@@ -57,7 +57,7 @@ func NewClient(provider, apiKey, model string) *Client {
 
 func (c *Client) GenerateRecipes(location string, availableIngredients []string, seasonalIngredients []string, previousRecipes []string) (string, error) {
 	prompt := c.buildRecipePrompt(location, availableIngredients, seasonalIngredients, previousRecipes)
-	
+
 	messages := []Message{
 		{
 			Role:    "system",
@@ -166,9 +166,9 @@ func (c *Client) generateWithAnthropic(messages []Message) (string, error) {
 	return anthropicResp.Content[0].Text, nil
 }
 
-func (c *Client) buildRecipePrompt(location, availableIngredients, seasonalIngredients, previousRecipes []string) string {
+func (c *Client) buildRecipePrompt(location string, availableIngredients, seasonalIngredients, previousRecipes []string) string {
 	prompt := fmt.Sprintf("Generate 4 unique weekly recipes for location: %s\n\n", location)
-	
+
 	if len(availableIngredients) > 0 {
 		prompt += "Available fresh ingredients at local QFC/Fred Meyer:\n"
 		for _, ingredient := range availableIngredients {
@@ -199,7 +199,7 @@ func (c *Client) buildRecipePrompt(location, availableIngredients, seasonalIngre
 	prompt += "- Use seasonal ingredients when possible\n"
 	prompt += "- Avoid repeating previous recipes\n"
 	prompt += "- Include variety in cooking methods and cuisines\n"
-	prompt += "- Each recipe should serve 4 people\n"
+	prompt += "- Each recipe should serve 2 people\n"
 	prompt += "- Provide clear, step-by-step instructions\n\n"
 
 	prompt += "Format your response as valid JSON with this structure:\n"
