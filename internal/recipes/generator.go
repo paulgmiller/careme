@@ -8,16 +8,14 @@ import (
 	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/history"
-	"careme/internal/ingredients"
 	"careme/internal/kroger"
 )
 
 type Generator struct {
-	config          *config.Config
-	aiClient        *ai.Client
-	krogerClient    *kroger.Client
-	seasonalClient  *ingredients.SeasonalClient
-	historyStorage  *history.HistoryStorage
+	config         *config.Config
+	aiClient       *ai.Client
+	krogerClient   *kroger.Client
+	historyStorage *history.HistoryStorage
 }
 
 type GeneratedRecipes struct {
@@ -26,27 +24,20 @@ type GeneratedRecipes struct {
 
 func NewGenerator(cfg *config.Config) *Generator {
 	return &Generator{
-		config:          cfg,
-		aiClient:        ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, cfg.AI.Model),
-		krogerClient:    kroger.NewClient(cfg.Kroger.MCPServerURL, cfg.Kroger.APIKey),
-		seasonalClient:  ingredients.NewSeasonalClient(cfg.Epicurious.APIEndpoint, cfg.Epicurious.APIKey),
-		historyStorage:  history.NewHistoryStorage(cfg.History.StoragePath, cfg.History.RetentionDays),
+		config:         cfg,
+		aiClient:       ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, cfg.AI.Model),
+		krogerClient:   kroger.NewClient(cfg.Kroger.APIKey),
+		historyStorage: history.NewHistoryStorage(cfg.History.StoragePath, cfg.History.RetentionDays),
 	}
 }
 
 func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, error) {
 	log.Printf("Generating recipes for location: %s", location)
 
-	availableIngredients, err := g.getAvailableIngredients(location)
+	saleIngredients, err := g.getSaleIngredients(location)
 	if err != nil {
-		log.Printf("Warning: Could not fetch available ingredients: %v", err)
-		availableIngredients = []string{}
-	}
-
-	seasonalIngredients, err := g.getSeasonalIngredients(location)
-	if err != nil {
-		log.Printf("Warning: Could not fetch seasonal ingredients: %v", err)
-		seasonalIngredients = []string{}
+		log.Printf("Warning: Could not fetch sale ingredients: %v", err)
+		saleIngredients = []string{}
 	}
 
 	previousRecipes, err := g.getPreviousRecipes()
@@ -55,10 +46,10 @@ func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, er
 		previousRecipes = []string{}
 	}
 
-	log.Printf("Found %d available ingredients, %d seasonal ingredients, %d previous recipes",
-		len(availableIngredients), len(seasonalIngredients), len(previousRecipes))
+	log.Printf("Found %d sale ingredients, %d previous recipes",
+		len(saleIngredients), len(previousRecipes))
 
-	response, err := g.aiClient.GenerateRecipes(location, availableIngredients, seasonalIngredients, previousRecipes)
+	response, err := g.aiClient.GenerateRecipes(location, saleIngredients, previousRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
@@ -75,41 +66,20 @@ func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, er
 	return recipes, nil
 }
 
-func (g *Generator) getAvailableIngredients(location string) ([]string, error) {
-	commonIngredients := []string{
-		"chicken", "beef", "pork", "salmon", "eggs",
-		"onions", "garlic", "potatoes", "carrots", "celery",
-		"tomatoes", "bell peppers", "broccoli", "spinach", "lettuce",
-		"rice", "pasta", "bread", "milk", "cheese", "butter",
-	}
-
-	products, err := g.krogerClient.GetFreshIngredients(location, commonIngredients)
+func (g *Generator) getSaleIngredients(location string) ([]string, error) {
+	products, err := g.krogerClient.GetSaleProducts(location)
 	if err != nil {
 		return nil, err
 	}
 
-	var available []string
+	var saleIngredients []string
 	for _, product := range products {
-		if product.Available && product.Fresh {
-			available = append(available, product.Name)
+		if product.OnSale && product.Available {
+			saleIngredients = append(saleIngredients, product.Name)
 		}
 	}
 
-	return available, nil
-}
-
-func (g *Generator) getSeasonalIngredients(location string) ([]string, error) {
-	seasonalItems, err := g.seasonalClient.GetSeasonalIngredients(location)
-	if err != nil {
-		return nil, err
-	}
-
-	var ingredients []string
-	for _, item := range seasonalItems {
-		ingredients = append(ingredients, item.Name)
-	}
-
-	return ingredients, nil
+	return saleIngredients, nil
 }
 
 func (g *Generator) getPreviousRecipes() ([]string, error) {

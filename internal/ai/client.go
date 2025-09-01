@@ -55,8 +55,8 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location string, availableIngredients []string, seasonalIngredients []string, previousRecipes []string) (string, error) {
-	prompt := c.buildRecipePrompt(location, availableIngredients, seasonalIngredients, previousRecipes)
+func (c *Client) GenerateRecipes(location string, saleIngredients []string, previousRecipes []string) (string, error) {
+	prompt := c.buildRecipePrompt(location, saleIngredients, previousRecipes)
 
 	messages := []Message{
 		{
@@ -166,20 +166,12 @@ func (c *Client) generateWithAnthropic(messages []Message) (string, error) {
 	return anthropicResp.Content[0].Text, nil
 }
 
-func (c *Client) buildRecipePrompt(location string, availableIngredients, seasonalIngredients, previousRecipes []string) string {
+func (c *Client) buildRecipePrompt(location string, saleIngredients, previousRecipes []string) string {
 	prompt := fmt.Sprintf("Generate 4 unique weekly recipes for location: %s\n\n", location)
 
-	if len(availableIngredients) > 0 {
-		prompt += "Available fresh ingredients at local QFC/Fred Meyer:\n"
-		for _, ingredient := range availableIngredients {
-			prompt += fmt.Sprintf("- %s\n", ingredient)
-		}
-		prompt += "\n"
-	}
-
-	if len(seasonalIngredients) > 0 {
-		prompt += "Seasonal ingredients currently available:\n"
-		for _, ingredient := range seasonalIngredients {
+	if len(saleIngredients) > 0 {
+		prompt += "Ingredients currently on sale at local QFC/Fred Meyer:\n"
+		for _, ingredient := range saleIngredients {
 			prompt += fmt.Sprintf("- %s\n", ingredient)
 		}
 		prompt += "\n"
@@ -195,8 +187,7 @@ func (c *Client) buildRecipePrompt(location string, availableIngredients, season
 
 	prompt += "Requirements:\n"
 	prompt += "- Generate exactly 4 recipes\n"
-	prompt += "- Prioritize available fresh ingredients\n"
-	prompt += "- Use seasonal ingredients when possible\n"
+	prompt += "- Prioritize ingredients currently on sale\n"
 	prompt += "- Avoid repeating previous recipes\n"
 	prompt += "- Include variety in cooking methods and cuisines\n"
 	prompt += "- Each recipe should serve 2 people\n"

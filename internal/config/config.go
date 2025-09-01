@@ -5,10 +5,9 @@ import (
 )
 
 type Config struct {
-	AI         AIConfig         `json:"ai"`
-	Kroger     KrogerConfig     `json:"kroger"`
-	Epicurious EpicuriousConfig `json:"epicurious"`
-	History    HistoryConfig    `json:"history"`
+	AI      AIConfig      `json:"ai"`
+	Kroger  KrogerConfig  `json:"kroger"`
+	History HistoryConfig `json:"history"`
 }
 
 type AIConfig struct {
@@ -18,13 +17,7 @@ type AIConfig struct {
 }
 
 type KrogerConfig struct {
-	MCPServerURL string `json:"mcp_server_url"`
-	APIKey       string `json:"api_key"`
-}
-
-type EpicuriousConfig struct {
-	APIEndpoint string `json:"api_endpoint"`
-	APIKey      string `json:"api_key"`
+	APIKey string `json:"api_key"`
 }
 
 type HistoryConfig struct {
@@ -40,12 +33,7 @@ func Load() (*Config, error) {
 			Model:    getEnvOrDefault("AI_MODEL", "gpt-4"),
 		},
 		Kroger: KrogerConfig{
-			MCPServerURL: getEnvOrDefault("KROGER_MCP_URL", "http://localhost:8080"),
-			APIKey:       os.Getenv("KROGER_API_KEY"),
-		},
-		Epicurious: EpicuriousConfig{
-			APIEndpoint: getEnvOrDefault("EPICURIOUS_ENDPOINT", "https://api.epicurious.com"),
-			APIKey:      os.Getenv("EPICURIOUS_API_KEY"),
+			APIKey: os.Getenv("KROGER_API_KEY"),
 		},
 		History: HistoryConfig{
 			StoragePath:   getEnvOrDefault("HISTORY_PATH", "./data/history.json"),

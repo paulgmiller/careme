@@ -46,8 +46,7 @@ func run(location string) error {
 	formatter := recipes.NewFormatter()
 
 	fmt.Printf("🍽️  Generating 4 weekly recipes for location: %s\n", location)
-	fmt.Println("📍 Checking available ingredients at local QFC/Fred Meyer...")
-	fmt.Println("🌱 Using seasonal ingredient recommendations...")
+	fmt.Println("🏷️  Checking current sales at local QFC/Fred Meyer...")
 	fmt.Println("📚 Avoiding recipes from the past 2 weeks...")
 	fmt.Println()
 

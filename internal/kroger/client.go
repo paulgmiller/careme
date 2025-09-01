@@ -8,9 +8,9 @@ import (
 )
 
 type Client struct {
-	mcpServerURL string
-	apiKey       string
-	httpClient   *http.Client
+	apiKey     string
+	httpClient *http.Client
+	baseURL    string
 }
 
 type Product struct {
@@ -18,37 +18,34 @@ type Product struct {
 	Name        string  `json:"name"`
 	Brand       string  `json:"brand"`
 	Price       float64 `json:"price"`
+	SalePrice   float64 `json:"sale_price"`
+	OnSale      bool    `json:"on_sale"`
 	Available   bool    `json:"available"`
 	Fresh       bool    `json:"fresh"`
 	Category    string  `json:"category"`
 	Description string  `json:"description"`
 }
 
-type SearchRequest struct {
-	Location   string   `json:"location"`
-	Keywords   []string `json:"keywords"`
-	Categories []string `json:"categories"`
-	FreshOnly  bool     `json:"fresh_only"`
+type SalesRequest struct {
+	Location string `json:"location"`
 }
 
-type SearchResponse struct {
+type SalesResponse struct {
 	Products []Product `json:"products"`
 	Total    int       `json:"total"`
 }
 
-func NewClient(mcpServerURL, apiKey string) *Client {
+func NewClient(apiKey string) *Client {
 	return &Client{
-		mcpServerURL: mcpServerURL,
-		apiKey:       apiKey,
-		httpClient:   &http.Client{},
+		apiKey:     apiKey,
+		httpClient: &http.Client{},
+		baseURL:    "https://api.kroger.com/v1",
 	}
 }
 
-func (c *Client) SearchProducts(location string, keywords []string, freshOnly bool) ([]Product, error) {
-	request := SearchRequest{
-		Location:  location,
-		Keywords:  keywords,
-		FreshOnly: freshOnly,
+func (c *Client) GetSaleProducts(location string) ([]Product, error) {
+	request := SalesRequest{
+		Location: location,
 	}
 
 	jsonData, err := json.Marshal(request)
@@ -56,7 +53,7 @@ func (c *Client) SearchProducts(location string, keywords []string, freshOnly bo
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", c.mcpServerURL+"/search", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", c.baseURL+"/products/sales", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -74,14 +71,10 @@ func (c *Client) SearchProducts(location string, keywords []string, freshOnly bo
 		return nil, fmt.Errorf("API request failed with status: %d", resp.StatusCode)
 	}
 
-	var searchResp SearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
+	var salesResp SalesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&salesResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	return searchResp.Products, nil
-}
-
-func (c *Client) GetFreshIngredients(location string, ingredients []string) ([]Product, error) {
-	return c.SearchProducts(location, ingredients, true)
+	return salesResp.Products, nil
 }
