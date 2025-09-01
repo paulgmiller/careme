@@ -1,0 +1,3346 @@
+openapi: 3.0.3
+info:
+  title: Kroger Public APIs
+  description: >-
+    The following APIs are publicly available for all clients to build new
+    products, 
+
+    services, or customer experiences that leverage the unique data, functions,
+    and 
+
+    applications of Kroger. As a company that strives to empower the developer
+    community 
+
+    and meet our customers where they are, we are offering these APIs as the
+    first 
+
+    step to building an ecosystem that promotes speed, simplicity, and security.
+
+
+
+    https://developer.kroger.com/reference
+  version: 1.0.0
+  contact: {}
+components:
+  securitySchemes:
+    OAuth2AuthorizationCode:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://api.kroger.com/v1/connect/oauth2/authorize
+          # Certificatn authorizationUrl: https://api-ce.kroger.com/v1/connect/oauth2/authorize
+          tokenUrl: https://api.kroger.com/v1/connect/oauth2/token
+          # Certification tokenUrl: https://api-ce.kroger.com/v1/connect/oauth2/token
+          scopes:
+            profile.compact: Grants read access to a customer profile ID.
+            cart.basic:write: Grants write access to a customer's cart.
+            product.compact: Grants read access to general product information.
+            N/A: No scope required.
+
+    OAuth2ClientCreds:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.kroger.com/v1/connect/oauth2/token
+          # Certification tokenUrl: https://api-ce.kroger.com/v1/connect/oauth2/token
+          scopes:
+            product.compact: Grants read access to general product information.
+servers:
+  - url: https://api.kroger.com/v1/
+    description: Production server (uses live data)
+  # - url: https://api-ce.kroger.com/v1/
+  # description: Certification Server
+paths:
+  /identity/profile:
+    get:
+      security:
+        - OAuth2ClientCreds:
+          - profile.compact
+      tags:
+        - Identity
+      summary: User profile information
+      description: >-
+        Provides access to the profile `id` of an authenticated customer.
+        <br><br> **Note**: the customer must be authenticated using the OAuth2
+        Authorization Code grant type.
+      operationId: userProfileInformation
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: object
+                        properties: {}
+                  meta:
+                    type: object
+                    properties:
+                      pagination:
+                        type: object
+                        properties:
+                          limit:
+                            type: number
+                            example: <number>
+                          start:
+                            type: number
+                            example: <number>
+                          total:
+                            type: number
+                            example: <number>
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+                          example: <string>
+                        example:
+                          - <string>
+                          - <string>
+              examples:
+                OK:
+                  value:
+                    data:
+                      id: {}
+                    meta:
+                      pagination:
+                        limit: <number>
+                        start: <number>
+                        total: <number>
+                      warnings:
+                        - <string>
+                        - <string>
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Forbidden:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+        '404':
+          description: Not Found
+          content:
+            application/octet-stream:
+              examples:
+                Not Found:
+                  value: '"<object>"'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+  /cart/add:
+    put:
+      security:
+        - OAuth2AuthorizationCode:
+          - cart.basic:write
+      tags:
+        - Cart
+      summary: Add to cart
+      description: >-
+        Provides you with access to add items to the cart of an authenticated
+        customer. <br><br> **Note**: the customer must be authenticated using
+        the OAuth2 Authorization Code grant type.
+      operationId: addToCart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      modality:
+                        type: string
+                        example: <string>
+                      quantity:
+                        type: number
+                        example: 1
+                      upc:
+                        type: string
+                        example: '0001111040101'
+                  example:
+                    - modality: <string>
+                      quantity: 1
+                      upc: '0001111040101'
+            example:
+              items:
+                - modality: <string>
+                  quantity: 1
+                  upc: '0001111040101'
+      responses:
+        '204':
+          description: OK
+          content:
+            application/octet-stream:
+              examples:
+                OK:
+                  value: '"<object>"'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: string
+                    example: <object>
+              examples:
+                Bad Request:
+                  value:
+                    errors: <object>
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+  /products:
+    get:
+      security:
+        - OAuth2AuthorizationCode:
+          - product.compact
+        - OAuth2ClientCreds:
+          - product.compact
+      tags:
+        - Products
+      summary: Product Search
+      description: >-
+        Allows you to find products by passing in either a search term or product Id.
+
+        Initial Search Value Required
+        An initial search value is requred for all requests. You can use either of the following parameters as an initial search value:
+
+        filter.term - When using the term parameter, the API performs a fuzzy search based on the term provided in the string. Search results are based on how relevant the term is to the product description.
+
+        filter.productId - When using the productId parameter, the API performs a query to find an exact match.
+      operationId: productSearch
+      parameters:
+        - name: filter.term
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: >-
+            A search term to filter product results. As an example, you could
+            input milk, bread, or salt.
+        - name: filter.locationId
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: >-
+            The locationId of the store you want results limited to. When using
+            this filter, only products available at that location are returned.
+        - name: filter.productId
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: >-
+            The productId of the products(s) you want returned. For more than
+            one item, the list must be comma-separated. When used, all other
+            query parameters are ignored.
+        - name: filter.brand
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: >-
+            The brand name of the product(s) you want returned. When using this
+            filter, only products by that brand are returned. Brand names are
+            case-sensitive, and lists must be pipe-separated.
+        - name: filter.fulfillment
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: >-
+            The available fulfillment types of the product(s) you want returned.
+            Fulfillment types are case-sensitive, and lists must be
+            comma-separated. Must be one or more of the follow types: ais -
+            Available In Store, csp - Curbside Pickup, dth - Delivery To Home,
+            sth - Ship To Home
+        - name: filter.start
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: The number of products you want to skip.
+        - name: filter.limit
+          in: query
+          schema:
+            type: string
+            example: <integer>
+          description: The number of products you want returned.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        aisleLocations:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              bayNumber:
+                                type: string
+                                example: <string>
+                              description:
+                                type: string
+                                example: <string>
+                              number:
+                                type: string
+                                example: <string>
+                              numberOfFacings:
+                                type: string
+                                example: <string>
+                              sequenceNumber:
+                                type: string
+                                example: <string>
+                              shelfNumber:
+                                type: string
+                                example: <string>
+                              shelfPositionInBay:
+                                type: string
+                                example: <string>
+                              side:
+                                type: string
+                                example: <string>
+                          example:
+                            - bayNumber: <string>
+                              description: <string>
+                              number: <string>
+                              numberOfFacings: <string>
+                              sequenceNumber: <string>
+                              shelfNumber: <string>
+                              shelfPositionInBay: <string>
+                              side: <string>
+                            - bayNumber: <string>
+                              description: <string>
+                              number: <string>
+                              numberOfFacings: <string>
+                              sequenceNumber: <string>
+                              shelfNumber: <string>
+                              shelfPositionInBay: <string>
+                              side: <string>
+                        brand:
+                          type: string
+                          example: <string>
+                        categories:
+                          type: array
+                          items:
+                            type: string
+                            example: <string>
+                          example:
+                            - <string>
+                            - <string>
+                        countryOrigin:
+                          type: string
+                          example: <string>
+                        description:
+                          type: string
+                          example: <string>
+                        images:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              default:
+                                type: boolean
+                                example: <boolean>
+                              type:
+                                type: string
+                                example: boolean
+                          example:
+                            - default: <boolean>
+                              type: boolean
+                            - default: <boolean>
+                              type: boolean
+                        itemInformation:
+                          type: object
+                          properties:
+                            depth:
+                              type: string
+                              example: <string>
+                            height:
+                              type: string
+                              example: <string>
+                            width:
+                              type: string
+                              example: <string>
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              favorite:
+                                type: boolean
+                                example: <boolean>
+                              fulfillment:
+                                type: object
+                                properties:
+                                  curbside:
+                                    type: boolean
+                                    example: <boolean>
+                                  delivery:
+                                    type: boolean
+                                    example: <boolean>
+                              inventory:
+                                type: object
+                                properties:
+                                  stockLevel:
+                                    type: string
+                                    example: <string>
+                              itemId:
+                                type: string
+                                example: <string>
+                              price:
+                                type: object
+                                properties:
+                                  promo:
+                                    type: number
+                                    example: <number>
+                                  regular:
+                                    type: number
+                                    example: <number>
+                              size:
+                                type: string
+                                example: <string>
+                          example:
+                            - favorite: <boolean>
+                              fulfillment:
+                                curbside: <boolean>
+                                delivery: <boolean>
+                              inventory:
+                                stockLevel: <string>
+                              itemId: <string>
+                              price:
+                                promo: <number>
+                                regular: <number>
+                              size: <string>
+                            - favorite: <boolean>
+                              fulfillment:
+                                curbside: <boolean>
+                                delivery: <boolean>
+                              inventory:
+                                stockLevel: <string>
+                              itemId: <string>
+                              price:
+                                promo: <number>
+                                regular: <number>
+                              size: <string>
+                        productId:
+                          type: string
+                          example: <string>
+                        temperature:
+                          type: object
+                          properties:
+                            heatSensitive:
+                              type: boolean
+                              example: <boolean>
+                            indicator:
+                              type: string
+                              example: <string>
+                        upc:
+                          type: string
+                          example: <string>
+                    example:
+                      - aisleLocations:
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                        brand: <string>
+                        categories:
+                          - <string>
+                          - <string>
+                        countryOrigin: <string>
+                        description: <string>
+                        images:
+                          - default: <boolean>
+                            type: boolean
+                          - default: <boolean>
+                            type: boolean
+                        itemInformation:
+                          depth: <string>
+                          height: <string>
+                          width: <string>
+                        items:
+                          - favorite: <boolean>
+                            fulfillment:
+                              curbside: <boolean>
+                              delivery: <boolean>
+                            inventory:
+                              stockLevel: <string>
+                            itemId: <string>
+                            price:
+                              promo: <number>
+                              regular: <number>
+                            size: <string>
+                          - favorite: <boolean>
+                            fulfillment:
+                              curbside: <boolean>
+                              delivery: <boolean>
+                            inventory:
+                              stockLevel: <string>
+                            itemId: <string>
+                            price:
+                              promo: <number>
+                              regular: <number>
+                            size: <string>
+                        productId: <string>
+                        temperature:
+                          heatSensitive: <boolean>
+                          indicator: <string>
+                        upc: <string>
+                      - aisleLocations:
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                        brand: <string>
+                        categories:
+                          - <string>
+                          - <string>
+                        countryOrigin: <string>
+                        description: <string>
+                        images:
+                          - default: <boolean>
+                            type: boolean
+                          - default: <boolean>
+                            type: boolean
+                        itemInformation:
+                          depth: <string>
+                          height: <string>
+                          width: <string>
+                        items:
+                          - favorite: <boolean>
+                            fulfillment:
+                              curbside: <boolean>
+                              delivery: <boolean>
+                            inventory:
+                              stockLevel: <string>
+                            itemId: <string>
+                            price:
+                              promo: <number>
+                              regular: <number>
+                            size: <string>
+                        productId: <string>
+                        temperature:
+                          heatSensitive: <boolean>
+                          indicator: <string>
+                        upc: <string>
+                  meta:
+                    type: object
+                    properties:
+                      pagination:
+                        type: object
+                        properties:
+                          limit:
+                            type: number
+                            example: <number>
+                          start:
+                            type: number
+                            example: <number>
+                          total:
+                            type: number
+                            example: <number>
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+                          example: <string>
+                        example:
+                          - <string>
+                          - <string>
+              examples:
+                OK:
+                  value:
+                    data:
+                      - aisleLocations:
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                        brand: <string>
+                        categories:
+                          - <string>
+                          - <string>
+                        countryOrigin: <string>
+                        description: <string>
+                        images:
+                          - default: <boolean>
+                            type: boolean
+                          - default: <boolean>
+                            type: boolean
+                        itemInformation:
+                          depth: <string>
+                          height: <string>
+                          width: <string>
+                        items:
+                          - favorite: <boolean>
+                            fulfillment:
+                              curbside: <boolean>
+                              delivery: <boolean>
+                            inventory:
+                              stockLevel: <string>
+                            itemId: <string>
+                            price:
+                              promo: <number>
+                              regular: <number>
+                            size: <string>
+                          - favorite: <boolean>
+                            fulfillment:
+                              curbside: <boolean>
+                              delivery: <boolean>
+                            inventory:
+                              stockLevel: <string>
+                            itemId: <string>
+                            price:
+                              promo: <number>
+                              regular: <number>
+                            size: <string>
+                        productId: <string>
+                        temperature:
+                          heatSensitive: <boolean>
+                          indicator: <string>
+                        upc: <string>
+                      - aisleLocations:
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                        brand: <string>
+                        categories:
+                          - <string>
+                          - <string>
+                        countryOrigin: <string>
+                        description: <string>
+                        images:
+                          - default: <boolean>
+                            type: boolean
+                          - default: <boolean>
+                            type: boolean
+                        itemInformation:
+                          depth: <string>
+                          height: <string>
+                          width: <string>
+                        items:
+                          - favorite: <boolean>
+                            fulfillment:
+                              curbside: <boolean>
+                              delivery: <boolean>
+                            inventory:
+                              stockLevel: <string>
+                            itemId: <string>
+                            price:
+                              promo: <number>
+                              regular: <number>
+                            size: <string>
+                        productId: <string>
+                        temperature:
+                          heatSensitive: <boolean>
+                          indicator: <string>
+                        upc: <string>
+                    meta:
+                      pagination:
+                        limit: <number>
+                        start: <number>
+                        total: <number>
+                      warnings:
+                        - <string>
+                        - <string>
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: string
+                    example: <object>
+              examples:
+                Bad Request:
+                  value:
+                    errors: <object>
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+  /products/{id}:
+    get:
+      security:
+        - OAuth2AuthorizationCode:
+          - product.compact
+        - OAuth2ClientCreds:
+          - product.compact
+      tags:
+        - Products
+      summary: Product details
+      description: >-
+        Provides access to the details of a specific product by either using the
+        `productId` or `UPC`. To return the product price and aisle location,
+        you must include the `filter.locationId` query parameters.
+      operationId: productDetails
+      parameters:
+        - name: filter.locationId
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: >-
+            The locationId of the store you want results limited to. When using
+            this filter, only products available at that location are returned.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      aisleLocations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            bayNumber:
+                              type: string
+                              example: <string>
+                            description:
+                              type: string
+                              example: <string>
+                            number:
+                              type: string
+                              example: <string>
+                            numberOfFacings:
+                              type: string
+                              example: <string>
+                            sequenceNumber:
+                              type: string
+                              example: <string>
+                            shelfNumber:
+                              type: string
+                              example: <string>
+                            shelfPositionInBay:
+                              type: string
+                              example: <string>
+                            side:
+                              type: string
+                              example: <string>
+                        example:
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                          - bayNumber: <string>
+                            description: <string>
+                            number: <string>
+                            numberOfFacings: <string>
+                            sequenceNumber: <string>
+                            shelfNumber: <string>
+                            shelfPositionInBay: <string>
+                            side: <string>
+                      brand:
+                        type: string
+                        example: <string>
+                      categories:
+                        type: array
+                        items:
+                          type: string
+                          example: <string>
+                        example:
+                          - <string>
+                          - <string>
+                      countryOrigin:
+                        type: string
+                        example: <string>
+                      description:
+                        type: string
+                        example: <string>
+                      images:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            default:
+                              type: boolean
+                              example: <boolean>
+                            type:
+                              type: string
+                              example: boolean
+                        example:
+                          - default: <boolean>
+                            type: boolean
+                          - default: <boolean>
+                            type: boolean
+                      itemInformation:
+                        type: object
+                        properties:
+                          depth:
+                            type: string
+                            example: <string>
+                          height:
+                            type: string
+                            example: <string>
+                          width:
+                            type: string
+                            example: <string>
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            favorite:
+                              type: boolean
+                              example: <boolean>
+                            fulfillment:
+                              type: object
+                              properties:
+                                curbside:
+                                  type: boolean
+                                  example: <boolean>
+                                delivery:
+                                  type: boolean
+                                  example: <boolean>
+                            inventory:
+                              type: object
+                              properties:
+                                stockLevel:
+                                  type: string
+                                  example: <string>
+                            itemId:
+                              type: string
+                              example: <string>
+                            price:
+                              type: object
+                              properties:
+                                promo:
+                                  type: number
+                                  example: <number>
+                                regular:
+                                  type: number
+                                  example: <number>
+                            size:
+                              type: string
+                              example: <string>
+                        example:
+                          - favorite: <boolean>
+                            fulfillment:
+                              curbside: <boolean>
+                              delivery: <boolean>
+                            inventory:
+                              stockLevel: <string>
+                            itemId: <string>
+                            price:
+                              promo: <number>
+                              regular: <number>
+                            size: <string>
+                      productId:
+                        type: string
+                        example: <string>
+                      temperature:
+                        type: object
+                        properties:
+                          heatSensitive:
+                            type: boolean
+                            example: <boolean>
+                          indicator:
+                            type: string
+                            example: <string>
+                      upc:
+                        type: string
+                        example: <string>
+                  meta:
+                    type: object
+                    properties:
+                      pagination:
+                        type: object
+                        properties:
+                          limit:
+                            type: number
+                            example: <number>
+                          start:
+                            type: number
+                            example: <number>
+                          total:
+                            type: number
+                            example: <number>
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+                          example: <string>
+                        example:
+                          - <string>
+                          - <string>
+              examples:
+                OK:
+                  value:
+                    data:
+                      aisleLocations:
+                        - bayNumber: <string>
+                          description: <string>
+                          number: <string>
+                          numberOfFacings: <string>
+                          sequenceNumber: <string>
+                          shelfNumber: <string>
+                          shelfPositionInBay: <string>
+                          side: <string>
+                        - bayNumber: <string>
+                          description: <string>
+                          number: <string>
+                          numberOfFacings: <string>
+                          sequenceNumber: <string>
+                          shelfNumber: <string>
+                          shelfPositionInBay: <string>
+                          side: <string>
+                      brand: <string>
+                      categories:
+                        - <string>
+                        - <string>
+                      countryOrigin: <string>
+                      description: <string>
+                      images:
+                        - default: <boolean>
+                          type: boolean
+                        - default: <boolean>
+                          type: boolean
+                      itemInformation:
+                        depth: <string>
+                        height: <string>
+                        width: <string>
+                      items:
+                        - favorite: <boolean>
+                          fulfillment:
+                            curbside: <boolean>
+                            delivery: <boolean>
+                          inventory:
+                            stockLevel: <string>
+                          itemId: <string>
+                          price:
+                            promo: <number>
+                            regular: <number>
+                          size: <string>
+                      productId: <string>
+                      temperature:
+                        heatSensitive: <boolean>
+                        indicator: <string>
+                      upc: <string>
+                    meta:
+                      pagination:
+                        limit: <number>
+                        start: <number>
+                        total: <number>
+                      warnings:
+                        - <string>
+                        - <string>
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Bad Request:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '404':
+          description: Not Found
+          content:
+            application/octet-stream:
+              examples:
+                Not Found:
+                  value: '"<object>"'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          example: ''
+        description: Either the productId or UPC of the product you want returned.
+  /locations/{locationId}:
+    get:
+      security:
+        - OAuth2AuthorizationCode: []
+        - OAuth2ClientCreds: []
+      tags:
+        - Locations
+      summary: Location details
+      description: >-
+        Provides access to the details of a specific location by using the
+        `locationId`.
+      operationId: locationDetails
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      address:
+                        type: object
+                        properties:
+                          addressLine1:
+                            type: string
+                            example: <string>
+                          addressLine2:
+                            type: string
+                            example: <string>
+                          city:
+                            type: string
+                            example: <string>
+                          county:
+                            type: string
+                            example: <string>
+                          state:
+                            type: string
+                            example: <string>
+                          zipCode:
+                            type: string
+                            example: <string>
+                      chain:
+                        type: string
+                        example: <string>
+                      departments:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            departmentId:
+                              type: string
+                              example: <string>
+                            hours:
+                              type: object
+                              properties:
+                                Open24:
+                                  type: boolean
+                                  example: <boolean>
+                                friday:
+                                  type: object
+                                  properties:
+                                    close:
+                                      type: string
+                                      example: <string>
+                                    open:
+                                      type: string
+                                      example: <string>
+                                    open24:
+                                      type: boolean
+                                      example: <boolean>
+                                monday:
+                                  type: object
+                                  properties:
+                                    close:
+                                      type: string
+                                      example: <string>
+                                    open:
+                                      type: string
+                                      example: <string>
+                                    open24:
+                                      type: boolean
+                                      example: <boolean>
+                                saturday:
+                                  type: object
+                                  properties:
+                                    close:
+                                      type: string
+                                      example: <string>
+                                    open:
+                                      type: string
+                                      example: <string>
+                                    open24:
+                                      type: boolean
+                                      example: <boolean>
+                                sunday:
+                                  type: object
+                                  properties:
+                                    close:
+                                      type: string
+                                      example: <string>
+                                    open:
+                                      type: string
+                                      example: <string>
+                                    open24:
+                                      type: boolean
+                                      example: <boolean>
+                                thursday:
+                                  type: object
+                                  properties:
+                                    close:
+                                      type: string
+                                      example: <string>
+                                    open:
+                                      type: string
+                                      example: <string>
+                                    open24:
+                                      type: boolean
+                                      example: <boolean>
+                                tuesday:
+                                  type: object
+                                  properties:
+                                    close:
+                                      type: string
+                                      example: <string>
+                                    open:
+                                      type: string
+                                      example: <string>
+                                    open24:
+                                      type: boolean
+                                      example: <boolean>
+                                wednesday:
+                                  type: object
+                                  properties:
+                                    close:
+                                      type: string
+                                      example: <string>
+                                    open:
+                                      type: string
+                                      example: <string>
+                                    open24:
+                                      type: boolean
+                                      example: <boolean>
+                            name:
+                              type: string
+                              example: <string>
+                            phone:
+                              type: string
+                              example: <string>
+                        example:
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                      divisionNumber:
+                        type: string
+                        example: <string>
+                      geolocation:
+                        type: object
+                        properties:
+                          latLng:
+                            type: string
+                            example: <string>
+                          latitude:
+                            type: number
+                            example: <number>
+                          longitude:
+                            type: number
+                            example: <number>
+                      hours:
+                        type: object
+                        properties:
+                          Open24:
+                            type: boolean
+                            example: <boolean>
+                          friday:
+                            type: object
+                            properties:
+                              close:
+                                type: string
+                                example: <string>
+                              open:
+                                type: string
+                                example: <string>
+                              open24:
+                                type: boolean
+                                example: <boolean>
+                          gmtOffset:
+                            type: string
+                            example: <string>
+                          monday:
+                            type: object
+                            properties:
+                              close:
+                                type: string
+                                example: <string>
+                              open:
+                                type: string
+                                example: <string>
+                              open24:
+                                type: boolean
+                                example: <boolean>
+                          saturday:
+                            type: object
+                            properties:
+                              close:
+                                type: string
+                                example: <string>
+                              open:
+                                type: string
+                                example: <string>
+                              open24:
+                                type: boolean
+                                example: <boolean>
+                          sunday:
+                            type: object
+                            properties:
+                              close:
+                                type: string
+                                example: <string>
+                              open:
+                                type: string
+                                example: <string>
+                              open24:
+                                type: boolean
+                                example: <boolean>
+                          thursday:
+                            type: object
+                            properties:
+                              close:
+                                type: string
+                                example: <string>
+                              open:
+                                type: string
+                                example: <string>
+                              open24:
+                                type: boolean
+                                example: <boolean>
+                          timezone:
+                            type: string
+                            example: <string>
+                          tuesday:
+                            type: object
+                            properties:
+                              close:
+                                type: string
+                                example: <string>
+                              open:
+                                type: string
+                                example: <string>
+                              open24:
+                                type: boolean
+                                example: <boolean>
+                          wednesday:
+                            type: object
+                            properties:
+                              close:
+                                type: string
+                                example: <string>
+                              open:
+                                type: string
+                                example: <string>
+                              open24:
+                                type: boolean
+                                example: <boolean>
+                      locationId:
+                        type: string
+                        example: <string>
+                      name:
+                        type: string
+                        example: <string>
+                      phone:
+                        type: string
+                        example: <string>
+                      storeNumber:
+                        type: string
+                        example: <string>
+                  meta:
+                    type: object
+                    properties:
+                      pagination:
+                        type: object
+                        properties:
+                          limit:
+                            type: number
+                            example: <number>
+                          start:
+                            type: number
+                            example: <number>
+                          total:
+                            type: number
+                            example: <number>
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+                          example: <string>
+                        example:
+                          - <string>
+                          - <string>
+              examples:
+                OK:
+                  value:
+                    data:
+                      address:
+                        addressLine1: <string>
+                        addressLine2: <string>
+                        city: <string>
+                        county: <string>
+                        state: <string>
+                        zipCode: <string>
+                      chain: <string>
+                      departments:
+                        - departmentId: <string>
+                          hours:
+                            Open24: <boolean>
+                            friday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            monday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            saturday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            sunday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            thursday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            tuesday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            wednesday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                          name: <string>
+                          phone: <string>
+                        - departmentId: <string>
+                          hours:
+                            Open24: <boolean>
+                            friday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            monday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            saturday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            sunday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            thursday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            tuesday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                            wednesday:
+                              close: <string>
+                              open: <string>
+                              open24: <boolean>
+                          name: <string>
+                          phone: <string>
+                      divisionNumber: <string>
+                      geolocation:
+                        latLng: <string>
+                        latitude: <number>
+                        longitude: <number>
+                      hours:
+                        Open24: <boolean>
+                        friday:
+                          close: <string>
+                          open: <string>
+                          open24: <boolean>
+                        gmtOffset: <string>
+                        monday:
+                          close: <string>
+                          open: <string>
+                          open24: <boolean>
+                        saturday:
+                          close: <string>
+                          open: <string>
+                          open24: <boolean>
+                        sunday:
+                          close: <string>
+                          open: <string>
+                          open24: <boolean>
+                        thursday:
+                          close: <string>
+                          open: <string>
+                          open24: <boolean>
+                        timezone: <string>
+                        tuesday:
+                          close: <string>
+                          open: <string>
+                          open24: <boolean>
+                        wednesday:
+                          close: <string>
+                          open: <string>
+                          open24: <boolean>
+                      locationId: <string>
+                      name: <string>
+                      phone: <string>
+                      storeNumber: <string>
+                    meta:
+                      pagination:
+                        limit: <number>
+                        start: <number>
+                        total: <number>
+                      warnings:
+                        - <string>
+                        - <string>
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Bad Request:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '404':
+          description: Not Found
+          content:
+            application/octet-stream:
+              examples:
+                Not Found:
+                  value: '"<object>"'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+    parameters:
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          example: <string>
+        description: The locationId of the store you want results limited to.
+  /locations:
+    get:
+      security:
+        - OAuth2AuthorizationCode: []
+        - OAuth2ClientCreds: []
+
+      tags:
+        - Locations
+      summary: Location list
+      description: >-
+        Provides access to a list of locations matching a given criteria. If the
+        parameter `filter.chain` is not provided, the results include all
+        locations and chains owned by The Kroger Co.<br> <h3>Starting Point
+        Required</h3> You must include one of the following parameters as a
+        starting point to narrow search results:<br><br> <ul> <li>
+        <code>filter.zipCode.near</code></li> <li>
+        <code>filter.latLong.near</code></li> <li> <code>filter.lat.near</code>
+        and <code>filter.lon.near</code></li> </ul><br> If you do not provide a
+        starting point or provide more than one starting point, an error warning
+        is returned. By default, the results are limited to 10 locations within
+        a 10-mile radius of the provided starting point. If you would like to
+        extend the search results, you can use the parameter
+        `filter.radiusInMiles` to set a new mile radius or `filter.limit` to set
+        the number of results returned.
+      operationId: locationList
+      parameters:
+        - name: filter.zipCode.near
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: The zip code you want to use as a starting point for results.
+        - name: filter.latLong.near
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: >-
+            The latitude and longitude you want to use as a starting point for
+            results.
+        - name: filter.lat.near
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: The latitude you want to use as a starting point for results.
+        - name: filter.lon.near
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: The longitude you want to use as a starting point for results.
+        - name: filter.radiusInMiles
+          in: query
+          schema:
+            type: string
+            example: '10'
+          description: The mile radius you want results limited to.
+        - name: filter.limit
+          in: query
+          schema:
+            type: string
+            example: '10'
+          description: The number of results you want returned.
+        - name: filter.chain
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: >-
+            The chain name of the chain you want results limited to. When using
+            this filter, only stores matching the provided chain name are
+            returned.
+        - name: filter.department
+          in: query
+          schema:
+            type: string
+            example: <string>
+          description: >-
+            The departmentId of the department you want results limited to.
+            Lists must be comma-separated. When using this filter, only stores
+            who have all of the departments provided are returned.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        address:
+                          type: object
+                          properties:
+                            addressLine1:
+                              type: string
+                              example: <string>
+                            addressLine2:
+                              type: string
+                              example: <string>
+                            city:
+                              type: string
+                              example: <string>
+                            county:
+                              type: string
+                              example: <string>
+                            state:
+                              type: string
+                              example: <string>
+                            zipCode:
+                              type: string
+                              example: <string>
+                        chain:
+                          type: string
+                          example: <string>
+                        departments:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              departmentId:
+                                type: string
+                                example: <string>
+                              hours:
+                                type: object
+                                properties:
+                                  Open24:
+                                    type: boolean
+                                    example: <boolean>
+                                  friday:
+                                    type: object
+                                    properties:
+                                      close:
+                                        type: string
+                                        example: <string>
+                                      open:
+                                        type: string
+                                        example: <string>
+                                      open24:
+                                        type: boolean
+                                        example: <boolean>
+                                  monday:
+                                    type: object
+                                    properties:
+                                      close:
+                                        type: string
+                                        example: <string>
+                                      open:
+                                        type: string
+                                        example: <string>
+                                      open24:
+                                        type: boolean
+                                        example: <boolean>
+                                  saturday:
+                                    type: object
+                                    properties:
+                                      close:
+                                        type: string
+                                        example: <string>
+                                      open:
+                                        type: string
+                                        example: <string>
+                                      open24:
+                                        type: boolean
+                                        example: <boolean>
+                                  sunday:
+                                    type: object
+                                    properties:
+                                      close:
+                                        type: string
+                                        example: <string>
+                                      open:
+                                        type: string
+                                        example: <string>
+                                      open24:
+                                        type: boolean
+                                        example: <boolean>
+                                  thursday:
+                                    type: object
+                                    properties:
+                                      close:
+                                        type: string
+                                        example: <string>
+                                      open:
+                                        type: string
+                                        example: <string>
+                                      open24:
+                                        type: boolean
+                                        example: <boolean>
+                                  tuesday:
+                                    type: object
+                                    properties:
+                                      close:
+                                        type: string
+                                        example: <string>
+                                      open:
+                                        type: string
+                                        example: <string>
+                                      open24:
+                                        type: boolean
+                                        example: <boolean>
+                                  wednesday:
+                                    type: object
+                                    properties:
+                                      close:
+                                        type: string
+                                        example: <string>
+                                      open:
+                                        type: string
+                                        example: <string>
+                                      open24:
+                                        type: boolean
+                                        example: <boolean>
+                              name:
+                                type: string
+                                example: <string>
+                              phone:
+                                type: string
+                                example: <string>
+                          example:
+                            - departmentId: <string>
+                              hours:
+                                Open24: <boolean>
+                                friday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                monday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                saturday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                sunday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                thursday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                tuesday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                wednesday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                              name: <string>
+                              phone: <string>
+                            - departmentId: <string>
+                              hours:
+                                Open24: <boolean>
+                                friday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                monday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                saturday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                sunday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                thursday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                tuesday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                                wednesday:
+                                  close: <string>
+                                  open: <string>
+                                  open24: <boolean>
+                              name: <string>
+                              phone: <string>
+                        divisionNumber:
+                          type: string
+                          example: <string>
+                        geolocation:
+                          type: object
+                          properties:
+                            latLng:
+                              type: string
+                              example: <string>
+                            latitude:
+                              type: number
+                              example: <number>
+                            longitude:
+                              type: number
+                              example: <number>
+                        hours:
+                          type: object
+                          properties:
+                            Open24:
+                              type: boolean
+                              example: <boolean>
+                            friday:
+                              type: object
+                              properties:
+                                close:
+                                  type: string
+                                  example: <string>
+                                open:
+                                  type: string
+                                  example: <string>
+                                open24:
+                                  type: boolean
+                                  example: <boolean>
+                            gmtOffset:
+                              type: string
+                              example: <string>
+                            monday:
+                              type: object
+                              properties:
+                                close:
+                                  type: string
+                                  example: <string>
+                                open:
+                                  type: string
+                                  example: <string>
+                                open24:
+                                  type: boolean
+                                  example: <boolean>
+                            saturday:
+                              type: object
+                              properties:
+                                close:
+                                  type: string
+                                  example: <string>
+                                open:
+                                  type: string
+                                  example: <string>
+                                open24:
+                                  type: boolean
+                                  example: <boolean>
+                            sunday:
+                              type: object
+                              properties:
+                                close:
+                                  type: string
+                                  example: <string>
+                                open:
+                                  type: string
+                                  example: <string>
+                                open24:
+                                  type: boolean
+                                  example: <boolean>
+                            thursday:
+                              type: object
+                              properties:
+                                close:
+                                  type: string
+                                  example: <string>
+                                open:
+                                  type: string
+                                  example: <string>
+                                open24:
+                                  type: boolean
+                                  example: <boolean>
+                            timezone:
+                              type: string
+                              example: <string>
+                            tuesday:
+                              type: object
+                              properties:
+                                close:
+                                  type: string
+                                  example: <string>
+                                open:
+                                  type: string
+                                  example: <string>
+                                open24:
+                                  type: boolean
+                                  example: <boolean>
+                            wednesday:
+                              type: object
+                              properties:
+                                close:
+                                  type: string
+                                  example: <string>
+                                open:
+                                  type: string
+                                  example: <string>
+                                open24:
+                                  type: boolean
+                                  example: <boolean>
+                        locationId:
+                          type: string
+                          example: <string>
+                        name:
+                          type: string
+                          example: <string>
+                        phone:
+                          type: string
+                          example: <string>
+                        storeNumber:
+                          type: string
+                          example: <string>
+                    example:
+                      - address:
+                          addressLine1: <string>
+                          addressLine2: <string>
+                          city: <string>
+                          county: <string>
+                          state: <string>
+                          zipCode: <string>
+                        chain: <string>
+                        departments:
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                        divisionNumber: <string>
+                        geolocation:
+                          latLng: <string>
+                          latitude: <number>
+                          longitude: <number>
+                        hours:
+                          Open24: <boolean>
+                          friday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          gmtOffset: <string>
+                          monday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          saturday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          sunday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          thursday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          timezone: <string>
+                          tuesday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          wednesday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                        locationId: <string>
+                        name: <string>
+                        phone: <string>
+                        storeNumber: <string>
+                      - address:
+                          addressLine1: <string>
+                          addressLine2: <string>
+                          city: <string>
+                          county: <string>
+                          state: <string>
+                          zipCode: <string>
+                        chain: <string>
+                        departments:
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                        divisionNumber: <string>
+                        geolocation:
+                          latLng: <string>
+                          latitude: <number>
+                          longitude: <number>
+                        hours:
+                          Open24: <boolean>
+                          friday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          gmtOffset: <string>
+                          monday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          saturday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          sunday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          thursday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          timezone: <string>
+                          tuesday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          wednesday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                        locationId: <string>
+                        name: <string>
+                        phone: <string>
+                        storeNumber: <string>
+                  meta:
+                    type: object
+                    properties:
+                      pagination:
+                        type: object
+                        properties:
+                          limit:
+                            type: number
+                            example: <number>
+                          start:
+                            type: number
+                            example: <number>
+                          total:
+                            type: number
+                            example: <number>
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+                          example: <string>
+                        example:
+                          - <string>
+                          - <string>
+              examples:
+                OK:
+                  value:
+                    data:
+                      - address:
+                          addressLine1: <string>
+                          addressLine2: <string>
+                          city: <string>
+                          county: <string>
+                          state: <string>
+                          zipCode: <string>
+                        chain: <string>
+                        departments:
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                        divisionNumber: <string>
+                        geolocation:
+                          latLng: <string>
+                          latitude: <number>
+                          longitude: <number>
+                        hours:
+                          Open24: <boolean>
+                          friday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          gmtOffset: <string>
+                          monday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          saturday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          sunday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          thursday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          timezone: <string>
+                          tuesday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          wednesday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                        locationId: <string>
+                        name: <string>
+                        phone: <string>
+                        storeNumber: <string>
+                      - address:
+                          addressLine1: <string>
+                          addressLine2: <string>
+                          city: <string>
+                          county: <string>
+                          state: <string>
+                          zipCode: <string>
+                        chain: <string>
+                        departments:
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                          - departmentId: <string>
+                            hours:
+                              Open24: <boolean>
+                              friday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              monday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              saturday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              sunday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              thursday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              tuesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                              wednesday:
+                                close: <string>
+                                open: <string>
+                                open24: <boolean>
+                            name: <string>
+                            phone: <string>
+                        divisionNumber: <string>
+                        geolocation:
+                          latLng: <string>
+                          latitude: <number>
+                          longitude: <number>
+                        hours:
+                          Open24: <boolean>
+                          friday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          gmtOffset: <string>
+                          monday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          saturday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          sunday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          thursday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          timezone: <string>
+                          tuesday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                          wednesday:
+                            close: <string>
+                            open: <string>
+                            open24: <boolean>
+                        locationId: <string>
+                        name: <string>
+                        phone: <string>
+                        storeNumber: <string>
+                    meta:
+                      pagination:
+                        limit: <number>
+                        start: <number>
+                        total: <number>
+                      warnings:
+                        - <string>
+                        - <string>
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: string
+                    example: <object>
+              examples:
+                Bad Request:
+                  value:
+                    errors: <object>
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+  /chains:
+    get:
+      security:
+        - OAuth2AuthorizationCode: []
+        - OAuth2ClientCreds: []
+
+      tags:
+        - Locations
+        - Chains
+      summary: Chain list
+      description: Provides access to a list of all chains owned by The Kroger Co.
+      operationId: chainList
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        divisionNumbers:
+                          type: array
+                          items:
+                            type: string
+                            example: <string>
+                          example:
+                            - <string>
+                            - <string>
+                        name:
+                          type: string
+                          example: <string>
+                    example:
+                      - divisionNumbers:
+                          - <string>
+                          - <string>
+                        name: <string>
+                      - divisionNumbers:
+                          - <string>
+                          - <string>
+                        name: <string>
+                  meta:
+                    type: object
+                    properties:
+                      pagination:
+                        type: object
+                        properties:
+                          limit:
+                            type: number
+                            example: <number>
+                          start:
+                            type: number
+                            example: <number>
+                          total:
+                            type: number
+                            example: <number>
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+                          example: <string>
+                        example:
+                          - <string>
+                          - <string>
+              examples:
+                OK:
+                  value:
+                    data:
+                      - divisionNumbers:
+                          - <string>
+                          - <string>
+                        name: <string>
+                      - divisionNumbers:
+                          - <string>
+                          - <string>
+                        name: <string>
+                    meta:
+                      pagination:
+                        limit: <number>
+                        start: <number>
+                        total: <number>
+                      warnings:
+                        - <string>
+                        - <string>
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: string
+                    example: <object>
+              examples:
+                Bad Request:
+                  value:
+                    errors: <object>
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+  /chains/{name}:
+    get:
+      security:
+        - OAuth2AuthorizationCode: []
+        - OAuth2ClientCreds: []
+
+      tags:
+        - Locations
+        - Chains
+      summary: Chain details
+      description: >-
+        Provides access to the details of a specific chian by using the chain
+        `name`.
+      operationId: chainDetails
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      divisionNumbers:
+                        type: array
+                        items:
+                          type: string
+                          example: <string>
+                        example:
+                          - <string>
+                          - <string>
+                      name:
+                        type: string
+                        example: <string>
+                  meta:
+                    type: object
+                    properties: {}
+              examples:
+                OK:
+                  value:
+                    data:
+                      divisionNumbers:
+                        - <string>
+                        - <string>
+                      name: <string>
+                    meta: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '404':
+          description: Not Found
+          content:
+            application/octet-stream:
+              examples:
+                Not Found:
+                  value: '"<object>"'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+          example: <string>
+        description: >-
+          The name of a chain owned by The Kroger Co. Note the chain "name" is
+          returned from the /chains endpoint as "name" and from the /locations
+          endpoint as "chain".
+  /departments:
+    get:
+      security:
+        - OAuth2AuthorizationCode: []
+        - OAuth2ClientCreds: []
+      tags:
+        - Locations
+        - Departments
+      summary: Department list
+      description: >-
+        Provides access to a list of all departments, including departments of
+        chains owned by The Kroger Co.
+      operationId: departmentList
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        departmentId:
+                          type: string
+                          example: <string>
+                        name:
+                          type: string
+                          example: <string>
+                    example:
+                      - departmentId: <string>
+                        name: <string>
+                      - departmentId: <string>
+                        name: <string>
+                  meta:
+                    type: object
+                    properties:
+                      pagination:
+                        type: object
+                        properties:
+                          limit:
+                            type: number
+                            example: <number>
+                          start:
+                            type: number
+                            example: <number>
+                          total:
+                            type: number
+                            example: <number>
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+                          example: <string>
+                        example:
+                          - <string>
+                          - <string>
+              examples:
+                OK:
+                  value:
+                    data:
+                      - departmentId: <string>
+                        name: <string>
+                      - departmentId: <string>
+                        name: <string>
+                    meta:
+                      pagination:
+                        limit: <number>
+                        start: <number>
+                        total: <number>
+                      warnings:
+                        - <string>
+                        - <string>
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+  /departments/{id}:
+    get:
+      tags:
+        - Locations
+        - Departments
+      summary: Department details
+      description: >-
+        Provides access to the details of a specific department by using the
+        `departmentId`. 
+      operationId: departmentDetails
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      departmentId:
+                        type: string
+                        example: <string>
+                      name:
+                        type: string
+                        example: <string>
+                  meta:
+                    type: object
+                    properties: {}
+              examples:
+                OK:
+                  value:
+                    data:
+                      departmentId: <string>
+                      name: <string>
+                    meta: {}
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Bad Request:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: <string>
+                      error_description:
+                        type: string
+                        example: <string>
+              examples:
+                Unauthorized:
+                  value:
+                    errors:
+                      error: <string>
+                      error_description: <string>
+        '404':
+          description: Not Found
+          content:
+            application/octet-stream:
+              examples:
+                Not Found:
+                  value: '"<object>"'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: <string>
+                      reason:
+                        type: string
+                        example: <string>
+                      timestamp:
+                        type: number
+                        example: <number>
+              examples:
+                Internal Server Error:
+                  value:
+                    errors:
+                      code: <string>
+                      reason: <string>
+                      timestamp: <number>
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          example: <string>
+        description: The departmentId of the department you want returned.
+tags:
+  - name: Identity
+    description: >-
+      The Identity API provides access to the profile ID of authenticated
+      customers.
+
+
+      Public Rate Limit: 5,000 per day
+  - name: Cart
+    description: >-
+      The Cart API provides you with access to add an item to an authenticated
+      customer's cart.
+
+
+      Public Rate Limit: 5,000 per day
+  - name: Products
+    description: |-
+      The Products API provides access to our entire product catalog. 
+
+      Public Rate Limit: 10,000 per day
+  - name: Locations
+    description: >-
+      The Locations API provides access to all locations, chains, and
+      departments that are owned by The Kroger Co.
+
+
+      Public Rate Limit: 1,600 a day per endpoint
+  - name: Chains
+  - name: Departments
