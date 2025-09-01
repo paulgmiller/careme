@@ -42,7 +42,10 @@ func run(location string) error {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	generator := recipes.NewGenerator(cfg)
+	generator, err := recipes.NewGenerator(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create recipe generator: %w", err)
+	}
 	formatter := recipes.NewFormatter()
 
 	fmt.Printf("🍽️  Generating 4 weekly recipes for location: %s\n", location)

@@ -1,20 +1,24 @@
 package recipes
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 
 	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/history"
 	"careme/internal/kroger"
+
+	"github.com/oapi-codegen/oapi-codegen/v2/pkg/securityprovider"
 )
 
 type Generator struct {
 	config         *config.Config
 	aiClient       *ai.Client
-	krogerClient   *kroger.Client
+	krogerClient   kroger.ClientWithResponsesInterface //probably need only subset
 	historyStorage *history.HistoryStorage
 }
 
@@ -22,19 +26,29 @@ type GeneratedRecipes struct {
 	Recipes []history.Recipe `json:"recipes"`
 }
 
-func NewGenerator(cfg *config.Config) *Generator {
+func NewGenerator(cfg *config.Config) (*Generator, error) {
+
+	basicAuth, err := securityprovider.NewSecurityProviderBasicAuth(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := kroger.NewClientWithResponses("https://api.kroger.com/", kroger.WithRequestEditorFn(basicAuth.Intercept))
+	if err != nil {
+		return nil, err
+	}
 	return &Generator{
 		config:         cfg,
 		aiClient:       ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, cfg.AI.Model),
-		krogerClient:   kroger.NewClient(cfg.Kroger.APIKey),
+		krogerClient:   client,
 		historyStorage: history.NewHistoryStorage(cfg.History.StoragePath, cfg.History.RetentionDays),
-	}
+	}, nil
 }
 
 func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, error) {
 	log.Printf("Generating recipes for location: %s", location)
 
-	saleIngredients, err := g.getSaleIngredients(location)
+	saleIngredients, err := g.getSaleIngredients(location, "steak")
 	if err != nil {
 		log.Printf("Warning: Could not fetch sale ingredients: %v", err)
 		saleIngredients = []string{}
@@ -66,20 +80,28 @@ func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, er
 	return recipes, nil
 }
 
-func (g *Generator) getSaleIngredients(location string) ([]string, error) {
-	products, err := g.krogerClient.GetSaleProducts(location)
+func (g *Generator) getSaleIngredients(location, term string) ([]string, error) {
+	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
+		FilterLocationId: &location,
+		FilterTerm:       &term,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var saleIngredients []string
-	for _, product := range products {
-		if product.OnSale && product.Available {
-			saleIngredients = append(saleIngredients, product.Name)
+	if products.StatusCode() != http.StatusOK {
+		return nil, fmt.Errorf("Got %d code from kroger", products.StatusCode())
+	}
+
+	var ingredients []string
+	for _, product := range *products.JSON200.Data {
+		for _, item := range *product.Items {
+			//does just giving the model json work better here?
+			ingredients = append(ingredients, fmt.Sprintf("%s %s price %s sale %s", product.Description, *item.Size, item.Price.Regular, item.Price.Promo))
 		}
 	}
 
-	return saleIngredients, nil
+	return ingredients, nil
 }
 
 func (g *Generator) getPreviousRecipes() ([]string, error) {

@@ -17,7 +17,8 @@ type AIConfig struct {
 }
 
 type KrogerConfig struct {
-	APIKey string `json:"api_key"`
+	ClientID     string
+	ClientSecret string
 }
 
 type HistoryConfig struct {
@@ -33,7 +34,8 @@ func Load() (*Config, error) {
 			Model:    getEnvOrDefault("AI_MODEL", "gpt-4"),
 		},
 		Kroger: KrogerConfig{
-			APIKey: os.Getenv("KROGER_API_KEY"),
+			ClientID:     os.Getenv("KROGER_CLIENT_ID"),
+			ClientSecret: os.Getenv("KROGER_CLIENT_SECRET"),
 		},
 		History: HistoryConfig{
 			StoragePath:   getEnvOrDefault("HISTORY_PATH", "./data/history.json"),
