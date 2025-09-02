@@ -2689,6 +2689,7 @@ func ParseProductSearchResponse(rsp *http.Response) (*ProductSearchResponse, err
 			Errors *string `json:"errors,omitempty"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			fmt.Printf("failing at 400: %s\n", bodyBytes)
 			return nil, err
 		}
 		response.JSON400 = &dest
@@ -2701,6 +2702,7 @@ func ParseProductSearchResponse(rsp *http.Response) (*ProductSearchResponse, err
 			} `json:"errors,omitempty"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			fmt.Printf("failing at 401: %s\n", bodyBytes)
 			return nil, err
 		}
 		response.JSON401 = &dest

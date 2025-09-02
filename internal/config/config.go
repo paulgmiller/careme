@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -43,7 +44,14 @@ func Load() (*Config, error) {
 		},
 	}
 
-	return config, nil
+	return config, validate(config)
+}
+
+func validate(cfg *Config) error {
+	if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
+		return fmt.Errorf("Kroger client ID and secret must be set")
+	}
+	return nil
 }
 
 func getEnvOrDefault(key, defaultValue string) string {

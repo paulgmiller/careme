@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"careme/internal/ai"
 	"careme/internal/config"
@@ -28,12 +29,22 @@ type GeneratedRecipes struct {
 
 func NewGenerator(cfg *config.Config) (*Generator, error) {
 
-	basicAuth, err := securityprovider.NewSecurityProviderBasicAuth(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
+	bearer, err := kroger.GetOAuth2Token(context.TODO(), cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := kroger.NewClientWithResponses("https://api.kroger.com/", kroger.WithRequestEditorFn(basicAuth.Intercept))
+	bearerAuth, err := securityprovider.NewSecurityProviderBearerToken(bearer)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add LoggingDoer to log all requests/responses
+	//loggingDoer := &kroger.LoggingDoer{Wrapped: http.DefaultClient}
+	client, err := kroger.NewClientWithResponses("https://api.kroger.com/v1",
+		kroger.WithRequestEditorFn(bearerAuth.Intercept),
+	//	kroger.WithHTTPClient(loggingDoer),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -48,10 +59,9 @@ func NewGenerator(cfg *config.Config) (*Generator, error) {
 func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, error) {
 	log.Printf("Generating recipes for location: %s", location)
 
-	saleIngredients, err := g.getSaleIngredients(location, "steak")
+	ingredients, err := g.GetIngredients(location, "steak", 0) //Meat \u0026 Seafood
 	if err != nil {
-		log.Printf("Warning: Could not fetch sale ingredients: %v", err)
-		saleIngredients = []string{}
+		return nil, fmt.Errorf("could not fetch sale ingredients: %w", err)
 	}
 
 	previousRecipes, err := g.getPreviousRecipes()
@@ -61,9 +71,9 @@ func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, er
 	}
 
 	log.Printf("Found %d sale ingredients, %d previous recipes",
-		len(saleIngredients), len(previousRecipes))
+		len(ingredients), len(previousRecipes))
 
-	response, err := g.aiClient.GenerateRecipes(location, saleIngredients, previousRecipes)
+	response, err := g.aiClient.GenerateRecipes(location, ingredients, previousRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
@@ -80,28 +90,77 @@ func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, er
 	return recipes, nil
 }
 
-func (g *Generator) getSaleIngredients(location, term string) ([]string, error) {
+func (g *Generator) GetIngredients(location, term string, skip int) ([]string, error) {
+	limit := 50
+	limitStr := strconv.Itoa(limit)
+	startStr := strconv.Itoa(skip)
+	fulfillment := "ais"
 	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
-		FilterLocationId: &location,
-		FilterTerm:       &term,
+		FilterLocationId:  &location,
+		FilterTerm:        &term,
+		FilterLimit:       &limitStr,
+		FilterStart:       &startStr,
+		FilterFulfillment: &fulfillment,
 	})
 	if err != nil {
+		fmt.Printf("failing here: %v\n", err)
 		return nil, err
 	}
 
 	if products.StatusCode() != http.StatusOK {
+		fmt.Printf("Kroger ProductSearchWithResponse returned status: %d\n", products.StatusCode())
 		return nil, fmt.Errorf("Got %d code from kroger", products.StatusCode())
 	}
+	bytes, _ := json.Marshal(*products.JSON200.Meta.Pagination)
+	fmt.Printf("Pagination:%s\n", bytes)
 
 	var ingredients []string
+
 	for _, product := range *products.JSON200.Data {
 		for _, item := range *product.Items {
 			//does just giving the model json work better here?
-			ingredients = append(ingredients, fmt.Sprintf("%s %s price %s sale %s", product.Description, *item.Size, item.Price.Regular, item.Price.Promo))
+			if item.Price == nil {
+				//fmt.Printf("Warning: Item %s has no price information\n", toStr(product.Description))
+				continue
+			}
+
+			ingredients = append(ingredients, fmt.Sprintf(
+				"%s %s price %.2f sale %.2f",
+				toStr(product.Description),
+				toStr(item.Size),
+				toFloat32(item.Price.Regular),
+				toFloat32(item.Price.Promo),
+				//strings.Join(*product.Categories, ", "),
+			))
 		}
 	}
 
+	//recursion is pretty dumb pagination
+	if len(*products.JSON200.Data) == limit { //fence post error
+		page, err := g.GetIngredients(location, term, skip+limit)
+		if err != nil {
+			return nil, err
+		}
+		ingredients = append(ingredients, page...)
+	}
+
 	return ingredients, nil
+}
+
+// toStr returns the string value if non-nil, or "empty" otherwise.
+func toStr(s *string) string {
+	if s == nil {
+		return "empty"
+	}
+	return *s
+}
+
+// toFloat32 returns the float32 value if non-nil, or 0.0 otherwise.
+func toFloat32(f *float32) float32 {
+	if f == nil {
+		return 0.0
+	}
+	return *f
 }
 
 func (g *Generator) getPreviousRecipes() ([]string, error) {

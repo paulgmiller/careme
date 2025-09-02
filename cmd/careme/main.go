@@ -46,7 +46,16 @@ func run(location string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
-	formatter := recipes.NewFormatter()
+
+	ingredients, err := generator.GetIngredients(location, "Meat & Seafood", 0) //Meat \u0026 Seafood
+	if err != nil {
+		return fmt.Errorf("failed to get ingredients: %w", err)
+	}
+	for _, ingredient := range ingredients {
+		fmt.Printf(" - %s\n", ingredient)
+	}
+
+	/*formatter := recipes.NewFormatter()
 
 	fmt.Printf("🍽️  Generating 4 weekly recipes for location: %s\n", location)
 	fmt.Println("🏷️  Checking current sales at local QFC/Fred Meyer...")
@@ -60,6 +69,7 @@ func run(location string) error {
 
 	output := formatter.FormatRecipes(generatedRecipes)
 	fmt.Print(output)
+	*/
 
 	return nil
 }
