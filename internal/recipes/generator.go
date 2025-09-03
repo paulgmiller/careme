@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"careme/internal/ai"
@@ -59,7 +60,7 @@ func NewGenerator(cfg *config.Config) (*Generator, error) {
 func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, error) {
 	log.Printf("Generating recipes for location: %s", location)
 
-	ingredients, err := g.GetIngredients(location, "steak", 0) //Meat \u0026 Seafood
+	ingredients, err := g.GetIngredients(location, Filter{Term: "steak"}, 0) //Meat \u0026 Seafood
 	if err != nil {
 		return nil, fmt.Errorf("could not fetch sale ingredients: %w", err)
 	}
@@ -90,17 +91,24 @@ func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, er
 	return recipes, nil
 }
 
-func (g *Generator) GetIngredients(location, term string, skip int) ([]string, error) {
+type Filter struct {
+	Term   string
+	Brands []string
+}
+
+func (g *Generator) GetIngredients(location string, f Filter, skip int) ([]string, error) {
 	limit := 50
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
-	fulfillment := "ais"
+	//brand := "empty"
+	//fulfillment := "ais"
 	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
-		FilterLocationId:  &location,
-		FilterTerm:        &term,
-		FilterLimit:       &limitStr,
-		FilterStart:       &startStr,
-		FilterFulfillment: &fulfillment,
+		FilterLocationId: &location,
+		FilterTerm:       &f.Term,
+		FilterLimit:      &limitStr,
+		FilterStart:      &startStr,
+		//FilterBrand:      &brand,
+		//FilterFulfillment: &fulfillment,
 	})
 	if err != nil {
 		fmt.Printf("failing here: %v\n", err)
@@ -109,14 +117,21 @@ func (g *Generator) GetIngredients(location, term string, skip int) ([]string, e
 
 	if products.StatusCode() != http.StatusOK {
 		fmt.Printf("Kroger ProductSearchWithResponse returned status: %d\n", products.StatusCode())
-		return nil, fmt.Errorf("Got %d code from kroger", products.StatusCode())
+		return nil, fmt.Errorf("got %d code from kroger", products.StatusCode())
 	}
-	bytes, _ := json.Marshal(*products.JSON200.Meta.Pagination)
-	fmt.Printf("Pagination:%s\n", bytes)
+	//bytes, _ := json.Marshal(*products.JSON200.Meta.Pagination)
+	//fmt.Printf("Pagination:%s\n", bytes)
 
 	var ingredients []string
 
 	for _, product := range *products.JSON200.Data {
+		if product.Brand != nil && !slices.Contains(f.Brands, toStr(product.Brand)) {
+			continue
+		}
+		if slices.Contains(*product.Categories, "Frozen") {
+			continue
+		}
+		//fmt.Printf("Product: %s\n", toStr(product.Description))
 		for _, item := range *product.Items {
 			//does just giving the model json work better here?
 			if item.Price == nil {
@@ -124,22 +139,30 @@ func (g *Generator) GetIngredients(location, term string, skip int) ([]string, e
 				continue
 			}
 
-			ingredients = append(ingredients, fmt.Sprintf(
-				"%s %s price %.2f sale %.2f",
+			//bytes, _ := json.MarshalIndent(product, "", "  ")
+			//fmt.Println(string(bytes))
+			ingredient := fmt.Sprintf(
+				"%s %s price %.2f",
+				//toStr(product.Brand),
 				toStr(product.Description),
 				toStr(item.Size),
 				toFloat32(item.Price.Regular),
-				toFloat32(item.Price.Promo),
-				//strings.Join(*product.Categories, ", "),
-			))
+			)
+
+			if toFloat32(item.Price.Promo) > 0.0 {
+				ingredient += fmt.Sprintf(" sale %.2f", toFloat32(item.Price.Promo))
+			}
+			ingredients = append(ingredients, ingredient)
+			//strings.Join(*product.Categories, ", "),
+
 		}
 	}
 
 	//recursion is pretty dumb pagination
-	if len(*products.JSON200.Data) == limit { //fence post error
-		page, err := g.GetIngredients(location, term, skip+limit)
+	if len(*products.JSON200.Data) == limit && skip+limit < 250 { //fence post error
+		page, err := g.GetIngredients(location, f, skip+limit)
 		if err != nil {
-			return nil, err
+			return nil, nil
 		}
 		ingredients = append(ingredients, page...)
 	}

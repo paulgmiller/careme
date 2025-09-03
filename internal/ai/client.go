@@ -192,6 +192,17 @@ func (c *Client) buildRecipePrompt(location string, saleIngredients, previousRec
 	prompt += "- Include variety in cooking methods and cuisines\n"
 	prompt += "- Each recipe should serve 2 people\n"
 	prompt += "- Provide clear, step-by-step instructions\n\n"
+	/*
+		You are a professional chef and recipe developer. Generate 3 unique, practical recipes based on the provided constraints
+		Each meal should have a protein and a vegtable and/or a starch side.
+		Prioritize ingredients currently on sale Prioritize seasonal ingredients (currently september 1st in washington state)
+		Include variety in cooking methods and cuisines. Each recipe should serve 2 people
+		Provide clear, step-by-step instructions and a total ingredient list
+		Should generally take less than an hour though special ones can go over.
+		Optionally provide a wine pairing with each recipe.
+
+		Proteins and Vegatables currently avaialable (assume most starches and seasonings are available):
+	*/
 
 	prompt += "Format your response as valid JSON with this structure:\n"
 	prompt += `{

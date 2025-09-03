@@ -46,13 +46,43 @@ func run(location string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
-
-	ingredients, err := generator.GetIngredients(location, "Meat & Seafood", 0) //Meat \u0026 Seafood
-	if err != nil {
-		return fmt.Errorf("failed to get ingredients: %w", err)
+	categories := []recipes.Filter{
+		{
+			Term:   "lamb",
+			Brands: []string{"Simple Truth"},
+		},
+		{
+			Term:   "chicken",
+			Brands: []string{"Foster Farms"},
+		},
+		{
+			Term: "beef",
+		},
+		{
+			Term: "fish",
+		},
+		{
+			Term: "pork",
+		},
+		{
+			Term: "chicken",
+		},
+		{
+			Term: "shellfish",
+		},
+		{
+			Term: "produce vegetable",
+		},
 	}
-	for _, ingredient := range ingredients {
-		fmt.Printf(" - %s\n", ingredient)
+	for _, category := range categories {
+		ingredients, err := generator.GetIngredients(location, category, 0) //Meat \u0026 Seafood
+		if err != nil {
+			return fmt.Errorf("failed to get ingredients: %w", err)
+		}
+		fmt.Println(category.Term)
+		for _, ingredient := range ingredients {
+			fmt.Printf(" - %s\n", ingredient)
+		}
 	}
 
 	/*formatter := recipes.NewFormatter()

@@ -1,0 +1,175 @@
+lamb
+ - Simple Truth® Natural Lamb Shoulder 1 lb price 9.99 sale 8.99
+ - Simple Truth® Natural Rack of Lamb 4 Rib 1 lb price 17.99
+ - Simple Truth® Natural Lamb Loin Chops 1 lb price 15.99 sale 12.99
+ - Simple Truth® Natural Ground Lamb 1 lb price 8.99 sale 8.00
+ - Simple Truth™ Natural Bison Ribeye Steak 8 oz price 14.99 sale 13.99
+ - Simple Truth® Natural Lamb for Stew Meat 1 lb price 9.99 sale 8.99
+ - Simple Truth™ 90% Lean Natural Ground Bison 16 oz price 11.99 sale 11.49
+ - Simple Truth® Natural Lamb Shank 1 lb price 7.49
+ - Simple Truth™ Natural Bison Sirloin Steak 6 oz price 7.99 sale 7.49
+ - Simple Truth® Natural Leg of Lamb 1 lb price 9.99
+chicken
+ - Foster Farms Fresh & Natural Chicken Thighs 1 lb price 2.79
+ - Foster Farms Fresh & Natural Cage Free Drumsticks 1 lb price 2.79
+ - Foster Farms Free Range Simply Raised Chicken Drumsticks 1 lb price 3.79
+ - Foster Farms Fresh & Natural Cage Free Chicken Livers 1 lb price 3.39
+ - Foster Farms Fresh & Natural Cage Free Whole Chicken 1 lb price 2.09
+ - Foster Farms Free Range Simply Raised Chicken Thighs 1 lb price 3.79
+ - Foster Farms Simply Raised Free Range Boneless Skinless Chicken Breast Fillets 1 lb price 8.49
+ - Foster Farms Free Range Simply Raised Boneless Skinless Chicken Breast Tenders 1 lb price 8.49
+ - Foster Farms Simply Raised Free Range No Antibiotics Ever Chicken Party Wings 1 lb price 6.49
+ - Hand Trimmed Boneless Skinless Fresh Chicken Breast 1 lb (order by the pound) price 4.99 sale 3.99
+ - Foster Farms Fresh & Natural Boneless Skinless Chicken Breast Fillets 1 lb price 7.49
+ - Foster Farms Fresh & Natural Cage Free Boneless Skinless Chicken Thighs 1 lb price 5.99
+ - Boneless Skinless Fresh Chicken Thighs 1 lb price 4.49
+ - Foster Farms Fresh & Natural Chicken Wings 1 lb price 6.59
+ - Foster Farms Fresh Chicken Gizzards/Heart 1 lb price 3.49
+beef
+ - Beef Choice Tri-Tip Steaks (About 2 per Pack) 1 lb price 11.99
+ - Beef Choice Boneless Flank Steak 1 lb price 13.99
+ - Beef Choice Tri Tip Roast (1 Roast) 1 lb price 10.99
+ - Beef Choice Top Sirloin Steak (1 Steak) 1 lb price 13.99
+ - Kroger® Choice Beef Bone-In Ribeye Steak Family Pack 1 lb price 18.99
+ - Beef Choice Bone-In Ribeye Roast (1 Roast) 1 lb price 9.99
+ - Choice Boneless Top Round Beef Steak (1 Steak) 1 lb price 10.99
+ - Choice Top Round London Broil Beef 1 lb price 10.99
+ - Beef Choice Angus Cubed Steak (About 2 Steaks per Pack) 1 lb price 9.99
+ - Kroger® Choice Beef In-Store Cut Chuck Roast 1 lb price 9.99
+ - Beef Choice Boneless Flat Iron Steak (1 Steak) 1 lb price 13.99
+ - Beef Choice Chuck Roast Cross Rib (1 Roast) 1 lb price 9.99
+ - Beef Choice Top Sirloin Steak Value Pack (About 3-4 Steaks Per Pack) 1 lb price 13.99 sale 12.99
+ - Beef for Stew Boneless 1 lb price 8.49
+ - Beef Choice Tri-Tip Steaks Value Pack ( 5-6 steaks per pack) 1 lb price 11.99
+ - Kroger® Beef Choice T-Bone Steak Value Pack 1 lb price 16.99 sale 15.99
+ - Beef Choice Boneless Chuck Steak Value Pack (About 2 Steaks Per Pack) 1 lb price 10.99
+ - Beef Choice Petite Sirloin Steak Value Pack (About 3-4 Steaks per Pack) 1 lb price 10.99
+ - Beef Choice Skirt Steak 1 lb price 13.99
+ - Choice Top Round Roast Beef (1 Roast) 1 lb price 9.99
+ - Beef Choice Petite Sirloin Steak (About 2-3 Steaks) 1 lb price 10.99
+ - Kroger® Choice Beef Boneless Strip Steak 1 lb price 17.99 sale 16.99
+ - Beef Choice Bone-In Short Ribs 1 lb price 9.99
+ - Certified Angus Beef Choice Tenderloin Steak 1 lb price 15.99
+ - Beef Choice For Stew Value Pack 1 lb price 8.49 sale 7.49
+ - Beef Choice Boneless Ribeye Steak Value Pack 1 lb price 19.99 sale 18.99
+ - Certified Angus Beef Boneless Flank Steak 1 lb price 15.99
+ - Certified Angus Beef Boneless Flank Steak Family Pack (2 per Pack) 1 lb price 13.99
+ - Beef Choice Ribs Back Value Pack 1 lb price 8.99 sale 7.99
+ - Rumba Meats® Beef Liver Sliced (Higado de Res Rebanado) 1 lb price 3.49
+ - MarcAngelo Montreal Spice Bacon Beef Skewers 0.62 lb price 9.99 sale 7.99
+ - Beef Angus Chuck Patties 1 ct price 3.00 sale 2.50
+ - Beef Choice Back Ribs 1 lb price 7.99
+fish
+ - Wild Caught Sockeye Salmon Fillet (Previously Frozen) 1 lb price 13.99
+ - Fresh Steelhead Trout Fillet 1 lb price 11.99
+ - Fresh Atlantic Salmon Center Cut Loin Farm Raised (never frozen; sustainably sourced) 1 lb price 12.99
+ - Fresh Sockeye Salmon Fillet Wild Caught (sustainably sourced) 1 lb price 14.99
+ - Fresh Rockfish Fillet Pacific Caught (sustainably sourced) 1 lb price 9.99
+ - Pacific Cod Fillet Wild Caught (sustainably sourced) 1 lb price 10.99
+ - Mahi Mahi Wild Caught Filet 1 lb price 9.99 sale 6.99
+ - Swordfish Steak Wild Caught (sustainably sourced) 1 lb price 9.99 sale 7.99
+ - Fresh Atlantic Whole Salmon Fillet Farm Raised (sustainably sourced) 1 lb price 10.99
+ - Tuna Steak Wild Caught Frozen (sustainably sourced) 1 lb price 11.99 sale 7.99
+ - Cod Pacific Fillet (Wild Caught Previously Frozen) 1 lb price 10.99
+ - Fresh Coho Salmon Fillet 1 lb price 16.99
+ - King Salmon Fillet (Wild Caught Previously Frozen) 1 lb price 18.99
+ - Salmon Coho Fillet (Fresh Wild Caught) 1 lb price 16.99
+ - Sole Dover Fillet Wild Caught Fresh (sustainably sourced) 1 lb price 8.99
+ - Tilapia Fillet (Fresh Farm Raised) 1 lb price 10.99
+ - Seafood Salad 1 rw price 7.99
+ - Rockfish Fillet (Wild Caught Fresh) 1 lb price 9.99
+pork
+ - Pork Shoulder Boneless Boston Butt Roast 1 lb price 3.79
+ - Pork Back Ribs 1 lb price 5.99
+ - St. Louis Style Pork Spareribs 1 lb price 4.99
+ - Boneless Pork Loin Center-Cut Thin Chops 1 lb price 6.99
+ - Kroger® Kansas BBQ Tenderloin 1 lb price 7.00 sale 6.00
+ - Kroger® Pork Belly Diced Rubbed With BBQ Seasoning 20 oz price 7.00
+ - Pork Sliced Applewood Smoked Bacon (From Fresh Meat Counter) 1 rw price 6.49
+chicken
+ - Hand Trimmed Boneless Skinless Fresh Chicken Breast 1 lb (order by the pound) price 4.99 sale 3.99
+ - Boneless Skinless Fresh Chicken Thighs 1 lb price 4.49
+shellfish
+ - Fresh Wild Mussels (never frozen; sustainably sourced) 1 lb price 5.99
+ - Wild Caught Sea Scallops 10/20 1 lb price 14.99
+ - Extra Large Shrimp Cooked 26/30 Tail On (fresh service case; sustainably sourced) 1 lb price 9.99 sale 7.99
+ - Extra Large EZ Peel Shrimp 21/25 1 lb price 8.99 sale 6.99
+ - Snow Crab Cluster Wild Caught 5/8 (sustainably sourced) 1 lb price 12.99
+ - Cooked Surimi Alaskan Snow Crab Legs 1 lb price 8.99
+ - Whole Cooked Dungeness Crab 1 lb price 15.99
+ - Live Manila Clams (sustainably sourced) 1 lb price 6.99
+ - Pink Shrimp Peeled and Deveined 31/40 Raw Previously Frozen (Service Counter) 1 lb price 8.99
+ - Shrimp Cooked X Large 26/30 Count 1 lb price 9.99 sale 7.99
+ - Wild Caught Lobster Tail 4-6 oz (1 Lobster Tail) 1 ct price 9.99
+ - Wild Caught Cooked Shrimp Meat 300/500 1 lb price 9.99
+ - Bay Scallops Farm Raised 80/120 (sustainably sourced) 1 lb price 9.99
+ - Red Shrimp 16/25 1 lb price 11.49
+ - Live In-Shell Oysters 1 ct price 1.29
+ - Cooked Shrimp U15 (sustainably sourced) 1 lb price 12.99
+produce vegetable
+ - Organic Lacinato Kale 1 ct price 2.79
+ - Organic Purple Kale 1 ct price 2.79
+ - Organic Cucumber 1 ct price 1.29
+ - Organic Zucchini Squash 1 lb price 2.29
+ - Organic Baby Bok Choy 1 lb price 2.99
+ - Organic Fresh Large Bartlett Pear - Each 1 lb price 3.29
+ - Organic Jalapeno Peppers 1 lb price 4.99
+ - Organic Spaghetti Squash 1 lb price 1.99
+ - Organic Ginger Root 1 lb price 3.99
+ - Organic Mangos 1 ct price 2.50
+ - Organic Butternut Squash 1 lb price 1.99
+ - Organic Romaine Lettuce 6 oz price 4.49
+ - Organic Kale 16 oz price 2.79
+ - Organic Acorn Squash 1 lb price 1.99
+ - Organic Yellow Nectarine 1 lb price 3.99
+ - Organic Iceberg Lettuce 1 ct price 2.99
+ - Organic White Onions 1 ct price 1.99
+ - Organic Garlic 1 lb price 6.99
+ - Organic Spinach 1 ct price 2.79
+ - Turnip 1 lb price 2.49
+ - Organic Collard Greens 16 oz price 2.99
+ - Fresh Cut Watermelon Chunks 18 oz price 5.00
+ - Organic Leeks-Order by the Bunch (2-3 leeks per bunch) 1 lb price 3.99
+ - Organic Red Leaf Lettuce 1 ct price 2.99
+ - Organic Russet Potatoes 1 lb price 1.69
+ - Kroger® Fresh French Green Beans Bag 16 oz price 4.39
+ - Organic Green Leaf Lettuce 1 ct price 2.99
+ - Organic Long English Cucumbers 1 ct price 2.29
+ - Organic Mustard Greens 1 lb price 2.99
+ - Fresh Green Beans - Bag 1 lb price 2.19
+ - Green Onions 1 each price 0.99
+ - Organic Green Beans 1 lb price 2.99
+ - Organic Red Chard 1 lb price 2.99
+ - Fresh Ripe Mini Honeyglow Pineapple 1 ct price 3.79
+ - Organic Yellow Potatoes 1 lb price 1.99
+ - Organic White Sweet Potatoes 1 lb price 2.79
+ - Fresh Cut Mixed Berries 9 oz price 5.99
+ - Fresh Large D'Anjou Pear - Each large/ 1 count price 2.99
+ - Fresh Cut Cantaloupe Chunks 9 oz price 3.99
+ - Fresh Large D'Anjou Red Pear - Each 1 lb price 2.99
+ - Fresh Cut Watermelon Chunks 9 oz price 3.99
+ - Fresh Large Bosc Pear - Each 1 lb price 2.99
+ - Organic Hass Avocados each price 2.49
+ - Fresh Cut Fruit Medley 18 oz price 7.49
+ - Chayote Squash 1 ct price 1.79
+ - Fresh Tomatillo 1 lb price 2.99
+ - Organic Artichokes 1 ct price 4.99
+ - Organic Crimini Mushrooms 1 lb price 4.99
+ - Fresh Large Bartlett Pear - Each 1 lb price 2.99
+ - Kroger® Fuji Apples – 3 Pound Bag 3 lb price 3.99
+ - Fresh Ripe Whole Pineapple 1 ct price 2.99
+ - Golden Acorn Squash 1 lb price 1.29
+ - Kroger® Russet Potatoes 5 lb price 2.99
+ - Kroger® Yellow Onion 3 lb Bag 3 lb price 2.99
+ - Organic Red Potatoes 1 lb price 1.99
+ - Organic Rainbow Chard 16 oz price 2.99
+ - Cored Pineapple 18.5 oz price 5.49
+ - Zucchini 1 lb price 1.69
+ - Organic Green Onions 1 each price 1.69
+ - Spaghetti Squash 1 lb price 1.49
+ - Kroger® Jumbo Russet Potatoes 8 lb price 5.99
+ - Buttercup Squash 1 lb price 1.29
+ - Butternut Squash 1 lb price 1.49
+ - Organic Italian Parsley each price 1.99
+ - Organic Large Cosmic Crisp Apple - Each 1 each price 2.79
+ - Organic Cilantro 1 ct price 1.39
