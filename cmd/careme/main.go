@@ -46,9 +46,7 @@ func run(location string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
-	generator.GetIngredients(location)
 
-	
 	//fmt.Printf("🍽️  Generating 4 weekly recipes for location: %s\n", location)
 	//fmt.Println("🏷️  Checking current sales at local QFC/Fred Meyer...")
 	//fmt.Println("📚 Avoiding recipes from the past 2 weeks...")
@@ -59,9 +57,8 @@ func run(location string) error {
 		return fmt.Errorf("failed to generate recipes: %w", err)
 	}
 
-	output := formatter.FormatRecipes(generatedRecipes)
-	fmt.Print(output)
-	*/
+	//output := formatter.FormatRecipes(generatedRecipes)
+	fmt.Println(generatedRecipes)
 
 	return nil
 }

@@ -57,7 +57,7 @@ func NewGenerator(cfg *config.Config) (*Generator, error) {
 	}, nil
 }
 
-func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, error) {
+func (g *Generator) GenerateWeeklyRecipes(location string) (string, error) {
 	log.Printf("Generating recipes for location: %s", location)
 
 	/*previousRecipes, err := g.getPreviousRecipes()
@@ -68,15 +68,17 @@ func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, er
 
 	ingredients, err := g.GetStaples(location)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get staples: %w", err)
+		return "", fmt.Errorf("failed to get staples: %w", err)
 	}
 
 	//log.Printf("Found %d sale ingredients, %d previous recipes", 		len(ingredients), len(previousRecipes))
 
-	response, err := g.aiClient.GenerateRecipes(location, ingredients, previousRecipes)
+	response, err := g.aiClient.GenerateRecipes(location, ingredients, []string{} /*previousRecipes*/)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
+		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
+
+	return response, nil
 
 	/*recipes, err := g.parseAIResponse(response, location)
 	if err != nil {
@@ -88,7 +90,7 @@ func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, er
 	}
 	*/
 
-	return recipes, nil
+	//return recipes, nil
 }
 
 type filter struct {
@@ -134,6 +136,7 @@ func (g *Generator) GetStaples(location string) ([]string, error) {
 			return nil, fmt.Errorf("failed to get ingredients: %w", err)
 		}
 		ingredients = append(ingredients, cingredients...)
+		log.Printf("Found %d ingredients for category: %s", len(cingredients), category.Term)
 	}
 	return ingredients, nil
 }
