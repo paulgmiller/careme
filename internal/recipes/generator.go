@@ -60,26 +60,25 @@ func NewGenerator(cfg *config.Config) (*Generator, error) {
 func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, error) {
 	log.Printf("Generating recipes for location: %s", location)
 
-	ingredients, err := g.GetIngredients(location, Filter{Term: "steak"}, 0) //Meat \u0026 Seafood
-	if err != nil {
-		return nil, fmt.Errorf("could not fetch sale ingredients: %w", err)
-	}
-
-	previousRecipes, err := g.getPreviousRecipes()
+	/*previousRecipes, err := g.getPreviousRecipes()
 	if err != nil {
 		log.Printf("Warning: Could not fetch recipe history: %v", err)
 		previousRecipes = []string{}
+	}*/
+
+	ingredients, err := g.GetStaples(location)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
 
-	log.Printf("Found %d sale ingredients, %d previous recipes",
-		len(ingredients), len(previousRecipes))
+	//log.Printf("Found %d sale ingredients, %d previous recipes", 		len(ingredients), len(previousRecipes))
 
 	response, err := g.aiClient.GenerateRecipes(location, ingredients, previousRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
-	recipes, err := g.parseAIResponse(response, location)
+	/*recipes, err := g.parseAIResponse(response, location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
@@ -87,21 +86,65 @@ func (g *Generator) GenerateWeeklyRecipes(location string) ([]history.Recipe, er
 	if err := g.historyStorage.SaveRecipes(recipes); err != nil {
 		log.Printf("Warning: Could not save recipes to history: %v", err)
 	}
+	*/
 
 	return recipes, nil
 }
 
-type Filter struct {
+type filter struct {
 	Term   string
 	Brands []string
 }
 
-func (g *Generator) GetIngredients(location string, f Filter, skip int) ([]string, error) {
+// calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
+// tries to filter to no brand or certain brands to avoid shelved products
+func (g *Generator) GetStaples(location string) ([]string, error) {
+	categories := []filter{
+		{
+			Term:   "lamb",
+			Brands: []string{"Simple Truth"},
+		},
+		{
+			Term:   "chicken",
+			Brands: []string{"Foster Farms"},
+		},
+		{
+			Term: "beef",
+		},
+		{
+			Term: "fish",
+		},
+		{
+			Term: "pork",
+		},
+		{
+			Term: "chicken",
+		},
+		{
+			Term: "shellfish",
+		},
+		{
+			Term: "produce vegetable",
+		},
+	}
+	var ingredients []string
+	for _, category := range categories {
+		cingredients, err := g.GetIngredients(location, category, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get ingredients: %w", err)
+		}
+		ingredients = append(ingredients, cingredients...)
+	}
+	return ingredients, nil
+}
+
+// move to krogrer client as everyone will be differnt here?
+func (g *Generator) GetIngredients(location string, f filter, skip int) ([]string, error) {
 	limit := 50
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
-	//brand := "empty"
-	//fulfillment := "ais"
+	//brand := "empty" doesn't work have to check for nil
+	//fulfillment := "ais" drmatically shortens?
 	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
 		FilterLocationId: &location,
 		FilterTerm:       &f.Term,
@@ -111,16 +154,13 @@ func (g *Generator) GetIngredients(location string, f Filter, skip int) ([]strin
 		//FilterFulfillment: &fulfillment,
 	})
 	if err != nil {
-		fmt.Printf("failing here: %v\n", err)
-		return nil, err
+		return nil, fmt.Errorf("failed on product searchwith response %w", err)
 	}
 
 	if products.StatusCode() != http.StatusOK {
 		fmt.Printf("Kroger ProductSearchWithResponse returned status: %d\n", products.StatusCode())
 		return nil, fmt.Errorf("got %d code from kroger", products.StatusCode())
 	}
-	//bytes, _ := json.Marshal(*products.JSON200.Meta.Pagination)
-	//fmt.Printf("Pagination:%s\n", bytes)
 
 	var ingredients []string
 
@@ -128,19 +168,17 @@ func (g *Generator) GetIngredients(location string, f Filter, skip int) ([]strin
 		if product.Brand != nil && !slices.Contains(f.Brands, toStr(product.Brand)) {
 			continue
 		}
+		//end up with a bunch of frozen chicken with out this.
 		if slices.Contains(*product.Categories, "Frozen") {
 			continue
 		}
-		//fmt.Printf("Product: %s\n", toStr(product.Description))
 		for _, item := range *product.Items {
-			//does just giving the model json work better here?
 			if item.Price == nil {
-				//fmt.Printf("Warning: Item %s has no price information\n", toStr(product.Description))
+				// todo what does this mean?
 				continue
 			}
 
-			//bytes, _ := json.MarshalIndent(product, "", "  ")
-			//fmt.Println(string(bytes))
+			//does just giving the model json work better here?
 			ingredient := fmt.Sprintf(
 				"%s %s price %.2f",
 				//toStr(product.Brand),
