@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -9,17 +10,21 @@ import (
 	"time"
 
 	"careme/internal/config"
+	"careme/internal/kroger"
 	"careme/internal/recipes"
 )
 
 func main() {
 	var location string
+	var zipcode string
 	var serve bool
 	var addr string
 	var help bool
 
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
+	flag.StringVar(&zipcode, "zipcode", "", "return location ids for a zip code.")
+	flag.StringVar(&zipcode, "z", "", "return location ids for a zip code (short form)")
 	flag.BoolVar(&serve, "serve", false, "Run HTTP server mode")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.BoolVar(&help, "help", false, "Show help message")
@@ -33,6 +38,35 @@ func main() {
 
 	if err := os.MkdirAll("recipes", 0755); err != nil {
 		log.Fatalf("failed to create recipes directory: %v", err)
+	}
+
+	//always load config here.
+
+	if zipcode != "" {
+		cfg, err := config.Load()
+		if err != nil {
+			log.Fatalf("failed to load configuration: %v", err)
+		}
+		client, err := kroger.FromConfig(context.TODO(), cfg)
+		if err != nil {
+			log.Fatalf("failed to create Kroger client: %v", err)
+		}
+		locparams := &kroger.LocationListParams{
+			FilterZipCodeNear: &zipcode,
+		}
+		resp, err := client.LocationListWithResponse(context.TODO(), locparams)
+		if err != nil {
+			log.Fatalf("failed to get locations for zip %s: %v", zipcode, err)
+		}
+		if resp.JSON200 == nil || len(*resp.JSON200.Data) == 0 {
+			fmt.Printf("No locations found for zip code %s\n", zipcode)
+			return
+		}
+		fmt.Printf("Locations for zip code %s:\n", zipcode)
+		for _, loc := range *resp.JSON200.Data {
+			fmt.Printf("- %s, %s: %s\n", *loc.Name, *loc.Address.AddressLine1, *loc.LocationId)
+		}
+		return
 	}
 
 	if serve {

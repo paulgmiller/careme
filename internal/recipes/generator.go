@@ -15,8 +15,6 @@ import (
 	"careme/internal/config"
 	"careme/internal/history"
 	"careme/internal/kroger"
-
-	"github.com/oapi-codegen/oapi-codegen/v2/pkg/securityprovider"
 )
 
 func Hash(location string, date time.Time) string {
@@ -35,23 +33,7 @@ type GeneratedRecipes struct {
 }
 
 func NewGenerator(cfg *config.Config) (*Generator, error) {
-
-	bearer, err := kroger.GetOAuth2Token(context.TODO(), cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
-	if err != nil {
-		return nil, err
-	}
-
-	bearerAuth, err := securityprovider.NewSecurityProviderBearerToken(bearer)
-	if err != nil {
-		return nil, err
-	}
-
-	// Add LoggingDoer to log all requests/responses
-	//loggingDoer := &kroger.LoggingDoer{Wrapped: http.DefaultClient}
-	client, err := kroger.NewClientWithResponses("https://api.kroger.com/v1",
-		kroger.WithRequestEditorFn(bearerAuth.Intercept),
-	//	kroger.WithHTTPClient(loggingDoer),
-	)
+	client, err := kroger.FromConfig(context.TODO(), cfg)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,8 @@
 package kroger
 
 import (
+	"careme/internal/config"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/oapi-codegen/oapi-codegen/v2/pkg/securityprovider"
 )
 
 //go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config cfg.yaml swagger.yaml
@@ -71,4 +75,23 @@ func GetOAuth2Token(ctx context.Context, clientID, clientSecret string) (string,
 		return "", err
 	}
 	return tokenResp.AccessToken, nil
+}
+
+func FromConfig(ctx context.Context, cfg *config.Config) (*ClientWithResponses, error) {
+	bearer, err := GetOAuth2Token(context.TODO(), cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
+	if err != nil {
+		return nil, err
+	}
+
+	bearerAuth, err := securityprovider.NewSecurityProviderBearerToken(bearer)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add LoggingDoer to log all requests/responses
+	//loggingDoer := &kroger.LoggingDoer{Wrapped: http.DefaultClient}
+	return NewClientWithResponses("https://api.kroger.com/v1",
+		WithRequestEditorFn(bearerAuth.Intercept),
+	//	kroger.WithHTTPClient(loggingDoer),
+	)
 }
