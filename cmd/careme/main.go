@@ -79,6 +79,10 @@ func main() {
 func runServer(cfg *config.Config, addr string) error {
 
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		zip := r.URL.Query().Get("zip")
 		if zip == "" {
