@@ -92,13 +92,16 @@ func runServer(addr string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
-	generator, err := recipes.NewGenerator(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to create recipe generator: %w", err)
-	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		generator, err := recipes.NewGenerator(cfg)
+		if err != nil {
+			log.Printf("failed to create recipe generator: %v", err)
+			http.Error(w, "could not create recipe generator", http.StatusInternalServerError)
+			return
+		}
+
 		loc := r.URL.Query().Get("location")
 		if loc == "" {
 			w.WriteHeader(http.StatusOK)
