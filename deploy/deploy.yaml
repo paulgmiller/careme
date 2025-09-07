@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: careme
+  labels:
+    app: careme
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: careme
+  template:
+    metadata:
+      labels:
+        app: careme
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      containers:
+        - name: careme
+          image: paulgmiller/careme:b34af65d
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: careme-secrets
+                  key: AI_API_KEY
+            - name: KROGER_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: careme-secrets
+                  key: KROGER_CLIENT_ID
+            - name: KROGER_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: careme-secrets
+                  key: KROGER_CLIENT_SECRET
+          volumeMounts:
+            - name: recipes
+              mountPath: /recipes
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: recipes
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: careme
+  labels:
+    app: careme
+spec:
+  type: ClusterIP
+  selector:
+    app: careme
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: careme
+  labels:
+    app: careme
+  annotations:
+    # Uncomment and adjust if using cert-manager for TLS
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  rules:
+    - host: careme.northbriton.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: careme
+                port:
+                  number: 80
+  # Uncomment TLS section after DNS points to ingress controller and certificate issuer is set up
+  # tls:
+  #   - hosts:
+  #       - careme.northbrion.net
+  #     secretName: careme-tls

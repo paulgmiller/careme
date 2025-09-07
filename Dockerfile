@@ -1,6 +1,6 @@
 # Multi-stage build for careme service
 # Stage 1: build
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /src
 # Enable module cache
 COPY go.mod go.sum ./
@@ -18,4 +18,4 @@ COPY --from=builder /src/careme /careme
 EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/careme"]
-CMD ["-serve","-addr",":8080"]
+CMD ["-serve"]
