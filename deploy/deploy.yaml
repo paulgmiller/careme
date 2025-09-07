@@ -20,7 +20,7 @@ spec:
         runAsGroup: 65532
       containers:
         - name: careme
-          image: paulgmiller/careme:b34af65d
+          image: paulgmiller/careme:20c845f
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
