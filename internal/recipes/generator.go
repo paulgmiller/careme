@@ -101,15 +101,11 @@ type filter struct {
 func (g *Generator) GetStaples(location string) ([]string, error) {
 	categories := []filter{
 		{
-			Term:   "lamb",
-			Brands: []string{"Simple Truth"},
+			Term: "beef",
 		},
 		{
 			Term:   "chicken",
 			Brands: []string{"Foster Farms"},
-		},
-		{
-			Term: "beef",
 		},
 		{
 			Term: "fish",
@@ -118,10 +114,11 @@ func (g *Generator) GetStaples(location string) ([]string, error) {
 			Term: "pork",
 		},
 		{
-			Term: "chicken",
+			Term: "shellfish",
 		},
 		{
-			Term: "shellfish",
+			Term:   "lamb",
+			Brands: []string{"Simple Truth"},
 		},
 		{
 			Term: "produce vegetable",

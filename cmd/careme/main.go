@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"careme/internal/config"
-	"careme/internal/kroger"
+	"careme/internal/locations"
 	"careme/internal/recipes"
 )
 
@@ -40,38 +40,27 @@ func main() {
 		log.Fatalf("failed to create recipes directory: %v", err)
 	}
 
-	//always load config here.
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("failed to load configuration: %v", err)
+	}
 
-	if zipcode != "" {
-		cfg, err := config.Load()
-		if err != nil {
-			log.Fatalf("failed to load configuration: %v", err)
-		}
-		client, err := kroger.FromConfig(context.TODO(), cfg)
-		if err != nil {
-			log.Fatalf("failed to create Kroger client: %v", err)
-		}
-		locparams := &kroger.LocationListParams{
-			FilterZipCodeNear: &zipcode,
-		}
-		resp, err := client.LocationListWithResponse(context.TODO(), locparams)
-		if err != nil {
-			log.Fatalf("failed to get locations for zip %s: %v", zipcode, err)
-		}
-		if resp.JSON200 == nil || len(*resp.JSON200.Data) == 0 {
-			fmt.Printf("No locations found for zip code %s\n", zipcode)
-			return
-		}
-		fmt.Printf("Locations for zip code %s:\n", zipcode)
-		for _, loc := range *resp.JSON200.Data {
-			fmt.Printf("- %s, %s: %s\n", *loc.Name, *loc.Address.AddressLine1, *loc.LocationId)
+	if serve {
+		if err := runServer(cfg, addr); err != nil {
+			log.Fatalf("server error: %v", err)
 		}
 		return
 	}
 
-	if serve {
-		if err := runServer(addr); err != nil {
-			log.Fatalf("server error: %v", err)
+	if zipcode != "" {
+
+		locs, err := locations.GetLocationsByZip(context.TODO(), cfg, zipcode)
+		if err != nil {
+			log.Fatalf("failed to get locations for zip %s: %v", zipcode, err)
+		}
+		fmt.Printf("Locations for zip code %s:\n", zipcode)
+		for _, loc := range locs {
+			fmt.Printf("- %s, %s: %s\n", loc.Name, loc.Address, loc.ID)
 		}
 		return
 	}
@@ -82,19 +71,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(location); err != nil {
+	if err := run(cfg, location); err != nil {
 		log.Fatalf("Error: %v", err)
 	}
 }
 
-func runServer(addr string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
-	}
+func runServer(cfg *config.Config, addr string) error {
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
+		zip := r.URL.Query().Get("zip")
+		if zip == "" {
+			log.Printf("no zip code provided to /locations")
+			http.Error(w, "provide a zip code with ?zip=12345", http.StatusBadRequest)
+			return
+		}
+		locs, err := locations.GetLocationsByZip(context.TODO(), cfg, zip)
+		if err != nil {
+			log.Printf("failed to get locations for zip %s: %v", zip, err)
+			http.Error(w, "could not get locations", http.StatusInternalServerError)
+			return
+		}
+		// Render locations
+		w.Write([]byte(locations.Html(locs, zip)))
+	})
+
+	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
 		generator, err := recipes.NewGenerator(cfg)
 		if err != nil {
 			log.Printf("failed to create recipe generator: %v", err)
@@ -108,18 +110,25 @@ func runServer(addr string) error {
 			_, _ = w.Write([]byte("specify a location id to generate recipes"))
 			return
 		}
-		var date = time.Now()
+		var dateStr string
+		if dateStr = r.URL.Query().Get("date"); dateStr == "" {
+			http.Redirect(w, r, "/recipes?location="+loc+"&date="+time.Now().Format("2006-01-02"), http.StatusSeeOther)
+			return
+		}
+		var date time.Time
+		if date, err = time.Parse("2006-01-02", dateStr); err != nil {
+			http.Error(w, "invalid date format, use YYYY-MM-DD", http.StatusBadRequest)
+			return
+		}
 
-		if dateStr := r.URL.Query().Get("date"); dateStr != "" {
-			var err error
-			if date, err = time.Parse("2006-01-02", dateStr); err == nil {
-				http.Error(w, "invalid date format, use YYYY-MM-DD", http.StatusBadRequest)
+		if recipe, err := os.ReadFile("recipes/" + recipes.Hash(loc, date) + ".txt"); err == nil {
+			log.Printf("serving cached recipes for %s on %s", loc, date.Format("2006-01-02"))
+			l, err := locations.GetLocationByID(context.TODO(), cfg, loc) // get details but ignore error
+			if err != nil {
+				http.Error(w, "could not get location details", http.StatusBadRequest)
 				return
 			}
-
-		}
-		if recipe, err := os.ReadFile("recipes/" + recipes.Hash(loc, date) + ".txt"); err == nil {
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(loc, string(recipe))))
+			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, string(recipe))))
 			return
 		}
 		go func() {
@@ -140,21 +149,12 @@ func runServer(addr string) error {
 	return http.ListenAndServe(addr, mux)
 }
 
-func run(location string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
-	}
+func run(cfg *config.Config, location string) error {
 
 	generator, err := recipes.NewGenerator(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
-
-	//fmt.Printf("🍽️  Generating 4 weekly recipes for location: %s\n", location)
-	//fmt.Println("🏷️  Checking current sales at local QFC/Fred Meyer...")
-	//fmt.Println("📚 Avoiding recipes from the past 2 weeks...")
-	//fmt.Println()
 
 	generatedRecipes, err := generator.GenerateRecipes(location, time.Now())
 	if err != nil {
