@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	openai "github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
@@ -33,8 +34,8 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location string, saleIngredients []string, previousRecipes []string) (string, error) {
-	prompt := c.buildRecipePrompt(location, saleIngredients, previousRecipes)
+func (c *Client) GenerateRecipes(location string, saleIngredients []string, previousRecipes []string, date time.Time) (string, error) {
+	prompt := c.buildRecipePrompt(location, saleIngredients, previousRecipes, date)
 
 	messages := []Message{
 		{
@@ -91,7 +92,7 @@ func (c *Client) generateWithOpenAI(messages []Message) (string, error) {
 	return resp.Choices[0].Message.Content, nil
 }
 
-func (c *Client) buildRecipePrompt(location string, saleIngredients, previousRecipes []string) string {
+func (c *Client) buildRecipePrompt(location string, saleIngredients, previousRecipes []string, date time.Time) string {
 	prompt := fmt.Sprintf("Generate 4 unique weekly recipes for location: %s\n\n", location)
 
 	/*prompt += "Requirements:\n"
@@ -105,7 +106,7 @@ func (c *Client) buildRecipePrompt(location string, saleIngredients, previousRec
 	prompt += `Generate 3 unique, practical recipes based on the provided constraints
 		Each meal should have a protein and a vegetable and/or a starch side.
 		Prioritize ingredients currently on sale (bigger sale more important than small sale)
-		Prioritize seasonal ingredients (currently september 3rd in washington state)
+		Prioritize seasonal ingredients (currently ` + date.Format("January 2nd") + ` in Washington State)
 		Include variety in cooking methods and cuisines. Each recipe should serve 2 people
 		Provide clear, step-by-step instructions and a total ingredient list
 		Should generally take less than an hour though special ones can go over.
