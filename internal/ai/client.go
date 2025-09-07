@@ -93,17 +93,8 @@ func (c *Client) generateWithOpenAI(messages []Message) (string, error) {
 }
 
 func (c *Client) buildRecipePrompt(location string, saleIngredients, previousRecipes []string, date time.Time) string {
-	prompt := fmt.Sprintf("Generate 4 unique weekly recipes for location: %s\n\n", location)
 
-	/*prompt += "Requirements:\n"
-	prompt += "- Generate exactly 4 recipes\n"
-	prompt += "- Prioritize ingredients currently on sale\n"
-	prompt += "- Avoid repeating previous recipes\n"
-	prompt += "- Include variety in cooking methods and cuisines\n"
-	prompt += "- Each recipe should serve 2 people\n"
-	prompt += "- Provide clear, step-by-step instructions\n\n"*/
-
-	prompt += `Generate 3 unique, practical recipes based on the provided constraints
+	prompt := `Generate 3 unique, practical recipes based on the provided constraints
 		Each meal should have a protein and a vegetable and/or a starch side.
 		Prioritize ingredients currently on sale (bigger sale more important than small sale)
 		Prioritize seasonal ingredients (currently ` + date.Format("January 2nd") + ` in Washington State)
