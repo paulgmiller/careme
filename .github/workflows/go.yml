@@ -1,45 +1,54 @@
-# .github/workflows/ghcr-publish.yml
-name: Publish to GHCR
+# .github/workflows/ghcr-publish-pr-gate.yml
+name: GHCR Publish & PR Gate
 
 on:
   push:
-    branches: ["main"]   # change if needed
+    branches: [master, main]   # include both; trim as needed
+  pull_request:
+    branches: [master, main]
   workflow_dispatch:
 
+# Cancel superseded runs (nice for PRs)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  publish:
+  gate:
+    name: gate                      # this appears in Required checks UI as "<workflow> / gate"
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write      # required to push to GHCR with GITHUB_TOKEN
+      packages: write               # needed to push to GHCR on branch pushes
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Derive image name and tags
+      - name: Derive image name & tags
         id: vars
         run: |
-          # Lowercase is safest for registry paths
-          REPO_LC="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
-          echo "IMAGE=ghcr.io/${REPO_LC}" >> "$GITHUB_OUTPUT"
-          echo "SHORT_SHA=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          OWNER_LC=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          REPO_LC=$(echo "${GITHUB_REPOSITORY#*/}"       | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE=ghcr.io/${OWNER_LC}/${REPO_LC}" >> "$GITHUB_OUTPUT"
+          echo "SHORT_SHA=${GITHUB_SHA::12}"           >> "$GITHUB_OUTPUT"
 
-      - name: Login to GHCR (uses built-in GITHUB_TOKEN)
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Only needed when actually pushing
+      - name: Login to GHCR
+        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & push
+      - name: Build (PR) or Build & Push (branch)
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ github.event_name == 'push' }}  # false on PRs, true on branch pushes
           tags: |
             ${{ steps.vars.outputs.IMAGE }}:latest
             ${{ steps.vars.outputs.IMAGE }}:${{ steps.vars.outputs.SHORT_SHA }}
