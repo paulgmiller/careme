@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"sync"
 	"time"
 
 	"careme/internal/ai"
@@ -26,6 +27,8 @@ type Generator struct {
 	aiClient       *ai.Client
 	krogerClient   kroger.ClientWithResponsesInterface //probably need only subset
 	historyStorage *history.HistoryStorage
+	inFlight       map[string]struct{}
+	generationLock sync.Mutex
 }
 
 type GeneratedRecipes struct {
@@ -42,7 +45,23 @@ func NewGenerator(cfg *config.Config) (*Generator, error) {
 		aiClient:       ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, cfg.AI.Model),
 		krogerClient:   client,
 		historyStorage: history.NewHistoryStorage(cfg.History.StoragePath, cfg.History.RetentionDays),
+		inFlight:       make(map[string]struct{}),
 	}, nil
+}
+
+// eventually we want to use  blob with exipiry for this
+func (g *Generator) isGenerating(hash string) (bool, func()) {
+	g.generationLock.Lock()
+	defer g.generationLock.Unlock()
+	if _, exists := g.inFlight[hash]; exists {
+		return true, nil
+	}
+	g.inFlight[hash] = struct{}{}
+	return false, func() {
+		g.generationLock.Lock()
+		defer g.generationLock.Unlock()
+		delete(g.inFlight, hash)
+	}
 }
 
 func (g *Generator) GenerateRecipes(location string, date time.Time) (string, error) {
@@ -53,6 +72,14 @@ func (g *Generator) GenerateRecipes(location string, date time.Time) (string, er
 		log.Printf("Warning: Could not fetch recipe history: %v", err)
 		previousRecipes = []string{}
 	}*/
+
+	hash := Hash(location, date)
+	generating, done := g.isGenerating(hash)
+	if generating {
+		log.Printf("Generation already in progress for %s, skipping", hash)
+		return "", nil
+	}
+	defer done()
 
 	ingredients, err := g.GetStaples(location)
 	if err != nil {
@@ -66,7 +93,7 @@ func (g *Generator) GenerateRecipes(location string, date time.Time) (string, er
 		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
-	w, err := os.OpenFile("recipes/"+Hash(location, date)+".txt", os.O_WRONLY|os.O_CREATE, 0644)
+	w, err := os.OpenFile("recipes/"+hash+".txt", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return "", fmt.Errorf("failed to open recipe file: %w", err)
 	}
