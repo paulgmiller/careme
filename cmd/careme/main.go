@@ -109,7 +109,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
-
+		ctx := r.Context()
 		loc := r.URL.Query().Get("location")
 		if loc == "" {
 			w.WriteHeader(http.StatusOK)
@@ -126,19 +126,20 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "invalid date format, use YYYY-MM-DD", http.StatusBadRequest)
 			return
 		}
+		l, err := locations.GetLocationByID(ctx, cfg, loc) // get details but ignore error
+		if err != nil {
+			http.Error(w, "could not get location details", http.StatusBadRequest)
+			return
+		}
 
 		if recipe, err := os.ReadFile("recipes/" + recipes.Hash(loc, date) + ".txt"); err == nil {
 			log.Printf("serving cached recipes for %s on %s", loc, date.Format("2006-01-02"))
-			l, err := locations.GetLocationByID(context.TODO(), cfg, loc) // get details but ignore error
-			if err != nil {
-				http.Error(w, "could not get location details", http.StatusBadRequest)
-				return
-			}
+
 			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, string(recipe))))
 			return
 		}
 		go func() {
-			_, err := generator.GenerateRecipes(loc, date)
+			_, err := generator.GenerateRecipes(l, date)
 			if err != nil {
 				log.Printf("generate error: %v", err)
 				return
@@ -160,7 +161,12 @@ func run(cfg *config.Config, location string) error {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-	generatedRecipes, err := generator.GenerateRecipes(location, time.Now())
+	l, err := locations.GetLocationByID(context.TODO(), cfg, location) // get details but ignore error
+	if err != nil {
+		return fmt.Errorf("could not get location details: %w", err)
+	}
+
+	generatedRecipes, err := generator.GenerateRecipes(l, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes: %w", err)
 	}

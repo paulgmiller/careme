@@ -16,6 +16,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/history"
 	"careme/internal/kroger"
+	"careme/internal/locations"
 )
 
 func Hash(location string, date time.Time) string {
@@ -64,7 +65,7 @@ func (g *Generator) isGenerating(hash string) (bool, func()) {
 	}
 }
 
-func (g *Generator) GenerateRecipes(location string, date time.Time) (string, error) {
+func (g *Generator) GenerateRecipes(location *locations.Location, date time.Time) (string, error) {
 	log.Printf("Generating recipes for location: %s", location)
 
 	/*previousRecipes, err := g.getPreviousRecipes()
@@ -73,7 +74,7 @@ func (g *Generator) GenerateRecipes(location string, date time.Time) (string, er
 		previousRecipes = []string{}
 	}*/
 
-	hash := Hash(location, date)
+	hash := Hash(location.ID, date)
 	generating, done := g.isGenerating(hash)
 	if generating {
 		log.Printf("Generation already in progress for %s, skipping", hash)
@@ -82,7 +83,7 @@ func (g *Generator) GenerateRecipes(location string, date time.Time) (string, er
 	defer done()
 	start := time.Now()
 
-	ingredients, err := g.GetStaples(location)
+	ingredients, err := g.GetStaples(location.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get staples: %w", err)
 	}
@@ -104,7 +105,7 @@ func (g *Generator) GenerateRecipes(location string, date time.Time) (string, er
 		return "", fmt.Errorf("failed to write recipe file: %w", err)
 	}
 
-	log.Printf("generated chat for %s in %s, stored in recipes/%s.txt", location, time.Since(start), Hash(location, date))
+	log.Printf("generated chat for %s in %s, stored in recipes/%s.txt", location, time.Since(start), Hash(location.ID, date))
 	return response, nil
 
 	/*recipes, err := g.parseAIResponse(response, location)

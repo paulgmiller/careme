@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"careme/internal/locations"
 	"context"
 	"fmt"
 	"net/http"
@@ -34,7 +35,7 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location string, saleIngredients []string, previousRecipes []string, date time.Time) (string, error) {
+func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, previousRecipes []string, date time.Time) (string, error) {
 	prompt := c.buildRecipePrompt(location, saleIngredients, previousRecipes, date)
 
 	messages := []Message{
@@ -92,16 +93,18 @@ func (c *Client) generateWithOpenAI(messages []Message) (string, error) {
 	return resp.Choices[0].Message.Content, nil
 }
 
-func (c *Client) buildRecipePrompt(location string, saleIngredients, previousRecipes []string, date time.Time) string {
+func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients, previousRecipes []string, date time.Time) string {
 
 	prompt := `Generate 3 unique, practical recipes based on the provided constraints
 		Each meal should have a protein and a vegetable and/or a starch side.
 		Prioritize ingredients currently on sale (bigger sale more important than small sale)
-		Prioritize seasonal ingredients (currently ` + date.Format("January 2nd") + ` in Washington State)
+		Prioritize seasonal ingredients (currently ` + date.Format("January 2nd") + ` in ` + location.State + ` State)
 		Include variety in cooking methods and cuisines. Each recipe should serve 2 people
 		Provide clear, step-by-step instructions and a total ingredient list
 		Should generally take less than an hour though special ones can go over.
 		Optionally provide a wine pairing with each recipe.
+		Oven, Stove, Grill and slow cooker are available cooking methods.
+		Produce output as html I can inline into a <div>.
 
 		Proteins and Vegatables currently avaialable (assume most starches and seasonings are available):`
 

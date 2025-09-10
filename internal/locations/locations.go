@@ -72,6 +72,7 @@ type Location struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Address string `json:"address"`
+	State   string `json:"state"`
 }
 
 func GetLocationsByZip(ctx context.Context, cfg *config.Config, zipcode string) ([]Location, error) {
@@ -99,6 +100,7 @@ func GetLocationsByZip(ctx context.Context, cfg *config.Config, zipcode string) 
 			ID:      *loc.LocationId,
 			Name:    *loc.Name,
 			Address: *loc.Address.AddressLine1,
+			State:   *loc.Address.State,
 		}
 		locationCache[l.ID] = l
 		locations = append(locations, l)
