@@ -80,6 +80,7 @@ func (g *Generator) GenerateRecipes(location string, date time.Time) (string, er
 		return "", nil
 	}
 	defer done()
+	start := time.Now()
 
 	ingredients, err := g.GetStaples(location)
 	if err != nil {
@@ -103,6 +104,7 @@ func (g *Generator) GenerateRecipes(location string, date time.Time) (string, er
 		return "", fmt.Errorf("failed to write recipe file: %w", err)
 	}
 
+	log.Printf("generated chat for %s in %s, stored in recipes/%s.txt", location, time.Since(start), Hash(location, date))
 	return response, nil
 
 	/*recipes, err := g.parseAIResponse(response, location)

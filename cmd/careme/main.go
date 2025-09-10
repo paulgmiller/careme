@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"flag"
 	"fmt"
 	"log"
@@ -13,6 +14,9 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 )
+
+//go:embed html/spinner.html
+var spinnerHTML []byte
 
 func main() {
 	var location string
@@ -134,17 +138,15 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		go func() {
-			start := time.Now()
 			_, err := generator.GenerateRecipes(loc, date)
 			if err != nil {
 				log.Printf("generate error: %v", err)
 				return
 			}
-			log.Printf("generated chat for %s in %s, stored in recipes/%s.txt", loc, time.Since(start), recipes.Hash(loc, date))
 		}()
 
-		_, _ = w.Write([]byte("recipe generation in progress, please refresh in a minute or two..."))
-		w.WriteHeader(http.StatusAccepted)
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		_, _ = w.Write(spinnerHTML)
 	})
 
 	log.Printf("Serving Careme on %s", addr)
