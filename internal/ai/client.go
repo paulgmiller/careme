@@ -35,8 +35,8 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, previousRecipes []string, date time.Time) (string, error) {
-	prompt := c.buildRecipePrompt(location, saleIngredients, previousRecipes, date)
+func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, instructions string, date time.Time) (string, error) {
+	prompt := c.buildRecipePrompt(location, saleIngredients, instructions, date)
 
 	messages := []Message{
 		{
@@ -93,7 +93,7 @@ func (c *Client) generateWithOpenAI(messages []Message) (string, error) {
 	return resp.Choices[0].Message.Content, nil
 }
 
-func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients, previousRecipes []string, date time.Time) string {
+func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients []string, instructions string, date time.Time) string {
 
 	prompt := `Generate 3 unique, practical recipes based on the provided constraints
 		Each meal should have a protein and a vegetable and/or a starch side.
@@ -116,25 +116,27 @@ func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients
 		prompt += "\n"
 	}
 
-	if len(previousRecipes) > 0 {
-		prompt += "DO NOT repeat these recipes from the past 2 weeks:\n"
-		for _, recipe := range previousRecipes {
-			prompt += fmt.Sprintf("- %s\n", recipe)
-		}
-		prompt += "\n"
-	}
-
+	prompt += instructions + "\n"
 	/*
-			prompt += "Format your response as valid JSON with this structure:\n"
-			prompt += `{
-		  "recipes": [
-		    {
-		      "name": "Recipe Name",
-		      "description": "Brief description",
-		      "ingredients": ["ingredient 1", "ingredient 2"],
-		      "instructions": ["step 1", "step 2"]
-		    }
-		  ]
+		if len(previousRecipes) > 0 {
+			prompt += "DO NOT repeat these recipes from the past 2 weeks:\n"
+			for _, recipe := range previousRecipes {
+				prompt += fmt.Sprintf("- %s\n", recipe)
+			}
+			prompt += "\n"
+		}
+
+
+				prompt += "Format your response as valid JSON with this structure:\n"
+				prompt += `{
+			  "recipes": [
+			    {
+			      "name": "Recipe Name",
+			      "description": "Brief description",
+			      "ingredients": ["ingredient 1", "ingredient 2"],
+			      "instructions": ["step 1", "step 2"]
+			    }
+			  ]
 	*/
 	return prompt
 }

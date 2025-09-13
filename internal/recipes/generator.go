@@ -2,8 +2,10 @@ package recipes
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"net/http"
 	"os"
@@ -73,6 +75,7 @@ type generatorParams struct {
 	Staples         []filter
 	PreviousRecipes []string
 	People          int
+	Instructions    string
 }
 
 func DefaultParams(l *locations.Location) *generatorParams {
@@ -84,8 +87,21 @@ func DefaultParams(l *locations.Location) *generatorParams {
 	}
 }
 
+func (g *generatorParams) Hash() string {
+	bytes, err := json.Marshal(g)
+	if err != nil {
+		panic(err)
+	}
+	fnv := fnv.New32a()
+	_, err = fnv.Write(bytes)
+	if err != nil {
+		panic(err)
+	}
+	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
+}
+
 func (g *generatorParams) Exclude(staple []string) {
-	g.Staples = lo.Filter(g.Staples, func(f filter) bool {
+	g.Staples = lo.Filter(g.Staples, func(f filter, _ int) bool {
 		return !slices.Contains(staple, f.Term)
 	})
 }
@@ -118,8 +134,8 @@ func DefaultStaples() []filter {
 	}
 }
 
-func (g *Generator) GenerateRecipes(location *locations.Location, date time.Time) (string, error) {
-	log.Printf("Generating recipes for location: %s", location)
+func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
+	log.Printf("Generating recipes for location: %s", p.Location)
 
 	/*previousRecipes, err := g.getPreviousRecipes()
 	if err != nil {
@@ -127,7 +143,7 @@ func (g *Generator) GenerateRecipes(location *locations.Location, date time.Time
 		previousRecipes = []string{}
 	}*/
 
-	hash := Hash(location.ID, date)
+	hash := p.Hash()
 	generating, done := g.isGenerating(hash)
 	if generating {
 		log.Printf("Generation already in progress for %s, skipping", hash)
@@ -136,14 +152,15 @@ func (g *Generator) GenerateRecipes(location *locations.Location, date time.Time
 	defer done()
 	start := time.Now()
 
-	ingredients, err := g.GetStaples(location.ID)
+	ingredients, err := g.GetStaples(p)
 	if err != nil {
 		return "", fmt.Errorf("failed to get staples: %w", err)
 	}
 
 	//log.Printf("Found %d sale ingredients, %d previous recipes", 		len(ingredients), len(previousRecipes))
 
-	response, err := g.aiClient.GenerateRecipes(location, ingredients, []string{} /*previousRecipes*/, date)
+	//
+	response, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
@@ -158,7 +175,7 @@ func (g *Generator) GenerateRecipes(location *locations.Location, date time.Time
 		return "", fmt.Errorf("failed to write recipe file: %w", err)
 	}
 
-	log.Printf("generated chat for %s in %s, stored in recipes/%s.txt", location, time.Since(start), Hash(location.ID, date))
+	log.Printf("generated chat for %s in %s, stored in recipes/%s.txt", p.Location.ID, time.Since(start), hash)
 	return response, nil
 
 	/*recipes, err := g.parseAIResponse(response, location)
@@ -181,11 +198,11 @@ type filter struct {
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
-func (g *Generator) GetStaples(location string) ([]string, error) {
+func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
 
 	var ingredients []string
-	for _, category := range categories {
-		cingredients, err := g.GetIngredients(location, category, 0)
+	for _, category := range p.Staples {
+		cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get ingredients: %w", err)
 		}

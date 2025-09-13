@@ -132,14 +132,22 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 
-		if recipe, err := os.ReadFile("recipes/" + recipes.Hash(loc, date) + ".txt"); err == nil {
+		p := recipes.DefaultParams(l)
+
+		p.Date = date
+		if i := r.URL.Query().Get("instructions"); i != "" {
+			log.Println("got instructions " + i)
+			p.Instructions = i
+		}
+		if recipe, err := os.ReadFile("recipes/" + p.Hash() + ".txt"); err == nil {
 			log.Printf("serving cached recipes for %s on %s", loc, date.Format("2006-01-02"))
 
 			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, string(recipe))))
 			return
 		}
 		go func() {
-			_, err := generator.GenerateRecipes(l, date)
+
+			_, err := generator.GenerateRecipes(p)
 			if err != nil {
 				log.Printf("generate error: %v", err)
 				return
@@ -166,7 +174,8 @@ func run(cfg *config.Config, location string) error {
 		return fmt.Errorf("could not get location details: %w", err)
 	}
 
-	generatedRecipes, err := generator.GenerateRecipes(l, time.Now())
+	p := recipes.DefaultParams(l)
+	generatedRecipes, err := generator.GenerateRecipes(p)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes: %w", err)
 	}
