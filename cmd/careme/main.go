@@ -142,7 +142,7 @@ func runServer(cfg *config.Config, addr string) error {
 		if recipe, err := os.ReadFile("recipes/" + p.Hash() + ".txt"); err == nil {
 			log.Printf("serving cached recipes for %s on %s", loc, date.Format("2006-01-02"))
 
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, string(recipe))))
+			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, date, string(recipe))))
 			return
 		}
 		go func() {
