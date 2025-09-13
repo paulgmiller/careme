@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samber/lo"
+
 	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/history"
@@ -62,6 +64,57 @@ func (g *Generator) isGenerating(hash string) (bool, func()) {
 		g.generationLock.Lock()
 		defer g.generationLock.Unlock()
 		delete(g.inFlight, hash)
+	}
+}
+
+type generatorParams struct {
+	Location        *locations.Location
+	Date            time.Time
+	Staples         []filter
+	PreviousRecipes []string
+	People          int
+}
+
+func DefaultParams(l *locations.Location) *generatorParams {
+	return &generatorParams{
+		Date:     time.Now(), // shave time
+		Location: l,
+		People:   2,
+		Staples:  DefaultStaples(),
+	}
+}
+
+func (g *generatorParams) Exclude(staple []string) {
+	g.Staples = lo.Filter(g.Staples, func(f filter) bool {
+		return !slices.Contains(staple, f.Term)
+	})
+}
+
+func DefaultStaples() []filter {
+	return []filter{
+		{
+			Term: "beef",
+		},
+		{
+			Term:   "chicken",
+			Brands: []string{"Foster Farms"},
+		},
+		{
+			Term: "fish",
+		},
+		{
+			Term: "pork",
+		},
+		{
+			Term: "shellfish",
+		},
+		{
+			Term:   "lamb",
+			Brands: []string{"Simple Truth"},
+		},
+		{
+			Term: "produce vegetable",
+		},
 	}
 }
 
@@ -129,31 +182,7 @@ type filter struct {
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
 func (g *Generator) GetStaples(location string) ([]string, error) {
-	categories := []filter{
-		{
-			Term: "beef",
-		},
-		{
-			Term:   "chicken",
-			Brands: []string{"Foster Farms"},
-		},
-		{
-			Term: "fish",
-		},
-		{
-			Term: "pork",
-		},
-		{
-			Term: "shellfish",
-		},
-		{
-			Term:   "lamb",
-			Brands: []string{"Simple Truth"},
-		},
-		{
-			Term: "produce vegetable",
-		},
-	}
+
 	var ingredients []string
 	for _, category := range categories {
 		cingredients, err := g.GetIngredients(location, category, 0)
