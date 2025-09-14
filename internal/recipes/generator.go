@@ -8,7 +8,6 @@ import (
 	"hash/fnv"
 	"log"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"sync"
@@ -163,16 +162,6 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 	response, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
-	}
-
-	w, err := os.OpenFile("recipes/"+hash+".txt", os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return "", fmt.Errorf("failed to open recipe file: %w", err)
-	}
-	defer w.Close()
-
-	if _, err := w.WriteString(response); err != nil {
-		return "", fmt.Errorf("failed to write recipe file: %w", err)
 	}
 
 	log.Printf("generated chat for %s in %s, stored in recipes/%s.txt", p.Location.ID, time.Since(start), hash)

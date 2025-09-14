@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"
@@ -82,6 +83,8 @@ func main() {
 
 func runServer(cfg *config.Config, addr string) error {
 
+	cache := cache.NewFileCache("cache")
+
 	mux := http.NewServeMux()
 	generator, err := recipes.NewGenerator(cfg)
 	if err != nil {
@@ -139,19 +142,23 @@ func runServer(cfg *config.Config, addr string) error {
 			log.Println("got instructions " + i)
 			p.Instructions = i
 		}
-		if recipe, err := os.ReadFile("recipes/" + p.Hash() + ".txt"); err == nil {
-			log.Printf("serving cached recipes for %s on %s", loc, date.Format("2006-01-02"))
 
+		if recipe, ok := cache.Get(p.Hash() + ".recipe"); ok {
+			log.Printf("serving cached recipes for %s on %s", loc, date.Format("2006-01-02"))
 			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, date, string(recipe))))
 			return
 		}
 		go func() {
 
-			_, err := generator.GenerateRecipes(p)
+			recipe, err := generator.GenerateRecipes(p)
 			if err != nil {
 				log.Printf("generate error: %v", err)
 				return
 			}
+			if err := cache.Set(p.Hash()+".recipe", recipe); err != nil {
+				log.Printf("failed to cache recipe for %s on %s: %v", loc, date.Format("2006-01-02"), err)
+			}
+
 		}()
 
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
