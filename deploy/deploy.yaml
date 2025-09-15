@@ -25,32 +25,9 @@ spec:
           ports:
             - containerPort: 8080
               name: http
-          env:
-            - name: AI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: careme-secrets
-                  key: AI_API_KEY
-            - name: KROGER_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: careme-secrets
-                  key: KROGER_CLIENT_ID
-            - name: KROGER_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: careme-secrets
-                  key: KROGER_CLIENT_SECRET
-            - name: AZURE_STORAGE_ACCOUNT_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: careme-secrets
-                  key: AZURE_STORAGE_ACCOUNT_NAME
-            - name: AZURE_STORAGE_PRIMARY_ACCOUNT_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: careme-secrets
-                  key: AZURE_STORAGE_PRIMARY_ACCOUNT_KEY
+          envFrom:
+            - secretRef:
+                name: careme-secrets
           volumeMounts:
             - name: recipes
               mountPath: /recipes
