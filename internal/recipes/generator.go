@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -203,6 +204,11 @@ type filter struct {
 // tries to filter to no brand or certain brands to avoid shelved products
 func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
 
+	if ingredientblob, found := g.cache.Get(p.LocationHash()); found {
+		log.Printf("serving cached ingredients for %s on %s", p.Location.ID, p.Date.Format("2006-01-02"))
+		return strings.Split(ingredientblob, "\n"), nil
+	}
+
 	var ingredients []string
 	for _, category := range p.Staples {
 		cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
@@ -211,6 +217,10 @@ func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
 		}
 		ingredients = append(ingredients, cingredients...)
 		log.Printf("Found %d ingredients for category: %s", len(cingredients), category.Term)
+	}
+	if err := g.cache.Set(p.LocationHash(), strings.Join(ingredients, "\n")); err != nil {
+		log.Printf("failed to cache ingredients for %s on %s: %v", p.Location.ID, p.Date.Format("2006-01-02"), err)
+		return nil, err
 	}
 	return ingredients, nil
 }
