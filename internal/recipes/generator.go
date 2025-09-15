@@ -218,14 +218,28 @@ func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
 	}
 
 	var ingredients []string
+	var errors []error
+	var wg sync.WaitGroup
+	var lock sync.Mutex
+	wg.Add(len(p.Staples))
 	for _, category := range p.Staples {
-		cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get ingredients: %w", err)
-		}
-		ingredients = append(ingredients, cingredients...)
-		log.Printf("Found %d ingredients for category: %s", len(cingredients), category.Term)
+		go func(category filter) {
+			defer wg.Done()
+
+			cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
+			lock.Lock()
+			defer lock.Unlock()
+			if err != nil {
+				errors = append(errors, fmt.Errorf("failed to get ingredients: %w", err))
+				return
+			}
+			ingredients = append(ingredients, cingredients...)
+			log.Printf("Found %d ingredients for category: %s at %s", len(cingredients), category.Term, p.Location.ID)
+		}(category)
 	}
+
+	wg.Wait()
+
 	if err := g.cache.Set(p.LocationHash(), strings.Join(ingredients, "\n")); err != nil {
 		log.Printf("failed to cache ingredients for %s on %s: %v", p.Location.ID, p.Date.Format("2006-01-02"), err)
 		return nil, err
