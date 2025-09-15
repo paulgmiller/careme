@@ -16,20 +16,18 @@ import (
 	"github.com/samber/lo"
 
 	"careme/internal/ai"
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/history"
 	"careme/internal/kroger"
 	"careme/internal/locations"
 )
 
-func Hash(location string, date time.Time) string {
-	return fmt.Sprintf("%x", location+date.Format("2006-01-02"))
-}
-
 type Generator struct {
 	config         *config.Config
 	aiClient       *ai.Client
 	krogerClient   kroger.ClientWithResponsesInterface //probably need only subset
+	cache          cache.Cache
 	historyStorage *history.HistoryStorage
 	inFlight       map[string]struct{}
 	generationLock sync.Mutex
@@ -39,7 +37,7 @@ type GeneratedRecipes struct {
 	Recipes []history.Recipe `json:"recipes"`
 }
 
-func NewGenerator(cfg *config.Config) (*Generator, error) {
+func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
 	client, err := kroger.FromConfig(context.TODO(), cfg)
 	if err != nil {
 		return nil, err
@@ -69,20 +67,20 @@ func (g *Generator) isGenerating(hash string) (bool, func()) {
 }
 
 type generatorParams struct {
-	Location        *locations.Location
-	Date            time.Time
-	Staples         []filter
-	PreviousRecipes []string
-	People          int
-	Instructions    string
+	Location *locations.Location `json:"location,omitempty"`
+	Date     time.Time           `json:"date,omitempty"`
+	Staples  []filter            `json:"staples,omitempty"`
+	//PreviousRecipes []string
+	//People       int
+	Instructions string `json:"instructions,omitempty"`
 }
 
 func DefaultParams(l *locations.Location) *generatorParams {
 	return &generatorParams{
 		Date:     time.Now(), // shave time
 		Location: l,
-		People:   2,
-		Staples:  DefaultStaples(),
+		//People:   2,
+		Staples: DefaultStaples(),
 	}
 }
 
@@ -91,12 +89,23 @@ func (g *generatorParams) Hash() string {
 	if err != nil {
 		panic(err)
 	}
-	fnv := fnv.New32a()
+	fnv := fnv.New64a()
 	_, err = fnv.Write(bytes)
 	if err != nil {
 		panic(err)
 	}
-	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
+	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
+}
+
+func (g *generatorParams) LocationHash() string {
+
+	fnv := fnv.New64a()
+	lo.Must(fnv.Write([]byte(g.Location.ID)))
+	lo.Must(fnv.Write([]byte(g.Date.Format("2006-01-02"))))
+	bytes := lo.Must(json.Marshal(g.Staples))
+	lo.Must(fnv.Write(bytes))
+	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("ingredients")))
+
 }
 
 func (g *generatorParams) Exclude(staple []string) {
@@ -158,13 +167,18 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 
 	//log.Printf("Found %d sale ingredients, %d previous recipes", 		len(ingredients), len(previousRecipes))
 
-	//
 	response, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
 	log.Printf("generated chat for %s in %s, stored in recipes/%s.txt", p.Location.ID, time.Since(start), hash)
+
+	if err := g.cache.Set(p.Hash()+".recipe", response); err != nil {
+		log.Printf("failed to cache recipe for %s on %s: %v", p.Location.ID, p.Date.Format("2006-01-02"), err)
+		return response, err
+	}
+
 	return response, nil
 
 	/*recipes, err := g.parseAIResponse(response, location)

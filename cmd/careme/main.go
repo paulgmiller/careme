@@ -86,7 +86,7 @@ func runServer(cfg *config.Config, addr string) error {
 	cache := cache.NewFileCache("cache")
 
 	mux := http.NewServeMux()
-	generator, err := recipes.NewGenerator(cfg)
+	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -150,13 +150,10 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		go func() {
 
-			recipe, err := generator.GenerateRecipes(p)
+			_, err := generator.GenerateRecipes(p)
 			if err != nil {
 				log.Printf("generate error: %v", err)
 				return
-			}
-			if err := cache.Set(p.Hash()+".recipe", recipe); err != nil {
-				log.Printf("failed to cache recipe for %s on %s: %v", loc, date.Format("2006-01-02"), err)
 			}
 
 		}()
@@ -171,7 +168,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 func run(cfg *config.Config, location string) error {
 
-	generator, err := recipes.NewGenerator(cfg)
+	generator, err := recipes.NewGenerator(cfg, cache.NewFileCache("cache"))
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
