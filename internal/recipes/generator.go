@@ -123,13 +123,13 @@ func DefaultStaples() []filter {
 		},
 		{
 			Term:   "chicken",
-			Brands: []string{"Foster Farms"},
+			Brands: []string{"Foster Farms", "Draper Valley"}, //"Simple Truth"? do these vary in every state?
 		},
 		{
 			Term: "fish",
 		},
 		{
-			Term: "pork",
+			Term: "pork", //Kroger?
 		},
 		{
 			Term: "shellfish",
@@ -201,6 +201,13 @@ type filter struct {
 	Brands []string
 }
 
+func Filter(term string, brands []string) filter {
+	return filter{
+		Term:   term,
+		Brands: brands,
+	}
+}
+
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
 func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
@@ -253,7 +260,9 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 	var ingredients []string
 
 	for _, product := range *products.JSON200.Data {
-		if product.Brand != nil && !slices.Contains(f.Brands, toStr(product.Brand)) {
+		wildcard := len(f.Brands) > 0 && f.Brands[0] == "*"
+
+		if product.Brand != nil && !slices.Contains(f.Brands, toStr(product.Brand)) && !wildcard {
 			continue
 		}
 		//end up with a bunch of frozen chicken with out this.
@@ -268,11 +277,12 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 
 			//does just giving the model json work better here?
 			ingredient := fmt.Sprintf(
-				"%s %s price %.2f",
+				"%s %s price %.2f", //				"%s, %s %s price %.2f %s",
 				//toStr(product.Brand),
 				toStr(product.Description),
 				toStr(item.Size),
 				toFloat32(item.Price.Regular),
+				//strings.Join(*product.Categories, ", "),
 			)
 
 			if toFloat32(item.Price.Promo) > 0.0 {
