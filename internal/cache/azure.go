@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 
@@ -62,4 +63,13 @@ func (fc *BlobCache) Get(key string) (string, bool) {
 func (fc *BlobCache) Set(key, value string) error {
 	_, err := fc.containerClient.UploadStream(context.TODO(), fc.container, key, strings.NewReader(value), &azblob.UploadStreamOptions{})
 	return err
+}
+
+func MakeCache() (Cache, error) {
+	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
+	if ok {
+		log.Println("Using Azure Blob Storage for cache")
+		return NewBlobCache("recipes")
+	}
+	return NewFileCache("cache"), nil
 }

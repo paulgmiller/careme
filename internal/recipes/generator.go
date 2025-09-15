@@ -44,6 +44,7 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
 		return nil, err
 	}
 	return &Generator{
+		cache:          cache, //should this also pull from config?
 		config:         cfg,
 		aiClient:       ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, cfg.AI.Model),
 		krogerClient:   client,
@@ -173,9 +174,9 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
-	log.Printf("generated chat for %s in %s, stored in recipes/%s.txt", p.Location.ID, time.Since(start), hash)
+	log.Printf("generated chat for %s in %s, stored in recipes/%s", p.Location.ID, time.Since(start), hash)
 
-	if err := g.cache.Set(p.Hash()+".recipe", response); err != nil {
+	if err := g.cache.Set(p.Hash(), response); err != nil {
 		log.Printf("failed to cache recipe for %s on %s: %v", p.Location.ID, p.Date.Format("2006-01-02"), err)
 		return response, err
 	}
