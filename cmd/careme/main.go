@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -101,7 +102,7 @@ func run(cfg *config.Config, location string, ingredient string) error {
 		return fmt.Errorf("could not get location details: %w", err)
 	}
 
-	p := recipes.DefaultParams(l)
+	p := recipes.DefaultParams(l, time.Now())
 	generatedRecipes, err := generator.GenerateRecipes(p)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes: %w", err)

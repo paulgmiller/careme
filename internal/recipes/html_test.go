@@ -2,7 +2,6 @@ package recipes
 
 import (
 	"bytes"
-	"careme/internal/history"
 	"careme/internal/locations"
 	"testing"
 	"time"

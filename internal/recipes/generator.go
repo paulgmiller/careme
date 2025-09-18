@@ -77,13 +77,20 @@ type generatorParams struct {
 	Instructions string `json:"instructions,omitempty"`
 }
 
-func DefaultParams(l *locations.Location) *generatorParams {
+func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
+
+	// normalize to midnight (shave hours, minutes, seconds, nanoseconds)
+	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	return &generatorParams{
-		Date:     time.Now(), // shave time
+		Date:     date, // shave time
 		Location: l,
 		//People:   2,
 		Staples: DefaultStaples(),
 	}
+}
+
+func (g *generatorParams) String() string {
+	return fmt.Sprintf("%s on %s", g.Location.ID, g.Date.Format("2006-01-02"))
 }
 
 func (g *generatorParams) Hash() string {
@@ -99,6 +106,7 @@ func (g *generatorParams) Hash() string {
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
 }
 
+// so far just excludes instructions. Can exclude people and other things
 func (g *generatorParams) LocationHash() string {
 
 	fnv := fnv.New64a()
@@ -108,12 +116,6 @@ func (g *generatorParams) LocationHash() string {
 	lo.Must(fnv.Write(bytes))
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("ingredients")))
 
-}
-
-func (g *generatorParams) Exclude(staple []string) {
-	g.Staples = lo.Filter(g.Staples, func(f filter, _ int) bool {
-		return !slices.Contains(staple, f.Term)
-	})
 }
 
 func DefaultStaples() []filter {
@@ -145,7 +147,7 @@ func DefaultStaples() []filter {
 }
 
 func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
-	log.Printf("Generating recipes for location: %s", p.Location)
+	log.Printf("Generating recipes for location: %s", p)
 
 	/*previousRecipes, err := g.getPreviousRecipes()
 	if err != nil {
@@ -174,10 +176,10 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
-	log.Printf("generated chat for %s in %s, stored in recipes/%s", p.Location.ID, time.Since(start), hash)
+	log.Printf("generated chat for %s in %s stored in recipes/%s", p, time.Since(start), hash)
 
 	if err := g.cache.Set(p.Hash(), response); err != nil {
-		log.Printf("failed to cache recipe for %s on %s: %v", p.Location.ID, p.Date.Format("2006-01-02"), err)
+		log.Printf("failed to cache recipe for %s: %v", p, err)
 		return response, err
 	}
 
@@ -197,8 +199,8 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 }
 
 type filter struct {
-	Term   string
-	Brands []string
+	Term   string   `json:"term,omitempty"`
+	Brands []string `json:"brands,omitempty"`
 }
 
 func Filter(term string, brands []string) filter {
@@ -212,8 +214,9 @@ func Filter(term string, brands []string) filter {
 // tries to filter to no brand or certain brands to avoid shelved products
 func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
 
-	if ingredientblob, found := g.cache.Get(p.LocationHash()); found {
-		log.Printf("serving cached ingredients for %s on %s", p.Location.ID, p.Date.Format("2006-01-02"))
+	lochash := p.LocationHash()
+	if ingredientblob, found := g.cache.Get(lochash); found {
+		log.Printf("serving cached ingredients for %s: %s", p.String(), lochash)
 		return strings.Split(ingredientblob, "\n"), nil
 	}
 
@@ -241,7 +244,7 @@ func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
 	wg.Wait()
 
 	if err := g.cache.Set(p.LocationHash(), strings.Join(ingredients, "\n")); err != nil {
-		log.Printf("failed to cache ingredients for %s on %s: %v", p.Location.ID, p.Date.Format("2006-01-02"), err)
+		log.Printf("failed to cache ingredients for %s: %v", p, err)
 		return nil, err
 	}
 	return ingredients, nil

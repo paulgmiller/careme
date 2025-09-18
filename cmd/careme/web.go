@@ -69,16 +69,14 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 
-		p := recipes.DefaultParams(l)
+		p := recipes.DefaultParams(l, date)
 
-		p.Date = date
 		if i := r.URL.Query().Get("instructions"); i != "" {
-			log.Println("got instructions " + i)
 			p.Instructions = i
 		}
 
 		if recipe, ok := cache.Get(p.Hash()); ok {
-			log.Printf("serving cached recipes for %s on %s", loc, date.Format("2006-01-02"))
+			log.Printf("serving cached recipes for %s", p.String())
 			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, date, string(recipe))))
 			return
 		}
