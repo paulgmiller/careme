@@ -1,15 +1,21 @@
 package locations
 
 import (
+	"bytes"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"context"
 	"fmt"
-	"html"
 	"log"
-	"strings"
 	"sync"
+	"embed"
+	"html/template"
 )
+
+//go:embed templates/*.html
+var templatesFS embed.FS
+
+var templates = template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
 
 // this should all be in a location service object
 var locationCache map[string]Location
@@ -55,17 +61,16 @@ func GetLocationByID(ctx context.Context, cfg *config.Config, locationID string)
 }
 
 func Html(locs []Location, zipstring string) string {
-	var b strings.Builder
-	b.WriteString("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Careme Locations</title>")
-	b.WriteString(`<style>body{font-family:system-ui,-apple-system,sans-serif;margin:2rem;background:#f5f7fa;color:#222}pre{background:#111;color:#eee;padding:1rem;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-size:.9rem;line-height:1.3}form{margin-bottom:1.5rem;display:flex;gap:.5rem}input[type=text]{flex:1;padding:.6rem .8rem;border:1px solid #bbb;border-radius:4px;font-size:1rem}button{background:#2563eb;color:#fff;border:0;padding:.6rem 1rem;border-radius:4px;cursor:pointer;font-size:1rem}button:hover{background:#1d4ed8}h1{margin-top:0}footer{margin-top:2rem;font-size:.75rem;color:#666}ul{list-style:none;padding:0;margin:1rem 0}li{margin:0 0 .75rem 0;background:#fff;border:1px solid #e2e2e2;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}li a{display:block;padding:1rem 1.25rem;text-decoration:none;color:#222;font-size:1.1rem;line-height:1.4;min-height:44px;box-sizing:border-box}li a:hover{background:#f8f9fa;color:#2563eb}li a:active{background:#e3f2fd}@media (max-width: 768px){body{margin:1rem}li a{padding:1.25rem;font-size:1.2rem;min-height:48px}}</style>`)
-	b.WriteString("</head><body>")
-	b.WriteString("<h1>Locations near " + html.EscapeString(zipstring) + "</h1>")
-	b.WriteString("<ul>")
-	for _, l := range locs {
-		b.WriteString(fmt.Sprintf("<li><a href='/recipes?location=%s'>%s, %s</a></li>", html.EscapeString(l.ID), html.EscapeString(l.Name), html.EscapeString(l.Address)))
+	data := struct {
+		Locations []Location
+		Zip       string
+	}{
+		Locations: locs,
+		Zip:       zipstring,
 	}
-	b.WriteString("</ul></body></html>")
-	return b.String()
+	var buf bytes.Buffer
+	_ = templates.ExecuteTemplate(&buf, "locations.html", data)
+	return buf.String()
 }
 
 type Location struct {

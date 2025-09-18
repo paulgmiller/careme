@@ -28,3 +28,6 @@ careme
 # OS files
 .DS_Store
 Thumbs.db
+
+#secrets
+.env
