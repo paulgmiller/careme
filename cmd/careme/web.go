@@ -3,6 +3,7 @@ package main
 import (
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/html"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"context"
@@ -11,6 +12,47 @@ import (
 	"net/http"
 	"time"
 )
+
+func generateSpinnerHTML(cfg *config.Config) string {
+	clarityScript := html.ClarityScript(cfg)
+	return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Generating…</title>
+  <meta http-equiv="refresh" content="60" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- discourage caching so each reload re-requests -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <style>
+    :root { --size: 48px; --thickness: 6px; }
+    html, body { height: 100%; margin: 0; }
+    body { display: grid; place-items: center; font: 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .card { text-align: center; padding: 2rem; }
+    .spinner {
+      width: var(--size); height: var(--size);
+      border-radius: 50%;
+      border: var(--thickness) solid #ddd;
+      border-top-color: #555;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  </style>
+  ` + string(clarityScript) + `
+</head>
+<body>
+  <main class="card" role="status" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <h1>Please wait…</h1>
+    <p>We're generating your result. This page refreshes every 60 seconds.</p>
+    <p><a href="">Refresh now</a></p>
+  </main>
+</body>
+</html>`
+}
 
 func runServer(cfg *config.Config, addr string) error {
 
@@ -42,7 +84,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		// Render locations
-		w.Write([]byte(locations.Html(locs, zip)))
+		w.Write([]byte(locations.Html(cfg, locs, zip)))
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +119,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		if recipe, ok := cache.Get(p.Hash()); ok {
 			log.Printf("serving cached recipes for %s", p.String())
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, date, string(recipe))))
+			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, *l, date, string(recipe))))
 			return
 		}
 		go func() {
@@ -91,7 +133,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}()
 
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-		_, _ = w.Write(spinnerHTML)
+		_, _ = w.Write([]byte(generateSpinnerHTML(cfg)))
 	})
 
 	log.Printf("Serving Careme on %s", addr)
