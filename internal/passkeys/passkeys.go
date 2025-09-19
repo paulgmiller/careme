@@ -90,7 +90,7 @@ func handleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 
 	creation, sessionData, err := appW.BeginRegistration(user)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	sessReg[req.Email] = sessionData
@@ -100,18 +100,18 @@ func handleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 func handleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	email := r.URL.Query().Get("email")
 	if email == "" {
-		http.Error(w, "email required", 400)
+		http.Error(w, "email required", http.StatusBadRequest)
 		return
 	}
 	user := getOrCreateUser(email)
 	session, ok := sessReg[email]
 	if !ok {
-		http.Error(w, "no registration session", 400)
+		http.Error(w, "no registration session", http.StatusBadRequest)
 		return
 	}
 	cred, err := appW.FinishRegistration(user, *session, r)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	usrLock.Lock()
@@ -125,14 +125,14 @@ func handleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 func handleLoginBegin(w http.ResponseWriter, r *http.Request) {
 	var req emailReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" {
-		http.Error(w, "email required", 400)
+		http.Error(w, "email required", http.StatusBadRequest)
 		return
 	}
 	user := getOrCreateUser(req.Email)
 
 	requestOptions, sessionData, err := appW.BeginLogin(user)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	sessLog[req.Email] = sessionData
@@ -142,18 +142,18 @@ func handleLoginBegin(w http.ResponseWriter, r *http.Request) {
 func handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 	email := r.URL.Query().Get("email")
 	if email == "" {
-		http.Error(w, "email required", 400)
+		http.Error(w, "email required", http.StatusBadRequest)
 		return
 	}
 	user := getOrCreateUser(email)
 	session, ok := sessLog[email]
 	if !ok {
-		http.Error(w, "no login session", 400)
+		http.Error(w, "no login session", http.StatusBadRequest)
 		return
 	}
 	_, err := appW.FinishLogin(user, *session, r)
 	if err != nil {
-		http.Error(w, err.Error(), 401)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 	delete(sessLog, email)
@@ -164,7 +164,7 @@ func handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 func handleMe(w http.ResponseWriter, r *http.Request) {
 	c, _ := r.Cookie("sid")
 	if c == nil || users[c.Value] == nil {
-		http.Error(w, "unauthorized", 401)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	writeJSON(w, map[string]string{"email": c.Value})
