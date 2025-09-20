@@ -1,18 +1,42 @@
 package main
 
 import (
+	"bytes"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/html"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"context"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"time"
 )
 
-func runServer(cfg *config.Config, addr string) error {
+func generateSpinnerHTML(cfg *config.Config, spinnerTemplate []byte) ([]byte, error) {
+	tmpl, err := template.New("spinner").Parse(string(spinnerTemplate))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse spinner template: %w", err)
+	}
+	
+	data := struct {
+		ClarityScript template.HTML
+	}{
+		ClarityScript: html.ClarityScript(cfg),
+	}
+	
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute spinner template: %w", err)
+	}
+	
+	return buf.Bytes(), nil
+}
+
+func runServer(cfg *config.Config, addr string, spinnerTemplate []byte) error {
 
 	cache, err := cache.MakeCache()
 	if err != nil {
@@ -42,7 +66,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		// Render locations
-		w.Write([]byte(locations.Html(locs, zip)))
+		w.Write([]byte(locations.Html(cfg, locs, zip)))
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +101,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		if recipe, ok := cache.Get(p.Hash()); ok {
 			log.Printf("serving cached recipes for %s", p.String())
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, date, string(recipe))))
+			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, *l, date, string(recipe))))
 			return
 		}
 		go func() {
@@ -91,6 +115,12 @@ func runServer(cfg *config.Config, addr string) error {
 		}()
 
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		spinnerHTML, err := generateSpinnerHTML(cfg, spinnerTemplate)
+		if err != nil {
+			log.Printf("failed to generate spinner HTML: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 		_, _ = w.Write(spinnerHTML)
 	})
 

@@ -45,7 +45,7 @@ func main() {
 	}
 
 	if serve {
-		if err := runServer(cfg, addr); err != nil {
+		if err := runServer(cfg, addr, spinnerHTML); err != nil {
 			log.Fatalf("server error: %v", err)
 		}
 		return

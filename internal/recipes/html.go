@@ -2,6 +2,8 @@ package recipes
 
 import (
 	"bytes"
+	"careme/internal/config"
+	"careme/internal/html"
 	"careme/internal/locations"
 	"embed"
 	"html/template"
@@ -18,15 +20,17 @@ var templates = template.Must(template.New("").Funcs(template.FuncMap{
 
 
 // FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
-func FormatChatHTML(location locations.Location, date time.Time, chat string) string {
+func FormatChatHTML(cfg *config.Config, location locations.Location, date time.Time, chat string) string {
 	data := struct {
 		Location locations.Location
 		Date     string
 		Chat     template.HTML
+		ClarityScript template.HTML
 	}{
 		Location: location,
 		Date:     date.Format("2006-01-02"),
 		Chat:     template.HTML(chat),
+		ClarityScript: html.ClarityScript(cfg),
 	}
 	var buf bytes.Buffer
 	_ = templates.ExecuteTemplate(&buf, "chat.html", data)
