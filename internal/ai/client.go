@@ -95,18 +95,47 @@ func (c *Client) generateWithOpenAI(messages []Message) (string, error) {
 
 func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients []string, instructions string, date time.Time) string {
 
-	prompt := `Generate 3 unique, practical recipes based on the provided constraints
-		Each meal should have a protein and a vegetable and/or a starch side.
-		Prioritize ingredients currently on sale (bigger sale more important than small sale)
-		Prioritize seasonal ingredients (currently ` + date.Format("January 2nd") + ` in ` + location.State + ` State)
-		Include variety in cooking methods and cuisines. Each recipe should serve 2 people
-		Provide clear, step-by-step instructions and a total ingredient list
-		Should generally take less than an hour though special ones can go over.
-		Optionally provide a wine pairing with each recipe.
-		Oven, Stove, Grill and slow cooker are available cooking methods.
-		Produce output as html I can inline into a <div>.
+	//TODO pull out meal count and people.
+	//TODO json formatting
+	//TODO store prompt in cache?
+	prompt := `# Objective
+Generate 3 distinct, practical recipes using the provided constraints to maximize ingredient efficiency and meal variety while maintaining clear, user-friendly HTML output.
 
-		Proteins and Vegatables currently avaialable (assume most starches and seasonings are available):`
+# Instructions
+- Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch alongside protein is acceptable and satisfies the side requirement.
+- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority) and that are in season for the current date and user's state location ` + date.Format("January 2nd") + `  in ` + location.State + `).
+- Recipes should use diverse cooking methods and represent a variety of cuisines.
+- Each recipe should serve 2 people.
+- Provide clear, step-by-step instructions and an ingredient list for each recipe.
+- Recipes should take under 1 hour to prepare, unless a special dish requires longer.
+- Optionally include a wine pairing suggestion for each recipe if appropriate.
+- Permitted cooking methods: oven, stove, grill, slow cooker.
+
+
+# Output Format
+- Return all output as HTML suitable for inlining in a ' < div > ' element.
+- Main wrapper is a ' < div > '.
+- Each recipe must be within a ' < section > ' or ' < article > ', starting with a ' < h2 > ' as the recipe title.
+- Each recipe includes:
+  - Short description (' < p > ').
+  - Ingredient list (' < ul > ' or ' < ol > ', each ingredient in a ' < li > '). Showing sale prices if applicable.
+  - Step-by-step instructions (' < ol > ').
+	- A guess at calorie count and helthyness in a ' < p > '.
+  - Optional wine pairing (' < p > ' at end).
+- Place an overall combined ingredient summary as a ' < ul > ' at the top or bottom. Use a ' < table > ' for extra clarity if needed.
+
+
+# Verbosity
+- Be concise but clear in step-by-step instructions and ingredient lists.
+
+# Stop Conditions
+- Only return output when 3 usable recipes or a user-friendly error message is generated.
+
+# Planning & Verification
+- Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.
+- After HTML generation, validate that the HTML structure is semantically correct and ready for inlining; self-correct if necessary before handing output back.
+
+# Inputs`
 
 	if len(saleIngredients) > 0 {
 		prompt += "Ingredients currently on sale at local QFC/Fred Meyer:\n"
@@ -116,7 +145,7 @@ func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients
 		prompt += "\n"
 	}
 
-	prompt += instructions + "\n"
+	prompt += `# Additional User Instructions:\n` + instructions + "\n"
 	/*
 		if len(previousRecipes) > 0 {
 			prompt += "DO NOT repeat these recipes from the past 2 weeks:\n"
@@ -127,16 +156,6 @@ func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients
 		}
 
 
-				prompt += "Format your response as valid JSON with this structure:\n"
-				prompt += `{
-			  "recipes": [
-			    {
-			      "name": "Recipe Name",
-			      "description": "Brief description",
-			      "ingredients": ["ingredient 1", "ingredient 2"],
-			      "instructions": ["step 1", "step 2"]
-			    }
-			  ]
 	*/
 	return prompt
 }
