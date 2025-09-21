@@ -15,7 +15,7 @@ import (
 func runServer(cfg *config.Config, addr string) error {
 
 	// Parse templates and spinner on startup (no init function)
-	homeTmpl, spinnerHTML := loadTemplates()
+	homeTmpl, spinnerTmpl := loadTemplates()
 
 	cache, err := cache.MakeCache()
 	if err != nil {
@@ -97,11 +97,13 @@ func runServer(cfg *config.Config, addr string) error {
 				log.Printf("generate error: %v", err)
 				return
 			}
-
 		}()
 
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-		_, _ = w.Write(spinnerHTML)
+		if err := spinnerTmpl.Execute(w, nil); err != nil {
+			log.Printf("home template execute error: %v", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
 	})
 
 	log.Printf("Serving Careme on %s", addr)
