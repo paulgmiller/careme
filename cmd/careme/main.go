@@ -15,9 +15,6 @@ import (
 	"careme/internal/recipes"
 )
 
-//go:embed html/spinner.html
-var spinnerHTML []byte
-
 func main() {
 	var location string
 	var zipcode string
@@ -45,7 +42,7 @@ func main() {
 	}
 
 	if serve {
-		if err := runServer(cfg, addr, spinnerHTML); err != nil {
+		if err := runServer(cfg, addr); err != nil {
 			log.Fatalf("server error: %v", err)
 		}
 		return

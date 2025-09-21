@@ -50,6 +50,7 @@ func NewBlobCache(container string) (*BlobCache, error) {
 func (fc *BlobCache) Get(key string) (string, bool) {
 	stream, err := fc.containerClient.DownloadStream(context.TODO(), fc.container, key, &azblob.DownloadStreamOptions{})
 	if err != nil {
+		//TODO don't log if not found
 		return "", false
 	}
 

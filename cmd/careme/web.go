@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/html"
@@ -15,35 +14,30 @@ import (
 	"time"
 )
 
-func generateSpinnerHTML(cfg *config.Config, spinnerTemplate []byte) ([]byte, error) {
-	tmpl, err := template.New("spinner").Parse(string(spinnerTemplate))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse spinner template: %w", err)
-	}
-	
-	data := struct {
-		ClarityScript template.HTML
-	}{
-		ClarityScript: html.ClarityScript(cfg),
-	}
-	
-	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute spinner template: %w", err)
-	}
-	
-	return buf.Bytes(), nil
-}
+func runServer(cfg *config.Config, addr string) error {
 
-func runServer(cfg *config.Config, addr string, spinnerTemplate []byte) error {
+	// Parse templates and spinner on startup (no init function)
+	homeTmpl, spinnerTmpl := loadTemplates()
 
 	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
+	data := struct {
+		ClarityScript template.HTML
+	}{
+		ClarityScript: html.ClarityScript(cfg),
+	}
+
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if err := homeTmpl.Execute(w, data); err != nil {
+			log.Printf("home template execute error: %v", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
 	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
@@ -111,17 +105,13 @@ func runServer(cfg *config.Config, addr string, spinnerTemplate []byte) error {
 				log.Printf("generate error: %v", err)
 				return
 			}
-
 		}()
 
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-		spinnerHTML, err := generateSpinnerHTML(cfg, spinnerTemplate)
-		if err != nil {
-			log.Printf("failed to generate spinner HTML: %v", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
+		if err := spinnerTmpl.Execute(w, data); err != nil {
+			log.Printf("home template execute error: %v", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
 		}
-		_, _ = w.Write(spinnerHTML)
 	})
 
 	log.Printf("Serving Careme on %s", addr)
