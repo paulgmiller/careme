@@ -95,7 +95,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		if recipe, ok := cache.Get(p.Hash()); ok {
 			log.Printf("serving cached recipes for %s", p.String())
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, *l, date, string(recipe))))
+			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, p, string(recipe))))
 			return
 		}
 		go func() {
