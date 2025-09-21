@@ -1,6 +1,5 @@
-Careme is a golang applicationt that takes a location as input and uses the latest chat gpt or anthropic model to 
-produce 4 recipes a week that can bet resourced at a local qfc or fredmeyer. The agentic model should use 
- * an mcp server for kroger api to see whats available and fresh
- * Epicurious Seasonal Ingredient Map
- * a history of the past 2 weeks recips to not repeat itself.
+Careme is your personal chef and sommilier. It will 
 
+1. Take yoru favorite grocery store based on location
+2. Check the stores inventory for fresh meat and seasonal produce
+3. Generate a weekly meal plan from a variety of cuisines and cooking styles. 

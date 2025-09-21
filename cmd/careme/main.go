@@ -15,9 +15,6 @@ import (
 	"careme/internal/recipes"
 )
 
-//go:embed html/spinner.html
-var spinnerHTML []byte
-
 func main() {
 	var location string
 	var zipcode string

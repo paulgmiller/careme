@@ -14,12 +14,24 @@ import (
 
 func runServer(cfg *config.Config, addr string) error {
 
+	// Parse templates and spinner on startup (no init function)
+	homeTmpl, spinnerHTML := loadTemplates()
+
 	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		desc := `Careme is your personal chef and sommilier. It will\n\n1. Take yoru favorite grocery store based on location\n2. Check the stores inventory for fresh meat and seasonal produce\n3. Generate a weekly meal plan from a variety of cuisines and cooking styles.`
+		data := map[string]any{"Description": desc}
+		if err := homeTmpl.Execute(w, data); err != nil {
+			log.Printf("home template execute error: %v", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
 	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)

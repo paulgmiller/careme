@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Careme</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:2rem;background:#f7f7f9}
+    .card{background:#fff;padding:1.5rem;border-radius:8px;max-width:720px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+    h1{margin-top:0}
+    form{margin-top:1rem}
+    input[type=text]{padding:0.5rem;width:200px;margin-right:0.5rem}
+    button{padding:0.5rem 0.75rem}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Careme</h1>
+    <div>
+      <pre style="white-space:pre-wrap">{{.Description}}</pre>
+    </div>
+
+    <form method="GET" action="/locations">
+      <label for="zip">Enter ZIP code to pick a nearby store:</label><br>
+      <input type="text" id="zip" name="zip" placeholder="e.g. 90210" required pattern="\d{5}">
+      <button type="submit">Find Stores</button>
+    </form>
+  </div>
+</body>
+</html>
