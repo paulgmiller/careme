@@ -3,10 +3,12 @@ package main
 import (
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/html"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"context"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"time"
@@ -22,10 +24,16 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
+	data := struct {
+		ClarityScript template.HTML
+	}{
+		ClarityScript: html.ClarityScript(cfg),
+	}
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if err := homeTmpl.Execute(w, nil); err != nil {
+		if err := homeTmpl.Execute(w, data); err != nil {
 			log.Printf("home template execute error: %v", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
@@ -52,7 +60,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		// Render locations
-		w.Write([]byte(locations.Html(locs, zip)))
+		w.Write([]byte(locations.Html(cfg, locs, zip)))
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +95,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		if recipe, ok := cache.Get(p.Hash()); ok {
 			log.Printf("serving cached recipes for %s", p.String())
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, date, string(recipe))))
+			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, *l, date, string(recipe))))
 			return
 		}
 		go func() {
@@ -100,7 +108,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}()
 
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-		if err := spinnerTmpl.Execute(w, nil); err != nil {
+		if err := spinnerTmpl.Execute(w, data); err != nil {
 			log.Printf("home template execute error: %v", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
