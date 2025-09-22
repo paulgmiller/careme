@@ -59,7 +59,6 @@ func (fc *BlobCache) Get(key string) (string, bool) {
 
 	data, err := io.ReadAll(stream.Body)
 	if err != nil {
-		log.Printf("failed to read blob data for key %s: %v", key, err)
 		return "", false
 	}
 	return string(data), true
