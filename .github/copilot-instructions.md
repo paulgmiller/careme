@@ -13,10 +13,9 @@ Always reference these instructions first and fallback to search or bash command
 - Alternative clean build: `rm -f careme && go build -o careme ./cmd/careme`
 
 ### Testing
-- Run working tests: `go test ./internal/html ./internal/locations -v` -- takes under 5 seconds
-- WARNING: `go test ./...` WILL FAIL due to broken tests in internal/recipes package. This is expected and NOT your responsibility to fix
-- Run specific test modules that work: `go test ./internal/html ./internal/locations`
-- Test execution time: Under 10 seconds for working modules. NEVER CANCEL. Set timeout to 30+ minutes for safety
+- Run all tests: `go test ./... -v` -- takes under 5 seconds and all tests should pass
+- Run specific test modules: `go test ./internal/html ./internal/locations ./internal/recipes -v`
+- Test execution time: Under 10 seconds for all modules. NEVER CANCEL. Set timeout to 30+ minutes for safety
 
 ### Code Quality
 - Format code: `go fmt ./...` -- takes 1-2 seconds
@@ -91,8 +90,6 @@ Always run these validation steps after making changes:
 ### Expected Limitations
 - Docker build may fail in sandboxed environments due to TLS certificate issues
 - External API calls (Kroger, OpenAI) will fail without valid credentials or network access
-- Some tests in internal/recipes package are broken (not your responsibility to fix)
-- `go test ./...` will fail - use `go test ./internal/html ./internal/locations` instead
 
 ## Docker
 
@@ -140,8 +137,8 @@ go build -o careme ./cmd/careme && ./careme --help
 # Test server locally
 KROGER_CLIENT_ID=test KROGER_CLIENT_SECRET=test AI_API_KEY=test ./careme -serve
 
-# Run working tests
-go test ./internal/html ./internal/locations -v
+# Run all tests
+go test ./... -v
 
 # Format and check code
 go fmt ./... && go vet ./...
