@@ -10,14 +10,14 @@ import (
 )
 
 type Recipe struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Ingredients []string  `json:"ingredients"`
-	Instructions []string `json:"instructions"`
-	CreatedAt   time.Time `json:"created_at"`
-	Location    string    `json:"location"`
-	Season      string    `json:"season"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	Ingredients  []string  `json:"ingredients"`
+	Instructions []string  `json:"instructions"`
+	CreatedAt    time.Time `json:"created_at"`
+	Location     string    `json:"location"`
+	Season       string    `json:"season"`
 }
 
 type HistoryStorage struct {
