@@ -25,8 +25,9 @@ func TestFormatChatHTML_ValidHTML(t *testing.T) {
 		Clarity: config.ClarityConfig{ProjectID: "test123"},
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
 	chat := "<pre>{\"message\": \"hi\"}</pre>"
-	html := FormatChatHTML(cfg, loc, time.Now(), chat)
+	html := FormatChatHTML(cfg, p, chat)
 	isValidHTML(t, html)
 }
 
@@ -36,7 +37,8 @@ func TestFormatChatHTML_IncludesClarityScript(t *testing.T) {
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	chat := "<pre>{\"message\": \"hi\"}</pre>"
-	html := FormatChatHTML(cfg, loc, time.Now(), chat)
+	p := DefaultParams(&loc, time.Now())
+	html := FormatChatHTML(cfg, p, chat)
 
 	if !bytes.Contains([]byte(html), []byte("www.clarity.ms/tag/")) {
 		t.Error("HTML should contain Clarity script URL")
@@ -53,7 +55,8 @@ func TestFormatChatHTML_NoClarityWhenEmpty(t *testing.T) {
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	chat := "<pre>{\"message\": \"hi\"}</pre>"
-	html := FormatChatHTML(cfg, loc, time.Now(), chat)
+	p := DefaultParams(&loc, time.Now())
+	html := FormatChatHTML(cfg, p, chat)
 
 	if bytes.Contains([]byte(html), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")

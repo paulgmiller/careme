@@ -122,7 +122,7 @@ Generate 3 distinct, practical recipes using the provided constraints to maximiz
   - Step-by-step instructions (' < ol > ').
 	- A guess at calorie count and helthyness in a ' < p > '.
   - Optional wine pairing (' < p > ' at end).
-- Place an overall combined ingredient summary as a ' < ul > ' at the top or bottom. Use a ' < table > ' for extra clarity if needed.
+- Place an overall combined ingredient summary as a ' < ul > ' at the bottom. Use a ' < table > ' for extra clarity if needed. Include name, quantity and sale prices.
 
 
 # Verbosity
