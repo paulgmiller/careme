@@ -3,13 +3,14 @@ package locations
 import (
 	"bytes"
 	"careme/internal/config"
+	"careme/internal/html"
 	"careme/internal/kroger"
 	"context"
+	"embed"
 	"fmt"
+	"html/template"
 	"log"
 	"sync"
-	"embed"
-	"html/template"
 )
 
 //go:embed templates/*.html
@@ -60,13 +61,15 @@ func GetLocationByID(ctx context.Context, cfg *config.Config, locationID string)
 	return &l, nil
 }
 
-func Html(locs []Location, zipstring string) string {
+func Html(cfg *config.Config, locs []Location, zipstring string) string {
 	data := struct {
-		Locations []Location
-		Zip       string
+		Locations     []Location
+		Zip           string
+		ClarityScript template.HTML
 	}{
-		Locations: locs,
-		Zip:       zipstring,
+		Locations:     locs,
+		Zip:           zipstring,
+		ClarityScript: html.ClarityScript(cfg),
 	}
 	var buf bytes.Buffer
 	_ = templates.ExecuteTemplate(&buf, "locations.html", data)

@@ -20,7 +20,7 @@ spec:
         runAsGroup: 65532
       containers:
         - name: careme
-          image: ghcr.io/paulgmiller/careme:2382800
+          image: ghcr.io/paulgmiller/careme:40b705e
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -28,6 +28,9 @@ spec:
           envFrom:
             - secretRef:
                 name: careme-secrets
+          env:
+            - name: CLARITY_PROJECT_ID
+              value: "td2gxd3sq9"
           volumeMounts:
             - name: recipes
               mountPath: /recipes

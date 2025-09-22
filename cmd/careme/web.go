@@ -3,11 +3,13 @@ package main
 import (
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/html"
 	"careme/internal/locations"
 	"careme/internal/passkeys"
 	"careme/internal/recipes"
 	"context"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"time"
@@ -15,12 +17,28 @@ import (
 
 func runServer(cfg *config.Config, addr string) error {
 
+	// Parse templates and spinner on startup (no init function)
+	homeTmpl, spinnerTmpl := loadTemplates()
+
 	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
+	data := struct {
+		ClarityScript template.HTML
+	}{
+		ClarityScript: html.ClarityScript(cfg),
+	}
+
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if err := homeTmpl.Execute(w, data); err != nil {
+			log.Printf("home template execute error: %v", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
 	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
@@ -45,7 +63,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		// Render locations
-		w.Write([]byte(locations.Html(locs, zip)))
+		w.Write([]byte(locations.Html(cfg, locs, zip)))
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +98,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		if recipe, ok := cache.Get(p.Hash()); ok {
 			log.Printf("serving cached recipes for %s", p.String())
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(*l, date, string(recipe))))
+			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, p, string(recipe))))
 			return
 		}
 		go func() {
@@ -90,11 +108,13 @@ func runServer(cfg *config.Config, addr string) error {
 				log.Printf("generate error: %v", err)
 				return
 			}
-
 		}()
 
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-		_, _ = w.Write(spinnerHTML)
+		if err := spinnerTmpl.Execute(w, data); err != nil {
+			log.Printf("home template execute error: %v", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
 	})
 
 	log.Printf("Serving Careme on %s", addr)

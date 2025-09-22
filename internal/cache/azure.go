@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 )
 
 type BlobCache struct {
@@ -50,7 +51,9 @@ func NewBlobCache(container string) (*BlobCache, error) {
 func (fc *BlobCache) Get(key string) (string, bool) {
 	stream, err := fc.containerClient.DownloadStream(context.TODO(), fc.container, key, &azblob.DownloadStreamOptions{})
 	if err != nil {
-		log.Printf("failed to download stremam key %s: %v", key, err)
+		if !bloberror.HasCode(err, bloberror.BlobNotFound) {
+			log.Printf("failed to download blob: %v", err)
+		}
 		return "", false
 	}
 
