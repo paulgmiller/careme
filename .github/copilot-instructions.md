@@ -11,6 +11,7 @@ Always reference these instructions first and fallback to search or bash command
 - Download dependencies: `go mod download` -- takes 5-10 seconds
 - Build the application: `go build -o careme ./cmd/careme` -- takes 30-45 seconds. NEVER CANCEL. Set timeout to 60+ minutes for safety
 - Alternative clean build: `rm -f careme && go build -o careme ./cmd/careme`
+- **IMPORTANT**: The `careme` binary is in `.gitignore` and should NOT be committed to the repository
 
 ### Testing
 - Run all tests: `go test ./... -v` -- takes under 5 seconds and all tests should pass
@@ -161,8 +162,8 @@ go fmt ./... && go vet ./...
 ### Common Issues
 1. **"Kroger client ID and secret must be set"**: Set environment variables as shown in Configuration
 2. **Docker build fails with TLS errors**: Expected in sandboxed environments, try local build instead
-3. **Tests fail in internal/recipes**: Expected, focus on other modules
-4. **External API failures**: Expected without valid credentials or in restricted networks
+3. **External API failures**: Expected without valid credentials or in restricted networks
+4. **Binary committed accidentally**: The `careme` binary is in `.gitignore` and should not be committed. Use `git rm careme` to remove if accidentally added
 
 ### Debug Server Issues
 1. Check server logs for specific error messages
