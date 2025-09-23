@@ -5,6 +5,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/html"
 	"careme/internal/locations"
+	"careme/internal/passkeys"
 	"careme/internal/recipes"
 	"context"
 	"fmt"
@@ -42,6 +43,8 @@ func runServer(cfg *config.Config, addr string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
+
+	mux.Handle("/passkeys/", http.StripPrefix("/passkeys", passkeys.Mux()))
 
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
