@@ -9,6 +9,7 @@ type Config struct {
 	AI      AIConfig      `json:"ai"`
 	Kroger  KrogerConfig  `json:"kroger"`
 	History HistoryConfig `json:"history"`
+	Users   UsersConfig   `json:"users"`
 	Clarity ClarityConfig `json:"clarity"`
 }
 
@@ -26,6 +27,10 @@ type KrogerConfig struct {
 type HistoryConfig struct {
 	StoragePath   string `json:"storage_path"`
 	RetentionDays int    `json:"retention_days"`
+}
+
+type UsersConfig struct {
+	StoragePath string `json:"storage_path"`
 }
 
 type ClarityConfig struct {
@@ -46,6 +51,9 @@ func Load() (*Config, error) {
 		History: HistoryConfig{
 			StoragePath:   getEnvOrDefault("HISTORY_PATH", "./data/history.json"),
 			RetentionDays: 14,
+		},
+		Users: UsersConfig{
+			StoragePath: getEnvOrDefault("USERS_PATH", "./data/users.json"),
 		},
 		Clarity: ClarityConfig{
 			ProjectID: os.Getenv("CLARITY_PROJECT_ID"),
