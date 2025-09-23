@@ -44,7 +44,7 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-	mux.Handle("/", passkeys.Mux())
+	mux.Handle("/passkeys/", http.StripPrefix("/passkeys", passkeys.Mux()))
 
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
