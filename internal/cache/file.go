@@ -6,7 +6,7 @@ import (
 )
 
 type Cache interface {
-	Get(key string) (string, bool)
+	Get(key string) (string, bool) //sigh need an error here.
 	Set(key, value string) error
 }
 
