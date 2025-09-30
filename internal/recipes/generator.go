@@ -19,7 +19,6 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/history"
 	"careme/internal/kroger"
 	"careme/internal/locations"
 )
@@ -29,13 +28,8 @@ type Generator struct {
 	aiClient       *ai.Client
 	krogerClient   kroger.ClientWithResponsesInterface //probably need only subset
 	cache          cache.Cache
-	historyStorage *history.HistoryStorage
 	inFlight       map[string]struct{}
 	generationLock sync.Mutex
-}
-
-type GeneratedRecipes struct {
-	Recipes []history.Recipe `json:"recipes"`
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
@@ -44,12 +38,11 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
 		return nil, err
 	}
 	return &Generator{
-		cache:          cache, //should this also pull from config?
-		config:         cfg,
-		aiClient:       ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, cfg.AI.Model),
-		krogerClient:   client,
-		historyStorage: history.NewHistoryStorage(cfg.History.StoragePath, cfg.History.RetentionDays),
-		inFlight:       make(map[string]struct{}),
+		cache:        cache, //should this also pull from config?
+		config:       cfg,
+		aiClient:     ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, cfg.AI.Model),
+		krogerClient: client,
+		inFlight:     make(map[string]struct{}),
 	}, nil
 }
 
@@ -337,28 +330,4 @@ func toFloat32(f *float32) float32 {
 		return 0.0
 	}
 	return *f
-}
-
-func (g *Generator) getPreviousRecipes() ([]string, error) {
-	return g.historyStorage.GetRecipeNames(14) // Last 2 weeks
-}
-
-func (g *Generator) parseAIResponse(response, location string) ([]history.Recipe, error) {
-	var generatedRecipes GeneratedRecipes
-	if err := json.Unmarshal([]byte(response), &generatedRecipes); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal AI response: %w", err)
-	}
-
-	if len(generatedRecipes.Recipes) != 4 {
-		return nil, fmt.Errorf("expected 4 recipes, got %d", len(generatedRecipes.Recipes))
-	}
-
-	var recipes []history.Recipe
-	for i, recipe := range generatedRecipes.Recipes {
-		recipe.ID = fmt.Sprintf("recipe_%d", i+1)
-		recipe.Location = location
-		recipes = append(recipes, recipe)
-	}
-
-	return recipes, nil
 }
