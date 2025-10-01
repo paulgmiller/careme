@@ -24,17 +24,13 @@ func runServer(cfg *config.Config, addr string) error {
 	// Parse templates and spinner on startup (no init function)
 	homeTmpl, spinnerTmpl := loadTemplates()
 
-	recipecache, err := cache.MakeCache("recipes")
-	if err != nil {
-		return fmt.Errorf("failed to create cache: %w", err)
-	}
-	userCache, err := cache.MakeCache("users")
+	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
 	clarityScript := html.ClarityScript(cfg)
-	userStorage := users.NewStorage(userCache)
+	userStorage := users.NewStorage(cache)
 
 	mux := http.NewServeMux()
 
@@ -95,7 +91,7 @@ func runServer(cfg *config.Config, addr string) error {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 
-	generator, err := recipes.NewGenerator(cfg, recipecache)
+	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -181,7 +177,7 @@ func runServer(cfg *config.Config, addr string) error {
 			p.Instructions = i
 		}
 
-		if recipe, ok := recipecache.Get(p.Hash()); ok {
+		if recipe, ok := cache.Get(p.Hash()); ok {
 			log.Printf("serving cached recipes for %s", p.String())
 			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, p, string(recipe))))
 			return

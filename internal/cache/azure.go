@@ -69,11 +69,11 @@ func (fc *BlobCache) Set(key, value string) error {
 	return err
 }
 
-func MakeCache(subtype string) (Cache, error) {
+func MakeCache() (Cache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
 		log.Println("Using Azure Blob Storage for cache")
-		return NewBlobCache(subtype)
+		return NewBlobCache("recipes")
 	}
-	return NewFileCache("cache/" + subtype), nil
+	return NewFileCache("cache"), nil
 }

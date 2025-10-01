@@ -1,8 +1,6 @@
 package users
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +8,8 @@ import (
 	"time"
 
 	"careme/internal/cache"
+
+	"github.com/google/uuid"
 )
 
 type User struct {
@@ -27,7 +27,11 @@ var (
 	ErrNotFound = errors.New("user not found")
 )
 
-const CookieName = "careme_user"
+const (
+	CookieName  = "careme_user"
+	userPrefix  = "users/"
+	emailPrefix = "email2user/"
+)
 
 func NewStorage(c cache.Cache) *Storage {
 	return &Storage{cache: c}
@@ -35,7 +39,7 @@ func NewStorage(c cache.Cache) *Storage {
 
 func (s *Storage) GetByID(id string) (*User, error) {
 
-	userBytes, found := s.cache.Get(id)
+	userBytes, found := s.cache.Get(userPrefix + id)
 	if !found {
 		return nil, ErrNotFound
 	}
@@ -49,7 +53,7 @@ func (s *Storage) GetByID(id string) (*User, error) {
 func (s *Storage) GetByEmail(email string) (*User, error) {
 
 	normalized := normalizeEmail(email)
-	id, found := s.cache.Get(normalized)
+	id, found := s.cache.Get(emailPrefix + normalized)
 
 	if !found {
 		return nil, ErrNotFound
@@ -68,7 +72,7 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 	}
 
 	newUser := User{
-		ID:        newUserID(),
+		ID:        uuid.New().String(),
 		Email:     []string{normalizeEmail(email)},
 		CreatedAt: time.Now(),
 	}
@@ -77,23 +81,16 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 		return nil, fmt.Errorf("failed to marshal new user: %w", err)
 	}
 	//no transactions
-	if err := s.cache.Set(newUser.ID, string(userBytes)); err != nil {
+	if err := s.cache.Set(userPrefix+newUser.ID, string(userBytes)); err != nil {
 		return nil, fmt.Errorf("failed to store new user: %w", err)
 	}
-	if err := s.cache.Set(newUser.Email[0], newUser.ID); err != nil {
+	if err := s.cache.Set(emailPrefix+newUser.Email[0], newUser.ID); err != nil {
 		return nil, fmt.Errorf("failed to index new user by email: %w", err)
 	}
 	return &newUser, nil
 }
 
 func normalizeEmail(email string) string {
+	//remove . from before @?
 	return strings.TrimSpace(strings.ToLower(email))
-}
-
-func newUserID() string {
-	b := make([]byte, 16) //guid instead?
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Errorf("failed to generate user id: %w", err))
-	}
-	return hex.EncodeToString(b)
 }

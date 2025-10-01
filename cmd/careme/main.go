@@ -72,7 +72,7 @@ func main() {
 
 func run(cfg *config.Config, location string, ingredient string) error {
 
-	cache, err := cache.MakeCache("recipes")
+	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
