@@ -6,13 +6,18 @@ import (
 	"careme/internal/html"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/users"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
+
+const sessionDuration = 365 * 24 * time.Hour
 
 func runServer(cfg *config.Config, addr string) error {
 
@@ -24,20 +29,68 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
-	data := struct {
-		ClarityScript template.HTML
-	}{
-		ClarityScript: html.ClarityScript(cfg),
-	}
+	clarityScript := html.ClarityScript(cfg)
+	userStorage := users.NewStorage(cache)
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		currentUser, err := userFromCookie(r, userStorage)
+		if err != nil {
+			if errors.Is(err, users.ErrNotFound) {
+				clearUserCookie(w)
+			} else {
+				log.Printf("failed to load user from cookie: %v", err)
+				http.Error(w, "unable to load account", http.StatusInternalServerError)
+				return
+			}
+		}
+		data := struct {
+			ClarityScript template.HTML
+			User          *users.User
+		}{
+			ClarityScript: clarityScript,
+			User:          currentUser,
+		}
 		if err := homeTmpl.Execute(w, data); err != nil {
 			log.Printf("home template execute error: %v", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
+
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form submission", http.StatusBadRequest)
+			return
+		}
+		email := strings.TrimSpace(r.FormValue("email"))
+		if email == "" {
+			http.Error(w, "email is required", http.StatusBadRequest)
+			return
+		}
+		user, err := userStorage.FindOrCreateByEmail(email)
+		if err != nil {
+			log.Printf("failed to find or create user: %v", err)
+			http.Error(w, "unable to sign in", http.StatusInternalServerError)
+			return
+		}
+		setUserCookie(w, user.ID)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})
+
+	mux.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		clearUserCookie(w)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})
+
 	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
@@ -46,7 +99,23 @@ func runServer(cfg *config.Config, addr string) error {
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
+
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
+		currentUser, err := userFromCookie(r, userStorage)
+		if err != nil {
+			if errors.Is(err, users.ErrNotFound) {
+				clearUserCookie(w)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			log.Printf("failed to load user for locations: %v", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		if currentUser == nil {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
 		zip := r.URL.Query().Get("zip")
 		if zip == "" {
 			log.Printf("no zip code provided to /locations")
@@ -64,6 +133,21 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
+		currentUser, err := userFromCookie(r, userStorage)
+		if err != nil {
+			if errors.Is(err, users.ErrNotFound) {
+				clearUserCookie(w)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			log.Printf("failed to load user for recipes: %v", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		if currentUser == nil {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
 		ctx := r.Context()
 		loc := r.URL.Query().Get("location")
 		if loc == "" {
@@ -108,7 +192,12 @@ func runServer(cfg *config.Config, addr string) error {
 		}()
 
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-		if err := spinnerTmpl.Execute(w, data); err != nil {
+		spinnerData := struct {
+			ClarityScript template.HTML
+		}{
+			ClarityScript: clarityScript,
+		}
+		if err := spinnerTmpl.Execute(w, spinnerData); err != nil {
 			log.Printf("home template execute error: %v", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
@@ -116,4 +205,46 @@ func runServer(cfg *config.Config, addr string) error {
 
 	log.Printf("Serving Careme on %s", addr)
 	return http.ListenAndServe(addr, mux)
+}
+
+func setUserCookie(w http.ResponseWriter, userID string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     users.CookieName,
+		Value:    userID,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Now().Add(sessionDuration),
+		MaxAge:   int(sessionDuration / time.Second),
+	})
+}
+
+func clearUserCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     users.CookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+	})
+}
+
+func userFromCookie(r *http.Request, store *users.Storage) (*users.User, error) {
+	cookie, err := r.Cookie(users.CookieName)
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if cookie.Value == "" {
+		return nil, nil
+	}
+	user, err := store.GetByID(cookie.Value)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
