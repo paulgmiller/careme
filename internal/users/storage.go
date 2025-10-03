@@ -13,10 +13,12 @@ import (
 )
 
 type User struct {
-	ID          string    `json:"id"`
-	Email       []string  `json:"email"`
-	CreatedAt   time.Time `json:"created_at"`
-	LastRecipes []string  `json:"last_recipes,omitempty"`
+	ID            string    `json:"id"`
+	Email         []string  `json:"email"`
+	CreatedAt     time.Time `json:"created_at"`
+	LastRecipes   []string  `json:"last_recipes,omitempty"`
+	FavoriteStore string    `json:"favorite_store,omitempty"`
+	ShoppingDay   string    `json:"shopping_day,omitempty"`
 }
 
 type Storage struct {
@@ -88,6 +90,17 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 		return nil, fmt.Errorf("failed to index new user by email: %w", err)
 	}
 	return &newUser, nil
+}
+
+func (s *Storage) Update(user *User) error {
+	userBytes, err := json.Marshal(user)
+	if err != nil {
+		return fmt.Errorf("failed to marshal user: %w", err)
+	}
+	if err := s.cache.Set(userPrefix+user.ID, string(userBytes)); err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
 }
 
 func normalizeEmail(email string) string {
