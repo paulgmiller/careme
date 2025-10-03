@@ -199,8 +199,15 @@ func runServer(cfg *config.Config, addr string) error {
 		
 		// Support direct hash-based retrieval
 		if hash := r.URL.Query().Get("hash"); hash != "" {
+			// Try to get formatted HTML first
+			if formattedHTML, ok := cache.Get("formatted-" + hash); ok {
+				log.Printf("serving formatted cached recipe by hash: %s", hash)
+				w.Write([]byte(formattedHTML))
+				return
+			}
+			// Fall back to raw recipe (though it won't have the save button)
 			if recipe, ok := cache.Get(hash); ok {
-				log.Printf("serving cached recipe by hash: %s", hash)
+				log.Printf("serving raw cached recipe by hash: %s", hash)
 				w.Write([]byte(recipe))
 				return
 			}
@@ -239,7 +246,12 @@ func runServer(cfg *config.Config, addr string) error {
 
 		if recipe, ok := cache.Get(p.Hash()); ok {
 			log.Printf("serving cached recipes for %s", p.String())
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, p, string(recipe))))
+			formattedHTML := recipes.FormatChatHTML(cfg, p, string(recipe))
+			// Cache the formatted HTML for hash-based retrieval
+			if err := cache.Set("formatted-"+p.Hash(), formattedHTML); err != nil {
+				log.Printf("failed to cache formatted HTML: %v", err)
+			}
+			_, _ = w.Write([]byte(formattedHTML))
 			return
 		}
 		go func() {
