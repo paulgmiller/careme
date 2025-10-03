@@ -251,6 +251,47 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 	})
 
+	mux.HandleFunc("/save-recipe", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		currentUser, err := userFromCookie(r, userStorage)
+		if err != nil {
+			if errors.Is(err, users.ErrNotFound) {
+				clearUserCookie(w)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			log.Printf("failed to load user for save-recipe: %v", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		if currentUser == nil {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form submission", http.StatusBadRequest)
+			return
+		}
+		hash := strings.TrimSpace(r.FormValue("hash"))
+		title := strings.TrimSpace(r.FormValue("title"))
+		location := strings.TrimSpace(r.FormValue("location"))
+		date := strings.TrimSpace(r.FormValue("date"))
+		if hash == "" || title == "" {
+			http.Error(w, "hash and title are required", http.StatusBadRequest)
+			return
+		}
+		if err := userStorage.SaveRecipe(currentUser.ID, title, hash, location, date); err != nil {
+			log.Printf("failed to save recipe: %v", err)
+			http.Error(w, "unable to save recipe", http.StatusInternalServerError)
+			return
+		}
+		// Redirect back to the user profile page
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
+	})
+
 	log.Printf("Serving Careme on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }

@@ -12,12 +12,22 @@
     button:hover{background:#1d4ed8}
     h1{margin-top:0}
     footer{margin-top:2rem;font-size:.75rem;color:#666}
+    .save-button{background:#059669;margin-bottom:1rem}
+    .save-button:hover{background:#047857}
   </style>
   {{.ClarityScript}}
 </head>
 <body>
   <h1>Careme Recipes</h1>
   <h2>Location: {{.Location.Name}} ({{.Location.Address}})</h2>
+
+  <form method="POST" action="/save-recipe" style="margin:1rem 0">
+    <input type="hidden" name="hash" value="{{.Hash}}">
+    <input type="hidden" name="location" value="{{.Location.ID}}">
+    <input type="hidden" name="date" value="{{.Date}}">
+    <input type="hidden" name="title" value="Recipes for {{.Location.Name}} on {{.Date}}">
+    <button type="submit" class="save-button">Save Recipe</button>
+  </form>
 
   <div>{{.Chat}}</div>
 
