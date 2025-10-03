@@ -79,8 +79,8 @@
     <ul class="recipe-list">
       {{range .User.LastRecipes}}
       <li>
-        {{if and .Location .Date}}
-        <a href="/recipes?location={{.Location}}&date={{.Date}}" style="color:#2563eb;text-decoration:none">{{.Title}}</a>
+        {{if .Hash}}
+        <a href="/recipes?hash={{.Hash}}" style="color:#2563eb;text-decoration:none">{{.Title}}</a>
         {{else}}
         {{.Title}}
         {{end}}

@@ -196,6 +196,18 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
+		
+		// Support direct hash-based retrieval
+		if hash := r.URL.Query().Get("hash"); hash != "" {
+			if recipe, ok := cache.Get(hash); ok {
+				log.Printf("serving cached recipe by hash: %s", hash)
+				w.Write([]byte(recipe))
+				return
+			}
+			http.Error(w, "recipe not found", http.StatusNotFound)
+			return
+		}
+		
 		ctx := r.Context()
 		loc := r.URL.Query().Get("location")
 		if loc == "" {
