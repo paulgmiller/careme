@@ -29,3 +29,6 @@ Thumbs.db
 
 #secrets
 .env
+
+# Cache directory
+cache/
