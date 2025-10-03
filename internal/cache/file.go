@@ -30,5 +30,10 @@ func (fc *FileCache) Get(key string) (string, bool) {
 }
 
 func (fc *FileCache) Set(key, value string) error {
-	return os.WriteFile(filepath.Join(fc.Dir, key), []byte(value), 0644)
+	filePath := filepath.Join(fc.Dir, key)
+	// Create parent directories if they don't exist
+	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, []byte(value), 0644)
 }
