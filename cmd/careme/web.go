@@ -129,7 +129,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		// Render locations
-		w.Write([]byte(locations.Html(cfg, locs, zip)))
+		w.Write([]byte(locations.Html(cfg, locs, zip, currentUser)))
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
@@ -179,7 +179,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		if recipe, ok := cache.Get(p.Hash()); ok {
 			log.Printf("serving cached recipes for %s", p.String())
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, p, string(recipe))))
+			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, p, string(recipe), currentUser)))
 			return
 		}
 		go func() {
@@ -194,8 +194,10 @@ func runServer(cfg *config.Config, addr string) error {
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 		spinnerData := struct {
 			ClarityScript template.HTML
+			User          *users.User
 		}{
 			ClarityScript: clarityScript,
+			User:          currentUser,
 		}
 		if err := spinnerTmpl.Execute(w, spinnerData); err != nil {
 			log.Printf("home template execute error: %v", err)

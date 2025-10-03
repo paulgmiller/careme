@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Careme</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:2rem;background:#f7f7f9}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:2rem;background:#f7f7f9;position:relative}
     .card{background:#fff;padding:1.5rem;border-radius:8px;max-width:720px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
     h1{margin-top:0}
     form{margin-top:1rem}
@@ -15,6 +15,7 @@
   {{.ClarityScript}}
 </head>
 <body>
+  {{template "login-widget" .}}
   <div class="card">
     <h1>Careme</h1>
     <div>
@@ -27,25 +28,13 @@
     </div>
 
     {{if .User}}
-    <div style="margin-bottom:1rem">
-      <p style="margin:0">Signed in as <strong>{{.User.Email}}</strong></p>
-      <small>User ID: <code>{{.User.ID}}</code></small>
-      <form method="POST" action="/logout" style="margin-top:0.5rem">
-        <button type="submit">Sign out</button>
-      </form>
-    </div>
-
     <form method="GET" action="/locations">
       <label for="zip">Enter ZIP code to pick a nearby store:</label><br>
       <input type="text" id="zip" name="zip" placeholder="e.g. 90210" required pattern="\d{5}">
       <button type="submit">Find Stores</button>
     </form>
     {{else}}
-    <form method="POST" action="/login">
-      <label for="email">Enter your email to continue:</label><br>
-      <input type="email" id="email" name="email" placeholder="you@example.com" required>
-      <button type="submit">Continue</button>
-    </form>
+    <p>Please log in to continue.</p>
     {{end}}
   </div>
 </body>

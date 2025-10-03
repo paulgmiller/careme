@@ -5,6 +5,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/html"
 	"careme/internal/kroger"
+	"careme/internal/users"
 	"context"
 	"embed"
 	"fmt"
@@ -16,7 +17,7 @@ import (
 //go:embed templates/*.html
 var templatesFS embed.FS
 
-var templates = template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
+var templates *template.Template
 
 // this should all be in a location service object
 var locationCache map[string]Location
@@ -24,6 +25,9 @@ var cacheLock sync.Mutex // to protect locationMap
 
 func init() {
 	locationCache = make(map[string]Location)
+	
+	// Load all templates including the widget
+	templates = template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
 }
 
 func GetLocationByID(ctx context.Context, cfg *config.Config, locationID string) (*Location, error) {
@@ -61,15 +65,17 @@ func GetLocationByID(ctx context.Context, cfg *config.Config, locationID string)
 	return &l, nil
 }
 
-func Html(cfg *config.Config, locs []Location, zipstring string) string {
+func Html(cfg *config.Config, locs []Location, zipstring string, user *users.User) string {
 	data := struct {
 		Locations     []Location
 		Zip           string
 		ClarityScript template.HTML
+		User          *users.User
 	}{
 		Locations:     locs,
 		Zip:           zipstring,
 		ClarityScript: html.ClarityScript(cfg),
+		User:          user,
 	}
 	var buf bytes.Buffer
 	_ = templates.ExecuteTemplate(&buf, "locations.html", data)

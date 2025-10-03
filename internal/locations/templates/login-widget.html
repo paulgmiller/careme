@@ -1,0 +1,17 @@
+{{define "login-widget"}}
+<div style="position:absolute;top:1rem;right:1rem;text-align:right">
+  {{if .User}}
+    <div style="font-size:0.9rem;color:#555">
+      <span style="margin-right:0.5rem">{{index .User.Email 0}}</span>
+      <form method="POST" action="/logout" style="display:inline">
+        <button type="submit" style="padding:0.3rem 0.6rem;font-size:0.85rem">Sign out</button>
+      </form>
+    </div>
+  {{else}}
+    <form method="POST" action="/login" style="display:inline-flex;gap:0.3rem;align-items:center">
+      <input type="email" name="email" placeholder="you@example.com" required style="padding:0.3rem 0.5rem;font-size:0.85rem;width:180px">
+      <button type="submit" style="padding:0.3rem 0.6rem;font-size:0.85rem">Login</button>
+    </form>
+  {{end}}
+</div>
+{{end}}
