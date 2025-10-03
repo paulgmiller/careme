@@ -37,7 +37,7 @@ func TestSaveRecipe(t *testing.T) {
 	}
 
 	// Save a recipe
-	err = storage.SaveRecipe(user.ID, "Test Recipe", "hash123", "location456", "2025-01-15")
+	err = storage.SaveRecipe(user.ID, "Test Recipe", "hash123")
 	if err != nil {
 		t.Fatalf("failed to save recipe: %v", err)
 	}
@@ -59,15 +59,9 @@ func TestSaveRecipe(t *testing.T) {
 	if recipe.Hash != "hash123" {
 		t.Errorf("expected hash 'hash123', got '%s'", recipe.Hash)
 	}
-	if recipe.Location != "location456" {
-		t.Errorf("expected location 'location456', got '%s'", recipe.Location)
-	}
-	if recipe.Date != "2025-01-15" {
-		t.Errorf("expected date '2025-01-15', got '%s'", recipe.Date)
-	}
 
 	// Save the same recipe again (should be idempotent)
-	err = storage.SaveRecipe(user.ID, "Test Recipe", "hash123", "location456", "2025-01-15")
+	err = storage.SaveRecipe(user.ID, "Test Recipe", "hash123")
 	if err != nil {
 		t.Fatalf("failed to save duplicate recipe: %v", err)
 	}
@@ -82,7 +76,7 @@ func TestSaveRecipe(t *testing.T) {
 	}
 
 	// Save a different recipe
-	err = storage.SaveRecipe(user.ID, "Another Recipe", "hash456", "location789", "2025-01-16")
+	err = storage.SaveRecipe(user.ID, "Another Recipe", "hash456")
 	if err != nil {
 		t.Fatalf("failed to save second recipe: %v", err)
 	}
@@ -132,7 +126,7 @@ func TestSaveRecipeLimit(t *testing.T) {
 	for i := 0; i < 25; i++ {
 		title := "Recipe " + string(rune('A'+i%26))
 		hash := fmt.Sprintf("hash%d", i)
-		err = storage.SaveRecipe(user.ID, title, hash, "loc", "2025-01-01")
+		err = storage.SaveRecipe(user.ID, title, hash)
 		if err != nil {
 			t.Fatalf("failed to save recipe %d: %v", i, err)
 		}

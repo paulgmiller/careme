@@ -23,8 +23,6 @@
 
   <form method="POST" action="/save-recipe" style="margin:1rem 0">
     <input type="hidden" name="hash" value="{{.Hash}}">
-    <input type="hidden" name="location" value="{{.Location.ID}}">
-    <input type="hidden" name="date" value="{{.Date}}">
     <input type="hidden" name="title" value="Recipes for {{.Location.Name}} on {{.Date}}">
     <button type="submit" class="save-button">Save Recipe</button>
   </form>

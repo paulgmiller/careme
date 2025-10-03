@@ -37,8 +37,6 @@ func parseWeekday(v string) (time.Weekday, error) {
 type Recipe struct {
 	Title     string    `json:"title"`
 	Hash      string    `json:"hash"`
-	Location  string    `json:"location,omitempty"`
-	Date      string    `json:"date,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -153,7 +151,7 @@ func (s *Storage) Update(user *User) error {
 	return nil
 }
 
-func (s *Storage) SaveRecipe(userID string, title string, hash string, location string, date string) error {
+func (s *Storage) SaveRecipe(userID string, title string, hash string) error {
 	user, err := s.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
@@ -170,8 +168,6 @@ func (s *Storage) SaveRecipe(userID string, title string, hash string, location 
 	recipe := Recipe{
 		Title:     title,
 		Hash:      hash,
-		Location:  location,
-		Date:      date,
 		CreatedAt: time.Now(),
 	}
 	user.LastRecipes = append([]Recipe{recipe}, user.LastRecipes...)

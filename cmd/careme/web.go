@@ -289,13 +289,11 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		hash := strings.TrimSpace(r.FormValue("hash"))
 		title := strings.TrimSpace(r.FormValue("title"))
-		location := strings.TrimSpace(r.FormValue("location"))
-		date := strings.TrimSpace(r.FormValue("date"))
 		if hash == "" || title == "" {
 			http.Error(w, "hash and title are required", http.StatusBadRequest)
 			return
 		}
-		if err := userStorage.SaveRecipe(currentUser.ID, title, hash, location, date); err != nil {
+		if err := userStorage.SaveRecipe(currentUser.ID, title, hash); err != nil {
 			log.Printf("failed to save recipe: %v", err)
 			http.Error(w, "unable to save recipe", http.StatusInternalServerError)
 			return
