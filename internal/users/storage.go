@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/mail"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,11 +14,60 @@ import (
 	"github.com/google/uuid"
 )
 
+var daysOfWeek = [...]string{
+	time.Sunday.String(),
+	time.Monday.String(),
+	time.Tuesday.String(),
+	time.Wednesday.String(),
+	time.Thursday.String(),
+	time.Friday.String(),
+	time.Saturday.String(),
+}
+
+func parseWeekday(v string) (time.Weekday, error) {
+	for i := range daysOfWeek {
+		if strings.EqualFold(daysOfWeek[i], v) {
+			return time.Weekday(i), nil
+		}
+	}
+
+	return time.Sunday, fmt.Errorf("invalid weekday '%s'", v)
+}
+
+type Recipe struct {
+	Title     string    `json:"id"`
+	Hash      string    `json:"hash"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type User struct {
-	ID          string    `json:"id"`
-	Email       []string  `json:"email"`
-	CreatedAt   time.Time `json:"created_at"`
-	LastRecipes []string  `json:"last_recipes,omitempty"`
+	ID            string    `json:"id"`
+	Email         []string  `json:"email"`
+	CreatedAt     time.Time `json:"created_at"`
+	LastRecipes   []string  `json:"last_recipes,omitempty"`
+	FavoriteStore string    `json:"favorite_store,omitempty"`
+	ShoppingDay   string    `json:"shopping_day,omitempty"`
+}
+
+// need to take a look up to location cache?
+func (u *User) Validate() error {
+	if _, err := parseWeekday(u.ShoppingDay); err != nil {
+		return err
+	}
+	if len(u.Email) == 0 {
+		return errors.New("at least one email is required")
+	}
+	for _, e := range u.Email {
+		if _, err := mail.ParseAddress(e); err != nil {
+			return errors.New("invalid email address: " + e)
+		}
+	}
+	if _, err := strconv.Atoi(u.FavoriteStore); err != nil {
+		return fmt.Errorf("invalid favorite store id %s: %w", u.FavoriteStore, err)
+	}
+	//trim out recipes older than 2 months?
+
+	return nil
 }
 
 type Storage struct {
@@ -76,18 +127,28 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 		Email:     []string{normalizeEmail(email)},
 		CreatedAt: time.Now(),
 	}
-	userBytes, err := json.Marshal(newUser)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal new user: %w", err)
-	}
-	//no transactions
-	if err := s.cache.Set(userPrefix+newUser.ID, string(userBytes)); err != nil {
-		return nil, fmt.Errorf("failed to store new user: %w", err)
+	if err := s.Update(&newUser); err != nil {
+		return nil, fmt.Errorf("failed to create new user: %w", err)
 	}
 	if err := s.cache.Set(emailPrefix+newUser.Email[0], newUser.ID); err != nil {
 		return nil, fmt.Errorf("failed to index new user by email: %w", err)
 	}
 	return &newUser, nil
+}
+
+func (s *Storage) Update(user *User) error {
+	if err := user.Validate(); err != nil {
+		return fmt.Errorf("invalid user: %w", err)
+	}
+
+	userBytes, err := json.Marshal(user)
+	if err != nil {
+		return fmt.Errorf("failed to marshal user: %w", err)
+	}
+	if err := s.cache.Set(userPrefix+user.ID, string(userBytes)); err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
 }
 
 func normalizeEmail(email string) string {

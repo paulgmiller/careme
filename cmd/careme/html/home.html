@@ -30,9 +30,12 @@
     <div style="margin-bottom:1rem">
       <p style="margin:0">Signed in as <strong>{{.User.Email}}</strong></p>
       <small>User ID: <code>{{.User.ID}}</code></small>
-      <form method="POST" action="/logout" style="margin-top:0.5rem">
-        <button type="submit">Sign out</button>
-      </form>
+      <div style="margin-top:0.5rem">
+        <a href="/user" style="color:#2563eb;text-decoration:none;margin-right:1rem">View Profile</a>
+        <form method="POST" action="/logout" style="display:inline">
+          <button type="submit">Sign out</button>
+        </form>
+      </div>
     </div>
 
     <form method="GET" action="/locations">
