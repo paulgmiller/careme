@@ -78,13 +78,8 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 		Email:     []string{normalizeEmail(email)},
 		CreatedAt: time.Now(),
 	}
-	userBytes, err := json.Marshal(newUser)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal new user: %w", err)
-	}
-	//no transactions
-	if err := s.cache.Set(userPrefix+newUser.ID, string(userBytes)); err != nil {
-		return nil, fmt.Errorf("failed to store new user: %w", err)
+	if err := s.Update(&newUser); err != nil {
+		return nil, fmt.Errorf("failed to create new user: %w", err)
 	}
 	if err := s.cache.Set(emailPrefix+newUser.Email[0], newUser.ID); err != nil {
 		return nil, fmt.Errorf("failed to index new user by email: %w", err)

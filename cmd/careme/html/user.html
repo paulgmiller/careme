@@ -31,16 +31,12 @@
   <div class="card">
     <a href="/" class="back-link">← Back to Home</a>
     <h1>User Profile</h1>
-    
+
     {{if .Success}}
     <div class="success">Settings saved successfully!</div>
     {{end}}
 
     <h2>Account Information</h2>
-    <div class="form-group">
-      <label>User ID:</label>
-      <small><code>{{.User.ID}}</code></small>
-    </div>
     <div class="form-group">
       <label>Email Addresses:</label>
       <ul class="email-list">
@@ -60,7 +56,7 @@
         <label for="favorite_store">Favorite Store:</label>
         <input type="text" id="favorite_store" name="favorite_store" value="{{.User.FavoriteStore}}" placeholder="Store ID or name">
       </div>
-      
+
       <div class="form-group">
         <label for="shopping_day">Shopping Day of Week:</label>
         <select id="shopping_day" name="shopping_day">
