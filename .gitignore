@@ -32,3 +32,4 @@ Thumbs.db
 
 # Cache directory
 cache/careme
+internal/users/cache/
