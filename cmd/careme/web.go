@@ -196,6 +196,25 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
+		
+		// Support direct hash-based retrieval
+		if hash := r.URL.Query().Get("hash"); hash != "" {
+			// Try to get formatted HTML first
+			if formattedHTML, ok := cache.Get("formatted-" + hash); ok {
+				log.Printf("serving formatted cached recipe by hash: %s", hash)
+				w.Write([]byte(formattedHTML))
+				return
+			}
+			// Fall back to raw recipe (though it won't have the save button)
+			if recipe, ok := cache.Get(hash); ok {
+				log.Printf("serving raw cached recipe by hash: %s", hash)
+				w.Write([]byte(recipe))
+				return
+			}
+			http.Error(w, "recipe not found", http.StatusNotFound)
+			return
+		}
+		
 		ctx := r.Context()
 		loc := r.URL.Query().Get("location")
 		if loc == "" {
@@ -227,7 +246,12 @@ func runServer(cfg *config.Config, addr string) error {
 
 		if recipe, ok := cache.Get(p.Hash()); ok {
 			log.Printf("serving cached recipes for %s", p.String())
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, p, string(recipe))))
+			formattedHTML := recipes.FormatChatHTML(cfg, p, string(recipe))
+			// Cache the formatted HTML for hash-based retrieval
+			if err := cache.Set("formatted-"+p.Hash(), formattedHTML); err != nil {
+				log.Printf("failed to cache formatted HTML: %v", err)
+			}
+			_, _ = w.Write([]byte(formattedHTML))
 			return
 		}
 		go func() {
@@ -249,6 +273,45 @@ func runServer(cfg *config.Config, addr string) error {
 			log.Printf("home template execute error: %v", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
+	})
+
+	mux.HandleFunc("/save-recipe", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		currentUser, err := userFromCookie(r, userStorage)
+		if err != nil {
+			if errors.Is(err, users.ErrNotFound) {
+				clearUserCookie(w)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			log.Printf("failed to load user for save-recipe: %v", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		if currentUser == nil {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form submission", http.StatusBadRequest)
+			return
+		}
+		hash := strings.TrimSpace(r.FormValue("hash"))
+		title := strings.TrimSpace(r.FormValue("title"))
+		if hash == "" || title == "" {
+			http.Error(w, "hash and title are required", http.StatusBadRequest)
+			return
+		}
+		if err := userStorage.SaveRecipe(currentUser.ID, title, hash); err != nil {
+			log.Printf("failed to save recipe: %v", err)
+			http.Error(w, "unable to save recipe", http.StatusInternalServerError)
+			return
+		}
+		// Redirect back to the user profile page
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
 	})
 
 	log.Printf("Serving Careme on %s", addr)

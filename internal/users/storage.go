@@ -35,7 +35,7 @@ func parseWeekday(v string) (time.Weekday, error) {
 }
 
 type Recipe struct {
-	Title     string    `json:"id"`
+	Title     string    `json:"title"`
 	Hash      string    `json:"hash"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -44,7 +44,7 @@ type User struct {
 	ID            string    `json:"id"`
 	Email         []string  `json:"email"`
 	CreatedAt     time.Time `json:"created_at"`
-	LastRecipes   []string  `json:"last_recipes,omitempty"`
+	LastRecipes   []Recipe  `json:"last_recipes,omitempty"`
 	FavoriteStore string    `json:"favorite_store,omitempty"`
 	ShoppingDay   string    `json:"shopping_day,omitempty"`
 }
@@ -141,6 +141,43 @@ func (s *Storage) Update(user *User) error {
 		return fmt.Errorf("invalid user: %w", err)
 	}
 
+	userBytes, err := json.Marshal(user)
+	if err != nil {
+		return fmt.Errorf("failed to marshal user: %w", err)
+	}
+	if err := s.cache.Set(userPrefix+user.ID, string(userBytes)); err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
+}
+
+func (s *Storage) SaveRecipe(userID string, title string, hash string) error {
+	user, err := s.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Check if recipe already exists
+	for _, r := range user.LastRecipes {
+		if r.Hash == hash {
+			return nil // Already saved
+		}
+	}
+
+	// Add new recipe to the beginning of the list
+	recipe := Recipe{
+		Title:     title,
+		Hash:      hash,
+		CreatedAt: time.Now(),
+	}
+	user.LastRecipes = append([]Recipe{recipe}, user.LastRecipes...)
+
+	// Keep only the last 20 recipes
+	if len(user.LastRecipes) > 20 {
+		user.LastRecipes = user.LastRecipes[:20]
+	}
+
+	// Update the user without validation (recipes don't affect validation)
 	userBytes, err := json.Marshal(user)
 	if err != nil {
 		return fmt.Errorf("failed to marshal user: %w", err)

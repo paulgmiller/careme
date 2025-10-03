@@ -78,7 +78,13 @@
     {{if .User.LastRecipes}}
     <ul class="recipe-list">
       {{range .User.LastRecipes}}
-      <li>{{.Title}}</li><!--Link if hash is not empty-->
+      <li>
+        {{if .Hash}}
+        <a href="/recipes?hash={{.Hash}}" style="color:#2563eb;text-decoration:none">{{.Title}}</a>
+        {{else}}
+        {{.Title}}
+        {{end}}
+      </li>
       {{end}}
     </ul>
     {{else}}

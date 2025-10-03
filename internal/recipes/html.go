@@ -24,12 +24,14 @@ func FormatChatHTML(cfg *config.Config, p *generatorParams, chat string) string 
 		Chat          template.HTML
 		ClarityScript template.HTML
 		Instructions  string
+		Hash          string
 	}{
 		Location:      *p.Location,
 		Date:          p.Date.Format("2006-01-02"),
 		Chat:          template.HTML(chat),
 		ClarityScript: html.ClarityScript(cfg),
 		Instructions:  p.Instructions,
+		Hash:          p.Hash(),
 	}
 	var buf bytes.Buffer
 	_ = templates.ExecuteTemplate(&buf, "chat.html", data)

@@ -31,4 +31,5 @@ Thumbs.db
 .env
 
 # Cache directory
-cache/
+cache/careme
+internal/users/cache/
