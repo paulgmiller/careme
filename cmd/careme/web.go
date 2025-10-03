@@ -22,7 +22,7 @@ const sessionDuration = 365 * 24 * time.Hour
 func runServer(cfg *config.Config, addr string) error {
 
 	// Parse templates and spinner on startup (no init function)
-	homeTmpl, spinnerTmpl := loadTemplates()
+	homeTmpl, spinnerTmpl, userTmpl := loadTemplates()
 
 	cache, err := cache.MakeCache()
 	if err != nil {
@@ -89,6 +89,54 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		clearUserCookie(w)
 		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})
+
+	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
+		currentUser, err := userFromCookie(r, userStorage)
+		if err != nil {
+			if errors.Is(err, users.ErrNotFound) {
+				clearUserCookie(w)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			log.Printf("failed to load user for user page: %v", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		if currentUser == nil {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+
+		success := false
+		if r.Method == http.MethodPost {
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "invalid form submission", http.StatusBadRequest)
+				return
+			}
+			currentUser.FavoriteStore = strings.TrimSpace(r.FormValue("favorite_store"))
+			currentUser.ShoppingDay = strings.TrimSpace(r.FormValue("shopping_day"))
+			if err := userStorage.Update(currentUser); err != nil {
+				log.Printf("failed to update user: %v", err)
+				http.Error(w, "unable to save preferences", http.StatusInternalServerError)
+				return
+			}
+			success = true
+		}
+
+		data := struct {
+			ClarityScript template.HTML
+			User          *users.User
+			Success       bool
+		}{
+			ClarityScript: clarityScript,
+			User:          currentUser,
+			Success:       success,
+		}
+		if err := userTmpl.Execute(w, data); err != nil {
+			log.Printf("user template execute error: %v", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
 	})
 
 	generator, err := recipes.NewGenerator(cfg, cache)

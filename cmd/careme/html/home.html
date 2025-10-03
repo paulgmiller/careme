@@ -28,6 +28,17 @@
     </div>
 
     {{if .User}}
+    <div style="margin-bottom:1rem">
+      <p style="margin:0">Signed in as <strong>{{.User.Email}}</strong></p>
+      <small>User ID: <code>{{.User.ID}}</code></small>
+      <div style="margin-top:0.5rem">
+        <a href="/user" style="color:#2563eb;text-decoration:none;margin-right:1rem">View Profile</a>
+        <form method="POST" action="/logout" style="display:inline">
+          <button type="submit">Sign out</button>
+        </form>
+      </div>
+    </div>
+
     <form method="GET" action="/locations">
       <label for="zip">Enter ZIP code to pick a nearby store:</label><br>
       <input type="text" id="zip" name="zip" placeholder="e.g. 90210" required pattern="\d{5}">

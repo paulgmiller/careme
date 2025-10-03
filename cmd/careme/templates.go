@@ -10,7 +10,7 @@ import (
 var htmlFiles embed.FS
 
 // loadTemplates parses embedded templates at server startup instead of using init.
-func loadTemplates() (home, spin *template.Template) {
+func loadTemplates() (home, spin, user *template.Template) {
 	// Load the login widget template first
 	widgetBytes, err := htmlFiles.ReadFile("html/login-widget.html")
 	if err != nil {
@@ -31,5 +31,11 @@ func loadTemplates() (home, spin *template.Template) {
 	spinTmpl := template.Must(template.New("spinner").Parse(string(widgetBytes)))
 	spinTmpl = template.Must(spinTmpl.Parse(string(spinBytes)))
 
-	return homeTmpl, spinTmpl
+	userBytes, err := htmlFiles.ReadFile("html/user.html")
+	if err != nil {
+		log.Fatalf("failed to read embedded user.html: %v", err)
+	}
+	userTmpl := template.Must(template.New("user").Parse(string(userBytes)))
+
+	return homeTmpl, spinTmpl, userTmpl
 }

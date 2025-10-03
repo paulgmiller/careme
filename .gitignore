@@ -28,4 +28,8 @@ go.work
 Thumbs.db
 
 #secrets
-.env/careme
+
+.env
+
+# Cache directory
+cache/
