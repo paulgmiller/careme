@@ -26,8 +26,12 @@ func TestFormatChatHTML_ValidHTML(t *testing.T) {
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	chat := "<pre>{\"message\": \"hi\"}</pre>"
-	html := FormatChatHTML(cfg, p, chat)
+	var chat []byte = []byte("<pre>{\"message\": \"hi\"}</pre>")
+	var buf bytes.Buffer
+	if err := FormatChatHTML(cfg, p, chat, &buf); err != nil {
+		t.Fatalf("failed to format chat HTML: %v", err)
+	}
+	html := buf.String()
 	isValidHTML(t, html)
 }
 
@@ -36,15 +40,18 @@ func TestFormatChatHTML_IncludesClarityScript(t *testing.T) {
 		Clarity: config.ClarityConfig{ProjectID: "test456"},
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
-	chat := "<pre>{\"message\": \"hi\"}</pre>"
+	chat := []byte("<pre>{\"message\": \"hi\"}</pre>")
 	p := DefaultParams(&loc, time.Now())
-	html := FormatChatHTML(cfg, p, chat)
+	var buf bytes.Buffer
+	if err := FormatChatHTML(cfg, p, chat, &buf); err != nil {
+		t.Fatalf("failed to format chat HTML: %v", err)
+	}
 
-	if !bytes.Contains([]byte(html), []byte("www.clarity.ms/tag/")) {
+	if !bytes.Contains(buf.Bytes(), []byte("www.clarity.ms/tag/")) {
 		t.Error("HTML should contain Clarity script URL")
 	}
 
-	if !bytes.Contains([]byte(html), []byte("test456")) {
+	if !bytes.Contains(buf.Bytes(), []byte("test456")) {
 		t.Error("HTML should contain project ID")
 	}
 }
@@ -54,11 +61,14 @@ func TestFormatChatHTML_NoClarityWhenEmpty(t *testing.T) {
 		Clarity: config.ClarityConfig{ProjectID: ""},
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
-	chat := "<pre>{\"message\": \"hi\"}</pre>"
+	chat := []byte("<pre>{\"message\": \"hi\"}</pre>")
 	p := DefaultParams(&loc, time.Now())
-	html := FormatChatHTML(cfg, p, chat)
+	var buf bytes.Buffer
+	if err := FormatChatHTML(cfg, p, chat, &buf); err != nil {
+		t.Fatalf("failed to format chat HTML: %v", err)
+	}
 
-	if bytes.Contains([]byte(html), []byte("clarity.ms")) {
+	if bytes.Contains(buf.Bytes(), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")
 	}
 }
