@@ -13,9 +13,14 @@ import (
 //go:embed templates/*.html
 var templatesFS embed.FS
 
-var templates = template.Must(template.New("").Funcs(template.FuncMap{
-	"add": func(a, b int) int { return a + b },
-}).ParseFS(templatesFS, "templates/*.html"))
+var templates *template.Template
+
+func init() {
+	templates = template.Must(template.New("").Funcs(template.FuncMap{
+		"add": func(a, b int) int { return a + b },
+	}).ParseFS(templatesFS, "templates/*.html"))
+	templates = html.MustLoadSharedTemplates(templates)
+}
 
 // FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
 func FormatChatHTML(cfg *config.Config, p *generatorParams, chat string, user *users.User) string {

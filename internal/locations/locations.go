@@ -26,8 +26,9 @@ var cacheLock sync.Mutex // to protect locationMap
 func init() {
 	locationCache = make(map[string]Location)
 	
-	// Load all templates including the widget
+	// Load all templates including the shared widget
 	templates = template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
+	templates = html.MustLoadSharedTemplates(templates)
 }
 
 func GetLocationByID(ctx context.Context, cfg *config.Config, locationID string) (*Location, error) {

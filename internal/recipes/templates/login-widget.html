@@ -1,9 +1,0 @@
-{{define "login-widget"}}
-<div style="position:absolute;top:1rem;right:1rem;text-align:right;font-size:0.9rem">
-  {{if .User}}
-    <span style="color:#555">{{index .User.Email 0}}</span>
-  {{else}}
-    <a href="/" style="color:#2563eb;text-decoration:none;padding:0.3rem 0.6rem;border:1px solid #2563eb;border-radius:4px">Login</a>
-  {{end}}
-</div>
-{{end}}
