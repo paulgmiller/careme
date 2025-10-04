@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/html"
 	"embed"
 	"html/template"
 	"log"
@@ -16,12 +17,14 @@ func loadTemplates() (home, spin, user *template.Template) {
 		log.Fatalf("failed to read embedded home.html: %v", err)
 	}
 	homeTmpl := template.Must(template.New("home").Parse(string(homeBytes)))
+	homeTmpl = html.MustLoadSharedTemplates(homeTmpl)
 
 	spinBytes, err := htmlFiles.ReadFile("html/spinner.html")
 	if err != nil {
 		log.Fatalf("failed to read embedded spinner.html: %v", err)
 	}
 	spinTmpl := template.Must(template.New("spinner").Parse(string(spinBytes)))
+	spinTmpl = html.MustLoadSharedTemplates(spinTmpl)
 
 	userBytes, err := htmlFiles.ReadFile("html/user.html")
 	if err != nil {

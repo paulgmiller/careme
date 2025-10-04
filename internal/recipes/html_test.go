@@ -26,9 +26,10 @@ func TestFormatChatHTML_ValidHTML(t *testing.T) {
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
+
 	var chat []byte = []byte("<pre>{\"message\": \"hi\"}</pre>")
 	var buf bytes.Buffer
-	if err := FormatChatHTML(cfg, p, chat, &buf); err != nil {
+	if err := FormatChatHTML(cfg, p, chat, &buf, nil); err != nil {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 	html := buf.String()
@@ -43,7 +44,7 @@ func TestFormatChatHTML_IncludesClarityScript(t *testing.T) {
 	chat := []byte("<pre>{\"message\": \"hi\"}</pre>")
 	p := DefaultParams(&loc, time.Now())
 	var buf bytes.Buffer
-	if err := FormatChatHTML(cfg, p, chat, &buf); err != nil {
+	if err := FormatChatHTML(cfg, p, chat, &buf, nil); err != nil {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 
@@ -64,7 +65,7 @@ func TestFormatChatHTML_NoClarityWhenEmpty(t *testing.T) {
 	chat := []byte("<pre>{\"message\": \"hi\"}</pre>")
 	p := DefaultParams(&loc, time.Now())
 	var buf bytes.Buffer
-	if err := FormatChatHTML(cfg, p, chat, &buf); err != nil {
+	if err := FormatChatHTML(cfg, p, chat, &buf, nil); err != nil {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 

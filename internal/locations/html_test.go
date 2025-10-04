@@ -26,7 +26,7 @@ func TestLocationsHtml_ValidHTML(t *testing.T) {
 		{ID: "L1", Name: "Store One", Address: "100 Main St"},
 		{ID: "L2", Name: "Store Two", Address: "200 Oak Ave"},
 	}
-	html := Html(cfg, locs, "12345")
+	html := Html(cfg, locs, "12345", nil)
 	isValidHTML(t, html)
 }
 
@@ -37,7 +37,7 @@ func TestLocationsHtml_IncludesClarityScript(t *testing.T) {
 	locs := []Location{
 		{ID: "L1", Name: "Store One", Address: "100 Main St"},
 	}
-	html := Html(cfg, locs, "12345")
+	html := Html(cfg, locs, "12345", nil)
 
 	if !bytes.Contains([]byte(html), []byte("www.clarity.ms/tag/")) {
 		t.Error("HTML should contain Clarity script URL")
@@ -55,7 +55,7 @@ func TestLocationsHtml_NoClarityWhenEmpty(t *testing.T) {
 	locs := []Location{
 		{ID: "L1", Name: "Store One", Address: "100 Main St"},
 	}
-	html := Html(cfg, locs, "12345")
+	html := Html(cfg, locs, "12345", nil)
 
 	if bytes.Contains([]byte(html), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")

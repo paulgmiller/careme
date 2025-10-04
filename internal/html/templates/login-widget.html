@@ -1,0 +1,9 @@
+{{define "login-widget"}}
+<div style="position:absolute;top:0.5rem;right:0.5rem;text-align:right;font-size:0.9rem;z-index:1000">
+  {{if .User}}
+    <span style="color:#555;word-break:break-all;max-width:200px;display:inline-block">{{index .User.Email 0}}</span>
+  {{else}}
+    <a href="/" style="color:#2563eb;text-decoration:none;padding:0.3rem 0.6rem;border:1px solid #2563eb;border-radius:4px;display:inline-block;white-space:nowrap">Login</a>
+  {{end}}
+</div>
+{{end}}

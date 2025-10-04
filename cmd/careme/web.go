@@ -178,7 +178,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		// Render locations
-		w.Write([]byte(locations.Html(cfg, locs, zip)))
+		w.Write([]byte(locations.Html(cfg, locs, zip, currentUser)))
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
@@ -228,6 +228,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		if recipe, err := cache.Get(p.Hash()); err != nil {
 			log.Printf("serving cached recipes for %s", p.String())
+
 			defer recipe.Close()
 			recipebytes, err := io.ReadAll(recipe) // read to EOF to avoid leaks
 			if err != nil {
@@ -235,7 +236,7 @@ func runServer(cfg *config.Config, addr string) error {
 				http.Error(w, "failed to read cached recipe", http.StatusInternalServerError)
 				return
 			}
-			if err := recipes.FormatChatHTML(cfg, p, recipebytes, w); err != nil {
+			if err := recipes.FormatChatHTML(cfg, p, recipebytes, w, currentUser); err != nil {
 				log.Printf("failed to format cached recipe for %s: %v", p, err)
 				http.Error(w, "failed to format cached recipe", http.StatusInternalServerError)
 			}
@@ -253,8 +254,10 @@ func runServer(cfg *config.Config, addr string) error {
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 		spinnerData := struct {
 			ClarityScript template.HTML
+			User          *users.User
 		}{
 			ClarityScript: clarityScript,
+			User:          currentUser,
 		}
 		if err := spinnerTmpl.Execute(w, spinnerData); err != nil {
 			log.Printf("home template execute error: %v", err)
