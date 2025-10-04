@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -208,12 +209,22 @@ func Filter(term string, brands []string) filter {
 func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
 
 	lochash := p.LocationHash()
-	if ingredientblob, found := g.cache.Get(lochash); found {
+	var ingredients []string
+
+	if ingredientblob, err := g.cache.Get(lochash); err != nil {
 		log.Printf("serving cached ingredients for %s: %s", p.String(), lochash)
-		return strings.Split(ingredientblob, "\n"), nil
+		defer ingredientblob.Close()
+		sc := bufio.NewScanner(ingredientblob)
+		for sc.Scan() {
+			ingredients = append(ingredients, sc.Text())
+		}
+		if err := sc.Err(); err != nil {
+			log.Printf("failed to read cached ingredients for %s: %v", p, err)
+			return nil, err
+		}
+		return ingredients, nil
 	}
 
-	var ingredients []string
 	var errors []error
 	var wg sync.WaitGroup
 	var lock sync.Mutex

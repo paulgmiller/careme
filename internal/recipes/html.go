@@ -1,13 +1,13 @@
 package recipes
 
 import (
-	"bytes"
 	"careme/internal/config"
 	"careme/internal/html"
 	"careme/internal/locations"
 	"careme/internal/users"
 	"embed"
 	"html/template"
+	"io"
 )
 
 //go:embed templates/*.html
@@ -23,7 +23,7 @@ func init() {
 }
 
 // FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
-func FormatChatHTML(cfg *config.Config, p *generatorParams, chat string, user *users.User) string {
+func FormatChatHTML(cfg *config.Config, p *generatorParams, chat []byte, writer io.Writer, user *users.User) error {
 	data := struct {
 		Location      locations.Location
 		Date          string
@@ -39,7 +39,5 @@ func FormatChatHTML(cfg *config.Config, p *generatorParams, chat string, user *u
 		Instructions:  p.Instructions,
 		User:          user,
 	}
-	var buf bytes.Buffer
-	_ = templates.ExecuteTemplate(&buf, "chat.html", data)
-	return buf.String()
+	return templates.ExecuteTemplate(writer, "chat.html", data)
 }

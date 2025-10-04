@@ -1,12 +1,16 @@
 package cache
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 )
 
+var ErrNotFound = errors.New("cache entry not found")
+
 type Cache interface {
-	Get(key string) (string, bool) //sigh need an error here.
+	Get(key string) (io.ReadCloser, error)
 	Set(key, value string) error
 }
 
@@ -20,13 +24,16 @@ func NewFileCache(dir string) *FileCache {
 	return &FileCache{Dir: dir}
 }
 
-func (fc *FileCache) Get(key string) (string, bool) {
+func (fc *FileCache) Get(key string) (io.ReadCloser, error) {
 
-	data, err := os.ReadFile(filepath.Join(fc.Dir, key))
+	data, err := os.Open(filepath.Join(fc.Dir, key))
 	if err != nil {
-		return "", false
+		if os.IsNotExist(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
 	}
-	return string(data), true
+	return data, nil
 }
 
 func (fc *FileCache) Set(key, value string) error {

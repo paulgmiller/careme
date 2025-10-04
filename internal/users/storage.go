@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/mail"
 	"strconv"
 	"strings"
@@ -90,12 +91,18 @@ func NewStorage(c cache.Cache) *Storage {
 
 func (s *Storage) GetByID(id string) (*User, error) {
 
-	userBytes, found := s.cache.Get(userPrefix + id)
-	if !found {
-		return nil, ErrNotFound
+	userBytes, err := s.cache.Get(userPrefix + id)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
 	}
+	defer userBytes.Close()
+	decoder := json.NewDecoder(userBytes)
+
 	var user User
-	if err := json.Unmarshal([]byte(userBytes), &user); err != nil {
+	if err := decoder.Decode(&user); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user: %w", err)
 	}
 	return &user, nil
@@ -104,12 +111,20 @@ func (s *Storage) GetByID(id string) (*User, error) {
 func (s *Storage) GetByEmail(email string) (*User, error) {
 
 	normalized := normalizeEmail(email)
-	id, found := s.cache.Get(emailPrefix + normalized)
+	id, err := s.cache.Get(emailPrefix + normalized)
 
-	if !found {
-		return nil, ErrNotFound
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
 	}
-	return s.GetByID(id)
+	defer id.Close()
+	data, err := io.ReadAll(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read user ID: %w", err)
+	}
+	return s.GetByID(string(data))
 }
 
 func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
