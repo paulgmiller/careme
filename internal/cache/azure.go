@@ -48,20 +48,17 @@ func NewBlobCache(container string) (*BlobCache, error) {
 	}, nil
 }
 
-func (fc *BlobCache) Get(key string) (string, bool) {
+func (fc *BlobCache) Get(key string) (io.ReadCloser, error) {
 	stream, err := fc.containerClient.DownloadStream(context.TODO(), fc.container, key, &azblob.DownloadStreamOptions{})
 	if err != nil {
-		if !bloberror.HasCode(err, bloberror.BlobNotFound) {
-			log.Printf("failed to download blob: %v", err)
+		if bloberror.HasCode(err, bloberror.BlobNotFound) {
+			return nil, ErrNotFound
 		}
-		return "", false
+		log.Printf("failed to download blob: %v", err)
+		return nil, err
 	}
 
-	data, err := io.ReadAll(stream.Body)
-	if err != nil {
-		return "", false
-	}
-	return string(data), true
+	return stream.Body, nil
 }
 
 func (fc *BlobCache) Set(key, value string) error {

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -225,9 +226,19 @@ func runServer(cfg *config.Config, addr string) error {
 			p.Instructions = i
 		}
 
-		if recipe, ok := cache.Get(p.Hash()); ok {
+		if recipe, err := cache.Get(p.Hash()); err != nil {
 			log.Printf("serving cached recipes for %s", p.String())
-			_, _ = w.Write([]byte(recipes.FormatChatHTML(cfg, p, string(recipe))))
+			defer recipe.Close()
+			recipebytes, err := io.ReadAll(recipe) // read to EOF to avoid leaks
+			if err != nil {
+				log.Printf("failed to read cached recipe for %s: %v", p, err)
+				http.Error(w, "failed to read cached recipe", http.StatusInternalServerError)
+				return
+			}
+			if err := recipes.FormatChatHTML(cfg, p, recipebytes, w); err != nil {
+				log.Printf("failed to format cached recipe for %s: %v", p, err)
+				http.Error(w, "failed to format cached recipe", http.StatusInternalServerError)
+			}
 			return
 		}
 		go func() {
