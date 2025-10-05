@@ -76,7 +76,7 @@ func runServer(cfg *config.Config, addr string) error {
 		user, err := userStorage.FindOrCreateByEmail(email)
 		if err != nil {
 			log.Printf("failed to find or create user: %v", err)
-			http.Error(w, "unable to sign in", http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("unable to sign in: %v", err), http.StatusInternalServerError)
 			return
 		}
 		setUserCookie(w, user.ID)
@@ -150,7 +150,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
-		currentUser, err := userFromCookie(r, userStorage)
+		_, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
 				clearUserCookie(w)
@@ -161,10 +161,11 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
+		/* Not forcing login yet
 		if currentUser == nil {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
-		}
+		}*/
 		zip := r.URL.Query().Get("zip")
 		if zip == "" {
 			log.Printf("no zip code provided to /locations")
@@ -182,7 +183,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
-		currentUser, err := userFromCookie(r, userStorage)
+		_, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
 				clearUserCookie(w)
@@ -193,10 +194,11 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
+		/* Not forcing login yet
 		if currentUser == nil {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
-		}
+		}*/
 		ctx := r.Context()
 		loc := r.URL.Query().Get("location")
 		if loc == "" {

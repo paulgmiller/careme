@@ -63,8 +63,10 @@ func (u *User) Validate() error {
 			return errors.New("invalid email address: " + e)
 		}
 	}
-	if _, err := strconv.Atoi(u.FavoriteStore); err != nil {
-		return fmt.Errorf("invalid favorite store id %s: %w", u.FavoriteStore, err)
+	if u.FavoriteStore != "" {
+		if _, err := strconv.Atoi(u.FavoriteStore); err != nil {
+			return fmt.Errorf("invalid favorite store id %s: %w", u.FavoriteStore, err)
+		}
 	}
 	//trim out recipes older than 2 months?
 
@@ -138,9 +140,10 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 	}
 
 	newUser := User{
-		ID:        uuid.New().String(),
-		Email:     []string{normalizeEmail(email)},
-		CreatedAt: time.Now(),
+		ID:          uuid.New().String(),
+		Email:       []string{normalizeEmail(email)},
+		CreatedAt:   time.Now(),
+		ShoppingDay: time.Saturday.String(),
 	}
 	if err := s.Update(&newUser); err != nil {
 		return nil, fmt.Errorf("failed to create new user: %w", err)
