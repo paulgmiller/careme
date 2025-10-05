@@ -211,7 +211,7 @@ func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
 	lochash := p.LocationHash()
 	var ingredients []string
 
-	if ingredientblob, err := g.cache.Get(lochash); err != nil {
+	if ingredientblob, err := g.cache.Get(lochash); err == nil {
 		log.Printf("serving cached ingredients for %s: %s", p.String(), lochash)
 		defer ingredientblob.Close()
 		sc := bufio.NewScanner(ingredientblob)

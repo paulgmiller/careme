@@ -228,8 +228,9 @@ func runServer(cfg *config.Config, addr string) error {
 			p.Instructions = i
 		}
 
-		if recipe, err := cache.Get(p.Hash()); err != nil {
-			log.Printf("serving cached recipes for %s", p.String())
+		hash := p.Hash()
+		if recipe, err := cache.Get(hash); err == nil {
+			log.Printf("serving cached recipes for %s %s", p.String(), hash)
 			defer recipe.Close()
 			recipebytes, err := io.ReadAll(recipe) // read to EOF to avoid leaks
 			if err != nil {
@@ -244,7 +245,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		go func() {
-
+			log.Printf("generating cached recipes for %s %s", p.String(), hash)
 			_, err := generator.GenerateRecipes(p)
 			if err != nil {
 				log.Printf("generate error: %v", err)
