@@ -45,7 +45,7 @@ type User struct {
 	ID            string    `json:"id"`
 	Email         []string  `json:"email"`
 	CreatedAt     time.Time `json:"created_at"`
-	LastRecipes   []string  `json:"last_recipes,omitempty"`
+	LastRecipes   []Recipe  `json:"last_recipes,omitempty"`
 	FavoriteStore string    `json:"favorite_store,omitempty"`
 	ShoppingDay   string    `json:"shopping_day,omitempty"`
 }

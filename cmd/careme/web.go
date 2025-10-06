@@ -35,6 +35,7 @@ func runServer(cfg *config.Config, addr string) error {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("home handler got %s", r.URL.Path)
 		currentUser, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
@@ -91,7 +92,54 @@ func runServer(cfg *config.Config, addr string) error {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 
+	mux.HandleFunc("/user/recipes", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("user adding previous recipe")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		currentUser, err := userFromCookie(r, userStorage)
+		if err != nil {
+			log.Printf("failed to load user for user page: %v", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		if currentUser == nil {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+
+		recipeTitle := strings.TrimSpace(r.FormValue("previous_recipe"))
+		if recipeTitle == "" {
+			http.Redirect(w, r, "/user", http.StatusSeeOther)
+			return
+		}
+
+		// Check for duplicates
+		for _, existing := range currentUser.LastRecipes {
+			if strings.EqualFold(existing.Title, recipeTitle) {
+				log.Printf("duplicate previous recipe: %s", recipeTitle)
+				http.Redirect(w, r, "/user", http.StatusSeeOther)
+				return
+			}
+		}
+		log.Printf("adding previous recipe: %s", recipeTitle)
+		newRecipe := users.Recipe{
+			Title:     recipeTitle,
+			Hash:      "",
+			CreatedAt: time.Now(),
+		}
+		currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
+		if err := userStorage.Update(currentUser); err != nil {
+			log.Printf("failed to update user: %v", err)
+			http.Error(w, "unable to save preferences", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
+	})
+
 	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("user page accessed")
 		currentUser, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
@@ -116,6 +164,27 @@ func runServer(cfg *config.Config, addr string) error {
 			}
 			currentUser.FavoriteStore = strings.TrimSpace(r.FormValue("favorite_store"))
 			currentUser.ShoppingDay = strings.TrimSpace(r.FormValue("shopping_day"))
+
+			// Handle previous recipe input
+			if recipeTitle := strings.TrimSpace(r.FormValue("previous_recipe")); recipeTitle != "" {
+				// Check for duplicates
+				isDuplicate := false
+				for _, existing := range currentUser.LastRecipes {
+					if strings.EqualFold(existing.Title, recipeTitle) {
+						isDuplicate = true
+						break
+					}
+				}
+				if !isDuplicate {
+					newRecipe := users.Recipe{
+						Title:     recipeTitle,
+						Hash:      "",
+						CreatedAt: time.Now(),
+					}
+					currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
+				}
+			}
+
 			if err := userStorage.Update(currentUser); err != nil {
 				log.Printf("failed to update user: %v", err)
 				http.Error(w, "unable to save preferences", http.StatusInternalServerError)
@@ -147,6 +216,8 @@ func runServer(cfg *config.Config, addr string) error {
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
+
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {})
 
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		_, err := userFromCookie(r, userStorage)

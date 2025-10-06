@@ -75,14 +75,27 @@
     </form>
 
     <h2>Past Recipes</h2>
+    <form method="POST" action="/user/recipes">
+      <div class="form-group">
+        <label for="previous_recipe">Add a Previous Recipe:</label>
+        <input type="text" id="previous_recipe" name="previous_recipe" placeholder="Enter recipe name">
+        <small style="display:block;margin-top:0.25rem">Add recipes you've made before to help personalize future recommendations</small>
+      </div>
+      <button type="submit">Add Recipe</button>
+    </form>
+
     {{if .User.LastRecipes}}
+    <h3 style="font-size:1rem;margin-top:1.5rem;margin-bottom:0.5rem">Your Recipe History:</h3>
     <ul class="recipe-list">
       {{range .User.LastRecipes}}
-      <li>{{.Title}}</li><!--Link if hash is not empty-->
+      <li>
+        <strong>{{.Title}}</strong>
+        <br><small>Added: {{.CreatedAt.Format "January 2, 2006"}}</small>
+      </li>
       {{end}}
     </ul>
     {{else}}
-    <p><small>No recipes generated yet. <a href="/">Generate your first recipe</a>!</small></p>
+    <p><small>No recipes yet.</small></p>
     {{end}}
   </div>
 </body>
