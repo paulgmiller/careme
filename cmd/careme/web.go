@@ -212,7 +212,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		var date time.Time
-		if date, err = time.Parse("2006-01-02", dateStr); err != nil {
+		if date, err = time.ParseInLocation("2006-01-02", dateStr, time.UTC); err != nil {
 			http.Error(w, "invalid date format, use YYYY-MM-DD", http.StatusBadRequest)
 			return
 		}

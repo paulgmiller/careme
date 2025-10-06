@@ -88,15 +88,12 @@ func (g *generatorParams) String() string {
 }
 
 func (g *generatorParams) Hash() string {
-	bytes, err := json.Marshal(g)
-	if err != nil {
-		panic(err)
-	}
 	fnv := fnv.New64a()
-	_, err = fnv.Write(bytes)
-	if err != nil {
-		panic(err)
-	}
+	lo.Must(fnv.Write([]byte(g.Location.ID)))
+	lo.Must(fnv.Write([]byte(g.Date.Format("2006-01-02"))))
+	bytes := lo.Must(json.Marshal(g.Staples))
+	lo.Must(fnv.Write(bytes))
+	lo.Must(fnv.Write([]byte(g.Instructions)))
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
 }
 
