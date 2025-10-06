@@ -177,6 +177,13 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 		return response, err
 	}
 
+	// Also cache the params for hash-based retrieval
+	paramsJSON := lo.Must(json.Marshal(p))
+
+	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
+		log.Printf("failed to cache params for %s: %v", p, err)
+	}
+
 	return response, nil
 
 	/*recipes, err := g.parseAIResponse(response, location)
@@ -190,6 +197,21 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 	*/
 
 	//return recipes, nil
+}
+
+// LoadParamsFromHash loads generator params from cache using the hash
+func (g *Generator) LoadParamsFromHash(hash string) (*generatorParams, error) {
+	paramsReader, err := g.cache.Get(hash + ".params")
+	if err != nil {
+		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
+	}
+	defer paramsReader.Close()
+
+	var params generatorParams
+	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
+		return nil, fmt.Errorf("failed to decode params: %w", err)
+	}
+	return &params, nil
 }
 
 type filter struct {

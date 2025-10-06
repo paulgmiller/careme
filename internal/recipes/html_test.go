@@ -21,14 +21,16 @@ func isValidHTML(t *testing.T, htmlStr string) {
 }
 
 func TestFormatChatHTML_ValidHTML(t *testing.T) {
-	cfg := &config.Config{
-		Clarity: config.ClarityConfig{ProjectID: "test123"},
+	g := Generator{
+		config: &config.Config{
+			Clarity: config.ClarityConfig{ProjectID: "test123"},
+		},
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	var chat []byte = []byte("<pre>{\"message\": \"hi\"}</pre>")
 	var buf bytes.Buffer
-	if err := FormatChatHTML(cfg, p, chat, &buf); err != nil {
+	if err := g.FormatChatHTML(p, chat, &buf); err != nil {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 	html := buf.String()
@@ -36,14 +38,16 @@ func TestFormatChatHTML_ValidHTML(t *testing.T) {
 }
 
 func TestFormatChatHTML_IncludesClarityScript(t *testing.T) {
-	cfg := &config.Config{
-		Clarity: config.ClarityConfig{ProjectID: "test456"},
+	g := Generator{
+		config: &config.Config{
+			Clarity: config.ClarityConfig{ProjectID: "test456"},
+		},
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	chat := []byte("<pre>{\"message\": \"hi\"}</pre>")
 	p := DefaultParams(&loc, time.Now())
 	var buf bytes.Buffer
-	if err := FormatChatHTML(cfg, p, chat, &buf); err != nil {
+	if err := g.FormatChatHTML(p, chat, &buf); err != nil {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 
@@ -57,14 +61,16 @@ func TestFormatChatHTML_IncludesClarityScript(t *testing.T) {
 }
 
 func TestFormatChatHTML_NoClarityWhenEmpty(t *testing.T) {
-	cfg := &config.Config{
-		Clarity: config.ClarityConfig{ProjectID: ""},
+	g := Generator{
+		config: &config.Config{
+			Clarity: config.ClarityConfig{ProjectID: ""},
+		},
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	chat := []byte("<pre>{\"message\": \"hi\"}</pre>")
 	p := DefaultParams(&loc, time.Now())
 	var buf bytes.Buffer
-	if err := FormatChatHTML(cfg, p, chat, &buf); err != nil {
+	if err := g.FormatChatHTML(p, chat, &buf); err != nil {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 

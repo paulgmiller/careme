@@ -200,6 +200,40 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}*/
 		ctx := r.Context()
+
+		// Check if using hash-based sharing
+		if hashParam := r.URL.Query().Get("h"); hashParam != "" {
+			// Load the recipe content from cache
+			recipe, err := cache.Get(hashParam)
+			if err != nil {
+				http.Error(w, "recipe not found or expired", http.StatusNotFound)
+				return
+			}
+			defer recipe.Close()
+
+			recipebytes, err := io.ReadAll(recipe)
+			if err != nil {
+				log.Printf("failed to read cached recipe for hash %s: %v", hashParam, err)
+				http.Error(w, "failed to read cached recipe", http.StatusInternalServerError)
+				return
+			}
+
+			// Load the params to properly format the HTML
+			params, err := generator.LoadParamsFromHash(hashParam)
+			if err != nil {
+				log.Printf("failed to load params for hash %s: %v", hashParam, err)
+				http.Error(w, "recipe metadata not found", http.StatusNotFound)
+				return
+			}
+
+			log.Printf("serving shared recipe by hash: %s", hashParam)
+			if err := generator.FormatChatHTML(params, recipebytes, w); err != nil {
+				log.Printf("failed to format shared recipe for hash %s: %v", hashParam, err)
+				http.Error(w, "failed to format recipe", http.StatusInternalServerError)
+			}
+			return
+		}
+
 		loc := r.URL.Query().Get("location")
 		if loc == "" {
 			w.WriteHeader(http.StatusOK)
@@ -238,7 +272,7 @@ func runServer(cfg *config.Config, addr string) error {
 				http.Error(w, "failed to read cached recipe", http.StatusInternalServerError)
 				return
 			}
-			if err := recipes.FormatChatHTML(cfg, p, recipebytes, w); err != nil {
+			if err := generator.FormatChatHTML(p, recipebytes, w); err != nil {
 				log.Printf("failed to format cached recipe for %s: %v", p, err)
 				http.Error(w, "failed to format cached recipe", http.StatusInternalServerError)
 			}
