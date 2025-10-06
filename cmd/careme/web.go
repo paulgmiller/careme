@@ -222,8 +222,10 @@ func runServer(cfg *config.Config, addr string) error {
 			params, err := generator.LoadParamsFromHash(hashParam)
 			if err != nil {
 				log.Printf("failed to load params for hash %s: %v", hashParam, err)
-				http.Error(w, "recipe metadata not found", http.StatusNotFound)
-				return
+				params = recipes.DefaultParams(&locations.Location{
+					ID:   "",
+					Name: "Unknown Location",
+				}, time.Now())
 			}
 
 			log.Printf("serving shared recipe by hash: %s", hashParam)
