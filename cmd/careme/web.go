@@ -253,7 +253,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
-		_, err := userFromCookie(r, userStorage)
+		currentUser, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
 				clearUserCookie(w)
@@ -264,11 +264,12 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
-		/* Not forcing login yet
+		// Not forcing login yet
 		if currentUser == nil {
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}*/
+			currentUser = &users.User{
+				LastRecipes: []users.Recipe{},
+			}
+		}
 		ctx := r.Context()
 
 		// Check if using hash-based sharing
@@ -304,6 +305,13 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 
 		p := recipes.DefaultParams(l, date)
+		for _, r := range currentUser.LastRecipes {
+			if r.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) { // older than 2 weeks
+				continue
+			}
+			p.LastRecipes = append(p.LastRecipes, r.Title) //need to think about how this messes with hash
+		}
+		// Override instructions if provided
 
 		if i := r.URL.Query().Get("instructions"); i != "" {
 			p.Instructions = i

@@ -66,9 +66,9 @@ type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
 	Date     time.Time           `json:"date,omitempty"`
 	Staples  []filter            `json:"staples,omitempty"`
-	//PreviousRecipes []string
 	//People       int
-	Instructions string `json:"instructions,omitempty"`
+	Instructions string   `json:"instructions,omitempty"`
+	LastRecipes  []string `json:"last_recipes,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -165,7 +165,7 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 
 	//log.Printf("Found %d sale ingredients, %d previous recipes", 		len(ingredients), len(previousRecipes))
 
-	response, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date)
+	response, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}

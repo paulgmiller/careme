@@ -35,8 +35,8 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, instructions string, date time.Time) (string, error) {
-	prompt := c.buildRecipePrompt(location, saleIngredients, instructions, date)
+func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) (string, error) {
+	prompt := c.buildRecipePrompt(location, saleIngredients, instructions, date, lastRecipes)
 
 	messages := []Message{
 		{
@@ -93,7 +93,7 @@ func (c *Client) generateWithOpenAI(messages []Message) (string, error) {
 	return resp.Choices[0].Message.Content, nil
 }
 
-func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients []string, instructions string, date time.Time) string {
+func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) string {
 
 	//TODO pull out meal count and people.
 	//TODO json formatting
@@ -141,6 +141,15 @@ Generate 3 distinct, practical recipes using the provided constraints to maximiz
 		prompt += "Ingredients currently on sale at local QFC/Fred Meyer:\n"
 		for _, ingredient := range saleIngredients {
 			prompt += fmt.Sprintf("- %s\n", ingredient)
+		}
+		prompt += "\n"
+	}
+
+	if prevRecipes := lastRecipes; len(prevRecipes) > 0 {
+		prompt += "# Previous Recipes \n"
+		prompt += "DO NOT repeat these recipes from the past 2 weeks:\n"
+		for _, recipe := range prevRecipes {
+			prompt += fmt.Sprintf("- %s\n", recipe)
 		}
 		prompt += "\n"
 	}
