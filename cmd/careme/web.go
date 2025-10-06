@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -203,37 +202,12 @@ func runServer(cfg *config.Config, addr string) error {
 
 		// Check if using hash-based sharing
 		if hashParam := r.URL.Query().Get("h"); hashParam != "" {
-			// Load the recipe content from cache
-			recipe, err := cache.Get(hashParam)
-			if err != nil {
+			if err := generator.FromCache(hashParam, nil, w); err != nil {
+				log.Printf("failed to load shared recipe for hash %s: %v", hashParam, err)
 				http.Error(w, "recipe not found or expired", http.StatusNotFound)
-				return
-			}
-			defer recipe.Close()
-
-			recipebytes, err := io.ReadAll(recipe)
-			if err != nil {
-				log.Printf("failed to read cached recipe for hash %s: %v", hashParam, err)
-				http.Error(w, "failed to read cached recipe", http.StatusInternalServerError)
-				return
-			}
-
-			// Load the params to properly format the HTML
-			params, err := generator.LoadParamsFromHash(hashParam)
-			if err != nil {
-				log.Printf("failed to load params for hash %s: %v", hashParam, err)
-				params = recipes.DefaultParams(&locations.Location{
-					ID:   "",
-					Name: "Unknown Location",
-				}, time.Now())
-			}
-
-			log.Printf("serving shared recipe by hash: %s", hashParam)
-			if err := generator.FormatChatHTML(params, recipebytes, w); err != nil {
-				log.Printf("failed to format shared recipe for hash %s: %v", hashParam, err)
-				http.Error(w, "failed to format recipe", http.StatusInternalServerError)
 			}
 			return
+
 		}
 
 		loc := r.URL.Query().Get("location")
@@ -263,23 +237,11 @@ func runServer(cfg *config.Config, addr string) error {
 		if i := r.URL.Query().Get("instructions"); i != "" {
 			p.Instructions = i
 		}
-
 		hash := p.Hash()
-		if recipe, err := cache.Get(hash); err == nil {
-			log.Printf("serving cached recipes for %s %s", p.String(), hash)
-			defer recipe.Close()
-			recipebytes, err := io.ReadAll(recipe) // read to EOF to avoid leaks
-			if err != nil {
-				log.Printf("failed to read cached recipe for %s: %v", p, err)
-				http.Error(w, "failed to read cached recipe", http.StatusInternalServerError)
-				return
-			}
-			if err := generator.FormatChatHTML(p, recipebytes, w); err != nil {
-				log.Printf("failed to format cached recipe for %s: %v", p, err)
-				http.Error(w, "failed to format cached recipe", http.StatusInternalServerError)
-			}
+		if err := generator.FromCache(hash, p, w); err == nil {
 			return
 		}
+
 		go func() {
 			log.Printf("generating cached recipes for %s %s", p.String(), hash)
 			_, err := generator.GenerateRecipes(p)
