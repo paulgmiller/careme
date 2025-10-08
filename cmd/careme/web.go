@@ -343,7 +343,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	log.Printf("Serving Careme on %s", addr)
-	return http.ListenAndServe(addr, mux)
+	return http.ListenAndServe(addr, WithMiddleware(mux))
 }
 
 func setUserCookie(w http.ResponseWriter, userID string) {
