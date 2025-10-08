@@ -23,7 +23,7 @@ type recoverer struct {
 func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
-			slog.Error("panic recovered", "error", err)
+			slog.ErrorContext(req.Context(), "panic recovered", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 	}()

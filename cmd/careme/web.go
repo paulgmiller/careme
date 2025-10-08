@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -35,13 +35,13 @@ func runServer(cfg *config.Config, addr string) error {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("home handler got %s", r.URL.Path)
+		ctx := r.Context()
 		currentUser, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
 				clearUserCookie(w)
 			} else {
-				log.Printf("failed to load user from cookie: %v", err)
+				slog.ErrorContext(ctx, "failed to load user from cookie", "error", err)
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
@@ -54,7 +54,7 @@ func runServer(cfg *config.Config, addr string) error {
 			User:          currentUser,
 		}
 		if err := homeTmpl.Execute(w, data); err != nil {
-			log.Printf("home template execute error: %v", err)
+			slog.ErrorContext(ctx, "home template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
@@ -75,7 +75,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		user, err := userStorage.FindOrCreateByEmail(email)
 		if err != nil {
-			log.Printf("failed to find or create user: %v", err)
+			slog.ErrorContext(r.Context(), "failed to find or create user", "error", err)
 			http.Error(w, fmt.Sprintf("unable to sign in: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -93,14 +93,14 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/user/recipes", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("user adding previous recipe")
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		ctx := r.Context()
 		currentUser, err := userFromCookie(r, userStorage)
 		if err != nil {
-			log.Printf("failed to load user for user page: %v", err)
+			slog.ErrorContext(ctx, "failed to load user for user page", "error", err)
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
@@ -118,12 +118,11 @@ func runServer(cfg *config.Config, addr string) error {
 		// Check for duplicates
 		for _, existing := range currentUser.LastRecipes {
 			if strings.EqualFold(existing.Title, recipeTitle) {
-				log.Printf("duplicate previous recipe: %s", recipeTitle)
+				slog.InfoContext(ctx, "duplicate previous recipe", "title", recipeTitle)
 				http.Redirect(w, r, "/user", http.StatusSeeOther)
 				return
 			}
 		}
-		log.Printf("adding previous recipe: %s", recipeTitle)
 		newRecipe := users.Recipe{
 			Title:     recipeTitle,
 			Hash:      "",
@@ -131,7 +130,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
 		if err := userStorage.Update(currentUser); err != nil {
-			log.Printf("failed to update user: %v", err)
+			slog.ErrorContext(ctx, "failed to update user", "error", err)
 			http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 			return
 		}
@@ -139,7 +138,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("user page accessed")
+		ctx := r.Context()
 		currentUser, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
@@ -147,7 +146,7 @@ func runServer(cfg *config.Config, addr string) error {
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
-			log.Printf("failed to load user for user page: %v", err)
+			slog.ErrorContext(ctx, "failed to load user for user page", "error", err)
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
@@ -165,28 +164,8 @@ func runServer(cfg *config.Config, addr string) error {
 			currentUser.FavoriteStore = strings.TrimSpace(r.FormValue("favorite_store"))
 			currentUser.ShoppingDay = strings.TrimSpace(r.FormValue("shopping_day"))
 
-			// Handle previous recipe input
-			if recipeTitle := strings.TrimSpace(r.FormValue("previous_recipe")); recipeTitle != "" {
-				// Check for duplicates
-				isDuplicate := false
-				for _, existing := range currentUser.LastRecipes {
-					if strings.EqualFold(existing.Title, recipeTitle) {
-						isDuplicate = true
-						break
-					}
-				}
-				if !isDuplicate {
-					newRecipe := users.Recipe{
-						Title:     recipeTitle,
-						Hash:      "",
-						CreatedAt: time.Now(),
-					}
-					currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
-				}
-			}
-
 			if err := userStorage.Update(currentUser); err != nil {
-				log.Printf("failed to update user: %v", err)
+				slog.ErrorContext(ctx, "failed to update user", "error", err)
 				http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 				return
 			}
@@ -203,7 +182,7 @@ func runServer(cfg *config.Config, addr string) error {
 			Success:       success,
 		}
 		if err := userTmpl.Execute(w, data); err != nil {
-			log.Printf("user template execute error: %v", err)
+			slog.ErrorContext(ctx, "user template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
@@ -220,6 +199,7 @@ func runServer(cfg *config.Config, addr string) error {
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {})
 
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		_, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
@@ -227,7 +207,7 @@ func runServer(cfg *config.Config, addr string) error {
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
-			log.Printf("failed to load user for locations: %v", err)
+			slog.ErrorContext(ctx, "failed to load user for locations", "error", err)
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
@@ -238,13 +218,13 @@ func runServer(cfg *config.Config, addr string) error {
 		}*/
 		zip := r.URL.Query().Get("zip")
 		if zip == "" {
-			log.Printf("no zip code provided to /locations")
+			slog.InfoContext(ctx, "no zip code provided to /locations")
 			http.Error(w, "provide a zip code with ?zip=12345", http.StatusBadRequest)
 			return
 		}
 		locs, err := locations.GetLocationsByZip(context.TODO(), cfg, zip)
 		if err != nil {
-			log.Printf("failed to get locations for zip %s: %v", zip, err)
+			slog.ErrorContext(ctx, "failed to get locations for zip", "zip", zip, "error", err)
 			http.Error(w, "could not get locations", http.StatusInternalServerError)
 			return
 		}
@@ -253,6 +233,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		currentUser, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
@@ -260,7 +241,7 @@ func runServer(cfg *config.Config, addr string) error {
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
-			log.Printf("failed to load user for recipes: %v", err)
+			slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
@@ -270,12 +251,11 @@ func runServer(cfg *config.Config, addr string) error {
 				LastRecipes: []users.Recipe{},
 			}
 		}
-		ctx := r.Context()
 
 		// Check if using hash-based sharing
 		if hashParam := r.URL.Query().Get("h"); hashParam != "" {
-			if err := generator.FromCache(hashParam, nil, w); err != nil {
-				log.Printf("failed to load shared recipe for hash %s: %v", hashParam, err)
+			if err := generator.FromCache(ctx, hashParam, nil, w); err != nil {
+				slog.ErrorContext(ctx, "failed to load shared recipe for hash", "hash", hashParam, "error", err)
 				http.Error(w, "recipe not found or expired", http.StatusNotFound)
 			}
 			return
@@ -317,15 +297,15 @@ func runServer(cfg *config.Config, addr string) error {
 			p.Instructions = i
 		}
 		hash := p.Hash()
-		if err := generator.FromCache(hash, p, w); err == nil {
+		if err := generator.FromCache(ctx, hash, p, w); err == nil {
 			return
 		}
 
 		go func() {
-			log.Printf("generating cached recipes for %s %s", p.String(), hash)
-			_, err := generator.GenerateRecipes(p)
+			slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
+			_, err := generator.GenerateRecipes(ctx, p)
 			if err != nil {
-				log.Printf("generate error: %v", err)
+				slog.ErrorContext(ctx, "generate error", "error", err)
 				return
 			}
 		}()
@@ -337,12 +317,12 @@ func runServer(cfg *config.Config, addr string) error {
 			ClarityScript: clarityScript,
 		}
 		if err := spinnerTmpl.Execute(w, spinnerData); err != nil {
-			log.Printf("home template execute error: %v", err)
+			slog.ErrorContext(ctx, "home template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
 
-	log.Printf("Serving Careme on %s", addr)
+	slog.Info("Serving Careme", "address", addr)
 	return http.ListenAndServe(addr, WithMiddleware(mux))
 }
 

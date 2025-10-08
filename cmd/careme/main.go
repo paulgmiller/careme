@@ -100,7 +100,7 @@ func run(cfg *config.Config, location string, ingredient string) error {
 	}
 
 	p := recipes.DefaultParams(l, time.Now())
-	generatedRecipes, err := generator.GenerateRecipes(p)
+	generatedRecipes, err := generator.GenerateRecipes(context.Background(), p)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes: %w", err)
 	}

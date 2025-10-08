@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"log"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -137,25 +137,25 @@ func DefaultStaples() []filter {
 	}
 }
 
-func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
-	log.Printf("Generating recipes for location: %s", p)
+func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (string, error) {
+	slog.Info("Generating recipes for location", "location", p.String())
 
 	/*previousRecipes, err := g.getPreviousRecipes()
 	if err != nil {
-		log.Printf("Warning: Could not fetch recipe history: %v", err)
+		slog.Warn("Warning: Could not fetch recipe history", "error", err)
 		previousRecipes = []string{}
 	}*/
 
 	hash := p.Hash()
 	generating, done := g.isGenerating(hash)
 	if generating {
-		log.Printf("Generation already in progress for %s, skipping", hash)
+		slog.InfoContext(ctx, "Generation already in progress, skipping", "hash", hash)
 		return "", nil
 	}
 	defer done()
 	start := time.Now()
 
-	ingredients, err := g.GetStaples(p)
+	ingredients, err := g.GetStaples(ctx, p)
 	if err != nil {
 		return "", fmt.Errorf("failed to get staples: %w", err)
 	}
@@ -167,10 +167,10 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
-	log.Printf("generated chat for %s in %s stored in recipes/%s", p, time.Since(start), hash)
+	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 
 	if err := g.cache.Set(p.Hash(), response); err != nil {
-		log.Printf("failed to cache recipe for %s: %v", p, err)
+		slog.ErrorContext(ctx, "failed to cache recipe", "location", p.String(), "error", err)
 		return response, err
 	}
 
@@ -178,7 +178,7 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 	paramsJSON := lo.Must(json.Marshal(p))
 
 	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
-		log.Printf("failed to cache params for %s: %v", p, err)
+		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
 	}
 
 	return response, nil
@@ -189,7 +189,7 @@ func (g *Generator) GenerateRecipes(p *generatorParams) (string, error) {
 	}
 
 	if err := g.historyStorage.SaveRecipes(recipes); err != nil {
-		log.Printf("Warning: Could not save recipes to history: %v", err)
+		slog.Warn("Warning: Could not save recipes to history", "error", err)
 	}
 	*/
 
@@ -225,20 +225,20 @@ func Filter(term string, brands []string) filter {
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
-func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
+func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]string, error) {
 
 	lochash := p.LocationHash()
 	var ingredients []string
 
 	if ingredientblob, err := g.cache.Get(lochash); err == nil {
-		log.Printf("serving cached ingredients for %s: %s", p.String(), lochash)
+		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 		defer ingredientblob.Close()
 		sc := bufio.NewScanner(ingredientblob)
 		for sc.Scan() {
 			ingredients = append(ingredients, sc.Text())
 		}
 		if err := sc.Err(); err != nil {
-			log.Printf("failed to read cached ingredients for %s: %v", p, err)
+			slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 			return nil, err
 		}
 		return ingredients, nil
@@ -260,14 +260,14 @@ func (g *Generator) GetStaples(p *generatorParams) ([]string, error) {
 				return
 			}
 			ingredients = append(ingredients, cingredients...)
-			log.Printf("Found %d ingredients for category: %s at %s", len(cingredients), category.Term, p.Location.ID)
+			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
 		}(category)
 	}
 
 	wg.Wait()
 
 	if err := g.cache.Set(p.LocationHash(), strings.Join(ingredients, "\n")); err != nil {
-		log.Printf("failed to cache ingredients for %s: %v", p, err)
+		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
 	return ingredients, nil
