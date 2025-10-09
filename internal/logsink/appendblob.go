@@ -19,14 +19,11 @@ type Config struct {
 	AccountName string
 	AccountKey  string
 	Container   string
-	BlobName    string        // e.g. "serviceA/prod/logs.jsonl" use
+	BlobName    string        // deault hostname/podname
 	FlushEvery  time.Duration // default 2s
-
 }
 
 type Handler struct {
-	cfg    Config
-	ab     *appendblob.Client
 	ch     chan []byte
 	wg     sync.WaitGroup
 	ticker *time.Ticker
@@ -58,13 +55,11 @@ func New(ctx context.Context, cfg Config) (*Handler, error) {
 	}
 
 	h := &Handler{
-		cfg:    cfg,
-		ab:     ab,
 		ch:     make(chan []byte, 1024), // Buffered channel to hold log entries
 		ticker: time.NewTicker(cfg.FlushEvery),
 	}
 	h.wg.Add(1)
-	go h.loop(ctx)
+	go h.loop(ctx, ab)
 	return h, nil
 }
 
@@ -101,14 +96,15 @@ func (h *Handler) WithGroup(string) slog.Handler { return h } // no-op for simpl
 
 // internals
 
-func (h *Handler) loop(ctx context.Context) {
+func (h *Handler) loop(ctx context.Context, ab *appendblob.Client) {
 	defer h.wg.Done()
 	var buf []byte
 	flush := func() {
 		if len(buf) == 0 {
 			return
 		}
-		_, _ = h.ab.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(buf)}, nil)
+		_, _ = ab.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(buf)}, nil)
+		//we should tell someone if append blob is failing
 		buf = buf[:0] //reset
 	}
 
