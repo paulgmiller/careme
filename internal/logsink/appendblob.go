@@ -3,7 +3,6 @@ package appendblobhandler
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -29,8 +28,6 @@ type Handler struct {
 	cfg    Config
 	ab     *appendblob.Client
 	ch     chan []byte
-	ctx    context.Context
-	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	ticker *time.Ticker
 }
@@ -60,22 +57,18 @@ func New(ctx context.Context, cfg Config) (*Handler, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
 	h := &Handler{
 		cfg:    cfg,
 		ab:     ab,
 		ch:     make(chan []byte, 1024), // Buffered channel to hold log entries
-		ctx:    ctx,
-		cancel: cancel,
 		ticker: time.NewTicker(cfg.FlushEvery),
 	}
 	h.wg.Add(1)
-	go h.loop()
+	go h.loop(ctx)
 	return h, nil
 }
 
 func (h *Handler) Close() error {
-	h.cancel()
 	close(h.ch)
 	h.wg.Wait()
 	h.ticker.Stop()
@@ -86,45 +79,17 @@ func (h *Handler) Close() error {
 
 func (h *Handler) Enabled(context.Context, slog.Level) bool { return true } // ignore levels
 
-func (h *Handler) Handle(_ context.Context, r slog.Record) error {
-	ev := make(map[string]any, r.NumAttrs()+3) //magic number!
-	ts := r.Time
-	if ts.IsZero() {
-		ts = time.Now()
-	}
-	ev["ts"] = ts.UTC().Format(time.RFC3339Nano)
-	ev["msg"] = r.Message
-
-	r.Attrs(func(a slog.Attr) bool {
-		a.Value = a.Value.Resolve()
-		if a.Value.Kind() == slog.KindGroup {
-			m := map[string]any{}
-			//only goes one level deep. do we care?
-			for _, aa := range a.Value.Group() {
-				aa.Value = aa.Value.Resolve()
-				m[aa.Key] = aa.Value.Any()
-			}
-			ev[a.Key] = m
-		} else {
-			ev[a.Key] = a.Value.Any()
-		}
-		return true
-	})
-
-	//just send record to channel instead of json?
+func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
 	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(ev); err != nil {
+	json := slog.NewJSONHandler(&b, &slog.HandlerOptions{})
+	//just send record to channel instead of json?
+	err := json.Handle(ctx, r)
+	if err != nil {
 		return err
 	}
 
-	select {
-	case h.ch <- append([]byte{}, b.Bytes()...):
-		return nil
-	case <-h.ctx.Done():
-		return h.ctx.Err()
-	}
+	h.ch <- b.Bytes()
+	return nil
 }
 
 func (h *Handler) WithAttrs(attrs []slog.Attr) slog.Handler {
@@ -136,22 +101,19 @@ func (h *Handler) WithGroup(string) slog.Handler { return h } // no-op for simpl
 
 // internals
 
-func (h *Handler) loop() {
+func (h *Handler) loop(ctx context.Context) {
 	defer h.wg.Done()
 	var buf []byte
 	flush := func() {
 		if len(buf) == 0 {
 			return
 		}
-		_, _ = h.ab.AppendBlock(h.ctx, readSeekNopCloser{bytes.NewReader(buf)}, nil)
+		_, _ = h.ab.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(buf)}, nil)
 		buf = buf[:0] //reset
 	}
 
 	for {
 		select {
-		case <-h.ctx.Done():
-			flush()
-			return
 		case line, ok := <-h.ch:
 			if !ok {
 				flush() // seems redundant with h.ctx.Done() case, but whatever
