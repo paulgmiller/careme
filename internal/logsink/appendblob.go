@@ -1,9 +1,10 @@
-package appendblobhandler
+package logsink
 
 import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 )
 
 type Config struct {
@@ -53,6 +55,12 @@ func New(ctx context.Context, cfg Config) (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	_, err = ab.Create(ctx, nil) // ignore error; maybe already exists
+	if err != nil {
+		if !bloberror.HasCode(err, bloberror.BlobAlreadyExists) {
+			return nil, err
+		}
+	}
 
 	h := &Handler{
 		ch:     make(chan []byte, 1024), // Buffered channel to hold log entries
@@ -61,6 +69,7 @@ func New(ctx context.Context, cfg Config) (*Handler, error) {
 	h.wg.Add(1)
 	go h.loop(ctx, ab)
 	return h, nil
+
 }
 
 func (h *Handler) Close() error {
@@ -84,6 +93,7 @@ func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	h.ch <- b.Bytes()
+	os.Stdout.Write(b.Bytes())
 	return nil
 }
 
@@ -103,8 +113,10 @@ func (h *Handler) loop(ctx context.Context, ab *appendblob.Client) {
 		if len(buf) == 0 {
 			return
 		}
-		_, _ = ab.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(buf)}, nil)
-		//we should tell someone if append blob is failing
+		_, err := ab.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(buf)}, nil)
+		if err != nil {
+			fmt.Printf("error %s", err)
+		}
 		buf = buf[:0] //reset
 	}
 
