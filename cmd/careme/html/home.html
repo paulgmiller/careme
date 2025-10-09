@@ -45,7 +45,11 @@
       <button type="submit">Find Stores</button>
     </form>
     {{else}}
-    <p>Please log in to continue.</p>
+    <form method="POST" action="/login">
+      <label for="email">Enter your email to continue:</label><br>
+      <input type="email" id="email" name="email" placeholder="you@example.com" required>
+      <button type="submit">Continue</button>
+    </form>
     {{end}}
   </div>
 </body>
