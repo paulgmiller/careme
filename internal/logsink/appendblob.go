@@ -21,7 +21,7 @@ type Config struct {
 	AccountName string
 	AccountKey  string
 	Container   string
-	BlobName    string        // deault hostname/podname
+	BlobName    string        // default hostname/podname
 	FlushEvery  time.Duration // default 2s
 }
 
