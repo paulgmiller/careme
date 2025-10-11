@@ -108,16 +108,16 @@ func (h *Handler) WithGroup(string) slog.Handler { return h } // no-op for simpl
 
 func (h *Handler) loop(ctx context.Context, ab *appendblob.Client) {
 	defer h.wg.Done()
-	var buf []byte
+	var buf bytes.Buffer
 	flush := func() {
-		if len(buf) == 0 {
+		if buf.Len() == 0 {
 			return
 		}
-		_, err := ab.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(buf)}, nil)
+		_, err := ab.AppendBlock(ctx, readSeekNopCloser{&buf}, nil)
 		if err != nil {
 			fmt.Printf("error %s", err)
 		}
-		buf = buf[:0] //reset
+		buf.Reset()
 	}
 
 	for {
@@ -127,7 +127,7 @@ func (h *Handler) loop(ctx context.Context, ab *appendblob.Client) {
 				flush() // seems redundant with h.ctx.Done() case, but whatever
 				return
 			}
-			buf = append(buf, line...)
+			buf.Write(line)
 		case <-h.ticker.C:
 			flush()
 		}
