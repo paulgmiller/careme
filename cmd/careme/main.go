@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	multi "github.com/samber/slog-multi"
+
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
@@ -56,7 +58,7 @@ func main() {
 			log.Fatalf("failed to create logsink: %v", err)
 		}
 		defer closer.Close()
-		slog.SetDefault(slog.New(handler))
+		slog.SetDefault(slog.New(multi.Fanout(handler, slog.NewTextHandler(os.Stdout, nil))))
 		//log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
 
 	}
