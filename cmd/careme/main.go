@@ -6,12 +6,14 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"time"
 
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/logsink"
 	"careme/internal/recipes"
 )
 
@@ -36,9 +38,27 @@ func main() {
 		log.Fatalf("failed to create recipes directory: %v", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load configuration: %v", err)
+	}
+
+	if _, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME"); ok {
+		handler, err := logsink.New(ctx, logsink.Config{
+			AccountName: os.Getenv("AZURE_STORAGE_ACCOUNT_NAME"),
+			AccountKey:  os.Getenv("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY"),
+			Container:   "logs",
+		})
+		if err != nil {
+			log.Fatalf("failed to create logsink: %v", err)
+		}
+		defer handler.Close()
+		slog.SetDefault(slog.New(handler))
+		log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
+
 	}
 
 	if serve {
