@@ -27,6 +27,7 @@ type Config struct {
 
 type Handler struct {
 	ch     chan []byte
+	done   chan bool
 	wg     sync.WaitGroup
 	ticker *time.Ticker
 }
@@ -64,6 +65,7 @@ func New(ctx context.Context, cfg Config) (*Handler, error) {
 
 	h := &Handler{
 		ch:     make(chan []byte, 1024), // Buffered channel to hold log entries
+		done:   make(chan bool),
 		ticker: time.NewTicker(cfg.FlushEvery),
 	}
 	h.wg.Add(1)
@@ -72,8 +74,9 @@ func New(ctx context.Context, cfg Config) (*Handler, error) {
 
 }
 
+// Drain rest of logs. Will panic if called
 func (h *Handler) Close() error {
-	close(h.ch)
+	close(h.done)
 	h.wg.Wait()
 	h.ticker.Stop()
 	return nil
@@ -91,9 +94,8 @@ func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
 	if err != nil {
 		return err
 	}
-
 	h.ch <- b.Bytes()
-	os.Stdout.Write(b.Bytes())
+
 	return nil
 }
 
@@ -122,14 +124,21 @@ func (h *Handler) loop(ctx context.Context, ab *appendblob.Client) {
 
 	for {
 		select {
-		case line, ok := <-h.ch:
-			if !ok {
-				flush() // seems redundant with h.ctx.Done() case, but whatever
-				return
-			}
+		case line := <-h.ch:
 			buf = append(buf, line...)
 		case <-h.ticker.C:
 			flush()
+		case <-h.done:
+			//drain whats left
+			for {
+				select {
+				case line := <-h.ch:
+					buf = append(buf, line...)
+				default:
+					flush()
+					return
+				}
+			}
 		}
 	}
 }
