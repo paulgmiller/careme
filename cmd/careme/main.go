@@ -47,7 +47,7 @@ func main() {
 	}
 
 	if _, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME"); ok {
-		handler, err := logsink.New(ctx, logsink.Config{
+		handler, closer, err := logsink.NewJson(ctx, logsink.Config{
 			AccountName: os.Getenv("AZURE_STORAGE_ACCOUNT_NAME"),
 			AccountKey:  os.Getenv("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY"),
 			Container:   "logs",
@@ -55,9 +55,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to create logsink: %v", err)
 		}
-		defer handler.Close()
+		defer closer.Close()
 		slog.SetDefault(slog.New(handler))
-		log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
+		//log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
 
 	}
 
