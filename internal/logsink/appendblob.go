@@ -21,7 +21,7 @@ type Config struct {
 	AccountName string
 	AccountKey  string
 	Container   string
-	BlobName    string        // deault hostname/podname
+	BlobName    string        // default hostname/podname
 	FlushEvery  time.Duration // default 2s
 }
 
@@ -33,7 +33,7 @@ type Handler struct {
 
 func New(ctx context.Context, cfg Config) (*Handler, error) {
 	if cfg.AccountName == "" || cfg.AccountKey == "" || cfg.Container == "" {
-		return nil, errors.New("AccountName, AccountKey, Container, and BlobName are required")
+		return nil, errors.New("AccountName, AccountKey, and Container are required")
 	}
 
 	if cfg.BlobName == "" {
