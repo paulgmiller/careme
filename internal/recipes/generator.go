@@ -160,8 +160,6 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (st
 		return "", fmt.Errorf("failed to get staples: %w", err)
 	}
 
-	//log.Printf("Found %d sale ingredients, %d previous recipes", 		len(ingredients), len(previousRecipes))
-
 	response, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
@@ -182,18 +180,6 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (st
 	}
 
 	return response, nil
-
-	/*recipes, err := g.parseAIResponse(response, location)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse AI response: %w", err)
-	}
-
-	if err := g.historyStorage.SaveRecipes(recipes); err != nil {
-		slog.Warn("Warning: Could not save recipes to history", "error", err)
-	}
-	*/
-
-	//return recipes, nil
 }
 
 // LoadParamsFromHash loads generator params from cache using the hash

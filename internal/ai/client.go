@@ -147,7 +147,7 @@ Generate 3 distinct, practical recipes using the provided constraints to maximiz
 
 	if prevRecipes := lastRecipes; len(prevRecipes) > 0 {
 		prompt += "# Previous Recipes \n"
-		prompt += "DO NOT repeat these recipes from the past 2 weeks:\n"
+		prompt += "Avoid recipes similar to these from the past 2 weeks:\n"
 		for _, recipe := range prevRecipes {
 			prompt += fmt.Sprintf("- %s\n", recipe)
 		}
@@ -155,16 +155,5 @@ Generate 3 distinct, practical recipes using the provided constraints to maximiz
 	}
 
 	prompt += `# Additional User Instructions:\n` + instructions + "\n"
-	/*
-		if len(previousRecipes) > 0 {
-			prompt += "DO NOT repeat these recipes from the past 2 weeks:\n"
-			for _, recipe := range previousRecipes {
-				prompt += fmt.Sprintf("- %s\n", recipe)
-			}
-			prompt += "\n"
-		}
-
-
-	*/
 	return prompt
 }
