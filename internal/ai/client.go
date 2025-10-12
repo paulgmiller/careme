@@ -5,11 +5,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	openai "github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
+	"github.com/openai/openai-go/v2/responses"
 )
 
 type Client struct {
@@ -17,11 +17,6 @@ type Client struct {
 	apiKey     string
 	model      string
 	httpClient *http.Client
-}
-
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
 }
 
 // Removed custom OpenAIRequest/OpenAIResponse in favor of official SDK types
@@ -38,59 +33,24 @@ func NewClient(provider, apiKey, model string) *Client {
 func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) (string, error) {
 	prompt := c.buildRecipePrompt(location, saleIngredients, instructions, date, lastRecipes)
 
-	messages := []Message{
-		{
-			Role:    "system",
-			Content: "You are a professional chef and recipe developer that wants to help working families cook each night and introduce them to varied cuisines.",
-		},
-		{
-			Role:    "user",
-			Content: prompt,
-		},
-	}
-
-	switch strings.ToLower(c.provider) {
-	case "openai":
-		return c.generateWithOpenAI(messages)
-	//case "anthropic":
-	//		return c.generateWithAnthropic(messages)
-	default:
-		return "", fmt.Errorf("unsupported AI provider: %s", c.provider)
-	}
-}
-
-func (c *Client) generateWithOpenAI(messages []Message) (string, error) {
-	ctx := context.Background()
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
-	// Convert internal messages to SDK message params
-	var chatMsgs []openai.ChatCompletionMessageParamUnion
-	for _, m := range messages {
-		role := strings.ToLower(m.Role)
-		switch role {
-		case "system":
-			chatMsgs = append(chatMsgs, openai.SystemMessage(m.Content))
-		case "assistant":
-			chatMsgs = append(chatMsgs, openai.AssistantMessage(m.Content))
-		default: // treat everything else as user
-			chatMsgs = append(chatMsgs, openai.UserMessage(m.Content))
-		}
+	params := responses.ResponseNewParams{
+		Model:        openai.ChatModelGPT5,
+		Instructions: openai.String("You are a professional chef and recipe developer that wants to help working families cook each night with varied cuisines."),
+
+		Input: responses.ResponseNewParamsInputUnion{
+			OfString: openai.String(prompt), //TODO break this up seperate messages? What do we gain?
+		},
+		//should we stream. Can we pass past generation.
 	}
 
-	params := openai.ChatCompletionNewParams{
-		Model:    openai.ChatModelGPT5,
-		Messages: chatMsgs,
-	}
-
-	resp, err := client.Chat.Completions.New(ctx, params)
+	resp, err := client.Responses.New(context.TODO(), params)
 	if err != nil {
-		return "", fmt.Errorf("openai chat completion error: %w", err)
-	}
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no choices in OpenAI response")
+		return "", fmt.Errorf("failed to generate recipes: %w", err)
 	}
 
-	return resp.Choices[0].Message.Content, nil
+	return resp.OutputText(), nil
 }
 
 func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) string {
