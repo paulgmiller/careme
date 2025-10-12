@@ -24,9 +24,9 @@ type Client struct {
 }
 
 type Ingredient struct {
-	Name     string  `json:"name"`
-	Quantity string  `json:"quantity"`
-	Price    float64 `json:"price"`
+	Name     string `json:"name"`
+	Quantity string `json:"quantity"` //shoudl this and price be numbers? need units then
+	Price    string `json:"price"`
 }
 
 type Recipe struct {
@@ -50,8 +50,7 @@ func NewClient(provider, apiKey, model string) *Client {
 		ExpandedStruct: true, // put the root type inline (not a $ref)
 	}
 	schema := r.Reflect(&ShoppingList{})
-	schemaJSON, _ := json.MarshalIndent(schema, "", "  ")
-	fmt.Println(string(schemaJSON))
+	schemaJSON, _ := json.Marshal(schema)
 	var m map[string]any
 	_ = json.Unmarshal(schemaJSON, &m)
 	return &Client{
