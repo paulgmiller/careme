@@ -22,7 +22,9 @@
   <h1>Careme Recipes</h1>
   <h2>Location: {{.Location.Name}} ({{.Location.Address}})</h2>
 
-  <div>{{.Chat}}</div>
+  {{for _, recipe := range .Recipes}}
+    <pre>{{recipe}}</pre>
+  {{end}}
 
   <form method="GET" style="margin:1rem 0;display:flex;gap:.5rem">
     <input type="hidden" name="location" value="{{.Location.ID}}">

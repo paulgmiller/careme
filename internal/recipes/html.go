@@ -1,10 +1,12 @@
 package recipes
 
 import (
+	"careme/internal/ai"
 	"careme/internal/html"
 	"careme/internal/locations"
 	"context"
 	"embed"
+	"encoding/json"
 	"html/template"
 	"io"
 	"log/slog"
@@ -54,6 +56,12 @@ func (g *Generator) FromCache(ctx context.Context, hash string, p *generatorPara
 
 // FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
 func (g *Generator) FormatChatHTML(p *generatorParams, chat []byte, writer io.Writer) error {
+	var list ai.ShoppingList // ensure import
+	err := json.Unmarshal(chat, &list)
+	if err != nil {
+		return err
+	}
+
 	data := struct {
 		Location      locations.Location
 		Date          string
@@ -61,6 +69,7 @@ func (g *Generator) FormatChatHTML(p *generatorParams, chat []byte, writer io.Wr
 		ClarityScript template.HTML
 		Instructions  string
 		Hash          string
+		Recipes       []ai.Recipe
 	}{
 		Location:      *p.Location,
 		Date:          p.Date.Format("2006-01-02"),
@@ -68,6 +77,7 @@ func (g *Generator) FormatChatHTML(p *generatorParams, chat []byte, writer io.Wr
 		ClarityScript: html.ClarityScript(g.config),
 		Instructions:  p.Instructions,
 		Hash:          p.Hash(),
+		Recipes:       list.Recipes,
 	}
 	return templates.ExecuteTemplate(writer, "chat.html", data)
 }
