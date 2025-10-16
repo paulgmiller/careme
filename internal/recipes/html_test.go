@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"bytes"
+	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"testing"
