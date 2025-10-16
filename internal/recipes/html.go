@@ -1,10 +1,12 @@
 package recipes
 
 import (
+	"careme/internal/ai"
 	"careme/internal/html"
 	"careme/internal/locations"
 	"context"
 	"embed"
+	"encoding/json"
 	"html/template"
 	"io"
 	"log/slog"
@@ -30,6 +32,10 @@ func (g *Generator) FromCache(ctx context.Context, hash string, p *generatorPara
 		slog.ErrorContext(ctx, "failed to read cached recipe for hash", "hash", hash, "error", err)
 		return err
 	}
+	var list ai.ShoppingList // ensure import
+	if err = json.Unmarshal(recipebytes, &list); err != nil {
+		return err
+	}
 
 	// Load the params to properly format the HTML
 	if p == nil {
@@ -45,7 +51,7 @@ func (g *Generator) FromCache(ctx context.Context, hash string, p *generatorPara
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
-	if err := g.FormatChatHTML(p, recipebytes, w); err != nil {
+	if err := g.FormatChatHTML(p, list, w); err != nil {
 		slog.ErrorContext(ctx, "failed to format shared recipe for hash", "hash", hash, "error", err)
 		return err
 	}
@@ -53,21 +59,22 @@ func (g *Generator) FromCache(ctx context.Context, hash string, p *generatorPara
 }
 
 // FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
-func (g *Generator) FormatChatHTML(p *generatorParams, chat []byte, writer io.Writer) error {
+func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
+
 	data := struct {
 		Location      locations.Location
 		Date          string
-		Chat          template.HTML
 		ClarityScript template.HTML
 		Instructions  string
 		Hash          string
+		Recipes       []ai.Recipe
 	}{
 		Location:      *p.Location,
 		Date:          p.Date.Format("2006-01-02"),
-		Chat:          template.HTML(chat),
 		ClarityScript: html.ClarityScript(g.config),
 		Instructions:  p.Instructions,
 		Hash:          p.Hash(),
+		Recipes:       l.Recipes,
 	}
 	return templates.ExecuteTemplate(writer, "chat.html", data)
 }

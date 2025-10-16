@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"bytes"
+	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"testing"
@@ -20,6 +21,25 @@ func isValidHTML(t *testing.T, htmlStr string) {
 	}
 }
 
+var list = ai.ShoppingList{
+	Recipes: []ai.Recipe{
+		{
+			Title:       "Test Recipe",
+			Description: "A simple test recipe",
+			Ingredients: []ai.Ingredient{
+				{Name: "Ingredient 1", Quantity: "1 cup", Price: "2.00"},
+				{Name: "Ingredient 2", Quantity: "2 tbsp", Price: "1.50"},
+			},
+			Instructions: []string{
+				"Step 1: Do something.",
+				"Step 2: Do something else.",
+			},
+			Health:       "Healthy",
+			DrinkPairing: "Water",
+		},
+	},
+}
+
 func TestFormatChatHTML_ValidHTML(t *testing.T) {
 	g := Generator{
 		config: &config.Config{
@@ -28,9 +48,8 @@ func TestFormatChatHTML_ValidHTML(t *testing.T) {
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	var chat []byte = []byte("<pre>{\"message\": \"hi\"}</pre>")
 	var buf bytes.Buffer
-	if err := g.FormatChatHTML(p, chat, &buf); err != nil {
+	if err := g.FormatChatHTML(p, list, &buf); err != nil {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 	html := buf.String()
@@ -44,10 +63,9 @@ func TestFormatChatHTML_IncludesClarityScript(t *testing.T) {
 		},
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
-	chat := []byte("<pre>{\"message\": \"hi\"}</pre>")
 	p := DefaultParams(&loc, time.Now())
 	var buf bytes.Buffer
-	if err := g.FormatChatHTML(p, chat, &buf); err != nil {
+	if err := g.FormatChatHTML(p, list, &buf); err != nil {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 
@@ -67,10 +85,9 @@ func TestFormatChatHTML_NoClarityWhenEmpty(t *testing.T) {
 		},
 	}
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
-	chat := []byte("<pre>{\"message\": \"hi\"}</pre>")
 	p := DefaultParams(&loc, time.Now())
 	var buf bytes.Buffer
-	if err := g.FormatChatHTML(p, chat, &buf); err != nil {
+	if err := g.FormatChatHTML(p, list, &buf); err != nil {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 

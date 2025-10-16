@@ -3,6 +3,7 @@ package ai
 import (
 	"careme/internal/locations"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,6 +11,8 @@ import (
 	openai "github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
 	"github.com/openai/openai-go/v2/responses"
+
+	"github.com/invopop/jsonschema"
 )
 
 type Client struct {
@@ -17,16 +20,45 @@ type Client struct {
 	apiKey     string
 	model      string
 	httpClient *http.Client
+	schema     map[string]any
+}
+
+type Ingredient struct {
+	Name     string `json:"name"`
+	Quantity string `json:"quantity"` //should this and price be numbers? need units then
+	Price    string `json:"price"`
+}
+
+type Recipe struct {
+	Title        string       `json:"title"`
+	Description  string       `json:"description"`
+	Ingredients  []Ingredient `json:"ingredients"`
+	Instructions []string     `json:"instructions"`
+	Health       string       `json:"health"`
+	DrinkPairing string       `json:"drink_pairing"`
+}
+
+type ShoppingList struct {
+	Recipes []Recipe `json:"recipes"`
 }
 
 // Removed custom OpenAIRequest/OpenAIResponse in favor of official SDK types
 
 func NewClient(provider, apiKey, model string) *Client {
+	r := jsonschema.Reflector{
+		DoNotReference: true, // no $defs and no $ref
+		ExpandedStruct: true, // put the root type inline (not a $ref)
+	}
+	schema := r.Reflect(&ShoppingList{})
+	schemaJSON, _ := json.Marshal(schema)
+	var m map[string]any
+	_ = json.Unmarshal(schemaJSON, &m)
 	return &Client{
 		provider:   provider,
 		apiKey:     apiKey,
 		model:      model,
 		httpClient: &http.Client{},
+		schema:     m,
 	}
 }
 
@@ -42,6 +74,15 @@ func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients [
 		Input: responses.ResponseNewParamsInputUnion{
 			OfString: openai.String(prompt), //TODO break this up seperate messages? What do we gain?
 		},
+		Text: responses.ResponseTextConfigParam{
+			Format: responses.ResponseFormatTextConfigUnionParam{
+				OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
+					Name:   "recipes",
+					Schema: c.schema,
+				},
+			},
+		},
+
 		//should we stream. Can we pass past generation.
 	}
 
@@ -58,6 +99,8 @@ func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients
 	//TODO pull out meal count and people.
 	//TODO json formatting
 	//TODO store prompt in cache?
+	// Place an overall combined ingredient summary as a ' < ul > ' at the bottom. Use a ' < table > ' for extra clarity if needed. Include name, quantity and sale prices.
+
 	prompt := `# Objective
 Generate 3 distinct, practical recipes using the provided constraints to maximize ingredient efficiency and meal variety while maintaining clear, user-friendly HTML output.
 
@@ -73,16 +116,14 @@ Generate 3 distinct, practical recipes using the provided constraints to maximiz
 
 
 # Output Format
-- Return all output as HTML suitable for inlining in a ' < div > ' element.
-- Main wrapper is a ' < div > '.
-- Each recipe must be within a ' < section > ' or ' < article > ', starting with a ' < h2 > ' as the recipe title.
+- Return all output json
 - Each recipe includes:
-  - Short description (' < p > ').
-  - Ingredient list (' < ul > ' or ' < ol > ', each ingredient in a ' < li > '). Showing sale prices if applicable.
-  - Step-by-step instructions (' < ol > ').
-	- A guess at calorie count and helthyness in a ' < p > '.
-  - Optional wine pairing (' < p > ' at end).
-- Place an overall combined ingredient summary as a ' < ul > ' at the bottom. Use a ' < table > ' for extra clarity if needed. Include name, quantity and sale prices.
+  - Title
+  - Description: Try to sell the dish and add some flair.
+  - Ingredient list: should include quantities and price if in input.
+  - Step-by-step instructions.
+	- A guess at calorie count and healthiness
+  - Optional wine or beer pairing.
 
 
 # Verbosity
@@ -93,7 +134,6 @@ Generate 3 distinct, practical recipes using the provided constraints to maximiz
 
 # Planning & Verification
 - Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.
-- After HTML generation, validate that the HTML structure is semantically correct and ready for inlining; self-correct if necessary before handing output back.
 
 # Inputs`
 
