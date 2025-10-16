@@ -37,7 +37,7 @@ var list = ai.ShoppingList{
 			DrinkPairing: "Water",
 		},
 	},
-}s
+}
 
 func TestFormatChatHTML_ValidHTML(t *testing.T) {
 	g := Generator{

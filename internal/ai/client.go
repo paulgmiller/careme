@@ -25,7 +25,7 @@ type Client struct {
 
 type Ingredient struct {
 	Name     string `json:"name"`
-	Quantity string `json:"quantity"` //shoudl this and price be numbers? need units then
+	Quantity string `json:"quantity"` //should this and price be numbers? need units then
 	Price    string `json:"price"`
 }
 
