@@ -28,7 +28,7 @@
 
     {{if .User}}
     <div style="margin-bottom:1rem">
-      <p style="margin:0">Signed in as <strong>{{index .User.Email 0}}</strong></p>
+      <p style="margin:0">Signed in as <strong>{{if .User.Email}}{{index .User.Email 0}}{{end}}</strong></p>
       <small>User ID: <code>{{.User.ID}}</code></small>
       <div style="margin-top:0.5rem">
         <a href="/user" style="color:#2563eb;text-decoration:none;margin-right:1rem">View Profile</a>

@@ -248,8 +248,9 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 
 		// Get redirect URL from query param or default to home
+		// Only allow relative URLs to prevent open redirect attacks
 		redirectURL := r.URL.Query().Get("redirect")
-		if redirectURL == "" {
+		if redirectURL == "" || !strings.HasPrefix(redirectURL, "/") {
 			redirectURL = "/"
 		}
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)

@@ -62,6 +62,14 @@ func TestLocationsHtml_NoClarityWhenEmpty(t *testing.T) {
 	}
 }
 
+type testUser struct {
+	favoriteStore string
+}
+
+func (u testUser) GetFavoriteStore() string {
+	return u.favoriteStore
+}
+
 func TestLocationsHtml_WithFavoriteStore(t *testing.T) {
 	cfg := &config.Config{
 		Clarity: config.ClarityConfig{ProjectID: "test123"},
@@ -70,11 +78,7 @@ func TestLocationsHtml_WithFavoriteStore(t *testing.T) {
 		{ID: "L1", Name: "Store One", Address: "100 Main St"},
 		{ID: "L2", Name: "Store Two", Address: "200 Oak Ave"},
 	}
-	user := struct {
-		FavoriteStore string
-	}{
-		FavoriteStore: "L1",
-	}
+	user := testUser{favoriteStore: "L1"}
 	html := Html(cfg, user, locs, "12345")
 
 	if !bytes.Contains([]byte(html), []byte("Set as Favorite")) {

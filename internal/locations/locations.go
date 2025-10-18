@@ -61,11 +61,16 @@ func GetLocationByID(ctx context.Context, cfg *config.Config, locationID string)
 	return &l, nil
 }
 
-func Html(cfg *config.Config, user interface{}, locs []Location, zipstring string) string {
+// UserWithFavorite is a minimal interface for templates that need favorite store info
+type UserWithFavorite interface {
+	GetFavoriteStore() string
+}
+
+func Html(cfg *config.Config, user UserWithFavorite, locs []Location, zipstring string) string {
 	data := struct {
 		Locations     []Location
 		Zip           string
-		User          interface{}
+		User          UserWithFavorite
 		ClarityScript template.HTML
 	}{
 		Locations:     locs,

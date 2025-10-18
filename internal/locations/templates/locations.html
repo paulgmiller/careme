@@ -36,8 +36,8 @@
           {{if $.User}}
           <form method="POST" action="/user/favorite-store?redirect={{$.Zip | printf "/locations?zip=%s"}}" style="margin:0;display:inline">
             <input type="hidden" name="store_id" value="{{.ID}}">
-            <button type="submit" class="favorite-btn{{if eq $.User.FavoriteStore .ID}} active{{end}}">
-              {{if eq $.User.FavoriteStore .ID}}★ Favorite{{else}}☆ Set as Favorite{{end}}
+            <button type="submit" class="favorite-btn{{if eq ($.User.GetFavoriteStore) .ID}} active{{end}}">
+              {{if eq ($.User.GetFavoriteStore) .ID}}★ Favorite{{else}}☆ Set as Favorite{{end}}
             </button>
           </form>
           {{end}}
