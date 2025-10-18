@@ -50,6 +50,11 @@ type User struct {
 	ShoppingDay   string    `json:"shopping_day,omitempty"`
 }
 
+// GetFavoriteStore returns the user's favorite store ID
+func (u *User) GetFavoriteStore() string {
+	return u.FavoriteStore
+}
+
 // need to take a look up to location cache?
 func (u *User) Validate() error {
 	if _, err := parseWeekday(u.ShoppingDay); err != nil {
