@@ -28,7 +28,7 @@
 
     {{if .User}}
     <div style="margin-bottom:1rem">
-      <p style="margin:0">Signed in as <strong>{{.User.Email}}</strong></p>
+      <p style="margin:0">Signed in as <strong>{{index .User.Email 0}}</strong></p>
       <small>User ID: <code>{{.User.ID}}</code></small>
       <div style="margin-top:0.5rem">
         <a href="/user" style="color:#2563eb;text-decoration:none;margin-right:1rem">View Profile</a>
@@ -37,6 +37,15 @@
         </form>
       </div>
     </div>
+
+    {{if .FavoriteLocation}}
+    <div style="margin-bottom:1.5rem;padding:1rem;background:#f0fdf4;border-left:4px solid #22c55e;border-radius:4px">
+      <p style="margin:0 0 0.5rem 0"><strong>Your Favorite Store:</strong></p>
+      <p style="margin:0 0 0.5rem 0">{{.FavoriteLocation.Name}}</p>
+      <p style="margin:0 0 0.75rem 0;color:#666;font-size:0.9rem">{{.FavoriteLocation.Address}}</p>
+      <a href="/recipes?location={{.FavoriteLocation.ID}}" style="display:inline-block;background:#22c55e;color:#fff;padding:0.5rem 0.75rem;text-decoration:none;border-radius:4px;font-size:0.9rem">Generate Recipes</a>
+    </div>
+    {{end}}
 
     <form method="GET" action="/locations">
       <label for="zip">Enter ZIP code to pick a nearby store:</label><br>

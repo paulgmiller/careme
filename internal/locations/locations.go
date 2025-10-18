@@ -61,14 +61,16 @@ func GetLocationByID(ctx context.Context, cfg *config.Config, locationID string)
 	return &l, nil
 }
 
-func Html(cfg *config.Config, locs []Location, zipstring string) string {
+func Html(cfg *config.Config, user interface{}, locs []Location, zipstring string) string {
 	data := struct {
 		Locations     []Location
 		Zip           string
+		User          interface{}
 		ClarityScript template.HTML
 	}{
 		Locations:     locs,
 		Zip:           zipstring,
+		User:          user,
 		ClarityScript: html.ClarityScript(cfg),
 	}
 	var buf bytes.Buffer

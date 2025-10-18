@@ -46,12 +46,22 @@ func runServer(cfg *config.Config, addr string) error {
 				return
 			}
 		}
+		var favoriteLocation *locations.Location
+		if currentUser != nil && currentUser.FavoriteStore != "" {
+			favoriteLocation, err = locations.GetLocationByID(ctx, cfg, currentUser.FavoriteStore)
+			if err != nil {
+				slog.WarnContext(ctx, "failed to load favorite store details", "storeID", currentUser.FavoriteStore, "error", err)
+				// Don't fail the page load, just log the warning
+			}
+		}
 		data := struct {
-			ClarityScript template.HTML
-			User          *users.User
+			ClarityScript    template.HTML
+			User             *users.User
+			FavoriteLocation *locations.Location
 		}{
-			ClarityScript: clarityScript,
-			User:          currentUser,
+			ClarityScript:    clarityScript,
+			User:             currentUser,
+			FavoriteLocation: favoriteLocation,
 		}
 		if err := homeTmpl.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
@@ -198,9 +208,56 @@ func runServer(cfg *config.Config, addr string) error {
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {})
 
+	mux.HandleFunc("/user/favorite-store", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		ctx := r.Context()
+		currentUser, err := userFromCookie(r, userStorage)
+		if err != nil {
+			if errors.Is(err, users.ErrNotFound) {
+				clearUserCookie(w)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			slog.ErrorContext(ctx, "failed to load user for setting favorite store", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		if currentUser == nil {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form submission", http.StatusBadRequest)
+			return
+		}
+		storeID := strings.TrimSpace(r.FormValue("store_id"))
+		if storeID == "" {
+			http.Error(w, "store_id is required", http.StatusBadRequest)
+			return
+		}
+
+		currentUser.FavoriteStore = storeID
+		if err := userStorage.Update(currentUser); err != nil {
+			slog.ErrorContext(ctx, "failed to update favorite store", "error", err)
+			http.Error(w, "unable to save favorite store", http.StatusInternalServerError)
+			return
+		}
+
+		// Get redirect URL from query param or default to home
+		redirectURL := r.URL.Query().Get("redirect")
+		if redirectURL == "" {
+			redirectURL = "/"
+		}
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+	})
+
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		_, err := userFromCookie(r, userStorage)
+		currentUser, err := userFromCookie(r, userStorage)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
 				clearUserCookie(w)
@@ -229,7 +286,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 		// Render locations
-		w.Write([]byte(locations.Html(cfg, locs, zip)))
+		w.Write([]byte(locations.Html(cfg, currentUser, locs, zip)))
 	})
 
 	mux.HandleFunc("/recipes", func(w http.ResponseWriter, r *http.Request) {
