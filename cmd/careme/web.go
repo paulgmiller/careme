@@ -296,6 +296,10 @@ func runServer(cfg *config.Config, addr string) error {
 		if i := r.URL.Query().Get("instructions"); i != "" {
 			p.Instructions = i
 		}
+		// Set user ID if available
+		if currentUser != nil && currentUser.ID != "" {
+			p.UserID = currentUser.ID
+		}
 		hash := p.Hash()
 		if err := generator.FromCache(ctx, hash, p, w); err == nil {
 			return

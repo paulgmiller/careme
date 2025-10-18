@@ -32,9 +32,40 @@ func (g *Generator) FromCache(ctx context.Context, hash string, p *generatorPara
 		slog.ErrorContext(ctx, "failed to read cached recipe for hash", "hash", hash, "error", err)
 		return err
 	}
-	var list ai.ShoppingList // ensure import
-	if err = json.Unmarshal(recipebytes, &list); err != nil {
-		return err
+	
+	// Try to parse as ShoppingListDocument first
+	var doc ai.ShoppingListDocument
+	var list ai.ShoppingList
+	
+	if err = json.Unmarshal(recipebytes, &doc); err == nil && len(doc.RecipeHashes) > 0 {
+		// New format: load individual recipes by their hashes
+		for _, recipeHash := range doc.RecipeHashes {
+			recipeReader, err := g.cache.Get("recipe/" + recipeHash)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to load recipe by hash", "recipe_hash", recipeHash, "error", err)
+				continue
+			}
+			
+			recipeData, err := io.ReadAll(recipeReader)
+			recipeReader.Close()
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to read recipe data", "recipe_hash", recipeHash, "error", err)
+				continue
+			}
+			
+			var recipe ai.Recipe
+			if err := json.Unmarshal(recipeData, &recipe); err != nil {
+				slog.ErrorContext(ctx, "failed to unmarshal recipe", "recipe_hash", recipeHash, "error", err)
+				continue
+			}
+			
+			list.Recipes = append(list.Recipes, recipe)
+		}
+	} else {
+		// Old format: entire shopping list in one blob
+		if err = json.Unmarshal(recipebytes, &list); err != nil {
+			return err
+		}
 	}
 
 	// Load the params to properly format the HTML

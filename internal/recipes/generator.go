@@ -69,6 +69,7 @@ type generatorParams struct {
 	//People       int
 	Instructions string   `json:"instructions,omitempty"`
 	LastRecipes  []string `json:"last_recipes,omitempty"`
+	UserID       string   `json:"user_id,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -167,9 +168,49 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (st
 
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 
-	if err := g.cache.Set(p.Hash(), response); err != nil {
-		slog.ErrorContext(ctx, "failed to cache recipe", "location", p.String(), "error", err)
-		return response, err
+	// Parse the response to save recipes separately
+	var shoppingList ai.ShoppingList
+	if err := json.Unmarshal([]byte(response), &shoppingList); err != nil {
+		slog.ErrorContext(ctx, "failed to parse AI response", "error", err)
+		// Fall back to saving the entire response as before
+		if err := g.cache.Set(p.Hash(), response); err != nil {
+			slog.ErrorContext(ctx, "failed to cache recipe", "location", p.String(), "error", err)
+			return response, err
+		}
+	} else {
+		// Save each recipe separately by its hash
+		var recipeHashes []string
+		for i := range shoppingList.Recipes {
+			recipe := &shoppingList.Recipes[i]
+			recipe.Hash = recipe.ComputeHash()
+			recipeHashes = append(recipeHashes, recipe.Hash)
+			
+			recipeJSON, err := json.Marshal(recipe)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to marshal recipe", "recipe", recipe.Title, "error", err)
+				continue
+			}
+			
+			if err := g.cache.Set("recipe/"+recipe.Hash, string(recipeJSON)); err != nil {
+				slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
+			}
+		}
+		
+		// Create and save the shopping list document
+		doc := ai.ShoppingListDocument{
+			RecipeHashes: recipeHashes,
+			Instructions: p.Instructions,
+			UserID:       p.UserID,
+			CreatedAt:    time.Now().Format(time.RFC3339),
+		}
+		docJSON, err := json.Marshal(doc)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to marshal shopping list document", "error", err)
+		} else {
+			if err := g.cache.Set(p.Hash(), string(docJSON)); err != nil {
+				slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
+			}
+		}
 	}
 
 	// Also cache the params for hash-based retrieval
