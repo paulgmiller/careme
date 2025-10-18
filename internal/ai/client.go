@@ -60,7 +60,13 @@ func (r *Recipe) ComputeHash() string {
 		DrinkPairing: r.DrinkPairing,
 	}
 	
-	jsonBytes, _ := json.Marshal(data)
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		// This should never happen with our struct, but if it does,
+		// fall back to hashing the title alone to avoid collisions
+		hash := sha256.Sum256([]byte(r.Title))
+		return hex.EncodeToString(hash[:])
+	}
 	hash := sha256.Sum256(jsonBytes)
 	return hex.EncodeToString(hash[:])
 }
