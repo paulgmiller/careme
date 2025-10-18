@@ -3,6 +3,8 @@ package ai
 import (
 	"careme/internal/locations"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -36,10 +38,43 @@ type Recipe struct {
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
+	Hash         string       `json:"hash,omitempty"` // SHA256 hash of the recipe content
+}
+
+// ComputeHash calculates the SHA256 hash of the recipe content
+func (r *Recipe) ComputeHash() string {
+	// Create a canonical representation of the recipe for hashing
+	data := struct {
+		Title        string
+		Description  string
+		Ingredients  []Ingredient
+		Instructions []string
+		Health       string
+		DrinkPairing string
+	}{
+		Title:        r.Title,
+		Description:  r.Description,
+		Ingredients:  r.Ingredients,
+		Instructions: r.Instructions,
+		Health:       r.Health,
+		DrinkPairing: r.DrinkPairing,
+	}
+	
+	jsonBytes, _ := json.Marshal(data)
+	hash := sha256.Sum256(jsonBytes)
+	return hex.EncodeToString(hash[:])
 }
 
 type ShoppingList struct {
 	Recipes []Recipe `json:"recipes"`
+}
+
+// ShoppingListDocument represents a shopping list with metadata and recipe references
+type ShoppingListDocument struct {
+	RecipeHashes []string `json:"recipe_hashes"` // SHA256 hashes of individual recipes
+	Instructions string   `json:"instructions"`
+	UserID       string   `json:"user_id,omitempty"`
+	CreatedAt    string   `json:"created_at"`
 }
 
 // Removed custom OpenAIRequest/OpenAIResponse in favor of official SDK types
