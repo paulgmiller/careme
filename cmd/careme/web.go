@@ -109,11 +109,14 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 
-		recipeTitle := strings.TrimSpace(r.FormValue("previous_recipe"))
+		recipeTitle := strings.TrimSpace(r.FormValue("recipe"))
 		if recipeTitle == "" {
-			http.Redirect(w, r, "/user", http.StatusSeeOther)
+			slog.ErrorContext(ctx, "no recipe title provided")
+			http.Error(w, "no recipe title provided", http.StatusBadRequest)
 			return
 		}
+
+		hash := strings.TrimSpace(r.FormValue("hash"))
 
 		// Check for duplicates
 		for _, existing := range currentUser.LastRecipes {
@@ -125,7 +128,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		newRecipe := users.Recipe{
 			Title:     recipeTitle,
-			Hash:      "",
+			Hash:      hash,
 			CreatedAt: time.Now(),
 		}
 		currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
@@ -296,6 +299,10 @@ func runServer(cfg *config.Config, addr string) error {
 		if i := r.URL.Query().Get("instructions"); i != "" {
 			p.Instructions = i
 		}
+		// Set user ID if available
+		if currentUser != nil && currentUser.ID != "" {
+			p.UserID = currentUser.ID
+		}
 		hash := p.Hash()
 		if err := generator.FromCache(ctx, hash, p, w); err == nil {
 			return
@@ -303,7 +310,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		go func() {
 			slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
-			_, err := generator.GenerateRecipes(ctx, p)
+			err := generator.GenerateRecipes(ctx, p)
 			if err != nil {
 				slog.ErrorContext(ctx, "generate error", "error", err)
 				return

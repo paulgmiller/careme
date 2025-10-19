@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -93,7 +94,7 @@ func main() {
 }
 
 func run(cfg *config.Config, location string, ingredient string) error {
-
+	ctx := context.Background()
 	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
@@ -116,19 +117,21 @@ func run(cfg *config.Config, location string, ingredient string) error {
 		return nil
 	}
 
-	l, err := locations.GetLocationByID(context.TODO(), cfg, location) // get details but ignore error
+	l, err := locations.GetLocationByID(ctx, cfg, location) // get details but ignore error
 	if err != nil {
 		return fmt.Errorf("could not get location details: %w", err)
 	}
 
 	p := recipes.DefaultParams(l, time.Now())
-	generatedRecipes, err := generator.GenerateRecipes(context.Background(), p)
+	err = generator.GenerateRecipes(ctx, p)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes: %w", err)
 	}
-
-	//output := formatter.FormatRecipes(generatedRecipes)
-	fmt.Println(generatedRecipes)
+	var w io.Writer = os.Stdout
+	err = generator.FromCache(ctx, p.Hash(), p, w)
+	if err != nil {
+		return fmt.Errorf("failed to get generated recipes from cache: %w", err)
+	}
 
 	return nil
 }

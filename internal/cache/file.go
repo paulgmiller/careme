@@ -37,5 +37,11 @@ func (fc *FileCache) Get(key string) (io.ReadCloser, error) {
 }
 
 func (fc *FileCache) Set(key, value string) error {
-	return os.WriteFile(filepath.Join(fc.Dir, key), []byte(value), 0644)
+	fullPath := filepath.Join(fc.Dir, key)
+	dir := filepath.Dir(fullPath)
+	// Create parent directories if they don't exist
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(fullPath, []byte(value), 0644)
 }

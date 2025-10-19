@@ -16,7 +16,7 @@ func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/ready" {
 		return
 	}
-	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "duration", time.Since(start))
+	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "form", r.Form, "duration", time.Since(start))
 }
 
 type recoverer struct {

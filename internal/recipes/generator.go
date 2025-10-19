@@ -24,9 +24,13 @@ import (
 	"careme/internal/locations"
 )
 
+type aiClient interface {
+	GenerateRecipes(location *locations.Location, ingredients []string, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+}
+
 type Generator struct {
 	config         *config.Config
-	aiClient       *ai.Client
+	aiClient       aiClient
 	krogerClient   kroger.ClientWithResponsesInterface //probably need only subset
 	cache          cache.Cache
 	inFlight       map[string]struct{}
@@ -69,6 +73,7 @@ type generatorParams struct {
 	//People       int
 	Instructions string   `json:"instructions,omitempty"`
 	LastRecipes  []string `json:"last_recipes,omitempty"`
+	UserID       string   `json:"user_id,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -137,49 +142,57 @@ func DefaultStaples() []filter {
 	}
 }
 
-func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (string, error) {
+func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) error {
 	slog.Info("Generating recipes for location", "location", p.String())
-
-	/*previousRecipes, err := g.getPreviousRecipes()
-	if err != nil {
-		slog.Warn("Warning: Could not fetch recipe history", "error", err)
-		previousRecipes = []string{}
-	}*/
 
 	hash := p.Hash()
 	generating, done := g.isGenerating(hash)
 	if generating {
 		slog.InfoContext(ctx, "Generation already in progress, skipping", "hash", hash)
-		return "", nil
+		return nil
 	}
 	defer done()
 	start := time.Now()
 
 	ingredients, err := g.GetStaples(ctx, p)
 	if err != nil {
-		return "", fmt.Errorf("failed to get staples: %w", err)
+		return fmt.Errorf("failed to get staples: %w", err)
 	}
 
-	response, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
+		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 
-	if err := g.cache.Set(p.Hash(), response); err != nil {
-		slog.ErrorContext(ctx, "failed to cache recipe", "location", p.String(), "error", err)
-		return response, err
+	// Save each recipe separately by its hash
+	for _, recipe := range shoppingList.Recipes {
+		recipeJSON := lo.Must(json.Marshal(recipe))
+		if err := g.cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
+			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
+			return err
+		}
+	}
+	//we could actually nuke out the rest of recipe and lazily load but not yet
+	shoppingJSON := lo.Must(json.Marshal(shoppingList))
+	if err := g.cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
+		slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
+		return err
 	}
 
 	// Also cache the params for hash-based retrieval
+	// TODO: Consider embedding the params directly in the shoppingList structure.
+	// This would allow us to cache both the shopping list and its associated parameters together,
+	// avoiding the need for a separate cache entry for params (currently stored as "<hash>.params").
+	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
 	paramsJSON := lo.Must(json.Marshal(p))
-
 	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
+		return err
 	}
 
-	return response, nil
+	return nil
 }
 
 // LoadParamsFromHash loads generator params from cache using the hash
