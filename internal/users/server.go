@@ -13,40 +13,23 @@ type server struct {
 	storage       *Storage
 	clarityScript template.HTML
 	userTmpl      *template.Template
-	mux           *http.ServeMux
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, clarityScript template.HTML, userTmpl *template.Template) http.Handler {
-	s := &server{
+func NewHandler(storage *Storage, clarityScript template.HTML, userTmpl *template.Template) *server {
+	return &server{
 		storage:       storage,
 		clarityScript: clarityScript,
 		userTmpl:      userTmpl,
 	}
-	router := http.NewServeMux()
-	router.HandleFunc("/", s.handleUser)
-	router.HandleFunc("/recipes", s.handleUserRecipes)
-	s.mux = router
-	return s
 }
 
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/user")
-	if path == "" {
-		path = "/"
-	} else if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	r2 := r.Clone(r.Context())
-	r2.URL.Path = path
-	s.mux.ServeHTTP(w, r2)
+func (s *server) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/user", s.handleUser)
+	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
 }
 
 func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
 	ctx := r.Context()
 	currentUser, err := FromRequest(r, s.storage)
 	if err != nil {

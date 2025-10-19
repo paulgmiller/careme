@@ -34,11 +34,13 @@ func runServer(cfg *config.Config, addr string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
+	mux := http.NewServeMux()
 
 	userHandler := users.NewHandler(userStorage, clarityScript, userTmpl)
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, spinnerTmpl)
+	userHandler.Register(mux)
 
-	mux := http.NewServeMux()
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, spinnerTmpl)
+	recipeHandler.Register(mux)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -97,11 +99,6 @@ func runServer(cfg *config.Config, addr string) error {
 		users.ClearCookie(w)
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
-
-	mux.Handle("/user", userHandler)
-	mux.Handle("/user/", userHandler)
-	mux.Handle("/recipes", recipeHandler)
-	mux.Handle("/recipes/", recipeHandler)
 
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))

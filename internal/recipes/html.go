@@ -18,22 +18,32 @@ var templatesFS embed.FS
 
 var templates = template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
 
-func (g *Generator) FromCache(ctx context.Context, hash string, p *generatorParams, w io.Writer) error {
-	recipe, err := g.cache.Get(hash)
+func (g *Generator) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
+	recipe, err := g.cache.Get("recipe/" + hash)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer recipe.Close()
 
-	recipebytes, err := io.ReadAll(recipe)
+	var singleRecipe ai.Recipe
+	err = json.NewDecoder(recipe).Decode(&singleRecipe)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to read cached recipe for hash", "hash", hash, "error", err)
+		return nil, err
+	}
+	return &singleRecipe, nil
+}
+
+func (g *Generator) FromCache(ctx context.Context, hash string, p *generatorParams, w io.Writer) error {
+	shoppinglist, err := g.cache.Get(hash) //this hash prefix is dumb now.
+	if err != nil {
 		return err
 	}
+	defer shoppinglist.Close()
 
-	// Try to parse as ShoppingListDocument first
 	var list ai.ShoppingList
-	if err = json.Unmarshal(recipebytes, &list); err != nil {
+	err = json.NewDecoder(shoppinglist).Decode(&list)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to read cached recipe for hash", "hash", hash, "error", err)
 		return err
 	}
 

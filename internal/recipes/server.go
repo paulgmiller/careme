@@ -5,9 +5,9 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/users"
@@ -19,34 +19,51 @@ type server struct {
 	generator     *Generator
 	clarityScript template.HTML
 	spinnerTmpl   *template.Template
-	mux           *http.ServeMux
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
-func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator, clarityScript template.HTML, spinnerTmpl *template.Template) http.Handler {
-	s := &server{
+func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator, clarityScript template.HTML, spinnerTmpl *template.Template) *server {
+	return &server{
 		cfg:           cfg,
 		storage:       storage,
 		generator:     generator,
 		clarityScript: clarityScript,
 		spinnerTmpl:   spinnerTmpl,
 	}
-	router := http.NewServeMux()
-	router.HandleFunc("/", s.handleRecipes)
-	s.mux = router
-	return s
 }
 
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/recipes")
-	if path == "" {
-		path = "/"
-	} else if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+func (s *server) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /recipes", s.handleRecipes)
+	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
+}
+
+func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hash := r.PathValue("{hash}")
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
 	}
-	r2 := r.Clone(r.Context())
-	r2.URL.Path = path
-	s.mux.ServeHTTP(w, r2)
+
+	recipe, err := s.generator.SingleFromCache(ctx, hash)
+	if err != nil {
+		http.Error(w, "recipe not found", http.StatusNotFound)
+		return
+	}
+
+	p := DefaultParams(&locations.Location{
+		ID:   "",
+		Name: "Unknown Location",
+	}, time.Now())
+
+	list := ai.ShoppingList{
+		Recipes: []ai.Recipe{*recipe},
+	}
+
+	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
+	if err := s.generator.FormatChatHTML(p, list, w); err != nil {
+		http.Error(w, "failed to format recipe", http.StatusInternalServerError)
+	}
 }
 
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
