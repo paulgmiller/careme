@@ -13,6 +13,7 @@ import (
 	openai "github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
 	"github.com/openai/openai-go/v2/responses"
+	"github.com/samber/lo"
 
 	"github.com/invopop/jsonschema"
 )
@@ -28,7 +29,7 @@ type Client struct {
 type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` //should this and price be numbers? need units then
-	Price    string `json:"price"`
+	Price    string `json:"price,omitempty"`
 }
 
 type Recipe struct {
@@ -38,49 +39,19 @@ type Recipe struct {
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
-	Hash         string       `json:"hash,omitempty"` // SHA256 hash of the recipe content
+	Hash         string       `json:"hash,omitempty"`
 }
 
 // ComputeHash calculates the SHA256 hash of the recipe content
 func (r *Recipe) ComputeHash() string {
 	// Create a canonical representation of the recipe for hashing
-	data := struct {
-		Title        string
-		Description  string
-		Ingredients  []Ingredient
-		Instructions []string
-		Health       string
-		DrinkPairing string
-	}{
-		Title:        r.Title,
-		Description:  r.Description,
-		Ingredients:  r.Ingredients,
-		Instructions: r.Instructions,
-		Health:       r.Health,
-		DrinkPairing: r.DrinkPairing,
-	}
-	
-	jsonBytes, err := json.Marshal(data)
-	if err != nil {
-		// This should never happen with our struct, but if it does,
-		// fall back to hashing the title alone to avoid collisions
-		hash := sha256.Sum256([]byte(r.Title))
-		return hex.EncodeToString(hash[:])
-	}
+	jsonBytes := lo.Must(json.Marshal(r))
 	hash := sha256.Sum256(jsonBytes)
 	return hex.EncodeToString(hash[:])
 }
 
 type ShoppingList struct {
-	Recipes []Recipe `json:"recipes"`
-}
-
-// ShoppingListDocument represents a shopping list with metadata and recipe references
-type ShoppingListDocument struct {
-	RecipeHashes []string `json:"recipe_hashes"` // SHA256 hashes of individual recipes
-	Instructions string   `json:"instructions"`
-	UserID       string   `json:"user_id,omitempty"`
-	CreatedAt    string   `json:"created_at"`
+	Recipes []Recipe `json:"recipes,omitempty"`
 }
 
 // Removed custom OpenAIRequest/OpenAIResponse in favor of official SDK types

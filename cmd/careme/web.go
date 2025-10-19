@@ -307,7 +307,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		go func() {
 			slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
-			_, err := generator.GenerateRecipes(ctx, p)
+			err := generator.GenerateRecipes(ctx, p)
 			if err != nil {
 				slog.ErrorContext(ctx, "generate error", "error", err)
 				return

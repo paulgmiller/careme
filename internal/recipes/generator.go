@@ -138,32 +138,26 @@ func DefaultStaples() []filter {
 	}
 }
 
-func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (string, error) {
+func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) error {
 	slog.Info("Generating recipes for location", "location", p.String())
-
-	/*previousRecipes, err := g.getPreviousRecipes()
-	if err != nil {
-		slog.Warn("Warning: Could not fetch recipe history", "error", err)
-		previousRecipes = []string{}
-	}*/
 
 	hash := p.Hash()
 	generating, done := g.isGenerating(hash)
 	if generating {
 		slog.InfoContext(ctx, "Generation already in progress, skipping", "hash", hash)
-		return "", nil
+		return nil
 	}
 	defer done()
 	start := time.Now()
 
 	ingredients, err := g.GetStaples(ctx, p)
 	if err != nil {
-		return "", fmt.Errorf("failed to get staples: %w", err)
+		return fmt.Errorf("failed to get staples: %w", err)
 	}
 
 	response, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate recipes with AI: %w", err)
+		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
@@ -173,54 +167,34 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (st
 	if err := json.Unmarshal([]byte(response), &shoppingList); err != nil {
 		slog.ErrorContext(ctx, "failed to parse AI response", "error", err)
 		// Fall back to saving the entire response as before
-		if err := g.cache.Set(p.Hash(), response); err != nil {
-			slog.ErrorContext(ctx, "failed to cache recipe", "location", p.String(), "error", err)
-			return response, err
+		return err
+	}
+
+	// Save each recipe separately by its hash
+	for _, recipe := range shoppingList.Recipes {
+		recipe.Hash = recipe.ComputeHash()
+		recipeJSON := lo.Must(json.Marshal(recipe))
+		if err := g.cache.Set("recipe/"+recipe.Hash, string(recipeJSON)); err != nil {
+			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
+			return err
 		}
-	} else {
-		// Save each recipe separately by its hash
-		var recipeHashes []string
-		for i := range shoppingList.Recipes {
-			recipe := &shoppingList.Recipes[i]
-			recipe.Hash = recipe.ComputeHash()
-			recipeHashes = append(recipeHashes, recipe.Hash)
-			
-			recipeJSON, err := json.Marshal(recipe)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to marshal recipe", "recipe", recipe.Title, "error", err)
-				continue
-			}
-			
-			if err := g.cache.Set("recipe/"+recipe.Hash, string(recipeJSON)); err != nil {
-				slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
-			}
-		}
-		
-		// Create and save the shopping list document
-		doc := ai.ShoppingListDocument{
-			RecipeHashes: recipeHashes,
-			Instructions: p.Instructions,
-			UserID:       p.UserID,
-			CreatedAt:    time.Now().Format(time.RFC3339),
-		}
-		docJSON, err := json.Marshal(doc)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to marshal shopping list document", "error", err)
-		} else {
-			if err := g.cache.Set(p.Hash(), string(docJSON)); err != nil {
-				slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
-			}
-		}
+	}
+	//we coulld actually nuke out the rest of recipe and lazily load but not yet
+	shoppingJSON := lo.Must(json.Marshal(shoppingList))
+	if err := g.cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
+		slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
+		return err
 	}
 
 	// Also cache the params for hash-based retrieval
+	// just put this in shopping list?
 	paramsJSON := lo.Must(json.Marshal(p))
-
 	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
+		return err
 	}
 
-	return response, nil
+	return nil
 }
 
 // LoadParamsFromHash loads generator params from cache using the hash
