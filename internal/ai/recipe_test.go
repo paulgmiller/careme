@@ -33,13 +33,6 @@ func TestRecipeComputeHash(t *testing.T) {
 	if hash1 == hash3 {
 		t.Fatalf("different recipes should have different hashes")
 	}
-
-	// Hash field should not affect the computed hash
-	recipe.Hash = "some-existing-hash"
-	hash4 := recipe.ComputeHash()
-	if hash1 != hash4 {
-		t.Fatalf("hash field should not affect computed hash: %s != %s", hash1, hash4)
-	}
 }
 
 func TestRecipeHashLength(t *testing.T) {

@@ -16,9 +16,7 @@ import (
 //go:embed templates/*.html
 var templatesFS embed.FS
 
-var templates = template.Must(template.New("").Funcs(template.FuncMap{
-	"add": func(a, b int) int { return a + b },
-}).ParseFS(templatesFS, "templates/*.html"))
+var templates = template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
 
 func (g *Generator) FromCache(ctx context.Context, hash string, p *generatorParams, w io.Writer) error {
 	recipe, err := g.cache.Get(hash)
@@ -62,7 +60,7 @@ func (g *Generator) FromCache(ctx context.Context, hash string, p *generatorPara
 
 // FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
 func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
-
+	//TODO just put prams into shopping list and pass that up?
 	data := struct {
 		Location      locations.Location
 		Date          string

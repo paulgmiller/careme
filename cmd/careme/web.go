@@ -109,11 +109,14 @@ func runServer(cfg *config.Config, addr string) error {
 			return
 		}
 
-		recipeTitle := strings.TrimSpace(r.FormValue("previous_recipe"))
+		recipeTitle := strings.TrimSpace(r.FormValue("recipe"))
 		if recipeTitle == "" {
-			http.Redirect(w, r, "/user", http.StatusSeeOther)
+			slog.ErrorContext(ctx, "no recipe title provided")
+			http.Error(w, "no recipe title provided", http.StatusBadRequest)
 			return
 		}
+
+		hash := strings.TrimSpace(r.FormValue("hash"))
 
 		// Check for duplicates
 		for _, existing := range currentUser.LastRecipes {
@@ -125,7 +128,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		newRecipe := users.Recipe{
 			Title:     recipeTitle,
-			Hash:      "",
+			Hash:      hash,
 			CreatedAt: time.Now(),
 		}
 		currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)

@@ -22,16 +22,16 @@ func TestRecipeFileNaming(t *testing.T) {
 	recipe := ai.Recipe{
 		Title: "Test Recipe",
 	}
-	recipe.Hash = recipe.ComputeHash()
 
+	hash := recipe.ComputeHash()
 	recipeJSON, _ := json.Marshal(recipe)
-	err = fileCache.Set("recipe/"+recipe.Hash, string(recipeJSON))
+	err = fileCache.Set("recipe/"+hash, string(recipeJSON))
 	if err != nil {
 		t.Fatalf("failed to save recipe: %v", err)
 	}
 
 	// Verify file exists at expected path
-	expectedPath := filepath.Join(tmpDir, "recipe", recipe.Hash)
+	expectedPath := filepath.Join(tmpDir, "recipe", hash)
 	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
 		t.Fatalf("recipe file not found at expected path: %s", expectedPath)
 	}

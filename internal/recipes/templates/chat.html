@@ -12,6 +12,9 @@
     button:hover{background:#1d4ed8}
     .share-btn{background:#10b981;margin-top:2rem}
     .share-btn:hover{background:#059669}
+    .save-form{margin-top:1rem}
+    .save-btn{background:#f59e0b}
+    .save-btn:hover{background:#d97706}
     .share-feedback{display:none;color:#10b981;font-size:.9rem;margin-left:.5rem}
     h1{margin-top:0}
     footer{margin-top:2rem;font-size:.75rem;color:#666}
@@ -38,6 +41,11 @@
     </ol>
     <p>{{.Health}}</p>
     <p>{{.DrinkPairing}}</p>
+    <form method="POST" action="/user/recipes" class="save-form">
+      <input type="hidden" name="recipe" value="{{.Title}}">
+      <input type="hidden" name="hash" value="{{.ComputeHash}}">
+      <button type="submit" class="save-btn">Save Recipe</button>
+    </form>
     </section>
     {{end}}
   </div>

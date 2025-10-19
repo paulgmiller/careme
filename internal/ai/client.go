@@ -30,7 +30,7 @@ type Client struct {
 type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` //should this and price be numbers? need units then
-	Price    string `json:"price,omitempty"`
+	Price    string `json:"price"`    //TODO exclue empty
 }
 
 type Recipe struct {
@@ -40,20 +40,18 @@ type Recipe struct {
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
-	Hash         string       `json:"hash,omitempty"`
 }
 
 // ComputeHash calculates the SHA256 hash of the recipe content
-func (r Recipe) ComputeHash() string {
+func (r *Recipe) ComputeHash() string {
 	// Exclude the Hash field itself from the hash computation
-	r.Hash = ""
 	jsonBytes := lo.Must(json.Marshal(r))
 	hash := sha256.Sum256(jsonBytes)
 	return hex.EncodeToString(hash[:])
 }
 
 type ShoppingList struct {
-	Recipes []Recipe `json:"recipes,omitempty"`
+	Recipes []Recipe `json:"recipes"`
 }
 
 // Removed custom OpenAIRequest/OpenAIResponse in favor of official SDK types

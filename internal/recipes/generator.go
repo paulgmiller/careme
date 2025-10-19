@@ -168,9 +168,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 
 	// Save each recipe separately by its hash
 	for _, recipe := range shoppingList.Recipes {
-		recipe.Hash = recipe.ComputeHash()
 		recipeJSON := lo.Must(json.Marshal(recipe))
-		if err := g.cache.Set("recipe/"+recipe.Hash, string(recipeJSON)); err != nil {
+		if err := g.cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
 			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
 			return err
 		}
