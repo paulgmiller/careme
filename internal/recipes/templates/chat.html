@@ -27,7 +27,7 @@
   <div>
   {{range .Recipes}}
     <section>
-    <h3>{{.Title}}</h3>
+    <a href="/recipe/{{.ComputeHash}}"><h3>{{.Title}}</h3></a>
     <p>{{ .Description }}</p>
     <ul>
       {{range  .Ingredients }}
