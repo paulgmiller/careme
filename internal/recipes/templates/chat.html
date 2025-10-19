@@ -58,12 +58,12 @@
   </form>
 
   <div>
-    <button class="share-btn" onclick="shareRecipe()">Share Recipe</button>
+    <button class="share-btn" onclick="shareRecipes()">Share Recipes</button>
     <span class="share-feedback" id="shareFeedback">Link copied!</span>
   </div>
 
   <script>
-    function shareRecipe() {
+    function shareRecipes() {
       const hash = "{{.Hash}}";
       const shareUrl = window.location.origin + "/recipes?h=" + encodeURIComponent(hash);
 
