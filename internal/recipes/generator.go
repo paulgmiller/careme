@@ -174,7 +174,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 			return err
 		}
 	}
-	//we coulld actually nuke out the rest of recipe and lazily load but not yet
+	//we could actually nuke out the rest of recipe and lazily load but not yet
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
 	if err := g.cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
@@ -182,7 +182,10 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	}
 
 	// Also cache the params for hash-based retrieval
-	// just put this in shopping list?
+	// TODO: Consider embedding the params directly in the shoppingList structure.
+	// This would allow us to cache both the shopping list and its associated parameters together,
+	// avoiding the need for a separate cache entry for params (currently stored as "<hash>.params").
+	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
 	paramsJSON := lo.Must(json.Marshal(p))
 	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)

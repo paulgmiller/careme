@@ -30,7 +30,7 @@ type Client struct {
 type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` //should this and price be numbers? need units then
-	Price    string `json:"price"`    //TODO exclue empty
+	Price    string `json:"price"`    //TODO exclude empty
 }
 
 type Recipe struct {
