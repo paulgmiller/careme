@@ -24,9 +24,13 @@ import (
 	"careme/internal/locations"
 )
 
+type aiClient interface {
+	GenerateRecipes(location *locations.Location, ingredients []string, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+}
+
 type Generator struct {
 	config         *config.Config
-	aiClient       *ai.Client
+	aiClient       aiClient
 	krogerClient   kroger.ClientWithResponsesInterface //probably need only subset
 	cache          cache.Cache
 	inFlight       map[string]struct{}
@@ -155,20 +159,12 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
 
-	response, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
-
-	// Parse the response to save recipes separately
-	var shoppingList ai.ShoppingList
-	if err := json.Unmarshal([]byte(response), &shoppingList); err != nil {
-		slog.ErrorContext(ctx, "failed to parse AI response", "error", err)
-		// Fall back to saving the entire response as before
-		return err
-	}
 
 	// Save each recipe separately by its hash
 	for _, recipe := range shoppingList.Recipes {

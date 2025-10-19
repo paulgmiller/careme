@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -43,8 +44,9 @@ type Recipe struct {
 }
 
 // ComputeHash calculates the SHA256 hash of the recipe content
-func (r *Recipe) ComputeHash() string {
-	// Create a canonical representation of the recipe for hashing
+func (r Recipe) ComputeHash() string {
+	// Exclude the Hash field itself from the hash computation
+	r.Hash = ""
 	jsonBytes := lo.Must(json.Marshal(r))
 	hash := sha256.Sum256(jsonBytes)
 	return hex.EncodeToString(hash[:])
@@ -74,7 +76,7 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) (string, error) {
+func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	prompt := c.buildRecipePrompt(location, saleIngredients, instructions, date, lastRecipes)
 
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
@@ -90,7 +92,7 @@ func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients [
 			Format: responses.ResponseFormatTextConfigUnionParam{
 				OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
 					Name:   "recipes",
-					Schema: c.schema,
+					Schema: c.schema, //https://platform.openai.com/docs/guides/structured-outputs?example=structured-data
 				},
 			},
 		},
@@ -100,10 +102,17 @@ func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients [
 
 	resp, err := client.Responses.New(context.TODO(), params)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate recipes: %w", err)
+		return nil, fmt.Errorf("failed to generate recipes: %w", err)
+	}
+	// Parse the response to save recipes separately
+	var shoppingList ShoppingList
+	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
+		slog.ErrorContext(context.TODO(), "failed to parse AI response", "error", err)
+		// Fall back to saving the entire response as before
+		return nil, err
 	}
 
-	return resp.OutputText(), nil
+	return &shoppingList, nil
 }
 
 func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) string {
