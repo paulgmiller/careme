@@ -109,6 +109,8 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png") // <= without this, many UAs ignore it
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		w.Write(favicon)
 	})
 
