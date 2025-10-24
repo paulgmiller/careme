@@ -7,6 +7,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/users"
+	_ "embed"
 	"errors"
 	"fmt"
 	"html/template"
@@ -15,6 +16,9 @@ import (
 	"strings"
 	"time"
 )
+
+//go:embed favicon.png
+var favicon []byte
 
 const sessionDuration = 365 * 24 * time.Hour
 
@@ -105,7 +109,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
+		w.Write(favicon)
 	})
 
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
