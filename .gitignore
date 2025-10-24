@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-careme
+
 
 # Test binary, built with `go test -c`
 *.test
@@ -17,8 +17,6 @@ careme
 
 # Go workspace file
 go.work
-
-
 
 # IDE files
 .vscode/
