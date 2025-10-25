@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var ErrNotFound = errors.New("cache entry not found")
@@ -12,6 +13,7 @@ var ErrNotFound = errors.New("cache entry not found")
 type Cache interface {
 	Get(key string) (io.ReadCloser, error)
 	Set(key, value string) error
+	//List(prefix string) ([]string, error)
 }
 
 type FileCache struct {
@@ -44,4 +46,21 @@ func (fc *FileCache) Set(key, value string) error {
 		return err
 	}
 	return os.WriteFile(fullPath, []byte(value), 0644)
+}
+
+func (fc *FileCache) List(prefix string) ([]string, error) { //should be a iterator.
+	var keys []string
+	err := filepath.Walk(fc.Dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasPrefix(info.Name(), prefix) {
+			keys = append(keys, info.Name())
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return keys, nil
 }
