@@ -5,18 +5,13 @@ import (
 	"careme/internal/config"
 	"careme/internal/html"
 	"careme/internal/kroger"
+	"careme/internal/templates"
 	"context"
-	"embed"
 	"fmt"
 	"html/template"
 	"log"
 	"sync"
 )
-
-//go:embed templates/*.html
-var templatesFS embed.FS
-
-var templates = template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
 
 // this should all be in a location service object
 var locationCache map[string]Location
@@ -72,7 +67,8 @@ func Html(cfg *config.Config, locs []Location, zipstring string) string {
 		ClarityScript: html.ClarityScript(cfg),
 	}
 	var buf bytes.Buffer
-	_ = templates.ExecuteTemplate(&buf, "locations.html", data)
+	//TODO move location server here and handle the error
+	_ = templates.Location.Execute(&buf, data)
 	return buf.String()
 }
 

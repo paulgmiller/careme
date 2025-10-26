@@ -6,6 +6,7 @@ import (
 	"careme/internal/html"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/templates"
 	"careme/internal/users"
 	_ "embed"
 	"errors"
@@ -23,8 +24,6 @@ var favicon []byte
 const sessionDuration = 365 * 24 * time.Hour
 
 func runServer(cfg *config.Config, addr string) error {
-	// Parse templates and spinner on startup (no init function)
-	homeTmpl, spinnerTmpl, userTmpl := loadTemplates()
 
 	cache, err := cache.MakeCache()
 	if err != nil {
@@ -40,10 +39,10 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 	mux := http.NewServeMux()
 
-	userHandler := users.NewHandler(userStorage, clarityScript, userTmpl)
+	userHandler := users.NewHandler(userStorage, clarityScript)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, spinnerTmpl)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript)
 	recipeHandler.Register(mux)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +64,7 @@ func runServer(cfg *config.Config, addr string) error {
 			ClarityScript: clarityScript,
 			User:          currentUser,
 		}
-		if err := homeTmpl.Execute(w, data); err != nil {
+		if err := templates.Home.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}

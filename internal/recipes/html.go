@@ -4,19 +4,14 @@ import (
 	"careme/internal/ai"
 	"careme/internal/html"
 	"careme/internal/locations"
+	"careme/internal/templates"
 	"context"
-	"embed"
 	"encoding/json"
 	"html/template"
 	"io"
 	"log/slog"
 	"time"
 )
-
-//go:embed templates/*.html
-var templatesFS embed.FS
-
-var templates = template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
 
 func (g *Generator) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
 	recipe, err := g.cache.Get("recipe/" + hash)
@@ -86,5 +81,6 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 		Hash:          p.Hash(),
 		Recipes:       l.Recipes,
 	}
-	return templates.ExecuteTemplate(writer, "chat.html", data)
+
+	return templates.Recipe.Execute(writer, data)
 }

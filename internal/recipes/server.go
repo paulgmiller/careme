@@ -10,6 +10,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/templates"
 	"careme/internal/users"
 )
 
@@ -18,17 +19,17 @@ type server struct {
 	storage       *users.Storage
 	generator     *Generator
 	clarityScript template.HTML
-	spinnerTmpl   *template.Template
+	spinnerTmpl   *template.Template //remove?
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
-func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator, clarityScript template.HTML, spinnerTmpl *template.Template) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator, clarityScript template.HTML) *server {
 	return &server{
 		cfg:           cfg,
 		storage:       storage,
 		generator:     generator,
 		clarityScript: clarityScript,
-		spinnerTmpl:   spinnerTmpl,
+		spinnerTmpl:   templates.Spin,
 	}
 }
 
