@@ -1,84 +1,146 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Careme Chat Result</title>
-  <style>
-    body{font-family:system-ui,-apple-system,sans-serif;margin:2rem;background:#f5f7fa;color:#222}
-    pre{background:#111;color:#eee;padding:1rem;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-size:.9rem;line-height:1.3}
-    form{margin-bottom:1.5rem;display:flex;gap:.5rem}
-    input[type=text]{flex:1;padding:.6rem .8rem;border:1px solid #bbb;border-radius:4px;font-size:1rem}
-    button{background:#2563eb;color:#fff;border:0;padding:.6rem 1rem;border-radius:4px;cursor:pointer;font-size:1rem}
-    button:hover{background:#1d4ed8}
-    .share-btn{background:#10b981;margin-top:2rem}
-    .share-btn:hover{background:#059669}
-    .save-form{margin-top:1rem}
-    .save-btn{background:#f59e0b}
-    .save-btn:hover{background:#d97706}
-    .share-feedback{display:none;color:#10b981;font-size:.9rem;margin-left:.5rem}
-    h1{margin-top:0}
-    footer{margin-top:2rem;font-size:.75rem;color:#666}
-  </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Careme Recipes</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              200: '#fed7aa',
+              300: '#fdba74',
+              400: '#fb923c',
+              500: '#f97316',
+              600: '#ea580c',
+              700: '#c2410c',
+              800: '#9a3412',
+              900: '#7c2d12'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
   {{.ClarityScript}}
 </head>
-<body>
-  <h1>Careme Recipes</h1>
-  <h2>Location: {{.Location.Name}} ({{.Location.Address}})</h2>
-  <div>
-  {{range .Recipes}}
-    <section>
-    <a href="/recipe/{{.ComputeHash}}"><h3>{{.Title}}</h3></a>
-    <p>{{ .Description }}</p>
-    <ul>
-      {{range  .Ingredients }}
-      <li>{{.Name}} - {{.Quantity}} - {{.Price}}</li>
-      {{end}}
-    </ul>
-    <ol>
-      {{range  .Instructions }}
-      <li>{{.}}</li>
-      {{end}}
-    </ol>
-    <p>{{.Health}}</p>
-    <p>{{.DrinkPairing}}</p>
-    <form method="POST" action="/user/recipes" class="save-form">
-      <input type="hidden" name="recipe" value="{{.Title}}">
-      <input type="hidden" name="hash" value="{{.ComputeHash}}">
-      <button type="submit" class="save-btn">Save Recipe</button>
-    </form>
+<body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
+  <main class="px-4 py-10">
+    <section class="mx-auto w-full max-w-5xl space-y-8">
+      <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
+        <div class="border-b border-brand-100 p-8">
+          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Careme Recipes</h1>
+          <p class="mt-2 text-gray-600">
+            Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
+            <span class="text-sm text-gray-500">({{.Location.Address}})</span>
+          </p>
+        </div>
+
+        <div class="p-8">
+          <form method="GET" class="flex flex-col gap-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:flex-row sm:items-center">
+            <input type="hidden" name="location" value="{{.Location.ID}}" />
+            <input type="hidden" name="date" value="{{.Date}}" />
+            <label for="instructions" class="text-sm font-medium text-gray-700 sm:w-48">Extra instructions</label>
+            <input id="instructions"
+                   type="text"
+                   name="instructions"
+                   value="{{.Instructions}}"
+                   placeholder="e.g. prefer vegetarian"
+                   class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+            <button type="submit"
+                    class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+              Apply
+            </button>
+          </form>
+
+          <div class="mt-8 space-y-8">
+            {{range .Recipes}}
+            <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+              <header class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    {{.Title}}
+                  </a>
+                  <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
+                </div>
+                <form method="POST" action="/user/recipes" class="flex items-center gap-3">
+                  <input type="hidden" name="recipe" value="{{.Title}}" />
+                  <input type="hidden" name="hash" value="{{.ComputeHash}}" />
+                  <button type="submit"
+                          class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Save Recipe
+                  </button>
+                </form>
+              </header>
+
+              <section class="grid gap-6 md:grid-cols-2">
+                <div>
+                  <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Ingredients</h3>
+                  <ul class="mt-3 space-y-2 text-gray-700">
+                    {{range .Ingredients}}
+                    <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
+                      <span class="font-medium text-brand-700">{{.Name}}</span>
+                      <span class="text-gray-600">{{.Quantity}}</span>
+                      <span class="text-gray-500">{{.Price}}</span>
+                    </li>
+                    {{end}}
+                  </ul>
+                </div>
+                <div>
+                  <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
+                  <ol class="mt-3 list-decimal space-y-2 pl-5 text-gray-700">
+                    {{range .Instructions}}
+                    <li>{{.}}</li>
+                    {{end}}
+                  </ol>
+                </div>
+              </section>
+
+              <section class="space-y-2 text-sm text-gray-600">
+                <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
+                <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
+              </section>
+            </article>
+            {{end}}
+          </div>
+
+          <div class="mt-10 flex flex-wrap items-center gap-4">
+            <button type="button"
+                    onclick="shareRecipes()"
+                    class="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2">
+              Share Recipes
+            </button>
+            <span id="shareFeedback" class="hidden text-sm font-medium text-emerald-600">Link copied!</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="text-center text-sm text-gray-500">Generated by Careme.</p>
     </section>
-    {{end}}
-  </div>
-
-  <form method="GET" style="margin:1rem 0;display:flex;gap:.5rem">
-    <input type="hidden" name="location" value="{{.Location.ID}}">
-    <input type="hidden" name="date" value="{{.Date}}">
-    <input type="text" name="instructions" placeholder="Enter extra instructions" value="{{.Instructions}}">
-    <button type="submit">Apply Instructions</button>
-  </form>
-
-  <div>
-    <button class="share-btn" onclick="shareRecipes()">Share Recipes</button>
-    <span class="share-feedback" id="shareFeedback">Link copied!</span>
-  </div>
+  </main>
 
   <script>
     function shareRecipes() {
       const hash = "{{.Hash}}";
       const shareUrl = window.location.origin + "/recipes?h=" + encodeURIComponent(hash);
 
-      navigator.clipboard.writeText(shareUrl).then(function() {
+      navigator.clipboard.writeText(shareUrl).then(function () {
         const feedback = document.getElementById('shareFeedback');
-        feedback.style.display = 'inline';
-        setTimeout(function() {
-          feedback.style.display = 'none';
+        feedback.classList.remove('hidden');
+        setTimeout(function () {
+          feedback.classList.add('hidden');
         }, 2000);
-      }).catch(function(err) {
+      }).catch(function (err) {
         alert('Failed to copy link: ' + err);
       });
     }
   </script>
-
-  <footer>Generated by Careme.</footer>
 </body>
 </html>
