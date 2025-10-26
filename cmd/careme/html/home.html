@@ -1,55 +1,124 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Careme</title>
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:2rem;background:#f7f7f9}
-    .card{background:#fff;padding:1.5rem;border-radius:8px;max-width:720px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
-    h1{margin-top:0}
-    form{margin-top:1rem}
-    input[type=text],input[type=email]{padding:0.5rem;width:200px;margin-right:0.5rem}
-    button{padding:0.5rem 0.75rem}
-  </style>
+
+  <!-- Tailwind CDN (swap to your build pipeline when ready) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#fff7ed',  // orange-50
+              100: '#ffedd5',
+              200: '#fed7aa',
+              300: '#fdba74',
+              400: '#fb923c',
+              500: '#f97316',  // primary
+              600: '#ea580c',
+              700: '#c2410c',
+              800: '#9a3412',
+              900: '#7c2d12'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
   {{.ClarityScript}}
 </head>
-<body>
-  <div class="card">
-    <h1>Careme</h1>
-    <div>
-      <pre style="white-space:pre-wrap">Careme is your personal chef and sommilier. It will
+<body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
+  <main class="px-4 py-10">
+    <section class="mx-auto w-full max-w-3xl">
+      <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
+        <!-- Header -->
+        <div class="border-b border-brand-100 p-8">
+          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Careme</h1>
+          <p class="mt-2 text-gray-600">
+            Your personal chef and sommelier. Careme will:
+          </p>
+        </div>
 
-1. Take yoru favorite grocery store based on location
-2. Check the stores inventory for fresh meat and seasonal produce
-3. Generate a weekly meal plan from a variety of cuisines and cooking styles.
-</pre>
-    </div>
+        <!-- Content -->
+        <div class="p-8">
+          <ol class="list-decimal list-inside space-y-1 text-gray-700">
+            <li>Find your favorite grocery store based on location.</li>
+            <li>Check the store&rsquo;s inventory for fresh meat and seasonal produce.</li>
+            <li>Generate a weekly meal plan from a variety of cuisines and cooking styles.</li>
+          </ol>
 
-    {{if .User}}
-    <div style="margin-bottom:1rem">
-      <p style="margin:0">Signed in as <strong>{{.User.Email}}</strong></p>
-      <small>User ID: <code>{{.User.ID}}</code></small>
-      <div style="margin-top:0.5rem">
-        <a href="/user" style="color:#2563eb;text-decoration:none;margin-right:1rem">View Profile</a>
-        <form method="POST" action="/logout" style="display:inline">
-          <button type="submit">Sign out</button>
-        </form>
+          {{if .User}}
+          <!-- Signed-in state -->
+          <div class="mt-6 rounded-xl border border-brand-100 bg-brand-50/60 p-5">
+            <p class="text-sm text-gray-700">
+              Signed in as <strong class="text-brand-700">{{.User.Email}}</strong>
+            </p>
+            <div class="mt-3 flex flex-wrap items-center gap-3">
+              <a href="/user"
+                 class="text-brand-700 underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 rounded">
+                View Profile
+              </a>
+              <form method="POST" action="/logout" class="inline">
+                <button type="submit"
+                        class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Sign out
+                </button>
+              </form>
+            </div>
+
+            <div class="mt-4">
+              <a href="/recipes?location={{.User.FavoriteStore}}"
+                 class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Favorite Store!
+              </a>
+            </div>
+          </div>
+
+          <!-- Find stores -->
+          <form method="GET" action="/locations" class="mt-8 space-y-2">
+            <label for="zip" class="block text-sm font-medium text-gray-700">
+              Enter ZIP code to pick a nearby store:
+            </label>
+            <div class="flex flex-col gap-3 sm:flex-row">
+              <input id="zip" name="zip" type="text" inputmode="numeric" pattern="\d{5}" required
+                     placeholder="e.g. 90210"
+                     class="w-full max-w-xs rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <button type="submit"
+                      class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Find Stores
+              </button>
+            </div>
+          </form>
+
+          {{else}}
+          <!-- Signed-out state -->
+          <form method="POST" action="/login" class="mt-6">
+            <label for="email" class="block text-sm font-medium text-gray-700">
+              Enter your email to continue:
+            </label>
+            <div class="mt-2 flex flex-col gap-3 sm:flex-row">
+              <input id="email" name="email" type="email" required placeholder="you@example.com"
+                     class="w-full max-w-sm rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <button type="submit"
+                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Continue
+              </button>
+            </div>
+          </form>
+          {{end}}
+        </div>
       </div>
-    </div>
 
-    <form method="GET" action="/locations">
-      <label for="zip">Enter ZIP code to pick a nearby store:</label><br>
-      <input type="text" id="zip" name="zip" placeholder="e.g. 90210" required pattern="\d{5}">
-      <button type="submit">Find Stores</button>
-    </form>
-    {{else}}
-    <form method="POST" action="/login">
-      <label for="email">Enter your email to continue:</label><br>
-      <input type="email" id="email" name="email" placeholder="you@example.com" required>
-      <button type="submit">Continue</button>
-    </form>
-    {{end}}
-  </div>
+      <!-- Footer note -->
+      <p class="mt-6 text-center text-sm text-gray-500">
+        By continuing you agree to our terms. Fresh picks, zero spam.
+      </p>
+    </section>
+  </main>
 </body>
 </html>
