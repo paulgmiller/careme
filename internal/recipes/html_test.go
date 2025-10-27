@@ -38,6 +38,7 @@ var list = ai.ShoppingList{
 			DrinkPairing: "Water",
 		},
 	},
+	ResponseID: "resp_test_123",
 }
 
 func TestFormatChatHTML_ValidHTML(t *testing.T) {
@@ -93,5 +94,29 @@ func TestFormatChatHTML_NoClarityWhenEmpty(t *testing.T) {
 
 	if bytes.Contains(buf.Bytes(), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")
+	}
+}
+
+func TestFormatChatHTML_IncludesResponseIDHiddenField(t *testing.T) {
+	g := Generator{
+		config: &config.Config{},
+	}
+	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+
+	customList := list
+	customList.ResponseID = "resp_hidden_456"
+
+	var buf bytes.Buffer
+	if err := g.FormatChatHTML(p, customList, &buf); err != nil {
+		t.Fatalf("failed to format chat HTML: %v", err)
+	}
+
+	output := buf.Bytes()
+	if !bytes.Contains(output, []byte(`name="response_id"`)) {
+		t.Error("hidden response_id input should be present")
+	}
+	if !bytes.Contains(output, []byte(`value="resp_hidden_456"`)) {
+		t.Error("hidden response_id input should contain the response identifier")
 	}
 }

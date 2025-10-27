@@ -51,7 +51,8 @@ func (r *Recipe) ComputeHash() string {
 }
 
 type ShoppingList struct {
-	Recipes []Recipe `json:"recipes"`
+	Recipes    []Recipe `json:"recipes"`
+	ResponseID string   `json:"response_id,omitempty" jsonschema:"-"`
 }
 
 // Removed custom OpenAIRequest/OpenAIResponse in favor of official SDK types
@@ -74,7 +75,7 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string, previousResponseID string) (*ShoppingList, error) {
 	prompt := c.buildRecipePrompt(location, saleIngredients, instructions, date, lastRecipes)
 
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
@@ -98,6 +99,10 @@ func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients [
 		//should we stream. Can we pass past generation.
 	}
 
+	if previousResponseID != "" {
+		params.PreviousResponseID = openai.String(previousResponseID)
+	}
+
 	resp, err := client.Responses.New(context.TODO(), params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes: %w", err)
@@ -110,6 +115,7 @@ func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients [
 		return nil, err
 	}
 
+	shoppingList.ResponseID = resp.ID
 	return &shoppingList, nil
 }
 

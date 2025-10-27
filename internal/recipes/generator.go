@@ -25,7 +25,7 @@ import (
 )
 
 type aiClient interface {
-	GenerateRecipes(location *locations.Location, ingredients []string, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	GenerateRecipes(location *locations.Location, ingredients []string, instructions string, date time.Time, lastRecipes []string, previousResponseID string) (*ai.ShoppingList, error)
 }
 
 type Generator struct {
@@ -67,9 +67,10 @@ func (g *Generator) isGenerating(hash string) (bool, func()) {
 }
 
 type generatorParams struct {
-	Location *locations.Location `json:"location,omitempty"`
-	Date     time.Time           `json:"date,omitempty"`
-	Staples  []filter            `json:"staples,omitempty"`
+	Location           *locations.Location `json:"location,omitempty"`
+	Date               time.Time           `json:"date,omitempty"`
+	Staples            []filter            `json:"staples,omitempty"`
+	PreviousResponseID string              `json:"previous_response_id,omitempty"`
 	//People       int
 	Instructions string   `json:"instructions,omitempty"`
 	LastRecipes  []string `json:"last_recipes,omitempty"`
@@ -159,7 +160,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
 
-	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes, p.PreviousResponseID)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}

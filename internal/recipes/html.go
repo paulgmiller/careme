@@ -71,6 +71,7 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 		Date          string
 		ClarityScript template.HTML
 		Instructions  string
+		ResponseID    string
 		Hash          string
 		Recipes       []ai.Recipe
 	}{
@@ -78,6 +79,7 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 		Date:          p.Date.Format("2006-01-02"),
 		ClarityScript: html.ClarityScript(g.config),
 		Instructions:  p.Instructions,
+		ResponseID:    l.ResponseID,
 		Hash:          p.Hash(),
 		Recipes:       l.Recipes,
 	}

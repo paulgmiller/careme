@@ -58,7 +58,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}, time.Now())
 
 	list := ai.ShoppingList{
-		Recipes: []ai.Recipe{*recipe},
+		Recipes:    []ai.Recipe{*recipe},
+		ResponseID: "",
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
@@ -127,6 +128,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	if instructions := r.URL.Query().Get("instructions"); instructions != "" {
 		p.Instructions = instructions
+	}
+
+	if responseID := r.URL.Query().Get("response_id"); responseID != "" {
+		p.PreviousResponseID = responseID
 	}
 
 	p.UserID = currentUser.ID
