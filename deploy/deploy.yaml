@@ -96,6 +96,16 @@ spec:
                 name: careme
                 port:
                   number: 80
+    - host: careme.cooking
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: careme
+                port:
+                  number: 80
   # Uncomment TLS section after DNS points to ingress controller and certificate issuer is set up
   # tls:
   #   - hosts:
