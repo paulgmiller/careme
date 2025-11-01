@@ -243,27 +243,27 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]strin
 		return ingredients, nil
 	}
 
-	//var errors []error
-	//var wg sync.WaitGroup
-	//var lock sync.Mutex
-	//wg.Add(len(p.Staples))
+	var errors []error
+	var wg sync.WaitGroup
+	var lock sync.Mutex
+	wg.Add(len(p.Staples))
 	for _, category := range p.Staples {
-		//func(category filter) {
-		//	defer wg.Done()
+		go func(category filter) {
+			defer wg.Done()
 
-		cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
-		//lock.Lock()
-		//defer lock.Unlock()
-		if err != nil {
-			//errors = append(errors, fmt.Errorf("failed to get ingredients: %w", err))
-			return nil, err
-		}
-		ingredients = append(ingredients, cingredients...)
-		slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
-		//	}(category)
+			cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
+			lock.Lock()
+			defer lock.Unlock()
+			if err != nil {
+				errors = append(errors, fmt.Errorf("failed to get ingredients: %w", err))
+				return
+			}
+			ingredients = append(ingredients, cingredients...)
+			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
+		}(category)
 	}
 
-	//wg.Wait()
+	wg.Wait()
 
 	if err := g.cache.Set(p.LocationHash(), strings.Join(ingredients, "\n")); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
