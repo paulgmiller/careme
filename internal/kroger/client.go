@@ -108,7 +108,7 @@ func GetOAuth2Token(ctx context.Context, clientID, clientSecret string) (string,
 	return tm.GetToken(ctx)
 }
 
-func FromConfig(ctx context.Context, cfg *config.Config) (*ClientWithResponses, error) {
+func FromConfig(cfg *config.Config) (*ClientWithResponses, error) {
 	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
 
 	// Custom request editor that refreshes token if needed
