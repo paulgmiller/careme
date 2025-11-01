@@ -95,7 +95,10 @@ func (h *writer) Close() error {
 }
 
 func (h *writer) Write(p []byte) (n int, err error) {
-	h.ch <- p
+	// Copy because slog reuses its buffers after Write returns.
+	line := make([]byte, len(p))
+	copy(line, p)
+	h.ch <- line
 	//could err on closed but loggers just lose it anyways
 	return len(p), nil
 } // internals
