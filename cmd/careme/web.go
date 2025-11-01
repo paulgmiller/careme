@@ -47,6 +47,7 @@ func runServer(cfg *config.Config, addr string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
+	locationserver.Register(mux)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, locationserver)
 	recipeHandler.Register(mux)
