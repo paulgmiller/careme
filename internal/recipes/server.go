@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"context"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -14,22 +15,28 @@ import (
 	"careme/internal/users"
 )
 
+type locServer interface {
+	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
+}
+
 type server struct {
 	cfg           *config.Config
 	storage       *users.Storage
 	generator     *Generator
 	clarityScript template.HTML
 	spinnerTmpl   *template.Template //remove?
+	locServer     locServer
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
-func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator, clarityScript template.HTML) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator, clarityScript template.HTML, locServer locServer) *server {
 	return &server{
 		cfg:           cfg,
 		storage:       storage,
 		generator:     generator,
 		clarityScript: clarityScript,
 		spinnerTmpl:   templates.Spin,
+		locServer:     locServer,
 	}
 }
 
@@ -111,7 +118,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	l, err := locations.GetLocationByID(ctx, s.cfg, loc)
+	l, err := s.locServer.GetLocationByID(ctx, loc)
 	if err != nil {
 		http.Error(w, "could not get location details", http.StatusBadRequest)
 		return

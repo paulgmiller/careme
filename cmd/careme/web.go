@@ -8,6 +8,7 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/templates"
 	"careme/internal/users"
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -42,7 +43,12 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, clarityScript)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript)
+	locationserver, err := locations.New(context.TODO(), cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create location server: %w", err)
+	}
+
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, locationserver)
 	recipeHandler.Register(mux)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -111,34 +117,6 @@ func runServer(cfg *config.Config, addr string) error {
 		w.Header().Set("Content-Type", "image/png") // <= without this, many UAs ignore it
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		w.Write(favicon)
-	})
-
-	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		_, err := users.FromRequest(r, userStorage)
-		if err != nil {
-			if errors.Is(err, users.ErrNotFound) {
-				users.ClearCookie(w)
-				http.Redirect(w, r, "/", http.StatusSeeOther)
-				return
-			}
-			slog.ErrorContext(ctx, "failed to load user for locations", "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}
-		zip := r.URL.Query().Get("zip")
-		if zip == "" {
-			slog.InfoContext(ctx, "no zip code provided to /locations")
-			http.Error(w, "provide a zip code with ?zip=12345", http.StatusBadRequest)
-			return
-		}
-		locs, err := locations.GetLocationsByZip(ctx, cfg, zip)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to get locations for zip", "zip", zip, "error", err)
-			http.Error(w, "could not get locations", http.StatusInternalServerError)
-			return
-		}
-		w.Write([]byte(locations.Html(cfg, locs, zip)))
 	})
 
 	slog.Info("Serving Careme", "address", addr)

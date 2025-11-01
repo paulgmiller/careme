@@ -72,7 +72,11 @@ func main() {
 	}
 
 	if zipcode != "" {
-		locs, err := locations.GetLocationsByZip(context.TODO(), cfg, zipcode)
+		ls, err := locations.New(ctx, cfg)
+		if err != nil {
+			log.Fatalf("failed to create location server: %v", err)
+		}
+		locs, err := ls.GetLocationsByZip(ctx, zipcode)
 		if err != nil {
 			log.Fatalf("failed to get locations for zip %s: %v", zipcode, err)
 		}
@@ -117,7 +121,12 @@ func run(cfg *config.Config, location string, ingredient string) error {
 		return nil
 	}
 
-	l, err := locations.GetLocationByID(ctx, cfg, location) // get details but ignore error
+	ls, err := locations.New(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create location server: %w", err)
+	}
+
+	l, err := ls.GetLocationByID(ctx, location) // get details but ignore error
 	if err != nil {
 		return fmt.Errorf("could not get location details: %w", err)
 	}

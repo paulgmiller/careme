@@ -38,7 +38,7 @@ type Generator struct {
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
-	client, err := kroger.FromConfig(context.TODO(), cfg)
+	client, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
