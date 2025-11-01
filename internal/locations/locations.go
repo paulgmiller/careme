@@ -14,13 +14,16 @@ import (
 	"sync"
 )
 
-func init() {
+type krogerClient interface {
+	LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error)
+	// LocationDetailsWithResponse request
+	LocationDetailsWithResponse(ctx context.Context, locationId string, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationDetailsResponse, error)
 }
 
 type locationServer struct {
 	locationCache map[string]Location
 	cacheLock     sync.Mutex // to protect locationMap
-	client        *kroger.ClientWithResponses
+	client        krogerClient
 	clarity       template.HTML //ugh should do better here.
 }
 
