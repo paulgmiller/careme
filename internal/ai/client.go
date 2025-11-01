@@ -100,6 +100,7 @@ func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients [
 	}
 
 	if previousResponseID != "" {
+		// don't need all of prompt? just the new instructions.
 		params.PreviousResponseID = openai.String(previousResponseID)
 	}
 
