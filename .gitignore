@@ -29,5 +29,6 @@ Thumbs.db
 #secrets
 .env
 
-# Cache directory
-cache/careme
+# Cache directory and compiled binary
+cache/
+careme
