@@ -43,6 +43,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator
 func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
+	mux.HandleFunc("GET /ingredients/{hash}", s.handleIngredients)
 }
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +72,26 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
 	if err := s.generator.FormatChatHTML(p, list, w); err != nil {
 		http.Error(w, "failed to format recipe", http.StatusInternalServerError)
+	}
+}
+
+func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hash := r.PathValue("hash")
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+
+	recipe, err := s.generator.SingleFromCache(ctx, hash)
+	if err != nil {
+		http.Error(w, "recipe not found", http.StatusNotFound)
+		return
+	}
+
+	slog.InfoContext(ctx, "serving ingredients by hash", "hash", hash)
+	if err := s.generator.FormatIngredientsHTML(recipe, w); err != nil {
+		http.Error(w, "failed to format ingredients", http.StatusInternalServerError)
 	}
 }
 
