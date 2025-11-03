@@ -5,6 +5,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/html"
 	"careme/internal/locations"
+	"careme/internal/logs"
 	"careme/internal/recipes"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -51,6 +52,13 @@ func runServer(cfg *config.Config, addr string) error {
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, locationserver)
 	recipeHandler.Register(mux)
+
+	logsHandler, err := logs.NewHandler(clarityScript)
+	if err != nil {
+		slog.Warn("failed to create logs handler", "error", err)
+	} else {
+		logsHandler.Register(mux)
+	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
