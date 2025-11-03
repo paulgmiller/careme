@@ -84,3 +84,18 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 
 	return templates.Recipe.Execute(writer, data)
 }
+
+// FormatIngredientsHTML renders just the ingredients list for a single recipe
+func (g *Generator) FormatIngredientsHTML(recipe *ai.Recipe, writer io.Writer) error {
+	data := struct {
+		Recipe        ai.Recipe
+		RecipeHash    string
+		ClarityScript template.HTML
+	}{
+		Recipe:        *recipe,
+		RecipeHash:    recipe.ComputeHash(),
+		ClarityScript: html.ClarityScript(g.config),
+	}
+
+	return templates.Ingredients.Execute(writer, data)
+}

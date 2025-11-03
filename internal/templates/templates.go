@@ -13,7 +13,8 @@ var (
 	Spin,
 	User,
 	Recipe,
-	Location *template.Template
+	Location,
+	Ingredients *template.Template
 )
 
 func init() {
@@ -26,6 +27,7 @@ func init() {
 	User = ensure(tmpls, "user.html")
 	Recipe = ensure(tmpls, "chat.html")
 	Location = ensure(tmpls, "locations.html")
+	Ingredients = ensure(tmpls, "ingredients.html")
 }
 
 func ensure(templates *template.Template, name string) *template.Template {
