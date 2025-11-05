@@ -243,23 +243,22 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]strin
 		return ingredients, nil
 	}
 
-	var errors []error
 	var wg sync.WaitGroup
 	var lock sync.Mutex
 	wg.Add(len(p.Staples))
 	for _, category := range p.Staples {
 		go func(category filter) {
 			defer wg.Done()
-
 			cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
-			lock.Lock()
-			defer lock.Unlock()
 			if err != nil {
-				errors = append(errors, fmt.Errorf("failed to get ingredients: %w", err))
+				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
 				return
 			}
+			lock.Lock()
+			defer lock.Unlock()
 			ingredients = append(ingredients, cingredients...)
-			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
+			//slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
+
 		}(category)
 	}
 
@@ -274,11 +273,12 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]strin
 
 // move to krogrer client as everyone will be differnt here?
 func (g *Generator) GetIngredients(location string, f filter, skip int) ([]string, error) {
-	limit := 50
+	limit := 10
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
 	//brand := "empty" doesn't work have to check for nil
 	//fulfillment := "ais" drmatically shortens?
+	//wrapped this in a retry and it did nothng
 	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
 		FilterLocationId: &location,
 		FilterTerm:       &f.Term,
@@ -288,13 +288,11 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 		//FilterFulfillment: &fulfillment,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed on product searchwith response %w", err)
+		return nil, fmt.Errorf("kroger product search request failed: %w", err)
 	}
-
 	if products.StatusCode() != http.StatusOK {
 		output, _ := json.Marshal(products.JSON500) //handle other errors?
-		slog.Error("Kroger ProductSearchWithResponse returned error", "term", f.Term, "status", products.StatusCode(), "error", string(output))
-		return nil, fmt.Errorf("got %d code from kroger", products.StatusCode())
+		return nil, fmt.Errorf("got %d code from kroger : %s", products.StatusCode(), string(output))
 	}
 
 	var ingredients []string
@@ -334,15 +332,18 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 		}
 	}
 
+	slog.Info("got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "location", location)
+
 	//recursion is pretty dumb pagination
-	if len(*products.JSON200.Data) == limit && skip+limit < 250 { //fence post error
+	/* ummm seem to be having 500's from any skip query?
+	if len(*products.JSON200.Data) == limit && skip+limit < 100 { //fence post error
 		page, err := g.GetIngredients(location, f, skip+limit)
 		if err != nil {
-			return nil, nil
+			return ingredients, nil
 		}
 		ingredients = append(ingredients, page...)
 	}
-
+	*/
 	return ingredients, nil
 }
 
