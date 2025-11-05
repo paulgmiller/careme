@@ -117,33 +117,38 @@ func (g *generatorParams) LocationHash() string {
 func DefaultStaples() []filter {
 	return []filter{
 		{
-			Term: "beef",
+			Term:   "beef",
+			Brands: []string{"Simple Truth", "Kroger"},
 		},
 		{
 			Term:   "chicken",
-			Brands: []string{"Foster Farms", "Draper Valley"}, //"Simple Truth"? do these vary in every state?
+			Brands: []string{"Foster Farms", "Draper Valley", "Simple Truth"}, //"Simple Truth"? do these vary in every state?
 		},
 		{
 			Term: "fish",
 		},
 		{
-			Term: "pork", //Kroger?
+			Term:   "pork", //Kroger?
+			Brands: []string{"PORK", "Kroger", "Harris Teeter"},
 		},
 		{
-			Term: "shellfish",
+			Term:   "shellfish",
+			Brands: []string{"Sand Bar", "Kroger"},
+			Frozen: true, //remove after 500 sadness?
 		},
 		{
 			Term:   "lamb",
 			Brands: []string{"Simple Truth"},
 		},
 		{
-			Term: "produce vegetable",
+			Term:   "produce vegetable",
+			Brands: []string{"*"}, //ther's alot of fresh * and kroger here. cut this down after 500 sadness
 		},
 	}
 }
 
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) error {
-	slog.Info("Generating recipes for location", "location", p.String())
+	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
 
 	hash := p.Hash()
 	generating, done := g.isGenerating(hash)
@@ -213,12 +218,14 @@ func (g *Generator) LoadParamsFromHash(hash string) (*generatorParams, error) {
 type filter struct {
 	Term   string   `json:"term,omitempty"`
 	Brands []string `json:"brands,omitempty"`
+	Frozen bool     `json:"frozen,omitempty"`
 }
 
-func Filter(term string, brands []string) filter {
+func Filter(term string, brands []string, frozen bool) filter {
 	return filter{
 		Term:   term,
 		Brands: brands,
+		Frozen: frozen,
 	}
 }
 
@@ -249,7 +256,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]strin
 	for _, category := range p.Staples {
 		go func(category filter) {
 			defer wg.Done()
-			cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
+			cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
 			if err != nil {
 				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
 				return
@@ -271,8 +278,11 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]strin
 	return ingredients, nil
 }
 
+type ingredient struct {
+}
+
 // move to krogrer client as everyone will be differnt here?
-func (g *Generator) GetIngredients(location string, f filter, skip int) ([]string, error) {
+func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]string, error) {
 	limit := 10
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
@@ -304,7 +314,7 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 			continue
 		}
 		//end up with a bunch of frozen chicken with out this.
-		if slices.Contains(*product.Categories, "Frozen") {
+		if slices.Contains(*product.Categories, "Frozen") && !f.Frozen {
 			continue
 		}
 		for _, item := range *product.Items {
@@ -316,11 +326,12 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 			//does just giving the model json work better here?
 			ingredient := fmt.Sprintf(
 				"%s %s price %.2f", //				"%s, %s %s price %.2f %s",
-				//toStr(product.Brand),
 				toStr(product.Description),
 				toStr(item.Size),
 				toFloat32(item.Price.Regular),
+				//useful for debugging
 				//strings.Join(*product.Categories, ", "),
+				//toStr(product.Brand),
 			)
 
 			if toFloat32(item.Price.Promo) > 0.0 {
@@ -332,7 +343,7 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 		}
 	}
 
-	slog.Info("got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "location", location)
+	slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location)
 
 	//recursion is pretty dumb pagination
 	/* ummm seem to be having 500's from any skip query?

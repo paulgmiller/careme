@@ -110,8 +110,8 @@ func run(cfg *config.Config, location string, ingredient string) error {
 	}
 
 	if ingredient != "" {
-		f := recipes.Filter(ingredient, []string{"*"})
-		ings, err := generator.GetIngredients(location, f, 0)
+		f := recipes.Filter(ingredient, []string{"*"}, false /*frozen*/)
+		ings, err := generator.GetIngredients(ctx, location, f, 0)
 		if err != nil {
 			return fmt.Errorf("failed to get ingredients: %w", err)
 		}
