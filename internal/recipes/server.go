@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"html/template"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -125,6 +126,19 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p := DefaultParams(l, date)
+
+	p.UserID = currentUser.ID
+
+	if r.URL.Query().Get("ingredients") == "true" {
+		lochash := p.LocationHash()
+		if ingredientblob, err := s.generator.cache.Get(lochash); err == nil {
+			slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
+			defer ingredientblob.Close()
+			io.Copy(w, ingredientblob)
+			w.Header().Add("Content-Type", "application/json")
+		}
+	}
+
 	for _, last := range currentUser.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
 			continue
@@ -135,8 +149,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if instructions := r.URL.Query().Get("instructions"); instructions != "" {
 		p.Instructions = instructions
 	}
-
-	p.UserID = currentUser.ID
 
 	hash := p.Hash()
 	if err := s.generator.FromCache(ctx, hash, p, w); err == nil {
