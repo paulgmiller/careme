@@ -1,7 +1,6 @@
 package recipes
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -163,8 +161,12 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	if err != nil {
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
+	stringIngredients := make([]string, len(ingredients))
+	for _, ing := range ingredients {
+		stringIngredients = append(stringIngredients, ing.String())
+	}
 
-	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, stringIngredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
@@ -231,23 +233,19 @@ func Filter(term string, brands []string, frozen bool) filter {
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
-func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]string, error) {
+func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]ingredient, error) {
 
 	lochash := p.LocationHash()
-	var ingredients []string
+	var ingredients []ingredient
 
 	if ingredientblob, err := g.cache.Get(lochash); err == nil {
 		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 		defer ingredientblob.Close()
-		sc := bufio.NewScanner(ingredientblob)
-		for sc.Scan() {
-			ingredients = append(ingredients, sc.Text())
+		jsonReader := json.NewDecoder(ingredientblob)
+		if err := jsonReader.Decode(&ingredients); err == nil {
+			return ingredients, nil
 		}
-		if err := sc.Err(); err != nil {
-			slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
-			return nil, err
-		}
-		return ingredients, nil
+		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
 	var wg sync.WaitGroup
@@ -271,18 +269,42 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]strin
 
 	wg.Wait()
 
-	if err := g.cache.Set(p.LocationHash(), strings.Join(ingredients, "\n")); err != nil {
+	allingredientsJSON, err := json.Marshal(ingredients)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to marshal ingredients", "location", p.String(), "error", err)
+		return nil, err
+	}
+	if err := g.cache.Set(p.LocationHash(), string(allingredientsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
 	return ingredients, nil
 }
 
+// this is a subset of ProductSearchResponse200Data combining item and product we think will be useful
 type ingredient struct {
+	AisleNumber *string `json:"number,omitempty"`
+	Brand       *string `json:"brand,omitempty"`
+	//Categories          *[]string `json:"categories,omitempty"`
+	CountryOrigin       *string  `json:"countryOrigin,omitempty"`
+	Description         *string  `json:"description,omitempty"`
+	Favorite            *bool    `json:"favorite,omitempty"` //what does this mean?
+	InventoryStockLevel *string  `json:"stockLevel,omitempty"`
+	PriceSale           *float32 `json:"salePrice,omitempty"`
+	PriceRegular        *float32 `json:"regularPrice,omitempty"`
+	Size                *string  `json:"size,omitempty"`
+}
+
+func (i ingredient) String() string {
+	jsonBytes, err := json.Marshal(i)
+	if err != nil {
+		return "ingredient{}"
+	}
+	return string(jsonBytes)
 }
 
 // move to krogrer client as everyone will be differnt here?
-func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]string, error) {
+func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]ingredient, error) {
 	limit := 10
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
@@ -305,7 +327,7 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 		return nil, fmt.Errorf("got %d code from kroger : %s", products.StatusCode(), string(output))
 	}
 
-	var ingredients []string
+	var ingredients []ingredient
 
 	for _, product := range *products.JSON200.Data {
 		wildcard := len(f.Brands) > 0 && f.Brands[0] == "*"
@@ -324,19 +346,23 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 			}
 
 			//does just giving the model json work better here?
-			ingredient := fmt.Sprintf(
-				"%s %s price %.2f", //				"%s, %s %s price %.2f %s",
-				toStr(product.Description),
-				toStr(item.Size),
-				toFloat32(item.Price.Regular),
-				//useful for debugging
-				//strings.Join(*product.Categories, ", "),
-				//toStr(product.Brand),
-			)
-
-			if toFloat32(item.Price.Promo) > 0.0 {
-				ingredient += fmt.Sprintf(" sale %.2f", toFloat32(item.Price.Promo))
+			ingredient := ingredient{
+				Brand:        product.Brand,
+				Description:  product.Description,
+				Size:         item.Size,
+				PriceRegular: item.Price.Regular,
+				PriceSale:    item.Price.Promo,
+				//Brand:               toStr(product.Brand), //is this repeated tokenss
+				//CountryOrigin: product.CountryOrigin,
+				//AisleNumber:   product.AisleLocations[0].Number,
+				//Favorite: item.Favorite,
+				//InventoryStockLevel: item.InventoryStockLevel),
 			}
+
+			/*if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
+				ingredient.AisleNumber = (*product.AisleLocations)[0].Number
+			}*/
+
 			ingredients = append(ingredients, ingredient)
 			//strings.Join(*product.Categories, ", "),
 
