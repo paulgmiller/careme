@@ -242,11 +242,10 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]ingre
 		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 		defer ingredientblob.Close()
 		jsonReader := json.NewDecoder(ingredientblob)
-		if err := jsonReader.Decode(&ingredients); err != nil {
-			slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
-			return nil, err
+		if err := jsonReader.Decode(&ingredients); err == nil {
+			return ingredients, nil
 		}
-		return ingredients, nil
+		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
 	var wg sync.WaitGroup
