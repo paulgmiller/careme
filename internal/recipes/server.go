@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -125,6 +126,36 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p := DefaultParams(l, date)
+
+	p.UserID = currentUser.ID
+
+	if r.URL.Query().Get("ingredients") == "true" {
+		lochash := p.LocationHash()
+		ingredientblob, err := s.generator.cache.Get(lochash)
+		if err != nil {
+			http.Error(w, "ingredients not found in cache", http.StatusNotFound)
+			return
+		}
+		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
+		defer ingredientblob.Close()
+		dec := json.NewDecoder(ingredientblob)
+		var ingredients []ingredient
+		err = dec.Decode(&ingredients)
+		if err != nil {
+			http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)
+			return
+		}
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(ingredients); err != nil {
+			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
+			return
+		}
+		//make this a html thats readable.
+		w.Header().Add("Content-Type", "application/json")
+		return
+	}
+
 	for _, last := range currentUser.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
 			continue
@@ -135,8 +166,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if instructions := r.URL.Query().Get("instructions"); instructions != "" {
 		p.Instructions = instructions
 	}
-
-	p.UserID = currentUser.ID
 
 	hash := p.Hash()
 	if err := s.generator.FromCache(ctx, hash, p, w); err == nil {

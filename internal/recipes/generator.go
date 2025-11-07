@@ -239,10 +239,10 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]ingre
 	var ingredients []ingredient
 
 	if ingredientblob, err := g.cache.Get(lochash); err == nil {
-		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 		defer ingredientblob.Close()
 		jsonReader := json.NewDecoder(ingredientblob)
 		if err := jsonReader.Decode(&ingredients); err == nil {
+			slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(ingredients))
 			return ingredients, nil
 		}
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
@@ -262,7 +262,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]ingre
 			lock.Lock()
 			defer lock.Unlock()
 			ingredients = append(ingredients, cingredients...)
-			//slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
+			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
 
 		}(category)
 	}
@@ -305,7 +305,7 @@ func (i ingredient) String() string {
 
 // move to krogrer client as everyone will be differnt here?
 func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]ingredient, error) {
-	limit := 10
+	limit := 25
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
 	//brand := "empty" doesn't work have to check for nil
@@ -369,18 +369,19 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 		}
 	}
 
-	slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location)
+	//Debug level?
+	//slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location, "skip", skip)
 
 	//recursion is pretty dumb pagination
-	/* ummm seem to be having 500's from any skip query?
+	//500's seem gone.
 	if len(*products.JSON200.Data) == limit && skip+limit < 100 { //fence post error
-		page, err := g.GetIngredients(location, f, skip+limit)
+		page, err := g.GetIngredients(ctx, location, f, skip+limit)
 		if err != nil {
 			return ingredients, nil
 		}
 		ingredients = append(ingredients, page...)
 	}
-	*/
+
 	return ingredients, nil
 }
 
