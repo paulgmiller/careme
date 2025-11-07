@@ -2,9 +2,9 @@ package recipes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"html/template"
-	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -138,7 +138,19 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 		defer ingredientblob.Close()
-		io.Copy(w, ingredientblob)
+		dec := json.NewDecoder(ingredientblob)
+		var ingredients []ingredient
+		err = dec.Decode(&ingredients)
+		if err != nil {
+			http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)
+			return
+		}
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(ingredients); err != nil {
+			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
+			return
+		}
 		//make this a html thats readable.
 		w.Header().Add("Content-Type", "application/json")
 		return
