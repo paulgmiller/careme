@@ -2,6 +2,7 @@ package logs
 
 import (
 	"bufio"
+	"careme/internal/logsink"
 	"context"
 	"encoding/json"
 	"errors"
@@ -141,7 +142,7 @@ func (r *Reader) getDatePrefixes(since, until time.Time) []string {
 	end := until.UTC().Truncate(24 * time.Hour)
 
 	for !current.After(end) {
-		prefix := fmt.Sprintf("%d/%02d/%02d/", current.Year(), current.Month(), current.Day())
+		prefix := logsink.FormatDateFolder(current.Year(), int(current.Month()), current.Day()) + "/"
 		prefixes = append(prefixes, prefix)
 		current = current.Add(24 * time.Hour)
 	}

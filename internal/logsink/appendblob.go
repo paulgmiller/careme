@@ -45,7 +45,7 @@ func New(ctx context.Context, cfg Config) (*writer, error) {
 
 	// Add date-based folder structure: YYYY/MM/DD/hostname
 	now := time.Now().UTC()
-	dateFolder := fmt.Sprintf("%d/%02d/%02d", now.Year(), now.Month(), now.Day())
+	dateFolder := FormatDateFolder(now.Year(), int(now.Month()), now.Day())
 	cfg.BlobName = dateFolder + "/" + cfg.BlobName
 
 	if cfg.FlushEvery <= 0 {
