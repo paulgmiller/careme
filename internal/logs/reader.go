@@ -102,35 +102,51 @@ func (r *Reader) GetLogs(ctx context.Context, hours int) ([]LogEntry, error) {
 	since := time.Now().Add(-time.Duration(hours) * time.Hour)
 	var allLogs []LogEntry
 
-	// List all blobs in the container
-	pager := r.client.NewListBlobsFlatPager(r.config.Container, &azblob.ListBlobsFlatOptions{
-		Include: azblob.ListBlobsInclude{Metadata: true},
-	})
+	// Generate date prefixes to query (covering the time range)
+	datePrefixes := r.getDatePrefixes(since, time.Now())
 
-	for pager.More() {
-		resp, err := pager.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list blobs: %w", err)
-		}
+	// List blobs using date-based prefixes for efficiency
+	for _, prefix := range datePrefixes {
+		pager := r.client.NewListBlobsFlatPager(r.config.Container, &azblob.ListBlobsFlatOptions{
+			Prefix:  &prefix,
+			Include: azblob.ListBlobsInclude{Metadata: true},
+		})
 
-		for _, blobItem := range resp.Segment.BlobItems {
-			// Check if blob was modified within the time range
-			if blobItem.Properties.LastModified != nil && blobItem.Properties.LastModified.Before(since) {
-				continue
-			}
-
-			// Read the blob content
-			logs, err := r.readBlobLogs(ctx, *blobItem.Name, since)
+		for pager.More() {
+			resp, err := pager.NextPage(ctx)
 			if err != nil {
-				// Log error but continue with other blobs
-				fmt.Printf("error reading blob %s: %v\n", *blobItem.Name, err)
-				continue
+				return nil, fmt.Errorf("failed to list blobs: %w", err)
 			}
-			allLogs = append(allLogs, logs...)
+
+			for _, blobItem := range resp.Segment.BlobItems {
+				// Read the blob content
+				logs, err := r.readBlobLogs(ctx, *blobItem.Name, since)
+				if err != nil {
+					// Log error but continue with other blobs
+					fmt.Printf("error reading blob %s: %v\n", *blobItem.Name, err)
+					continue
+				}
+				allLogs = append(allLogs, logs...)
+			}
 		}
 	}
 
 	return allLogs, nil
+}
+
+// getDatePrefixes generates date folder prefixes for the time range
+func (r *Reader) getDatePrefixes(since, until time.Time) []string {
+	var prefixes []string
+	current := since.UTC().Truncate(24 * time.Hour)
+	end := until.UTC().Truncate(24 * time.Hour)
+
+	for !current.After(end) {
+		prefix := fmt.Sprintf("%d/%02d/%02d/", current.Year(), current.Month(), current.Day())
+		prefixes = append(prefixes, prefix)
+		current = current.Add(24 * time.Hour)
+	}
+
+	return prefixes
 }
 
 // readBlobLogs reads and parses log entries from a specific blob
