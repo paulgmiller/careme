@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -132,14 +131,13 @@ func run(cfg *config.Config, location string, ingredient string) error {
 	}
 
 	p := recipes.DefaultParams(l, time.Now())
-	err = generator.GenerateRecipes(ctx, p)
+	ingredients, err := generator.GetStaples(ctx, p)
 	if err != nil {
-		return fmt.Errorf("failed to generate recipes: %w", err)
+		return fmt.Errorf("failed to get staple ingredients: %w", err)
 	}
-	var w io.Writer = os.Stdout
-	err = generator.FromCache(ctx, p.Hash(), p, w)
-	if err != nil {
-		return fmt.Errorf("failed to get generated recipes from cache: %w", err)
+	log.Println("Staple Ingredients:")
+	for _, ing := range ingredients {
+		fmt.Printf("- %s\n", *ing.Description)
 	}
 
 	return nil
