@@ -131,12 +131,17 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Query().Get("ingredients") == "true" {
 		lochash := p.LocationHash()
-		if ingredientblob, err := s.generator.cache.Get(lochash); err == nil {
-			slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
-			defer ingredientblob.Close()
-			io.Copy(w, ingredientblob)
-			w.Header().Add("Content-Type", "application/json")
+		ingredientblob, err := s.generator.cache.Get(lochash)
+		if err != nil {
+			http.Error(w, "ingredients not found in cache", http.StatusNotFound)
+			return
 		}
+		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
+		defer ingredientblob.Close()
+		io.Copy(w, ingredientblob)
+		//make this a html thats readable.
+		w.Header().Add("Content-Type", "application/json")
+		return
 	}
 
 	for _, last := range currentUser.LastRecipes {
