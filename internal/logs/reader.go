@@ -120,6 +120,11 @@ func (r *Reader) GetLogs(ctx context.Context, hours int) ([]LogEntry, error) {
 			}
 
 			for _, blobItem := range resp.Segment.BlobItems {
+				// Skip blobs that haven't been modified in the time range (optimization)
+				if blobItem.Properties.LastModified != nil && blobItem.Properties.LastModified.Before(since) {
+					continue
+				}
+
 				// Read the blob content
 				logs, err := r.readBlobLogs(ctx, *blobItem.Name, since)
 				if err != nil {
