@@ -1,6 +1,7 @@
 package users
 
 import (
+	"careme/internal/templates"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -12,15 +13,15 @@ import (
 type server struct {
 	storage       *Storage
 	clarityScript template.HTML
-	userTmpl      *template.Template
+	userTmpl      *template.Template //just remove or is htis useful?
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, clarityScript template.HTML, userTmpl *template.Template) *server {
+func NewHandler(storage *Storage, clarityScript template.HTML) *server {
 	return &server{
 		storage:       storage,
 		clarityScript: clarityScript,
-		userTmpl:      userTmpl,
+		userTmpl:      templates.User,
 	}
 }
 

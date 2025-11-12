@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -72,7 +71,11 @@ func main() {
 	}
 
 	if zipcode != "" {
-		locs, err := locations.GetLocationsByZip(context.TODO(), cfg, zipcode)
+		ls, err := locations.New(ctx, cfg)
+		if err != nil {
+			log.Fatalf("failed to create location server: %v", err)
+		}
+		locs, err := ls.GetLocationsByZip(ctx, zipcode)
 		if err != nil {
 			log.Fatalf("failed to get locations for zip %s: %v", zipcode, err)
 		}
@@ -106,8 +109,8 @@ func run(cfg *config.Config, location string, ingredient string) error {
 	}
 
 	if ingredient != "" {
-		f := recipes.Filter(ingredient, []string{"*"})
-		ings, err := generator.GetIngredients(location, f, 0)
+		f := recipes.Filter(ingredient, []string{"*"}, false /*frozen*/)
+		ings, err := generator.GetIngredients(ctx, location, f, 0)
 		if err != nil {
 			return fmt.Errorf("failed to get ingredients: %w", err)
 		}
@@ -117,20 +120,24 @@ func run(cfg *config.Config, location string, ingredient string) error {
 		return nil
 	}
 
-	l, err := locations.GetLocationByID(ctx, cfg, location) // get details but ignore error
+	ls, err := locations.New(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create location server: %w", err)
+	}
+
+	l, err := ls.GetLocationByID(ctx, location) // get details but ignore error
 	if err != nil {
 		return fmt.Errorf("could not get location details: %w", err)
 	}
 
 	p := recipes.DefaultParams(l, time.Now())
-	err = generator.GenerateRecipes(ctx, p)
+	ingredients, err := generator.GetStaples(ctx, p)
 	if err != nil {
-		return fmt.Errorf("failed to generate recipes: %w", err)
+		return fmt.Errorf("failed to get staple ingredients: %w", err)
 	}
-	var w io.Writer = os.Stdout
-	err = generator.FromCache(ctx, p.Hash(), p, w)
-	if err != nil {
-		return fmt.Errorf("failed to get generated recipes from cache: %w", err)
+	log.Println("Staple Ingredients:")
+	for _, ing := range ingredients {
+		fmt.Printf("- %s\n", *ing.Description)
 	}
 
 	return nil

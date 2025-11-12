@@ -1,47 +1,56 @@
 package locations
 
 import (
-	"bytes"
 	"careme/internal/config"
 	"careme/internal/html"
 	"careme/internal/kroger"
+	"careme/internal/templates"
 	"context"
-	"embed"
 	"fmt"
 	"html/template"
 	"log"
+	"log/slog"
+	"net/http"
 	"sync"
 )
 
-//go:embed templates/*.html
-var templatesFS embed.FS
-
-var templates = template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
-
-// this should all be in a location service object
-var locationCache map[string]Location
-var cacheLock sync.Mutex // to protect locationMap
-
-func init() {
-	locationCache = make(map[string]Location)
+type krogerClient interface {
+	LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error)
+	// LocationDetailsWithResponse request
+	LocationDetailsWithResponse(ctx context.Context, locationId string, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationDetailsResponse, error)
 }
 
-func GetLocationByID(ctx context.Context, cfg *config.Config, locationID string) (*Location, error) {
+type locationServer struct {
+	locationCache map[string]Location
+	cacheLock     sync.Mutex // to protect locationMap
+	client        krogerClient
+	clarity       template.HTML //ugh should do better here.
+}
 
-	cacheLock.Lock()
-
-	if loc, exists := locationCache[locationID]; exists {
-		cacheLock.Unlock()
-		return &loc, nil
-	}
-	cacheLock.Unlock()
-
-	client, err := kroger.FromConfig(ctx, cfg)
+func New(ctx context.Context, cfg *config.Config) (*locationServer, error) {
+	client, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
 	}
+	return &locationServer{
+		locationCache: make(map[string]Location),
+		cacheLock:     sync.Mutex{},
+		client:        client,
+		clarity:       html.ClarityScript(cfg),
+	}, nil
+}
 
-	resp, err := client.LocationDetailsWithResponse(ctx, locationID)
+func (l *locationServer) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
+
+	l.cacheLock.Lock()
+
+	if loc, exists := l.locationCache[locationID]; exists {
+		l.cacheLock.Unlock()
+		return &loc, nil
+	}
+	l.cacheLock.Unlock()
+
+	resp, err := l.client.LocationDetailsWithResponse(ctx, locationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get location details for ID %s: %w", locationID, err)
 	}
@@ -50,30 +59,15 @@ func GetLocationByID(ctx context.Context, cfg *config.Config, locationID string)
 		return nil, fmt.Errorf("no data found for location ID %s", locationID)
 	}
 
-	l := Location{
+	loc := Location{
 		ID:      locationID,
 		Name:    *resp.JSON200.Data.Name,
 		Address: *resp.JSON200.Data.Address.AddressLine1,
 	}
-	cacheLock.Lock()
-	defer cacheLock.Unlock()
-	locationCache[locationID] = l
-	return &l, nil
-}
-
-func Html(cfg *config.Config, locs []Location, zipstring string) string {
-	data := struct {
-		Locations     []Location
-		Zip           string
-		ClarityScript template.HTML
-	}{
-		Locations:     locs,
-		Zip:           zipstring,
-		ClarityScript: html.ClarityScript(cfg),
-	}
-	var buf bytes.Buffer
-	_ = templates.ExecuteTemplate(&buf, "locations.html", data)
-	return buf.String()
+	l.cacheLock.Lock()
+	defer l.cacheLock.Unlock()
+	l.locationCache[locationID] = loc
+	return &loc, nil
 }
 
 type Location struct {
@@ -83,15 +77,11 @@ type Location struct {
 	State   string `json:"state"`
 }
 
-func GetLocationsByZip(ctx context.Context, cfg *config.Config, zipcode string) ([]Location, error) {
-	client, err := kroger.FromConfig(ctx, cfg)
-	if err != nil {
-		log.Fatalf("failed to create Kroger client: %v", err)
-	}
+func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
 	locparams := &kroger.LocationListParams{
 		FilterZipCodeNear: &zipcode,
 	}
-	resp, err := client.LocationListWithResponse(ctx, locparams)
+	resp, err := l.client.LocationListWithResponse(ctx, locparams)
 	if err != nil {
 		log.Fatalf("failed to get locations for zip %s: %v", zipcode, err)
 	}
@@ -101,17 +91,60 @@ func GetLocationsByZip(ctx context.Context, cfg *config.Config, zipcode string) 
 	}
 
 	var locations []Location
-	cacheLock.Lock()
-	defer cacheLock.Unlock()
+	l.cacheLock.Lock()
+	defer l.cacheLock.Unlock()
 	for _, loc := range *resp.JSON200.Data {
-		l := Location{
+		loc := Location{
 			ID:      *loc.LocationId,
 			Name:    *loc.Name,
 			Address: *loc.Address.AddressLine1,
 			State:   *loc.Address.State,
 		}
-		locationCache[l.ID] = l
-		locations = append(locations, l)
+		l.locationCache[loc.ID] = loc
+		locations = append(locations, loc)
 	}
 	return locations, nil
+}
+
+func (l *locationServer) Register(mux *http.ServeMux) {
+
+	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		/*_, err := users.FromRequest(r, userStorage)
+		if err != nil {
+			if errors.Is(err, users.ErrNotFound) {
+				users.ClearCookie(w)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			slog.ErrorContext(ctx, "failed to load user for locations", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}*/
+		zip := r.URL.Query().Get("zip")
+		if zip == "" {
+			slog.InfoContext(ctx, "no zip code provided to /locations")
+			http.Error(w, "provide a zip code with ?zip=12345", http.StatusBadRequest)
+			return
+		}
+		locs, err := l.GetLocationsByZip(ctx, zip)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to get locations for zip", "zip", zip, "error", err)
+			http.Error(w, "could not get locations", http.StatusInternalServerError)
+			return
+		}
+		data := struct {
+			Locations     []Location
+			Zip           string
+			ClarityScript template.HTML
+		}{
+			Locations:     locs,
+			Zip:           zip,
+			ClarityScript: l.clarity,
+		}
+		if err := templates.Location.Execute(w, data); err != nil {
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+
+	})
 }

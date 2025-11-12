@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Careme Locations</title>
+
+  {{template "tailwind_head"}}
+
+  {{.ClarityScript}}
+</head>
+<body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
+  <main class="px-4 py-10">
+    <section class="mx-auto w-full max-w-3xl">
+      <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
+        <div class="border-b border-brand-100 p-8">
+          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Nearby Locations</h1>
+          <p class="mt-2 text-gray-600">Showing results near ZIP <span class="font-semibold text-brand-700">{{.Zip}}</span>.</p>
+        </div>
+
+        <ul class="divide-y divide-brand-100">
+          {{range .Locations}}
+          <li>
+        <a href="/recipes?location={{.ID}}"
+          class="flex flex-col gap-1 rounded-xl px-8 py-6 transition hover:bg-brand-50 focus:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+              <span class="text-lg font-semibold text-brand-700">{{.Name}}</span>
+              <span class="text-sm text-gray-600">{{.Address}}</span>
+            </a>
+          </li>
+          {{end}}
+        </ul>
+      </div>
+
+      <p class="mt-6 text-center text-sm text-gray-500">Can’t find the right store? Try a different ZIP code from the home page.</p>
+    </section>
+  </main>
+</body>
+</html>

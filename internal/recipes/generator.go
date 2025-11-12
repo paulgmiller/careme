@@ -1,7 +1,6 @@
 package recipes
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -38,7 +36,7 @@ type Generator struct {
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
-	client, err := kroger.FromConfig(context.TODO(), cfg)
+	client, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -117,33 +115,38 @@ func (g *generatorParams) LocationHash() string {
 func DefaultStaples() []filter {
 	return []filter{
 		{
-			Term: "beef",
+			Term:   "beef",
+			Brands: []string{"Simple Truth", "Kroger"},
 		},
 		{
 			Term:   "chicken",
-			Brands: []string{"Foster Farms", "Draper Valley"}, //"Simple Truth"? do these vary in every state?
+			Brands: []string{"Foster Farms", "Draper Valley", "Simple Truth"}, //"Simple Truth"? do these vary in every state?
 		},
 		{
 			Term: "fish",
 		},
 		{
-			Term: "pork", //Kroger?
+			Term:   "pork", //Kroger?
+			Brands: []string{"PORK", "Kroger", "Harris Teeter"},
 		},
 		{
-			Term: "shellfish",
+			Term:   "shellfish",
+			Brands: []string{"Sand Bar", "Kroger"},
+			Frozen: true, //remove after 500 sadness?
 		},
 		{
 			Term:   "lamb",
 			Brands: []string{"Simple Truth"},
 		},
 		{
-			Term: "produce vegetable",
+			Term:   "produce vegetable",
+			Brands: []string{"*"}, //ther's alot of fresh * and kroger here. cut this down after 500 sadness
 		},
 	}
 }
 
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) error {
-	slog.Info("Generating recipes for location", "location", p.String())
+	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
 
 	hash := p.Hash()
 	generating, done := g.isGenerating(hash)
@@ -158,8 +161,12 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	if err != nil {
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
+	stringIngredients := make([]string, len(ingredients))
+	for _, ing := range ingredients {
+		stringIngredients = append(stringIngredients, ing.String())
+	}
 
-	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, stringIngredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
@@ -213,72 +220,97 @@ func (g *Generator) LoadParamsFromHash(hash string) (*generatorParams, error) {
 type filter struct {
 	Term   string   `json:"term,omitempty"`
 	Brands []string `json:"brands,omitempty"`
+	Frozen bool     `json:"frozen,omitempty"`
 }
 
-func Filter(term string, brands []string) filter {
+func Filter(term string, brands []string, frozen bool) filter {
 	return filter{
 		Term:   term,
 		Brands: brands,
+		Frozen: frozen,
 	}
 }
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
-func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]string, error) {
+func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]ingredient, error) {
 
 	lochash := p.LocationHash()
-	var ingredients []string
+	var ingredients []ingredient
 
 	if ingredientblob, err := g.cache.Get(lochash); err == nil {
-		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 		defer ingredientblob.Close()
-		sc := bufio.NewScanner(ingredientblob)
-		for sc.Scan() {
-			ingredients = append(ingredients, sc.Text())
+		jsonReader := json.NewDecoder(ingredientblob)
+		if err := jsonReader.Decode(&ingredients); err == nil {
+			slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(ingredients))
+			return ingredients, nil
 		}
-		if err := sc.Err(); err != nil {
-			slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
-			return nil, err
-		}
-		return ingredients, nil
+		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
-	var errors []error
 	var wg sync.WaitGroup
 	var lock sync.Mutex
 	wg.Add(len(p.Staples))
 	for _, category := range p.Staples {
 		go func(category filter) {
 			defer wg.Done()
-
-			cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
-			lock.Lock()
-			defer lock.Unlock()
+			cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("failed to get ingredients: %w", err))
+				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
 				return
 			}
+			lock.Lock()
+			defer lock.Unlock()
 			ingredients = append(ingredients, cingredients...)
 			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
+
 		}(category)
 	}
 
 	wg.Wait()
 
-	if err := g.cache.Set(p.LocationHash(), strings.Join(ingredients, "\n")); err != nil {
+	allingredientsJSON, err := json.Marshal(ingredients)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to marshal ingredients", "location", p.String(), "error", err)
+		return nil, err
+	}
+	if err := g.cache.Set(p.LocationHash(), string(allingredientsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
 	return ingredients, nil
 }
 
+// this is a subset of ProductSearchResponse200Data combining item and product we think will be useful
+type ingredient struct {
+	AisleNumber *string `json:"number,omitempty"`
+	Brand       *string `json:"brand,omitempty"`
+	//Categories          *[]string `json:"categories,omitempty"`
+	CountryOrigin       *string  `json:"countryOrigin,omitempty"`
+	Description         *string  `json:"description,omitempty"`
+	Favorite            *bool    `json:"favorite,omitempty"` //what does this mean?
+	InventoryStockLevel *string  `json:"stockLevel,omitempty"`
+	PriceSale           *float32 `json:"salePrice,omitempty"`
+	PriceRegular        *float32 `json:"regularPrice,omitempty"`
+	Size                *string  `json:"size,omitempty"`
+}
+
+func (i ingredient) String() string {
+	jsonBytes, err := json.Marshal(i)
+	if err != nil {
+		return "ingredient{}"
+	}
+	return string(jsonBytes)
+}
+
 // move to krogrer client as everyone will be differnt here?
-func (g *Generator) GetIngredients(location string, f filter, skip int) ([]string, error) {
-	limit := 50
+func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]ingredient, error) {
+	limit := 25
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
 	//brand := "empty" doesn't work have to check for nil
 	//fulfillment := "ais" drmatically shortens?
+	//wrapped this in a retry and it did nothng
 	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
 		FilterLocationId: &location,
 		FilterTerm:       &f.Term,
@@ -288,15 +320,14 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 		//FilterFulfillment: &fulfillment,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed on product searchwith response %w", err)
+		return nil, fmt.Errorf("kroger product search request failed: %w", err)
 	}
-
 	if products.StatusCode() != http.StatusOK {
-		fmt.Printf("Kroger ProductSearchWithResponse returned status: %d\n", products.StatusCode())
-		return nil, fmt.Errorf("got %d code from kroger", products.StatusCode())
+		output, _ := json.Marshal(products.JSON500) //handle other errors?
+		return nil, fmt.Errorf("got %d code from kroger : %s", products.StatusCode(), string(output))
 	}
 
-	var ingredients []string
+	var ingredients []ingredient
 
 	for _, product := range *products.JSON200.Data {
 		wildcard := len(f.Brands) > 0 && f.Brands[0] == "*"
@@ -305,7 +336,7 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 			continue
 		}
 		//end up with a bunch of frozen chicken with out this.
-		if slices.Contains(*product.Categories, "Frozen") {
+		if slices.Contains(*product.Categories, "Frozen") && !f.Frozen {
 			continue
 		}
 		for _, item := range *product.Items {
@@ -315,29 +346,38 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 			}
 
 			//does just giving the model json work better here?
-			ingredient := fmt.Sprintf(
-				"%s %s price %.2f", //				"%s, %s %s price %.2f %s",
-				//toStr(product.Brand),
-				toStr(product.Description),
-				toStr(item.Size),
-				toFloat32(item.Price.Regular),
-				//strings.Join(*product.Categories, ", "),
-			)
-
-			if toFloat32(item.Price.Promo) > 0.0 {
-				ingredient += fmt.Sprintf(" sale %.2f", toFloat32(item.Price.Promo))
+			ingredient := ingredient{
+				Brand:        product.Brand,
+				Description:  product.Description,
+				Size:         item.Size,
+				PriceRegular: item.Price.Regular,
+				PriceSale:    item.Price.Promo,
+				//Brand:               toStr(product.Brand), //is this repeated tokenss
+				//CountryOrigin: product.CountryOrigin,
+				//AisleNumber:   product.AisleLocations[0].Number,
+				//Favorite: item.Favorite,
+				//InventoryStockLevel: item.InventoryStockLevel),
 			}
+
+			/*if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
+				ingredient.AisleNumber = (*product.AisleLocations)[0].Number
+			}*/
+
 			ingredients = append(ingredients, ingredient)
 			//strings.Join(*product.Categories, ", "),
 
 		}
 	}
 
+	//Debug level?
+	//slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location, "skip", skip)
+
 	//recursion is pretty dumb pagination
-	if len(*products.JSON200.Data) == limit && skip+limit < 250 { //fence post error
-		page, err := g.GetIngredients(location, f, skip+limit)
+	//500's seem gone.
+	if len(*products.JSON200.Data) == limit && skip+limit < 100 { //fence post error
+		page, err := g.GetIngredients(ctx, location, f, skip+limit)
 		if err != nil {
-			return nil, nil
+			return ingredients, nil
 		}
 		ingredients = append(ingredients, page...)
 	}
