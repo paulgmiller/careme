@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 
+	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/users"
@@ -24,17 +27,53 @@ type locServer interface {
 }
 
 type mailer struct {
-	userStorage users.Storage
+	userStorage *users.Storage
 	generator   *recipes.Generator //interface requires making params public
 	locServer   locServer
 }
 
+// TOD share some of this with web.go? goood for mocking?
+func NewMailer(cfg *config.Config) (*mailer, error) {
+	cache, err := cache.MakeCache()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache: %w", err)
+	}
+
+	userStorage := users.NewStorage(cache)
+
+	generator, err := recipes.NewGenerator(cfg, cache)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
+	}
+
+	locationserver, err := locations.New(context.TODO(), cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create location server: %w", err)
+	}
+
+	return &mailer{
+		userStorage: userStorage,
+		generator:   generator,
+		locServer:   locationserver,
+	}, nil
+}
+
 func (m *mailer) Iterate(ctx context.Context, duration time.Duration) {
+	users, err := m.userStorage.List(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to list users", err)
+	} else {
+		//toss this shit in a channel and use same channel to requeue
+		for _, user := range users {
+			m.sendEmail(ctx, user)
+		}
+	}
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
+			slog.InfoContext(ctx, "starting user email round")
 			users, err := m.userStorage.List(ctx)
 			if err != nil {
 				slog.ErrorContext(ctx, "failed to list users", err)
@@ -53,6 +92,7 @@ func (m *mailer) Iterate(ctx context.Context, duration time.Duration) {
 func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 
 	if user.FavoriteStore == "" {
+		slog.InfoContext(ctx, "no favorite store", "user", user.ID)
 		return
 	}
 
@@ -67,6 +107,7 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 
 	if err := m.generator.FromCache(ctx, p.Hash(), p, io.Discard); err == nil {
 		//already generated. Assume we sent for now (need better atomic tracking)
+		slog.InfoContext(ctx, "already emailed", "user", user.ID)
 		return
 	}
 
@@ -81,7 +122,7 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 	}
 
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
-	subject := "Sending with SendGrid is Fun"
+	subject := "Your new recipes are ready!"
 
 	plainTextContent := "Check out your new recipes at https://careme.cooking/recipes?hash=" + p.Hash()
 	for _, email := range user.Email {

@@ -62,7 +62,7 @@ func (fc *BlobCache) List(ctx context.Context, prefix string, _ string) ([]strin
 			return nil, fmt.Errorf("failed to get next page of blobs: %w", err)
 		}
 		for _, blob := range page.Segment.BlobItems {
-			keys = append(keys, *blob.Name)
+			keys = append(keys, strings.TrimPrefix(*blob.Name, prefix))
 		}
 	}
 
