@@ -87,7 +87,7 @@ func (fc *BlobCache) Set(key, value string) error {
 	return err
 }
 
-func MakeCache() (Cache, error) {
+func MakeCache() (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
 		log.Println("Using Azure Blob Storage for cache")
