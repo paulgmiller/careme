@@ -110,6 +110,12 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 		slog.InfoContext(ctx, "already emailed", "user", user.ID)
 		return
 	}
+	for _, last := range user.LastRecipes {
+		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
+			continue
+		}
+		p.LastRecipes = append(p.LastRecipes, last.Title)
+	}
 
 	if err := m.generator.GenerateRecipes(ctx, p); err != nil {
 		slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.Email)
