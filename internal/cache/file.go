@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -16,14 +17,36 @@ type Cache interface {
 	//List(prefix string) ([]string, error)
 }
 
+type ListCache interface {
+	Cache
+	List(ctx context.Context, prefix string, token string) ([]string, error)
+}
+
 type FileCache struct {
 	Dir string
 }
 
-var _ Cache = (*FileCache)(nil)
+var _ ListCache = (*FileCache)(nil)
 
 func NewFileCache(dir string) *FileCache {
 	return &FileCache{Dir: dir}
+}
+
+func (fc *FileCache) List(_ context.Context, prefix string, token string) ([]string, error) {
+	var keys []string
+	err := filepath.Walk(fc.Dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasPrefix(info.Name(), prefix) {
+			keys = append(keys, info.Name())
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return keys, nil
 }
 
 func (fc *FileCache) Get(key string) (io.ReadCloser, error) {

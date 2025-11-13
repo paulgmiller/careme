@@ -1,6 +1,7 @@
 package users
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,7 +75,7 @@ func (u *User) Validate() error {
 }
 
 type Storage struct {
-	cache cache.Cache
+	cache cache.ListCache
 }
 
 var (
@@ -87,8 +88,25 @@ const (
 	emailPrefix = "email2user/"
 )
 
-func NewStorage(c cache.Cache) *Storage {
+func NewStorage(c cache.ListCache) *Storage {
 	return &Storage{cache: c}
+}
+
+// obviously needs to be better
+func (s *Storage) List(ctx context.Context) ([]User, error) {
+	userids, err := s.cache.List(ctx, userPrefix, "")
+	if err != nil {
+		return nil, err
+	}
+	var users []User
+	for _, id := range userids {
+		user, err := s.GetByID(id)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, *user)
+	}
+	return users, nil
 }
 
 func (s *Storage) GetByID(id string) (*User, error) {

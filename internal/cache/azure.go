@@ -17,7 +17,7 @@ type BlobCache struct {
 	container       string
 }
 
-var _ Cache = (*BlobCache)(nil)
+var _ ListCache = (*BlobCache)(nil)
 
 func NewBlobCache(container string) (*BlobCache, error) {
 	// Your account name and key can be obtained from the Azure Portal.
@@ -46,6 +46,27 @@ func NewBlobCache(container string) (*BlobCache, error) {
 		containerClient: client,
 		container:       container,
 	}, nil
+}
+
+// come back and use iterators or a queue?
+func (fc *BlobCache) List(ctx context.Context, prefix string, _ string) ([]string, error) {
+	var keys []string
+	pager := fc.containerClient.NewListBlobsFlatPager(fc.container, &azblob.ListBlobsFlatOptions{
+		Prefix: &prefix,
+	})
+
+	for pager.More() {
+
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get next page of blobs: %w", err)
+		}
+		for _, blob := range page.Segment.BlobItems {
+			keys = append(keys, *blob.Name)
+		}
+	}
+
+	return keys, nil
 }
 
 func (fc *BlobCache) Get(key string) (io.ReadCloser, error) {
