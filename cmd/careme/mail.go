@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"time"
@@ -61,7 +60,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 func (m *mailer) Iterate(ctx context.Context, duration time.Duration) {
 	users, err := m.userStorage.List(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to list users", err)
+		slog.ErrorContext(ctx, "failed to list users", "error", err.Error())
 	} else {
 		//toss this shit in a channel and use same channel to requeue
 		for _, user := range users {
@@ -76,7 +75,7 @@ func (m *mailer) Iterate(ctx context.Context, duration time.Duration) {
 			slog.InfoContext(ctx, "starting user email round")
 			users, err := m.userStorage.List(ctx)
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to list users", err)
+				slog.ErrorContext(ctx, "failed to list users", "error", err.Error())
 				continue //can we call back in 5 minutes?
 			}
 			//toss this shit in a channel and use same channel to requeue
@@ -98,18 +97,19 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 
 	l, err := m.locServer.GetLocationByID(ctx, user.FavoriteStore)
 	if err != nil {
-		slog.ErrorContext(ctx, "error getting location", "location", user.FavoriteStore, "error", err)
+		slog.ErrorContext(ctx, "error getting location", "location", user.FavoriteStore, "error", err.Error())
 		return
 	}
 
 	p := recipes.DefaultParams(l, time.Now().Add(-6*time.Hour)) //how do we get the timezone of the user?
 	p.UserID = user.ID
 
-	if err := m.generator.FromCache(ctx, p.Hash(), p, io.Discard); err == nil {
+	if _, err := m.generator.FromCache(ctx, p.Hash()); err == nil {
 		//already generated. Assume we sent for now (need better atomic tracking)
 		slog.InfoContext(ctx, "already emailed", "user", user.ID)
 		return
 	}
+
 	for _, last := range user.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
 			continue
@@ -121,11 +121,14 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 		slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.Email)
 	}
 
-	var buf bytes.Buffer
-	if err := m.generator.FromCache(ctx, p.Hash(), p, &buf); err != nil {
+	shoppingList, err := m.generator.FromCache(ctx, p.Hash())
+	if err != nil {
 		slog.ErrorContext(ctx, "failed to get generated recipes for user", "user", user.Email, "error", err)
 		return
 	}
+
+	var buf bytes.Buffer
+	recipes.FormatMail(p, *shoppingList, &buf)
 
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"
@@ -139,9 +142,9 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 		// uncomment the above line if you are sending mail using a regional EU subuser
 		response, err := client.Send(message)
 		if err != nil {
-			slog.ErrorContext(ctx, "mail error", err, "user", user.Email[0])
+			slog.ErrorContext(ctx, "mail error", "error", err.Error(), "user", user.Email[0])
 		} else {
-			slog.InfoContext(ctx, "status", response.StatusCode, "body", response.Body, "headers", response.Headers)
+			slog.InfoContext(ctx, "status", slog.Int("status", response.StatusCode), "body", response.Body, "headers", response.Headers)
 			// Todo shove something into cache so we don't resend.
 		}
 	}
