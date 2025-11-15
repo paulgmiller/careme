@@ -33,7 +33,7 @@ func main() {
 	flag.StringVar(&ingredient, "ingredient", "", "just list ingredients")
 	flag.StringVar(&ingredient, "i", "", "just list ingredients (short form)")
 	flag.BoolVar(&serve, "serve", false, "Run HTTP server mode")
-	flag.BoolVar(&mail, "mail", false, "Run HTTP server mode")
+	flag.BoolVar(&mail, "mail", false, "Run mail sender loop")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.Parse()
 
@@ -78,7 +78,6 @@ func main() {
 			log.Fatalf("server error: %v", err)
 		}
 		return
-
 	}
 
 	if zipcode != "" {

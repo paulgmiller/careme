@@ -31,7 +31,7 @@ type mailer struct {
 	locServer   locServer
 }
 
-// TOD share some of this with web.go? goood for mocking?
+// TODO share some of this with web.go? good for mocking?
 func NewMailer(cfg *config.Config) (*mailer, error) {
 	cache, err := cache.MakeCache()
 	if err != nil {
@@ -62,7 +62,7 @@ func (m *mailer) Iterate(ctx context.Context, duration time.Duration) {
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to list users", "error", err.Error())
 	} else {
-		//toss this shit in a channel and use same channel to requeue
+		//toss this in a channel and use same channel to requeue
 		for _, user := range users {
 			m.sendEmail(ctx, user)
 		}
