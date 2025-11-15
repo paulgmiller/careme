@@ -133,7 +133,7 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"
 
-	plainTextContent := "Check out your new recipes at https://careme.cooking/recipes?hash=" + p.Hash()
+	plainTextContent := "Check out your new recipes at https://careme.cooking/recipes?h=" + p.Hash()
 	for _, email := range user.Email {
 		to := mail.NewEmail("Example User", email) //todo email whole list
 		message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
