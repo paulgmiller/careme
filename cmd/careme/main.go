@@ -23,7 +23,7 @@ func main() {
 	var location string
 	var zipcode string
 	var ingredient string
-	var serve bool
+	var serve, mail bool
 	var addr string
 
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
@@ -33,6 +33,7 @@ func main() {
 	flag.StringVar(&ingredient, "ingredient", "", "just list ingredients")
 	flag.StringVar(&ingredient, "i", "", "just list ingredients (short form)")
 	flag.BoolVar(&serve, "serve", false, "Run HTTP server mode")
+	flag.BoolVar(&mail, "mail", false, "Run mail sender loop")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.Parse()
 
@@ -61,6 +62,15 @@ func main() {
 		slog.SetDefault(slog.New(multi.Fanout(handler, slog.NewTextHandler(os.Stdout, nil))))
 		//log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
 
+	}
+
+	if mail {
+		mailer, err := NewMailer(cfg)
+		if err != nil {
+			log.Fatalf("failed to create mailer: %v", err)
+		}
+		slog.InfoContext(ctx, "mail sender engaged")
+		go mailer.Iterate(ctx, 1*time.Hour)
 	}
 
 	if serve {
