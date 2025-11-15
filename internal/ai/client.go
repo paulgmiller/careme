@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alpkeskin/gotoon"
 	openai "github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
 	"github.com/openai/openai-go/v2/responses"
@@ -32,15 +33,6 @@ type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` //should this and price be numbers? need units then
 	Price    string `json:"price"`    //TODO exclude empty
-}
-
-// IngredientData represents the ingredient data structure from the store
-type IngredientData struct {
-	Brand        *string  `json:"brand,omitempty"`
-	Description  *string  `json:"description,omitempty"`
-	Size         *string  `json:"size,omitempty"`
-	PriceRegular *float32 `json:"regularPrice,omitempty"`
-	PriceSale    *float32 `json:"salePrice,omitempty"`
 }
 
 type Recipe struct {
@@ -84,7 +76,7 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []IngredientData, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients interface{}, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
@@ -123,97 +115,22 @@ func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients [
 	return &shoppingList, nil
 }
 
-// encodeIngredientsToTOON converts ingredient data to TOON format
-// TOON is a token-efficient format that uses tabular representation for uniform arrays
-func encodeIngredientsToTOON(ingredients []IngredientData) string {
-	if len(ingredients) == 0 {
+// encodeIngredientsToTOON converts ingredient data to TOON format using the gotoon library
+func encodeIngredientsToTOON(ingredients interface{}) string {
+	data := map[string]interface{}{
+		"ingredients": ingredients,
+	}
+
+	encoded, err := gotoon.Encode(data)
+	if err != nil {
 		return "ingredients[0]:"
 	}
 
-	var result strings.Builder
-
-	// Header: declare array length and field names in tabular format
-	result.WriteString(fmt.Sprintf("ingredients[%d]{brand,description,size,regularPrice,salePrice}:\n", len(ingredients)))
-
-	// Each ingredient as a row with comma-separated values
-	for _, ing := range ingredients {
-		brand := quoteIfNeeded(ptrToString(ing.Brand))
-		description := quoteIfNeeded(ptrToString(ing.Description))
-		size := quoteIfNeeded(ptrToString(ing.Size))
-		regularPrice := floatToString(ing.PriceRegular)
-		salePrice := floatToString(ing.PriceSale)
-
-		result.WriteString(fmt.Sprintf("  %s,%s,%s,%s,%s\n", brand, description, size, regularPrice, salePrice))
-	}
-
-	return result.String()
-}
-
-// quoteIfNeeded quotes a string if it contains commas, colons, quotes, or looks like a special value
-func quoteIfNeeded(s string) string {
-	if s == "" {
-		return `""`
-	}
-
-	// Check if quoting is needed
-	needsQuotes := false
-
-	// Check for special cases that require quotes
-	if strings.HasPrefix(s, " ") || strings.HasSuffix(s, " ") {
-		needsQuotes = true
-	}
-
-	// Check for delimiters and special characters
-	for _, char := range s {
-		if char == ',' || char == ':' || char == '"' || char == '\\' || char == '\n' || char == '\r' || char == '\t' {
-			needsQuotes = true
-			break
-		}
-	}
-
-	// Check if it looks like a boolean/number/null
-	lower := strings.ToLower(s)
-	if lower == "true" || lower == "false" || lower == "null" {
-		needsQuotes = true
-	}
-
-	if !needsQuotes {
-		return s
-	}
-
-	// Escape and quote
-	escaped := strings.ReplaceAll(s, "\\", "\\\\")
-	escaped = strings.ReplaceAll(escaped, "\"", "\\\"")
-	escaped = strings.ReplaceAll(escaped, "\n", "\\n")
-	escaped = strings.ReplaceAll(escaped, "\r", "\\r")
-	escaped = strings.ReplaceAll(escaped, "\t", "\\t")
-
-	return fmt.Sprintf(`"%s"`, escaped)
-}
-
-// ptrToString converts a string pointer to string, returning empty string if nil
-func ptrToString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
-// floatToString converts a float pointer to string, returning empty string if nil
-func floatToString(f *float32) string {
-	if f == nil {
-		return ""
-	}
-	// Format without trailing zeros
-	str := fmt.Sprintf("%.2f", *f)
-	// Remove trailing zeros after decimal point
-	str = strings.TrimRight(str, "0")
-	str = strings.TrimRight(str, ".")
-	return str
+	return encoded
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []IngredientData, instructions string, date time.Time, lastRecipes []string) responses.ResponseInputParam {
+func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients interface{}, instructions string, date time.Time, lastRecipes []string) responses.ResponseInputParam {
 	var messages []responses.ResponseInputItemUnionParam
 
 	// Message 1: System context and objective

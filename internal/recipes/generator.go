@@ -23,7 +23,7 @@ import (
 )
 
 type aiClient interface {
-	GenerateRecipes(location *locations.Location, ingredients []ai.IngredientData, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	GenerateRecipes(location *locations.Location, ingredients interface{}, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 }
 
 type Generator struct {
@@ -162,19 +162,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
 
-	// Convert internal ingredients to AI ingredient data format
-	aiIngredients := make([]ai.IngredientData, 0, len(ingredients))
-	for _, ing := range ingredients {
-		aiIngredients = append(aiIngredients, ai.IngredientData{
-			Brand:        ing.Brand,
-			Description:  ing.Description,
-			Size:         ing.Size,
-			PriceRegular: ing.PriceRegular,
-			PriceSale:    ing.PriceSale,
-		})
-	}
-
-	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, aiIngredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
