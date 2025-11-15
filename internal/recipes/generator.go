@@ -161,7 +161,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	if err != nil {
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
-	
+
 	// Convert internal ingredients to AI ingredient data format
 	aiIngredients := make([]ai.IngredientData, 0, len(ingredients))
 	for _, ing := range ingredients {

@@ -131,10 +131,10 @@ func encodeIngredientsToTOON(ingredients []IngredientData) string {
 	}
 
 	var result strings.Builder
-	
+
 	// Header: declare array length and field names in tabular format
 	result.WriteString(fmt.Sprintf("ingredients[%d]{brand,description,size,regularPrice,salePrice}:\n", len(ingredients)))
-	
+
 	// Each ingredient as a row with comma-separated values
 	for _, ing := range ingredients {
 		brand := quoteIfNeeded(ptrToString(ing.Brand))
@@ -142,10 +142,10 @@ func encodeIngredientsToTOON(ingredients []IngredientData) string {
 		size := quoteIfNeeded(ptrToString(ing.Size))
 		regularPrice := floatToString(ing.PriceRegular)
 		salePrice := floatToString(ing.PriceSale)
-		
+
 		result.WriteString(fmt.Sprintf("  %s,%s,%s,%s,%s\n", brand, description, size, regularPrice, salePrice))
 	}
-	
+
 	return result.String()
 }
 
@@ -154,15 +154,15 @@ func quoteIfNeeded(s string) string {
 	if s == "" {
 		return `""`
 	}
-	
+
 	// Check if quoting is needed
 	needsQuotes := false
-	
+
 	// Check for special cases that require quotes
 	if strings.HasPrefix(s, " ") || strings.HasSuffix(s, " ") {
 		needsQuotes = true
 	}
-	
+
 	// Check for delimiters and special characters
 	for _, char := range s {
 		if char == ',' || char == ':' || char == '"' || char == '\\' || char == '\n' || char == '\r' || char == '\t' {
@@ -170,24 +170,24 @@ func quoteIfNeeded(s string) string {
 			break
 		}
 	}
-	
+
 	// Check if it looks like a boolean/number/null
 	lower := strings.ToLower(s)
 	if lower == "true" || lower == "false" || lower == "null" {
 		needsQuotes = true
 	}
-	
+
 	if !needsQuotes {
 		return s
 	}
-	
+
 	// Escape and quote
 	escaped := strings.ReplaceAll(s, "\\", "\\\\")
 	escaped = strings.ReplaceAll(escaped, "\"", "\\\"")
 	escaped = strings.ReplaceAll(escaped, "\n", "\\n")
 	escaped = strings.ReplaceAll(escaped, "\r", "\\r")
 	escaped = strings.ReplaceAll(escaped, "\t", "\\t")
-	
+
 	return fmt.Sprintf(`"%s"`, escaped)
 }
 
