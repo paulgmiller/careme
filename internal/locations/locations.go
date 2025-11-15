@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"log"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -83,7 +82,7 @@ func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) 
 	}
 	resp, err := l.client.LocationListWithResponse(ctx, locparams)
 	if err != nil {
-		log.Fatalf("failed to get locations for zip %s: %v", zipcode, err)
+		return nil, fmt.Errorf("failed to get location list for zip %s: %w", zipcode, err)
 	}
 	if resp.JSON200 == nil || len(*resp.JSON200.Data) == 0 {
 		fmt.Printf("No locations found for zip code %s\n", zipcode)

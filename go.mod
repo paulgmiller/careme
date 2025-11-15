@@ -11,6 +11,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/openai/openai-go/v2 v2.3.1
 	github.com/samber/slog-multi v1.5.0
+	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	golang.org/x/net v0.42.0
 )
 
@@ -21,6 +22,7 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/samber/slog-common v0.19.0 // indirect
+	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	golang.org/x/sync v0.16.0 // indirect

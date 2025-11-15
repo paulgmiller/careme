@@ -93,10 +93,21 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
-		if err := s.generator.FromCache(ctx, hashParam, nil, w); err != nil {
+		slist, err := s.generator.FromCache(ctx, hashParam)
+		if err != nil {
 			slog.ErrorContext(ctx, "failed to load shared recipe for hash", "hash", hashParam, "error", err)
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
+			return
 		}
+		p, err := s.generator.LoadParamsFromHash(hashParam)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+			p = DefaultParams(&locations.Location{
+				ID:   "",
+				Name: "Unknown Location",
+			}, time.Now())
+		}
+		s.generator.FormatChatHTML(p, *slist, w)
 		return
 	}
 
@@ -168,7 +179,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash := p.Hash()
-	if err := s.generator.FromCache(ctx, hash, p, w); err == nil {
+	if list, err := s.generator.FromCache(ctx, hash); err == nil {
+		//TODO check not found error explicitly
+		if r.URL.Query().Get("mail") == "true" {
+			FormatMail(p, *list, w)
+			return
+		}
+		s.generator.FormatChatHTML(p, *list, w)
 		return
 	}
 

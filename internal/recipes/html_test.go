@@ -5,6 +5,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,10 +26,10 @@ var list = ai.ShoppingList{
 	Recipes: []ai.Recipe{
 		{
 			Title:       "Test Recipe",
-			Description: "A simple test recipe",
+			Description: "A simple quail recipe",
 			Ingredients: []ai.Ingredient{
-				{Name: "Ingredient 1", Quantity: "1 cup", Price: "2.00"},
-				{Name: "Ingredient 2", Quantity: "2 tbsp", Price: "1.50"},
+				{Name: "quail", Quantity: "1 cup", Price: "2.00"},
+				{Name: "kohlrabi", Quantity: "2 tbsp", Price: "1.50"},
 			},
 			Instructions: []string{
 				"Step 1: Do something.",
@@ -54,6 +55,20 @@ func TestFormatChatHTML_ValidHTML(t *testing.T) {
 	}
 	html := buf.String()
 	isValidHTML(t, html)
+}
+
+func TestFormatMail_ValidHTML(t *testing.T) {
+	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	var buf bytes.Buffer
+	if err := FormatMail(p, list, &buf); err != nil {
+		t.Fatalf("failed to format chat HTML: %v", err)
+	}
+	html := buf.String()
+	isValidHTML(t, html)
+	if !strings.Contains(html, "quail") {
+		t.Error("HTML should contain 'quail'")
+	}
 }
 
 func TestFormatChatHTML_IncludesClarityScript(t *testing.T) {
