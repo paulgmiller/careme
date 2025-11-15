@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 
@@ -25,10 +26,15 @@ type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
 
+type emailClient interface {
+	Send(message *mail.SGMailV3) (*rest.Response, error)
+}
+
 type mailer struct {
 	userStorage *users.Storage
 	generator   *recipes.Generator //interface requires making params public
 	locServer   locServer
+	client      emailClient
 }
 
 // TODO share some of this with web.go? good for mocking?
@@ -50,10 +56,16 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}
 
+	sendgridkey := os.Getenv("SENDGRID_API_KEY")
+	if sendgridkey == "" {
+		return nil, fmt.Errorf("SENDGRID_API_KEY environment variable is not set")
+	}
+
 	return &mailer{
 		userStorage: userStorage,
 		generator:   generator,
 		locServer:   locationserver,
+		client:      sendgrid.NewSendClient(sendgridkey),
 	}, nil
 }
 
@@ -138,10 +150,10 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 	for _, email := range user.Email {
 		to := mail.NewEmail("Example User", email) //todo email whole list
 		message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
-		client := sendgrid.NewSendClient(os.Getenv("SENDGRID_API_KEY"))
+
 		// client.Request, _ = sendgrid.SetDataResidency(client.Request, "eu")
 		// uncomment the above line if you are sending mail using a regional EU subuser
-		response, err := client.Send(message)
+		response, err := m.client.Send(message)
 		if err != nil {
 			slog.ErrorContext(ctx, "mail error", "error", err.Error(), "user", user.Email[0])
 		} else {

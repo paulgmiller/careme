@@ -47,7 +47,7 @@ func (g *Generator) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 
 // FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
 func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
-	//TODO just put prams into shopping list and pass that up?
+	//TODO just put params into shopping list and pass that up?
 	data := struct {
 		Location      locations.Location
 		Date          string
@@ -67,9 +67,10 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 	return templates.Recipe.Execute(writer, data)
 }
 
-// similiar but withl less stuff
+// drops clarity, instructions and most of shoppinglist
 func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
-	//TODO just put prams into shopping list and pass that up?
+	//TODO just put params into shopping list and pass that up?
+
 	data := struct {
 		Location locations.Location
 		Date     string
