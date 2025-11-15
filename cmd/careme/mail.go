@@ -106,6 +106,7 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 
 	if _, err := m.generator.FromCache(ctx, p.Hash()); err == nil {
 		//already generated. Assume we sent for now (need better atomic tracking)
+		//must include user id in tracking.
 		slog.InfoContext(ctx, "already emailed", "user", user.ID)
 		return
 	}

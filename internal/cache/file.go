@@ -38,8 +38,8 @@ func (fc *FileCache) List(_ context.Context, prefix string, token string) ([]str
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && strings.HasPrefix(info.Name(), prefix) {
-			keys = append(keys, strings.TrimPrefix(info.Name(), prefix))
+		if !info.IsDir() && strings.HasPrefix(path, prefix) {
+			keys = append(keys, strings.TrimPrefix(path, prefix))
 		}
 		return nil
 	})
