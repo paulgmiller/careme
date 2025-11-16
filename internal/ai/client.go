@@ -135,7 +135,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes: %w", err)
 	}
-	slog.InfoContext(ctx, "API usage", "usage", resp.Usage.RawJSON())
+	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
 
 	// Parse the response to save recipes separately
 	var shoppingList ShoppingList
