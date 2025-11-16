@@ -151,7 +151,7 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients interface{}, instructions string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
+func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	//constants we might make variable later
 	messages = append(messages, user("Each recipe should serve 2 people."))
