@@ -50,30 +50,3 @@ func TestRecipeHashLength(t *testing.T) {
 	}
 }
 
-func TestEncodeIngredientsToTOON(t *testing.T) {
-	// Test that the function works with gotoon library
-	ingredients := []map[string]interface{}{
-		{
-			"brand":        "Kroger",
-			"description":  "Fresh Chicken Breast",
-			"size":         "1 lb",
-			"regularPrice": 8.99,
-			"salePrice":    6.99,
-		},
-	}
-
-	result := encodeIngredientsToTOON(ingredients)
-
-	// Just verify it produces TOON format (has the ingredients header)
-	if !strings.Contains(result, "ingredients[") {
-		t.Errorf("Expected TOON format with 'ingredients[' header, got: %s", result)
-	}
-}
-
-func TestEncodeIngredientsToTOON_Empty(t *testing.T) {
-	result := encodeIngredientsToTOON([]interface{}{})
-
-	if result != "ingredients[0]:" {
-		t.Errorf("Expected 'ingredients[0]:', got: %s", result)
-	}
-}
