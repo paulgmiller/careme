@@ -103,7 +103,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 # Planning & Verification
 - Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.`
 
-// is this dependency on kgorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
+// is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
 func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
