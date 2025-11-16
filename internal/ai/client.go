@@ -96,7 +96,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
   - Title
   - Description: Try to sell the dish and add some flair.
   - Ingredient list: should include quantities and price if in input.
-  - Step-by-step instructions starting with prep.
+  - Step-by-step instructions starting with prep. Don't prefix with numbers.
   - A guess at calorie count and healthiness
   - Optional wine or beer pairing.
 
