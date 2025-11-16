@@ -104,7 +104,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.`
 
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
-func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -131,14 +131,16 @@ func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients [
 		//should we stream. Can we pass past generation.
 	}
 
-	resp, err := client.Responses.New(context.TODO(), params)
+	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes: %w", err)
 	}
+	slog.InfoContext(ctx, "API usage", "usage", resp.Usage.RawJSON())
+
 	// Parse the response to save recipes separately
 	var shoppingList ShoppingList
 	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
-		slog.ErrorContext(context.TODO(), "failed to parse AI response", "error", err)
+		slog.ErrorContext(ctx, "failed to parse AI response", "error", err)
 		// Fall back to saving the entire response as before
 		return nil, err
 	}
