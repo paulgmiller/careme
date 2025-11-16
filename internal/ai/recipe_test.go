@@ -1,6 +1,8 @@
 package ai
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestRecipeComputeHash(t *testing.T) {
 	recipe := Recipe{

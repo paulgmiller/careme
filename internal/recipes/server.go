@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/config"
+	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -150,7 +151,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 		defer ingredientblob.Close()
 		dec := json.NewDecoder(ingredientblob)
-		var ingredients []ingredient
+		var ingredients []kroger.Ingredient
 		err = dec.Decode(&ingredients)
 		if err != nil {
 			http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)

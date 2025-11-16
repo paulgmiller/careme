@@ -23,7 +23,7 @@ import (
 )
 
 type aiClient interface {
-	GenerateRecipes(location *locations.Location, ingredients []string, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	GenerateRecipes(location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 }
 
 type Generator struct {
@@ -161,12 +161,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	if err != nil {
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
-	stringIngredients := make([]string, len(ingredients))
-	for _, ing := range ingredients {
-		stringIngredients = append(stringIngredients, ing.String())
-	}
 
-	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, stringIngredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
@@ -233,10 +229,10 @@ func Filter(term string, brands []string, frozen bool) filter {
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
-func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]ingredient, error) {
+func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
 
 	lochash := p.LocationHash()
-	var ingredients []ingredient
+	var ingredients []kroger.Ingredient
 
 	if ingredientblob, err := g.cache.Get(lochash); err == nil {
 		defer ingredientblob.Close()
@@ -281,30 +277,8 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]ingre
 	return ingredients, nil
 }
 
-// this is a subset of ProductSearchResponse200Data combining item and product we think will be useful
-type ingredient struct {
-	AisleNumber *string `json:"number,omitempty"`
-	Brand       *string `json:"brand,omitempty"`
-	//Categories          *[]string `json:"categories,omitempty"`
-	CountryOrigin       *string  `json:"countryOrigin,omitempty"`
-	Description         *string  `json:"description,omitempty"`
-	Favorite            *bool    `json:"favorite,omitempty"` //what does this mean?
-	InventoryStockLevel *string  `json:"stockLevel,omitempty"`
-	PriceSale           *float32 `json:"salePrice,omitempty"`
-	PriceRegular        *float32 `json:"regularPrice,omitempty"`
-	Size                *string  `json:"size,omitempty"`
-}
-
-func (i ingredient) String() string {
-	jsonBytes, err := json.Marshal(i)
-	if err != nil {
-		return "ingredient{}"
-	}
-	return string(jsonBytes)
-}
-
 // move to krogrer client as everyone will be differnt here?
-func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]ingredient, error) {
+func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]kroger.Ingredient, error) {
 	limit := 25
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
@@ -327,7 +301,7 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 		return nil, fmt.Errorf("got %d code from kroger : %s", products.StatusCode(), string(output))
 	}
 
-	var ingredients []ingredient
+	var ingredients []kroger.Ingredient
 
 	for _, product := range *products.JSON200.Data {
 		wildcard := len(f.Brands) > 0 && f.Brands[0] == "*"
@@ -346,13 +320,12 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 			}
 
 			//does just giving the model json work better here?
-			ingredient := ingredient{
+			ingredient := kroger.Ingredient{
 				Brand:        product.Brand,
 				Description:  product.Description,
 				Size:         item.Size,
 				PriceRegular: item.Price.Regular,
 				PriceSale:    item.Price.Promo,
-				//Brand:               toStr(product.Brand), //is this repeated tokenss
 				//CountryOrigin: product.CountryOrigin,
 				//AisleNumber:   product.AisleLocations[0].Number,
 				//Favorite: item.Favorite,
