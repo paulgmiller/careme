@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -49,4 +48,3 @@ func TestRecipeHashLength(t *testing.T) {
 		t.Fatalf("expected hash length of 64, got %d", len(hash))
 	}
 }
-

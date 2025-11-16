@@ -153,16 +153,14 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
 func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients interface{}, instructions string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
-
-	// Message 1: System context and objective, move to Instructions
-
-	messages = append(messages, responses.ResponseInputItemParamOfMessage(systemMessage, responses.EasyInputMessageRoleSystem))
+	//constants we might make variable later
 	messages = append(messages, user("Each recipe should serve 2 people."))
 	messages = append(messages, user("generate 3 recipes"))
 	messages = append(messages, user("Permitted cooking methods: oven, stove, grill, slow cooker"))
+	//location and date for seasonal ingredientss
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
 
-	// Message 2: Available ingredients (in TOON format for token efficiency)
+	//Available ingredients (in TOON format for token efficiency)
 	ingredientsMessage := "Ingredients currently on sale in toon\n"
 
 	encoded, err := gotoon.Encode(saleIngredients)
@@ -173,7 +171,7 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 
 	messages = append(messages, user(ingredientsMessage))
 
-	// Message 3: Previous recipes to avoid (if any)
+	// Previous recipes to avoid (if any)
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
 		prevRecipesMsg.WriteString("Avoid recipes similar to these from the past 2 weeks:\n")
@@ -183,7 +181,7 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 		messages = append(messages, user(prevRecipesMsg.String()))
 	}
 
-	// Message 4: Additional user instructions (if any)
+	// Additional user instructions (if any)
 	if instructions != "" {
 		messages = append(messages, user(instructions))
 	}

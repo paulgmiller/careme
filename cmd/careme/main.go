@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/alpkeskin/gotoon"
 	multi "github.com/samber/slog-multi"
 
 	"careme/internal/cache"
@@ -124,9 +125,11 @@ func run(cfg *config.Config, location string, ingredient string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get ingredients: %w", err)
 		}
-		for _, ing := range ings {
-			fmt.Printf("- %s\n", ing)
+		encoded, err := gotoon.Encode(ings)
+		if err != nil {
+			return fmt.Errorf("failed to encode ingredients to TOON: %w", err)
 		}
+		fmt.Println(encoded)
 		return nil
 	}
 
