@@ -161,7 +161,7 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
 
 	//Available ingredients (in TOON format for token efficiency)
-	ingredientsMessage := "Ingredients currently on sale in toon\n"
+	ingredientsMessage := "Ingredients currently on sale in TOON format\n"
 
 	encoded, err := gotoon.Encode(saleIngredients)
 	if err != nil {
