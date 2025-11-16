@@ -9,7 +9,7 @@ require github.com/samber/lo v1.51.0
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2
 	github.com/invopop/jsonschema v0.13.0
-	github.com/openai/openai-go/v2 v2.3.1
+	github.com/openai/openai-go/v2 v2.7.1
 	github.com/samber/slog-multi v1.5.0
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	golang.org/x/net v0.42.0

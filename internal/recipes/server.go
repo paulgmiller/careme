@@ -192,7 +192,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
-		if err := s.generator.GenerateRecipes(ctx, p); err != nil {
+		//copy over request id to new context? can't be same context because end of http request will cancel it.
+		if err := s.generator.GenerateRecipes(context.Background(), p); err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
 		}
 	}()
