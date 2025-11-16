@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
 	"crypto/sha256"
@@ -29,6 +30,7 @@ type Client struct {
 	schema     map[string]any
 }
 
+// todo collapse closer to
 type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` //should this and price be numbers? need units then
@@ -56,8 +58,6 @@ type ShoppingList struct {
 	Recipes []Recipe `json:"recipes"`
 }
 
-// Removed custom OpenAIRequest/OpenAIResponse in favor of official SDK types
-
 func NewClient(provider, apiKey, model string) *Client {
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
@@ -76,14 +76,45 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients interface{}, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
-	messages := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
+const systemMessage = `
+"You are a professional chef and recipe developer that wants to help working families cook each night with varied cuisines."
+
+# Objective
+Generate distinct, practical recipes using the provided constraints to maximize ingredient efficiency and meal variety.
+
+# Instructions
+- Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch alongside protein is acceptable and satisfies the side requirement.
+- Recipes should use diverse cooking methods and represent a variety of cuisines.
+- Provide clear, step-by-step instructions and an ingredient list for each recipe.
+- Recipes should take under 1 hour to prepare, unless the user ask for something longer
+- Optionally include a wine pairing suggestion for each recipe if appropriate.
+- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority) 
+
+
+# Output Format
+- Each recipe includes:
+  - Title
+  - Description: Try to sell the dish and add some flair.
+  - Ingredient list: should include quantities and price if in input.
+  - Step-by-step instructions starting with prep.
+  - A guess at calorie count and healthiness
+  - Optional wine or beer pairing (suggest a local brand if possible).
+
+# Planning & Verification
+- Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.`
+
+// is this dependency on kgorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
+func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
+	}
 
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
 	params := responses.ResponseNewParams{
 		Model:        openai.ChatModelGPT5,
-		Instructions: openai.String("You are a professional chef and recipe developer that wants to help working families cook each night with varied cuisines."),
+		Instructions: openai.String(systemMessage),
 
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
@@ -115,74 +146,47 @@ func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients i
 	return &shoppingList, nil
 }
 
-// encodeIngredientsToTOON converts ingredient data to TOON format using the gotoon library
-func encodeIngredientsToTOON(ingredients interface{}) string {
-	data := map[string]interface{}{
-		"ingredients": ingredients,
-	}
-
-	encoded, err := gotoon.Encode(data)
-	if err != nil {
-		return "ingredients[0]:"
-	}
-
-	return encoded
+func user(msg string) responses.ResponseInputItemUnionParam {
+	return responses.ResponseInputItemParamOfMessage(msg, responses.EasyInputMessageRoleUser)
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients interface{}, instructions string, date time.Time, lastRecipes []string) responses.ResponseInputParam {
+func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients interface{}, instructions string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 
-	// Message 1: System context and objective
-	systemMessage := `# Objective
-Generate 3 distinct, practical recipes using the provided constraints to maximize ingredient efficiency and meal variety.
-
-# Instructions
-- Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch alongside protein is acceptable and satisfies the side requirement.
-- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority) and that are in season for the current date and user's state location ` + date.Format("January 2nd") + ` in ` + location.State + `).
-- Recipes should use diverse cooking methods and represent a variety of cuisines.
-- Each recipe should serve 2 people.
-- Provide clear, step-by-step instructions and an ingredient list for each recipe.
-- Recipes should take under 1 hour to prepare, unless a special dish requires longer.
-- Optionally include a wine pairing suggestion for each recipe if appropriate.
-- Permitted cooking methods: oven, stove, grill, slow cooker.
-
-# Output Format
-- Each recipe includes:
-  - Title
-  - Description: Try to sell the dish and add some flair.
-  - Ingredient list: should include quantities and price if in input.
-  - Step-by-step instructions.
-  - A guess at calorie count and healthiness
-  - Optional wine or beer pairing.
-
-# Planning & Verification
-- Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.`
+	// Message 1: System context and objective, move to Instructions
 
 	messages = append(messages, responses.ResponseInputItemParamOfMessage(systemMessage, responses.EasyInputMessageRoleSystem))
+	messages = append(messages, user("Each recipe should serve 2 people."))
+	messages = append(messages, user("generate 3 recipes"))
+	messages = append(messages, user("Permitted cooking methods: oven, stove, grill, slow cooker"))
+	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
 
 	// Message 2: Available ingredients (in TOON format for token efficiency)
-	ingredientsMessage := `Ingredients currently on sale at local QFC/Fred Meyer (in TOON format - a token-efficient tabular format):
+	ingredientsMessage := "Ingredients currently on sale in toon\n"
 
-` + encodeIngredientsToTOON(saleIngredients)
+	encoded, err := gotoon.Encode(saleIngredients)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode ingredients to TOON: %w", err)
+	}
+	ingredientsMessage += encoded
 
-	messages = append(messages, responses.ResponseInputItemParamOfMessage(ingredientsMessage, responses.EasyInputMessageRoleUser))
+	messages = append(messages, user(ingredientsMessage))
 
 	// Message 3: Previous recipes to avoid (if any)
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
 		prevRecipesMsg.WriteString("Avoid recipes similar to these from the past 2 weeks:\n")
 		for _, recipe := range lastRecipes {
-			prevRecipesMsg.WriteString(fmt.Sprintf("- %s\n", recipe))
+			prevRecipesMsg.WriteString(fmt.Sprintf("%s\n", recipe))
 		}
-		messages = append(messages, responses.ResponseInputItemParamOfMessage(prevRecipesMsg.String(), responses.EasyInputMessageRoleUser))
+		messages = append(messages, user(prevRecipesMsg.String()))
 	}
 
 	// Message 4: Additional user instructions (if any)
 	if instructions != "" {
-		userInstructionsMsg := "Additional User Instructions:\n" + instructions
-		messages = append(messages, responses.ResponseInputItemParamOfMessage(userInstructionsMsg, responses.EasyInputMessageRoleUser))
+		messages = append(messages, user(instructions))
 	}
 
-	return messages
+	return messages, nil
 }
