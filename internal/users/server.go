@@ -2,6 +2,7 @@ package users
 
 import (
 	"careme/internal/templates"
+	"context"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -10,18 +11,24 @@ import (
 	"time"
 )
 
+type locationService interface {
+	GetLocationNameByID(ctx context.Context, locationID string) (string, error)
+}
+
 type server struct {
 	storage       *Storage
 	clarityScript template.HTML
 	userTmpl      *template.Template //just remove or is htis useful?
+	locService    locationService
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, clarityScript template.HTML) *server {
+func NewHandler(storage *Storage, clarityScript template.HTML, locService locationService) *server {
 	return &server{
 		storage:       storage,
 		clarityScript: clarityScript,
 		userTmpl:      templates.User,
+		locService:    locService,
 	}
 }
 
@@ -113,14 +120,28 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		success = true
 	}
 
+	// Fetch location name if favorite store is set
+	var favoriteStoreName string
+	if currentUser.FavoriteStore != "" && s.locService != nil {
+		name, err := s.locService.GetLocationNameByID(ctx, currentUser.FavoriteStore)
+		if err != nil {
+			slog.WarnContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", err)
+			favoriteStoreName = currentUser.FavoriteStore // fallback to ID
+		} else {
+			favoriteStoreName = name
+		}
+	}
+
 	data := struct {
-		ClarityScript template.HTML
-		User          *User
-		Success       bool
+		ClarityScript     template.HTML
+		User              *User
+		Success           bool
+		FavoriteStoreName string
 	}{
-		ClarityScript: s.clarityScript,
-		User:          currentUser,
-		Success:       success,
+		ClarityScript:     s.clarityScript,
+		User:              currentUser,
+		Success:           success,
+		FavoriteStoreName: favoriteStoreName,
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)

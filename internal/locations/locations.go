@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -19,11 +20,17 @@ type krogerClient interface {
 	LocationDetailsWithResponse(ctx context.Context, locationId string, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationDetailsResponse, error)
 }
 
+type userStore interface {
+	GetUserByID(id string) (userID string, favoriteStore string, err error)
+	UpdateUserFavoriteStore(userID string, storeID string) error
+}
+
 type locationServer struct {
 	locationCache map[string]Location
 	cacheLock     sync.Mutex // to protect locationMap
 	client        krogerClient
 	clarity       template.HTML //ugh should do better here.
+	userStore     userStore
 }
 
 func New(ctx context.Context, cfg *config.Config) (*locationServer, error) {
@@ -37,6 +44,10 @@ func New(ctx context.Context, cfg *config.Config) (*locationServer, error) {
 		client:        client,
 		clarity:       html.ClarityScript(cfg),
 	}, nil
+}
+
+func (l *locationServer) SetUserStore(store userStore) {
+	l.userStore = store
 }
 
 func (l *locationServer) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
@@ -145,5 +156,43 @@ func (l *locationServer) Register(mux *http.ServeMux) {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 
+	})
+
+	mux.HandleFunc("POST /locations/favorite", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		
+		if l.userStore == nil {
+			http.Error(w, "user storage not configured", http.StatusInternalServerError)
+			return
+		}
+
+		// Get user from cookie
+		cookie, err := r.Cookie("careme_user")
+		if err != nil {
+			slog.ErrorContext(ctx, "no user cookie found", "error", err)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form submission", http.StatusBadRequest)
+			return
+		}
+
+		locationID := strings.TrimSpace(r.FormValue("location_id"))
+		if locationID == "" {
+			http.Error(w, "location_id is required", http.StatusBadRequest)
+			return
+		}
+
+		// Update user's favorite store
+		if err := l.userStore.UpdateUserFavoriteStore(cookie.Value, locationID); err != nil {
+			slog.ErrorContext(ctx, "failed to update user favorite store", "error", err)
+			http.Error(w, "unable to save favorite store", http.StatusInternalServerError)
+			return
+		}
+
+		slog.InfoContext(ctx, "favorite store updated", "user_id", cookie.Value, "location_id", locationID)
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
 	})
 }
