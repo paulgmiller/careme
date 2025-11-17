@@ -20,7 +20,7 @@ spec:
         runAsGroup: 65532
       containers:
         - name: careme
-          image: ghcr.io/paulgmiller/careme:98d1134
+          image: ghcr.io/paulgmiller/careme:c72709b
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -80,10 +80,6 @@ metadata:
   name: careme
   labels:
     app: careme
-  annotations:
-    # Uncomment and adjust if using cert-manager for TLS
-    # cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
 spec:
   rules:
     - host: careme.northbriton.net
