@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -111,6 +112,11 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		success = true
+	}
+
+	slices.Reverse(currentUser.LastRecipes)
+	if len(currentUser.LastRecipes) > 14 {
+		currentUser.LastRecipes = currentUser.LastRecipes[:14]
 	}
 
 	data := struct {
