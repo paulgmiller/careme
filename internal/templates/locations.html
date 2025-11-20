@@ -27,8 +27,8 @@
                 <span class="text-lg font-semibold text-brand-700">{{.Name}}</span>
                 <span class="text-sm text-gray-600">{{.Address}}</span>
               </a>
-              <form method="POST" action="/locations/favorite">
-                <input type="hidden" name="location_id" value="{{.ID}}" />
+              <form method="POST" action="/user">
+                <input type="hidden" name="favorite_store" value="{{.ID}}" />
                 <button type="submit"
                   class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-600 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Set as Favorite

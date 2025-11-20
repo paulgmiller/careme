@@ -109,8 +109,16 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid form submission", http.StatusBadRequest)
 			return
 		}
-		currentUser.FavoriteStore = strings.TrimSpace(r.FormValue("favorite_store"))
-		currentUser.ShoppingDay = strings.TrimSpace(r.FormValue("shopping_day"))
+		
+		// Only update favorite_store if provided
+		if favoriteStore := strings.TrimSpace(r.FormValue("favorite_store")); favoriteStore != "" || r.Form.Has("favorite_store") {
+			currentUser.FavoriteStore = favoriteStore
+		}
+		
+		// Only update shopping_day if provided
+		if shoppingDay := strings.TrimSpace(r.FormValue("shopping_day")); shoppingDay != "" {
+			currentUser.ShoppingDay = shoppingDay
+		}
 
 		if err := s.storage.Update(currentUser); err != nil {
 			slog.ErrorContext(ctx, "failed to update user", "error", err)

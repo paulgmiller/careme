@@ -44,8 +44,6 @@ func runServer(cfg *config.Config, addr string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
-	userStoreAdapter := users.NewUserStoreAdapter(userStorage)
-	locationserver.SetUserStore(userStoreAdapter)
 	locationserver.Register(mux)
 
 	locationAdapter := locations.NewLocationAdapter(locationserver)
