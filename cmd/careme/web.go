@@ -40,14 +40,14 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 	mux := http.NewServeMux()
 
-	userHandler := users.NewHandler(userStorage, clarityScript)
-	userHandler.Register(mux)
-
 	locationserver, err := locations.New(context.TODO(), cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
 	locationserver.Register(mux)
+
+	userHandler := users.NewHandler(userStorage, clarityScript, locationserver)
+	userHandler.Register(mux)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, locationserver)
 	recipeHandler.Register(mux)

@@ -1,7 +1,9 @@
 package users
 
 import (
+	"careme/internal/locations"
 	"careme/internal/templates"
+	"context"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -10,18 +12,24 @@ import (
 	"time"
 )
 
+type locationGetter interface {
+	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
+}
+
 type server struct {
 	storage       *Storage
 	clarityScript template.HTML
 	userTmpl      *template.Template //just remove or is htis useful?
+	locGetter     locationGetter
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, clarityScript template.HTML) *server {
+func NewHandler(storage *Storage, clarityScript template.HTML, locGetter locationGetter) *server {
 	return &server{
 		storage:       storage,
 		clarityScript: clarityScript,
 		userTmpl:      templates.User,
+		locGetter:     locGetter,
 	}
 }
 
@@ -102,8 +110,16 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid form submission", http.StatusBadRequest)
 			return
 		}
-		currentUser.FavoriteStore = strings.TrimSpace(r.FormValue("favorite_store"))
-		currentUser.ShoppingDay = strings.TrimSpace(r.FormValue("shopping_day"))
+		
+		// Only update favorite_store if provided
+		if favoriteStore := strings.TrimSpace(r.FormValue("favorite_store")); favoriteStore != "" || r.Form.Has("favorite_store") {
+			currentUser.FavoriteStore = favoriteStore
+		}
+		
+		// Only update shopping_day if provided
+		if shoppingDay := strings.TrimSpace(r.FormValue("shopping_day")); shoppingDay != "" {
+			currentUser.ShoppingDay = shoppingDay
+		}
 
 		if err := s.storage.Update(currentUser); err != nil {
 			slog.ErrorContext(ctx, "failed to update user", "error", err)
@@ -113,14 +129,28 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		success = true
 	}
 
+	// Fetch location name if favorite store is set
+	var favoriteStoreName string
+	if currentUser.FavoriteStore != "" && s.locGetter != nil {
+		loc, err := s.locGetter.GetLocationByID(ctx, currentUser.FavoriteStore)
+		if err != nil {
+			slog.WarnContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", err)
+			favoriteStoreName = currentUser.FavoriteStore // fallback to ID
+		} else {
+			favoriteStoreName = loc.Name
+		}
+	}
+
 	data := struct {
-		ClarityScript template.HTML
-		User          *User
-		Success       bool
+		ClarityScript     template.HTML
+		User              *User
+		Success           bool
+		FavoriteStoreName string
 	}{
-		ClarityScript: s.clarityScript,
-		User:          currentUser,
-		Success:       success,
+		ClarityScript:     s.clarityScript,
+		User:              currentUser,
+		Success:           success,
+		FavoriteStoreName: favoriteStoreName,
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)
