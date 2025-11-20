@@ -1,6 +1,7 @@
 package users
 
 import (
+	"careme/internal/locations"
 	"careme/internal/templates"
 	"context"
 	"errors"
@@ -11,24 +12,24 @@ import (
 	"time"
 )
 
-type locationService interface {
-	GetLocationNameByID(ctx context.Context, locationID string) (string, error)
+type locationGetter interface {
+	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
 
 type server struct {
 	storage       *Storage
 	clarityScript template.HTML
 	userTmpl      *template.Template //just remove or is htis useful?
-	locService    locationService
+	locGetter     locationGetter
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, clarityScript template.HTML, locService locationService) *server {
+func NewHandler(storage *Storage, clarityScript template.HTML, locGetter locationGetter) *server {
 	return &server{
 		storage:       storage,
 		clarityScript: clarityScript,
 		userTmpl:      templates.User,
-		locService:    locService,
+		locGetter:     locGetter,
 	}
 }
 
@@ -130,13 +131,13 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch location name if favorite store is set
 	var favoriteStoreName string
-	if currentUser.FavoriteStore != "" && s.locService != nil {
-		name, err := s.locService.GetLocationNameByID(ctx, currentUser.FavoriteStore)
+	if currentUser.FavoriteStore != "" && s.locGetter != nil {
+		loc, err := s.locGetter.GetLocationByID(ctx, currentUser.FavoriteStore)
 		if err != nil {
 			slog.WarnContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", err)
 			favoriteStoreName = currentUser.FavoriteStore // fallback to ID
 		} else {
-			favoriteStoreName = name
+			favoriteStoreName = loc.Name
 		}
 	}
 

@@ -46,8 +46,7 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 	locationserver.Register(mux)
 
-	locationAdapter := locations.NewLocationAdapter(locationserver)
-	userHandler := users.NewHandler(userStorage, clarityScript, locationAdapter)
+	userHandler := users.NewHandler(userStorage, clarityScript, locationserver)
 	userHandler.Register(mux)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, locationserver)
