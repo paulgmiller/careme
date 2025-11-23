@@ -6,6 +6,9 @@
 *.dylib
 /cmd/careme/careme
 
+# Project binary
+careme
+
 # Test binary, built with `go test -c`
 *.test
 
