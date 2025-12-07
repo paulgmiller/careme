@@ -160,41 +160,48 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	defer done()
 	start := time.Now()
 
-	var shoppingList *ai.ShoppingList
 	var err error
-	if p.Conversation != nil {
+	if p.Conversation != nil && p.Instructions != "" {
+		// these should both alwas be true. Warn if not because its a cacheing bug?
 		//todo have this be seperate so we don't even bother with last recipes? nah seems okay
-		shoppingList, err = g.aiClient.Regenerate(ctx, p.Instructions, *p.Conversation)
-	} else {
-		ingredients, serr := g.GetStaples(ctx, p)
-		if serr != nil {
-			return fmt.Errorf("failed to get staples: %w", err)
+		shoppingList, err := g.aiClient.Regenerate(ctx, p.Instructions, *p.Conversation)
+		if err != nil {
+			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		shoppingList, err = g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
+		return saveShoppingList(ctx, g.cache, shoppingList, p)
 	}
+
+	ingredients, err := g.GetStaples(ctx, p)
+	if err != nil {
+		return fmt.Errorf("failed to get staples: %w", err)
+	}
+	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
-
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
+	return saveShoppingList(ctx, g.cache, shoppingList, p)
 
+}
+
+func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.ShoppingList, p *generatorParams) error {
 	// Save each recipe separately by its hash
 	for i := range shoppingList.Recipes {
 		recipe := &shoppingList.Recipes[i]
 		recipe.OriginHash = p.Hash()
 		recipeJSON := lo.Must(json.Marshal(recipe))
-		if err := g.cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
+		if err := cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
 			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
 			return err
 		}
 	}
 	//we could actually nuke out the rest of recipe and lazily load but not yet
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
-	if err := g.cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
+	if err := cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
 		return err
 	}
-
 	// Also cache the params for hash-based retrieval
 	// TODO: Consider embedding the params directly in the shoppingList structure.
 	// This would allow us to cache both the shopping list and its associated parameters together,
@@ -203,11 +210,10 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	// Persist the latest conversation IDs with the params so follow-ups can reuse them.
 	p.Conversation = &shoppingList.ConversationState
 	paramsJSON := lo.Must(json.Marshal(p))
-	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
+	if err := cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
 		return err
 	}
-
 	return nil
 }
 
