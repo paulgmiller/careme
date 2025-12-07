@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/alpkeskin/gotoon"
-	openai "github.com/openai/openai-go/v2"
-	"github.com/openai/openai-go/v2/option"
-	"github.com/openai/openai-go/v2/responses"
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
 
 	"github.com/invopop/jsonschema"
@@ -44,6 +44,7 @@ type Recipe struct {
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
+	OriginHash   string       `json:"origin_hash"`
 }
 
 // ComputeHash calculates the SHA256 hash of the recipe content
@@ -113,7 +114,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
 	params := responses.ResponseNewParams{
-		Model:        openai.ChatModelGPT5,
+		Model:        openai.ChatModelGPT5_1,
 		Instructions: openai.String(systemMessage),
 
 		Input: responses.ResponseNewParamsInputUnion{
