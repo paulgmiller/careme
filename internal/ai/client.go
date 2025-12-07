@@ -44,6 +44,7 @@ type Recipe struct {
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
+	OriginHash   string       `json:"origin_hash"`
 }
 
 // ComputeHash calculates the SHA256 hash of the recipe content
