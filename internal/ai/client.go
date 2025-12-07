@@ -15,6 +15,7 @@ import (
 
 	"github.com/alpkeskin/gotoon"
 	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/conversations"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
@@ -37,11 +38,6 @@ type Ingredient struct {
 	Price    string `json:"price"`    //TODO exclude empty
 }
 
-type ConversationState struct {
-	ResponseID     string `json:"response_id,omitempty"`
-	ConversationID string `json:"conversation_id,omitempty"`
-}
-
 type Recipe struct {
 	Title        string       `json:"title"`
 	Description  string       `json:"description"`
@@ -61,8 +57,8 @@ func (r *Recipe) ComputeHash() string {
 }
 
 type ShoppingList struct {
-	ConversationState
-	Recipes []Recipe `json:"recipes"`
+	ConversationID string   `json:"conversation_id,omitempty" jsonschema:"-"`
+	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
 }
 
 func NewClient(provider, apiKey, model string) *Client {
@@ -116,25 +112,39 @@ func responseToShoppingList(ctx context.Context, resp *responses.Response) (*Sho
 	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
-	shoppingList.ResponseID = resp.ID
+	if resp.Conversation.ID == "" {
+		return nil, fmt.Errorf("failed to get conversation ID")
+	}
 	shoppingList.ConversationID = resp.Conversation.ID
+
 	return &shoppingList, nil
 }
 
-func (c *Client) Regenerate(ctx context.Context, newinstruction string, cs ConversationState) (*ShoppingList, error) {
+func scheme(schema map[string]any) responses.ResponseTextConfigParam {
+	return responses.ResponseTextConfigParam{
+		Format: responses.ResponseFormatTextConfigUnionParam{
+			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name:   "recipes",
+				Schema: schema, //https://platform.openai.com/docs/guides/structured-outputs?example=structured-data
+			},
+		},
+	}
+}
+
+func (c *Client) Regenerate(ctx context.Context, newinstruction string, conversationID string) (*ShoppingList, error) {
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
 	params := responses.ResponseNewParams{
 		Model: openai.ChatModelGPT5_1,
-
+		//only new input
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newinstruction)},
 		},
-		Store:              openai.Bool(true),
-		PreviousResponseID: openai.String(cs.ResponseID),
+		Store: openai.Bool(true),
 		Conversation: responses.ResponseNewParamsConversationUnion{
-			OfString: openai.String(cs.ConversationID),
+			OfString: openai.String(conversationID),
 		},
+		Text: scheme(c.schema),
 	}
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
@@ -152,6 +162,10 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 	}
 
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	convo, err := client.Conversations.New(ctx, conversations.ConversationNewParams{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create conversation: %w", err)
+	}
 
 	params := responses.ResponseNewParams{
 		Model:        openai.ChatModelGPT5_1,
@@ -161,17 +175,14 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 			OfInputItemList: messages,
 		},
 		Store: openai.Bool(true),
-		Text: responses.ResponseTextConfigParam{
-			Format: responses.ResponseFormatTextConfigUnionParam{
-				OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-					Name:   "recipes",
-					Schema: c.schema, //https://platform.openai.com/docs/guides/structured-outputs?example=structured-data
-				},
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfConversationObject: &responses.ResponseConversationParam{
+				ID: convo.ID,
 			},
 		},
-
-		//should we stream. Can we pass past generation.
+		Text: scheme(c.schema),
 	}
+	//should we stream. Can we pass past generation.
 
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {

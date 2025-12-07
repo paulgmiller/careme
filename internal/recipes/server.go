@@ -193,9 +193,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	hash := p.Hash()
 	if list, err := s.generator.FromCache(ctx, hash); err == nil {
 		//TODO check not found error explicitly
-		if p.Conversation == nil {
-			p.Conversation = &list.ConversationState
-		}
 		if r.URL.Query().Get("mail") == "true" {
 			FormatMail(p, *list, w)
 			return
@@ -204,14 +201,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	convID := strings.TrimSpace(r.URL.Query().Get("conversation_id"))
-	respID := strings.TrimSpace(r.URL.Query().Get("response_id"))
-	if convID != "" || respID != "" {
-		p.Conversation = &ai.ConversationState{
-			ConversationID: convID,
-			ResponseID:     respID,
-		}
-	}
+	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
 	go func() {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)

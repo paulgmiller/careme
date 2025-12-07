@@ -56,7 +56,6 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 		Hash           string
 		Recipes        []ai.Recipe
 		ConversationID string
-		LastResponseID string
 	}{
 		Location:       *p.Location,
 		Date:           p.Date.Format("2006-01-02"),
@@ -65,7 +64,6 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 		Hash:           p.Hash(),
 		Recipes:        l.Recipes,
 		ConversationID: l.ConversationID,
-		LastResponseID: l.ResponseID,
 	}
 
 	return templates.Recipe.Execute(writer, data)
