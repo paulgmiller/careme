@@ -162,7 +162,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 
 	var err error
 	if p.ConversationID != "" && p.Instructions != "" {
-		// these should both alwas be true. Warn if not because its a cacheing bug?
+		// these should both alwas be true. Warn if not because its a caching bug?
 		//todo have this be separate so we don't even bother with last recipes? nah seems okay
 		shoppingList, err := g.aiClient.Regenerate(ctx, p.Instructions, p.ConversationID)
 		if err != nil {
