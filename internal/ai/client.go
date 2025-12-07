@@ -56,7 +56,8 @@ func (r *Recipe) ComputeHash() string {
 }
 
 type ShoppingList struct {
-	Recipes []Recipe `json:"recipes"`
+	Recipes        []Recipe `json:"recipes"`
+	ConversationID string   `json:"conversation_id,omitempty"`
 }
 
 func NewClient(provider, apiKey, model string) *Client {
@@ -105,7 +106,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.`
 
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
-func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string, previousConversationID string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -132,6 +133,13 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 		//should we stream. Can we pass past generation.
 	}
 
+	// Use OpenAI's conversation continuation feature to maintain conversation history.
+	// The PreviousResponseID links this request to a prior response, allowing the model
+	// to reference previous context when generating new recipes.
+	if previousConversationID != "" {
+		params.PreviousResponseID = openai.String(previousConversationID)
+	}
+
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes: %w", err)
@@ -145,6 +153,9 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 		// Fall back to saving the entire response as before
 		return nil, err
 	}
+
+	// Save the conversation/response ID for future multi-turn conversations
+	shoppingList.ConversationID = resp.ID
 
 	return &shoppingList, nil
 }

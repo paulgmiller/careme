@@ -48,3 +48,25 @@ func TestRecipeHashLength(t *testing.T) {
 		t.Fatalf("expected hash length of 64, got %d", len(hash))
 	}
 }
+
+func TestShoppingListConversationID(t *testing.T) {
+	list := ShoppingList{
+		Recipes: []Recipe{
+			{Title: "Recipe 1"},
+			{Title: "Recipe 2"},
+		},
+		ConversationID: "test-conversation-id-123",
+	}
+
+	if list.ConversationID != "test-conversation-id-123" {
+		t.Fatalf("expected conversation ID to be 'test-conversation-id-123', got '%s'", list.ConversationID)
+	}
+
+	// Test that empty conversation ID is allowed
+	list2 := ShoppingList{
+		Recipes: []Recipe{{Title: "Recipe"}},
+	}
+	if list2.ConversationID != "" {
+		t.Fatalf("expected empty conversation ID, got '%s'", list2.ConversationID)
+	}
+}
