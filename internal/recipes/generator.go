@@ -170,7 +170,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 
 	// Save each recipe separately by its hash
-	for _, recipe := range shoppingList.Recipes {
+	for i := range shoppingList.Recipes {
+		recipe := &shoppingList.Recipes[i]
 		recipe.OriginHash = p.Hash()
 		recipeJSON := lo.Must(json.Marshal(recipe))
 		if err := g.cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
