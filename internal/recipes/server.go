@@ -198,6 +198,19 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Try to find a previous conversation ID to maintain conversation history
+	// First, try the base params (without instructions) to find the most recent generation
+	if p.Instructions != "" || len(p.LastRecipes) > 0 {
+		baseParams := DefaultParams(l, date)
+		baseParams.UserID = currentUser.ID
+		baseHash := baseParams.Hash()
+		
+		if baseList, err := s.generator.FromCache(ctx, baseHash); err == nil && baseList.ConversationID != "" {
+			p.ConversationID = baseList.ConversationID
+			slog.InfoContext(ctx, "using previous conversation ID", "conversation_id", p.ConversationID, "base_hash", baseHash)
+		}
+	}
+
 	go func() {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		//copy over request id to new context? can't be same context because end of http request will cancel it.

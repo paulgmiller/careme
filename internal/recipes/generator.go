@@ -23,7 +23,7 @@ import (
 )
 
 type aiClient interface {
-	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string, previousConversationID string) (*ai.ShoppingList, error)
 }
 
 type Generator struct {
@@ -65,13 +65,14 @@ func (g *Generator) isGenerating(hash string) (bool, func()) {
 }
 
 type generatorParams struct {
-	Location *locations.Location `json:"location,omitempty"`
-	Date     time.Time           `json:"date,omitempty"`
-	Staples  []filter            `json:"staples,omitempty"`
+	Location       *locations.Location `json:"location,omitempty"`
+	Date           time.Time           `json:"date,omitempty"`
+	Staples        []filter            `json:"staples,omitempty"`
 	//People       int
-	Instructions string   `json:"instructions,omitempty"`
-	LastRecipes  []string `json:"last_recipes,omitempty"`
-	UserID       string   `json:"user_id,omitempty"`
+	Instructions   string   `json:"instructions,omitempty"`
+	LastRecipes    []string `json:"last_recipes,omitempty"`
+	UserID         string   `json:"user_id,omitempty"`
+	ConversationID string   `json:"conversation_id,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -162,10 +163,13 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
 
-	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes, p.ConversationID)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
+
+	// Update params with the new conversation ID for future reference
+	p.ConversationID = shoppingList.ConversationID
 
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 
