@@ -131,14 +131,17 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *Client) Regenerate(ctx context.Context, newinstruction string, conversationID string) (*ShoppingList, error) {
+func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversationID string) (*ShoppingList, error) {
+	if conversationID == "" {
+		return nil, fmt.Errorf("conversation ID is required for regeneration")
+	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
 	params := responses.ResponseNewParams{
 		Model: openai.ChatModelGPT5_1,
 		//only new input
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newinstruction)},
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newInstruction)},
 		},
 		Store: openai.Bool(true),
 		Conversation: responses.ResponseNewParamsConversationUnion{

@@ -117,8 +117,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				Name: "Unknown Location",
 			}, time.Now())
 		}
-		//no need to do this as its already in slist. Right?
-		//p.Conversation = &slist.ConversationState
 		s.generator.FormatChatHTML(p, *slist, w)
 		return
 	}
