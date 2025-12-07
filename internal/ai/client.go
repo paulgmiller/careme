@@ -133,7 +133,9 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 		//should we stream. Can we pass past generation.
 	}
 
-	// Use previous conversation ID if provided to maintain conversation history
+	// Use OpenAI's conversation continuation feature to maintain conversation history.
+	// The PreviousResponseID links this request to a prior response, allowing the model
+	// to reference previous context when generating new recipes.
 	if previousConversationID != "" {
 		params.PreviousResponseID = openai.String(previousConversationID)
 	}

@@ -168,7 +168,9 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 
-	// Update params with the new conversation ID for future reference
+	// Update params with the new conversation ID for future reference.
+	// Note: This modifies the input parameter p so that the conversation ID
+	// is persisted when params are cached along with the shopping list.
 	p.ConversationID = shoppingList.ConversationID
 
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)

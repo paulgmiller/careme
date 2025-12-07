@@ -47,6 +47,22 @@ func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 }
 
+// findPreviousConversationID attempts to find a conversation ID from a previous
+// shopping list generation for the same location and date but without instructions
+// or dismissed recipes. This allows maintaining conversation context across modifications.
+func (s *server) findPreviousConversationID(ctx context.Context, l *locations.Location, date time.Time, userID string) string {
+	baseParams := DefaultParams(l, date)
+	baseParams.UserID = userID
+	baseHash := baseParams.Hash()
+
+	baseList, err := s.generator.FromCache(ctx, baseHash)
+	if err != nil {
+		return ""
+	}
+
+	return baseList.ConversationID
+}
+
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	hash := r.PathValue("hash")
@@ -198,16 +214,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try to find a previous conversation ID to maintain conversation history
-	// First, try the base params (without instructions) to find the most recent generation
+	// Try to find a previous conversation ID to maintain conversation history.
+	// When instructions or dismissed recipes are present, look up the base shopping list
+	// (without those modifications) to retrieve its conversation ID.
 	if p.Instructions != "" || len(p.LastRecipes) > 0 {
-		baseParams := DefaultParams(l, date)
-		baseParams.UserID = currentUser.ID
-		baseHash := baseParams.Hash()
-		
-		if baseList, err := s.generator.FromCache(ctx, baseHash); err == nil && baseList.ConversationID != "" {
-			p.ConversationID = baseList.ConversationID
-			slog.InfoContext(ctx, "using previous conversation ID", "conversation_id", p.ConversationID, "base_hash", baseHash)
+		if conversationID := s.findPreviousConversationID(ctx, l, date, currentUser.ID); conversationID != "" {
+			p.ConversationID = conversationID
+			slog.InfoContext(ctx, "using previous conversation ID for multi-turn conversation", "conversation_id", conversationID)
 		}
 	}
 
