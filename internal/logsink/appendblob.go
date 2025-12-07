@@ -106,15 +106,26 @@ func (h *writer) Write(p []byte) (n int, err error) {
 func (h *writer) loop(ctx context.Context, ab *appendblob.Client) {
 	defer h.wg.Done()
 	var buf []byte
+	// flush writes only complete lines unless forced.
 	flush := func() {
 		if len(buf) == 0 {
 			return
 		}
-		_, err := ab.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(buf)}, nil)
+		limit := len(buf)
+		if idx := bytes.LastIndexByte(buf, '\n'); idx >= 0 {
+			limit = idx + 1 // include newline
+		} else {
+			// no complete line yet; defer flushing
+			return
+		}
+
+		toSend := buf[:limit]
+		_, err := ab.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(toSend)}, nil)
 		if err != nil {
 			fmt.Printf("error %s", err)
+			return
 		}
-		buf = buf[:0] //reset
+		buf = buf[limit:]
 	}
 
 	for {
@@ -122,6 +133,7 @@ func (h *writer) loop(ctx context.Context, ab *appendblob.Client) {
 		case line := <-h.ch:
 			buf = append(buf, line...)
 		case <-h.ticker.C:
+			// periodic flush of complete lines only
 			flush()
 		case <-h.done:
 			//drain whats left
@@ -130,6 +142,7 @@ func (h *writer) loop(ctx context.Context, ab *appendblob.Client) {
 				case line := <-h.ch:
 					buf = append(buf, line...)
 				default:
+					// flush any remaining complete lines
 					flush()
 					return
 				}
