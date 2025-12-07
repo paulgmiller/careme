@@ -24,6 +24,7 @@ import (
 
 type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	Regenerate(ctx context.Context, newinstruction string, conversationID string) (*ai.ShoppingList, error)
 }
 
 type Generator struct {
@@ -69,9 +70,10 @@ type generatorParams struct {
 	Date     time.Time           `json:"date,omitempty"`
 	Staples  []filter            `json:"staples,omitempty"`
 	//People       int
-	Instructions string   `json:"instructions,omitempty"`
-	LastRecipes  []string `json:"last_recipes,omitempty"`
-	UserID       string   `json:"user_id,omitempty"`
+	Instructions   string   `json:"instructions,omitempty"`
+	LastRecipes    []string `json:"last_recipes,omitempty"`
+	UserID         string   `json:"user_id,omitempty"`
+	ConversationID string   `json:"conversation_id,omitempty"` //Can remove if we pass it in seperately to generate recipes?
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -96,8 +98,9 @@ func (g *generatorParams) Hash() string {
 	lo.Must(fnv.Write([]byte(g.Date.Format("2006-01-02"))))
 	bytes := lo.Must(json.Marshal(g.Staples))
 	lo.Must(fnv.Write(bytes))
-	lo.Must(fnv.Write([]byte(g.Instructions)))
+	lo.Must(fnv.Write([]byte(g.Instructions))) //rethink this? if they're all in convo should we have one id and ability to walk back?
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
+	//intionally not including ConversationID to preserve old hashes
 }
 
 // so far just excludes instructions. Can exclude people and other things
@@ -157,43 +160,59 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	defer done()
 	start := time.Now()
 
+	var err error
+	if p.ConversationID != "" && p.Instructions != "" {
+		// these should both alwas be true. Warn if not because its a caching bug?
+		shoppingList, err := g.aiClient.Regenerate(ctx, p.Instructions, p.ConversationID)
+		if err != nil {
+			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
+		}
+		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
+		return saveShoppingList(ctx, g.cache, shoppingList, p)
+	}
+
 	ingredients, err := g.GetStaples(ctx, p)
 	if err != nil {
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
-
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
-
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
+	if err := saveShoppingList(ctx, g.cache, shoppingList, p); err != nil {
+		return fmt.Errorf("failed to save shopping list: %w", err)
+	}
+	// Also cache the params for hash-based retrieval
+	// TODO: Consider embedding the params directly in the shoppingList structure.
+	// This would allow us to cache both the shopping list and its associated parameters together,
+	// avoiding the need for a separate cache entry for params (currently stored as "<hash>.params").
+	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
+	// Persist the latest conversation IDs with the params so follow-ups can reuse them.
+	p.ConversationID = shoppingList.ConversationID
+	paramsJSON := lo.Must(json.Marshal(p))
+	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
+		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
+		return err
+	}
+	return nil
+}
 
+func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.ShoppingList, p *generatorParams) error {
 	// Save each recipe separately by its hash
 	for i := range shoppingList.Recipes {
 		recipe := &shoppingList.Recipes[i]
 		recipe.OriginHash = p.Hash()
 		recipeJSON := lo.Must(json.Marshal(recipe))
-		if err := g.cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
+		if err := cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
 			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
 			return err
 		}
 	}
 	//we could actually nuke out the rest of recipe and lazily load but not yet
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
-	if err := g.cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
+	if err := cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
-		return err
-	}
-
-	// Also cache the params for hash-based retrieval
-	// TODO: Consider embedding the params directly in the shoppingList structure.
-	// This would allow us to cache both the shopping list and its associated parameters together,
-	// avoiding the need for a separate cache entry for params (currently stored as "<hash>.params").
-	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
-	paramsJSON := lo.Must(json.Marshal(p))
-	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
-		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
 		return err
 	}
 

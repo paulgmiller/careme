@@ -49,19 +49,21 @@ func (g *Generator) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
 	//TODO just put params into shopping list and pass that up?
 	data := struct {
-		Location      locations.Location
-		Date          string
-		ClarityScript template.HTML
-		Instructions  string
-		Hash          string
-		Recipes       []ai.Recipe
+		Location       locations.Location
+		Date           string
+		ClarityScript  template.HTML
+		Instructions   string
+		Hash           string
+		Recipes        []ai.Recipe
+		ConversationID string
 	}{
-		Location:      *p.Location,
-		Date:          p.Date.Format("2006-01-02"),
-		ClarityScript: html.ClarityScript(g.config),
-		Instructions:  p.Instructions,
-		Hash:          p.Hash(),
-		Recipes:       l.Recipes,
+		Location:       *p.Location,
+		Date:           p.Date.Format("2006-01-02"),
+		ClarityScript:  html.ClarityScript(g.config),
+		Instructions:   p.Instructions,
+		Hash:           p.Hash(),
+		Recipes:        l.Recipes,
+		ConversationID: l.ConversationID,
 	}
 
 	return templates.Recipe.Execute(writer, data)

@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"careme/internal/ai"
@@ -197,6 +198,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		s.generator.FormatChatHTML(p, *list, w)
 		return
 	}
+
+	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
 	go func() {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
