@@ -18,6 +18,7 @@
 - Go 1.24; keep code `gofmt`-clean before review. Favor small, focused functions and table-driven tests.
 - Exported identifiers in `CamelCase`; package-private helpers in `lowerCamel`. Template names mirror file names in `internal/templates`.
 - Prefer standard library first; add dependencies sparingly and record rationale in PR description if new.
+- Prefer simple html to javascript frameworks
 
 ## Testing Guidelines
 - Place tests alongside code in `*_test.go`; prefer table-driven cases and explicit fixtures over implicit globals.
@@ -25,7 +26,7 @@
 - When touching recipe generation or Kroger client code, add assertions that cover API shape changes and template output (see existing tests in `internal/recipes` and `internal/html`).
 
 ## Commit & Pull Request Guidelines
-- Follow the existing history: short, imperative summaries (e.g., “Fix Kroger location parsing”). Reference an issue/PR number when applicable.
+- Reference an issue/PR number when applicable. Say why something was done rather than just what was done.
 - In PRs, include: what changed, why, how to verify (commands run), and any config/env impacts. Add screenshots for UI changes using `internal/templates`.
 - Keep commits scoped and reviewable; avoid mixing refactors with feature changes unless necessary.
 

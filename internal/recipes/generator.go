@@ -24,6 +24,7 @@ import (
 
 type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	Regenerate(ctx context.Context, newinstruction string, cs ai.ConversationState) (*ai.ShoppingList, error)
 }
 
 type Generator struct {
@@ -69,9 +70,10 @@ type generatorParams struct {
 	Date     time.Time           `json:"date,omitempty"`
 	Staples  []filter            `json:"staples,omitempty"`
 	//People       int
-	Instructions string   `json:"instructions,omitempty"`
-	LastRecipes  []string `json:"last_recipes,omitempty"`
-	UserID       string   `json:"user_id,omitempty"`
+	Instructions string                `json:"instructions,omitempty"`
+	LastRecipes  []string              `json:"last_recipes,omitempty"`
+	UserID       string                `json:"user_id,omitempty"`
+	Conversation *ai.ConversationState `json:"conversation,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -96,8 +98,9 @@ func (g *generatorParams) Hash() string {
 	lo.Must(fnv.Write([]byte(g.Date.Format("2006-01-02"))))
 	bytes := lo.Must(json.Marshal(g.Staples))
 	lo.Must(fnv.Write(bytes))
-	lo.Must(fnv.Write([]byte(g.Instructions)))
+	lo.Must(fnv.Write([]byte(g.Instructions))) //rethink this? if they're all in convo should we have one id and ability to walk back?
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
+	//intionally not including Conversation
 }
 
 // so far just excludes instructions. Can exclude people and other things
@@ -157,12 +160,18 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	defer done()
 	start := time.Now()
 
-	ingredients, err := g.GetStaples(ctx, p)
-	if err != nil {
-		return fmt.Errorf("failed to get staples: %w", err)
+	var shoppingList *ai.ShoppingList
+	var err error
+	if p.Conversation != nil {
+		//todo have this be seperate so we don't even bother with last recipes? nah seems okay
+		shoppingList, err = g.aiClient.Regenerate(ctx, p.Instructions, *p.Conversation)
+	} else {
+		ingredients, serr := g.GetStaples(ctx, p)
+		if serr != nil {
+			return fmt.Errorf("failed to get staples: %w", err)
+		}
+		shoppingList, err = g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	}
-
-	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
@@ -191,6 +200,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	// This would allow us to cache both the shopping list and its associated parameters together,
 	// avoiding the need for a separate cache entry for params (currently stored as "<hash>.params").
 	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
+	// Persist the latest conversation IDs with the params so follow-ups can reuse them.
+	p.Conversation = &shoppingList.ConversationState
 	paramsJSON := lo.Must(json.Marshal(p))
 	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)

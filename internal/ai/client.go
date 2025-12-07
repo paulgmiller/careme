@@ -37,6 +37,11 @@ type Ingredient struct {
 	Price    string `json:"price"`    //TODO exclude empty
 }
 
+type ConversationState struct {
+	ResponseID     string `json:"response_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+}
+
 type Recipe struct {
 	Title        string       `json:"title"`
 	Description  string       `json:"description"`
@@ -56,6 +61,7 @@ func (r *Recipe) ComputeHash() string {
 }
 
 type ShoppingList struct {
+	ConversationState
 	Recipes []Recipe `json:"recipes"`
 }
 
@@ -104,6 +110,40 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 # Planning & Verification
 - Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.`
 
+func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
+	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
+	var shoppingList ShoppingList
+	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
+		return nil, fmt.Errorf("failed to parse AI response: %w", err)
+	}
+	shoppingList.ResponseID = resp.ID
+	shoppingList.ConversationID = resp.Conversation.ID
+	return &shoppingList, nil
+}
+
+func (c *Client) Regenerate(ctx context.Context, newinstruction string, cs ConversationState) (*ShoppingList, error) {
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+
+	params := responses.ResponseNewParams{
+		Model: openai.ChatModelGPT5_1,
+
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newinstruction)},
+		},
+		Store:              openai.Bool(true),
+		PreviousResponseID: openai.String(cs.ResponseID),
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfString: openai.String(cs.ConversationID),
+		},
+	}
+	resp, err := client.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
+	}
+
+	return responseToShoppingList(ctx, resp)
+}
+
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
 func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
@@ -120,6 +160,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
+		Store: openai.Bool(true),
 		Text: responses.ResponseTextConfigParam{
 			Format: responses.ResponseFormatTextConfigUnionParam{
 				OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
@@ -136,17 +177,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes: %w", err)
 	}
-	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
-
-	// Parse the response to save recipes separately
-	var shoppingList ShoppingList
-	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
-		slog.ErrorContext(ctx, "failed to parse AI response", "error", err)
-		// Fall back to saving the entire response as before
-		return nil, err
-	}
-
-	return &shoppingList, nil
+	return responseToShoppingList(ctx, resp)
 }
 
 func user(msg string) responses.ResponseInputItemUnionParam {

@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"careme/internal/ai"
@@ -116,6 +117,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				Name: "Unknown Location",
 			}, time.Now())
 		}
+		//no need to do this as its already in slist. Right?
+		//p.Conversation = &slist.ConversationState
 		s.generator.FormatChatHTML(p, *slist, w)
 		return
 	}
@@ -190,12 +193,24 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	hash := p.Hash()
 	if list, err := s.generator.FromCache(ctx, hash); err == nil {
 		//TODO check not found error explicitly
+		if p.Conversation == nil {
+			p.Conversation = &list.ConversationState
+		}
 		if r.URL.Query().Get("mail") == "true" {
 			FormatMail(p, *list, w)
 			return
 		}
 		s.generator.FormatChatHTML(p, *list, w)
 		return
+	}
+
+	convID := strings.TrimSpace(r.URL.Query().Get("conversation_id"))
+	respID := strings.TrimSpace(r.URL.Query().Get("response_id"))
+	if convID != "" || respID != "" {
+		p.Conversation = &ai.ConversationState{
+			ConversationID: convID,
+			ResponseID:     respID,
+		}
 	}
 
 	go func() {
