@@ -5,6 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Careme Recipes</title>
 
+  {{if .Recipes}}
+  <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
+  <meta property="og:title" content="{{(index .Recipes 0).Title}}" />
+  <meta property="og:description" content="{{(index .Recipes 0).Description}}" />
+  <meta property="og:image" content="https://careme.cooking/favicon.ico" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Careme" />
+  
+  <!-- Twitter Card meta tags -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="{{(index .Recipes 0).Title}}" />
+  <meta name="twitter:description" content="{{(index .Recipes 0).Description}}" />
+  <meta name="twitter:image" content="https://careme.cooking/favicon.ico" />
+  {{end}}
+
   {{template "tailwind_head"}}
 
   {{.ClarityScript}}
