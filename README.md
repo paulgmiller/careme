@@ -17,3 +17,8 @@ The application is configured via environment variables:
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `HISTORY_PATH` - Path to store recipe history (default: "./data/history.json")
 
+## Live site
+
+* Uptime https://stats.uptimerobot.com/ehEFlvlNM9
+* Cloudflare for dns and https proxying
+
