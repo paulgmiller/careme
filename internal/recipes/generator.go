@@ -161,14 +161,14 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 
 	var err error
 	if p.ConversationID != "" && p.Instructions != "" {
-		slog.InfoContext(ctx, "Regenerating	 recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
-		// these should both alwas be true. Warn if not because its a caching bug?
+		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
+		// these should both always be true. Warn if not because its a caching bug?
 		shoppingList, err := g.aiClient.Regenerate(ctx, p.Instructions, p.ConversationID)
 		if err != nil {
 			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
-		//see todo below.
+
 		paramsJSON := lo.Must(json.Marshal(p))
 		if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
 			slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
