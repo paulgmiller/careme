@@ -17,7 +17,7 @@ type BlobCache struct {
 	container       string
 }
 
-var _ Cache = (*BlobCache)(nil)
+var _ ListCache = (*BlobCache)(nil)
 
 func NewBlobCache(container string) (*BlobCache, error) {
 	// Your account name and key can be obtained from the Azure Portal.
@@ -48,6 +48,27 @@ func NewBlobCache(container string) (*BlobCache, error) {
 	}, nil
 }
 
+// come back and use iterators or a queue?
+func (fc *BlobCache) List(ctx context.Context, prefix string, _ string) ([]string, error) {
+	var keys []string
+	pager := fc.containerClient.NewListBlobsFlatPager(fc.container, &azblob.ListBlobsFlatOptions{
+		Prefix: &prefix,
+	})
+
+	for pager.More() {
+
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get next page of blobs: %w", err)
+		}
+		for _, blob := range page.Segment.BlobItems {
+			keys = append(keys, strings.TrimPrefix(*blob.Name, prefix))
+		}
+	}
+
+	return keys, nil
+}
+
 func (fc *BlobCache) Get(key string) (io.ReadCloser, error) {
 	stream, err := fc.containerClient.DownloadStream(context.TODO(), fc.container, key, &azblob.DownloadStreamOptions{})
 	if err != nil {
@@ -66,7 +87,7 @@ func (fc *BlobCache) Set(key, value string) error {
 	return err
 }
 
-func MakeCache() (Cache, error) {
+func MakeCache() (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
 		log.Println("Using Azure Blob Storage for cache")

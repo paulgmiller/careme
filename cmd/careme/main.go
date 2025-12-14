@@ -5,12 +5,12 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/alpkeskin/gotoon"
 	multi "github.com/samber/slog-multi"
 
 	"careme/internal/cache"
@@ -24,7 +24,7 @@ func main() {
 	var location string
 	var zipcode string
 	var ingredient string
-	var serve bool
+	var serve, mail bool
 	var addr string
 
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
@@ -34,6 +34,7 @@ func main() {
 	flag.StringVar(&ingredient, "ingredient", "", "just list ingredients")
 	flag.StringVar(&ingredient, "i", "", "just list ingredients (short form)")
 	flag.BoolVar(&serve, "serve", false, "Run HTTP server mode")
+	flag.BoolVar(&mail, "mail", false, "Run mail sender loop")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.Parse()
 
@@ -62,6 +63,15 @@ func main() {
 		slog.SetDefault(slog.New(multi.Fanout(handler, slog.NewTextHandler(os.Stdout, nil))))
 		//log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
 
+	}
+
+	if mail {
+		mailer, err := NewMailer(cfg)
+		if err != nil {
+			log.Fatalf("failed to create mailer: %v", err)
+		}
+		slog.InfoContext(ctx, "mail sender engaged")
+		go mailer.Iterate(ctx, 1*time.Hour)
 	}
 
 	if serve {
@@ -110,14 +120,16 @@ func run(cfg *config.Config, location string, ingredient string) error {
 	}
 
 	if ingredient != "" {
-		f := recipes.Filter(ingredient, []string{"*"})
-		ings, err := generator.GetIngredients(location, f, 0)
+		f := recipes.Filter(ingredient, []string{"*"}, false /*frozen*/)
+		ings, err := generator.GetIngredients(ctx, location, f, 0)
 		if err != nil {
 			return fmt.Errorf("failed to get ingredients: %w", err)
 		}
-		for _, ing := range ings {
-			fmt.Printf("- %s\n", ing)
+		encoded, err := gotoon.Encode(ings)
+		if err != nil {
+			return fmt.Errorf("failed to encode ingredients to TOON: %w", err)
 		}
+		fmt.Println(encoded)
 		return nil
 	}
 
@@ -132,14 +144,13 @@ func run(cfg *config.Config, location string, ingredient string) error {
 	}
 
 	p := recipes.DefaultParams(l, time.Now())
-	err = generator.GenerateRecipes(ctx, p)
+	ingredients, err := generator.GetStaples(ctx, p)
 	if err != nil {
-		return fmt.Errorf("failed to generate recipes: %w", err)
+		return fmt.Errorf("failed to get staple ingredients: %w", err)
 	}
-	var w io.Writer = os.Stdout
-	err = generator.FromCache(ctx, p.Hash(), p, w)
-	if err != nil {
-		return fmt.Errorf("failed to get generated recipes from cache: %w", err)
+	log.Println("Staple Ingredients:")
+	for _, ing := range ingredients {
+		fmt.Printf("- %s\n", *ing.Description)
 	}
 
 	return nil

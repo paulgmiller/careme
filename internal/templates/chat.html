@@ -5,6 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Careme Recipes</title>
 
+  {{if .Recipes}}
+  <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
+  <meta property="og:title" content="{{(index .Recipes 0).Title}}" />
+  <meta property="og:description" content="{{(index .Recipes 0).Description}}" />
+  <meta property="og:image" content="https://careme.cooking/favicon.ico" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Careme" />
+  
+  <!-- Twitter Card meta tags -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="{{(index .Recipes 0).Title}}" />
+  <meta name="twitter:description" content="{{(index .Recipes 0).Description}}" />
+  <meta name="twitter:image" content="https://careme.cooking/favicon.ico" />
+  {{end}}
+
   {{template "tailwind_head"}}
 
   {{.ClarityScript}}
@@ -25,6 +40,7 @@
           <form method="GET" class="flex flex-col gap-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:flex-row sm:items-center">
             <input type="hidden" name="location" value="{{.Location.ID}}" />
             <input type="hidden" name="date" value="{{.Date}}" />
+            <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
             <label for="instructions" class="text-sm font-medium text-gray-700 sm:w-48">Extra instructions</label>
             <input id="instructions"
                    type="text"

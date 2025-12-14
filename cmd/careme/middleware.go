@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"time"
 )
 
@@ -26,7 +27,7 @@ type recoverer struct {
 func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
-			slog.ErrorContext(req.Context(), "panic recovered", "error", err)
+			slog.ErrorContext(req.Context(), "panic recovered", "error", err, "stack", debug.Stack())
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 	}()

@@ -1,7 +1,6 @@
 package recipes
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -25,7 +23,8 @@ import (
 )
 
 type aiClient interface {
-	GenerateRecipes(location *locations.Location, ingredients []string, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	Regenerate(ctx context.Context, newinstruction string, conversationID string) (*ai.ShoppingList, error)
 }
 
 type Generator struct {
@@ -71,9 +70,10 @@ type generatorParams struct {
 	Date     time.Time           `json:"date,omitempty"`
 	Staples  []filter            `json:"staples,omitempty"`
 	//People       int
-	Instructions string   `json:"instructions,omitempty"`
-	LastRecipes  []string `json:"last_recipes,omitempty"`
-	UserID       string   `json:"user_id,omitempty"`
+	Instructions   string   `json:"instructions,omitempty"`
+	LastRecipes    []string `json:"last_recipes,omitempty"`
+	UserID         string   `json:"user_id,omitempty"`
+	ConversationID string   `json:"conversation_id,omitempty"` //Can remove if we pass it in seperately to generate recipes?
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -98,8 +98,9 @@ func (g *generatorParams) Hash() string {
 	lo.Must(fnv.Write([]byte(g.Date.Format("2006-01-02"))))
 	bytes := lo.Must(json.Marshal(g.Staples))
 	lo.Must(fnv.Write(bytes))
-	lo.Must(fnv.Write([]byte(g.Instructions)))
+	lo.Must(fnv.Write([]byte(g.Instructions))) //rethink this? if they're all in convo should we have one id and ability to walk back?
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
+	//intionally not including ConversationID to preserve old hashes
 }
 
 // so far just excludes instructions. Can exclude people and other things
@@ -117,33 +118,37 @@ func (g *generatorParams) LocationHash() string {
 func DefaultStaples() []filter {
 	return []filter{
 		{
-			Term: "beef",
+			Term:   "beef",
+			Brands: []string{"Simple Truth", "Kroger"},
 		},
 		{
 			Term:   "chicken",
-			Brands: []string{"Foster Farms", "Draper Valley"}, //"Simple Truth"? do these vary in every state?
+			Brands: []string{"Foster Farms", "Draper Valley", "Simple Truth"}, //"Simple Truth"? do these vary in every state?
 		},
 		{
 			Term: "fish",
 		},
 		{
-			Term: "pork", //Kroger?
+			Term:   "pork", //Kroger?
+			Brands: []string{"PORK", "Kroger", "Harris Teeter"},
 		},
 		{
-			Term: "shellfish",
+			Term:   "shellfish",
+			Brands: []string{"Sand Bar", "Kroger"},
+			Frozen: true, //remove after 500 sadness?
 		},
 		{
 			Term:   "lamb",
 			Brands: []string{"Simple Truth"},
 		},
 		{
-			Term: "produce vegetable",
+			Term:   "produce vegetable",
+			Brands: []string{"*"}, //ther's alot of fresh * and kroger here. cut this down after 500 sadness
 		},
 	}
 }
 
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) error {
-	slog.Info("Generating recipes for location", "location", p.String())
 
 	hash := p.Hash()
 	generating, done := g.isGenerating(hash)
@@ -154,29 +159,49 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	defer done()
 	start := time.Now()
 
+	var err error
+	if p.ConversationID != "" && p.Instructions != "" {
+		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
+		// these should both always be true. Warn if not because its a caching bug?
+		shoppingList, err := g.aiClient.Regenerate(ctx, p.Instructions, p.ConversationID)
+		if err != nil {
+			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
+		}
+		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
+		return saveShoppingList(ctx, g.cache, shoppingList, p)
+	}
+	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
 	ingredients, err := g.GetStaples(ctx, p)
 	if err != nil {
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
-
-	shoppingList, err := g.aiClient.GenerateRecipes(p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
-
+	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
+	if err := saveShoppingList(ctx, g.cache, shoppingList, p); err != nil {
+		return fmt.Errorf("failed to save shopping list: %w", err)
+	}
 
+	return nil
+}
+
+func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.ShoppingList, p *generatorParams) error {
 	// Save each recipe separately by its hash
-	for _, recipe := range shoppingList.Recipes {
+	for i := range shoppingList.Recipes {
+		recipe := &shoppingList.Recipes[i]
+		recipe.OriginHash = p.Hash()
 		recipeJSON := lo.Must(json.Marshal(recipe))
-		if err := g.cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
+		if err := cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
 			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
 			return err
 		}
 	}
 	//we could actually nuke out the rest of recipe and lazily load but not yet
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
-	if err := g.cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
+	if err := cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
 		return err
 	}
@@ -186,12 +211,12 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	// This would allow us to cache both the shopping list and its associated parameters together,
 	// avoiding the need for a separate cache entry for params (currently stored as "<hash>.params").
 	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
+	// Persist the latest conversation IDs with the params so follow-ups can reuse them.
 	paramsJSON := lo.Must(json.Marshal(p))
-	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
+	if err := cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
 		return err
 	}
-
 	return nil
 }
 
@@ -213,59 +238,61 @@ func (g *Generator) LoadParamsFromHash(hash string) (*generatorParams, error) {
 type filter struct {
 	Term   string   `json:"term,omitempty"`
 	Brands []string `json:"brands,omitempty"`
+	Frozen bool     `json:"frozen,omitempty"`
 }
 
-func Filter(term string, brands []string) filter {
+func Filter(term string, brands []string, frozen bool) filter {
 	return filter{
 		Term:   term,
 		Brands: brands,
+		Frozen: frozen,
 	}
 }
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
-func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]string, error) {
+func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
 
 	lochash := p.LocationHash()
-	var ingredients []string
+	var ingredients []kroger.Ingredient
 
 	if ingredientblob, err := g.cache.Get(lochash); err == nil {
-		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 		defer ingredientblob.Close()
-		sc := bufio.NewScanner(ingredientblob)
-		for sc.Scan() {
-			ingredients = append(ingredients, sc.Text())
+		jsonReader := json.NewDecoder(ingredientblob)
+		if err := jsonReader.Decode(&ingredients); err == nil {
+			slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(ingredients))
+			return ingredients, nil
 		}
-		if err := sc.Err(); err != nil {
-			slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
-			return nil, err
-		}
-		return ingredients, nil
+		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
-	var errors []error
 	var wg sync.WaitGroup
 	var lock sync.Mutex
 	wg.Add(len(p.Staples))
 	for _, category := range p.Staples {
 		go func(category filter) {
 			defer wg.Done()
-
-			cingredients, err := g.GetIngredients(p.Location.ID, category, 0)
-			lock.Lock()
-			defer lock.Unlock()
+			cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("failed to get ingredients: %w", err))
+				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
 				return
 			}
+			lock.Lock()
+			defer lock.Unlock()
 			ingredients = append(ingredients, cingredients...)
 			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
+
 		}(category)
 	}
 
 	wg.Wait()
 
-	if err := g.cache.Set(p.LocationHash(), strings.Join(ingredients, "\n")); err != nil {
+	allingredientsJSON, err := json.Marshal(ingredients)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to marshal ingredients", "location", p.String(), "error", err)
+		return nil, err
+	}
+	if err := g.cache.Set(p.LocationHash(), string(allingredientsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
@@ -273,12 +300,13 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]strin
 }
 
 // move to krogrer client as everyone will be differnt here?
-func (g *Generator) GetIngredients(location string, f filter, skip int) ([]string, error) {
-	limit := 50
+func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]kroger.Ingredient, error) {
+	limit := 25
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
 	//brand := "empty" doesn't work have to check for nil
 	//fulfillment := "ais" drmatically shortens?
+	//wrapped this in a retry and it did nothng
 	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
 		FilterLocationId: &location,
 		FilterTerm:       &f.Term,
@@ -288,16 +316,14 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 		//FilterFulfillment: &fulfillment,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed on product searchwith response %w", err)
+		return nil, fmt.Errorf("kroger product search request failed: %w", err)
 	}
-
 	if products.StatusCode() != http.StatusOK {
 		output, _ := json.Marshal(products.JSON500) //handle other errors?
-		slog.Error("Kroger ProductSearchWithResponse returned error", "term", f.Term, "status", products.StatusCode(), "error", string(output))
-		return nil, fmt.Errorf("got %d code from kroger", products.StatusCode())
+		return nil, fmt.Errorf("got %d code from kroger : %s", products.StatusCode(), string(output))
 	}
 
-	var ingredients []string
+	var ingredients []kroger.Ingredient
 
 	for _, product := range *products.JSON200.Data {
 		wildcard := len(f.Brands) > 0 && f.Brands[0] == "*"
@@ -306,7 +332,7 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 			continue
 		}
 		//end up with a bunch of frozen chicken with out this.
-		if slices.Contains(*product.Categories, "Frozen") {
+		if slices.Contains(*product.Categories, "Frozen") && !f.Frozen {
 			continue
 		}
 		for _, item := range *product.Items {
@@ -316,29 +342,37 @@ func (g *Generator) GetIngredients(location string, f filter, skip int) ([]strin
 			}
 
 			//does just giving the model json work better here?
-			ingredient := fmt.Sprintf(
-				"%s %s price %.2f", //				"%s, %s %s price %.2f %s",
-				//toStr(product.Brand),
-				toStr(product.Description),
-				toStr(item.Size),
-				toFloat32(item.Price.Regular),
-				//strings.Join(*product.Categories, ", "),
-			)
-
-			if toFloat32(item.Price.Promo) > 0.0 {
-				ingredient += fmt.Sprintf(" sale %.2f", toFloat32(item.Price.Promo))
+			ingredient := kroger.Ingredient{
+				Brand:        product.Brand,
+				Description:  product.Description,
+				Size:         item.Size,
+				PriceRegular: item.Price.Regular,
+				PriceSale:    item.Price.Promo,
+				//CountryOrigin: product.CountryOrigin,
+				//AisleNumber:   product.AisleLocations[0].Number,
+				//Favorite: item.Favorite,
+				//InventoryStockLevel: item.InventoryStockLevel),
 			}
+
+			/*if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
+				ingredient.AisleNumber = (*product.AisleLocations)[0].Number
+			}*/
+
 			ingredients = append(ingredients, ingredient)
 			//strings.Join(*product.Categories, ", "),
 
 		}
 	}
 
+	//Debug level?
+	//slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location, "skip", skip)
+
 	//recursion is pretty dumb pagination
-	if len(*products.JSON200.Data) == limit && skip+limit < 250 { //fence post error
-		page, err := g.GetIngredients(location, f, skip+limit)
+	//500's seem gone.
+	if len(*products.JSON200.Data) == limit && skip+limit < 100 { //fence post error
+		page, err := g.GetIngredients(ctx, location, f, skip+limit)
 		if err != nil {
-			return nil, nil
+			return ingredients, nil
 		}
 		ingredients = append(ingredients, page...)
 	}

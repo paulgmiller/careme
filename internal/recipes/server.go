@@ -2,14 +2,17 @@ package recipes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/config"
+	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -63,6 +66,16 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		ID:   "",
 		Name: "Unknown Location",
 	}, time.Now())
+	if recipe.OriginHash != "" {
+		loadedp, err := s.generator.LoadParamsFromHash(recipe.OriginHash)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
+			//http.Error(w, "recipe not found or expired", http.StatusNotFound)
+			//return
+		} else {
+			p = loadedp
+		}
+	}
 
 	list := ai.ShoppingList{
 		Recipes: []ai.Recipe{*recipe},
@@ -92,10 +105,21 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
-		if err := s.generator.FromCache(ctx, hashParam, nil, w); err != nil {
+		slist, err := s.generator.FromCache(ctx, hashParam)
+		if err != nil {
 			slog.ErrorContext(ctx, "failed to load shared recipe for hash", "hash", hashParam, "error", err)
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
+			return
 		}
+		p, err := s.generator.LoadParamsFromHash(hashParam)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+			p = DefaultParams(&locations.Location{
+				ID:   "",
+				Name: "Unknown Location",
+			}, time.Now())
+		}
+		s.generator.FormatChatHTML(p, *slist, w)
 		return
 	}
 
@@ -125,6 +149,36 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p := DefaultParams(l, date)
+
+	p.UserID = currentUser.ID
+
+	if r.URL.Query().Get("ingredients") == "true" {
+		lochash := p.LocationHash()
+		ingredientblob, err := s.generator.cache.Get(lochash)
+		if err != nil {
+			http.Error(w, "ingredients not found in cache", http.StatusNotFound)
+			return
+		}
+		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
+		defer ingredientblob.Close()
+		dec := json.NewDecoder(ingredientblob)
+		var ingredients []kroger.Ingredient
+		err = dec.Decode(&ingredients)
+		if err != nil {
+			http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)
+			return
+		}
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(ingredients); err != nil {
+			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
+			return
+		}
+		//make this a html thats readable.
+		w.Header().Add("Content-Type", "application/json")
+		return
+	}
+
 	for _, last := range currentUser.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
 			continue
@@ -136,16 +190,23 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		p.Instructions = instructions
 	}
 
-	p.UserID = currentUser.ID
-
 	hash := p.Hash()
-	if err := s.generator.FromCache(ctx, hash, p, w); err == nil {
+	if list, err := s.generator.FromCache(ctx, hash); err == nil {
+		//TODO check not found error explicitly
+		if r.URL.Query().Get("mail") == "true" {
+			FormatMail(p, *list, w)
+			return
+		}
+		s.generator.FormatChatHTML(p, *list, w)
 		return
 	}
 
+	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
+
 	go func() {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
-		if err := s.generator.GenerateRecipes(ctx, p); err != nil {
+		//copy over request id to new context? can't be same context because end of http request will cancel it.
+		if err := s.generator.GenerateRecipes(context.Background(), p); err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
 		}
 	}()

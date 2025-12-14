@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
 	"crypto/sha256"
@@ -9,11 +10,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
-	openai "github.com/openai/openai-go/v2"
-	"github.com/openai/openai-go/v2/option"
-	"github.com/openai/openai-go/v2/responses"
+	"github.com/alpkeskin/gotoon"
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/conversations"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
 
 	"github.com/invopop/jsonschema"
@@ -27,6 +31,7 @@ type Client struct {
 	schema     map[string]any
 }
 
+// todo collapse closer to
 type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` //should this and price be numbers? need units then
@@ -40,6 +45,7 @@ type Recipe struct {
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
+	OriginHash   string       `json:"origin_hash"`
 }
 
 // ComputeHash calculates the SHA256 hash of the recipe content
@@ -51,10 +57,9 @@ func (r *Recipe) ComputeHash() string {
 }
 
 type ShoppingList struct {
-	Recipes []Recipe `json:"recipes"`
+	ConversationID string   `json:"conversation_id,omitempty" jsonschema:"-"`
+	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
 }
-
-// Removed custom OpenAIRequest/OpenAIResponse in favor of official SDK types
 
 func NewClient(provider, apiKey, model string) *Client {
 	r := jsonschema.Reflector{
@@ -74,105 +79,160 @@ func NewClient(provider, apiKey, model string) *Client {
 	}
 }
 
-func (c *Client) GenerateRecipes(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
-	prompt := c.buildRecipePrompt(location, saleIngredients, instructions, date, lastRecipes)
+const systemMessage = `
+"You are a professional chef and recipe developer that wants to help working families cook each night with varied cuisines."
 
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
-
-	params := responses.ResponseNewParams{
-		Model:        openai.ChatModelGPT5,
-		Instructions: openai.String("You are a professional chef and recipe developer that wants to help working families cook each night with varied cuisines."),
-
-		Input: responses.ResponseNewParamsInputUnion{
-			OfString: openai.String(prompt), //TODO break this up seperate messages? What do we gain?
-		},
-		Text: responses.ResponseTextConfigParam{
-			Format: responses.ResponseFormatTextConfigUnionParam{
-				OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-					Name:   "recipes",
-					Schema: c.schema, //https://platform.openai.com/docs/guides/structured-outputs?example=structured-data
-				},
-			},
-		},
-
-		//should we stream. Can we pass past generation.
-	}
-
-	resp, err := client.Responses.New(context.TODO(), params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate recipes: %w", err)
-	}
-	// Parse the response to save recipes separately
-	var shoppingList ShoppingList
-	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
-		slog.ErrorContext(context.TODO(), "failed to parse AI response", "error", err)
-		// Fall back to saving the entire response as before
-		return nil, err
-	}
-
-	return &shoppingList, nil
-}
-
-func (c *Client) buildRecipePrompt(location *locations.Location, saleIngredients []string, instructions string, date time.Time, lastRecipes []string) string {
-
-	//TODO pull out meal count and people.
-	//TODO json formatting
-	//TODO store prompt in cache?
-	// Place an overall combined ingredient summary as a ' < ul > ' at the bottom. Use a ' < table > ' for extra clarity if needed. Include name, quantity and sale prices.
-
-	prompt := `# Objective
-Generate 3 distinct, practical recipes using the provided constraints to maximize ingredient efficiency and meal variety while maintaining clear, user-friendly HTML output.
+# Objective
+Generate distinct, practical recipes using the provided constraints to maximize ingredient freshness, quality, and value while ensuring meal variety.
 
 # Instructions
 - Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch alongside protein is acceptable and satisfies the side requirement.
-- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority) and that are in season for the current date and user's state location ` + date.Format("January 2nd") + `  in ` + location.State + `).
 - Recipes should use diverse cooking methods and represent a variety of cuisines.
-- Each recipe should serve 2 people.
 - Provide clear, step-by-step instructions and an ingredient list for each recipe.
-- Recipes should take under 1 hour to prepare, unless a special dish requires longer.
-- Optionally include a wine pairing suggestion for each recipe if appropriate.
-- Permitted cooking methods: oven, stove, grill, slow cooker.
+- Recipes should take under 1 hour to prepare, unless the user asks for something longer
+- Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a local brand if possible.
+- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority) 
 
 
 # Output Format
-- Return all output json
 - Each recipe includes:
   - Title
   - Description: Try to sell the dish and add some flair.
   - Ingredient list: should include quantities and price if in input.
-  - Step-by-step instructions.
-	- A guess at calorie count and healthiness
+  - Step-by-step instructions starting with prep. Don't prefix with numbers.
+  - A guess at calorie count and healthiness
   - Optional wine or beer pairing.
 
-
-# Verbosity
-- Be concise but clear in step-by-step instructions and ingredient lists.
-
-# Stop Conditions
-- Only return output when 3 usable recipes or a user-friendly error message is generated.
-
 # Planning & Verification
-- Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.
+- Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.`
 
-# Inputs`
+func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
+	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
+	var shoppingList ShoppingList
+	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
+		return nil, fmt.Errorf("failed to parse AI response: %w", err)
+	}
+	if resp.Conversation.ID == "" {
+		return nil, fmt.Errorf("failed to get conversation ID")
+	}
+	shoppingList.ConversationID = resp.Conversation.ID
 
-	if len(saleIngredients) > 0 {
-		prompt += "Ingredients currently on sale at local QFC/Fred Meyer:\n"
-		for _, ingredient := range saleIngredients {
-			prompt += fmt.Sprintf("- %s\n", ingredient)
-		}
-		prompt += "\n"
+	return &shoppingList, nil
+}
+
+func scheme(schema map[string]any) responses.ResponseTextConfigParam {
+	return responses.ResponseTextConfigParam{
+		Format: responses.ResponseFormatTextConfigUnionParam{
+			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name:   "recipes",
+				Schema: schema, //https://platform.openai.com/docs/guides/structured-outputs?example=structured-data
+			},
+		},
+	}
+}
+
+func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversationID string) (*ShoppingList, error) {
+	if conversationID == "" {
+		return nil, fmt.Errorf("conversation ID is required for regeneration")
+	}
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+
+	params := responses.ResponseNewParams{
+		Model: openai.ChatModelGPT5_1,
+		//only new input
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newInstruction)},
+		},
+		Store: openai.Bool(true),
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfString: openai.String(conversationID),
+		},
+		Text: scheme(c.schema),
+	}
+	resp, err := client.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
 
-	if prevRecipes := lastRecipes; len(prevRecipes) > 0 {
-		prompt += "# Previous Recipes \n"
-		prompt += "Avoid recipes similar to these from the past 2 weeks:\n"
-		for _, recipe := range prevRecipes {
-			prompt += fmt.Sprintf("- %s\n", recipe)
-		}
-		prompt += "\n"
+	return responseToShoppingList(ctx, resp)
+}
+
+// is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
+func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
 	}
 
-	prompt += `# Additional User Instructions:\n` + instructions + "\n"
-	return prompt
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	convo, err := client.Conversations.New(ctx, conversations.ConversationNewParams{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create conversation: %w", err)
+	}
+
+	params := responses.ResponseNewParams{
+		Model:        openai.ChatModelGPT5_1,
+		Instructions: openai.String(systemMessage),
+
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Store: openai.Bool(true),
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfConversationObject: &responses.ResponseConversationParam{
+				ID: convo.ID,
+			},
+		},
+		Text: scheme(c.schema),
+	}
+	//should we stream. Can we pass past generation.
+
+	resp, err := client.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate recipes: %w", err)
+	}
+	return responseToShoppingList(ctx, resp)
+}
+
+func user(msg string) responses.ResponseInputItemUnionParam {
+	return responses.ResponseInputItemParamOfMessage(msg, responses.EasyInputMessageRoleUser)
+}
+
+// buildRecipeMessages creates separate messages for the LLM to process more efficiently
+func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
+	var messages []responses.ResponseInputItemUnionParam
+	//constants we might make variable later
+	messages = append(messages, user("Each recipe should serve 2 people."))
+	messages = append(messages, user("generate 3 recipes"))
+	messages = append(messages, user("Permitted cooking methods: oven, stove, grill, slow cooker"))
+	//location and date for seasonal ingredientss
+	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
+
+	//Available ingredients (in TOON format for token efficiency)
+	ingredientsMessage := "Ingredients currently on sale in TOON format\n"
+
+	encoded, err := gotoon.Encode(saleIngredients)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode ingredients to TOON: %w", err)
+	}
+	ingredientsMessage += encoded
+
+	messages = append(messages, user(ingredientsMessage))
+
+	// Previous recipes to avoid (if any)
+	if len(lastRecipes) > 0 {
+		var prevRecipesMsg strings.Builder
+		prevRecipesMsg.WriteString("Avoid recipes similar to these from the past 2 weeks:\n")
+		for _, recipe := range lastRecipes {
+			prevRecipesMsg.WriteString(fmt.Sprintf("%s\n", recipe))
+		}
+		messages = append(messages, user(prevRecipesMsg.String()))
+	}
+
+	// Additional user instructions (if any)
+	if instructions != "" {
+		messages = append(messages, user(instructions))
+	}
+
+	return messages, nil
 }
