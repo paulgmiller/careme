@@ -67,11 +67,13 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		Name: "Unknown Location",
 	}, time.Now())
 	if recipe.OriginHash != "" {
-		p, err = s.generator.LoadParamsFromHash(recipe.OriginHash)
+		loadedp, err := s.generator.LoadParamsFromHash(recipe.OriginHash)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
 			//http.Error(w, "recipe not found or expired", http.StatusNotFound)
 			//return
+		} else {
+			p = loadedp
 		}
 	}
 
