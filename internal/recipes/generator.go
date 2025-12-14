@@ -168,12 +168,6 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
-
-		paramsJSON := lo.Must(json.Marshal(p))
-		if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
-			slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
-			return err
-		}
 		return saveShoppingList(ctx, g.cache, shoppingList, p)
 	}
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
