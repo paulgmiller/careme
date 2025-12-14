@@ -149,7 +149,6 @@ func DefaultStaples() []filter {
 }
 
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) error {
-	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
 
 	hash := p.Hash()
 	generating, done := g.isGenerating(hash)
@@ -162,15 +161,22 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 
 	var err error
 	if p.ConversationID != "" && p.Instructions != "" {
-		// these should both alwas be true. Warn if not because its a caching bug?
+		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
+		// these should both always be true. Warn if not because its a caching bug?
 		shoppingList, err := g.aiClient.Regenerate(ctx, p.Instructions, p.ConversationID)
 		if err != nil {
 			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
+
+		paramsJSON := lo.Must(json.Marshal(p))
+		if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
+			slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
+			return err
+		}
 		return saveShoppingList(ctx, g.cache, shoppingList, p)
 	}
-
+	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
 	ingredients, err := g.GetStaples(ctx, p)
 	if err != nil {
 		return fmt.Errorf("failed to get staples: %w", err)
@@ -179,22 +185,12 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
+	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	if err := saveShoppingList(ctx, g.cache, shoppingList, p); err != nil {
 		return fmt.Errorf("failed to save shopping list: %w", err)
 	}
-	// Also cache the params for hash-based retrieval
-	// TODO: Consider embedding the params directly in the shoppingList structure.
-	// This would allow us to cache both the shopping list and its associated parameters together,
-	// avoiding the need for a separate cache entry for params (currently stored as "<hash>.params").
-	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
-	// Persist the latest conversation IDs with the params so follow-ups can reuse them.
-	p.ConversationID = shoppingList.ConversationID
-	paramsJSON := lo.Must(json.Marshal(p))
-	if err := g.cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
-		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
-		return err
-	}
+
 	return nil
 }
 
@@ -216,6 +212,17 @@ func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.S
 		return err
 	}
 
+	// Also cache the params for hash-based retrieval
+	// TODO: Consider embedding the params directly in the shoppingList structure.
+	// This would allow us to cache both the shopping list and its associated parameters together,
+	// avoiding the need for a separate cache entry for params (currently stored as "<hash>.params").
+	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
+	// Persist the latest conversation IDs with the params so follow-ups can reuse them.
+	paramsJSON := lo.Must(json.Marshal(p))
+	if err := cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
+		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
+		return err
+	}
 	return nil
 }
 
