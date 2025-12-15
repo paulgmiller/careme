@@ -37,10 +37,12 @@
         </div>
 
         <div class="p-8">
-          <form method="GET" class="flex flex-col gap-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:flex-row sm:items-center">
+          <form id="regenerateForm" method="GET" class="flex flex-col gap-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:flex-row sm:items-center">
             <input type="hidden" name="location" value="{{.Location.ID}}" />
             <input type="hidden" name="date" value="{{.Date}}" />
             <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
+            <input type="hidden" id="savedRecipes" name="saved" value="" />
+            <input type="hidden" id="dismissedRecipes" name="dismissed" value="" />
             <label for="instructions" class="text-sm font-medium text-gray-700 sm:w-48">Extra instructions</label>
             <input id="instructions"
                    type="text"
@@ -50,28 +52,38 @@
                    class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
             <button type="submit"
                     class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-              Apply
+              Regenerate
             </button>
           </form>
 
           <div class="mt-8 space-y-8">
             {{range .Recipes}}
-            <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+            <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md recipe-card" data-recipe-title="{{.Title}}">
               <header class="flex flex-wrap items-center justify-between gap-3">
-                <div>
+                <div class="flex-1">
                   <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     {{.Title}}
                   </a>
                   <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
                 </div>
-                <form method="POST" action="/user/recipes" class="flex items-center gap-3">
-                  <input type="hidden" name="recipe" value="{{.Title}}" />
-                  <input type="hidden" name="hash" value="{{.ComputeHash}}" />
-                  <button type="submit"
-                          class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Save Recipe
+                <div class="flex items-center gap-2">
+                  <button type="button" onclick="saveRecipe('{{.Title}}')"
+                          class="save-btn inline-flex items-center justify-center rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2">
+                    Save
                   </button>
-                </form>
+                  <button type="button" onclick="dismissRecipe('{{.Title}}')"
+                          class="dismiss-btn inline-flex items-center justify-center rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2">
+                    Dismiss
+                  </button>
+                  <form method="POST" action="/user/recipes" class="inline">
+                    <input type="hidden" name="recipe" value="{{.Title}}" />
+                    <input type="hidden" name="hash" value="{{.ComputeHash}}" />
+                    <button type="submit"
+                            class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                      Save to Account
+                    </button>
+                  </form>
+                </div>
               </header>
 
               <section class="grid gap-6 md:grid-cols-2">
@@ -121,6 +133,51 @@
   </main>
 
   <script>
+    // Track saved and dismissed recipes
+    const savedRecipes = new Set();
+    const dismissedRecipes = new Set();
+
+    function saveRecipe(title) {
+      if (dismissedRecipes.has(title)) {
+        dismissedRecipes.delete(title);
+      }
+      savedRecipes.add(title);
+      updateRecipeState(title);
+      updateFormFields();
+    }
+
+    function dismissRecipe(title) {
+      if (savedRecipes.has(title)) {
+        savedRecipes.delete(title);
+      }
+      dismissedRecipes.add(title);
+      updateRecipeState(title);
+      updateFormFields();
+    }
+
+    function updateRecipeState(title) {
+      const card = document.querySelector(`[data-recipe-title="${title}"]`);
+      if (!card) return;
+
+      const saveBtn = card.querySelector('.save-btn');
+      const dismissBtn = card.querySelector('.dismiss-btn');
+
+      // Reset both buttons
+      saveBtn.classList.remove('ring-2', 'ring-emerald-700', 'bg-emerald-700');
+      dismissBtn.classList.remove('ring-2', 'ring-red-700', 'bg-red-700');
+
+      if (savedRecipes.has(title)) {
+        saveBtn.classList.add('ring-2', 'ring-emerald-700', 'bg-emerald-700');
+      } else if (dismissedRecipes.has(title)) {
+        dismissBtn.classList.add('ring-2', 'ring-red-700', 'bg-red-700');
+      }
+    }
+
+    function updateFormFields() {
+      document.getElementById('savedRecipes').value = Array.from(savedRecipes).join('|||');
+      document.getElementById('dismissedRecipes').value = Array.from(dismissedRecipes).join('|||');
+    }
+
     function shareRecipes() {
       const hash = "{{.Hash}}";
       const shareUrl = window.location.origin + "/recipes?h=" + encodeURIComponent(hash);

@@ -190,6 +190,32 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		p.Instructions = instructions
 	}
 
+	// Handle saved and dismissed recipes
+	savedRecipes := r.URL.Query().Get("saved")
+	dismissedRecipes := r.URL.Query().Get("dismissed")
+
+	var additionalInstructions []string
+	if savedRecipes != "" {
+		saved := strings.Split(savedRecipes, "|||")
+		if len(saved) > 0 {
+			additionalInstructions = append(additionalInstructions, "Keep these recipes: "+strings.Join(saved, ", "))
+		}
+	}
+	if dismissedRecipes != "" {
+		dismissed := strings.Split(dismissedRecipes, "|||")
+		if len(dismissed) > 0 {
+			additionalInstructions = append(additionalInstructions, "Remove these recipes: "+strings.Join(dismissed, ", "))
+		}
+	}
+
+	if len(additionalInstructions) > 0 {
+		if p.Instructions != "" {
+			p.Instructions = p.Instructions + ". " + strings.Join(additionalInstructions, ". ")
+		} else {
+			p.Instructions = strings.Join(additionalInstructions, ". ")
+		}
+	}
+
 	hash := p.Hash()
 	if list, err := s.generator.FromCache(ctx, hash); err == nil {
 		//TODO check not found error explicitly
