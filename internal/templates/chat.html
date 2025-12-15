@@ -134,6 +134,7 @@
 
   <script>
     // Track saved and dismissed recipes
+    const RECIPE_DELIMITER = '|||';
     const savedRecipes = new Set();
     const dismissedRecipes = new Set();
 
@@ -156,7 +157,9 @@
     }
 
     function updateRecipeState(title) {
-      const card = document.querySelector(`[data-recipe-title="${title}"]`);
+      // Use CSS.escape to prevent selector injection
+      const escapedTitle = CSS.escape(title);
+      const card = document.querySelector(`[data-recipe-title="${escapedTitle}"]`);
       if (!card) return;
 
       const saveBtn = card.querySelector('.save-btn');
@@ -174,8 +177,8 @@
     }
 
     function updateFormFields() {
-      document.getElementById('savedRecipes').value = Array.from(savedRecipes).join('|||');
-      document.getElementById('dismissedRecipes').value = Array.from(dismissedRecipes).join('|||');
+      document.getElementById('savedRecipes').value = Array.from(savedRecipes).join(RECIPE_DELIMITER);
+      document.getElementById('dismissedRecipes').value = Array.from(dismissedRecipes).join(RECIPE_DELIMITER);
     }
 
     function shareRecipes() {

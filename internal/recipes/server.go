@@ -191,18 +191,19 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Handle saved and dismissed recipes
+	const recipeDelimiter = "|||"
 	savedRecipes := r.URL.Query().Get("saved")
 	dismissedRecipes := r.URL.Query().Get("dismissed")
 
 	var additionalInstructions []string
 	if savedRecipes != "" {
-		saved := strings.Split(savedRecipes, "|||")
+		saved := strings.Split(savedRecipes, recipeDelimiter)
 		if len(saved) > 0 {
 			additionalInstructions = append(additionalInstructions, "Keep these recipes: "+strings.Join(saved, ", "))
 		}
 	}
 	if dismissedRecipes != "" {
-		dismissed := strings.Split(dismissedRecipes, "|||")
+		dismissed := strings.Split(dismissedRecipes, recipeDelimiter)
 		if len(dismissed) > 0 {
 			additionalInstructions = append(additionalInstructions, "Remove these recipes: "+strings.Join(dismissed, ", "))
 		}
