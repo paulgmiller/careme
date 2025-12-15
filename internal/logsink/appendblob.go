@@ -25,6 +25,18 @@ type Config struct {
 	FlushEvery  time.Duration // default 2s
 }
 
+func ConfigFromEnv(container string) Config {
+	return Config{
+		AccountName: os.Getenv("AZURE_STORAGE_ACCOUNT_NAME"),
+		AccountKey:  os.Getenv("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY"),
+		Container:   container,
+	}
+}
+
+func (c Config) Enabled() bool {
+	return c.AccountName != ""
+}
+
 type writer struct {
 	ch     chan []byte
 	done   chan bool

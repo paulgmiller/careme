@@ -54,11 +54,13 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, locationserver)
 	recipeHandler.Register(mux)
 
-	logsHandler, err := logs.NewHandler(logsinkCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create logs handler: %w", err)
+	if logsinkCfg.Enabled() {
+		logsHandler, err := logs.NewHandler(logsinkCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create logs handler: %w", err)
+		}
+		logsHandler.Register(mux)
 	}
-	logsHandler.Register(mux)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

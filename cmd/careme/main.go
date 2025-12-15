@@ -50,13 +50,8 @@ func main() {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 
-	var logcfg logsink.Config
-	if _, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME"); ok {
-		logcfg = logsink.Config{
-			AccountName: os.Getenv("AZURE_STORAGE_ACCOUNT_NAME"),
-			AccountKey:  os.Getenv("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY"),
-			Container:   "logs",
-		}
+	logcfg := logsink.ConfigFromEnv("logs")
+	if logcfg.Enabled() {
 		handler, closer, err := logsink.NewJson(ctx, logcfg)
 		if err != nil {
 			log.Fatalf("failed to create logsink: %v", err)
