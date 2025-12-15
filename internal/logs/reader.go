@@ -6,11 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
+	"log/slog"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 )
 
 // Reader reads logs from Azure Blob Storage
@@ -76,7 +75,7 @@ func (r *Reader) GetLogs(ctx context.Context, hours int, w io.Writer) error {
 				err := r.readBlobLogs(ctx, *blobItem.Name, w)
 				if err != nil {
 					// Log error but continue with other blobs
-					fmt.Printf("error reading blob %s: %v\n", *blobItem.Name, err)
+					slog.ErrorContext(ctx, "error reading blob", "blob", *blobItem.Name, "error", err)
 					continue
 				}
 
@@ -103,22 +102,10 @@ func (r *Reader) getDatePrefixes(since, until time.Time) []string {
 }
 
 // readBlobLogs reads and parses log entries from a specific blob
-// can we parallize this wihout  busting the writer?
+// can we parallelize this without busting the writer?
 func (r *Reader) readBlobLogs(ctx context.Context, blobName string, w io.Writer) error {
-	blobURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s/%s",
-		r.config.AccountName,
-		url.PathEscape(r.config.Container),
-		blobName)
 
-	cred, err := azblob.NewSharedKeyCredential(r.config.AccountName, r.config.AccountKey)
-	if err != nil {
-		return err
-	}
-
-	blobClient, err := blob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
-	if err != nil {
-		return err
-	}
+	blobClient := r.client.ServiceClient().NewContainerClient(r.config.Container).NewBlobClient(blobName)
 
 	// Download the blob
 	resp, err := blobClient.DownloadStream(ctx, nil)

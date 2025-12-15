@@ -79,6 +79,8 @@ func (h *handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get logs
+	// Return as JSON // kinda?
+	w.Header().Set("Content-Type", "application/json")
 	err := h.reader.GetLogs(r.Context(), hours, w)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to get logs", "error", err)
@@ -86,6 +88,4 @@ func (h *handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return as JSON // kinda?
-	w.Header().Set("Content-Type", "application/json")
 }
