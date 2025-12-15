@@ -4,6 +4,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/html"
 	"careme/internal/kroger"
+	"careme/internal/seasons"
 	"careme/internal/templates"
 	"context"
 	"fmt"
@@ -136,10 +137,12 @@ func (l *locationServer) Register(mux *http.ServeMux) {
 			Locations     []Location
 			Zip           string
 			ClarityScript template.HTML
+			Colors        seasons.ColorScheme
 		}{
 			Locations:     locs,
 			Zip:           zip,
 			ClarityScript: l.clarity,
+			Colors:        seasons.GetCurrentColorScheme(),
 		}
 		if err := templates.Location.Execute(w, data); err != nil {
 			http.Error(w, "template error", http.StatusInternalServerError)

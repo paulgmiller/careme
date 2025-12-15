@@ -2,6 +2,7 @@ package users
 
 import (
 	"careme/internal/locations"
+	"careme/internal/seasons"
 	"careme/internal/templates"
 	"context"
 	"errors"
@@ -110,12 +111,12 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid form submission", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Only update favorite_store if provided
 		if favoriteStore := strings.TrimSpace(r.FormValue("favorite_store")); favoriteStore != "" || r.Form.Has("favorite_store") {
 			currentUser.FavoriteStore = favoriteStore
 		}
-		
+
 		// Only update shopping_day if provided
 		if shoppingDay := strings.TrimSpace(r.FormValue("shopping_day")); shoppingDay != "" {
 			currentUser.ShoppingDay = shoppingDay
@@ -146,11 +147,13 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		User              *User
 		Success           bool
 		FavoriteStoreName string
+		Colors            seasons.ColorScheme
 	}{
 		ClarityScript:     s.clarityScript,
 		User:              currentUser,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
+		Colors:            seasons.GetCurrentColorScheme(),
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)

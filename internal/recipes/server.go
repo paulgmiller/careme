@@ -14,6 +14,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/locations"
+	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
 )
@@ -214,8 +215,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	spinnerData := struct {
 		ClarityScript template.HTML
+		Colors        seasons.ColorScheme
 	}{
 		ClarityScript: s.clarityScript,
+		Colors:        seasons.GetCurrentColorScheme(),
 	}
 	if err := s.spinnerTmpl.Execute(w, spinnerData); err != nil {
 		slog.ErrorContext(ctx, "home template execute error", "error", err)
