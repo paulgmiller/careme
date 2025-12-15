@@ -5,6 +5,8 @@ import (
 	"careme/internal/config"
 	"careme/internal/html"
 	"careme/internal/locations"
+	"careme/internal/logs"
+	"careme/internal/logsink"
 	"careme/internal/recipes"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -24,7 +26,7 @@ var favicon []byte
 
 const sessionDuration = 365 * 24 * time.Hour
 
-func runServer(cfg *config.Config, addr string) error {
+func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 
 	cache, err := cache.MakeCache()
 	if err != nil {
@@ -51,6 +53,14 @@ func runServer(cfg *config.Config, addr string) error {
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, locationserver)
 	recipeHandler.Register(mux)
+
+	if logsinkCfg.Enabled() {
+		logsHandler, err := logs.NewHandler(logsinkCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create logs handler: %w", err)
+		}
+		logsHandler.Register(mux)
+	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

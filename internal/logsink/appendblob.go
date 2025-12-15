@@ -25,6 +25,18 @@ type Config struct {
 	FlushEvery  time.Duration // default 2s
 }
 
+func ConfigFromEnv(container string) Config {
+	return Config{
+		AccountName: os.Getenv("AZURE_STORAGE_ACCOUNT_NAME"),
+		AccountKey:  os.Getenv("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY"),
+		Container:   container,
+	}
+}
+
+func (c Config) Enabled() bool {
+	return c.AccountName != ""
+}
+
 type writer struct {
 	ch     chan []byte
 	done   chan bool
@@ -42,6 +54,11 @@ func New(ctx context.Context, cfg Config) (*writer, error) {
 	if cfg.BlobName == "" {
 		cfg.BlobName, _ = os.Hostname()
 	}
+
+	// Add date-based folder structure: YYYY/MM/DD/hostname
+	now := time.Now().UTC()
+	dateFolder := FormatDateFolder(now.Year(), int(now.Month()), now.Day())
+	cfg.BlobName = dateFolder + "/" + cfg.BlobName
 
 	if cfg.FlushEvery <= 0 {
 		cfg.FlushEvery = 2 * time.Second
