@@ -80,6 +80,7 @@ func (h *handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
 
 	// Get logs
 	// Return as JSON // kinda?
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	err := h.reader.GetLogs(r.Context(), hours, w)
 	if err != nil {
