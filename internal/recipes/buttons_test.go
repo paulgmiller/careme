@@ -56,25 +56,25 @@ func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Verify HTML is valid
 	isValidHTML(t, html)
 
-	// Check for Save checkboxes
+	// Check for Save and Dismiss radio buttons and labels
 	if !strings.Contains(html, `name="saved"`) {
-		t.Error("HTML should contain saved checkbox inputs")
+		t.Error("HTML should contain saved hidden inputs")
 	}
-	if !strings.Contains(html, `<span>Save</span>`) {
-		t.Error("HTML should contain Save label")
-	}
-
-	// Check for Dismiss checkboxes
 	if !strings.Contains(html, `name="dismissed"`) {
-		t.Error("HTML should contain dismissed checkbox inputs")
-	}
-	if !strings.Contains(html, `<span>Dismiss</span>`) {
-		t.Error("HTML should contain Dismiss label")
+		t.Error("HTML should contain dismissed hidden inputs")
 	}
 
-	// Check that checkboxes have recipe hash values
-	if !strings.Contains(html, `type="checkbox"`) {
-		t.Error("HTML should contain checkbox inputs")
+	// Check for radio buttons
+	if !strings.Contains(html, `type="radio"`) {
+		t.Error("HTML should contain radio button inputs")
+	}
+
+	// Check for Save and Dismiss labels (without span tags)
+	if !strings.Contains(html, `Save`) {
+		t.Error("HTML should contain Save label text")
+	}
+	if !strings.Contains(html, `Dismiss`) {
+		t.Error("HTML should contain Dismiss label text")
 	}
 
 	// Check that "Regenerate" button exists
