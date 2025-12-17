@@ -16,6 +16,7 @@ The application is configured via environment variables:
 - `AI_MODEL` - AI model to use (default: "gpt-4")
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `HISTORY_PATH` - Path to store recipe history (default: "./data/history.json")
+- `STRIPE_PAYMENT_LINK` - Stripe payment link URL for subscriptions (optional)
 
 ## Live site
 
