@@ -60,22 +60,18 @@ func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	if !strings.Contains(html, `class="save-btn`) {
 		t.Error("HTML should contain Save button class")
 	}
-	if !strings.Contains(html, `onclick="saveRecipe('Recipe One')"`) {
-		t.Error("HTML should contain saveRecipe call for Recipe One")
-	}
-	if !strings.Contains(html, `onclick="saveRecipe('Recipe Two')"`) {
-		t.Error("HTML should contain saveRecipe call for Recipe Two")
+	// The onclick should contain saveRecipe with a hash parameter
+	if !strings.Contains(html, `onclick="saveRecipe('`) {
+		t.Error("HTML should contain saveRecipe calls with hash parameters")
 	}
 
 	// Check for Dismiss buttons
 	if !strings.Contains(html, `class="dismiss-btn`) {
 		t.Error("HTML should contain Dismiss button class")
 	}
-	if !strings.Contains(html, `onclick="dismissRecipe('Recipe One')"`) {
-		t.Error("HTML should contain dismissRecipe call for Recipe One")
-	}
-	if !strings.Contains(html, `onclick="dismissRecipe('Recipe Two')"`) {
-		t.Error("HTML should contain dismissRecipe call for Recipe Two")
+	// The onclick should contain dismissRecipe with a hash parameter
+	if !strings.Contains(html, `onclick="dismissRecipe('`) {
+		t.Error("HTML should contain dismissRecipe calls with hash parameters")
 	}
 
 	// Check for hidden form fields
@@ -93,11 +89,11 @@ func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	}
 
 	// Check for JavaScript functions
-	if !strings.Contains(html, `function saveRecipe(title)`) {
-		t.Error("HTML should contain saveRecipe function")
+	if !strings.Contains(html, `function saveRecipe(hash)`) {
+		t.Error("HTML should contain saveRecipe function with hash parameter")
 	}
-	if !strings.Contains(html, `function dismissRecipe(title)`) {
-		t.Error("HTML should contain dismissRecipe function")
+	if !strings.Contains(html, `function dismissRecipe(hash)`) {
+		t.Error("HTML should contain dismissRecipe function with hash parameter")
 	}
 	if !strings.Contains(html, `const savedRecipes = new Set()`) {
 		t.Error("HTML should contain savedRecipes Set")
@@ -112,6 +108,9 @@ func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	}
 
 	// Check for data attributes on recipe cards
+	if !strings.Contains(html, `data-recipe-hash="`) {
+		t.Error("HTML should contain data-recipe-hash attribute")
+	}
 	if !strings.Contains(html, `data-recipe-title="Recipe One"`) {
 		t.Error("HTML should contain data-recipe-title for Recipe One")
 	}

@@ -190,32 +190,55 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		p.Instructions = instructions
 	}
 
-	// Handle saved and dismissed recipes
+	// Handle saved and dismissed recipe hashes
 	const recipeDelimiter = "|||"
-	savedRecipes := r.URL.Query().Get("saved")
-	dismissedRecipes := r.URL.Query().Get("dismissed")
+	savedHashes := r.URL.Query().Get("saved")
+	dismissedHashes := r.URL.Query().Get("dismissed")
 
-	var additionalInstructions []string
-	if savedRecipes != "" {
-		saved := strings.Split(savedRecipes, recipeDelimiter)
-		if len(saved) > 0 {
-			additionalInstructions = append(additionalInstructions, "Keep these recipes: "+strings.Join(saved, ", "))
-		}
-	}
-	if dismissedRecipes != "" {
-		dismissed := strings.Split(dismissedRecipes, recipeDelimiter)
-		if len(dismissed) > 0 {
-			additionalInstructions = append(additionalInstructions, "Remove these recipes: "+strings.Join(dismissed, ", "))
+	// Load saved recipes from cache by their hashes
+	var savedRecipesList []ai.Recipe
+	if savedHashes != "" {
+		hashes := strings.Split(savedHashes, recipeDelimiter)
+		for _, hash := range hashes {
+			if hash == "" {
+				continue
+			}
+			recipe, err := s.generator.SingleFromCache(ctx, hash)
+			if err != nil || recipe == nil {
+				slog.WarnContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
+				continue
+			}
+			savedRecipesList = append(savedRecipesList, *recipe)
 		}
 	}
 
-	if len(additionalInstructions) > 0 {
-		if p.Instructions != "" {
-			p.Instructions = p.Instructions + ". " + strings.Join(additionalInstructions, ". ")
-		} else {
-			p.Instructions = strings.Join(additionalInstructions, ". ")
+	// Add dismissed recipe titles to instructions so AI knows what to avoid
+	if dismissedHashes != "" {
+		hashes := strings.Split(dismissedHashes, recipeDelimiter)
+		var dismissedTitles []string
+		for _, hash := range hashes {
+			if hash == "" {
+				continue
+			}
+			recipe, err := s.generator.SingleFromCache(ctx, hash)
+			if err != nil || recipe == nil {
+				slog.WarnContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
+				continue
+			}
+			dismissedTitles = append(dismissedTitles, recipe.Title)
+		}
+		if len(dismissedTitles) > 0 {
+			dismissInstruction := "Do not include recipes similar to: " + strings.Join(dismissedTitles, ", ")
+			if p.Instructions != "" {
+				p.Instructions = p.Instructions + ". " + dismissInstruction
+			} else {
+				p.Instructions = dismissInstruction
+			}
 		}
 	}
+
+	// Add saved recipes to params
+	p.SavedRecipes = savedRecipesList
 
 	hash := p.Hash()
 	if list, err := s.generator.FromCache(ctx, hash); err == nil {

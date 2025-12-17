@@ -70,10 +70,11 @@ type generatorParams struct {
 	Date     time.Time           `json:"date,omitempty"`
 	Staples  []filter            `json:"staples,omitempty"`
 	//People       int
-	Instructions   string   `json:"instructions,omitempty"`
-	LastRecipes    []string `json:"last_recipes,omitempty"`
-	UserID         string   `json:"user_id,omitempty"`
-	ConversationID string   `json:"conversation_id,omitempty"` //Can remove if we pass it in seperately to generate recipes?
+	Instructions   string      `json:"instructions,omitempty"`
+	LastRecipes    []string    `json:"last_recipes,omitempty"`
+	UserID         string      `json:"user_id,omitempty"`
+	ConversationID string      `json:"conversation_id,omitempty"` //Can remove if we pass it in seperately to generate recipes?
+	SavedRecipes   []ai.Recipe `json:"saved_recipes,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -167,6 +168,13 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 		if err != nil {
 			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
+
+		// Include saved recipes in the shopping list
+		if len(p.SavedRecipes) > 0 {
+			shoppingList.Recipes = append(p.SavedRecipes, shoppingList.Recipes...)
+			slog.InfoContext(ctx, "included saved recipes in regeneration", "count", len(p.SavedRecipes))
+		}
+
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 		return saveShoppingList(ctx, g.cache, shoppingList, p)
 	}
@@ -179,6 +187,13 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
+
+	// Include saved recipes in the shopping list
+	if len(p.SavedRecipes) > 0 {
+		shoppingList.Recipes = append(p.SavedRecipes, shoppingList.Recipes...)
+		slog.InfoContext(ctx, "included saved recipes", "count", len(p.SavedRecipes))
+	}
+
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	if err := saveShoppingList(ctx, g.cache, shoppingList, p); err != nil {

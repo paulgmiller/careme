@@ -58,7 +58,7 @@
 
           <div class="mt-8 space-y-8">
             {{range .Recipes}}
-            <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md recipe-card" data-recipe-title="{{.Title}}">
+            <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md recipe-card" data-recipe-hash="{{.ComputeHash}}" data-recipe-title="{{.Title}}">
               <header class="flex flex-wrap items-center justify-between gap-3">
                 <div class="flex-1">
                   <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -67,11 +67,11 @@
                   <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
                 </div>
                 <div class="flex items-center gap-2">
-                  <button type="button" onclick="saveRecipe('{{.Title}}')"
+                  <button type="button" onclick="saveRecipe('{{.ComputeHash}}')"
                           class="save-btn inline-flex items-center justify-center rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2">
                     Save
                   </button>
-                  <button type="button" onclick="dismissRecipe('{{.Title}}')"
+                  <button type="button" onclick="dismissRecipe('{{.ComputeHash}}')"
                           class="dismiss-btn inline-flex items-center justify-center rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2">
                     Dismiss
                   </button>
@@ -133,33 +133,31 @@
   </main>
 
   <script>
-    // Track saved and dismissed recipes
+    // Track saved and dismissed recipes by hash
     const RECIPE_DELIMITER = '|||';
     const savedRecipes = new Set();
     const dismissedRecipes = new Set();
 
-    function saveRecipe(title) {
-      if (dismissedRecipes.has(title)) {
-        dismissedRecipes.delete(title);
+    function saveRecipe(hash) {
+      if (dismissedRecipes.has(hash)) {
+        dismissedRecipes.delete(hash);
       }
-      savedRecipes.add(title);
-      updateRecipeState(title);
+      savedRecipes.add(hash);
+      updateRecipeState(hash);
       updateFormFields();
     }
 
-    function dismissRecipe(title) {
-      if (savedRecipes.has(title)) {
-        savedRecipes.delete(title);
+    function dismissRecipe(hash) {
+      if (savedRecipes.has(hash)) {
+        savedRecipes.delete(hash);
       }
-      dismissedRecipes.add(title);
-      updateRecipeState(title);
+      dismissedRecipes.add(hash);
+      updateRecipeState(hash);
       updateFormFields();
     }
 
-    function updateRecipeState(title) {
-      // Use CSS.escape to prevent selector injection
-      const escapedTitle = CSS.escape(title);
-      const card = document.querySelector(`[data-recipe-title="${escapedTitle}"]`);
+    function updateRecipeState(hash) {
+      const card = document.querySelector(`[data-recipe-hash="${hash}"]`);
       if (!card) return;
 
       const saveBtn = card.querySelector('.save-btn');
@@ -169,9 +167,9 @@
       saveBtn.classList.remove('ring-2', 'ring-emerald-700', 'bg-emerald-700');
       dismissBtn.classList.remove('ring-2', 'ring-red-700', 'bg-red-700');
 
-      if (savedRecipes.has(title)) {
+      if (savedRecipes.has(hash)) {
         saveBtn.classList.add('ring-2', 'ring-emerald-700', 'bg-emerald-700');
-      } else if (dismissedRecipes.has(title)) {
+      } else if (dismissedRecipes.has(hash)) {
         dismissBtn.classList.add('ring-2', 'ring-red-700', 'bg-red-700');
       }
     }
