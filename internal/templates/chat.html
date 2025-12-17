@@ -67,14 +67,16 @@
                     <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
                   </div>
                   <div class="flex items-center gap-3">
-                    <label class="inline-flex items-center gap-2 rounded-lg border-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 cursor-pointer hover:bg-emerald-100">
-                      <input type="checkbox" name="saved" value="{{.ComputeHash}}" class="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
-                      <span>Save</span>
+                    <input type="radio" name="recipe-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" onchange="document.getElementById('saved-{{.ComputeHash}}').value = this.checked ? '{{.ComputeHash}}' : ''; document.getElementById('dismissed-{{.ComputeHash}}').value = '';" />
+                    <label for="save-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-emerald-500 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 cursor-pointer transition hover:bg-emerald-100 peer-checked/save:bg-emerald-600 peer-checked/save:text-white peer-checked/save:border-emerald-700">
+                      Save
                     </label>
-                    <label class="inline-flex items-center gap-2 rounded-lg border-2 border-red-500 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 cursor-pointer hover:bg-red-100">
-                      <input type="checkbox" name="dismissed" value="{{.ComputeHash}}" class="h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500" />
-                      <span>Dismiss</span>
+                    <input type="radio" name="recipe-{{.ComputeHash}}" value="dismiss" id="dismiss-{{.ComputeHash}}" class="peer/dismiss hidden" onchange="document.getElementById('dismissed-{{.ComputeHash}}').value = this.checked ? '{{.ComputeHash}}' : ''; document.getElementById('saved-{{.ComputeHash}}').value = '';" />
+                    <label for="dismiss-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-red-500 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 cursor-pointer transition hover:bg-red-100 peer-checked/dismiss:bg-red-600 peer-checked/dismiss:text-white peer-checked/dismiss:border-red-700">
+                      Dismiss
                     </label>
+                    <input type="hidden" name="saved" id="saved-{{.ComputeHash}}" value="" />
+                    <input type="hidden" name="dismissed" id="dismissed-{{.ComputeHash}}" value="" />
                   </div>
                 </header>
 
