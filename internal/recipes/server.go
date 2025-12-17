@@ -204,7 +204,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			recipe, err := s.generator.SingleFromCache(ctx, hash)
-			if err != nil {
+			if err != nil || recipe == nil {
 				slog.WarnContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
 				continue
 			}
@@ -221,7 +221,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			recipe, err := s.generator.SingleFromCache(ctx, hash)
-			if err != nil {
+			if err != nil || recipe == nil {
 				slog.WarnContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
 				continue
 			}
