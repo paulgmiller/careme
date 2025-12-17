@@ -124,7 +124,7 @@ func TestFormatChatHTML_HomePageLink(t *testing.T) {
 		t.Fatalf("failed to format chat HTML: %v", err)
 	}
 	html := buf.String()
-	
+
 	// Verify "Careme Recipes" is a link to home page
 	if !strings.Contains(html, `<a href="/"`) {
 		t.Error("HTML should contain a link to home page")
