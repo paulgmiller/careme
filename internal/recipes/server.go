@@ -196,45 +196,27 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	dismissedHashes := r.URL.Query()["dismissed"]
 
 	// Load saved recipes from cache by their hashes
-	var savedRecipesList []ai.Recipe
 	for _, hash := range savedHashes {
-		if hash == "" {
-			continue
-		}
 		recipe, err := s.generator.SingleFromCache(ctx, hash)
-		if err != nil || recipe == nil {
-			slog.WarnContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
 			continue
 		}
-		savedRecipesList = append(savedRecipesList, *recipe)
+		p.Saved = append(p.Saved, *recipe)
 	}
 
 	// Add dismissed recipe titles to instructions so AI knows what to avoid
-	var dismissedTitles []string
 	for _, hash := range dismissedHashes {
-		if hash == "" {
-			continue
-		}
 		recipe, err := s.generator.SingleFromCache(ctx, hash)
-		if err != nil || recipe == nil {
-			slog.WarnContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
 			continue
 		}
-		dismissedTitles = append(dismissedTitles, recipe.Title)
+		p.Dismissed = append(p.Dismissed, *recipe)
 	}
-	if len(dismissedTitles) > 0 {
-		dismissInstruction := "Do not include recipes similar to: " + strings.Join(dismissedTitles, ", ")
-		if p.Instructions != "" {
-			p.Instructions = p.Instructions + ". " + dismissInstruction
-		} else {
-			p.Instructions = dismissInstruction
-		}
-	}
-
-	// Add saved recipes to params
-	p.SavedRecipes = savedRecipesList
 
 	hash := p.Hash()
+	//TODO should we just redirect here?
 	if list, err := s.generator.FromCache(ctx, hash); err == nil {
 		//TODO check not found error explicitly
 		if r.URL.Query().Get("mail") == "true" {
