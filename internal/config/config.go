@@ -10,6 +10,7 @@ type Config struct {
 	Kroger  KrogerConfig  `json:"kroger"`
 	History HistoryConfig `json:"history"`
 	Clarity ClarityConfig `json:"clarity"`
+	Stripe  StripeConfig  `json:"stripe"`
 }
 
 type AIConfig struct {
@@ -32,6 +33,10 @@ type ClarityConfig struct {
 	ProjectID string `json:"project_id"`
 }
 
+type StripeConfig struct {
+	PaymentLink string `json:"payment_link"`
+}
+
 func Load() (*Config, error) {
 	config := &Config{
 		AI: AIConfig{
@@ -49,6 +54,9 @@ func Load() (*Config, error) {
 		},
 		Clarity: ClarityConfig{
 			ProjectID: os.Getenv("CLARITY_PROJECT_ID"),
+		},
+		Stripe: StripeConfig{
+			PaymentLink: os.Getenv("STRIPE_PAYMENT_LINK"),
 		},
 	}
 
