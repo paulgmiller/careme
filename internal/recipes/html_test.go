@@ -110,3 +110,26 @@ func TestFormatChatHTML_NoClarityWhenEmpty(t *testing.T) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")
 	}
 }
+
+func TestFormatChatHTML_HomePageLink(t *testing.T) {
+	g := Generator{
+		config: &config.Config{
+			Clarity: config.ClarityConfig{ProjectID: "test123"},
+		},
+	}
+	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	var buf bytes.Buffer
+	if err := g.FormatChatHTML(p, list, &buf); err != nil {
+		t.Fatalf("failed to format chat HTML: %v", err)
+	}
+	html := buf.String()
+
+	// Verify "Careme Recipes" is a link to home page
+	if !strings.Contains(html, `<a href="/"`) {
+		t.Error("HTML should contain a link to home page")
+	}
+	if !strings.Contains(html, "Careme Recipes</a>") {
+		t.Error("HTML should contain 'Careme Recipes' as a link")
+	}
+}
