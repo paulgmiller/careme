@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/admin"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/html"
@@ -53,6 +54,9 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, locationserver)
 	recipeHandler.Register(mux)
+
+	adminHandler := admin.NewHandler(userStorage, clarityScript)
+	adminHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
 		logsHandler, err := logs.NewHandler(logsinkCfg)

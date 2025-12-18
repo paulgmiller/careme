@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Careme · Users</title>
+
+  {{template "tailwind_head"}}
+
+  {{.ClarityScript}}
+</head>
+<body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
+  <main class="px-4 py-10">
+    <section class="mx-auto w-full max-w-6xl">
+      <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
+        <div class="border-b border-brand-100 px-8 pb-6 pt-8">
+          <a href="/admin" class="inline-flex items-center text-sm font-medium text-brand-600 underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+            ← Back to Admin
+          </a>
+          <h1 class="mt-4 text-4xl font-extrabold tracking-tight text-brand-700">Users</h1>
+          <p class="mt-2 text-sm text-gray-600">All registered user accounts ({{len .Users}} total).</p>
+        </div>
+
+        <div class="px-8 py-8">
+          {{if .Users}}
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse">
+              <thead>
+                <tr class="border-b border-brand-100">
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-brand-700">Email</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-brand-700">Member Since</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-brand-700">Favorite Store</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-brand-700">Shopping Day</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-brand-700">Recipes</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-brand-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-brand-100">
+                {{range .Users}}
+                <tr class="transition hover:bg-brand-50/50">
+                  <td class="px-4 py-4 text-sm text-gray-700">
+                    {{if .Email}}
+                      {{index .Email 0}}
+                    {{else}}
+                      <span class="text-gray-400">No email</span>
+                    {{end}}
+                  </td>
+                  <td class="px-4 py-4 text-sm text-gray-600">
+                    {{.CreatedAt.Format "Jan 2, 2006"}}
+                  </td>
+                  <td class="px-4 py-4 text-sm text-gray-600">
+                    {{if .FavoriteStore}}
+                      {{.FavoriteStore}}
+                    {{else}}
+                      <span class="text-gray-400">—</span>
+                    {{end}}
+                  </td>
+                  <td class="px-4 py-4 text-sm text-gray-600">
+                    {{if .ShoppingDay}}
+                      {{.ShoppingDay}}
+                    {{else}}
+                      <span class="text-gray-400">—</span>
+                    {{end}}
+                  </td>
+                  <td class="px-4 py-4 text-sm text-gray-600">
+                    {{len .LastRecipes}}
+                  </td>
+                  <td class="px-4 py-4">
+                    <a href="/user?id={{.ID}}" class="inline-flex items-center text-sm font-medium text-brand-600 underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-1">
+                      View Profile
+                    </a>
+                  </td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+          {{else}}
+          <div class="text-center py-12">
+            <p class="text-gray-500">No users found.</p>
+          </div>
+          {{end}}
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

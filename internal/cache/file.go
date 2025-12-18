@@ -38,8 +38,15 @@ func (fc *FileCache) List(_ context.Context, prefix string, token string) ([]str
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && strings.HasPrefix(path, prefix) {
-			keys = append(keys, strings.TrimPrefix(path, prefix))
+		if !info.IsDir() {
+			// Get relative path from cache directory
+			relPath, err := filepath.Rel(fc.Dir, path)
+			if err != nil {
+				return err
+			}
+			if strings.HasPrefix(relPath, prefix) {
+				keys = append(keys, strings.TrimPrefix(relPath, prefix))
+			}
 		}
 		return nil
 	})
