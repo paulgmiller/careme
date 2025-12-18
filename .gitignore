@@ -33,3 +33,4 @@ Thumbs.db
 # Cache directory and compiled binary
 cache/
 careme
+bin/
