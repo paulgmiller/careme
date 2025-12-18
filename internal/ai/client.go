@@ -131,14 +131,19 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversationID string) (*ShoppingList, error) {
+func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversationID string, model string) (*ShoppingList, error) {
 	if conversationID == "" {
 		return nil, fmt.Errorf("conversation ID is required for regeneration")
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
+	// Use provided model or fall back to default
+	if model == "" {
+		model = c.model
+	}
+
 	params := responses.ResponseNewParams{
-		Model: openai.ChatModelGPT5_1,
+		Model: model,
 		//only new input
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newInstruction)},
@@ -158,7 +163,7 @@ func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversa
 }
 
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
-func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string, model string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -170,8 +175,13 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 		return nil, fmt.Errorf("failed to create conversation: %w", err)
 	}
 
+	// Use provided model or fall back to default
+	if model == "" {
+		model = c.model
+	}
+
 	params := responses.ResponseNewParams{
-		Model:        openai.ChatModelGPT5_1,
+		Model:        model,
 		Instructions: openai.String(systemMessage),
 
 		Input: responses.ResponseNewParamsInputUnion{

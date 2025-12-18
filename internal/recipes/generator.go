@@ -24,8 +24,8 @@ import (
 )
 
 type aiClient interface {
-	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
-	Regenerate(ctx context.Context, newinstruction string, conversationID string) (*ai.ShoppingList, error)
+	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string, model string) (*ai.ShoppingList, error)
+	Regenerate(ctx context.Context, newinstruction string, conversationID string, model string) (*ai.ShoppingList, error)
 }
 
 type Generator struct {
@@ -77,6 +77,7 @@ type generatorParams struct {
 	ConversationID string      `json:"conversation_id,omitempty"` //Can remove if we pass it in seperately to generate recipes?
 	Saved          []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed      []ai.Recipe `json:"dismissed_recipes,omitempty"`
+	Model          string      `json:"model,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -181,7 +182,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 			instructions += " Do not include recipes similar to \n" + strings.Join(dismissedTitles, ", ")
 		}
 		//TODO pipe through dismssed and saved sow e dont mess with instructions. Also format dismissed titles with toon?
-		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
+		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID, p.Model)
 		if err != nil {
 			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
@@ -198,7 +199,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	if err != nil {
 		return fmt.Errorf("failed to get staples: %w", err)
 	}
-	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes, p.Model)
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}

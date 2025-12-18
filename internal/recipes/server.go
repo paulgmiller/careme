@@ -192,6 +192,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		p.Instructions = instructions
 	}
 
+	if model := r.URL.Query().Get("model"); model != "" {
+		p.Model = model
+	}
+
 	// Handle saved and dismissed recipe hashes from checkboxes
 	// Query().Get returns first value, Query() returns all values
 	// will be empty values for every recipe and two for ones with no action
