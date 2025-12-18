@@ -76,7 +76,7 @@ type generatorParams struct {
 	UserID         string      `json:"user_id,omitempty"`
 	ConversationID string      `json:"conversation_id,omitempty"` //Can remove if we pass it in seperately to generate recipes?
 	Saved          []ai.Recipe `json:"saved_recipes,omitempty"`
-	Dismissed      []ai.Recipe `json:"dismissed_steps,omitempty"`
+	Dismissed      []ai.Recipe `json:"dismissed_recipes,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -169,7 +169,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	start := time.Now()
 
 	var err error
-	if p.ConversationID != "" && p.Instructions != "" {
+	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
 		// these should both always be true. Warn if not because its a caching bug?
 		instructions := p.Instructions
