@@ -26,6 +26,11 @@ type ColorScheme struct {
 	C900 string
 }
 
+// Style represents styling configuration including seasonal colors
+type Style struct {
+	Colors ColorScheme
+}
+
 // GetSeason determines the season based on the month
 func GetSeason(t time.Time) Season {
 	month := t.Month()
@@ -122,4 +127,11 @@ func GetCurrentSeason() Season {
 // GetCurrentColorScheme returns the color scheme for the current season
 func GetCurrentColorScheme() ColorScheme {
 	return GetColorScheme(GetCurrentSeason())
+}
+
+// GetCurrentStyle returns the current style configuration
+func GetCurrentStyle() Style {
+	return Style{
+		Colors: GetCurrentColorScheme(),
+	}
 }

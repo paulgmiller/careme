@@ -128,3 +128,11 @@ func TestGetCurrentColorScheme(t *testing.T) {
 		t.Errorf("GetCurrentColorScheme() returned empty colors")
 	}
 }
+
+func TestGetCurrentStyle(t *testing.T) {
+	// Verify it returns a style with valid colors
+	style := GetCurrentStyle()
+	if style.Colors.C50 == "" || style.Colors.C500 == "" || style.Colors.C900 == "" {
+		t.Errorf("GetCurrentStyle() returned empty colors")
+	}
+}

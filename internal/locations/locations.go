@@ -137,12 +137,12 @@ func (l *locationServer) Register(mux *http.ServeMux) {
 			Locations     []Location
 			Zip           string
 			ClarityScript template.HTML
-			Colors        seasons.ColorScheme
+			Style         seasons.Style
 		}{
 			Locations:     locs,
 			Zip:           zip,
 			ClarityScript: l.clarity,
-			Colors:        seasons.GetCurrentColorScheme(),
+			Style:         seasons.GetCurrentStyle(),
 		}
 		if err := templates.Location.Execute(w, data); err != nil {
 			http.Error(w, "template error", http.StatusInternalServerError)

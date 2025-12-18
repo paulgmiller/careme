@@ -147,13 +147,13 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		User              *User
 		Success           bool
 		FavoriteStoreName string
-		Colors            seasons.ColorScheme
+		Style             seasons.Style
 	}{
 		ClarityScript:     s.clarityScript,
 		User:              currentUser,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
-		Colors:            seasons.GetCurrentColorScheme(),
+		Style:             seasons.GetCurrentStyle(),
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)

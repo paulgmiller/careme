@@ -78,11 +78,11 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		data := struct {
 			ClarityScript template.HTML
 			User          *users.User
-			Colors        seasons.ColorScheme
+			Style         seasons.Style
 		}{
 			ClarityScript: clarityScript,
 			User:          currentUser,
-			Colors:        seasons.GetCurrentColorScheme(),
+			Style:         seasons.GetCurrentStyle(),
 		}
 		if err := templates.Home.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
