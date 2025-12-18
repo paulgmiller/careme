@@ -16,6 +16,8 @@ import (
 	"careme/internal/locations"
 	"careme/internal/templates"
 	"careme/internal/users"
+
+	"github.com/samber/lo"
 )
 
 type locServer interface {
@@ -192,9 +194,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	// Handle saved and dismissed recipe hashes from checkboxes
 	// Query().Get returns first value, Query() returns all values
-	savedHashes := r.URL.Query()["saved"]
-	dismissedHashes := r.URL.Query()["dismissed"]
-
+	// will be empty values for every recipe and two for ones with no action
+	clean := func(s string, _ int) (string, bool) {
+		ts := strings.TrimSpace(s)
+		return ts, ts != ""
+	}
+	savedHashes := lo.FilterMap(r.URL.Query()["saved"], clean)
+	dismissedHashes := lo.FilterMap(r.URL.Query()["dismissed"], clean)
 	// Load saved recipes from cache by their hashes
 	for _, hash := range savedHashes {
 		recipe, err := s.generator.SingleFromCache(ctx, hash)
@@ -202,6 +208,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
 			continue
 		}
+		slog.InfoContext(ctx, "adding saved recipe to params", "title", recipe.Title, "hash", hash)
 		p.Saved = append(p.Saved, *recipe)
 	}
 
@@ -212,11 +219,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
 			continue
 		}
+		slog.InfoContext(ctx, "adding dismissed recipe to params", "title", recipe.Title, "hash", hash)
 		p.Dismissed = append(p.Dismissed, *recipe)
 	}
 
 	hash := p.Hash()
-	//TODO should we just redirect here?
 	if list, err := s.generator.FromCache(ctx, hash); err == nil {
 		//TODO check not found error explicitly
 		if r.URL.Query().Get("mail") == "true" {
@@ -227,6 +234,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//should this be in hash?
 	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
 	go func() {
@@ -236,7 +244,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "generate error", "error", err)
 		}
 	}()
-
+	//TODO should we just redirect to cache page here?
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	spinnerData := struct {
 		ClarityScript template.HTML

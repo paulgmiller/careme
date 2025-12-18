@@ -187,6 +187,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 		}
 
 		// Include saved recipes in the shopping list
+		// TODO communicate to html that this should stay saved
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
