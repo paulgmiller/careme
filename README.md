@@ -17,6 +17,21 @@ The application is configured via environment variables:
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `HISTORY_PATH` - Path to store recipe history (default: "./data/history.json")
 
+### Query Parameters
+
+The `/recipes` endpoint accepts the following query parameters:
+
+- `location` - Kroger location ID (required)
+- `date` - Date for meal planning in YYYY-MM-DD format (default: today)
+- `instructions` - Additional instructions for recipe generation (optional)
+- `model` - AI model to use for this request (optional, overrides `AI_MODEL` env var)
+  - Examples: `gpt-4o-mini`, `gpt-5-mini`, `gpt-5-nano`, `gpt-4o`, `o1-mini`
+  - See [OpenAI's model documentation](https://platform.openai.com/docs/models) for available models
+  - Cheaper/faster models like `gpt-4o-mini` or `gpt-5-nano` can reduce costs
+- `conversation_id` - Continue a previous conversation (optional)
+- `saved` - Array of recipe hashes to include (optional)
+- `dismissed` - Array of recipe hashes to exclude (optional)
+
 ## Live site
 
 * Uptime https://stats.uptimerobot.com/ehEFlvlNM9

@@ -192,6 +192,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		p.Instructions = instructions
 	}
 
+	// Model parameter allows overriding the default AI model
+	// Must be a valid OpenAI ChatModel constant (e.g., "gpt-4o-mini", "gpt-5-mini", "gpt-5-nano")
+	// See: github.com/openai/openai-go/v3/shared/shared.go for available constants
 	if model := r.URL.Query().Get("model"); model != "" {
 		p.Model = model
 	}
