@@ -141,6 +141,9 @@ func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversa
 	if model == "" {
 		model = c.model
 	}
+	if err := validateModel(model); err != nil {
+		return nil, err
+	}
 
 	params := responses.ResponseNewParams{
 		Model: model,
@@ -178,6 +181,9 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 	// Use provided model or fall back to default
 	if model == "" {
 		model = c.model
+	}
+	if err := validateModel(model); err != nil {
+		return nil, err
 	}
 
 	params := responses.ResponseNewParams{
@@ -245,4 +251,22 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	}
 
 	return messages, nil
+}
+
+// validateModel performs basic validation on the model string to catch obvious errors early.
+// The OpenAI API will perform final validation, but this helps provide better error messages.
+func validateModel(model string) error {
+	if model == "" {
+		return fmt.Errorf("model cannot be empty")
+	}
+	if len(model) > 100 {
+		return fmt.Errorf("model name too long: %d characters (max 100)", len(model))
+	}
+	// Basic sanity check: model names typically contain alphanumerics, hyphens, dots, and underscores
+	for _, r := range model {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '.' || r == '_') {
+			return fmt.Errorf("model name contains invalid character: %q", r)
+		}
+	}
+	return nil
 }

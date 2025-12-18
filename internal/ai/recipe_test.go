@@ -48,3 +48,31 @@ func TestRecipeHashLength(t *testing.T) {
 		t.Fatalf("expected hash length of 64, got %d", len(hash))
 	}
 }
+
+func TestValidateModel(t *testing.T) {
+	tests := []struct {
+		name      string
+		model     string
+		wantError bool
+	}{
+		{"valid gpt-4o-mini", "gpt-4o-mini", false},
+		{"valid gpt-5.1", "gpt-5.1", false},
+		{"valid gpt-5-nano", "gpt-5-nano", false},
+		{"valid o1-mini", "o1-mini", false},
+		{"valid with underscore", "gpt-4_turbo", false},
+		{"empty string", "", true},
+		{"too long", string(make([]byte, 101)), true},
+		{"invalid character space", "gpt 4o mini", true},
+		{"invalid character slash", "gpt/4o", true},
+		{"invalid character at", "gpt@4o", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateModel(tt.model)
+			if (err != nil) != tt.wantError {
+				t.Errorf("validateModel(%q) error = %v, wantError %v", tt.model, err, tt.wantError)
+			}
+		})
+	}
+}
