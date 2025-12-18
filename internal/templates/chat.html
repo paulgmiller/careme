@@ -37,42 +37,48 @@
         </div>
 
         <div class="p-8">
-          <form method="GET" class="flex flex-col gap-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:flex-row sm:items-center">
+          <form id="regenerateForm" method="GET">
             <input type="hidden" name="location" value="{{.Location.ID}}" />
             <input type="hidden" name="date" value="{{.Date}}" />
             <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
-            <label for="instructions" class="text-sm font-medium text-gray-700 sm:w-48">Extra instructions</label>
-            <input id="instructions"
-                   type="text"
-                   name="instructions"
-                   value="{{.Instructions}}"
-                   placeholder="e.g. prefer vegetarian"
-                   class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-            <button type="submit"
-                    class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-              Apply
-            </button>
-          </form>
+            
+            <div class="flex flex-col gap-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:flex-row sm:items-center">
+              <label for="instructions" class="text-sm font-medium text-gray-700 sm:w-48">Extra instructions</label>
+              <input id="instructions"
+                     type="text"
+                     name="instructions"
+                     value="{{.Instructions}}"
+                     placeholder="e.g. prefer vegetarian"
+                     class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <button type="submit"
+                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Regenerate
+              </button>
+            </div>
 
-          <div class="mt-8 space-y-8">
-            {{range .Recipes}}
-            <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-              <header class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    {{.Title}}
-                  </a>
-                  <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
-                </div>
-                <form method="POST" action="/user/recipes" class="flex items-center gap-3">
-                  <input type="hidden" name="recipe" value="{{.Title}}" />
-                  <input type="hidden" name="hash" value="{{.ComputeHash}}" />
-                  <button type="submit"
-                          class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Save Recipe
-                  </button>
-                </form>
-              </header>
+            <div class="mt-8 space-y-8">
+              {{range .Recipes}}
+              <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+                <header class="flex flex-wrap items-center justify-between gap-3">
+                  <div class="flex-1">
+                    <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                      {{.Title}}
+                    </a>
+                    <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <input type="radio" name="recipe-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" onchange="document.getElementById('saved-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('dismissed-{{.ComputeHash}}').value = '';" />
+                    <label for="save-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-emerald-500 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 cursor-pointer transition hover:bg-emerald-100 peer-checked/save:bg-emerald-600 peer-checked/save:text-white peer-checked/save:border-emerald-700">
+                      Save
+                    </label>
+                    <input type="radio" name="recipe-{{.ComputeHash}}" value="dismiss" id="dismiss-{{.ComputeHash}}" class="peer/dismiss hidden" onchange="document.getElementById('dismissed-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('saved-{{.ComputeHash}}').value = '';" />
+                    <label for="dismiss-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-red-500 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 cursor-pointer transition hover:bg-red-100 peer-checked/dismiss:bg-red-600 peer-checked/dismiss:text-white peer-checked/dismiss:border-red-700">
+                      Dismiss
+                    </label>
+                    <input type="hidden" name="saved" id="saved-{{.ComputeHash}}" value="" />
+                    <input type="hidden" name="dismissed" id="dismissed-{{.ComputeHash}}" value="" />
+                  </div>
+                </header>
 
               <section class="grid gap-6 md:grid-cols-2">
                 <div>
@@ -104,6 +110,7 @@
             </article>
             {{end}}
           </div>
+          </form>
 
           <div class="mt-10 flex flex-wrap items-center gap-4">
             <button type="button"

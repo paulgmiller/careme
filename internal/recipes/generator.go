@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,10 +71,12 @@ type generatorParams struct {
 	Date     time.Time           `json:"date,omitempty"`
 	Staples  []filter            `json:"staples,omitempty"`
 	//People       int
-	Instructions   string   `json:"instructions,omitempty"`
-	LastRecipes    []string `json:"last_recipes,omitempty"`
-	UserID         string   `json:"user_id,omitempty"`
-	ConversationID string   `json:"conversation_id,omitempty"` //Can remove if we pass it in seperately to generate recipes?
+	Instructions   string      `json:"instructions,omitempty"`
+	LastRecipes    []string    `json:"last_recipes,omitempty"`
+	UserID         string      `json:"user_id,omitempty"`
+	ConversationID string      `json:"conversation_id,omitempty"` //Can remove if we pass it in seperately to generate recipes?
+	Saved          []ai.Recipe `json:"saved_recipes,omitempty"`
+	Dismissed      []ai.Recipe `json:"dismissed_recipes,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -99,6 +102,12 @@ func (g *generatorParams) Hash() string {
 	bytes := lo.Must(json.Marshal(g.Staples))
 	lo.Must(fnv.Write(bytes))
 	lo.Must(fnv.Write([]byte(g.Instructions))) //rethink this? if they're all in convo should we have one id and ability to walk back?
+	for _, saved := range g.Saved {
+		lo.Must(fnv.Write([]byte("saved" + saved.ComputeHash())))
+	}
+	for _, dismissed := range g.Dismissed {
+		lo.Must(fnv.Write([]byte("dismissed" + dismissed.ComputeHash())))
+	}
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
 	//intionally not including ConversationID to preserve old hashes
 }
@@ -160,13 +169,27 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	start := time.Now()
 
 	var err error
-	if p.ConversationID != "" && p.Instructions != "" {
+	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
 		// these should both always be true. Warn if not because its a caching bug?
-		shoppingList, err := g.aiClient.Regenerate(ctx, p.Instructions, p.ConversationID)
+		instructions := p.Instructions
+		var dismissedTitles []string
+		for _, dismissed := range p.Dismissed {
+			dismissedTitles = append(dismissedTitles, dismissed.Title)
+		}
+		if len(p.Dismissed) > 0 {
+			instructions += " Do not include recipes similar to \n" + strings.Join(dismissedTitles, ", ")
+		}
+		//TODO pipe through dismssed and saved sow e dont mess with instructions. Also format dismissed titles with toon?
+		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
 			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
+
+		// Include saved recipes in the shopping list
+		// TODO communicate to html that this should stay saved
+		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
+
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 		return saveShoppingList(ctx, g.cache, shoppingList, p)
 	}
@@ -179,6 +202,10 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 	if err != nil {
 		return fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
+
+	//should never happen? How do you get save on first generte?
+	//shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
+
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	if err := saveShoppingList(ctx, g.cache, shoppingList, p); err != nil {
