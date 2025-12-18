@@ -195,6 +195,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// Handle saved and dismissed recipe hashes from checkboxes
 	// Query().Get returns first value, Query() returns all values
 	// will be empty values for every recipe and two for ones with no action
+	// TODO look at way not to duplicate so many query arguments and pass down just a saved list or a query arg for each saved item.
 	clean := func(s string, _ int) (string, bool) {
 		ts := strings.TrimSpace(s)
 		return ts, ts != ""

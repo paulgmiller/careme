@@ -178,9 +178,9 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 			dismissedTitles = append(dismissedTitles, dismissed.Title)
 		}
 		if len(p.Dismissed) > 0 {
-			instructions += "Do not include recipes similar to: " + strings.Join(dismissedTitles, ", ")
+			instructions += " Do not include recipes similar to \n" + strings.Join(dismissedTitles, ", ")
 		}
-		//TODO pipe through dismssed and saved sow e dont mess with instructions
+		//TODO pipe through dismssed and saved sow e dont mess with instructions. Also format dismissed titles with toon?
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
 			return fmt.Errorf("failed to regenerate recipes with AI: %w", err)
