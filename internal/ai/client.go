@@ -91,7 +91,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Provide clear, step-by-step instructions and an ingredient list for each recipe.
 - Recipes should take under 1 hour to prepare, unless the user asks for something longer
 - Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a local brand if possible.
-- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority) 
+- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority)
 
 
 # Output Format
@@ -138,7 +138,7 @@ func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversa
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
 	params := responses.ResponseNewParams{
-		Model: openai.ChatModelGPT5_1,
+		Model: openai.ChatModelGPT5_2,
 		//only new input
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newInstruction)},
@@ -171,7 +171,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 	}
 
 	params := responses.ResponseNewParams{
-		Model:        openai.ChatModelGPT5_1,
+		Model:        openai.ChatModelGPT5_2,
 		Instructions: openai.String(systemMessage),
 
 		Input: responses.ResponseNewParamsInputUnion{
