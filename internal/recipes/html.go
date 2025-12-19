@@ -4,6 +4,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/html"
 	"careme/internal/locations"
+	"careme/internal/seasons"
 	"careme/internal/templates"
 	"context"
 	"encoding/json"
@@ -56,6 +57,7 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 		Hash           string
 		Recipes        []ai.Recipe
 		ConversationID string
+		Style          seasons.Style
 	}{
 		Location:       *p.Location,
 		Date:           p.Date.Format("2006-01-02"),
@@ -64,6 +66,7 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 		Hash:           p.Hash(),
 		Recipes:        l.Recipes,
 		ConversationID: l.ConversationID,
+		Style:          seasons.GetCurrentStyle(),
 	}
 
 	return templates.Recipe.Execute(writer, data)

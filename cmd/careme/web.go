@@ -8,6 +8,7 @@ import (
 	"careme/internal/logs"
 	"careme/internal/logsink"
 	"careme/internal/recipes"
+	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
 	"context"
@@ -77,9 +78,11 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		data := struct {
 			ClarityScript template.HTML
 			User          *users.User
+			Style         seasons.Style
 		}{
 			ClarityScript: clarityScript,
 			User:          currentUser,
+			Style:         seasons.GetCurrentStyle(),
 		}
 		if err := templates.Home.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
