@@ -45,7 +45,7 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
 	return &Generator{
 		cache:        cache, //should this also pull from config?
 		config:       cfg,
-		aiClient:     ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, cfg.AI.Model),
+		aiClient:     ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
 		inFlight:     make(map[string]struct{}),
 	}, nil
@@ -178,7 +178,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 			dismissedTitles = append(dismissedTitles, dismissed.Title)
 		}
 		if len(p.Dismissed) > 0 {
-			instructions += " Do not include recipes similar to \n" + strings.Join(dismissedTitles, ", ")
+			instructions += " Did not like " + strings.Join(dismissedTitles, "; ")
 		}
 		//TODO pipe through dismssed and saved sow e dont mess with instructions. Also format dismissed titles with toon?
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
@@ -188,7 +188,16 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 
 		// Include saved recipes in the shopping list
 		// TODO communicate to html that this should stay saved
-		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
+
+		/*if len(p.Saved) > 0 {
+			instructions += " Enjoyed and saved :"
+		}*/
+		for _, saved := range p.Saved {
+			saved.Saved = true
+			///THis end it up giving me a "Preference update + replacements requested" recipe
+			//instructions += saved.Title + "; " //is this enough or do we keep the exact one?
+			shoppingList.Recipes = append(shoppingList.Recipes, saved)
+		}
 
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 		return saveShoppingList(ctx, g.cache, shoppingList, p)

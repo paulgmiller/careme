@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
 
@@ -24,11 +23,10 @@ import (
 )
 
 type Client struct {
-	provider   string
-	apiKey     string
-	model      string
-	httpClient *http.Client
-	schema     map[string]any
+	provider string
+	apiKey   string
+	schema   map[string]any
+	model    string
 }
 
 // todo collapse closer to
@@ -46,6 +44,7 @@ type Recipe struct {
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
 	OriginHash   string       `json:"origin_hash"`
+	Saved        bool         `json:"previously_saved" jsonschema:"-"` //not in schema
 }
 
 // ComputeHash calculates the SHA256 hash of the recipe content
@@ -61,7 +60,9 @@ type ShoppingList struct {
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
 }
 
-func NewClient(provider, apiKey, model string) *Client {
+// ignoring model for now.
+func NewClient(provider, apiKey, _ string) *Client {
+	//ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
@@ -71,11 +72,10 @@ func NewClient(provider, apiKey, model string) *Client {
 	var m map[string]any
 	_ = json.Unmarshal(schemaJSON, &m)
 	return &Client{
-		provider:   provider,
-		apiKey:     apiKey,
-		model:      model,
-		httpClient: &http.Client{},
-		schema:     m,
+		provider: provider,
+		apiKey:   apiKey,
+		schema:   m,
+		model:    openai.ChatModelGPT5_2,
 	}
 }
 
@@ -138,7 +138,7 @@ func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversa
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
 	params := responses.ResponseNewParams{
-		Model: openai.ChatModelGPT5_2,
+		Model: c.model,
 		//only new input
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newInstruction)},
@@ -171,7 +171,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 	}
 
 	params := responses.ResponseNewParams{
-		Model:        openai.ChatModelGPT5_2,
+		Model:        c.model,
 		Instructions: openai.String(systemMessage),
 
 		Input: responses.ResponseNewParamsInputUnion{
