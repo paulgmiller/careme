@@ -18,7 +18,7 @@ jobs:
     name: Deploy to careme namespace
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
 
     steps:
@@ -75,16 +75,6 @@ jobs:
           
           echo "Successfully retagged image from ${SOURCE_IMAGE} to ${TARGET_IMAGE}"
 
-      - name: Update deployment manifest
-        run: |
-          IMAGE_TAG="${{ steps.vars.outputs.TARGET_IMAGE }}"
-          echo "Updating deploy/deploy.yaml with image: ${IMAGE_TAG}"
-          sed -i "s|image: ghcr.io/.*/careme:.*|image: ${IMAGE_TAG}|g" deploy/deploy.yaml
-          
-          # Verify the change
-          echo "Updated deployment manifest:"
-          grep "image: ghcr.io" deploy/deploy.yaml
-
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
         with:
@@ -98,26 +88,12 @@ jobs:
           chmod 600 $HOME/.kube/config
 
       - name: Deploy to careme namespace
+        env:
+          IMAGE_TAG: ${{ steps.vars.outputs.TARGET_IMAGE }}
         run: |
-          kubectl apply -f deploy/deploy.yaml -n careme
+          echo "Deploying image: ${IMAGE_TAG}"
+          envsubst < deploy/deploy.yaml | kubectl apply -f - -n careme
           echo "Deployment triggered for careme (production) namespace"
           
           # Wait for rollout to complete
           kubectl rollout status deployment/careme -n careme --timeout=5m
-
-      - name: Commit updated deployment manifest
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Determine the default branch
-          DEFAULT_BRANCH=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
-          echo "Default branch: ${DEFAULT_BRANCH}"
-          
-          git add deploy/deploy.yaml
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Deploy to production: Update image to ${{ steps.vars.outputs.TAG_NAME }}"
-            git push origin HEAD:${DEFAULT_BRANCH}
-          fi

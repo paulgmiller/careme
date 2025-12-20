@@ -17,9 +17,9 @@ The application uses GitHub Actions for continuous deployment with two separate 
 
 **What it does:**
 - Extracts the short commit SHA (7 characters) from the successful build
-- Updates `deploy/deploy.yaml` with the new image tag `ghcr.io/paulgmiller/careme:<SHORT_SHA>`
-- Deploys to the `caremetest` Kubernetes namespace
-- Commits the updated manifest back to the repository
+- Uses `envsubst` to substitute the `${IMAGE_TAG}` variable in `deploy/deploy.yaml` with `ghcr.io/paulgmiller/careme:<SHORT_SHA>`
+- Deploys to the `caremetest` Kubernetes namespace using `kubectl apply`
+- The deployment manifest remains templated and is not committed
 
 **Required Secrets:**
 - `KUBECONFIG` - Base64-encoded Kubernetes configuration file with access to the `caremetest` namespace
@@ -35,12 +35,28 @@ The application uses GitHub Actions for continuous deployment with two separate 
 - Pulls the Docker image tagged with the commit SHA
 - Retags the image with the semantic version tag
 - Pushes the newly tagged image to GHCR
-- Updates `deploy/deploy.yaml` with the semantic version tag
-- Deploys to the `careme` Kubernetes namespace (production)
-- Commits the updated manifest back to the repository
+- Uses `envsubst` to substitute the `${IMAGE_TAG}` variable in `deploy/deploy.yaml` with the semantic version tag
+- Deploys to the `careme` Kubernetes namespace (production) using `kubectl apply`
+- The deployment manifest remains templated and is not committed
 
 **Required Secrets:**
 - `KUBECONFIG` - Base64-encoded Kubernetes configuration file with access to the `careme` namespace
+
+## Template-Based Deployment
+
+The `deploy/deploy.yaml` file uses environment variable substitution with `envsubst` for lightweight templating:
+
+```yaml
+containers:
+  - name: careme
+    image: ${IMAGE_TAG}
+```
+
+This approach:
+- Keeps the manifest file as a template (no commits needed)
+- Uses the lightweight `envsubst` tool (from GNU gettext)
+- Avoids the complexity of Helm charts
+- Allows the same template to be used for both test and production environments
 
 ## Setup Instructions
 
@@ -73,7 +89,7 @@ The configuration should have permissions to:
 ### 3. Verify Permissions
 
 Ensure the GitHub Actions have the following permissions in `.github/workflows/`:
-- `contents: write` - To commit updated deployment manifests
+- `contents: read` - To read the repository and deployment templates
 - `packages: read/write` - To pull and push Docker images to GHCR
 
 ## Deployment Flow
@@ -85,11 +101,9 @@ Push to master → GHCR Publish & PR Gate → Build & Push Image
                                         ↓
                             Deploy to Test Environment
                                         ↓
-                        Update deploy/deploy.yaml with SHA
+                        envsubst replaces ${IMAGE_TAG} with SHA
                                         ↓
                       kubectl apply -n caremetest
-                                        ↓
-                      Commit updated manifest
 ```
 
 ### Production Deployment Flow
@@ -105,11 +119,9 @@ Create/Push Tag (v1.0.0) → Deploy to Production
                                  ↓
                     Push retagged image
                                  ↓
-            Update deploy/deploy.yaml with v1.0.0
+            envsubst replaces ${IMAGE_TAG} with v1.0.0
                                  ↓
                 kubectl apply -n careme
-                                 ↓
-                Commit updated manifest
 ```
 
 ## Creating a Release
@@ -124,8 +136,7 @@ To deploy to production:
    ```
 3. The deployment workflow will automatically:
    - Retag the corresponding Docker image
-   - Deploy to the `careme` namespace
-   - Update the deployment manifest
+   - Deploy to the `careme` namespace using the templated manifest
 
 ## Monitoring
 
