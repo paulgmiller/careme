@@ -118,17 +118,13 @@
       </p>
 
       {{if .StripePaymentLink}}
-      <!-- Stripe Subscribe Section -->
-      <div class="mt-8 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-brand-100 p-8 shadow-md">
-        <div class="text-center">
-          <h2 class="text-2xl font-bold text-brand-800">Upgrade to Premium</h2>
-          <p class="mt-3 text-gray-700">Get unlimited meal plans and exclusive features</p>
-          <a href="{{.StripePaymentLink}}"
-             rel="noopener noreferrer"
-             class="mt-6 inline-flex items-center justify-center rounded-lg bg-brand-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-            Subscribe Now
-          </a>
-        </div>
+      <!-- Stripe Subscribe Button -->
+      <div class="mt-6 text-center">
+        <a href="{{.StripePaymentLink}}"
+           rel="noopener noreferrer"
+           class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+          Subscribe
+        </a>
       </div>
       {{end}}
     </section>
