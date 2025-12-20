@@ -13,9 +13,7 @@ type Config struct {
 }
 
 type AIConfig struct {
-	Provider string `json:"provider"` // "openai" or "anthropic"
-	APIKey   string `json:"api_key"`
-	Model    string `json:"model"`
+	APIKey string `json:"api_key"`
 }
 
 type KrogerConfig struct {
@@ -35,9 +33,7 @@ type ClarityConfig struct {
 func Load() (*Config, error) {
 	config := &Config{
 		AI: AIConfig{
-			Provider: getEnvOrDefault("AI_PROVIDER", "openai"),
-			APIKey:   os.Getenv("AI_API_KEY"),
-			Model:    getEnvOrDefault("AI_MODEL", "gpt-4"),
+			APIKey: os.Getenv("AI_API_KEY"),
 		},
 		Kroger: KrogerConfig{
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),
@@ -57,7 +53,7 @@ func Load() (*Config, error) {
 
 func validate(cfg *Config) error {
 	if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
-		return fmt.Errorf("Kroger client ID and secret must be set")
+		return fmt.Errorf("kroger client ID and secret must be set")
 	}
 	return nil
 }

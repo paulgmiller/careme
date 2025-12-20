@@ -31,5 +31,5 @@
 - Keep commits scoped and reviewable; avoid mixing refactors with feature changes unless necessary.
 
 ## Security & Configuration Notes
-- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `AI_PROVIDER`, `AI_MODEL`, `CLARITY_PROJECT_ID`, `HISTORY_PATH`. Azure logging uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`.
+- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `CLARITY_PROJECT_ID`, `HISTORY_PATH`. Azure logging uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`.
 - Never commit secrets or generated recipe outputs. If testing against real APIs, use minimal scopes and rotate keys promptly.
