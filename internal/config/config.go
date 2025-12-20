@@ -13,8 +13,7 @@ type Config struct {
 }
 
 type AIConfig struct {
-	Provider string `json:"provider"` // "openai" or "anthropic"
-	APIKey   string `json:"api_key"`
+	APIKey string `json:"api_key"`
 }
 
 type KrogerConfig struct {
@@ -34,8 +33,7 @@ type ClarityConfig struct {
 func Load() (*Config, error) {
 	config := &Config{
 		AI: AIConfig{
-			Provider: getEnvOrDefault("AI_PROVIDER", "openai"),
-			APIKey:   os.Getenv("AI_API_KEY"),
+			APIKey: os.Getenv("AI_API_KEY"),
 		},
 		Kroger: KrogerConfig{
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),

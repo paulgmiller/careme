@@ -45,7 +45,7 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
 	return &Generator{
 		cache:        cache, //should this also pull from config?
 		config:       cfg,
-		aiClient:     ai.NewClient(cfg.AI.Provider, cfg.AI.APIKey, "TODOMODEL"),
+		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
 		inFlight:     make(map[string]struct{}),
 	}, nil

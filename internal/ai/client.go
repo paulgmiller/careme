@@ -23,10 +23,9 @@ import (
 )
 
 type Client struct {
-	provider string
-	apiKey   string
-	schema   map[string]any
-	model    string
+	apiKey string
+	schema map[string]any
+	model  string
 }
 
 // todo collapse closer to
@@ -61,7 +60,7 @@ type ShoppingList struct {
 }
 
 // ignoring model for now.
-func NewClient(provider, apiKey, _ string) *Client {
+func NewClient(apiKey, _ string) *Client {
 	//ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
@@ -72,10 +71,9 @@ func NewClient(provider, apiKey, _ string) *Client {
 	var m map[string]any
 	_ = json.Unmarshal(schemaJSON, &m)
 	return &Client{
-		provider: provider,
-		apiKey:   apiKey,
-		schema:   m,
-		model:    openai.ChatModelGPT5_2,
+		apiKey: apiKey,
+		schema: m,
+		model:  openai.ChatModelGPT5_2,
 	}
 }
 
