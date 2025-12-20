@@ -51,7 +51,7 @@ jobs:
           IMAGE_TAG: ${{ steps.vars.outputs.IMAGE }}:${{ steps.vars.outputs.SHORT_SHA }}
         run: |
           echo "Deploying image: ${IMAGE_TAG}"
-          envsubst < deploy/deploy.yaml | kubectl apply -f - -n caremetest
+          envsubst '$IMAGE_TAG' < deploy/deploy.yaml | kubectl apply -f - -n caremetest
           echo "Deployment triggered for caremetest namespace"
           
           # Wait for rollout to complete (optional, with timeout)

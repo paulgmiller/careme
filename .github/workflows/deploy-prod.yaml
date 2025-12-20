@@ -92,7 +92,7 @@ jobs:
           IMAGE_TAG: ${{ steps.vars.outputs.TARGET_IMAGE }}
         run: |
           echo "Deploying image: ${IMAGE_TAG}"
-          envsubst < deploy/deploy.yaml | kubectl apply -f - -n careme
+          envsubst '$IMAGE_TAG' < deploy/deploy.yaml | kubectl apply -f - -n careme
           echo "Deployment triggered for careme (production) namespace"
           
           # Wait for rollout to complete
