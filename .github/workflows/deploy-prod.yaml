@@ -1,0 +1,123 @@
+# .github/workflows/deploy-prod.yaml
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'  # Allow pre-release tags like v1.0.0-beta.1
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Semantic version tag to deploy (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  deploy-prod:
+    name: Deploy to careme namespace
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for tags
+
+      - name: Derive image names and tags
+        id: vars
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME="${{ github.event.repository.name }}"
+          REPO_LC=$(echo "${REPO_NAME}" | tr '[:upper:]' '[:lower:]')
+          IMAGE="ghcr.io/${OWNER_LC}/${REPO_LC}"
+          
+          # Get the tag name
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG_NAME="${{ inputs.tag }}"
+          else
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          fi
+          
+          # Get the commit SHA for this tag
+          COMMIT_SHA=$(git rev-list -n 1 "${TAG_NAME}")
+          SHORT_SHA=$(echo "${COMMIT_SHA}" | cut -c1-7)
+          
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "TAG_NAME=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_IMAGE=${IMAGE}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "TARGET_IMAGE=${IMAGE}:${TAG_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag Docker image with semantic version
+        run: |
+          SOURCE_IMAGE="${{ steps.vars.outputs.SOURCE_IMAGE }}"
+          TARGET_IMAGE="${{ steps.vars.outputs.TARGET_IMAGE }}"
+          
+          echo "Pulling source image: ${SOURCE_IMAGE}"
+          docker pull "${SOURCE_IMAGE}"
+          
+          echo "Tagging image as: ${TARGET_IMAGE}"
+          docker tag "${SOURCE_IMAGE}" "${TARGET_IMAGE}"
+          
+          echo "Pushing tagged image: ${TARGET_IMAGE}"
+          docker push "${TARGET_IMAGE}"
+          
+          echo "Successfully retagged image from ${SOURCE_IMAGE} to ${TARGET_IMAGE}"
+
+      - name: Update deployment manifest
+        run: |
+          IMAGE_TAG="${{ steps.vars.outputs.TARGET_IMAGE }}"
+          echo "Updating deploy/deploy.yaml with image: ${IMAGE_TAG}"
+          sed -i "s|image: ghcr.io/.*/careme:.*|image: ${IMAGE_TAG}|g" deploy/deploy.yaml
+          
+          # Verify the change
+          echo "Updated deployment manifest:"
+          grep "image: ghcr.io" deploy/deploy.yaml
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl context
+        run: |
+          mkdir -p $HOME/.kube
+          chmod 700 $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy to careme namespace
+        run: |
+          kubectl apply -f deploy/deploy.yaml -n careme
+          echo "Deployment triggered for careme (production) namespace"
+          
+          # Wait for rollout to complete
+          kubectl rollout status deployment/careme -n careme --timeout=5m
+
+      - name: Commit updated deployment manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Determine the default branch
+          DEFAULT_BRANCH=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
+          echo "Default branch: ${DEFAULT_BRANCH}"
+          
+          git add deploy/deploy.yaml
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Deploy to production: Update image to ${{ steps.vars.outputs.TAG_NAME }}"
+            git push origin HEAD:${DEFAULT_BRANCH}
+          fi

@@ -1,0 +1,77 @@
+# .github/workflows/deploy-test.yaml
+name: Deploy to Test Environment
+
+on:
+  workflow_run:
+    workflows: ["GHCR Publish & PR Gate"]
+    types:
+      - completed
+    branches:
+      - master
+      - main
+
+jobs:
+  deploy-test:
+    name: Deploy to caremetest namespace
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+
+      - name: Derive image tag
+        id: vars
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_LC=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          SHORT_SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+          echo "IMAGE=ghcr.io/${OWNER_LC}/${REPO_LC}" >> "$GITHUB_OUTPUT"
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "IMAGE_TAG=${IMAGE}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Update deployment manifest
+        run: |
+          IMAGE_TAG="${{ steps.vars.outputs.IMAGE }}:${{ steps.vars.outputs.SHORT_SHA }}"
+          echo "Updating deploy/deploy.yaml with image: ${IMAGE_TAG}"
+          sed -i "s|image: ghcr.io/.*/careme:.*|image: ${IMAGE_TAG}|g" deploy/deploy.yaml
+          
+          # Verify the change
+          echo "Updated deployment manifest:"
+          grep "image: ghcr.io" deploy/deploy.yaml
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl context
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy to caremetest namespace
+        run: |
+          kubectl apply -f deploy/deploy.yaml -n caremetest
+          echo "Deployment triggered for caremetest namespace"
+          
+          # Wait for rollout to complete (optional, with timeout)
+          kubectl rollout status deployment/careme -n caremetest --timeout=5m || true
+
+      - name: Commit updated deployment manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/deploy.yaml
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Deploy to test: Update image to ${{ steps.vars.outputs.SHORT_SHA }}"
+            git push origin HEAD:${{ github.event.workflow_run.head_branch }}
+          fi
