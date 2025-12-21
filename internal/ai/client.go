@@ -52,7 +52,7 @@ func (r *Recipe) ComputeHash() string {
 	rClone := *r
 	rClone.OriginHash = ""
 	rClone.Saved = false
-	//should we stop using jsin here?
+	//should we stop using json here?
 	jsonBytes := lo.Must(json.Marshal(rClone))
 	hash := sha256.Sum256(jsonBytes)
 	return hex.EncodeToString(hash[:])
