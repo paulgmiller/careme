@@ -68,11 +68,6 @@ func (g *Generator) isGenerating(hash string) (bool, func()) {
 	}
 }
 
-// Wait blocks until all active recipe generation goroutines have completed.
-func (g *Generator) Wait() {
-	g.wg.Wait()
-}
-
 type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
 	Date     time.Time           `json:"date,omitempty"`

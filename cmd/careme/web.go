@@ -178,7 +178,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		slog.Info("Waiting for recipe generation goroutines to complete")
 		done := make(chan struct{})
 		go func() {
-			generator.Wait()
+			recipeHandler.Wait()
 			close(done)
 		}()
 
