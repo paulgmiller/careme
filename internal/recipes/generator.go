@@ -36,6 +36,7 @@ type Generator struct {
 	cache          cache.Cache
 	inFlight       map[string]struct{}
 	generationLock sync.Mutex
+	wg             sync.WaitGroup // tracks active recipe generation goroutines
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
@@ -65,6 +66,11 @@ func (g *Generator) isGenerating(hash string) (bool, func()) {
 		defer g.generationLock.Unlock()
 		delete(g.inFlight, hash)
 	}
+}
+
+// Wait blocks until all active recipe generation goroutines have completed.
+func (g *Generator) Wait() {
+	g.wg.Wait()
 }
 
 type generatorParams struct {

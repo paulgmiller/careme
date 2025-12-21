@@ -233,7 +233,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.generator.FormatChatHTML(p, *list, w)
+		s.generator.wg.Add(1)
 		go func() {
+			defer s.generator.wg.Done()
 			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-21"))
 			if p.Date.After(cutoff) {
 				return
@@ -249,7 +251,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	//should this be in hash?
 	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
+	s.generator.wg.Add(1)
 	go func() {
+		defer s.generator.wg.Done()
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		//copy over request id to new context? can't be same context because end of http request will cancel it.
 		if err := s.generator.GenerateRecipes(context.Background(), p); err != nil {
