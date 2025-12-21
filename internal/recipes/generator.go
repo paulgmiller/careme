@@ -230,7 +230,7 @@ func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.S
 		recipe := &shoppingList.Recipes[i]
 		recipe.OriginHash = p.Hash()
 		recipeJSON := lo.Must(json.Marshal(recipe))
-		if err := cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
+		if err := cache.Set(recipeCachePrefix+recipe.ComputeHash(), string(recipeJSON)); err != nil {
 			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
 			return err
 		}

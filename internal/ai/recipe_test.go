@@ -21,8 +21,14 @@ func TestRecipeComputeHash(t *testing.T) {
 	if hash1 == "" {
 		t.Fatal("hash should not be empty")
 	}
+	if hash1 != "b9a97966605cde98e6addad196fc1c05bc8d6eeee3d58759aef14a2a7eeec816" {
+		t.Fatalf("Hash changed by json marshalling: %s", hash1)
+	}
 
-	// Hash should be consistent
+	recipe.Saved = true
+	recipe.OriginHash = "somehashvalue"
+
+	// Hash should be consistent regardless of silly fields
 	hash2 := recipe.ComputeHash()
 	if hash1 != hash2 {
 		t.Fatalf("hash should be consistent: %s != %s", hash1, hash2)
