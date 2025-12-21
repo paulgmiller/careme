@@ -4,10 +4,11 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -46,17 +47,28 @@ type Recipe struct {
 	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` //not in schema
 }
 
-// ComputeHash calculates the SHA256 hash of the recipe content
+// ComputeHash calculates the fnv128 hash of the recipe content
 func (r *Recipe) ComputeHash() string {
-	// Exclude the Hash field itself from the hash computation
-	rClone := *r
-	rClone.OriginHash = ""
-	rClone.Saved = false
-	//should we stop using json here?
-	jsonBytes := lo.Must(json.Marshal(rClone))
-	hash := sha256.Sum256(jsonBytes)
-	return hex.EncodeToString(hash[:])
+	//these aer intntioanlly dropped.
+	/// OriginHash = ""
+	// Saved = false
+	fnv := fnv.New128a()
+	lo.Must(io.WriteString(fnv, r.Title))
+	lo.Must(io.WriteString(fnv, r.Description))
+	for _, ing := range r.Ingredients {
+		lo.Must(io.WriteString(fnv, ing.Name))
+		lo.Must(io.WriteString(fnv, ing.Quantity))
+		lo.Must(io.WriteString(fnv, ing.Price))
+	}
+	for _, instr := range r.Instructions {
+		lo.Must(io.WriteString(fnv, instr))
+	}
+	lo.Must(io.WriteString(fnv, r.Health))
+	lo.Must(io.WriteString(fnv, r.DrinkPairing))
+	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
 }
+
+//intionally not including ConversationID to preserve old hashes
 
 type ShoppingList struct {
 	ConversationID string   `json:"conversation_id,omitempty" jsonschema:"-"`

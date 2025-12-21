@@ -234,7 +234,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		s.generator.FormatChatHTML(p, *list, w)
 		go func() {
-			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-21"))
+			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
 			if p.Date.After(cutoff) {
 				return
 			}
