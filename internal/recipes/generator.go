@@ -258,14 +258,16 @@ func SaveRecipes(ctx context.Context, c cache.Cache, recipes []ai.Recipe, origin
 		recipe := &recipes[i]
 		recipe.OriginHash = originHash
 		hash := recipe.ComputeHash()
-		if _, err := c.Get(recipeCachePrefix + hash); err != nil {
-			if err != cache.ErrNotFound {
-				slog.ErrorContext(ctx, "failed to check existing recipe in cache", "recipe", recipe.Title, "error", err)
-				errs = append(errs, fmt.Errorf("error checking %s, %w", hash, err))
-			}
-			continue
+		_, err := c.Get(recipeCachePrefix + hash)
+		if err == nil {
+			continue //already saved
+		}
+		if err != cache.ErrNotFound {
+			slog.ErrorContext(ctx, "failed to check existing recipe in cache", "recipe", recipe.Title, "error", err)
+			errs = append(errs, fmt.Errorf("error checking %s, %w", hash, err))
 		}
 
+		slog.InfoContext(ctx, "Backfilling recipe", "title", recipe.Title, "hash", hash)
 		recipeJSON := lo.Must(json.Marshal(recipe))
 		if err := c.Set(recipeCachePrefix+hash, string(recipeJSON)); err != nil {
 			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)

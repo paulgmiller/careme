@@ -240,7 +240,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
-			SaveRecipes(ctx, s.generator.cache, list.Recipes, p.Hash())
+			//nothing we can do on failure anyways. Aleaady logged
+			_ = SaveRecipes(ctx, s.generator.cache, list.Recipes, p.Hash())
 		}()
 		return
 	}
