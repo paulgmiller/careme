@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/locations"
@@ -239,7 +238,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			if p.Date.After(cutoff) {
 				return
 			}
-			backfill(context.Background(), s.generator.cache, list)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			SaveRecipes(ctx, s.generator.cache, list.Recipes, p.Hash())
 		}()
 		return
 	}
@@ -266,22 +267,5 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if err := s.spinnerTmpl.Execute(w, spinnerData); err != nil {
 		slog.ErrorContext(ctx, "home template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
-	}
-}
-
-// backfill is onl needsed because I messed up the hash to include origin and saved fields
-func backfill(ctx context.Context, c cache.Cache, list *ai.ShoppingList) {
-	for _, recipe := range list.Recipes {
-		hash := recipe.ComputeHash()
-		_, err := c.Get(recipeCachePrefix + hash)
-		if err == cache.ErrNotFound {
-			continue
-		}
-
-		recipeJSON := lo.Must(json.Marshal(recipe))
-
-		if err := c.Set(recipeCachePrefix+hash, string(recipeJSON)); err != nil {
-			slog.ErrorContext(ctx, "failed to backfill individual recipe", "recipe", recipe.Title, "error", err)
-		}
 	}
 }
