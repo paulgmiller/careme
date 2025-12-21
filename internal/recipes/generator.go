@@ -227,7 +227,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 
 func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.ShoppingList, p *generatorParams) error {
 	// Save each recipe separately by its hash
-	if err := SaveRecipes(ctx, cache, shoppingList.Recipes, p.Hash()); err != nil {
+	if err := saveRecipes(ctx, cache, shoppingList.Recipes, p.Hash()); err != nil {
 		return err
 	}
 	//we could actually nuke out the rest of recipe and lazily load but not yet
@@ -251,7 +251,7 @@ func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.S
 	return nil
 }
 
-func SaveRecipes(ctx context.Context, c cache.Cache, recipes []ai.Recipe, originHash string) error {
+func saveRecipes(ctx context.Context, c cache.Cache, recipes []ai.Recipe, originHash string) error {
 	// Save each recipe separately by its hash
 	var errs []error
 	for i := range recipes {
@@ -262,7 +262,7 @@ func SaveRecipes(ctx context.Context, c cache.Cache, recipes []ai.Recipe, origin
 		if err == nil {
 			continue //already saved
 		}
-		if err != cache.ErrNotFound {
+		if !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to check existing recipe in cache", "recipe", recipe.Title, "error", err)
 			errs = append(errs, fmt.Errorf("error checking %s, %w", hash, err))
 		}
