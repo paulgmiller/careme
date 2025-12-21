@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log/slog"
@@ -226,14 +227,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) err
 
 func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.ShoppingList, p *generatorParams) error {
 	// Save each recipe separately by its hash
-	for i := range shoppingList.Recipes {
-		recipe := &shoppingList.Recipes[i]
-		recipe.OriginHash = p.Hash()
-		recipeJSON := lo.Must(json.Marshal(recipe))
-		if err := cache.Set("recipe/"+recipe.ComputeHash(), string(recipeJSON)); err != nil {
-			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
-			return err
-		}
+	if err := saveRecipes(ctx, cache, shoppingList.Recipes, p.Hash()); err != nil {
+		return err
 	}
 	//we could actually nuke out the rest of recipe and lazily load but not yet
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
@@ -254,6 +249,32 @@ func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.S
 		return err
 	}
 	return nil
+}
+
+func saveRecipes(ctx context.Context, c cache.Cache, recipes []ai.Recipe, originHash string) error {
+	// Save each recipe separately by its hash
+	var errs []error
+	for i := range recipes {
+		recipe := &recipes[i]
+		recipe.OriginHash = originHash
+		hash := recipe.ComputeHash()
+		_, err := c.Get(recipeCachePrefix + hash)
+		if err == nil {
+			continue //already saved
+		}
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to check existing recipe in cache", "recipe", recipe.Title, "error", err)
+			errs = append(errs, fmt.Errorf("error checking %s, %w", hash, err))
+		}
+
+		slog.InfoContext(ctx, "Backfilling recipe", "title", recipe.Title, "hash", hash)
+		recipeJSON := lo.Must(json.Marshal(recipe))
+		if err := c.Set(recipeCachePrefix+hash, string(recipeJSON)); err != nil {
+			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
+			errs = append(errs, fmt.Errorf("error saving %s, %w", hash, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // LoadParamsFromHash loads generator params from cache using the hash

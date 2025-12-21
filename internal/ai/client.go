@@ -42,14 +42,18 @@ type Recipe struct {
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
-	OriginHash   string       `json:"origin_hash"`
-	Saved        bool         `json:"previously_saved" jsonschema:"-"` //not in schema
+	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      //not in schema
+	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` //not in schema
 }
 
 // ComputeHash calculates the SHA256 hash of the recipe content
 func (r *Recipe) ComputeHash() string {
 	// Exclude the Hash field itself from the hash computation
-	jsonBytes := lo.Must(json.Marshal(r))
+	rClone := *r
+	rClone.OriginHash = ""
+	rClone.Saved = false
+	//should we stop using jsin here?
+	jsonBytes := lo.Must(json.Marshal(rClone))
 	hash := sha256.Sum256(jsonBytes)
 	return hex.EncodeToString(hash[:])
 }

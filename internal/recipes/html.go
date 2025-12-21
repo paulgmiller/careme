@@ -13,8 +13,10 @@ import (
 	"log/slog"
 )
 
+const recipeCachePrefix = "recipe/"
+
 func (g *Generator) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
-	recipe, err := g.cache.Get("recipe/" + hash)
+	recipe, err := g.cache.Get(recipeCachePrefix + hash)
 	if err != nil {
 		return nil, err
 	}

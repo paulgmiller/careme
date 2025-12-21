@@ -233,6 +233,16 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.generator.FormatChatHTML(p, *list, w)
+		go func() {
+			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-21"))
+			if p.Date.After(cutoff) {
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			//nothing we can do on failure anyways. Aleaady logged
+			_ = saveRecipes(ctx, s.generator.cache, list.Recipes, p.Hash())
+		}()
 		return
 	}
 
