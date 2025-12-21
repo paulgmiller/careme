@@ -49,7 +49,7 @@ func TestRecipeHashLength(t *testing.T) {
 	}
 
 	hash := recipe.ComputeHash()
-	//fnv 128 url encodied is 24
+	//fnv 128 url encoded is 24
 	if len(hash) != 24 {
 		t.Fatalf("expected hash length of 24, got %d", len(hash))
 	}

@@ -22,6 +22,11 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 		t.Fatalf("expected equal hashes for same day with different hours: got %s and %s", h1, h2)
 	}
 
+	//make sure we're intentional about breaking hash
+	if h1 != "cmVjaXBl5paGKJp_BFc=" {
+		t.Fatalf("expected hash to be stable and equal to cmVjaXBl5paGKJp_BFc=, got %s", h1)
+	}
+
 	// ensure stability across multiple calls
 	if h1 != p1.Hash() {
 		t.Fatalf("hash not stable across multiple calls: %s vs %s", h1, p1.Hash())

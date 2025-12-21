@@ -98,7 +98,7 @@ func (g *generatorParams) String() string {
 }
 
 // Hash this is how we find shoppinglists and params
-// intionally not including ConversationID to preserve old hashes
+// intentionally not including ConversationID to preserve old hashes
 func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
@@ -112,7 +112,9 @@ func (g *generatorParams) Hash() string {
 	for _, dismissed := range g.Dismissed {
 		lo.Must(io.WriteString(fnv, "dismissed"+dismissed.ComputeHash()))
 	}
-	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe"))) //this is actully a list not a recipe and isn't necessary
+	//this is actually a list not a recipe and isn't necessary. TODO figure out how to remove
+	// could fix without breaking by doing two lookups?
+	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
 }
 
 // so far just excludes instructions. Can exclude people and other things
@@ -123,6 +125,7 @@ func (g *generatorParams) LocationHash() string {
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
 	bytes := lo.Must(json.Marshal(g.Staples)) //excited fro this to break in some wierd way
 	lo.Must(fnv.Write(bytes))
+	//see comment above this suffix is unceessary but keeps old hashes working
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("ingredients")))
 
 }

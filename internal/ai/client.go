@@ -49,7 +49,8 @@ type Recipe struct {
 
 // ComputeHash calculates the fnv128 hash of the recipe content
 func (r *Recipe) ComputeHash() string {
-	//these aer intntioanlly dropped.
+	//these are intentionally dropped as they don't change the content and are metadata
+	// maybe they should have always been outside the struct.
 	/// OriginHash = ""
 	// Saved = false
 	fnv := fnv.New128a()
