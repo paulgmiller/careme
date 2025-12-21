@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -96,31 +97,35 @@ func (g *generatorParams) String() string {
 	return fmt.Sprintf("%s on %s", g.Location.ID, g.Date.Format("2006-01-02"))
 }
 
+// Hash this is how we find shoppinglists and params
+// intentionally not including ConversationID to preserve old hashes
 func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
-	lo.Must(fnv.Write([]byte(g.Location.ID)))
-	lo.Must(fnv.Write([]byte(g.Date.Format("2006-01-02"))))
+	lo.Must(io.WriteString(fnv, g.Location.ID))
+	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
 	bytes := lo.Must(json.Marshal(g.Staples))
 	lo.Must(fnv.Write(bytes))
-	lo.Must(fnv.Write([]byte(g.Instructions))) //rethink this? if they're all in convo should we have one id and ability to walk back?
+	lo.Must(io.WriteString(fnv, g.Instructions)) //rethink this? if they're all in convo should we have one id and ability to walk back?
 	for _, saved := range g.Saved {
-		lo.Must(fnv.Write([]byte("saved" + saved.ComputeHash())))
+		lo.Must(io.WriteString(fnv, "saved"+saved.ComputeHash()))
 	}
 	for _, dismissed := range g.Dismissed {
-		lo.Must(fnv.Write([]byte("dismissed" + dismissed.ComputeHash())))
+		lo.Must(io.WriteString(fnv, "dismissed"+dismissed.ComputeHash()))
 	}
+	//this is actually a list not a recipe and isn't necessary. TODO figure out how to remove
+	// could fix without breaking by doing two lookups?
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
-	//intionally not including ConversationID to preserve old hashes
 }
 
 // so far just excludes instructions. Can exclude people and other things
 func (g *generatorParams) LocationHash() string {
 
 	fnv := fnv.New64a()
-	lo.Must(fnv.Write([]byte(g.Location.ID)))
-	lo.Must(fnv.Write([]byte(g.Date.Format("2006-01-02"))))
-	bytes := lo.Must(json.Marshal(g.Staples))
+	lo.Must(io.WriteString(fnv, g.Location.ID))
+	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
+	bytes := lo.Must(json.Marshal(g.Staples)) //excited fro this to break in some wierd way
 	lo.Must(fnv.Write(bytes))
+	//see comment above this suffix is unceessary but keeps old hashes working
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("ingredients")))
 
 }
