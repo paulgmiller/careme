@@ -160,35 +160,35 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		if err != nil && err != http.ErrServerClosed {
 			return fmt.Errorf("server error: %w", err)
 		}
+		return nil
 	case sig := <-shutdown:
 		slog.Info("Shutdown signal received", "signal", sig)
+		return gracefulShutdown(server, recipeHandler.Wait())
+	}
+}
 
-		// Give outstanding requests 25 seconds to complete (kubernetes has 30 second grace period)
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer cancel()
+func gracefulShutdown(svr *http.Server, recipeHandlerDone <-chan struct{}) error {
+	// Give outstanding requests 25 seconds to complete (kubernetes has 30 second grace period)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
 
-		// Gracefully shutdown the HTTP server
-		if err := server.Shutdown(ctx); err != nil {
-			slog.Error("Server shutdown error", "error", err)
-			// Force close after timeout
-			server.Close()
-		}
-
-		// Wait for all recipe generation goroutines to complete
-		slog.Info("Waiting for recipe generation goroutines to complete")
-		done := make(chan struct{})
-		go func() {
-			recipeHandler.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			slog.Info("All recipe generation goroutines completed")
-		case <-ctx.Done():
-			slog.Warn("Timeout waiting for recipe generation goroutines")
-		}
+	// Gracefully shutdown the HTTP server
+	if err := svr.Shutdown(ctx); err != nil {
+		slog.Error("Server shutdown error", "error", err)
+		// Force close after timeout
+		svr.Close()
+		return err
 	}
 
+	// Wait for all recipe generation goroutines to complete
+	slog.Info("Waiting for recipe generation goroutines to complete")
+
+	select {
+	case <-recipeHandlerDone:
+		slog.Info("All recipe generation goroutines completed")
+	case <-ctx.Done():
+		slog.Warn("Timeout waiting for recipe generation goroutines")
+		return ctx.Err()
+	}
 	return nil
 }
