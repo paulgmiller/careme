@@ -61,14 +61,14 @@
             <div class="mt-8 space-y-8">
               {{range .Recipes}}
               <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-                <header class="flex flex-wrap items-center justify-between gap-3">
-                  <div class="flex-1">
+                <header class="space-y-4">
+                  <div>
                     <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                       {{.Title}}
                     </a>
                     <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
                   </div>
-                  <div class="flex items-center gap-3">
+                  <div class="flex flex-wrap items-center gap-3">
                     <input type="radio" {{if .Saved}}checked{{end}} name="recipe-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" onchange="document.getElementById('saved-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('dismissed-{{.ComputeHash}}').value = '';" />
                     <label for="save-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-emerald-500 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 cursor-pointer transition hover:bg-emerald-100 peer-checked/save:bg-emerald-600 peer-checked/save:text-white peer-checked/save:border-emerald-700">
                       Save
