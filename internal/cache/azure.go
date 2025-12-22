@@ -9,12 +9,13 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 )
 
 type BlobCache struct {
-	containerClient *azblob.Client
-	container       string
+	container *container.Client
 }
 
 var _ ListCache = (*BlobCache)(nil)
@@ -42,16 +43,17 @@ func NewBlobCache(container string) (*BlobCache, error) {
 		return nil, fmt.Errorf("failed to create blob client: %w", err)
 	}
 
+	containerClient := client.ServiceClient().NewContainerClient(container)
+
 	return &BlobCache{
-		containerClient: client,
-		container:       container,
+		container: containerClient,
 	}, nil
 }
 
 // come back and use iterators or a queue?
 func (fc *BlobCache) List(ctx context.Context, prefix string, _ string) ([]string, error) {
 	var keys []string
-	pager := fc.containerClient.NewListBlobsFlatPager(fc.container, &azblob.ListBlobsFlatOptions{
+	pager := fc.container.NewListBlobsFlatPager(&azblob.ListBlobsFlatOptions{
 		Prefix: &prefix,
 	})
 
@@ -69,8 +71,20 @@ func (fc *BlobCache) List(ctx context.Context, prefix string, _ string) ([]strin
 	return keys, nil
 }
 
+func (fc *BlobCache) Exists(key string) (bool, error) {
+	_, err := fc.container.NewBlobClient(key).GetProperties(context.TODO(), &blob.GetPropertiesOptions{})
+	if err != nil {
+		if bloberror.HasCode(err, bloberror.BlobNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+
+}
+
 func (fc *BlobCache) Get(key string) (io.ReadCloser, error) {
-	stream, err := fc.containerClient.DownloadStream(context.TODO(), fc.container, key, &azblob.DownloadStreamOptions{})
+	stream, err := fc.container.NewBlockBlobClient(key).DownloadStream(context.TODO(), &azblob.DownloadStreamOptions{})
 	if err != nil {
 		if bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return nil, ErrNotFound
@@ -83,7 +97,7 @@ func (fc *BlobCache) Get(key string) (io.ReadCloser, error) {
 }
 
 func (fc *BlobCache) Set(key, value string) error {
-	_, err := fc.containerClient.UploadStream(context.TODO(), fc.container, key, strings.NewReader(value), &azblob.UploadStreamOptions{})
+	_, err := fc.container.NewBlockBlobClient(key).UploadStream(context.TODO(), strings.NewReader(value), &azblob.UploadStreamOptions{})
 	return err
 }
 
