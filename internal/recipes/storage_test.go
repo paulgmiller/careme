@@ -25,7 +25,7 @@ func TestRecipeFileNaming(t *testing.T) {
 
 	hash := recipe.ComputeHash()
 	recipeJSON, _ := json.Marshal(recipe)
-	err = fileCache.Set("recipe/"+hash, string(recipeJSON))
+	err = fileCache.Set(t.Context(), "recipe/"+hash, string(recipeJSON))
 	if err != nil {
 		t.Fatalf("failed to save recipe: %v", err)
 	}
