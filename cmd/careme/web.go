@@ -18,7 +18,10 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -133,6 +136,65 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		w.Write(favicon)
 	})
 
-	slog.Info("Serving Careme", "address", addr)
-	return http.ListenAndServe(addr, WithMiddleware(mux))
+	server := &http.Server{
+		Addr:    addr,
+		Handler: WithMiddleware(mux),
+	}
+
+	// Channel to listen for errors coming from the server
+	serverErrors := make(chan error, 1)
+
+	// Start the server in a goroutine
+	go func() {
+		slog.Info("Serving Careme", "address", addr)
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	// Channel to listen for interrupt or terminate signals
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	// Block until we receive a signal or server error
+	select {
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("server error: %w", err)
+		}
+		return nil
+	case sig := <-shutdown:
+		slog.Info("Shutdown signal received", "signal", sig)
+		return gracefulShutdown(server, recipeHandler.Wait)
+	}
+}
+
+func gracefulShutdown(svr *http.Server, recipesWait func()) error {
+	// Give outstanding requests 25 seconds to complete (kubernetes has 30 second grace period)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	// Gracefully shutdown the HTTP server
+	if err := svr.Shutdown(ctx); err != nil {
+		slog.Error("Server shutdown error", "error", err)
+		// Force close after timeout
+		svr.Close()
+		return err
+	}
+
+	done := make(chan struct{})
+	go func() {
+		recipesWait()
+		close(done)
+	}()
+
+	// Wait for all recipe generation goroutines to complete
+	slog.Info("Waiting for recipe generation goroutines to complete")
+
+	select {
+	case <-done:
+		slog.Info("All recipe generation goroutines completed")
+	case <-ctx.Done():
+		slog.Warn("Timeout waiting for recipe generation goroutines")
+		return ctx.Err()
+	}
+	return nil
 }
