@@ -113,7 +113,7 @@ func (s *Storage) List(ctx context.Context) ([]User, error) {
 
 func (s *Storage) GetByID(id string) (*User, error) {
 
-	userBytes, err := s.cache.Get(userPrefix + id)
+	userBytes, err := s.cache.Get(context.TODO(), userPrefix+id)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			return nil, ErrNotFound
@@ -133,7 +133,7 @@ func (s *Storage) GetByID(id string) (*User, error) {
 func (s *Storage) GetByEmail(email string) (*User, error) {
 
 	normalized := normalizeEmail(email)
-	id, err := s.cache.Get(emailPrefix + normalized)
+	id, err := s.cache.Get(context.TODO(), emailPrefix+normalized)
 
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -168,7 +168,7 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 	if err := s.Update(&newUser); err != nil {
 		return nil, fmt.Errorf("failed to create new user: %w", err)
 	}
-	if err := s.cache.Set(emailPrefix+newUser.Email[0], newUser.ID); err != nil {
+	if err := s.cache.Set(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID); err != nil {
 		return nil, fmt.Errorf("failed to index new user by email: %w", err)
 	}
 	return &newUser, nil
@@ -183,7 +183,7 @@ func (s *Storage) Update(user *User) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal user: %w", err)
 	}
-	if err := s.cache.Set(userPrefix+user.ID, string(userBytes)); err != nil {
+	if err := s.cache.Set(context.TODO(), userPrefix+user.ID, string(userBytes)); err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 	return nil

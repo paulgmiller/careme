@@ -72,7 +72,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		Name: "Unknown Location",
 	}, time.Now())
 	if recipe.OriginHash != "" {
-		loadedp, err := s.generator.LoadParamsFromHash(recipe.OriginHash)
+		loadedp, err := s.generator.LoadParamsFromHash(ctx, recipe.OriginHash)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
 			//http.Error(w, "recipe not found or expired", http.StatusNotFound)
@@ -112,11 +112,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
 		slist, err := s.generator.FromCache(ctx, hashParam)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to load shared recipe for hash", "hash", hashParam, "error", err)
+			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
 			return
 		}
-		p, err := s.generator.LoadParamsFromHash(hashParam)
+		p, err := s.generator.LoadParamsFromHash(ctx, hashParam)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 			p = DefaultParams(&locations.Location{
@@ -169,7 +169,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Query().Get("ingredients") == "true" {
 		lochash := p.LocationHash()
-		ingredientblob, err := s.generator.cache.Get(lochash)
+		ingredientblob, err := s.generator.cache.Get(ctx, lochash)
 		if err != nil {
 			http.Error(w, "ingredients not found in cache", http.StatusNotFound)
 			return
