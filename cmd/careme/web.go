@@ -163,11 +163,11 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return nil
 	case sig := <-shutdown:
 		slog.Info("Shutdown signal received", "signal", sig)
-		return gracefulShutdown(server, recipeHandler.Wait())
+		return gracefulShutdown(server, recipeHandler.Wait)
 	}
 }
 
-func gracefulShutdown(svr *http.Server, recipeHandlerDone <-chan struct{}) error {
+func gracefulShutdown(svr *http.Server, recipesWait func()) error {
 	// Give outstanding requests 25 seconds to complete (kubernetes has 30 second grace period)
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
@@ -180,11 +180,17 @@ func gracefulShutdown(svr *http.Server, recipeHandlerDone <-chan struct{}) error
 		return err
 	}
 
+	done := make(chan struct{})
+	go func() {
+		recipesWait()
+		close(done)
+	}()
+
 	// Wait for all recipe generation goroutines to complete
 	slog.Info("Waiting for recipe generation goroutines to complete")
 
 	select {
-	case <-recipeHandlerDone:
+	case <-done:
 		slog.Info("All recipe generation goroutines completed")
 	case <-ctx.Done():
 		slog.Warn("Timeout waiting for recipe generation goroutines")

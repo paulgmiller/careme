@@ -275,11 +275,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) Wait() <-chan struct{} {
-	signal := make(chan struct{})
-	go func() {
-		s.wg.Wait()
-		close(signal)
-	}()
-	return signal
+func (s *server) Wait() {
+	s.wg.Wait()
 }
