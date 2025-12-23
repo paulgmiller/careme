@@ -14,7 +14,7 @@ var ErrNotFound = errors.New("cache entry not found")
 type Cache interface {
 	Get(key string) (io.ReadCloser, error)
 	Set(key, value string) error
-	//List(prefix string) ([]string, error)
+	Exists(key string) (bool, error)
 }
 
 type ListCache interface {
@@ -47,6 +47,17 @@ func (fc *FileCache) List(_ context.Context, prefix string, token string) ([]str
 		return nil, err
 	}
 	return keys, nil
+}
+
+func (fc *FileCache) Exists(key string) (bool, error) {
+	_, err := os.Stat(filepath.Join(fc.Dir, key))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (fc *FileCache) Get(key string) (io.ReadCloser, error) {
