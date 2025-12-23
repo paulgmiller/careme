@@ -89,24 +89,46 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	currentUser, err := FromRequest(r, s.storage)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ClearCookie(w)
+
+	// Check if viewing another user's profile via ID query parameter
+	userID := r.URL.Query().Get("id")
+	var viewUser *User
+	var err error
+
+	if userID != "" {
+		// Admin viewing another user
+		viewUser, err = s.storage.GetByID(userID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				http.Error(w, "user not found", http.StatusNotFound)
+				return
+			}
+			slog.ErrorContext(ctx, "failed to load user by ID", "error", err, "user_id", userID)
+			http.Error(w, "unable to load user", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// User viewing their own profile
+		viewUser, err = FromRequest(r, s.storage)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				ClearCookie(w)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			slog.ErrorContext(ctx, "failed to load user for user page", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		if viewUser == nil {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load user for user page", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
-	}
-	if currentUser == nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
 	}
 
 	success := false
-	if r.Method == http.MethodPost {
+	// Only allow POST updates for own profile (no ID parameter)
+	if r.Method == http.MethodPost && userID == "" {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "invalid form submission", http.StatusBadRequest)
 			return
@@ -114,15 +136,15 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 
 		// Only update favorite_store if provided
 		if favoriteStore := strings.TrimSpace(r.FormValue("favorite_store")); favoriteStore != "" || r.Form.Has("favorite_store") {
-			currentUser.FavoriteStore = favoriteStore
+			viewUser.FavoriteStore = favoriteStore
 		}
 
 		// Only update shopping_day if provided
 		if shoppingDay := strings.TrimSpace(r.FormValue("shopping_day")); shoppingDay != "" {
-			currentUser.ShoppingDay = shoppingDay
+			viewUser.ShoppingDay = shoppingDay
 		}
 
-		if err := s.storage.Update(currentUser); err != nil {
+		if err := s.storage.Update(viewUser); err != nil {
 			slog.ErrorContext(ctx, "failed to update user", "error", err)
 			http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 			return
@@ -132,11 +154,11 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch location name if favorite store is set
 	var favoriteStoreName string
-	if currentUser.FavoriteStore != "" && s.locGetter != nil {
-		loc, err := s.locGetter.GetLocationByID(ctx, currentUser.FavoriteStore)
+	if viewUser.FavoriteStore != "" && s.locGetter != nil {
+		loc, err := s.locGetter.GetLocationByID(ctx, viewUser.FavoriteStore)
 		if err != nil {
-			slog.WarnContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", err)
-			favoriteStoreName = currentUser.FavoriteStore // fallback to ID
+			slog.WarnContext(ctx, "failed to get location name for favorite store", "location_id", viewUser.FavoriteStore, "error", err)
+			favoriteStoreName = viewUser.FavoriteStore // fallback to ID
 		} else {
 			favoriteStoreName = loc.Name
 		}
@@ -150,7 +172,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Style             seasons.Style
 	}{
 		ClarityScript:     s.clarityScript,
-		User:              currentUser,
+		User:              viewUser,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
 		Style:             seasons.GetCurrentStyle(),

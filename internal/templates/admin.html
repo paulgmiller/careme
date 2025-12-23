@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Careme · Admin</title>
+
+  {{template "tailwind_head"}}
+
+  {{.ClarityScript}}
+</head>
+<body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
+  <main class="px-4 py-10">
+    <section class="mx-auto w-full max-w-4xl">
+      <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
+        <div class="border-b border-brand-100 px-8 pb-6 pt-8">
+          <a href="/" class="inline-flex items-center text-sm font-medium text-brand-600 underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+            ← Back to Home
+          </a>
+          <h1 class="mt-4 text-4xl font-extrabold tracking-tight text-brand-700">Admin</h1>
+          <p class="mt-2 text-sm text-gray-600">Administrative tools and resources.</p>
+        </div>
+
+        <div class="space-y-6 px-8 py-8">
+          <section class="space-y-4">
+            <h2 class="text-lg font-semibold text-brand-700">Tools</h2>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <a href="/logs" class="block rounded-xl border border-brand-100 bg-white p-6 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                <div class="flex items-center gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-8 w-8 text-brand-600">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                  </svg>
+                  <div>
+                    <h3 class="text-lg font-semibold text-brand-700">Logs</h3>
+                    <p class="mt-1 text-sm text-gray-600">View application logs</p>
+                  </div>
+                </div>
+              </a>
+
+              <a href="/users" class="block rounded-xl border border-brand-100 bg-white p-6 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                <div class="flex items-center gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-8 w-8 text-brand-600">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                  </svg>
+                  <div>
+                    <h3 class="text-lg font-semibold text-brand-700">Users</h3>
+                    <p class="mt-1 text-sm text-gray-600">Manage user accounts</p>
+                  </div>
+                </div>
+              </a>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

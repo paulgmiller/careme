@@ -14,7 +14,9 @@ var (
 	User,
 	Recipe,
 	Location,
-	Mail *template.Template
+	Mail,
+	Admin,
+	Users *template.Template
 )
 
 func init() {
@@ -28,6 +30,8 @@ func init() {
 	Recipe = ensure(tmpls, "chat.html")
 	Location = ensure(tmpls, "locations.html")
 	Mail = ensure(tmpls, "mail.html")
+	Admin = ensure(tmpls, "admin.html")
+	Users = ensure(tmpls, "users.html")
 }
 
 func ensure(templates *template.Template, name string) *template.Template {
