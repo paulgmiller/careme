@@ -237,7 +237,7 @@ func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.S
 	}
 	//we could actually nuke out the rest of recipe and lazily load but not yet
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
-	if err := cache.Set(p.Hash(), string(shoppingJSON)); err != nil {
+	if err := cache.Set(ctx, p.Hash(), string(shoppingJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
 		return err
 	}
@@ -249,7 +249,7 @@ func saveShoppingList(ctx context.Context, cache cache.Cache, shoppingList *ai.S
 	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
 	// Persist the latest conversation IDs with the params so follow-ups can reuse them.
 	paramsJSON := lo.Must(json.Marshal(p))
-	if err := cache.Set(p.Hash()+".params", string(paramsJSON)); err != nil {
+	if err := cache.Set(ctx, p.Hash()+".params", string(paramsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
 		return err
 	}
@@ -263,18 +263,18 @@ func saveRecipes(ctx context.Context, c cache.Cache, recipes []ai.Recipe, origin
 		recipe := &recipes[i]
 		recipe.OriginHash = originHash
 		hash := recipe.ComputeHash()
-		_, err := c.Get(recipeCachePrefix + hash)
-		if err == nil {
-			continue //already saved
-		}
-		if !errors.Is(err, cache.ErrNotFound) {
+		exists, err := c.Exists(ctx, recipeCachePrefix+hash)
+		if err != nil {
 			slog.ErrorContext(ctx, "failed to check existing recipe in cache", "recipe", recipe.Title, "error", err)
 			errs = append(errs, fmt.Errorf("error checking %s, %w", hash, err))
 		}
+		if exists {
+			continue
+		}
 
-		slog.InfoContext(ctx, "Backfilling recipe", "title", recipe.Title, "hash", hash)
+		slog.InfoContext(ctx, "storing recipe", "title", recipe.Title, "hash", hash)
 		recipeJSON := lo.Must(json.Marshal(recipe))
-		if err := c.Set(recipeCachePrefix+hash, string(recipeJSON)); err != nil {
+		if err := c.Set(ctx, recipeCachePrefix+hash, string(recipeJSON)); err != nil {
 			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
 			errs = append(errs, fmt.Errorf("error saving %s, %w", hash, err))
 		}
@@ -283,8 +283,8 @@ func saveRecipes(ctx context.Context, c cache.Cache, recipes []ai.Recipe, origin
 }
 
 // LoadParamsFromHash loads generator params from cache using the hash
-func (g *Generator) LoadParamsFromHash(hash string) (*generatorParams, error) {
-	paramsReader, err := g.cache.Get(hash + ".params")
+func (g *Generator) LoadParamsFromHash(ctx context.Context, hash string) (*generatorParams, error) {
+	paramsReader, err := g.cache.Get(ctx, hash+".params")
 	if err != nil {
 		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
 	}
@@ -318,7 +318,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 	lochash := p.LocationHash()
 	var ingredients []kroger.Ingredient
 
-	if ingredientblob, err := g.cache.Get(lochash); err == nil {
+	if ingredientblob, err := g.cache.Get(ctx, lochash); err == nil {
 		defer ingredientblob.Close()
 		jsonReader := json.NewDecoder(ingredientblob)
 		if err := jsonReader.Decode(&ingredients); err == nil {
@@ -354,7 +354,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		slog.ErrorContext(ctx, "failed to marshal ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
-	if err := g.cache.Set(p.LocationHash(), string(allingredientsJSON)); err != nil {
+	if err := g.cache.Set(ctx, p.LocationHash(), string(allingredientsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}

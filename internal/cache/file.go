@@ -12,9 +12,9 @@ import (
 var ErrNotFound = errors.New("cache entry not found")
 
 type Cache interface {
-	Get(key string) (io.ReadCloser, error)
-	Set(key, value string) error
-	Exists(key string) (bool, error)
+	Get(ctx context.Context, key string) (io.ReadCloser, error)
+	Set(ctx context.Context, key, value string) error
+	Exists(ctx context.Context, key string) (bool, error)
 }
 
 type ListCache interface {
@@ -49,7 +49,7 @@ func (fc *FileCache) List(_ context.Context, prefix string, token string) ([]str
 	return keys, nil
 }
 
-func (fc *FileCache) Exists(key string) (bool, error) {
+func (fc *FileCache) Exists(_ context.Context, key string) (bool, error) {
 	_, err := os.Stat(filepath.Join(fc.Dir, key))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -60,7 +60,7 @@ func (fc *FileCache) Exists(key string) (bool, error) {
 	return true, nil
 }
 
-func (fc *FileCache) Get(key string) (io.ReadCloser, error) {
+func (fc *FileCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
 
 	data, err := os.Open(filepath.Join(fc.Dir, key))
 	if err != nil {
@@ -72,7 +72,7 @@ func (fc *FileCache) Get(key string) (io.ReadCloser, error) {
 	return data, nil
 }
 
-func (fc *FileCache) Set(key, value string) error {
+func (fc *FileCache) Set(_ context.Context, key, value string) error {
 	fullPath := filepath.Join(fc.Dir, key)
 	dir := filepath.Dir(fullPath)
 	// Create parent directories if they don't exist

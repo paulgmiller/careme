@@ -71,8 +71,8 @@ func (fc *BlobCache) List(ctx context.Context, prefix string, _ string) ([]strin
 	return keys, nil
 }
 
-func (fc *BlobCache) Exists(key string) (bool, error) {
-	_, err := fc.container.NewBlobClient(key).GetProperties(context.TODO(), &blob.GetPropertiesOptions{})
+func (fc *BlobCache) Exists(ctx context.Context, key string) (bool, error) {
+	_, err := fc.container.NewBlobClient(key).GetProperties(ctx, &blob.GetPropertiesOptions{})
 	if err != nil {
 		if bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return false, nil
@@ -83,8 +83,8 @@ func (fc *BlobCache) Exists(key string) (bool, error) {
 
 }
 
-func (fc *BlobCache) Get(key string) (io.ReadCloser, error) {
-	stream, err := fc.container.NewBlockBlobClient(key).DownloadStream(context.TODO(), &azblob.DownloadStreamOptions{})
+func (fc *BlobCache) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	stream, err := fc.container.NewBlockBlobClient(key).DownloadStream(ctx, &azblob.DownloadStreamOptions{})
 	if err != nil {
 		if bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return nil, ErrNotFound
@@ -96,8 +96,8 @@ func (fc *BlobCache) Get(key string) (io.ReadCloser, error) {
 	return stream.Body, nil
 }
 
-func (fc *BlobCache) Set(key, value string) error {
-	_, err := fc.container.NewBlockBlobClient(key).UploadStream(context.TODO(), strings.NewReader(value), &azblob.UploadStreamOptions{})
+func (fc *BlobCache) Set(ctx context.Context, key, value string) error {
+	_, err := fc.container.NewBlockBlobClient(key).UploadStream(ctx, strings.NewReader(value), &azblob.UploadStreamOptions{})
 	return err
 }
 

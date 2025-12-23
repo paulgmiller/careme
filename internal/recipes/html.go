@@ -16,7 +16,7 @@ import (
 const recipeCachePrefix = "recipe/"
 
 func (g *Generator) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
-	recipe, err := g.cache.Get(recipeCachePrefix + hash)
+	recipe, err := g.cache.Get(ctx, recipeCachePrefix+hash)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +31,7 @@ func (g *Generator) SingleFromCache(ctx context.Context, hash string) (*ai.Recip
 }
 
 func (g *Generator) FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error) {
-	shoppinglist, err := g.cache.Get(hash) //this hash prefix is dumb now.
+	shoppinglist, err := g.cache.Get(ctx, hash) //this hash prefix is dumb now.
 	if err != nil {
 		return nil, err
 	}
