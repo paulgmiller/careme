@@ -267,6 +267,7 @@ func saveRecipes(ctx context.Context, c cache.Cache, recipes []ai.Recipe, origin
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to check existing recipe in cache", "recipe", recipe.Title, "error", err)
 			errs = append(errs, fmt.Errorf("error checking %s, %w", hash, err))
+			continue
 		}
 		if exists {
 			continue

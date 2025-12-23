@@ -72,7 +72,7 @@ func (fc *BlobCache) List(ctx context.Context, prefix string, _ string) ([]strin
 }
 
 func (fc *BlobCache) Exists(ctx context.Context, key string) (bool, error) {
-	_, err := fc.container.NewBlobClient(key).GetProperties(ctx, &blob.GetPropertiesOptions{})
+	_, err := fc.container.NewBlockBlobClient(key).GetProperties(ctx, &blob.GetPropertiesOptions{})
 	if err != nil {
 		if bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return false, nil
