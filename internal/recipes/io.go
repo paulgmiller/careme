@@ -12,6 +12,8 @@ import (
 	"github.com/samber/lo"
 )
 
+const recipeCachePrefix = "recipe/"
+
 type recipeio struct {
 	Cache cache.Cache
 }

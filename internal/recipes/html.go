@@ -10,8 +10,6 @@ import (
 	"net/http"
 )
 
-const recipeCachePrefix = "recipe/"
-
 // FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
 func FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer http.ResponseWriter) {
 	// TODO just put params into shopping list and pass that up?
