@@ -2,7 +2,6 @@ package locations
 
 import (
 	"careme/internal/config"
-	"careme/internal/html"
 	"careme/internal/kroger"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -24,7 +23,6 @@ type locationServer struct {
 	locationCache map[string]Location
 	cacheLock     sync.Mutex // to protect locationMap
 	client        krogerClient
-	clarity       template.HTML //ugh should do better here.
 }
 
 func New(ctx context.Context, cfg *config.Config) (*locationServer, error) {
@@ -36,12 +34,10 @@ func New(ctx context.Context, cfg *config.Config) (*locationServer, error) {
 		locationCache: make(map[string]Location),
 		cacheLock:     sync.Mutex{},
 		client:        client,
-		clarity:       html.ClarityScript(cfg),
 	}, nil
 }
 
 func (l *locationServer) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
-
 	l.cacheLock.Lock()
 
 	if loc, exists := l.locationCache[locationID]; exists {
@@ -107,7 +103,6 @@ func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) 
 }
 
 func (l *locationServer) Register(mux *http.ServeMux) {
-
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		/*_, err := users.FromRequest(r, userStorage)
@@ -141,12 +136,11 @@ func (l *locationServer) Register(mux *http.ServeMux) {
 		}{
 			Locations:     locs,
 			Zip:           zip,
-			ClarityScript: l.clarity,
+			ClarityScript: templates.ClarityScript(),
 			Style:         seasons.GetCurrentStyle(),
 		}
 		if err := templates.Location.Execute(w, data); err != nil {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
-
 	})
 }

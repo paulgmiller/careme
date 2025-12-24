@@ -2,7 +2,6 @@ package recipes
 
 import (
 	"careme/internal/ai"
-	"careme/internal/html"
 	"careme/internal/locations"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -11,6 +10,7 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
+	"net/http"
 )
 
 const recipeCachePrefix = "recipe/"
@@ -31,7 +31,7 @@ func (g *Generator) SingleFromCache(ctx context.Context, hash string) (*ai.Recip
 }
 
 func (g *Generator) FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error) {
-	shoppinglist, err := g.cache.Get(ctx, hash) //this hash prefix is dumb now.
+	shoppinglist, err := g.cache.Get(ctx, hash) // this hash prefix is dumb now.
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +49,8 @@ func (g *Generator) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 }
 
 // FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
-func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
-	//TODO just put params into shopping list and pass that up?
+func FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer http.ResponseWriter) {
+	// TODO just put params into shopping list and pass that up?
 	data := struct {
 		Location       locations.Location
 		Date           string
@@ -63,7 +63,7 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 	}{
 		Location:       *p.Location,
 		Date:           p.Date.Format("2006-01-02"),
-		ClarityScript:  html.ClarityScript(g.config),
+		ClarityScript:  templates.ClarityScript(),
 		Instructions:   p.Instructions,
 		Hash:           p.Hash(),
 		Recipes:        l.Recipes,
@@ -71,12 +71,14 @@ func (g *Generator) FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer
 		Style:          seasons.GetCurrentStyle(),
 	}
 
-	return templates.Recipe.Execute(writer, data)
+	if err := templates.Recipe.Execute(writer, data); err != nil {
+		http.Error(writer, "recipe not found or expired", http.StatusNotFound)
+	}
 }
 
 // drops clarity, instructions and most of shoppinglist
 func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
-	//TODO just put params into shopping list and pass that up?
+	// TODO just put params into shopping list and pass that up?
 
 	data := struct {
 		Location locations.Location

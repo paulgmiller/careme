@@ -1,10 +1,9 @@
 package recipes
 
 import (
-	"bytes"
 	"careme/internal/ai"
-	"careme/internal/config"
 	"careme/internal/locations"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -12,12 +11,6 @@ import (
 
 // Test that the HTML contains Save and Dismiss buttons for recipes
 func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
-	g := Generator{
-		config: &config.Config{
-			Clarity: config.ClarityConfig{ProjectID: ""},
-		},
-	}
-
 	// Create a shopping list with multiple recipes
 	multiRecipeList := ai.ShoppingList{
 		Recipes: []ai.Recipe{
@@ -46,12 +39,9 @@ func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	var buf bytes.Buffer
-	if err := g.FormatChatHTML(p, multiRecipeList, &buf); err != nil {
-		t.Fatalf("failed to format chat HTML: %v", err)
-	}
-
-	html := buf.String()
+	w := httptest.NewRecorder()
+	FormatChatHTML(p, multiRecipeList, w)
+	html := w.Body.String()
 
 	// Verify HTML is valid
 	isValidHTML(t, html)

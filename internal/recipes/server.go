@@ -1,6 +1,13 @@
 package recipes
 
 import (
+	"careme/internal/ai"
+	"careme/internal/config"
+	"careme/internal/kroger"
+	"careme/internal/locations"
+	"careme/internal/seasons"
+	"careme/internal/templates"
+	"careme/internal/users"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,14 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"careme/internal/ai"
-	"careme/internal/config"
-	"careme/internal/kroger"
-	"careme/internal/locations"
-	"careme/internal/seasons"
-	"careme/internal/templates"
-	"careme/internal/users"
-
 	"github.com/samber/lo"
 )
 
@@ -26,25 +25,29 @@ type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
 
+type generator interface {
+	FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error)
+	SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error)
+	GenerateRecipes(ctx context.Context, p *generatorParams) error
+	LoadParamsFromHash(ctx context.Context, hash string) (*generatorParams, error)
+}
+
 type server struct {
 	cfg           *config.Config
 	storage       *users.Storage
 	generator     *Generator
 	clarityScript template.HTML
-	spinnerTmpl   *template.Template //remove?
 	locServer     locServer
 	wg            sync.WaitGroup
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
-func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator, clarityScript template.HTML, locServer locServer) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator, locServer locServer) *server {
 	return &server{
-		cfg:           cfg,
-		storage:       storage,
-		generator:     generator,
-		clarityScript: clarityScript,
-		spinnerTmpl:   templates.Spin,
-		locServer:     locServer,
+		cfg:       cfg,
+		storage:   storage,
+		generator: generator,
+		locServer: locServer,
 	}
 }
 
@@ -75,8 +78,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		loadedp, err := s.generator.LoadParamsFromHash(ctx, recipe.OriginHash)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
-			//http.Error(w, "recipe not found or expired", http.StatusNotFound)
-			//return
+			// http.Error(w, "recipe not found or expired", http.StatusNotFound)
+			// return
 		} else {
 			p = loadedp
 		}
@@ -87,9 +90,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
-	if err := s.generator.FormatChatHTML(p, list, w); err != nil {
-		http.Error(w, "failed to format recipe", http.StatusInternalServerError)
-	}
+	FormatChatHTML(p, list, w)
 }
 
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +125,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				Name: "Unknown Location",
 			}, time.Now())
 		}
-		s.generator.FormatChatHTML(p, *slist, w)
+		FormatChatHTML(p, *slist, w)
 		go func() {
 			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
 			if p.Date.After(cutoff) {
@@ -132,7 +133,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
-			//nothing we can do on failure anyways. Aleaady logged
+			// nothing we can do on failure anyways. Aleaady logged
 			_ = saveRecipes(ctx, s.generator.cache, slist.Recipes, p.Hash())
 		}()
 		return
@@ -189,7 +190,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
 			return
 		}
-		//make this a html thats readable.
+		// make this a html thats readable.
 		w.Header().Add("Content-Type", "application/json")
 		return
 	}
@@ -239,12 +240,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 	if list, err := s.generator.FromCache(ctx, hash); err == nil {
-		//TODO check not found error explicitly
+		// TODO check not found error explicitly
 		if r.URL.Query().Get("mail") == "true" {
 			FormatMail(p, *list, w)
 			return
 		}
-		s.generator.FormatChatHTML(p, *list, w)
+		FormatChatHTML(p, *list, w)
 		go func() {
 			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
 			if p.Date.After(cutoff) {
@@ -252,25 +253,25 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
-			//nothing we can do on failure anyways. Aleaady logged
+			// nothing we can do on failure anyways. Aleaady logged
 			_ = saveRecipes(ctx, s.generator.cache, list.Recipes, p.Hash())
 		}()
 		return
 	}
 
-	//should this be in hash?
+	// should this be in hash?
 	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
-		//copy over request id to new context? can't be same context because end of http request will cancel it.
+		// copy over request id to new context? can't be same context because end of http request will cancel it.
 		if err := s.generator.GenerateRecipes(context.Background(), p); err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
 		}
 	}()
-	//TODO should we just redirect to cache page here?
+	// TODO should we just redirect to cache page here?
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	spinnerData := struct {
 		ClarityScript template.HTML
@@ -279,7 +280,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		ClarityScript: s.clarityScript,
 		Style:         seasons.GetCurrentStyle(),
 	}
-	if err := s.spinnerTmpl.Execute(w, spinnerData); err != nil {
+
+	if err := templates.Spin.Execute(w, spinnerData); err != nil {
 		slog.ErrorContext(ctx, "home template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
