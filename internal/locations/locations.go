@@ -25,7 +25,16 @@ type locationServer struct {
 	client        krogerClient
 }
 
-func New(ctx context.Context, cfg *config.Config) (*locationServer, error) {
+type locationGetter interface {
+	GetLocationByID(ctx context.Context, locationID string) (*Location, error)
+	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
+}
+
+func New(ctx context.Context, cfg *config.Config) (locationGetter, error) {
+	if cfg.Mocks.Enable {
+		return mock{}, nil
+	}
+
 	client, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
@@ -102,7 +111,7 @@ func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) 
 	return locations, nil
 }
 
-func (l *locationServer) Register(mux *http.ServeMux) {
+func Register(l locationGetter, mux *http.ServeMux) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		/*_, err := users.FromRequest(r, userStorage)
