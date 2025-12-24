@@ -52,7 +52,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	userHandler := users.NewHandler(userStorage, locationserver)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache)
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {

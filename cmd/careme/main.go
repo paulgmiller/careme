@@ -1,6 +1,11 @@
 package main
 
 import (
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/logsink"
+	"careme/internal/recipes"
 	"context"
 	_ "embed"
 	"flag"
@@ -12,12 +17,6 @@ import (
 
 	"github.com/alpkeskin/gotoon"
 	multi "github.com/samber/slog-multi"
-
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/logsink"
-	"careme/internal/recipes"
 )
 
 func main() {
@@ -58,7 +57,7 @@ func main() {
 		}
 		defer closer.Close()
 		slog.SetDefault(slog.New(multi.Fanout(handler, slog.NewTextHandler(os.Stdout, nil))))
-		//log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
+		// log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
 
 	}
 
@@ -116,9 +115,12 @@ func run(cfg *config.Config, location string, ingredient string) error {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
+	// just use the kroger client directly or punt all this and go pure web
+	g := generator.(*recipes.Generator)
+
 	if ingredient != "" {
 		f := recipes.Filter(ingredient, []string{"*"}, false /*frozen*/)
-		ings, err := generator.GetIngredients(ctx, location, f, 0)
+		ings, err := g.GetIngredients(ctx, location, f, 0)
 		if err != nil {
 			return fmt.Errorf("failed to get ingredients: %w", err)
 		}
@@ -141,7 +143,7 @@ func run(cfg *config.Config, location string, ingredient string) error {
 	}
 
 	p := recipes.DefaultParams(l, time.Now())
-	ingredients, err := generator.GetStaples(ctx, p)
+	ingredients, err := g.GetStaples(ctx, p)
 	if err != nil {
 		return fmt.Errorf("failed to get staple ingredients: %w", err)
 	}

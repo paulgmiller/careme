@@ -17,10 +17,10 @@ var fakes = map[string]Location{
 		State:   "North Dakota",
 	},
 	"5000": {
-		ID:      "10",
-		Name:    "Big Willys",
-		Address: "1 willy ave",
-		State:   "North Dakota",
+		ID:      "5000",
+		Name:    "Piggly Wiggly",
+		Address: "20 somewhere st",
+		State:   "North Carolina",
 	},
 }
 

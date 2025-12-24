@@ -15,8 +15,16 @@ import (
 
 const recipeCachePrefix = "recipe/"
 
-func (g *Generator) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
-	recipe, err := g.cache.Get(ctx, recipeCachePrefix+hash)
+type getcache interface {
+	Get(ctx context.Context, key string) (io.ReadCloser, error)
+}
+
+type HtmlFromCache struct {
+	Cache getcache
+}
+
+func (h HtmlFromCache) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
+	recipe, err := h.Cache.Get(ctx, recipeCachePrefix+hash)
 	if err != nil {
 		return nil, err
 	}
@@ -30,8 +38,8 @@ func (g *Generator) SingleFromCache(ctx context.Context, hash string) (*ai.Recip
 	return &singleRecipe, nil
 }
 
-func (g *Generator) FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error) {
-	shoppinglist, err := g.cache.Get(ctx, hash) // this hash prefix is dumb now.
+func (h HtmlFromCache) FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error) {
+	shoppinglist, err := h.Cache.Get(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
