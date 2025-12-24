@@ -32,7 +32,7 @@ type generator interface {
 }
 
 type server struct {
-	HtmlFromCache
+	recipeio
 	cfg           *config.Config
 	storage       *users.Storage
 	cache         cache.Cache
@@ -46,12 +46,12 @@ type server struct {
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache) *server {
 	return &server{
-		HtmlFromCache: HtmlFromCache{Cache: c},
-		cache:         c,
-		cfg:           cfg,
-		storage:       storage,
-		generator:     generator,
-		locServer:     locServer,
+		recipeio:  recipeio{Cache: c},
+		cache:     c,
+		cfg:       cfg,
+		storage:   storage,
+		generator: generator,
+		locServer: locServer,
 	}
 }
 
@@ -138,7 +138,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			// nothing we can do on failure anyways. Aleaady logged
-			_ = SaveRecipes(ctx, s.cache, slist.Recipes, p.Hash())
+			_ = s.SaveRecipes(ctx, slist.Recipes, p.Hash())
 		}()
 		return
 	}
@@ -258,7 +258,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			// nothing we can do on failure anyways. Aleaady logged
-			_ = SaveRecipes(ctx, s.cache, list.Recipes, p.Hash())
+			_ = s.SaveRecipes(ctx, list.Recipes, p.Hash())
 		}()
 		return
 	}
@@ -277,7 +277,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "generate error", "error", err)
 			return
 		}
-		if err := saveShoppingList(ctx, s.cache, shoppingList, p); err != nil {
+		if err := s.SaveShoppingList(ctx, shoppingList, p); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 		}
 	}()

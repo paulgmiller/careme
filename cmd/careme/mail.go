@@ -30,11 +30,11 @@ type emailClient interface {
 }
 
 type mailer struct {
+	cache       cache.Cache
 	userStorage *users.Storage
 	generator   *recipes.Generator // interface requires making params public
 	locServer   locServer
 	client      emailClient
-	html        recipes.HtmlFromCache
 }
 
 // TODO share some of this with web.go? good for mocking?
@@ -63,11 +63,11 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	return &mailer{
+		cache:       cache,
 		userStorage: userStorage,
 		generator:   generator.(*recipes.Generator), // TODO do better
 		locServer:   locationserver,
 		client:      sendgrid.NewSendClient(sendgridkey),
-		html:        recipes.HtmlFromCache{Cache: cache},
 	}, nil
 }
 
@@ -116,8 +116,8 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 
 	p := recipes.DefaultParams(l, time.Now().Add(-6*time.Hour)) // how do we get the timezone of the user?
 	p.UserID = user.ID
-
-	if _, err := m.html.FromCache(ctx, p.Hash()); err == nil {
+	rio := recipes.IO(m.cache)
+	if _, err := rio.FromCache(ctx, p.Hash()); err == nil {
 		// already generated. Assume we sent for now (need better atomic tracking)
 		// must include user id in tracking.
 		slog.InfoContext(ctx, "already emailed", "user", user.ID)
@@ -135,7 +135,8 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.Email)
 	}
-	// need save recipes here
+	// coombine hee save recipes with html
+	rio.SaveShoppingList(ctx, shoppingList, p)
 
 	var buf bytes.Buffer
 	recipes.FormatMail(p, *shoppingList, &buf)
