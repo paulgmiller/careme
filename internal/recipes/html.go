@@ -34,7 +34,7 @@ func FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer http.ResponseW
 	}
 
 	if err := templates.Recipe.Execute(writer, data); err != nil {
-		http.Error(writer, "recipe not found or expired", http.StatusNotFound)
+		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 

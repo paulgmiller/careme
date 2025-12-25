@@ -33,13 +33,12 @@ type generator interface {
 
 type server struct {
 	recipeio
-	cfg           *config.Config
-	storage       *users.Storage
-	cache         cache.Cache
-	generator     generator
-	clarityScript template.HTML
-	locServer     locServer
-	wg            sync.WaitGroup
+	cfg       *config.Config
+	storage   *users.Storage
+	cache     cache.Cache
+	generator generator
+	locServer locServer
+	wg        sync.WaitGroup
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
@@ -291,7 +290,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		ClarityScript template.HTML
 		Style         seasons.Style
 	}{
-		ClarityScript: s.clarityScript,
+		ClarityScript: templates.ClarityScript(),
 		Style:         seasons.GetCurrentStyle(),
 	}
 
