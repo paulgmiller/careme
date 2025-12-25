@@ -1,23 +1,24 @@
 package recipes
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
-	"html/template"
-	"log/slog"
-	"net/http"
-	"strings"
-	"sync"
-	"time"
-
 	"careme/internal/ai"
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html/template"
+	"log/slog"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/samber/lo"
 )
@@ -26,25 +27,30 @@ type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
 
+type generator interface {
+	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
+}
+
 type server struct {
-	cfg           *config.Config
-	storage       *users.Storage
-	generator     *Generator
-	clarityScript template.HTML
-	spinnerTmpl   *template.Template //remove?
-	locServer     locServer
-	wg            sync.WaitGroup
+	recipeio
+	cfg       *config.Config
+	storage   *users.Storage
+	cache     cache.Cache
+	generator generator
+	locServer locServer
+	wg        sync.WaitGroup
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
-func NewHandler(cfg *config.Config, storage *users.Storage, generator *Generator, clarityScript template.HTML, locServer locServer) *server {
+// cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache) *server {
 	return &server{
-		cfg:           cfg,
-		storage:       storage,
-		generator:     generator,
-		clarityScript: clarityScript,
-		spinnerTmpl:   templates.Spin,
-		locServer:     locServer,
+		recipeio:  recipeio{Cache: c},
+		cache:     c,
+		cfg:       cfg,
+		storage:   storage,
+		generator: generator,
+		locServer: locServer,
 	}
 }
 
@@ -61,7 +67,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recipe, err := s.generator.SingleFromCache(ctx, hash)
+	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
 		http.Error(w, "recipe not found", http.StatusNotFound)
 		return
@@ -72,11 +78,11 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		Name: "Unknown Location",
 	}, time.Now())
 	if recipe.OriginHash != "" {
-		loadedp, err := s.generator.LoadParamsFromHash(ctx, recipe.OriginHash)
+		loadedp, err := s.loadParamsFromHash(ctx, recipe.OriginHash)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
-			//http.Error(w, "recipe not found or expired", http.StatusNotFound)
-			//return
+			// http.Error(w, "recipe not found or expired", http.StatusNotFound)
+			// return
 		} else {
 			p = loadedp
 		}
@@ -87,9 +93,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
-	if err := s.generator.FormatChatHTML(p, list, w); err != nil {
-		http.Error(w, "failed to format recipe", http.StatusInternalServerError)
-	}
+	FormatChatHTML(p, list, w)
 }
 
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
@@ -110,13 +114,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
-		slist, err := s.generator.FromCache(ctx, hashParam)
+		slist, err := s.FromCache(ctx, hashParam)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
 			return
 		}
-		p, err := s.generator.LoadParamsFromHash(ctx, hashParam)
+		p, err := s.loadParamsFromHash(ctx, hashParam)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 			p = DefaultParams(&locations.Location{
@@ -124,7 +128,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				Name: "Unknown Location",
 			}, time.Now())
 		}
-		s.generator.FormatChatHTML(p, *slist, w)
+		FormatChatHTML(p, *slist, w)
 		go func() {
 			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
 			if p.Date.After(cutoff) {
@@ -132,8 +136,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
-			//nothing we can do on failure anyways. Aleaady logged
-			_ = saveRecipes(ctx, s.generator.cache, slist.Recipes, p.Hash())
+			// nothing we can do on failure anyways. Aleaady logged
+			_ = s.SaveRecipes(ctx, slist.Recipes, p.Hash())
 		}()
 		return
 	}
@@ -169,7 +173,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Query().Get("ingredients") == "true" {
 		lochash := p.LocationHash()
-		ingredientblob, err := s.generator.cache.Get(ctx, lochash)
+		ingredientblob, err := s.cache.Get(ctx, lochash)
 		if err != nil {
 			http.Error(w, "ingredients not found in cache", http.StatusNotFound)
 			return
@@ -189,7 +193,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
 			return
 		}
-		//make this a html thats readable.
+		// make this a html thats readable.
 		w.Header().Add("Content-Type", "application/json")
 		return
 	}
@@ -217,7 +221,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	dismissedHashes := lo.FilterMap(r.URL.Query()["dismissed"], clean)
 	// Load saved recipes from cache by their hashes
 	for _, hash := range savedHashes {
-		recipe, err := s.generator.SingleFromCache(ctx, hash)
+		recipe, err := s.SingleFromCache(ctx, hash)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
 			continue
@@ -228,7 +232,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	// Add dismissed recipe titles to instructions so AI knows what to avoid
 	for _, hash := range dismissedHashes {
-		recipe, err := s.generator.SingleFromCache(ctx, hash)
+		recipe, err := s.SingleFromCache(ctx, hash)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
 			continue
@@ -238,13 +242,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash := p.Hash()
-	if list, err := s.generator.FromCache(ctx, hash); err == nil {
-		//TODO check not found error explicitly
+	if list, err := s.FromCache(ctx, hash); err == nil {
+		// TODO check not found error explicitly
 		if r.URL.Query().Get("mail") == "true" {
 			FormatMail(p, *list, w)
 			return
 		}
-		s.generator.FormatChatHTML(p, *list, w)
+		FormatChatHTML(p, *list, w)
 		go func() {
 			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
 			if p.Date.After(cutoff) {
@@ -252,34 +256,45 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
-			//nothing we can do on failure anyways. Aleaady logged
-			_ = saveRecipes(ctx, s.generator.cache, list.Recipes, p.Hash())
+			// nothing we can do on failure anyways. Aleaady logged
+			_ = s.SaveRecipes(ctx, list.Recipes, p.Hash())
 		}()
 		return
 	}
 
-	//should this be in hash?
+	// should this be in hash?
 	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		// copy over request id to new context? can't be same context because end of http request will cancel it.
+		ctx := context.Background()
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
-		//copy over request id to new context? can't be same context because end of http request will cancel it.
-		if err := s.generator.GenerateRecipes(context.Background(), p); err != nil {
+		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
+		if err != nil {
+			if errors.Is(err, InProgress) {
+				slog.InfoContext(ctx, "generation already in progress, skipping save", "hash", hash)
+				return
+			}
 			slog.ErrorContext(ctx, "generate error", "error", err)
+			return
+		}
+		if err := s.SaveShoppingList(ctx, shoppingList, p); err != nil {
+			slog.ErrorContext(ctx, "save error", "error", err)
 		}
 	}()
-	//TODO should we just redirect to cache page here?
+	// TODO should we just redirect to cache page here?
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	spinnerData := struct {
 		ClarityScript template.HTML
 		Style         seasons.Style
 	}{
-		ClarityScript: s.clarityScript,
+		ClarityScript: templates.ClarityScript(),
 		Style:         seasons.GetCurrentStyle(),
 	}
-	if err := s.spinnerTmpl.Execute(w, spinnerData); err != nil {
+
+	if err := templates.Spin.Execute(w, spinnerData); err != nil {
 		slog.ErrorContext(ctx, "home template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
@@ -287,4 +302,19 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) Wait() {
 	s.wg.Wait()
+}
+
+// loadParamsFromHash loads generator params from cache using the hash
+func (s *server) loadParamsFromHash(ctx context.Context, hash string) (*generatorParams, error) {
+	paramsReader, err := s.cache.Get(ctx, hash+".params")
+	if err != nil {
+		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
+	}
+	defer paramsReader.Close()
+
+	var params generatorParams
+	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
+		return nil, fmt.Errorf("failed to decode params: %w", err)
+	}
+	return &params, nil
 }

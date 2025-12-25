@@ -18,19 +18,17 @@ type locationGetter interface {
 }
 
 type server struct {
-	storage       *Storage
-	clarityScript template.HTML
-	userTmpl      *template.Template //just remove or is htis useful?
-	locGetter     locationGetter
+	storage   *Storage
+	userTmpl  *template.Template // just remove or is htis useful?
+	locGetter locationGetter
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, clarityScript template.HTML, locGetter locationGetter) *server {
+func NewHandler(storage *Storage, locGetter locationGetter) *server {
 	return &server{
-		storage:       storage,
-		clarityScript: clarityScript,
-		userTmpl:      templates.User,
-		locGetter:     locGetter,
+		storage:   storage,
+		userTmpl:  templates.User,
+		locGetter: locGetter,
 	}
 }
 
@@ -149,7 +147,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		FavoriteStoreName string
 		Style             seasons.Style
 	}{
-		ClarityScript:     s.clarityScript,
+		ClarityScript:     templates.ClarityScript(),
 		User:              currentUser,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
