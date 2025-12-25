@@ -116,7 +116,10 @@ func run(cfg *config.Config, location string, ingredient string) error {
 	}
 
 	// just use the kroger client directly or punt all this and go pure web
-	g := generator.(*recipes.Generator)
+	g, ok := generator.(*recipes.Generator)
+	if !ok {
+		return fmt.Errorf("unexpected recipe generator type: %T", generator)
+	}
 
 	if ingredient != "" {
 		f := recipes.Filter(ingredient, []string{"*"}, false /*frozen*/)
