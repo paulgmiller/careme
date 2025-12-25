@@ -39,7 +39,7 @@ func ensure(templates *template.Template, name string) *template.Template {
 	return tmpl
 }
 
-// basically a hack for uts till we make this non global
+// basically a hack for us till we make this non global
 func SetClarity(project string) {
 	clarityproject = project
 }

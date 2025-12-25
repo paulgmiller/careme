@@ -135,7 +135,7 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.Email)
 	}
-	// coombine hee save recipes with html
+	// combine here save recipes with html
 	rio.SaveShoppingList(ctx, shoppingList, p)
 
 	var buf bytes.Buffer

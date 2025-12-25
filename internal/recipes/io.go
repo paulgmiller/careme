@@ -37,8 +37,8 @@ func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recip
 	return &singleRecipe, nil
 }
 
-func (h recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error) {
-	shoppinglist, err := h.Cache.Get(ctx, hash)
+func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error) {
+	shoppinglist, err := rio.Cache.Get(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
