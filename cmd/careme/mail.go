@@ -134,6 +134,7 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 	shoppingList, err := m.generator.GenerateRecipes(ctx, p)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.Email)
+		return
 	}
 	// coombine hee save recipes with html
 	rio.SaveShoppingList(ctx, shoppingList, p)

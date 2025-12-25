@@ -274,6 +274,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
+			if errors.Is(err, InProgress) {
+				slog.InfoContext(ctx, "generation already in progress, skipping save", "hash", hash)
+				return
+			}
 			slog.ErrorContext(ctx, "generate error", "error", err)
 			return
 		}

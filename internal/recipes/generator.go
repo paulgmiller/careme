@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -162,12 +163,14 @@ func DefaultStaples() []filter {
 	}
 }
 
+var InProgress error = errors.New("generation in progress")
+
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	hash := p.Hash()
 	generating, done := g.isGenerating(hash)
 	if generating {
 		slog.InfoContext(ctx, "Generation already in progress, skipping", "hash", hash)
-		return nil, nil
+		return nil, InProgress
 	}
 	defer done()
 	start := time.Now()
