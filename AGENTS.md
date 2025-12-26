@@ -10,6 +10,7 @@
 ## Build, Test, and Development Commands
 - `go fmt ./...` then `go vet ./...`: Baseline formatting and static checks.
 - `go test ./...`: Run unit tests across all packages; add `-cover` when changing core logic.
+- `export ENABLE_MOCKS=1`: to test without kroger, openai credentials
 - `go run ./cmd/careme -serve -addr :8080`: Start the web server (requires env vars below).
 - `go run ./cmd/careme -zipcode 98101`: Helper to list Kroger location IDs by ZIP.
 - `go build -o bin/careme ./cmd/careme`: Produce a local binary for manual runs.
