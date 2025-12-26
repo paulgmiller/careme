@@ -265,6 +265,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// should this be in hash?
 	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
+	// Capture user ID for goroutine to avoid race conditions
+	userID := currentUser.ID
+
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -284,9 +287,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "save error", "error", err)
 		}
 		// Save recipes to user profile if they were marked as saved
-		if len(p.Saved) > 0 && currentUser.ID != "" {
-			if err := s.saveSavedRecipesToUserProfile(ctx, currentUser, p.Saved); err != nil {
-				slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
+		if len(p.Saved) > 0 && userID != "" {
+			// Create a minimal user object with just the ID for the helper method
+			user := &users.User{ID: userID}
+			if err := s.saveSavedRecipesToUserProfile(ctx, user, p.Saved); err != nil {
+				slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", userID, "error", err)
 			}
 		}
 	}()
