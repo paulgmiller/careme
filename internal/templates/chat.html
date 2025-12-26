@@ -69,11 +69,17 @@
                     <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-3">
-                    <input type="radio" {{if .Saved}}checked{{end}} name="recipe-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" onchange="document.getElementById('saved-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('dismissed-{{.ComputeHash}}').value = '';" />
+                    <button type="button" onclick="toggleRecipeDetails('{{.ComputeHash}}')" class="inline-flex items-center gap-2 rounded-lg border-2 border-brand-500 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 cursor-pointer transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                      <svg id="arrow-{{.ComputeHash}}" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                      </svg>
+                      <span>Details</span>
+                    </button>
+                    <input type="radio" {{if .Saved}}checked{{end}} name="recipe-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" onchange="document.getElementById('saved-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('dismissed-{{.ComputeHash}}').value = ''; hideRecipeDetails('{{.ComputeHash}}');" />
                     <label for="save-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-emerald-500 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 cursor-pointer transition hover:bg-emerald-100 peer-checked/save:bg-emerald-600 peer-checked/save:text-white peer-checked/save:border-emerald-700">
                       Save
                     </label>
-                    <input type="radio" name="recipe-{{.ComputeHash}}" value="dismiss" id="dismiss-{{.ComputeHash}}" class="peer/dismiss hidden" onchange="document.getElementById('dismissed-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('saved-{{.ComputeHash}}').value = '';" />
+                    <input type="radio" name="recipe-{{.ComputeHash}}" value="dismiss" id="dismiss-{{.ComputeHash}}" class="peer/dismiss hidden" onchange="document.getElementById('dismissed-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('saved-{{.ComputeHash}}').value = ''; hideRecipeDetails('{{.ComputeHash}}');" />
                     <label for="dismiss-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-red-500 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 cursor-pointer transition hover:bg-red-100 peer-checked/dismiss:bg-red-600 peer-checked/dismiss:text-white peer-checked/dismiss:border-red-700">
                       Dismiss
                     </label>
@@ -82,6 +88,7 @@
                   </div>
                 </header>
 
+              <div id="details-{{.ComputeHash}}" class="hidden">
               <section class="grid gap-6 md:grid-cols-2">
                 <div>
                   <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Ingredients</h3>
@@ -109,6 +116,7 @@
                 <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
                 <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
               </section>
+              </div>
             </article>
             {{end}}
           </div>
@@ -130,6 +138,27 @@
   </main>
 
   <script>
+    function toggleRecipeDetails(hash) {
+      const detailsDiv = document.getElementById('details-' + hash);
+      const arrow = document.getElementById('arrow-' + hash);
+      
+      if (detailsDiv.classList.contains('hidden')) {
+        detailsDiv.classList.remove('hidden');
+        arrow.style.transform = 'rotate(90deg)';
+      } else {
+        detailsDiv.classList.add('hidden');
+        arrow.style.transform = 'rotate(0deg)';
+      }
+    }
+
+    function hideRecipeDetails(hash) {
+      const detailsDiv = document.getElementById('details-' + hash);
+      const arrow = document.getElementById('arrow-' + hash);
+      
+      detailsDiv.classList.add('hidden');
+      arrow.style.transform = 'rotate(0deg)';
+    }
+
     function shareRecipes() {
       const hash = "{{.Hash}}";
       const shareUrl = window.location.origin + "/recipes?h=" + encodeURIComponent(hash);
