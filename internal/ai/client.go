@@ -94,6 +94,11 @@ func NewClient(apiKey, _ string) *Client {
 	}
 }
 
+// defaultTools returns the default set of tools to use for recipe generation
+var defaultTools = []responses.ToolUnionParam{
+	responses.ToolParamOfWebSearch(responses.WebSearchToolTypeWebSearch),
+}
+
 const systemMessage = `
 "You are a professional chef and recipe developer that wants to help working families cook each night with varied cuisines."
 
@@ -163,7 +168,7 @@ func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversa
 			OfString: openai.String(conversationID),
 		},
 		Text:  scheme(c.schema),
-		Tools: []responses.ToolUnionParam{responses.ToolParamOfWebSearch(responses.WebSearchToolTypeWebSearch)},
+		Tools: defaultTools,
 	}
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
@@ -200,7 +205,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 			},
 		},
 		Text:  scheme(c.schema),
-		Tools: []responses.ToolUnionParam{responses.ToolParamOfWebSearch(responses.WebSearchToolTypeWebSearch)},
+		Tools: defaultTools,
 	}
 	//should we stream. Can we pass past generation.
 
