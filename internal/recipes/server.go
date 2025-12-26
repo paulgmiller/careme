@@ -287,11 +287,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// TODO should we just redirect to cache page here?
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	spinnerData := struct {
-		ClarityScript template.HTML
-		Style         seasons.Style
+		ClarityScript   template.HTML
+		Style           seasons.Style
+		RefreshInterval string // seconds
 	}{
-		ClarityScript: templates.ClarityScript(),
-		Style:         seasons.GetCurrentStyle(),
+		ClarityScript:   templates.ClarityScript(),
+		Style:           seasons.GetCurrentStyle(),
+		RefreshInterval: "10", // seconds
 	}
 
 	if err := templates.Spin.Execute(w, spinnerData); err != nil {
