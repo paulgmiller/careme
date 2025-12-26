@@ -162,7 +162,8 @@ func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversa
 		Conversation: responses.ResponseNewParamsConversationUnion{
 			OfString: openai.String(conversationID),
 		},
-		Text: scheme(c.schema),
+		Text:  scheme(c.schema),
+		Tools: []responses.ToolUnionParam{responses.ToolParamOfWebSearch(responses.WebSearchToolTypeWebSearch)},
 	}
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
@@ -198,7 +199,8 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 				ID: convo.ID,
 			},
 		},
-		Text: scheme(c.schema),
+		Text:  scheme(c.schema),
+		Tools: []responses.ToolUnionParam{responses.ToolParamOfWebSearch(responses.WebSearchToolTypeWebSearch)},
 	}
 	//should we stream. Can we pass past generation.
 
