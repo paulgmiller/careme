@@ -94,7 +94,7 @@ func NewClient(apiKey, _ string) *Client {
 	}
 }
 
-// defaultTools returns the default set of tools to use for recipe generation
+// defaultTools contains the default set of tools to use for recipe generation
 var defaultTools = []responses.ToolUnionParam{
 	responses.ToolParamOfWebSearch(responses.WebSearchToolTypeWebSearch),
 }
