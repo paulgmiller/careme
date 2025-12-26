@@ -69,7 +69,7 @@
                     <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-3">
-                    <button type="button" onclick="toggleRecipeDetails('{{.ComputeHash}}')" class="inline-flex items-center gap-2 rounded-lg border-2 border-brand-500 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 cursor-pointer transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    <button type="button" onclick="toggleRecipeDetails('{{.ComputeHash}}')" id="toggle-{{.ComputeHash}}" aria-expanded="false" aria-controls="details-{{.ComputeHash}}" class="inline-flex items-center gap-2 rounded-lg border-2 border-brand-500 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 cursor-pointer transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                       <svg id="arrow-{{.ComputeHash}}" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                       </svg>
@@ -88,7 +88,7 @@
                   </div>
                 </header>
 
-              <div id="details-{{.ComputeHash}}" class="hidden">
+              <div id="details-{{.ComputeHash}}" class="hidden" role="region" aria-labelledby="toggle-{{.ComputeHash}}">
               <section class="grid gap-6 md:grid-cols-2">
                 <div>
                   <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Ingredients</h3>
@@ -141,22 +141,27 @@
     function toggleRecipeDetails(hash) {
       const detailsDiv = document.getElementById('details-' + hash);
       const arrow = document.getElementById('arrow-' + hash);
+      const toggleBtn = document.getElementById('toggle-' + hash);
       
       if (detailsDiv.classList.contains('hidden')) {
         detailsDiv.classList.remove('hidden');
-        arrow.style.transform = 'rotate(90deg)';
+        arrow.classList.add('rotate-90');
+        toggleBtn.setAttribute('aria-expanded', 'true');
       } else {
         detailsDiv.classList.add('hidden');
-        arrow.style.transform = 'rotate(0deg)';
+        arrow.classList.remove('rotate-90');
+        toggleBtn.setAttribute('aria-expanded', 'false');
       }
     }
 
     function hideRecipeDetails(hash) {
       const detailsDiv = document.getElementById('details-' + hash);
       const arrow = document.getElementById('arrow-' + hash);
+      const toggleBtn = document.getElementById('toggle-' + hash);
       
       detailsDiv.classList.add('hidden');
-      arrow.style.transform = 'rotate(0deg)';
+      arrow.classList.remove('rotate-90');
+      toggleBtn.setAttribute('aria-expanded', 'false');
     }
 
     function shareRecipes() {
