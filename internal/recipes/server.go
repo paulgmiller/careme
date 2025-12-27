@@ -318,6 +318,10 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 		return fmt.Errorf("invalid user")
 	}
 
+	if len(savedRecipes) == 0 {
+		return nil
+	}
+
 	// Reload the user to get the latest state
 	currentUser, err := s.storage.GetByID(userID)
 	if err != nil {
