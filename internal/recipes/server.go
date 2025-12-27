@@ -285,7 +285,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
 
-		// Create a minimal user object with just the ID for the helper method
+		// Use the current user ID when saving recipes to the user profile
 		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
 			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
 		}
@@ -342,7 +342,7 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 		}
 		newRecipe := users.Recipe{
 			Title:     recipe.Title,
-			Hash:      recipe.ComputeHash(),
+			Hash:      hash,
 			CreatedAt: time.Now(),
 		}
 		currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
@@ -351,7 +351,7 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 	}
 
 	if added > 0 {
-		// etag mistmatch fun!
+		// etag mismatch fun!
 		if err := s.storage.Update(currentUser); err != nil {
 			return fmt.Errorf("failed to update user with saved recipes: %w", err)
 		}

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func TestSaveSavedRecipesToUserProfile(t *testing.T) {
+func TestSaveRecipesToUserProfile(t *testing.T) {
 	// Create temporary cache
 	tmpDir, err := os.MkdirTemp("", "careme-test-user-*")
 	if err != nil {
@@ -78,7 +78,7 @@ func TestSaveSavedRecipesToUserProfile(t *testing.T) {
 	}
 }
 
-func TestSaveSavedRecipesToUserProfile_NoDuplicates(t *testing.T) {
+func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 	// Create temporary cache
 	tmpDir, err := os.MkdirTemp("", "careme-test-user-*")
 	if err != nil {
