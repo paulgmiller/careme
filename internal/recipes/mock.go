@@ -9,11 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func init() {
-	// Seed the random number generator for random recipe selection
-	rand.Seed(time.Now().UnixNano())
-}
-
 type mock struct{}
 
 var mockRecipes = []ai.Recipe{
@@ -355,8 +350,10 @@ func (_ mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	}
 
 	// Select 3 random recipes from the pool of 20
+	// Create a new random generator with current time as seed
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	selectedRecipes := make([]ai.Recipe, 3)
-	indices := rand.Perm(len(mockRecipes))[:3]
+	indices := rng.Perm(len(mockRecipes))[:3]
 	for i, idx := range indices {
 		selectedRecipes[i] = mockRecipes[idx]
 	}
