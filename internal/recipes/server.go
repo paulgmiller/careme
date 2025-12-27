@@ -283,7 +283,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		if err := s.SaveShoppingList(ctx, shoppingList, p); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 		}
-		// Save recipes to user profile if they were marked as saved
+		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
 
 		// Create a minimal user object with just the ID for the helper method
 		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
