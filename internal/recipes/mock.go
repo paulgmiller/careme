@@ -4,9 +4,15 @@ import (
 	"careme/internal/ai"
 	"context"
 	"math/rand"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+func init() {
+	// Seed the random number generator for random recipe selection
+	rand.Seed(time.Now().UnixNano())
+}
 
 type mock struct{}
 
