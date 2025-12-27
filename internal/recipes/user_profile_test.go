@@ -53,7 +53,7 @@ func TestSaveSavedRecipesToUserProfile(t *testing.T) {
 
 	// Save recipes to user profile
 	ctx := context.Background()
-	if err := srv.saveSavedRecipesToUserProfile(ctx, testUser, savedRecipes); err != nil {
+	if err := srv.saveRecipesToUserProfile(ctx, testUser.ID, savedRecipes); err != nil {
 		t.Fatalf("failed to save recipes to user profile: %v", err)
 	}
 
@@ -89,10 +89,22 @@ func TestSaveSavedRecipesToUserProfile_NoDuplicates(t *testing.T) {
 	tmpCache := cache.NewFileCache(tmpDir)
 	storage := users.NewStorage(tmpCache)
 
+	// Try to save the same recipe again (case-insensitive)
+	savedRecipes := []ai.Recipe{
+		{
+			Title:       "test recipe 1", // lowercase version
+			Description: "A test recipe",
+		},
+		{
+			Title:       "Test Recipe 2",
+			Description: "Another test recipe",
+		},
+	}
+
 	// Create a test user with an existing recipe
 	existingRecipe := users.Recipe{
-		Title:     "Test Recipe 1",
-		Hash:      "existing-hash",
+		Title:     savedRecipes[0].Title,
+		Hash:      savedRecipes[0].ComputeHash(),
 		CreatedAt: time.Now().Add(-24 * time.Hour),
 	}
 	testUser := &users.User{
@@ -111,21 +123,9 @@ func TestSaveSavedRecipesToUserProfile_NoDuplicates(t *testing.T) {
 		storage: storage,
 	}
 
-	// Try to save the same recipe again (case-insensitive)
-	savedRecipes := []ai.Recipe{
-		{
-			Title:       "test recipe 1", // lowercase version
-			Description: "A test recipe",
-		},
-		{
-			Title:       "Test Recipe 2",
-			Description: "Another test recipe",
-		},
-	}
-
 	// Save recipes to user profile
 	ctx := context.Background()
-	if err := srv.saveSavedRecipesToUserProfile(ctx, testUser, savedRecipes); err != nil {
+	if err := srv.saveRecipesToUserProfile(ctx, testUser.ID, savedRecipes); err != nil {
 		t.Fatalf("failed to save recipes to user profile: %v", err)
 	}
 
@@ -174,14 +174,7 @@ func TestSaveSavedRecipesToUserProfile_InvalidUser(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test with nil user
-	if err := srv.saveSavedRecipesToUserProfile(ctx, nil, savedRecipes); err == nil {
-		t.Error("expected error with nil user, got nil")
-	}
-
-	// Test with user with empty ID
-	emptyUser := &users.User{ID: ""}
-	if err := srv.saveSavedRecipesToUserProfile(ctx, emptyUser, savedRecipes); err == nil {
+	if err := srv.saveRecipesToUserProfile(ctx, "", savedRecipes); err == nil {
 		t.Error("expected error with empty user ID, got nil")
 	}
 }

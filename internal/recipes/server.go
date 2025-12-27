@@ -265,9 +265,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// should this be in hash?
 	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
-	// Capture user ID for goroutine to avoid race conditions
-	userID := currentUser.ID
-
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -287,12 +284,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "save error", "error", err)
 		}
 		// Save recipes to user profile if they were marked as saved
-		if len(p.Saved) > 0 && userID != "" {
-			// Create a minimal user object with just the ID for the helper method
-			user := &users.User{ID: userID}
-			if err := s.saveSavedRecipesToUserProfile(ctx, user, p.Saved); err != nil {
-				slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", userID, "error", err)
-			}
+
+		// Create a minimal user object with just the ID for the helper method
+		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
+			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
 		}
 	}()
 	// TODO should we just redirect to cache page here?
@@ -317,14 +312,14 @@ func (s *server) Wait() {
 	s.wg.Wait()
 }
 
-// saveSavedRecipesToUserProfile adds saved recipes to the user's profile
-func (s *server) saveSavedRecipesToUserProfile(ctx context.Context, user *users.User, savedRecipes []ai.Recipe) error {
-	if user == nil || user.ID == "" {
+// saveRecipesToUserProfile adds saved recipes to the user's profile
+func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, savedRecipes []ai.Recipe) error {
+	if userID == "" {
 		return fmt.Errorf("invalid user")
 	}
 
 	// Reload the user to get the latest state
-	currentUser, err := s.storage.GetByID(user.ID)
+	currentUser, err := s.storage.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("failed to reload user: %w", err)
 	}
@@ -333,30 +328,30 @@ func (s *server) saveSavedRecipesToUserProfile(ctx context.Context, user *users.
 	added := 0
 	for _, recipe := range savedRecipes {
 		// Check if recipe already exists in user's last recipes
-		exists := false
-		for _, existing := range currentUser.LastRecipes {
-			if strings.EqualFold(existing.Title, recipe.Title) {
-				exists = true
-				break
-			}
+		hash := recipe.ComputeHash()
+
+		_, exists := lo.Find(currentUser.LastRecipes, func(r users.Recipe) bool {
+			return r.Hash == hash
+		})
+		if exists {
+			continue
 		}
-		if !exists {
-			newRecipe := users.Recipe{
-				Title:     recipe.Title,
-				Hash:      recipe.ComputeHash(),
-				CreatedAt: time.Now(),
-			}
-			currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
-			added++
-			slog.InfoContext(ctx, "added saved recipe to user profile", "user_id", user.ID, "title", recipe.Title)
+		newRecipe := users.Recipe{
+			Title:     recipe.Title,
+			Hash:      recipe.ComputeHash(),
+			CreatedAt: time.Now(),
 		}
+		currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
+		added++
+		slog.InfoContext(ctx, "added saved recipe to user profile", "user_id", userID, "title", recipe.Title)
 	}
 
 	if added > 0 {
+		// etag mistmatch fun!
 		if err := s.storage.Update(currentUser); err != nil {
 			return fmt.Errorf("failed to update user with saved recipes: %w", err)
 		}
-		slog.InfoContext(ctx, "saved recipes to user profile", "user_id", user.ID, "count", added)
+		slog.InfoContext(ctx, "saved recipes to user profile", "user_id", userID, "count", added)
 	}
 
 	return nil
