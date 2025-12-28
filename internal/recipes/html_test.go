@@ -109,3 +109,22 @@ func TestFormatChatHTML_HomePageLink(t *testing.T) {
 		t.Error("HTML should contain 'Careme Recipes' as a link")
 	}
 }
+
+func TestFormatChatHTML_CollapsibleDetails(t *testing.T) {
+	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+	FormatChatHTML(p, list, w)
+	html := w.Body.String()
+
+	// Verify details element exists for collapsible content
+	if !strings.Contains(html, "<details") {
+		t.Error("HTML should contain <details> element for collapsible content")
+	}
+	if !strings.Contains(html, "<summary") {
+		t.Error("HTML should contain <summary> element for toggle button")
+	}
+	if !strings.Contains(html, "Details</span>") {
+		t.Error("HTML should contain 'Details' text in summary")
+	}
+}
