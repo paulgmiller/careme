@@ -151,7 +151,7 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 	}
 }
 
-func TestSaveSavedRecipesToUserProfile_InvalidUser(t *testing.T) {
+func TestSaveRecipesToUserProfile_InvalidUser(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "careme-test-user-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
