@@ -70,7 +70,7 @@
                   </div>
                   <div class="flex flex-wrap items-center gap-3">
                     <button type="button" onclick="toggleRecipeDetails('{{.ComputeHash}}')" id="toggle-{{.ComputeHash}}" aria-expanded="false" aria-controls="details-{{.ComputeHash}}" class="inline-flex items-center gap-2 rounded-lg border-2 border-brand-500 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 cursor-pointer transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      <svg id="arrow-{{.ComputeHash}}" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <svg id="arrow-{{.ComputeHash}}" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                       </svg>
                       <span>Details</span>
@@ -163,9 +163,10 @@
       
       if (!detailsDiv || !arrow || !toggleBtn) return;
       
-      detailsDiv.classList.add('hidden');
-      arrow.classList.remove('rotate-90');
-      toggleBtn.setAttribute('aria-expanded', 'false');
+      // Only collapse if currently expanded, reusing the logic in toggleRecipeDetails
+      if (!detailsDiv.classList.contains('hidden')) {
+        toggleRecipeDetails(hash);
+      }
     }
 
     function shareRecipes() {
