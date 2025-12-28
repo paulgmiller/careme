@@ -14,6 +14,7 @@ var Home,
 	User,
 	Recipe,
 	Location,
+	ShoppingList,
 	Mail *template.Template
 
 func init() {
@@ -26,6 +27,7 @@ func init() {
 	User = ensure(tmpls, "user.html")
 	Recipe = ensure(tmpls, "chat.html")
 	Location = ensure(tmpls, "locations.html")
+	ShoppingList = ensure(tmpls, "shopping_list.html")
 	Mail = ensure(tmpls, "mail.html")
 
 	clarityproject = os.Getenv("CLARITY_PROJECT_ID")

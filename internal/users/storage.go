@@ -43,13 +43,23 @@ type Recipe struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type ShoppingListItem struct {
+	Name             string `json:"name"`
+	Quantity         string `json:"quantity,omitempty"`
+	Price            string `json:"price,omitempty"`
+	AisleNumber      string `json:"aisle_number,omitempty"`
+	AisleDescription string `json:"aisle_description,omitempty"`
+	RecipeTitle      string `json:"recipe_title,omitempty"`
+}
+
 type User struct {
-	ID            string    `json:"id"`
-	Email         []string  `json:"email"`
-	CreatedAt     time.Time `json:"created_at"`
-	LastRecipes   []Recipe  `json:"last_recipes,omitempty"`
-	FavoriteStore string    `json:"favorite_store,omitempty"`
-	ShoppingDay   string    `json:"shopping_day,omitempty"`
+	ID           string             `json:"id"`
+	Email        []string           `json:"email"`
+	CreatedAt    time.Time          `json:"created_at"`
+	LastRecipes  []Recipe           `json:"last_recipes,omitempty"`
+	ShoppingList []ShoppingListItem `json:"shopping_list,omitempty"`
+	FavoriteStore string            `json:"favorite_store,omitempty"`
+	ShoppingDay   string            `json:"shopping_day,omitempty"`
 }
 
 // need to take a look up to location cache?

@@ -57,6 +57,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
+	mux.HandleFunc("GET /shopping-list", s.handleShoppingList)
 }
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
@@ -288,6 +289,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		// Use the current user ID when saving recipes to the user profile
 		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
 			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
+		}
+		// Update shopping list after saving recipes
+		if err := s.UpdateShoppingList(ctx, currentUser.ID); err != nil {
+			slog.ErrorContext(ctx, "failed to update shopping list", "user_id", currentUser.ID, "error", err)
 		}
 	}()
 	// TODO should we just redirect to cache page here?

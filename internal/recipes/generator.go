@@ -337,14 +337,14 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 				PriceRegular: item.Price.Regular,
 				PriceSale:    item.Price.Promo,
 				// CountryOrigin: product.CountryOrigin,
-				// AisleNumber:   product.AisleLocations[0].Number,
 				// Favorite: item.Favorite,
 				// InventoryStockLevel: item.InventoryStockLevel),
 			}
 
-			/*if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
+			if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
 				ingredient.AisleNumber = (*product.AisleLocations)[0].Number
-			}*/
+				ingredient.AisleDescription = (*product.AisleLocations)[0].Description
+			}
 
 			ingredients = append(ingredients, ingredient)
 			// strings.Join(*product.Categories, ", "),

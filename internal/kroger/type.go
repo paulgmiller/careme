@@ -3,8 +3,9 @@ package kroger
 // this is a subset of ProductSearchResponse200Data combining item and product we think will be useful
 // TODO merge with ai.Ingredient
 type Ingredient struct {
-	AisleNumber *string `json:"number,omitempty"`
-	Brand       *string `json:"brand,omitempty"`
+	AisleNumber      *string `json:"number,omitempty"`
+	AisleDescription *string `json:"aisleDescription,omitempty"`
+	Brand            *string `json:"brand,omitempty"`
 	//Categories          *[]string `json:"categories,omitempty"`
 	CountryOrigin       *string  `json:"countryOrigin,omitempty"`
 	Description         *string  `json:"description,omitempty"`
