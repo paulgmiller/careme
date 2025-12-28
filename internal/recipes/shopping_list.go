@@ -43,7 +43,10 @@ func (s *server) UpdateShoppingList(ctx context.Context, userID string) error {
 				Quantity:     ingredient.Quantity,
 				Price:        ingredient.Price,
 				RecipeTitle:  recipe.Title,
-				// Aisle info will be added if available
+				// Note: Aisle info not available here - AI-generated recipes don't include
+				// aisle information. This data exists in kroger.Ingredient but is lost
+				// during AI recipe generation. Future improvement: preserve aisle data
+				// through the recipe generation pipeline.
 			}
 			currentUser.ShoppingList = append(currentUser.ShoppingList, item)
 		}
@@ -77,6 +80,9 @@ func (s *server) handleShoppingList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rebuild shopping list from saved recipes
+	// Note: This rebuilds on every page load to ensure freshness. The list is also
+	// updated in the background when recipes are saved (see server.go line ~293).
+	// This could be optimized with ETag-based caching if performance becomes an issue.
 	if err := s.UpdateShoppingList(ctx, currentUser.ID); err != nil {
 		slog.ErrorContext(ctx, "failed to update shopping list", "error", err)
 		http.Error(w, "failed to update shopping list", http.StatusInternalServerError)
