@@ -283,6 +283,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		if err := s.SaveShoppingList(ctx, shoppingList, p); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 		}
+		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
+
+		// Use the current user ID when saving recipes to the user profile
+		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
+			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
+		}
 	}()
 	// TODO should we just redirect to cache page here?
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -304,6 +310,55 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) Wait() {
 	s.wg.Wait()
+}
+
+// saveRecipesToUserProfile adds saved recipes to the user's profile
+func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, savedRecipes []ai.Recipe) error {
+	if userID == "" {
+		return fmt.Errorf("invalid user")
+	}
+
+	if len(savedRecipes) == 0 {
+		return nil
+	}
+
+	// Reload the user to get the latest state
+	currentUser, err := s.storage.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("failed to reload user: %w", err)
+	}
+
+	// Track if any new recipes were added
+	added := 0
+	for _, recipe := range savedRecipes {
+		// Check if recipe already exists in user's last recipes
+		hash := recipe.ComputeHash()
+
+		_, exists := lo.Find(currentUser.LastRecipes, func(r users.Recipe) bool {
+			return r.Hash == hash
+		})
+		if exists {
+			continue
+		}
+		newRecipe := users.Recipe{
+			Title:     recipe.Title,
+			Hash:      hash,
+			CreatedAt: time.Now(),
+		}
+		currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
+		added++
+		slog.InfoContext(ctx, "added saved recipe to user profile", "user_id", userID, "title", recipe.Title)
+	}
+
+	if added > 0 {
+		// etag mismatch fun!
+		if err := s.storage.Update(currentUser); err != nil {
+			return fmt.Errorf("failed to update user with saved recipes: %w", err)
+		}
+		slog.InfoContext(ctx, "saved recipes to user profile", "user_id", userID, "count", added)
+	}
+
+	return nil
 }
 
 // loadParamsFromHash loads generator params from cache using the hash
