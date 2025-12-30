@@ -96,7 +96,7 @@ func loadParamsFromHash(ctx context.Context, hash string, c cache.Cache) (*gener
 func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generatorParams, error) {
 	loc := r.URL.Query().Get("location")
 	if loc == "" {
-		return nil, errors.New("must proviide location id")
+		return nil, errors.New("must provide location id")
 	}
 
 	l, err := s.locServer.GetLocationByID(ctx, loc)

@@ -301,12 +301,12 @@ func (s *server) ingredients(ctx context.Context, w http.ResponseWriter, p *gene
 		http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)
 		return
 	}
+	// make this a html thats readable.
+	w.Header().Add("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(ingredients); err != nil {
 		http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
 		return
 	}
-	// make this a html thats readable.
-	w.Header().Add("Content-Type", "application/json")
 }
