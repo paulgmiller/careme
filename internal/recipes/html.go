@@ -71,14 +71,14 @@ func shoppingListForDisplay(recipes []ai.Recipe) []ai.Ingredient {
 
 	for _, recipe := range recipes {
 		for _, ingredient := range recipe.Ingredients {
-			name := strings.TrimSpace(ingredient.Name)
+			name := strings.ToLower(strings.TrimSpace(ingredient.Name))
 			if name == "" {
 				continue
 			}
 			existing, ok := items[name]
 			if !ok {
 				items[name] = &ai.Ingredient{
-					Name:     name,
+					Name:     ingredient.Name,
 					Quantity: strings.TrimSpace(ingredient.Quantity),
 				}
 				order = append(order, name)
@@ -92,7 +92,7 @@ func shoppingListForDisplay(recipes []ai.Recipe) []ai.Ingredient {
 				existing.Quantity = qty
 				continue
 			}
-			existing.Quantity = existing.Quantity + " + " + qty
+			existing.Quantity = existing.Quantity + ", " + qty
 		}
 	}
 
