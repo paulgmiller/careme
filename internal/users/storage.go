@@ -1,6 +1,7 @@
 package users
 
 import (
+	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,11 +9,10 @@ import (
 	"io"
 	"log/slog"
 	"net/mail"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
-
-	"careme/internal/cache"
 
 	"github.com/google/uuid"
 )
@@ -70,7 +70,10 @@ func (u *User) Validate() error {
 			return fmt.Errorf("invalid favorite store id %s: %w", u.FavoriteStore, err)
 		}
 	}
-	//trim out recipes older than 2 months?
+	// trim out recipes older than 2 months? store them in seperate file?
+	slices.SortFunc(u.LastRecipes, func(a, b Recipe) int {
+		return b.CreatedAt.Compare(a.CreatedAt)
+	})
 
 	return nil
 }
@@ -79,9 +82,7 @@ type Storage struct {
 	cache cache.ListCache
 }
 
-var (
-	ErrNotFound = errors.New("user not found")
-)
+var ErrNotFound = errors.New("user not found")
 
 const (
 	CookieName  = "careme_user"
@@ -112,7 +113,6 @@ func (s *Storage) List(ctx context.Context) ([]User, error) {
 }
 
 func (s *Storage) GetByID(id string) (*User, error) {
-
 	userBytes, err := s.cache.Get(context.TODO(), userPrefix+id)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -131,10 +131,8 @@ func (s *Storage) GetByID(id string) (*User, error) {
 }
 
 func (s *Storage) GetByEmail(email string) (*User, error) {
-
 	normalized := normalizeEmail(email)
 	id, err := s.cache.Get(context.TODO(), emailPrefix+normalized)
-
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			return nil, ErrNotFound
@@ -190,6 +188,6 @@ func (s *Storage) Update(user *User) error {
 }
 
 func normalizeEmail(email string) string {
-	//remove . from before @?
+	// remove . from before @?
 	return strings.TrimSpace(strings.ToLower(email))
 }

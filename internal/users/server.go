@@ -139,7 +139,10 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			favoriteStoreName = loc.Name
 		}
 	}
-
+	// TODO paginate and search on page instead.
+	if len(currentUser.LastRecipes) > 14 {
+		currentUser.LastRecipes = currentUser.LastRecipes[0:14]
+	}
 	data := struct {
 		ClarityScript     template.HTML
 		User              *User
