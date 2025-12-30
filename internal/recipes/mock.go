@@ -3,6 +3,7 @@ package recipes
 import (
 	"careme/internal/ai"
 	"context"
+	"log/slog"
 	"math/rand"
 	"time"
 
@@ -352,10 +353,30 @@ func (_ mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	// Select 3 random recipes from the pool of 20
 	// Create a new random generator with current time as seed
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	selectedRecipes := make([]ai.Recipe, 3)
-	indices := rng.Perm(len(mockRecipes))[:3]
-	for i, idx := range indices {
-		selectedRecipes[i] = mockRecipes[idx]
+	toGenerate := 3 - len(p.Saved)
+	var selectedRecipes []ai.Recipe
+	seen := map[string]bool{}
+	for _, s := range append(p.Saved, p.Dismissed...) {
+		seen[s.ComputeHash()] = true
+	}
+	indices := rng.Perm(len(mockRecipes)) // just shuffle?
+	for _, idx := range indices {
+		if toGenerate <= 0 {
+			break
+		}
+		mr := mockRecipes[idx]
+		if _, found := seen[mr.ComputeHash()]; !found {
+
+			slog.InfoContext(ctx, "adding", "title", mr.Title)
+			selectedRecipes = append(selectedRecipes, mr)
+			toGenerate--
+		}
+	}
+	// not presisting dimissed as
+	for _, s := range p.Saved {
+		slog.InfoContext(ctx, "keeping", "title", s.Title)
+		s.Saved = true
+		selectedRecipes = append(selectedRecipes, s)
 	}
 
 	return &ai.ShoppingList{
