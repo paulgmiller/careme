@@ -200,7 +200,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	for _, last := range currentUser.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
-			continue
+			break
 		}
 		p.LastRecipes = append(p.LastRecipes, last.Title)
 	}
@@ -249,6 +249,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		FormatChatHTML(p, *list, w)
+		//backfill
 		go func() {
 			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
 			if p.Date.After(cutoff) {
@@ -351,7 +352,7 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 	}
 
 	if added > 0 {
-		// etag mismatch fun!
+		// etag mismatch fun!		
 		if err := s.storage.Update(currentUser); err != nil {
 			return fmt.Errorf("failed to update user with saved recipes: %w", err)
 		}

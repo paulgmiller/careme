@@ -51,7 +51,7 @@ func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 		return nil, err
 	}
 
-	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
+	slog.InfoContext(ctx, "serving shared shoppingList by hash", "hash", hash)
 	return &list, nil
 }
 
