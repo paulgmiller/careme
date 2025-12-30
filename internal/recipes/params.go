@@ -7,9 +7,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
+	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -20,9 +24,9 @@ type generatorParams struct {
 	Date     time.Time           `json:"date,omitempty"`
 	Staples  []filter            `json:"staples,omitempty"`
 	// People       int
-	Instructions   string      `json:"instructions,omitempty"`
-	LastRecipes    []string    `json:"last_recipes,omitempty"`
-	UserID         string      `json:"user_id,omitempty"`
+	Instructions string   `json:"instructions,omitempty"`
+	LastRecipes  []string `json:"last_recipes,omitempty"`
+	// UserID         string      `json:"user_id,omitempty"`
 	ConversationID string      `json:"conversation_id,omitempty"` // Can remove if we pass it in seperately to generate recipes?
 	Saved          []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed      []ai.Recipe `json:"dismissed_recipes,omitempty"`
@@ -87,6 +91,66 @@ func loadParamsFromHash(ctx context.Context, hash string, c cache.Cache) (*gener
 		return nil, fmt.Errorf("failed to decode params: %w", err)
 	}
 	return &params, nil
+}
+
+func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generatorParams, error) {
+	loc := r.URL.Query().Get("location")
+	if loc == "" {
+		return nil, errors.New("must proviide location id")
+	}
+
+	l, err := s.locServer.GetLocationByID(ctx, loc)
+	if err != nil {
+		return nil, err
+	}
+
+	dateStr := r.URL.Query().Get("date")
+	if dateStr == "" {
+		dateStr = time.Now().Format("2006-01-02")
+	}
+	date, err := time.ParseInLocation("2006-01-02", dateStr, time.UTC)
+	if err != nil {
+		return nil, err
+	}
+
+	p := DefaultParams(l, date)
+	p.Instructions = r.URL.Query().Get("instructions")
+
+	// Handle saved and dismissed recipe hashes from checkboxes
+	// Query().Get returns first value, Query() returns all values
+	// will be empty values for every recipe and two for ones with no action
+	// TODO look at way not to duplicate so many query arguments and pass down just a saved list or a query arg for each saved item.
+	clean := func(s string, _ int) (string, bool) {
+		ts := strings.TrimSpace(s)
+		return ts, ts != ""
+	}
+	savedHashes := lo.FilterMap(r.URL.Query()["saved"], clean)
+	dismissedHashes := lo.FilterMap(r.URL.Query()["dismissed"], clean)
+	// Load saved recipes from cache by their hashes
+	for _, hash := range savedHashes {
+		recipe, err := s.SingleFromCache(ctx, hash)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
+			continue
+		}
+		slog.InfoContext(ctx, "adding saved recipe to params", "title", recipe.Title, "hash", hash)
+		p.Saved = append(p.Saved, *recipe)
+	}
+
+	// Add dismissed recipe titles to instructions so AI knows what to avoid
+	for _, hash := range dismissedHashes {
+		recipe, err := s.SingleFromCache(ctx, hash)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
+			continue
+		}
+		slog.InfoContext(ctx, "adding dismissed recipe to params", "title", recipe.Title, "hash", hash)
+		p.Dismissed = append(p.Dismissed, *recipe)
+	}
+	// should this be in hash?
+	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
+
+	return p, nil
 }
 
 func DefaultStaples() []filter {

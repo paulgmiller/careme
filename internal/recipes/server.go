@@ -16,7 +16,6 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -129,6 +128,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}, time.Now())
 		}
 		FormatChatHTML(p, *slist, w)
+		// backfill
 		go func() {
 			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
 			if p.Date.After(cutoff) {
@@ -142,34 +142,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loc := r.URL.Query().Get("location")
-	if loc == "" {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("specify a location id to generate recipes"))
-		return
-	}
+	p, err := s.ParseQueryArgs(ctx, r)
 
-	dateStr := r.URL.Query().Get("date")
-	if dateStr == "" {
-		http.Redirect(w, r, "/recipes?location="+loc+"&date="+time.Now().Format("2006-01-02"), http.StatusSeeOther)
-		return
-	}
-
-	date, err := time.ParseInLocation("2006-01-02", dateStr, time.UTC)
-	if err != nil {
-		http.Error(w, "invalid date format, use YYYY-MM-DD", http.StatusBadRequest)
-		return
-	}
-
-	l, err := s.locServer.GetLocationByID(ctx, loc)
-	if err != nil {
-		http.Error(w, "could not get location details", http.StatusBadRequest)
-		return
-	}
-
-	p := DefaultParams(l, date)
-
-	p.UserID = currentUser.ID
+	// what do we do with this?
+	// p.UserID = currentUser.ID
 
 	if r.URL.Query().Get("ingredients") == "true" {
 		s.ingredients(ctx, w, p)
@@ -181,42 +157,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		p.LastRecipes = append(p.LastRecipes, last.Title)
-	}
-
-	if instructions := r.URL.Query().Get("instructions"); instructions != "" {
-		p.Instructions = instructions
-	}
-
-	// Handle saved and dismissed recipe hashes from checkboxes
-	// Query().Get returns first value, Query() returns all values
-	// will be empty values for every recipe and two for ones with no action
-	// TODO look at way not to duplicate so many query arguments and pass down just a saved list or a query arg for each saved item.
-	clean := func(s string, _ int) (string, bool) {
-		ts := strings.TrimSpace(s)
-		return ts, ts != ""
-	}
-	savedHashes := lo.FilterMap(r.URL.Query()["saved"], clean)
-	dismissedHashes := lo.FilterMap(r.URL.Query()["dismissed"], clean)
-	// Load saved recipes from cache by their hashes
-	for _, hash := range savedHashes {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
-			continue
-		}
-		slog.InfoContext(ctx, "adding saved recipe to params", "title", recipe.Title, "hash", hash)
-		p.Saved = append(p.Saved, *recipe)
-	}
-
-	// Add dismissed recipe titles to instructions so AI knows what to avoid
-	for _, hash := range dismissedHashes {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
-			continue
-		}
-		slog.InfoContext(ctx, "adding dismissed recipe to params", "title", recipe.Title, "hash", hash)
-		p.Dismissed = append(p.Dismissed, *recipe)
 	}
 
 	hash := p.Hash()
@@ -240,9 +180,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}()
 		return
 	}
-
-	// should this be in hash?
-	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
 	s.wg.Add(1)
 	go func() {

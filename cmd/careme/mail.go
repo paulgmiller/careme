@@ -115,7 +115,7 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 	}
 
 	p := recipes.DefaultParams(l, time.Now().Add(-6*time.Hour)) // how do we get the timezone of the user?
-	p.UserID = user.ID
+	// p.UserID = user.ID
 	rio := recipes.IO(m.cache)
 	if _, err := rio.FromCache(ctx, p.Hash()); err == nil {
 		// already generated. Assume we sent for now (need better atomic tracking)
@@ -136,8 +136,11 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 		slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.Email)
 		return
 	}
-	// combine here save recipes with html
-	rio.SaveShoppingList(ctx, shoppingList, p)
+	// coombine hee save recipes with html
+	if err := rio.SaveShoppingList(ctx, shoppingList, p); err != nil {
+		slog.ErrorContext(ctx, "failed to save shopping list", "error", err.Error())
+		return
+	}
 
 	var buf bytes.Buffer
 	recipes.FormatMail(p, *shoppingList, &buf)
