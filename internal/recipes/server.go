@@ -143,7 +143,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p, err := s.ParseQueryArgs(ctx, r)
-
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
+		return
+	}
 	// what do we do with this?
 	// p.UserID = currentUser.ID
 
