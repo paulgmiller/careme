@@ -80,17 +80,17 @@
                     <button type="button"
                             id="details-{{.ComputeHash}}-button"
                             aria-controls="details-{{.ComputeHash}}"
-                            aria-expanded="true"
+                            aria-expanded="{{if .Saved}}false{{else}}true{{end}}"
                             onclick="toggleRecipeDetails('{{.ComputeHash}}')"
                             class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      Hide details
+                      {{if .Saved}}Show details{{else}}Hide details{{end}}
                     </button>
                     <input type="hidden" name="saved" id="saved-{{.ComputeHash}}" value="{{if .Saved}}{{.ComputeHash}}{{end}}" />
                     <input type="hidden" name="dismissed" id="dismissed-{{.ComputeHash}}" value="" />
                   </div>
                 </header>
 
-              <section id="details-{{.ComputeHash}}" class="space-y-6">
+              <section id="details-{{.ComputeHash}}" class="space-y-6 {{if .Saved}}hidden{{end}}">
                 <div class="grid gap-6 md:grid-cols-2">
                   <div>
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Ingredients</h3>
