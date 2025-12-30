@@ -259,6 +259,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "generate error", "error", err)
 			return
 		}
+
+		// add saved recipes here rather than each
+
 		if err := s.SaveShoppingList(ctx, shoppingList, p); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 		}
@@ -356,6 +359,7 @@ func (s *server) loadParamsFromHash(ctx context.Context, hash string) (*generato
 	return &params, nil
 }
 
+// move to admin?
 func (s *server) ingredients(ctx context.Context, w http.ResponseWriter, p *generatorParams) {
 	lochash := p.LocationHash()
 	ingredientblob, err := s.cache.Get(ctx, lochash)
