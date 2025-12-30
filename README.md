@@ -5,6 +5,25 @@ Careme is your personal chef and sommilier. It will
 3. Generate a weekly meal plan from a variety of cuisines and cooking styles.
 
 
+## Development
+
+### Building CSS
+
+The application uses Tailwind CSS for styling with a local build process. The CSS needs to be built before running the application:
+
+```bash
+# Install dependencies (first time only)
+npm install
+
+# Build CSS for production
+npm run build:css
+
+# Watch for changes during development
+npm run watch:css
+```
+
+The Tailwind configuration supports dynamic seasonal colors that change throughout the year (Winter: blue, Spring: green, Summer: yellow, Fall: orange).
+
 ## Configuration
 
 The application is configured via environment variables:
