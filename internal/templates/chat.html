@@ -111,6 +111,31 @@
               </section>
             </article>
             {{end}}
+
+            {{if .ShoppingList}}
+            <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
+                <button type="button"
+                        id="shoppingListToggle"
+                        aria-controls="shoppingListPanel"
+                        aria-expanded="false"
+                        class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Show
+                </button>
+              </div>
+              <div id="shoppingListPanel" class="mt-4 hidden">
+                <ul class="space-y-2 text-gray-700">
+                  {{range .ShoppingList}}
+                  <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
+                    <span class="font-medium text-brand-700">{{.Name}}</span>
+                    <span class="text-gray-600">{{.Quantity}}</span>
+                  </li>
+                  {{end}}
+                </ul>
+              </div>
+            </section>
+            {{end}}
           </div>
           </form>
 
@@ -142,6 +167,17 @@
         }, 2000);
       }).catch(function (err) {
         alert('Failed to copy link: ' + err);
+      });
+    }
+
+    const shoppingListToggle = document.getElementById('shoppingListToggle');
+    const shoppingListPanel = document.getElementById('shoppingListPanel');
+    if (shoppingListToggle && shoppingListPanel) {
+      shoppingListToggle.addEventListener('click', function () {
+        shoppingListPanel.classList.toggle('hidden');
+        const isOpen = !shoppingListPanel.classList.contains('hidden');
+        shoppingListToggle.textContent = isOpen ? 'Hide' : 'Show';
+        shoppingListToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
       });
     }
   </script>
