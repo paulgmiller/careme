@@ -172,29 +172,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	p.UserID = currentUser.ID
 
 	if r.URL.Query().Get("ingredients") == "true" {
-		lochash := p.LocationHash()
-		ingredientblob, err := s.cache.Get(ctx, lochash)
-		if err != nil {
-			http.Error(w, "ingredients not found in cache", http.StatusNotFound)
-			return
-		}
-		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
-		defer ingredientblob.Close()
-		dec := json.NewDecoder(ingredientblob)
-		var ingredients []kroger.Ingredient
-		err = dec.Decode(&ingredients)
-		if err != nil {
-			http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)
-			return
-		}
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(ingredients); err != nil {
-			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
-			return
-		}
-		// make this a html thats readable.
-		w.Header().Add("Content-Type", "application/json")
+		s.ingredients(ctx, w, p)
 		return
 	}
 
@@ -376,4 +354,30 @@ func (s *server) loadParamsFromHash(ctx context.Context, hash string) (*generato
 		return nil, fmt.Errorf("failed to decode params: %w", err)
 	}
 	return &params, nil
+}
+
+func (s *server) ingredients(ctx context.Context, w http.ResponseWriter, p *generatorParams) {
+	lochash := p.LocationHash()
+	ingredientblob, err := s.cache.Get(ctx, lochash)
+	if err != nil {
+		http.Error(w, "ingredients not found in cache", http.StatusNotFound)
+		return
+	}
+	slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
+	defer ingredientblob.Close()
+	dec := json.NewDecoder(ingredientblob)
+	var ingredients []kroger.Ingredient
+	err = dec.Decode(&ingredients)
+	if err != nil {
+		http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)
+		return
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(ingredients); err != nil {
+		http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
+		return
+	}
+	// make this a html thats readable.
+	w.Header().Add("Content-Type", "application/json")
 }
