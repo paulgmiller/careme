@@ -78,7 +78,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		Name: "Unknown Location",
 	}, time.Now())
 	if recipe.OriginHash != "" {
-		loadedp, err := s.loadParamsFromHash(ctx, recipe.OriginHash)
+		loadedp, err := loadParamsFromHash(ctx, recipe.OriginHash, s.cache)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
 			// http.Error(w, "recipe not found or expired", http.StatusNotFound)
@@ -120,7 +120,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
 			return
 		}
-		p, err := s.loadParamsFromHash(ctx, hashParam)
+		p, err := loadParamsFromHash(ctx, hashParam, s.cache)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 			p = DefaultParams(&locations.Location{
@@ -342,21 +342,6 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 	}
 
 	return nil
-}
-
-// loadParamsFromHash loads generator params from cache using the hash
-func (s *server) loadParamsFromHash(ctx context.Context, hash string) (*generatorParams, error) {
-	paramsReader, err := s.cache.Get(ctx, hash+".params")
-	if err != nil {
-		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
-	}
-	defer paramsReader.Close()
-
-	var params generatorParams
-	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
-		return nil, fmt.Errorf("failed to decode params: %w", err)
-	}
-	return &params, nil
 }
 
 // move to admin?
