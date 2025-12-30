@@ -1,25 +1,17 @@
 {{define "tailwind_head"}}
-  <script src="https://cdn.tailwindcss.com"></script> <!-- try and remove back to local-->
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '{{.Colors.C50}}',
-              100: '{{.Colors.C100}}',
-              200: '{{.Colors.C200}}',
-              300: '{{.Colors.C300}}',
-              400: '{{.Colors.C400}}',
-              500: '{{.Colors.C500}}',
-              600: '{{.Colors.C600}}',
-              700: '{{.Colors.C700}}',
-              800: '{{.Colors.C800}}',
-              900: '{{.Colors.C900}}'
-            }
-          }
-        }
-      }
+  <link rel="stylesheet" href="/static/output.css">
+  <style>
+    :root {
+      --color-brand-50: {{.Colors.C50}};
+      --color-brand-100: {{.Colors.C100}};
+      --color-brand-200: {{.Colors.C200}};
+      --color-brand-300: {{.Colors.C300}};
+      --color-brand-400: {{.Colors.C400}};
+      --color-brand-500: {{.Colors.C500}};
+      --color-brand-600: {{.Colors.C600}};
+      --color-brand-700: {{.Colors.C700}};
+      --color-brand-800: {{.Colors.C800}};
+      --color-brand-900: {{.Colors.C900}};
     }
-  </script>
+  </style>
 {{end}}

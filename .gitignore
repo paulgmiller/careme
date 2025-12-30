@@ -33,3 +33,9 @@ Thumbs.db
 # Cache directory and compiled binary
 cache/
 careme
+
+# Node modules
+node_modules/
+
+# Keep built CSS in static/
+!static/output.css
