@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,6 +29,10 @@ import (
 var favicon []byte
 
 const sessionDuration = 365 * 24 * time.Hour
+
+func init() {
+	_ = mime.AddExtensionType(".js", "application/javascript")
+}
 
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
