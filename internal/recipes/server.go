@@ -16,7 +16,6 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -78,7 +77,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		Name: "Unknown Location",
 	}, time.Now())
 	if recipe.OriginHash != "" {
-		loadedp, err := s.loadParamsFromHash(ctx, recipe.OriginHash)
+		loadedp, err := loadParamsFromHash(ctx, recipe.OriginHash, s.cache)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
 			// http.Error(w, "recipe not found or expired", http.StatusNotFound)
@@ -120,7 +119,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
 			return
 		}
-		p, err := s.loadParamsFromHash(ctx, hashParam)
+		p, err := loadParamsFromHash(ctx, hashParam, s.cache)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 			p = DefaultParams(&locations.Location{
@@ -129,6 +128,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}, time.Now())
 		}
 		FormatChatHTML(p, *slist, w)
+		// backfill
 		go func() {
 			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
 			if p.Date.After(cutoff) {
@@ -142,59 +142,16 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loc := r.URL.Query().Get("location")
-	if loc == "" {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("specify a location id to generate recipes"))
-		return
-	}
-
-	dateStr := r.URL.Query().Get("date")
-	if dateStr == "" {
-		http.Redirect(w, r, "/recipes?location="+loc+"&date="+time.Now().Format("2006-01-02"), http.StatusSeeOther)
-		return
-	}
-
-	date, err := time.ParseInLocation("2006-01-02", dateStr, time.UTC)
+	p, err := s.ParseQueryArgs(ctx, r)
 	if err != nil {
-		http.Error(w, "invalid date format, use YYYY-MM-DD", http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
 		return
 	}
-
-	l, err := s.locServer.GetLocationByID(ctx, loc)
-	if err != nil {
-		http.Error(w, "could not get location details", http.StatusBadRequest)
-		return
-	}
-
-	p := DefaultParams(l, date)
-
-	p.UserID = currentUser.ID
+	// what do we do with this?
+	// p.UserID = currentUser.ID
 
 	if r.URL.Query().Get("ingredients") == "true" {
-		lochash := p.LocationHash()
-		ingredientblob, err := s.cache.Get(ctx, lochash)
-		if err != nil {
-			http.Error(w, "ingredients not found in cache", http.StatusNotFound)
-			return
-		}
-		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
-		defer ingredientblob.Close()
-		dec := json.NewDecoder(ingredientblob)
-		var ingredients []kroger.Ingredient
-		err = dec.Decode(&ingredients)
-		if err != nil {
-			http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)
-			return
-		}
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(ingredients); err != nil {
-			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
-			return
-		}
-		// make this a html thats readable.
-		w.Header().Add("Content-Type", "application/json")
+		s.ingredients(ctx, w, p)
 		return
 	}
 
@@ -203,42 +160,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		p.LastRecipes = append(p.LastRecipes, last.Title)
-	}
-
-	if instructions := r.URL.Query().Get("instructions"); instructions != "" {
-		p.Instructions = instructions
-	}
-
-	// Handle saved and dismissed recipe hashes from checkboxes
-	// Query().Get returns first value, Query() returns all values
-	// will be empty values for every recipe and two for ones with no action
-	// TODO look at way not to duplicate so many query arguments and pass down just a saved list or a query arg for each saved item.
-	clean := func(s string, _ int) (string, bool) {
-		ts := strings.TrimSpace(s)
-		return ts, ts != ""
-	}
-	savedHashes := lo.FilterMap(r.URL.Query()["saved"], clean)
-	dismissedHashes := lo.FilterMap(r.URL.Query()["dismissed"], clean)
-	// Load saved recipes from cache by their hashes
-	for _, hash := range savedHashes {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
-			continue
-		}
-		slog.InfoContext(ctx, "adding saved recipe to params", "title", recipe.Title, "hash", hash)
-		p.Saved = append(p.Saved, *recipe)
-	}
-
-	// Add dismissed recipe titles to instructions so AI knows what to avoid
-	for _, hash := range dismissedHashes {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
-			continue
-		}
-		slog.InfoContext(ctx, "adding dismissed recipe to params", "title", recipe.Title, "hash", hash)
-		p.Dismissed = append(p.Dismissed, *recipe)
 	}
 
 	hash := p.Hash()
@@ -263,9 +184,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// should this be in hash?
-	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
-
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -281,6 +199,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "generate error", "error", err)
 			return
 		}
+
+		// add saved recipes here rather than each
+
 		if err := s.SaveShoppingList(ctx, shoppingList, p); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 		}
@@ -363,17 +284,29 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 	return nil
 }
 
-// loadParamsFromHash loads generator params from cache using the hash
-func (s *server) loadParamsFromHash(ctx context.Context, hash string) (*generatorParams, error) {
-	paramsReader, err := s.cache.Get(ctx, hash+".params")
+// move to admin?
+func (s *server) ingredients(ctx context.Context, w http.ResponseWriter, p *generatorParams) {
+	lochash := p.LocationHash()
+	ingredientblob, err := s.cache.Get(ctx, lochash)
 	if err != nil {
-		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
+		http.Error(w, "ingredients not found in cache", http.StatusNotFound)
+		return
 	}
-	defer paramsReader.Close()
-
-	var params generatorParams
-	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
-		return nil, fmt.Errorf("failed to decode params: %w", err)
+	slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
+	defer ingredientblob.Close()
+	dec := json.NewDecoder(ingredientblob)
+	var ingredients []kroger.Ingredient
+	err = dec.Decode(&ingredients)
+	if err != nil {
+		http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)
+		return
 	}
-	return &params, nil
+	// make this a html thats readable.
+	w.Header().Add("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(ingredients); err != nil {
+		http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
+		return
+	}
 }
