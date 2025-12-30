@@ -86,7 +86,7 @@
                 <input type="hidden" name="saved" id="saved-{{.ComputeHash}}" value="{{if .Saved}}{{.ComputeHash}}{{end}}" />
                 <input type="hidden" name="dismissed" id="dismissed-{{.ComputeHash}}" value="" />
 
-                <details id="details-{{.ComputeHash}}"{{if not .Saved}} open{{end}}>
+                <details id="details-{{.ComputeHash}}" class="w-full"{{if not .Saved}} open{{end}}>
                   <summary class="inline-flex items-center gap-2 rounded-lg border-2 border-brand-500 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 cursor-pointer transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 list-none">
                     <svg class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
