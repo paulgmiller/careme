@@ -66,6 +66,9 @@ func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	if !strings.Contains(html, `Dismiss`) {
 		t.Error("HTML should contain Dismiss label text")
 	}
+	if !strings.Contains(html, `Details`) {
+		t.Error("HTML should contain Details button text")
+	}
 
 	// Check that "Regenerate" button exists
 	if !strings.Contains(html, `Regenerate`) {
