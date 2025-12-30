@@ -27,7 +27,7 @@ type generatorParams struct {
 	Instructions string   `json:"instructions,omitempty"`
 	LastRecipes  []string `json:"last_recipes,omitempty"`
 	// UserID         string      `json:"user_id,omitempty"`
-	ConversationID string      `json:"conversation_id,omitempty"` // Can remove if we pass it in seperately to generate recipes?
+	ConversationID string      `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
 	Saved          []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed      []ai.Recipe `json:"dismissed_recipes,omitempty"`
 }
@@ -72,7 +72,7 @@ func (g *generatorParams) LocationHash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	bytes := lo.Must(json.Marshal(g.Staples)) // excited fro this to break in some wierd way
+	bytes := lo.Must(json.Marshal(g.Staples)) // excited fro this to break in some weird way
 	lo.Must(fnv.Write(bytes))
 	// see comment above this suffix is unceessary but keeps old hashes working
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("ingredients")))
