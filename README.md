@@ -9,13 +9,16 @@ Careme is your personal chef and sommilier. It will
 
 ### Building CSS
 
-The application uses Tailwind CSS for styling with a local build process. The CSS needs to be built before running the application:
+The application uses Tailwind CSS for styling. The built CSS file (`static/output.css`) is committed to the repository, so **you don't need to build it** to run the application with `go run ./cmd/careme -serve`.
+
+To regenerate the CSS file after making changes to templates or Tailwind configuration:
 
 ```bash
-# Install dependencies (first time only)
-npm install
+# Quick rebuild (recommended)
+./build-css.sh
 
-# Build CSS for production
+# Or manually:
+npm install  # First time only
 npm run build:css
 
 # Watch for changes during development

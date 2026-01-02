@@ -36,6 +36,3 @@ careme
 
 # Node modules
 node_modules/
-
-# Build artifacts - CSS is built during deployment
-static/output.css
