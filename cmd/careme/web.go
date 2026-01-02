@@ -31,7 +31,7 @@ var favicon []byte
 const sessionDuration = 365 * 24 * time.Hour
 
 func init() {
-	_ = mime.AddExtensionType(".js", "application/javascript")
+	_ = mime.AddExtensionType(".css", "text/css")
 }
 
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
