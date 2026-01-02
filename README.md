@@ -13,7 +13,7 @@ The application is configured via environment variables:
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI or Anthropic API key (required)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
-- `HISTORY_PATH` - Path to store recipe history (default: "./data/history.json")
+- `ENABLE_MOCKS` - For testing if you have none of the above
 
 ## Live site
 
