@@ -6,6 +6,8 @@ set -e
 
 echo "Building Tailwind CSS..."
 
+cd tailwind
+
 # Check if node_modules exists, install if not
 if [ ! -d "node_modules" ]; then
     echo "Installing dependencies..."
@@ -14,5 +16,7 @@ fi
 
 # Build the CSS
 npm run build:css
+
+cd ..
 
 echo "CSS build complete! Output: static/output.css"

@@ -17,15 +17,17 @@ To regenerate the CSS file after making changes to templates or Tailwind configu
 # Quick rebuild (recommended)
 ./build-css.sh
 
-# Or manually:
+# Or manually from the tailwind directory:
+cd tailwind
 npm install  # First time only
 npm run build:css
+cd ..
 
 # Watch for changes during development
-npm run watch:css
+cd tailwind && npm run watch:css
 ```
 
-The Tailwind configuration supports dynamic seasonal colors that change throughout the year (Winter: blue, Spring: green, Summer: yellow, Fall: orange).
+The color scheme is defined in `internal/seasons/seasons.go` and changes dynamically based on the current season (Winter: blue, Spring: green, Summer: yellow, Fall: orange). The Tailwind configuration in `tailwind/` uses CSS variables that are set at runtime by the Go templates.
 
 ## Configuration
 

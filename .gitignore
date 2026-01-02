@@ -34,5 +34,6 @@ Thumbs.db
 cache/
 careme
 
-# Node modules
-node_modules/
+# Node modules (Tailwind build dependencies)
+tailwind/node_modules/
+tailwind/package-lock.json

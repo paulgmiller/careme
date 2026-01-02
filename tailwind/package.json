@@ -1,0 +1,13 @@
+{
+  "name": "careme-tailwind",
+  "version": "1.0.0",
+  "description": "Tailwind CSS build for Careme",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -c ./tailwind.config.js -i ./input.css -o ../static/output.css --minify",
+    "watch:css": "tailwindcss -c ./tailwind.config.js -i ./input.css -o ../static/output.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.1"
+  }
+}
