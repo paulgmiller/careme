@@ -1,0 +1,26 @@
+name: Tailwind CSS Check
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+
+jobs:
+  tailwind:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Generate Tailwind CSS
+        run: bash tailwind/generate.sh
+
+      - name: Verify working tree clean
+        run: git diff --exit-code
