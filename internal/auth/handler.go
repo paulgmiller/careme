@@ -13,8 +13,6 @@ import (
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
-const sessionDuration = 365 * 24 * time.Hour
-
 type emailClient interface {
 	Send(message *mail.SGMailV3) (*rest.Response, error)
 }
@@ -162,7 +160,8 @@ func (h *Handler) handleLoginVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set session cookie
+	// Set session cookie (indefinite duration as specified in requirements)
+	sessionDuration := 365 * 24 * time.Hour
 	users.SetCookie(w, user.ID, sessionDuration)
 
 	slog.InfoContext(ctx, "user logged in via magic link", "email", email, "user_id", user.ID)

@@ -57,7 +57,7 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("kroger client ID and secret must be set")
 	}
 	if cfg.AI.APIKey == "" {
-		return fmt.Errorf("AI API  key must be set")
+		return fmt.Errorf("AI API key must be set")
 	}
 	if cfg.SendGrid.APIKey == "" {
 		return fmt.Errorf("SendGrid API key must be set")
