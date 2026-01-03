@@ -6,9 +6,10 @@ import (
 )
 
 type Config struct {
-	AI     AIConfig     `json:"ai"`
-	Kroger KrogerConfig `json:"kroger"`
-	Mocks  MockConfig   `json:"mocks"`
+	AI       AIConfig       `json:"ai"`
+	Kroger   KrogerConfig   `json:"kroger"`
+	Mocks    MockConfig     `json:"mocks"`
+	SendGrid SendGridConfig `json:"sendgrid"`
 }
 
 type AIConfig struct {
@@ -24,6 +25,10 @@ type MockConfig struct {
 	Enable bool
 }
 
+type SendGridConfig struct {
+	APIKey string
+}
+
 func Load() (*Config, error) {
 	config := &Config{
 		AI: AIConfig{
@@ -35,6 +40,9 @@ func Load() (*Config, error) {
 		},
 		Mocks: MockConfig{
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv
+		},
+		SendGrid: SendGridConfig{
+			APIKey: os.Getenv("SENDGRID_API_KEY"),
 		},
 	}
 
@@ -50,6 +58,9 @@ func validate(cfg *Config) error {
 	}
 	if cfg.AI.APIKey == "" {
 		return fmt.Errorf("AI API  key must be set")
+	}
+	if cfg.SendGrid.APIKey == "" {
+		return fmt.Errorf("SendGrid API key must be set")
 	}
 	return nil
 }
