@@ -14,7 +14,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o careme ./
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /workspace
 COPY --from=builder /src/careme /careme
-COPY --from=builder /src/static/tailwind.css /static/tailwind.css
 # Copy CA certs (distroless already has them, included for clarity)
 # COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 EXPOSE 8080
