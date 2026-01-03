@@ -28,6 +28,9 @@ import (
 //go:embed favicon.png
 var favicon []byte
 
+//go:embed static/tailwind.css
+var tailwindCSS []byte
+
 const sessionDuration = 365 * 24 * time.Hour
 
 func init() {
@@ -47,7 +50,11 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Write(tailwindCSS)
+	})
 
 	locationserver, err := locations.New(context.TODO(), cfg)
 	if err != nil {
