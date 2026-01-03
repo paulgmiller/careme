@@ -2,6 +2,7 @@ package main
 
 import (
 	"careme/internal/cache"
+	"careme/internal/clerk"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/logs"
@@ -40,6 +41,12 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	userStorage := users.NewStorage(cache)
 
+	// Initialize Clerk client
+	clerkClient, err := clerk.NewClient(cfg.Clerk.SecretKey)
+	if err != nil {
+		return fmt.Errorf("failed to create clerk client: %w", err)
+	}
+
 	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
@@ -73,24 +80,43 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		currentUser, err := users.FromRequest(r, userStorage)
-		if err != nil {
-			if errors.Is(err, users.ErrNotFound) {
-				users.ClearCookie(w)
-			} else {
-				slog.ErrorContext(ctx, "failed to load user from cookie", "error", err)
-				http.Error(w, "unable to load account", http.StatusInternalServerError)
-				return
+		
+		// Try to get user from Clerk session first
+		var currentUser *users.User
+		clerkUserID, err := clerk.GetUserIDFromRequest(r)
+		if err == nil && clerkUserID != "" {
+			// Get or create local user from Clerk user ID
+			currentUser, err = getOrCreateUserFromClerk(ctx, clerkClient, userStorage, clerkUserID)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to sync clerk user", "error", err, "clerk_user_id", clerkUserID)
+				// Continue without user rather than failing
 			}
 		}
+		
+		// Fall back to cookie-based auth for existing users
+		if currentUser == nil {
+			currentUser, err = users.FromRequest(r, userStorage)
+			if err != nil {
+				if errors.Is(err, users.ErrNotFound) {
+					users.ClearCookie(w)
+				} else {
+					slog.ErrorContext(ctx, "failed to load user from cookie", "error", err)
+					http.Error(w, "unable to load account", http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+		
 		data := struct {
-			ClarityScript template.HTML
-			User          *users.User
-			Style         seasons.Style
+			ClarityScript     template.HTML
+			User              *users.User
+			Style             seasons.Style
+			ClerkPublishableKey string
 		}{
-			ClarityScript: templates.ClarityScript(),
-			User:          currentUser,
-			Style:         seasons.GetCurrentStyle(),
+			ClarityScript:     templates.ClarityScript(),
+			User:              currentUser,
+			Style:             seasons.GetCurrentStyle(),
+			ClerkPublishableKey: cfg.Clerk.PublishableKey,
 		}
 		if err := templates.Home.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
@@ -98,6 +124,46 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 	})
 
+	// Redirect to Clerk hosted sign-in page
+	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
+		// Clerk hosted sign-in URL
+		http.Redirect(w, r, "https://bold-salmon-53.accounts.dev/sign-in", http.StatusSeeOther)
+	})
+
+	// Redirect to Clerk hosted sign-up page
+	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
+		// Clerk hosted sign-up URL
+		http.Redirect(w, r, "https://bold-salmon-53.accounts.dev/sign-up", http.StatusSeeOther)
+	})
+
+	// Callback handler after Clerk authentication
+	mux.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		
+		// Get Clerk user ID from session
+		clerkUserID, err := clerk.GetUserIDFromRequest(r)
+		if err != nil {
+			slog.ErrorContext(ctx, "no clerk session in callback", "error", err)
+			http.Redirect(w, r, "/sign-in", http.StatusSeeOther)
+			return
+		}
+
+		// Sync Clerk user with local storage
+		user, err := getOrCreateUserFromClerk(ctx, clerkClient, userStorage, clerkUserID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to sync user in callback", "error", err, "clerk_user_id", clerkUserID)
+			http.Error(w, "unable to complete sign in", http.StatusInternalServerError)
+			return
+		}
+
+		// Set local cookie for backwards compatibility
+		users.SetCookie(w, user.ID, sessionDuration)
+		
+		// Redirect to home
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})
+
+	// Keep old login endpoint for backwards compatibility
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -143,7 +209,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: WithMiddleware(mux),
+		Handler: WithMiddleware(clerkClient.WithClerkHTTP(mux)),
 	}
 
 	// Channel to listen for errors coming from the server
@@ -170,6 +236,39 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		slog.Info("Shutdown signal received", "signal", sig)
 		return gracefulShutdown(server, recipeHandler.Wait)
 	}
+}
+
+// getOrCreateUserFromClerk syncs a Clerk user with local storage
+func getOrCreateUserFromClerk(ctx context.Context, clerkClient *clerk.Client, userStorage *users.Storage, clerkUserID string) (*users.User, error) {
+	// Fetch user details from Clerk
+	clerkUser, err := clerkClient.GetUser(ctx, clerkUserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch clerk user: %w", err)
+	}
+
+	// Get primary email from Clerk user
+	var primaryEmail string
+	for _, emailAddr := range clerkUser.EmailAddresses {
+		if clerkUser.PrimaryEmailAddressID != nil && emailAddr.ID == *clerkUser.PrimaryEmailAddressID {
+			primaryEmail = emailAddr.EmailAddress
+			break
+		}
+	}
+	if primaryEmail == "" && len(clerkUser.EmailAddresses) > 0 {
+		// Fallback to first email if no primary is set
+		primaryEmail = clerkUser.EmailAddresses[0].EmailAddress
+	}
+	if primaryEmail == "" {
+		return nil, fmt.Errorf("clerk user has no email address")
+	}
+
+	// Find or create user in local storage
+	user, err := userStorage.FindOrCreateByEmail(primaryEmail)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find or create local user: %w", err)
+	}
+
+	return user, nil
 }
 
 func gracefulShutdown(svr *http.Server, recipesWait func()) error {
