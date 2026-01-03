@@ -24,6 +24,8 @@ type KrogerConfig struct {
 type ClerkConfig struct {
 	SecretKey      string
 	PublishableKey string
+	SignInURL      string
+	SignUpURL      string
 }
 
 type MockConfig struct {
@@ -42,6 +44,8 @@ func Load() (*Config, error) {
 		Clerk: ClerkConfig{
 			SecretKey:      os.Getenv("CLERK_SECRET_KEY"),
 			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
+			SignInURL:      getEnvOrDefault("CLERK_SIGN_IN_URL", "https://bold-salmon-53.accounts.dev/sign-in"),
+			SignUpURL:      getEnvOrDefault("CLERK_SIGN_UP_URL", "https://bold-salmon-53.accounts.dev/sign-up"),
 		},
 		Mocks: MockConfig{
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv
@@ -49,6 +53,13 @@ func Load() (*Config, error) {
 	}
 
 	return config, validate(config)
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 func validate(cfg *Config) error {

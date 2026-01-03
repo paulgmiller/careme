@@ -61,4 +61,3 @@ func GetUserIDFromRequest(r *http.Request) (string, error) {
 func (c *Client) WithClerkHTTP(handler http.Handler) http.Handler {
 	return clerkhttp.WithHeaderAuthorization()(handler)
 }
-

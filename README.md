@@ -14,6 +14,8 @@ The application is configured via environment variables:
 - `AI_API_KEY` - OpenAI or Anthropic API key (required)
 - `CLERK_SECRET_KEY` - Clerk secret key for authentication (required)
 - `CLERK_PUBLISHABLE_KEY` - Clerk publishable key for frontend (optional, for future use)
+- `CLERK_SIGN_IN_URL` - Clerk hosted sign-in page URL (optional, defaults to https://bold-salmon-53.accounts.dev/sign-in)
+- `CLERK_SIGN_UP_URL` - Clerk hosted sign-up page URL (optional, defaults to https://bold-salmon-53.accounts.dev/sign-up)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `ENABLE_MOCKS` - For testing if you have none of the above
 

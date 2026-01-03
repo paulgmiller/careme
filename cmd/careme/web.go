@@ -126,14 +126,12 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	// Redirect to Clerk hosted sign-in page
 	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
-		// Clerk hosted sign-in URL
-		http.Redirect(w, r, "https://bold-salmon-53.accounts.dev/sign-in", http.StatusSeeOther)
+		http.Redirect(w, r, cfg.Clerk.SignInURL, http.StatusSeeOther)
 	})
 
 	// Redirect to Clerk hosted sign-up page
 	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
-		// Clerk hosted sign-up URL
-		http.Redirect(w, r, "https://bold-salmon-53.accounts.dev/sign-up", http.StatusSeeOther)
+		http.Redirect(w, r, cfg.Clerk.SignUpURL, http.StatusSeeOther)
 	})
 
 	// Callback handler after Clerk authentication
