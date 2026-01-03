@@ -9,6 +9,7 @@ require github.com/samber/lo v1.51.0
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2
 	github.com/alpkeskin/gotoon v0.1.1
+	github.com/clerk/clerk-sdk-go/v2 v2.5.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/openai/openai-go/v3 v3.14.0
 	github.com/samber/slog-multi v1.5.0
@@ -22,7 +23,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/clerk/clerk-sdk-go/v2 v2.5.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
 	github.com/samber/slog-common v0.19.0 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect

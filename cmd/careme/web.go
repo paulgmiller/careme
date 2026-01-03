@@ -80,7 +80,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		
+
 		// Try to get user from Clerk session first
 		var currentUser *users.User
 		clerkUserID, err := clerk.GetUserIDFromRequest(r)
@@ -92,7 +92,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 				// Continue without user rather than failing
 			}
 		}
-		
+
 		// Fall back to cookie-based auth for existing users
 		if currentUser == nil {
 			currentUser, err = users.FromRequest(r, userStorage)
@@ -106,16 +106,16 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 				}
 			}
 		}
-		
+
 		data := struct {
-			ClarityScript     template.HTML
-			User              *users.User
-			Style             seasons.Style
+			ClarityScript       template.HTML
+			User                *users.User
+			Style               seasons.Style
 			ClerkPublishableKey string
 		}{
-			ClarityScript:     templates.ClarityScript(),
-			User:              currentUser,
-			Style:             seasons.GetCurrentStyle(),
+			ClarityScript:       templates.ClarityScript(),
+			User:                currentUser,
+			Style:               seasons.GetCurrentStyle(),
 			ClerkPublishableKey: cfg.Clerk.PublishableKey,
 		}
 		if err := templates.Home.Execute(w, data); err != nil {
@@ -137,7 +137,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	// Callback handler after Clerk authentication
 	mux.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		
+
 		// Get Clerk user ID from session
 		clerkUserID, err := clerk.GetUserIDFromRequest(r)
 		if err != nil {
@@ -156,7 +156,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 		// Set local cookie for backwards compatibility
 		users.SetCookie(w, user.ID, sessionDuration)
-		
+
 		// Redirect to home
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
