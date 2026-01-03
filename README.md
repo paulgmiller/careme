@@ -12,6 +12,8 @@ The application is configured via environment variables:
 - `KROGER_CLIENT_ID` - Kroger API client ID (required)
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI or Anthropic API key (required)
+- `CLERK_SECRET_KEY` - Clerk secret key for authentication (required)
+- `CLERK_PUBLISHABLE_KEY` - Clerk publishable key for frontend (optional, for future use)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `ENABLE_MOCKS` - For testing if you have none of the above
 
