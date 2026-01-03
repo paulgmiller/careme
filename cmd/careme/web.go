@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
-	"mime"
 	"net/http"
 	"os"
 	"os/signal"
@@ -32,10 +31,6 @@ var favicon []byte
 var tailwindCSS []byte
 
 const sessionDuration = 365 * 24 * time.Hour
-
-func init() {
-	_ = mime.AddExtensionType(".css", "text/css")
-}
 
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
