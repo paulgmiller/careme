@@ -6,10 +6,9 @@ import (
 )
 
 type Config struct {
-	AI      AIConfig      `json:"ai"`
-	Kroger  KrogerConfig  `json:"kroger"`
-	History HistoryConfig `json:"history"`
-	Clarity ClarityConfig `json:"clarity"`
+	AI     AIConfig     `json:"ai"`
+	Kroger KrogerConfig `json:"kroger"`
+	Mocks  MockConfig   `json:"mocks"`
 }
 
 type AIConfig struct {
@@ -21,13 +20,8 @@ type KrogerConfig struct {
 	ClientSecret string
 }
 
-type HistoryConfig struct {
-	StoragePath   string `json:"storage_path"`
-	RetentionDays int    `json:"retention_days"`
-}
-
-type ClarityConfig struct {
-	ProjectID string `json:"project_id"`
+type MockConfig struct {
+	Enable bool
 }
 
 func Load() (*Config, error) {
@@ -39,12 +33,8 @@ func Load() (*Config, error) {
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),
 			ClientSecret: os.Getenv("KROGER_CLIENT_SECRET"),
 		},
-		History: HistoryConfig{
-			StoragePath:   getEnvOrDefault("HISTORY_PATH", "./data/history.json"),
-			RetentionDays: 14,
-		},
-		Clarity: ClarityConfig{
-			ProjectID: os.Getenv("CLARITY_PROJECT_ID"),
+		Mocks: MockConfig{
+			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv
 		},
 	}
 
@@ -52,15 +42,14 @@ func Load() (*Config, error) {
 }
 
 func validate(cfg *Config) error {
+	if cfg.Mocks.Enable {
+		return nil
+	}
 	if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
 		return fmt.Errorf("kroger client ID and secret must be set")
 	}
-	return nil
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+	if cfg.AI.APIKey == "" {
+		return fmt.Errorf("AI API  key must be set")
 	}
-	return defaultValue
+	return nil
 }

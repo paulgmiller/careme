@@ -3,7 +3,6 @@ package main
 import (
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/html"
 	"careme/internal/locations"
 	"careme/internal/logs"
 	"careme/internal/logsink"
@@ -28,16 +27,17 @@ import (
 //go:embed favicon.png
 var favicon []byte
 
+//go:embed static/tailwind.css
+var tailwindCSS []byte
+
 const sessionDuration = 365 * 24 * time.Hour
 
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
-
 	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
-	clarityScript := html.ClarityScript(cfg)
 	userStorage := users.NewStorage(cache)
 
 	generator, err := recipes.NewGenerator(cfg, cache)
@@ -45,17 +45,22 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Write(tailwindCSS)
+	})
 
 	locationserver, err := locations.New(context.TODO(), cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
-	locationserver.Register(mux)
+	locations.Register(locationserver, mux)
 
-	userHandler := users.NewHandler(userStorage, clarityScript, locationserver)
+	userHandler := users.NewHandler(userStorage, locationserver)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, clarityScript, locationserver)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache)
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
@@ -83,7 +88,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			User          *users.User
 			Style         seasons.Style
 		}{
-			ClarityScript: clarityScript,
+			ClarityScript: templates.ClarityScript(),
 			User:          currentUser,
 			Style:         seasons.GetCurrentStyle(),
 		}

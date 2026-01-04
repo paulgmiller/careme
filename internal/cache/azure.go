@@ -80,7 +80,6 @@ func (fc *BlobCache) Exists(ctx context.Context, key string) (bool, error) {
 		return false, err
 	}
 	return true, nil
-
 }
 
 func (fc *BlobCache) Get(ctx context.Context, key string) (io.ReadCloser, error) {
@@ -101,6 +100,7 @@ func (fc *BlobCache) Set(ctx context.Context, key, value string) error {
 	return err
 }
 
+// TODO take a config? let it set container or directory?
 func MakeCache() (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
