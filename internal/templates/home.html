@@ -91,19 +91,30 @@
           </ol>
 
           <!-- Signed-out state -->
-          <form method="POST" action="/login" class="mt-6">
-            <label for="email" class="block text-sm font-medium text-gray-700">
-              Enter your email to continue:
-            </label>
-            <div class="mt-2 flex flex-col gap-3 sm:flex-row">
-              <input id="email" name="email" type="email" required placeholder="you@example.com"
-                     class="w-full max-w-sm rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-              <button type="submit"
-                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                Continue
-              </button>
+          <div class="mt-6 rounded-xl border border-brand-100 bg-white p-5 shadow-sm">
+            <div class="flex flex-col gap-2">
+              <h2 class="text-xl font-semibold text-brand-700">Sign in with a passkey</h2>
+              <p class="text-sm text-gray-600">Passkeys keep your account secure and private. Create one with your device or use an existing passkey.</p>
             </div>
-          </form>
+            <form id="passkey-form" class="mt-4 space-y-3">
+              <div class="space-y-2">
+                <label for="passkey-email" class="block text-sm font-medium text-gray-700">Email (for labeling your account)</label>
+                <input id="passkey-email" name="email" type="email" required placeholder="you@example.com"
+                       class="w-full max-w-sm rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              </div>
+              <div class="flex flex-col gap-3 sm:flex-row">
+                <button type="button" data-action="register"
+                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Create a passkey
+                </button>
+                <button type="button" data-action="login"
+                        class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Use an existing passkey
+                </button>
+              </div>
+              <p id="passkey-status" class="text-sm text-gray-600"></p>
+            </form>
+          </div>
           {{end}}
         </div>
       </div>
@@ -114,5 +125,116 @@
       </p>
     </section>
   </main>
+  <script>
+    (() => {
+      const form = document.getElementById('passkey-form');
+      if (!form || typeof PublicKeyCredential === 'undefined') {
+        return;
+      }
+      const emailInput = document.getElementById('passkey-email');
+      const status = document.getElementById('passkey-status');
+
+      const setStatus = (message, isError = false) => {
+        status.textContent = message;
+        status.className = isError ? 'text-sm text-red-600' : 'text-sm text-gray-700';
+      };
+
+      const decodeBase64URL = (value) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+      const encodeBase64URL = (buffer) => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+      const prepareCreationOptions = (options) => {
+        const { publicKey } = options;
+        publicKey.challenge = decodeBase64URL(publicKey.challenge);
+        publicKey.user.id = decodeBase64URL(publicKey.user.id);
+        publicKey.excludeCredentials = (publicKey.excludeCredentials || []).map((cred) => ({
+          ...cred,
+          id: decodeBase64URL(cred.id),
+        }));
+        return publicKey;
+      };
+
+      const prepareRequestOptions = (options) => {
+        const { publicKey } = options;
+        publicKey.challenge = decodeBase64URL(publicKey.challenge);
+        publicKey.allowCredentials = (publicKey.allowCredentials || []).map((cred) => ({
+          ...cred,
+          id: decodeBase64URL(cred.id),
+        }));
+        return publicKey;
+      };
+
+      const credentialToJSON = (cred) => ({
+        id: cred.id,
+        rawId: encodeBase64URL(cred.rawId),
+        type: cred.type,
+        response: {
+          attestationObject: cred.response.attestationObject ? encodeBase64URL(cred.response.attestationObject) : undefined,
+          clientDataJSON: encodeBase64URL(cred.response.clientDataJSON),
+          authenticatorData: cred.response.authenticatorData ? encodeBase64URL(cred.response.authenticatorData) : undefined,
+          signature: cred.response.signature ? encodeBase64URL(cred.response.signature) : undefined,
+          userHandle: cred.response.userHandle ? encodeBase64URL(cred.response.userHandle) : undefined,
+          transports: cred.response.getTransports ? cred.response.getTransports() : undefined,
+          publicKey: cred.response.getPublicKey ? encodeBase64URL(cred.response.getPublicKey()) : undefined,
+        },
+        clientExtensionResults: cred.getClientExtensionResults(),
+      });
+
+      const startPasskeyFlow = async (action) => {
+        if (!window.isSecureContext) {
+          setStatus('Passkeys require a secure context (https).', true);
+          return;
+        }
+        const email = emailInput.value.trim();
+        if (!email) {
+          setStatus('Please enter your email to label the passkey.', true);
+          return;
+        }
+        setStatus(action === 'register' ? 'Creating passkey...' : 'Requesting passkey...');
+
+        const basePath = action === 'register' ? '/passkeys/register' : '/passkeys/login';
+        const optionsResponse = await fetch(`${basePath}/options`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (!optionsResponse.ok) {
+          setStatus('Unable to start passkey flow. Please try again.', true);
+          return;
+        }
+        const { session_id: sessionId, options } = await optionsResponse.json();
+        const publicKey = action === 'register' ? prepareCreationOptions(options) : prepareRequestOptions(options);
+
+        let credential;
+        try {
+          credential = action === 'register'
+            ? await navigator.credentials.create({ publicKey })
+            : await navigator.credentials.get({ publicKey });
+        } catch (err) {
+          setStatus('Passkey operation cancelled or unavailable.', true);
+          return;
+        }
+
+        const finishResponse = await fetch(`${basePath}/finish?session=${encodeURIComponent(sessionId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentialToJSON(credential)),
+        });
+
+        if (!finishResponse.ok) {
+          setStatus('Passkey validation failed. Please try again.', true);
+          return;
+        }
+        const result = await finishResponse.json();
+        window.location.href = result.redirect || '/';
+      };
+
+      form.querySelectorAll('button[data-action]').forEach((btn) => {
+        btn.addEventListener('click', (event) => {
+          event.preventDefault();
+          startPasskeyFlow(btn.dataset.action);
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

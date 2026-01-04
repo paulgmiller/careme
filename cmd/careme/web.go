@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -29,8 +28,6 @@ var favicon []byte
 
 //go:embed static/tailwind.css
 var tailwindCSS []byte
-
-const sessionDuration = 365 * 24 * time.Hour
 
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
@@ -59,6 +56,9 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	userHandler := users.NewHandler(userStorage, locationserver)
 	userHandler.Register(mux)
+
+	passkeyHandler := users.NewPasskeyHandler(userStorage)
+	passkeyHandler.Register(mux)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache)
 	recipeHandler.Register(mux)
@@ -103,23 +103,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "invalid form submission", http.StatusBadRequest)
-			return
-		}
-		email := strings.TrimSpace(r.FormValue("email"))
-		if email == "" {
-			http.Error(w, "email is required", http.StatusBadRequest)
-			return
-		}
-		user, err := userStorage.FindOrCreateByEmail(email)
-		if err != nil {
-			slog.ErrorContext(r.Context(), "failed to find or create user", "error", err)
-			http.Error(w, fmt.Sprintf("unable to sign in: %v", err), http.StatusInternalServerError)
-			return
-		}
-		users.SetCookie(w, user.ID, sessionDuration)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Error(w, "Passkeys are required to sign in. Please use the passkey buttons below.", http.StatusBadRequest)
 	})
 
 	mux.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
