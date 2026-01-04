@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/cache"
 )
 
 func TestUserValidate(t *testing.T) {
@@ -79,4 +81,29 @@ func TestUserValidate(t *testing.T) {
 			t.Fatalf("expected invalid favorite store error, got %v", err)
 		}
 	})
+}
+
+func TestPasskeyIndexing(t *testing.T) {
+	tempDir := t.TempDir()
+	store := NewStorage(cache.NewFileCache(tempDir))
+	user := &User{
+		ID:          "user-passkey",
+		ShoppingDay: time.Monday.String(),
+		Email:       []string{"passkey@example.com"},
+		Passkeys: []Passkey{{
+			CredentialID: []byte{0x01, 0x02, 0x03},
+		}},
+	}
+
+	if err := store.Update(user); err != nil {
+		t.Fatalf("expected update to succeed: %v", err)
+	}
+
+	lookedUp, err := store.FindByPasskeyID([]byte{0x01, 0x02, 0x03})
+	if err != nil {
+		t.Fatalf("expected to find user by passkey: %v", err)
+	}
+	if lookedUp.ID != user.ID {
+		t.Fatalf("unexpected user returned: got %s want %s", lookedUp.ID, user.ID)
+	}
 }

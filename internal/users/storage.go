@@ -3,6 +3,7 @@ package users
 import (
 	"careme/internal/cache"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,6 +51,17 @@ type User struct {
 	LastRecipes   []Recipe  `json:"last_recipes,omitempty"`
 	FavoriteStore string    `json:"favorite_store,omitempty"`
 	ShoppingDay   string    `json:"shopping_day,omitempty"`
+	Passkeys      []Passkey `json:"passkeys,omitempty"`
+}
+
+type Passkey struct {
+	CredentialID    []byte    `json:"credential_id"`
+	PublicKey       []byte    `json:"public_key"`
+	SignCount       uint32    `json:"sign_count"`
+	AttestationType string    `json:"attestation_type,omitempty"`
+	Transports      []string  `json:"transports,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	LastUsed        time.Time `json:"last_used,omitempty"`
 }
 
 // need to take a look up to location cache?
@@ -85,9 +97,14 @@ type Storage struct {
 var ErrNotFound = errors.New("user not found")
 
 const (
-	CookieName  = "careme_user"
-	userPrefix  = "users/"
-	emailPrefix = "email2user/"
+	CookieName    = "careme_user"
+	userPrefix    = "users/"
+	emailPrefix   = "email2user/"
+	passkeyPrefix = "passkey2user/"
+)
+
+const (
+	SessionDuration = 365 * 24 * time.Hour
 )
 
 func NewStorage(c cache.ListCache) *Storage {
@@ -177,12 +194,50 @@ func (s *Storage) Update(user *User) error {
 		return fmt.Errorf("invalid user: %w", err)
 	}
 
+	if err := s.indexPasskeys(user); err != nil {
+		return fmt.Errorf("failed to index passkeys: %w", err)
+	}
+
 	userBytes, err := json.Marshal(user)
 	if err != nil {
 		return fmt.Errorf("failed to marshal user: %w", err)
 	}
 	if err := s.cache.Set(context.TODO(), userPrefix+user.ID, string(userBytes)); err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
+}
+
+func (s *Storage) FindByPasskeyID(credentialID []byte) (*User, error) {
+	lookupKey := passkeyPrefix + base64.RawURLEncoding.EncodeToString(credentialID)
+	userID, err := s.cache.Get(context.TODO(), lookupKey)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	defer userID.Close()
+	data, err := io.ReadAll(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read user ID for passkey: %w", err)
+	}
+
+	return s.GetByID(string(data))
+}
+
+func (s *Storage) indexPasskeys(user *User) error {
+	if len(user.Passkeys) == 0 {
+		return nil
+	}
+	for _, pk := range user.Passkeys {
+		if len(pk.CredentialID) == 0 {
+			continue
+		}
+		lookupKey := passkeyPrefix + base64.RawURLEncoding.EncodeToString(pk.CredentialID)
+		if err := s.cache.Set(context.TODO(), lookupKey, user.ID); err != nil {
+			return fmt.Errorf("failed to index passkey: %w", err)
+		}
 	}
 	return nil
 }

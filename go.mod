@@ -1,21 +1,24 @@
 module careme
 
-go 1.24.6
+go 1.24
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
 require github.com/samber/lo v1.51.0
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2
-	github.com/alpkeskin/gotoon v0.1.1
-	github.com/invopop/jsonschema v0.13.0
-	github.com/openai/openai-go/v3 v3.14.0
-	github.com/samber/slog-multi v1.5.0
+        github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2
+        github.com/alpkeskin/gotoon v0.1.1
+        github.com/go-webauthn/webauthn v0.0.0
+        github.com/invopop/jsonschema v0.13.0
+        github.com/openai/openai-go/v3 v3.14.0
+        github.com/samber/slog-multi v1.5.0
 	github.com/sendgrid/rest v2.6.9+incompatible
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	golang.org/x/net v0.42.0
 )
+
+replace github.com/go-webauthn/webauthn => ./third_party/go-webauthn
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.1 // indirect
