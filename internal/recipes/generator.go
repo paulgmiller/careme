@@ -31,12 +31,11 @@ type aiClient interface {
 }
 
 type Generator struct {
-	config         *config.Config
-	aiClient       aiClient
-	krogerClient   kroger.ClientWithResponsesInterface //probably need only subset
-	cache          cache.Cache
-	inFlight       map[string]struct{}
-	generationLock sync.Mutex
+	config       *config.Config
+	aiClient     aiClient
+	krogerClient kroger.ClientWithResponsesInterface //probably need only subset
+	cache        cache.Cache
+	inflight     cache.Cache
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
@@ -49,23 +48,46 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (*Generator, error) {
 		config:       cfg,
 		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
-		inFlight:     make(map[string]struct{}),
+		inflight:     cache, //seperate?
 	}, nil
 }
 
-// eventually we want to use  blob with exipiry for this
-func (g *Generator) isGenerating(hash string) (bool, func()) {
-	g.generationLock.Lock()
-	defer g.generationLock.Unlock()
-	if _, exists := g.inFlight[hash]; exists {
-		return true, nil
+// TODO move this into its own struct.
+func (g *Generator) isGenerating(ctx context.Context, hash string) (bool, error) {
+	var generating = false
+	starttime, err := g.inflight.Get(ctx, "inflight/"+hash)
+	if err != nil {
+		if err != cache.ErrNotFound {
+			//TODO retry
+			return false, err
+		}
+	} else {
+		stringbuf, err := io.ReadAll(starttime)
+		if err != nil {
+			//TODO retry
+			slog.ErrorContext(ctx, "failed to read inflight start time", "hash", hash, "error", err)
+			return false, err
+		}
+
+		start, err := time.Parse(time.RFC3339Nano, string(stringbuf))
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to parse inflight start time", "hash", hash, "error", err)
+		} else {
+			if time.Since(start) < 10*time.Minute {
+				generating = true
+			}
+		}
 	}
-	g.inFlight[hash] = struct{}{}
-	return false, func() {
-		g.generationLock.Lock()
-		defer g.generationLock.Unlock()
-		delete(g.inFlight, hash)
+
+	if !generating {
+		now := time.Now().Format(time.RFC3339Nano)
+		//todo retry?
+		if err := g.inflight.Set(ctx, "inflight/"+hash, now); err != nil {
+			slog.ErrorContext(ctx, "failed to set inflight start time", "hash", hash, "error", err)
+			return false, err
+		}
 	}
+	return generating, nil
 }
 
 type generatorParams struct {
@@ -166,15 +188,16 @@ func DefaultStaples() []filter {
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) error {
 
 	hash := p.Hash()
-	generating, done := g.isGenerating(hash)
+	generating, err := g.isGenerating(ctx, hash)
+	if err != nil {
+		return err
+	}
 	if generating {
 		slog.InfoContext(ctx, "Generation already in progress, skipping", "hash", hash)
 		return nil
 	}
-	defer done()
 	start := time.Now()
 
-	var err error
 	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
 		// these should both always be true. Warn if not because its a caching bug?
