@@ -53,6 +53,9 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 
 // TODO move this into its own struct.
 func (g *Generator) isGenerating(ctx context.Context, hash string) error {
+	setInFlight := func() error {
+		return g.inflight.Set(ctx, "inflight/"+hash, time.Now().Format(time.RFC3339Nano))
+	}
 
 	startblob, err := g.inflight.Get(ctx, "inflight/"+hash)
 	if err != nil {
@@ -60,33 +63,27 @@ func (g *Generator) isGenerating(ctx context.Context, hash string) error {
 			//TODO retry
 			return err
 		}
-	} else {
-		startbuf, err := io.ReadAll(startblob)
-		if err != nil {
-			//TODO retry
-			slog.ErrorContext(ctx, "failed to read inflight start time", "hash", hash, "error", err)
-			return err
-		}
-
-		start, err := time.Parse(time.RFC3339Nano, string(startbuf))
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to parse inflight start time", "hash", hash, "error", err)
-		} else {
-			if time.Since(start) < 10*time.Minute {
-				slog.InfoContext(ctx, "generation already in progress", "hash", hash, "since", time.Since(start))
-				return InProgress
-			}
-		}
+		return setInFlight()
 	}
-
-	now := time.Now().Format(time.RFC3339Nano)
-	//todo retry?
-	if err := g.inflight.Set(ctx, "inflight/"+hash, now); err != nil {
-		slog.ErrorContext(ctx, "failed to set inflight start time", "hash", hash, "error", err)
+	startbuf, err := io.ReadAll(startblob)
+	if err != nil {
+		//TODO retry
+		slog.ErrorContext(ctx, "failed to read inflight start time", "hash", hash, "error", err)
 		return err
 	}
 
-	return nil
+	start, err := time.Parse(time.RFC3339Nano, string(startbuf))
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to parse inflight start time", "hash", hash, "error", err)
+		return setInFlight() //just set it its not like its going tstart parsing
+	}
+
+	if time.Since(start) < 10*time.Minute {
+		slog.InfoContext(ctx, "generation already in progress", "hash", hash, "since", time.Since(start))
+		return InProgress
+	}
+	return setInFlight()
+
 }
 
 var InProgress error = errors.New("generation in progress")
