@@ -28,7 +28,7 @@ type aiClient interface {
 type Generator struct {
 	config       *config.Config
 	aiClient     aiClient
-	krogerClient kroger.ClientWithResponsesInterface //probably need only subset
+	krogerClient kroger.ClientWithResponsesInterface // probably need only subset
 	cache        cache.Cache
 	inflight     cache.Cache
 }
@@ -47,7 +47,7 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 		config:       cfg,
 		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
-		inflight:     cache, //seperate?
+		inflight:     cache, // separate?
 	}, nil
 }
 
