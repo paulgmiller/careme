@@ -1,6 +1,6 @@
 Careme is your personal chef and sommilier. It will
 
-1. Take yoru favorite grocery store based on location
+1. Take your favorite grocery store based on location
 2. Check the stores inventory for fresh meat and seasonal produce
 3. Generate a weekly meal plan from a variety of cuisines and cooking styles.
 
@@ -13,6 +13,7 @@ The application is configured via environment variables:
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI or Anthropic API key (required)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
+- `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
 - `ENABLE_MOCKS` - For testing if you have none of the above
 
 ## Live site
