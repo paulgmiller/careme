@@ -60,14 +60,15 @@ func (g *Generator) isGenerating(ctx context.Context, hash string) error {
 	startblob, err := g.inflight.Get(ctx, "inflight/"+hash)
 	if err != nil {
 		if err != cache.ErrNotFound {
-			//TODO retry
+			// TODO retry
 			return err
 		}
 		return setInFlight()
 	}
+	defer startblob.Close()
 	startbuf, err := io.ReadAll(startblob)
 	if err != nil {
-		//TODO retry
+		// TODO retry
 		slog.ErrorContext(ctx, "failed to read inflight start time", "hash", hash, "error", err)
 		return err
 	}
