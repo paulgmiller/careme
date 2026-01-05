@@ -12,6 +12,10 @@ The application is configured via environment variables:
 - `KROGER_CLIENT_ID` - Kroger API client ID (required)
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI or Anthropic API key (required)
+- `CLERK_SECRET_KEY` - Clerk secret key for authentication (required)
+- `CLERK_PUBLISHABLE_KEY` - Clerk publishable key for frontend (optional, for future use)
+- `CLERK_SIGN_IN_URL` - Clerk hosted sign-in page URL (optional, defaults to https://bold-salmon-53.accounts.dev/sign-in)
+- `CLERK_SIGN_UP_URL` - Clerk hosted sign-up page URL (optional, defaults to https://bold-salmon-53.accounts.dev/sign-up)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
 - `ENABLE_MOCKS` - For testing if you have none of the above
