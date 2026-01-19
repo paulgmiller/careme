@@ -164,6 +164,7 @@
               Share Recipes
             </button>
             <span id="shareFeedback" class="hidden text-sm font-medium text-emerald-600">Link copied!</span>
+            <span id="finalizeFeedback" class="hidden text-sm font-medium text-red-600">Please save at least one recipe.</span>
           </div>
         </div>
       </div>
@@ -184,7 +185,11 @@
         .filter(value => value !== '');
       
       if (savedHashes.length === 0) {
-        alert('Please save at least one recipe before finalizing.');
+        const feedback = document.getElementById('finalizeFeedback');
+        feedback.classList.remove('hidden');
+        setTimeout(function () {
+          feedback.classList.add('hidden');
+        }, 3000);
         return;
       }
       
