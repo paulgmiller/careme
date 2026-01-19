@@ -321,7 +321,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 
 	if len(savedHashes) == 0 {
 		slog.InfoContext(ctx, "no recipes to finalize", "user_id", currentUser.ID)
-		// Redirect back to home or recipes page
+		// Redirect back to home page
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
