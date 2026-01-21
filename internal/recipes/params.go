@@ -127,12 +127,14 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 	savedHashes := lo.FilterMap(r.URL.Query()["saved"], clean)
 	dismissedHashes := lo.FilterMap(r.URL.Query()["dismissed"], clean)
 	// Load saved recipes from cache by their hashes
+	// TODO is it overkill to pull full recip in param instead of just hash?
 	for _, hash := range savedHashes {
 		recipe, err := s.SingleFromCache(ctx, hash)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
 			continue
 		}
+		recipe.Saved = true
 		slog.InfoContext(ctx, "adding saved recipe to params", "title", recipe.Title, "hash", hash)
 		p.Saved = append(p.Saved, *recipe)
 	}

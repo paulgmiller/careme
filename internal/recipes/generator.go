@@ -101,7 +101,6 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 			instructions += " Enjoyed and saved :"
 		}*/
 		for _, saved := range p.Saved {
-			saved.Saved = true
 			// This ended up giving me a "Preference update + replacements requested" recipe
 			// instructions += saved.Title + "; " //is this enough or do we keep the exact one?
 			shoppingList.Recipes = append(shoppingList.Recipes, saved)
