@@ -113,6 +113,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
+		//TODO check if generating and spin.
 		slist, err := s.FromCache(ctx, hashParam)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
@@ -127,18 +128,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				Name: "Unknown Location",
 			}, time.Now())
 		}
+		if r.URL.Query().Get("mail") == "true" {
+			FormatMail(p, *slist, w)
+			return
+		}
 		FormatChatHTML(p, *slist, w)
-		// backfill
-		go func() {
-			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
-			if p.Date.After(cutoff) {
-				return
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			defer cancel()
-			// nothing we can do on failure anyways. Aleaady logged
-			_ = s.SaveRecipes(ctx, slist.Recipes, p.Hash())
-		}()
 		return
 	}
 
@@ -162,13 +156,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "must be logged in to finalize recipes", http.StatusUnauthorized)
 			return
 		}
-		
+
 		// If no recipes are saved, just return to home
 		if len(p.Saved) == 0 {
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+			http.Error(w, "no recipes selected to save", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Save recipes to user profile
 		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
 			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
@@ -178,11 +172,25 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(ctx, "finalized recipes", "user_id", currentUser.ID, "count", len(p.Saved))
 
 		// Display the saved recipes
-		shoppingList := ai.ShoppingList{
-			Recipes: p.Saved,
+		shoppingList := &ai.ShoppingList{
+			Recipes:        p.Saved,
+			ConversationID: p.ConversationID,
 		}
-		FormatChatHTML(p, shoppingList, w)
+
+		// should finlize go into params to get a different hash that previous one with unsaved?
+		// or should we shove a guid or iteration in params along with conversation id. Response id?
+		if err := s.SaveShoppingList(ctx, shoppingList, p); err != nil {
+			slog.ErrorContext(ctx, "save error", "error", err)
+		}
+		http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
 		return
+	}
+
+	hash := p.Hash()
+	if list, err := s.FromCache(ctx, hash); err == nil {
+		// TODO check not found error explicitly
+		http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
+		FormatChatHTML(p, *list, w)
 	}
 
 	for _, last := range currentUser.LastRecipes {
@@ -190,28 +198,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		p.LastRecipes = append(p.LastRecipes, last.Title)
-	}
-
-	hash := p.Hash()
-	if list, err := s.FromCache(ctx, hash); err == nil {
-		// TODO check not found error explicitly
-		if r.URL.Query().Get("mail") == "true" {
-			FormatMail(p, *list, w)
-			return
-		}
-		FormatChatHTML(p, *list, w)
-		// backfill
-		go func() {
-			cutoff := lo.Must(time.Parse(time.DateOnly, "2025-12-22"))
-			if p.Date.After(cutoff) {
-				return
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			defer cancel()
-			// nothing we can do on failure anyways. Aleaady logged
-			_ = s.SaveRecipes(ctx, list.Recipes, p.Hash())
-		}()
-		return
 	}
 
 	s.wg.Add(1)
@@ -243,7 +229,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	// TODO should we just redirect to cache page here?
+	// need to save params first and do spin in hash loop above.
+	s.Spin(w, r)
+}
+func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	ctx := r.Context()
 	spinnerData := struct {
 		ClarityScript   template.HTML
 		Style           seasons.Style
