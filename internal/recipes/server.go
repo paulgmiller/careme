@@ -162,13 +162,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "must be logged in to finalize recipes", http.StatusUnauthorized)
 			return
 		}
-		
+
 		// If no recipes are saved, just return to home
 		if len(p.Saved) == 0 {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
-		
+
 		// Save recipes to user profile
 		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
 			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
