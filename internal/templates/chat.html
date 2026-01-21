@@ -151,7 +151,7 @@
 
           <div class="mt-10 flex flex-wrap items-center gap-4">
             <button type="submit" form="regenerateForm" name="finalize" value="true" id="finalizeButton"
-                    class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 disabled:bg-blue-300 disabled:text-white disabled:cursor-not-allowed disabled:hover:bg-blue-300">
+                    class="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2">
               Finalize
             </button>
             <button type="button"
@@ -173,10 +173,10 @@
       const form = document.getElementById('regenerateForm');
       const savedInputs = form.querySelectorAll('input[name="saved"]');
       const finalizeButton = document.getElementById('finalizeButton');
-      
+
       // Check if any saved inputs have non-empty values
       const hasSavedRecipes = Array.from(savedInputs).some(input => input.value.trim() !== '');
-      
+
       // Enable/disable the button based on whether recipes are saved
       finalizeButton.disabled = !hasSavedRecipes;
     }
