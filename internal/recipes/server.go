@@ -187,10 +187,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash := p.Hash()
-	if list, err := s.FromCache(ctx, hash); err == nil {
+	if _, err := s.FromCache(ctx, hash); err == nil {
 		// TODO check not found error explicitly
 		http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
-		FormatChatHTML(p, *list, w)
+		return
 	}
 
 	for _, last := range currentUser.LastRecipes {
