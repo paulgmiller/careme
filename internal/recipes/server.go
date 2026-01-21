@@ -16,7 +16,6 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -57,7 +56,6 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
-	mux.HandleFunc("POST /recipes/finalize", s.handleFinalize)
 }
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +152,24 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Query().Get("ingredients") == "true" {
 		s.ingredients(ctx, w, p)
+		return
+	}
+
+	// Handle finalize - save recipes to user profile and display filtered list
+	if r.URL.Query().Get("finalize") == "true" && len(p.Saved) > 0 {
+		// Save recipes to user profile
+		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
+			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
+			http.Error(w, "failed to save recipes", http.StatusInternalServerError)
+			return
+		}
+		slog.InfoContext(ctx, "finalized recipes", "user_id", currentUser.ID, "count", len(p.Saved))
+
+		// Display the saved recipes
+		shoppingList := ai.ShoppingList{
+			Recipes: p.Saved,
+		}
+		FormatChatHTML(p, shoppingList, w)
 		return
 	}
 
@@ -284,70 +300,6 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 	}
 
 	return nil
-}
-
-// handleFinalize saves the selected recipes to the user profile without regenerating
-func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	currentUser, err := users.FromRequest(r, s.storage)
-	if err != nil {
-		if errors.Is(err, users.ErrNotFound) {
-			users.ClearCookie(w)
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load user for finalize", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
-	}
-	if currentUser == nil {
-		http.Error(w, "user not found", http.StatusUnauthorized)
-		return
-	}
-
-	// Parse form data to get saved recipe hashes
-	if err := r.ParseForm(); err != nil {
-		slog.ErrorContext(ctx, "failed to parse form", "error", err)
-		http.Error(w, "invalid form data", http.StatusBadRequest)
-		return
-	}
-
-	// Get saved recipe hashes from form
-	clean := func(s string, _ int) (string, bool) {
-		ts := strings.TrimSpace(s)
-		return ts, ts != ""
-	}
-	savedHashes := lo.FilterMap(r.Form["saved"], clean)
-
-	if len(savedHashes) == 0 {
-		slog.InfoContext(ctx, "no recipes to finalize", "user_id", currentUser.ID)
-		// Redirect back to home page
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	// Load saved recipes from cache
-	var savedRecipes []ai.Recipe
-	for _, hash := range savedHashes {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load recipe for finalize", "hash", hash, "error", err)
-			continue
-		}
-		savedRecipes = append(savedRecipes, *recipe)
-	}
-
-	// Save recipes to user profile
-	if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, savedRecipes); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
-		http.Error(w, "failed to save recipes", http.StatusInternalServerError)
-		return
-	}
-
-	slog.InfoContext(ctx, "finalized recipes", "user_id", currentUser.ID, "count", len(savedRecipes))
-
-	// Redirect back to home
-	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // move to admin?

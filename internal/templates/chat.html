@@ -150,15 +150,10 @@
           </form>
 
           <div class="mt-10 flex flex-wrap items-center gap-4">
-            <form id="finalizeForm" method="POST" action="/recipes/finalize" class="inline">
-              <!-- Hidden inputs for saved recipes will be populated by JavaScript -->
-            </form>
-            <button type="button"
-                    onclick="finalizeRecipes()"
+            <button type="submit" form="regenerateForm" name="finalize" value="true"
                     class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">
               Finalize
             </button>
-            <span id="finalizeFeedback" class="hidden text-sm font-medium text-red-600">Please save at least one recipe.</span>
             <button type="button"
                     onclick="shareRecipes()"
                     class="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2">
@@ -174,41 +169,6 @@
   </main>
 
   <script>
-    function finalizeRecipes() {
-      // Collect all saved recipe hashes from the regenerate form
-      const regenerateForm = document.getElementById('regenerateForm');
-      const savedInputs = regenerateForm.querySelectorAll('input[name="saved"]');
-      
-      // Filter out empty values and collect saved hashes
-      const savedHashes = Array.from(savedInputs)
-        .map(input => input.value.trim())
-        .filter(value => value !== '');
-      
-      if (savedHashes.length === 0) {
-        const feedback = document.getElementById('finalizeFeedback');
-        feedback.classList.remove('hidden');
-        setTimeout(function () {
-          feedback.classList.add('hidden');
-        }, 3000);
-        return;
-      }
-      
-      // Create form with saved recipe hashes
-      const finalizeForm = document.getElementById('finalizeForm');
-      finalizeForm.innerHTML = ''; // Clear existing inputs
-      
-      savedHashes.forEach(hash => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'saved';
-        input.value = hash;
-        finalizeForm.appendChild(input);
-      });
-      
-      // Submit the form
-      finalizeForm.submit();
-    }
-
     function shareRecipes() {
       const hash = "{{.Hash}}";
       const shareUrl = window.location.origin + "/recipes?h=" + encodeURIComponent(hash);

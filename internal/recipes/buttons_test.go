@@ -79,16 +79,13 @@ func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	if !strings.Contains(html, `Finalize`) {
 		t.Error("HTML should contain Finalize button")
 	}
-	
-	// Check for finalize form and JavaScript function
-	if !strings.Contains(html, `id="finalizeForm"`) {
-		t.Error("HTML should contain finalize form")
+
+	// Check for finalize submit button (not a POST form anymore)
+	if !strings.Contains(html, `name="finalize"`) {
+		t.Error("HTML should have finalize submit button")
 	}
-	if !strings.Contains(html, `action="/recipes/finalize"`) {
-		t.Error("HTML should have finalize form with correct action")
-	}
-	if !strings.Contains(html, `function finalizeRecipes()`) {
-		t.Error("HTML should contain finalizeRecipes JavaScript function")
+	if !strings.Contains(html, `value="true"`) {
+		t.Error("HTML should have finalize value set to true")
 	}
 
 	// Check that recipes are present with their titles
