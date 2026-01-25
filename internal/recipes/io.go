@@ -83,28 +83,26 @@ func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, origin
 	return errors.Join(errs...)
 }
 
-func (rio *recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, p *generatorParams) error {
-	// Save each recipe separately by its hash
-	if err := rio.SaveRecipes(ctx, shoppingList.Recipes, p.Hash()); err != nil {
-		return err
-	}
-	// we could actually nuke out the rest of recipe and lazily load but not yet
-	shoppingJSON := lo.Must(json.Marshal(shoppingList))
-	if err := rio.Cache.Set(ctx, p.Hash(), string(shoppingJSON)); err != nil {
-		slog.ErrorContext(ctx, "failed to cache shopping list document", "location", p.String(), "error", err)
-		return err
-	}
-
-	// Also cache the params for hash-based retrieval
-	// TODO: Consider embedding the params directly in the shoppingList structure.
-	// This would allow us to cache both the shopping list and its associated parameters together,
-	// avoiding the need for a separate cache entry for params (currently stored as "<hash>.params").
-	// Embedding params could simplify cache management and ensure all relevant data is retrieved together.
-	// Persist the latest conversation IDs with the params so follow-ups can reuse them.
+func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	paramsJSON := lo.Must(json.Marshal(p))
 	if err := rio.Cache.Set(ctx, p.Hash()+".params", string(paramsJSON)); err != nil {
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
 		return err
 	}
+	return nil
+}
+
+func (rio *recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
+	// Save each recipe separately by its hash
+	if err := rio.SaveRecipes(ctx, shoppingList.Recipes, hash); err != nil {
+		return err
+	}
+	// we could actually nuke out the rest of recipe and lazily load but not yet
+	shoppingJSON := lo.Must(json.Marshal(shoppingList))
+	if err := rio.Cache.Set(ctx, hash, string(shoppingJSON)); err != nil {
+		slog.ErrorContext(ctx, "failed to cache shopping list document", "location", hash, "error", err)
+		return err
+	}
+
 	return nil
 }

@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -32,7 +31,6 @@ type Generator struct {
 	aiClient     aiClient
 	krogerClient kroger.ClientWithResponsesInterface // probably need only subset
 	cache        cache.Cache
-	inflight     cache.Cache
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
@@ -49,54 +47,13 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 		config:       cfg,
 		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
-		inflight:     cache, // separate?
 	}, nil
-}
-
-// TODO move this into its own struct.
-func (g *Generator) isGenerating(ctx context.Context, hash string) error {
-	setInFlight := func() error {
-		return g.inflight.Set(ctx, "inflight/"+hash, time.Now().Format(time.RFC3339Nano))
-	}
-
-	startblob, err := g.inflight.Get(ctx, "inflight/"+hash)
-	if err != nil {
-		if err != cache.ErrNotFound {
-			// TODO retry
-			return err
-		}
-		return setInFlight()
-	}
-	defer startblob.Close()
-	startbuf, err := io.ReadAll(startblob)
-	if err != nil {
-		// TODO retry
-		slog.ErrorContext(ctx, "failed to read inflight start time", "hash", hash, "error", err)
-		return err
-	}
-
-	start, err := time.Parse(time.RFC3339Nano, string(startbuf))
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to parse inflight start time", "hash", hash, "error", err)
-		return setInFlight() //just set it its not like its going tstart parsing
-	}
-
-	if time.Since(start) < 10*time.Minute {
-		slog.InfoContext(ctx, "generation already in progress", "hash", hash, "since", time.Since(start))
-		return InProgress
-	}
-	return setInFlight()
-
 }
 
 var InProgress error = errors.New("generation in progress")
 
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	hash := p.Hash()
-	err := g.isGenerating(ctx, hash)
-	if err != nil {
-		return nil, err
-	}
 	start := time.Now()
 
 	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {

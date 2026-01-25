@@ -100,6 +100,11 @@ func (fc *BlobCache) Set(ctx context.Context, key, value string) error {
 	return err
 }
 
+func (fc *BlobCache) Delete(ctx context.Context, key string) error {
+	_, err := fc.container.NewBlockBlobClient(key).Delete(ctx, nil)
+	return err
+}
+
 // TODO take a config? let it set container or directory?
 func MakeCache() (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
