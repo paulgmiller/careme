@@ -141,19 +141,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	//if params are already saved redirect and assume somemone kicks off genrateion
 
-	if err := s.SaveParams(ctx, p); err != nil {
-		if errors.Is(err, AlreadyExists) {
-			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
-			http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to save params", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	//After this failures lead to recipe orphaning.
-
 	currentUser, err := users.FromRequest(r, s.storage)
 	if err != nil {
 		if errors.Is(err, users.ErrNotFound) {
@@ -168,6 +155,19 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if currentUser == nil {
 		currentUser = &users.User{LastRecipes: []users.Recipe{}}
 	}
+
+	if err := s.SaveParams(ctx, p); err != nil {
+		if errors.Is(err, AlreadyExists) {
+			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
+			http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to save params", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	//After this failures lead to recipe orphaning.
 
 	hash := p.Hash()
 
