@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/samber/lo/mutable"
 )
 
 type aiClient interface {
@@ -176,6 +178,8 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 	}
 
 	wg.Wait()
+
+	mutable.Shuffle(ingredients)
 
 	allingredientsJSON, err := json.Marshal(ingredients)
 	if err != nil {
