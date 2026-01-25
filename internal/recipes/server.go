@@ -107,7 +107,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if err == cache.ErrNotFound {
 				//how do we time this out and go try and regenerate
-				//shoudl we put start time in params or a seperate blob
+				//should we put start time in params or a seperate blob
 				s.Spin(w, r)
 				return
 			}
