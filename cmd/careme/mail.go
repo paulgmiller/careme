@@ -136,8 +136,13 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 		slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.Email)
 		return
 	}
+	if err := rio.SaveParams(ctx, p); err != nil {
+		slog.ErrorContext(ctx, "failed to save params", "error", err.Error())
+		return
+	}
+
 	// coombine hee save recipes with html
-	if err := rio.SaveShoppingList(ctx, shoppingList, p); err != nil {
+	if err := rio.SaveShoppingList(ctx, shoppingList, p.Hash()); err != nil {
 		slog.ErrorContext(ctx, "failed to save shopping list", "error", err.Error())
 		return
 	}

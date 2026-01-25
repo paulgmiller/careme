@@ -38,7 +38,6 @@ type server struct {
 	generator generator
 	locServer locServer
 	wg        sync.WaitGroup
-	tracker   tracker
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
@@ -51,7 +50,6 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		storage:   storage,
 		generator: generator,
 		locServer: locServer,
-		tracker:   NewTracker(c),
 	}
 }
 
@@ -104,16 +102,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
-		if s.tracker.IsGenerating(ctx, hashParam) == nil {
-			s.Spin(w, r)
-			return
-		}
 
-		slist, err := s.FromCache(ctx, hashParam)
+		slist, err := s.FromCache(ctx, hashParam) //ideall should memory cache this so lots of reloads don't constantly go out ot azure
 		if err != nil {
 			if err == cache.ErrNotFound {
-				http.Error(w, "orphaned recipe generation OH NO!", http.StatusNotFound)
-				//better here would be to load params and kick new generation
+				//how do we time this out and go try and regenerate
+				//shoudl we put start time in params or a seperate blob
+				s.Spin(w, r)
 				return
 			}
 			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
@@ -219,10 +214,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.wg.Add(1)
-	s.tracker.Start(ctx, hash)
 	go func() {
 		defer s.wg.Done()
-		defer s.tracker.Finish(ctx, hash)
 		// copy over request id to new context? can't be same context because end of http request will cancel it.
 		ctx := context.Background()
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
