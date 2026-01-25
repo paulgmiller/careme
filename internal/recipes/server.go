@@ -169,6 +169,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		currentUser = &users.User{LastRecipes: []users.Recipe{}}
 	}
 
+	hash := p.Hash()
+
 	// Handle finalize - save recipes to user profile and display filtered list
 	if r.URL.Query().Get("finalize") == "true" {
 		// Check if user is authenticated
@@ -199,11 +201,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 		// should finlize go into params to get a different hash that previous one with unsaved?
 		// or should we shove a guid or iteration in params along with conversation id. Response id?
-		if err := s.SaveShoppingList(ctx, shoppingList, p.Hash()); err != nil {
+		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			http.Error(w, "failed to save finalized recipes", http.StatusInternalServerError)
 		}
-		http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
+		http.Redirect(w, r, "/recipes?h="+hash, http.StatusSeeOther)
 		return
 	}
 
@@ -228,7 +230,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 		// add saved recipes here rather than each
 
-		if err := s.SaveShoppingList(ctx, shoppingList, p.Hash()); err != nil {
+		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 		}
 		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
@@ -241,7 +243,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
+	http.Redirect(w, r, "/recipes?h="+hash, http.StatusSeeOther)
 }
 func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -260,6 +262,10 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "home template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
+}
+
+func redirectToHash(w http.ResponseWriter, r *http.Request, hash string) {
+	http.Redirect(w, r, "/recipes?h="+hash, http.StatusSeeOther)
 }
 
 func (s *server) Wait() {
