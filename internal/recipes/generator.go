@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/samber/lo/mutable"
 )
 
 type aiClient interface {
@@ -119,7 +121,6 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 			instructions += " Enjoyed and saved :"
 		}*/
 		for _, saved := range p.Saved {
-			saved.Saved = true
 			// This ended up giving me a "Preference update + replacements requested" recipe
 			// instructions += saved.Title + "; " //is this enough or do we keep the exact one?
 			shoppingList.Recipes = append(shoppingList.Recipes, saved)
@@ -195,6 +196,8 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 	}
 
 	wg.Wait()
+
+	mutable.Shuffle(ingredients)
 
 	allingredientsJSON, err := json.Marshal(ingredients)
 	if err != nil {
