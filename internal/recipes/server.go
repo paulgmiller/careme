@@ -139,6 +139,15 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// what do we do with this?
 	// p.UserID = currentUser.ID
 
+	hash := p.Hash()
+	if _, err := s.FromCache(ctx, hash); err == nil {
+		// TODO check not found error explicitly?
+		http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
+		return
+	}
+
+	//if params are already saved should we skip generation?
+
 	if err := s.SaveParams(ctx, p); err != nil {
 		slog.ErrorContext(ctx, "failed to save params", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -198,14 +207,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := p.Hash()
-	//do we even need this? when would this url ever be saved?
-	if _, err := s.FromCache(ctx, hash); err == nil {
-		// TODO check not found error explicitly
-		http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
-		return
-	}
-
 	for _, last := range currentUser.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
 			break
@@ -236,8 +237,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
 
 		// Use the current user ID when saving recipes to the user profile
-		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
-			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
+		// needs user to be logged in. Only do on finalize?
+		if currentUser.ID != "" {
+			if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
+				slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
+			}
 		}
 	}()
 	http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
