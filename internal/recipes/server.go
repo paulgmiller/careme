@@ -56,6 +56,9 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
+	//maybe this should be under locations server?
+	mux.HandleFunc("GET /ingredients/{location}", s.ingredients)
+
 }
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
@@ -97,25 +100,17 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	currentUser, err := users.FromRequest(r, s.storage)
-	if err != nil {
-		if errors.Is(err, users.ErrNotFound) {
-			users.ClearCookie(w)
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
-	}
-	if currentUser == nil {
-		currentUser = &users.User{LastRecipes: []users.Recipe{}}
-	}
 
 	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
-		//TODO check if generating and spin.
-		slist, err := s.FromCache(ctx, hashParam)
+
+		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 		if err != nil {
+			if errors.Is(err, cache.ErrNotFound) {
+				//how do we time this out and go try and regenerate
+				//should we put start time in params or a seperate blob
+				s.Spin(w, r)
+				return
+			}
 			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
 			return
@@ -144,10 +139,37 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// what do we do with this?
 	// p.UserID = currentUser.ID
 
-	if r.URL.Query().Get("ingredients") == "true" {
-		s.ingredients(ctx, w, p)
+	//if params are already saved redirect and assume someone kicks off genration
+
+	currentUser, err := users.FromRequest(r, s.storage)
+	if err != nil {
+		if errors.Is(err, users.ErrNotFound) {
+			users.ClearCookie(w)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
+	if currentUser == nil {
+		currentUser = &users.User{LastRecipes: []users.Recipe{}}
+	}
+
+	if err := s.SaveParams(ctx, p); err != nil {
+		if errors.Is(err, AlreadyExists) {
+			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
+			redirectToHash(w, r, p.Hash())
+			return
+		}
+		slog.ErrorContext(ctx, "failed to save params", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	//After this failures lead to recipe orphaning.
+
+	hash := p.Hash()
 
 	// Handle finalize - save recipes to user profile and display filtered list
 	if r.URL.Query().Get("finalize") == "true" {
@@ -177,19 +199,14 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			ConversationID: p.ConversationID,
 		}
 
-		// should finlize go into params to get a different hash that previous one with unsaved?
+		// should finalize go into params to get a different hash that previous one with unsaved?
 		// or should we shove a guid or iteration in params along with conversation id. Response id?
-		if err := s.SaveShoppingList(ctx, shoppingList, p); err != nil {
+		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
+			http.Error(w, "failed to save finalized recipes", http.StatusInternalServerError)
+			return
 		}
-		http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
-		return
-	}
-
-	hash := p.Hash()
-	if _, err := s.FromCache(ctx, hash); err == nil {
-		// TODO check not found error explicitly
-		http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
+		redirectToHash(w, r, hash)
 		return
 	}
 
@@ -208,29 +225,26 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
-			if errors.Is(err, InProgress) {
-				slog.InfoContext(ctx, "generation already in progress, skipping save", "hash", hash)
-				return
-			}
 			slog.ErrorContext(ctx, "generate error", "error", err)
 			return
 		}
 
 		// add saved recipes here rather than each
 
-		if err := s.SaveShoppingList(ctx, shoppingList, p); err != nil {
+		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 		}
 		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
 
 		// Use the current user ID when saving recipes to the user profile
-		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
-			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
+		// needs user to be logged in. Only do on finalize?
+		if currentUser.ID != "" {
+			if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
+				slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
+			}
 		}
 	}()
-	// TODO should we just redirect to cache page here?
-	// need to save params first and do spin in hash loop above.
-	s.Spin(w, r)
+	redirectToHash(w, r, hash)
 }
 func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -249,6 +263,10 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "home template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
+}
+
+func redirectToHash(w http.ResponseWriter, r *http.Request, hash string) {
+	http.Redirect(w, r, "/recipes?h="+hash, http.StatusSeeOther)
 }
 
 func (s *server) Wait() {
@@ -305,8 +323,18 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 	return nil
 }
 
-// move to admin?
-func (s *server) ingredients(ctx context.Context, w http.ResponseWriter, p *generatorParams) {
+// move to admin? Nah let the people see
+func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	loc := r.PathValue("location")
+	l, err := s.locServer.GetLocationByID(ctx, loc)
+	if err != nil {
+		http.Error(w, "invalid location id", http.StatusBadRequest)
+		return
+	}
+	// later use saved items
+	p := DefaultParams(l, time.Now())
+
 	lochash := p.LocationHash()
 	ingredientblob, err := s.cache.Get(ctx, lochash)
 	if err != nil {

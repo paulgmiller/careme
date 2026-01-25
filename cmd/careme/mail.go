@@ -11,6 +11,7 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/users"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -130,14 +131,24 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 		}
 		p.LastRecipes = append(p.LastRecipes, last.Title)
 	}
+	if err := rio.SaveParams(ctx, p); err != nil {
+		if errors.Is(err, recipes.AlreadyExists) {
+			slog.InfoContext(ctx, "params already exist, another process likely generated", "user", user.ID)
+			return
+		}
+
+		slog.ErrorContext(ctx, "failed to save params", "error", err.Error())
+		return
+	}
 
 	shoppingList, err := m.generator.GenerateRecipes(ctx, p)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.Email)
 		return
 	}
-	// coombine hee save recipes with html
-	if err := rio.SaveShoppingList(ctx, shoppingList, p); err != nil {
+
+	// combine hee save recipes with html
+	if err := rio.SaveShoppingList(ctx, shoppingList, p.Hash()); err != nil {
 		slog.ErrorContext(ctx, "failed to save shopping list", "error", err.Error())
 		return
 	}

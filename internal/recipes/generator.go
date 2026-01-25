@@ -8,7 +8,6 @@ import (
 	"careme/internal/locations"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -27,12 +26,10 @@ type aiClient interface {
 }
 
 type Generator struct {
-	config         *config.Config
-	aiClient       aiClient
-	krogerClient   kroger.ClientWithResponsesInterface // probably need only subset
-	cache          cache.Cache
-	inFlight       map[string]struct{}
-	generationLock sync.Mutex
+	config       *config.Config
+	aiClient     aiClient
+	krogerClient kroger.ClientWithResponsesInterface // probably need only subset
+	cache        cache.Cache
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
@@ -49,38 +46,13 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 		config:       cfg,
 		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
-		inFlight:     make(map[string]struct{}),
 	}, nil
 }
 
-// eventually we want to use  blob with exipiry for this
-func (g *Generator) isGenerating(hash string) (bool, func()) {
-	g.generationLock.Lock()
-	defer g.generationLock.Unlock()
-	if _, exists := g.inFlight[hash]; exists {
-		return true, nil
-	}
-	g.inFlight[hash] = struct{}{}
-	return false, func() {
-		g.generationLock.Lock()
-		defer g.generationLock.Unlock()
-		delete(g.inFlight, hash)
-	}
-}
-
-var InProgress error = errors.New("generation in progress")
-
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	hash := p.Hash()
-	generating, done := g.isGenerating(hash)
-	if generating {
-		slog.InfoContext(ctx, "Generation already in progress, skipping", "hash", hash)
-		return nil, InProgress
-	}
-	defer done()
 	start := time.Now()
 
-	var err error
 	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
 		// these should both always be true. Warn if not because its a caching bug?
