@@ -86,7 +86,14 @@ func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, origin
 var AlreadyExists = errors.New("already exists")
 
 func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
-	if exists, _ := rio.Cache.Exists(ctx, p.Hash()+".params"); exists {
+	//not atomic push this into cache
+	exists, err := rio.Cache.Exists(ctx, p.Hash()+".params")
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check existing params in cache", "location", p.String(), "error", err)
+		return err
+	}
+
+	if exists {
 		return AlreadyExists
 	}
 

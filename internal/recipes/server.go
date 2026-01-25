@@ -105,7 +105,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 		if err != nil {
-			if err == cache.ErrNotFound {
+			if errors.Is(err, cache.ErrNotFound) {
 				//how do we time this out and go try and regenerate
 				//should we put start time in params or a seperate blob
 				s.Spin(w, r)
@@ -139,7 +139,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// what do we do with this?
 	// p.UserID = currentUser.ID
 
-	//if params are already saved redirect and assume somemone kicks off genrateion
+	//if params are already saved redirect and assume someone kicks off genration
 
 	currentUser, err := users.FromRequest(r, s.storage)
 	if err != nil {
@@ -159,7 +159,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, AlreadyExists) {
 			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
-			http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
+			redirectToHash(w, r, p.Hash())
 			return
 		}
 		slog.ErrorContext(ctx, "failed to save params", "error", err)
@@ -206,7 +206,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to save finalized recipes", http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, "/recipes?h="+hash, http.StatusSeeOther)
+		redirectToHash(w, r, hash)
 		return
 	}
 
@@ -244,7 +244,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	http.Redirect(w, r, "/recipes?h="+hash, http.StatusSeeOther)
+	redirectToHash(w, r, hash)
 }
 func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
