@@ -139,20 +139,20 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// what do we do with this?
 	// p.UserID = currentUser.ID
 
-	hash := p.Hash()
-	if _, err := s.FromCache(ctx, hash); err == nil {
-		// TODO check not found error explicitly?
-		http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
-		return
-	}
-
-	//if params are already saved should we skip generation?
+	//if params are already saved redirect and assume somemone kicks off genrateion
 
 	if err := s.SaveParams(ctx, p); err != nil {
+		if errors.Is(err, AlreadyExists) {
+			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
+			http.Redirect(w, r, "/recipes?h="+p.Hash(), http.StatusSeeOther)
+			return
+		}
 		slog.ErrorContext(ctx, "failed to save params", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	//After this failures lead to recipe orphaning.
 
 	currentUser, err := users.FromRequest(r, s.storage)
 	if err != nil {
@@ -222,9 +222,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
-			if errors.Is(err, InProgress) {
-				return
-			}
 			slog.ErrorContext(ctx, "generate error", "error", err)
 			return
 		}

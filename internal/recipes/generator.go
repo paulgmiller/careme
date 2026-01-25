@@ -8,7 +8,6 @@ import (
 	"careme/internal/locations"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -49,8 +48,6 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 		krogerClient: client,
 	}, nil
 }
-
-var InProgress error = errors.New("generation in progress")
 
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	hash := p.Hash()

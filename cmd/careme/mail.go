@@ -141,7 +141,7 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 		return
 	}
 
-	// coombine hee save recipes with html
+	// combine hee save recipes with html
 	if err := rio.SaveShoppingList(ctx, shoppingList, p.Hash()); err != nil {
 		slog.ErrorContext(ctx, "failed to save shopping list", "error", err.Error())
 		return

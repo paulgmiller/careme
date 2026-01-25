@@ -13,6 +13,7 @@ var ErrNotFound = errors.New("cache entry not found")
 
 type Cache interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
+	//TODO define set behavior if it already exists. Maybe go immutable and error?
 	Set(ctx context.Context, key, value string) error
 	Exists(ctx context.Context, key string) (bool, error)
 }
