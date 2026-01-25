@@ -103,11 +103,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
 
-		slist, err := s.FromCache(ctx, hashParam) //ideall should memory cache this so lots of reloads don't constantly go out ot azure
+		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 		if err != nil {
 			if err == cache.ErrNotFound {
 				//how do we time this out and go try and regenerate
-				//shoudl we put start time in params or a seperate blob
+				//should we put start time in params or a seperate blob
 				s.Spin(w, r)
 				return
 			}
@@ -199,11 +199,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			ConversationID: p.ConversationID,
 		}
 
-		// should finlize go into params to get a different hash that previous one with unsaved?
+		// should finalize go into params to get a different hash that previous one with unsaved?
 		// or should we shove a guid or iteration in params along with conversation id. Response id?
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			http.Error(w, "failed to save finalized recipes", http.StatusInternalServerError)
+			return
 		}
 		http.Redirect(w, r, "/recipes?h="+hash, http.StatusSeeOther)
 		return
@@ -322,7 +323,7 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 	return nil
 }
 
-// move to admin? Nahlet the people see
+// move to admin? Nah let the people see
 func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	loc := r.PathValue("location")
@@ -331,7 +332,7 @@ func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid location id", http.StatusBadRequest)
 		return
 	}
-	//later use saved tiems
+	// later use saved items
 	p := DefaultParams(l, time.Now())
 
 	lochash := p.LocationHash()
