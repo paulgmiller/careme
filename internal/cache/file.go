@@ -14,7 +14,6 @@ var ErrNotFound = errors.New("cache entry not found")
 type Cache interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
 	Set(ctx context.Context, key, value string) error
-	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
 }
 
@@ -81,9 +80,4 @@ func (fc *FileCache) Set(_ context.Context, key, value string) error {
 		return err
 	}
 	return os.WriteFile(fullPath, []byte(value), 0644)
-}
-
-func (fc *FileCache) Delete(_ context.Context, key string) error {
-	fullPath := filepath.Join(fc.Dir, key)
-	return os.Remove(fullPath)
 }
