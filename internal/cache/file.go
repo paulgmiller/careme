@@ -10,12 +10,34 @@ import (
 )
 
 var ErrNotFound = errors.New("cache entry not found")
+var ErrAlreadyExists = errors.New("cache entry already exists")
+
+type PutCondition uint8
+
+const (
+	PutUnconditional PutCondition = iota
+	PutIfNoneMatch
+	// PutIfMatch
+)
+
+type PutOptions struct {
+	Condition PutCondition
+	// IfMatch updates the entry only if the current ETag matches this value.
+	// IfMatch string
+}
+
+func Unconditional() PutOptions {
+	return PutOptions{Condition: PutUnconditional}
+}
+
+func IfNoneMatch() PutOptions {
+	return PutOptions{Condition: PutIfNoneMatch}
+}
 
 type Cache interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
-	//TODO define set behavior if it already exists. Maybe go immutable and error?
-	Set(ctx context.Context, key, value string) error
 	Exists(ctx context.Context, key string) (bool, error)
+	Put(ctx context.Context, key, value string, opts PutOptions) error
 }
 
 type ListCache interface {
@@ -62,7 +84,6 @@ func (fc *FileCache) Exists(_ context.Context, key string) (bool, error) {
 }
 
 func (fc *FileCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
-
 	data, err := os.Open(filepath.Join(fc.Dir, key))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -73,12 +94,28 @@ func (fc *FileCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
 	return data, nil
 }
 
-func (fc *FileCache) Set(_ context.Context, key, value string) error {
+func (fc *FileCache) Put(_ context.Context, key, value string, opts PutOptions) error {
 	fullPath := filepath.Join(fc.Dir, key)
 	dir := filepath.Dir(fullPath)
-	// Create parent directories if they don't exist
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
+
+	if opts.Condition == PutIfNoneMatch {
+		f, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+		if err != nil {
+			if os.IsExist(err) {
+				return ErrAlreadyExists
+			}
+			return err
+		}
+		defer f.Close()
+		if _, err := f.WriteString(value); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// TODO: IfMatch support (write only if etag matches).
 	return os.WriteFile(fullPath, []byte(value), 0644)
 }

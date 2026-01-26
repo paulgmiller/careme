@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
@@ -95,9 +96,29 @@ func (fc *BlobCache) Get(ctx context.Context, key string) (io.ReadCloser, error)
 	return stream.Body, nil
 }
 
-func (fc *BlobCache) Set(ctx context.Context, key, value string) error {
-	_, err := fc.container.NewBlockBlobClient(key).UploadStream(ctx, strings.NewReader(value), &azblob.UploadStreamOptions{})
-	return err
+func (fc *BlobCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
+	var access *blob.AccessConditions
+	if opts.Condition == PutIfNoneMatch {
+		access = &blob.AccessConditions{}
+		access.ModifiedAccessConditions = &blob.ModifiedAccessConditions{}
+		any := azcore.ETag("*")
+		access.ModifiedAccessConditions.IfNoneMatch = &any
+		// TODO: IfMatch support.
+	}
+
+	_, err := fc.container.NewBlockBlobClient(key).UploadStream(ctx, strings.NewReader(value), &azblob.UploadStreamOptions{
+		AccessConditions: access,
+	})
+	if err != nil {
+		if bloberror.HasCode(err, bloberror.BlobAlreadyExists, bloberror.ResourceAlreadyExists) {
+			return ErrAlreadyExists
+		}
+		if bloberror.HasCode(err, bloberror.ConditionNotMet, bloberror.TargetConditionNotMet, bloberror.SourceConditionNotMet) {
+			return ErrAlreadyExists
+		}
+		return err
+	}
+	return nil
 }
 
 // TODO take a config? let it set container or directory?

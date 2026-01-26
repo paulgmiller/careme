@@ -166,7 +166,7 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 	if err := s.Update(&newUser); err != nil {
 		return nil, fmt.Errorf("failed to create new user: %w", err)
 	}
-	if err := s.cache.Set(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID); err != nil {
+	if err := s.cache.Put(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID, cache.Unconditional()); err != nil {
 		return nil, fmt.Errorf("failed to index new user by email: %w", err)
 	}
 	return &newUser, nil
@@ -181,7 +181,7 @@ func (s *Storage) Update(user *User) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal user: %w", err)
 	}
-	if err := s.cache.Set(context.TODO(), userPrefix+user.ID, string(userBytes)); err != nil {
+	if err := s.cache.Put(context.TODO(), userPrefix+user.ID, string(userBytes), cache.Unconditional()); err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 	return nil
