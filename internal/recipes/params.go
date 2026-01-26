@@ -27,9 +27,10 @@ type generatorParams struct {
 	Instructions string   `json:"instructions,omitempty"`
 	LastRecipes  []string `json:"last_recipes,omitempty"`
 	// UserID         string      `json:"user_id,omitempty"`
-	ConversationID string      `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
-	Saved          []ai.Recipe `json:"saved_recipes,omitempty"`
-	Dismissed      []ai.Recipe `json:"dismissed_recipes,omitempty"`
+	ConversationID      string      `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
+	Saved               []ai.Recipe `json:"saved_recipes,omitempty"`
+	Dismissed           []ai.Recipe `json:"dismissed_recipes,omitempty"`
+	GenerationStartedAt time.Time   `json:"generation_started_at,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {

@@ -91,6 +91,15 @@ func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	return nil
 }
 
+func (rio *recipeio) UpdateParams(ctx context.Context, p *generatorParams) error {
+	paramsJSON := lo.Must(json.Marshal(p))
+	if err := rio.Cache.Put(ctx, p.Hash()+".params", string(paramsJSON), cache.Unconditional()); err != nil {
+		slog.ErrorContext(ctx, "failed to update params", "location", p.String(), "error", err)
+		return err
+	}
+	return nil
+}
+
 func (rio *recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
 	// Save each recipe separately by its hash
 	if err := rio.SaveRecipes(ctx, shoppingList.Recipes, hash); err != nil {
