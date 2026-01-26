@@ -158,7 +158,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		slog.ErrorContext(ctx, "failed to marshal ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
-	if err := g.cache.Set(ctx, p.LocationHash(), string(allingredientsJSON)); err != nil {
+	if err := g.cache.Put(ctx, p.LocationHash(), string(allingredientsJSON), cache.Unconditional()); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}

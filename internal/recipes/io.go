@@ -63,19 +63,13 @@ func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, origin
 		recipe := &recipes[i]
 		recipe.OriginHash = originHash
 		hash := recipe.ComputeHash()
-		exists, err := rio.Cache.Exists(ctx, recipeCachePrefix+hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to check existing recipe in cache", "recipe", recipe.Title, "error", err)
-			errs = append(errs, fmt.Errorf("error checking %s, %w", hash, err))
-			continue
-		}
-		if exists {
-			continue
-		}
 
 		slog.InfoContext(ctx, "storing recipe", "title", recipe.Title, "hash", hash)
 		recipeJSON := lo.Must(json.Marshal(recipe))
-		if err := rio.Cache.Set(ctx, recipeCachePrefix+hash, string(recipeJSON)); err != nil {
+		if err := rio.Cache.Put(ctx, recipeCachePrefix+hash, string(recipeJSON), cache.IfNoneMatch()); err != nil {
+			if errors.Is(err, cache.ErrAlreadyExists) {
+				continue
+			}
 			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
 			errs = append(errs, fmt.Errorf("error saving %s, %w", hash, err))
 		}
@@ -86,19 +80,11 @@ func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, origin
 var AlreadyExists = errors.New("already exists")
 
 func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
-	//not atomic push this into cache
-	exists, err := rio.Cache.Exists(ctx, p.Hash()+".params")
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to check existing params in cache", "location", p.String(), "error", err)
-		return err
-	}
-
-	if exists {
-		return AlreadyExists
-	}
-
 	paramsJSON := lo.Must(json.Marshal(p))
-	if err := rio.Cache.Set(ctx, p.Hash()+".params", string(paramsJSON)); err != nil {
+	if err := rio.Cache.Put(ctx, p.Hash()+".params", string(paramsJSON), cache.IfNoneMatch()); err != nil {
+		if errors.Is(err, cache.ErrAlreadyExists) {
+			return AlreadyExists
+		}
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
 		return err
 	}
@@ -112,7 +98,7 @@ func (rio *recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.Shop
 	}
 	// we could actually nuke out the rest of recipe and lazily load but not yet
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
-	if err := rio.Cache.Set(ctx, hash, string(shoppingJSON)); err != nil {
+	if err := rio.Cache.Put(ctx, hash, string(shoppingJSON), cache.Unconditional()); err != nil {
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "hash", hash, "error", err)
 		return err
 	}
