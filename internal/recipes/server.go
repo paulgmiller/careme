@@ -38,6 +38,8 @@ type server struct {
 	generator generator
 	locServer locServer
 	wg        sync.WaitGroup
+
+	now func() time.Time
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
@@ -50,8 +52,14 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		storage:   storage,
 		generator: generator,
 		locServer: locServer,
+		now:       time.Now,
 	}
 }
+
+const (
+	generationRetryAfter     = 10 * time.Minute
+	generationAttemptTimeout = 10 * time.Minute
+)
 
 func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
@@ -106,8 +114,26 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 		if err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
-				//how do we time this out and go try and regenerate
-				//should we put start time in params or a seperate blob
+				p, perr := loadParamsFromHash(ctx, hashParam, s.cache)
+				if perr != nil {
+					if errors.Is(perr, cache.ErrNotFound) {
+						http.Error(w, "recipe not found or expired", http.StatusNotFound)
+						return
+					}
+					slog.ErrorContext(ctx, "failed to load params for regeneration", "hash", hashParam, "error", perr)
+					s.Spin(w, r)
+					return
+				}
+
+				now := s.now().UTC()
+				if p.GenerationStartedAt.IsZero() || now.Sub(p.GenerationStartedAt) > generationRetryAfter {
+					p.GenerationStartedAt = now
+					if err := s.UpdateParams(ctx, p); err != nil {
+						slog.ErrorContext(ctx, "failed to update params for regeneration", "hash", hashParam, "error", err)
+					}
+					s.startGenerationIfNeeded(hashParam, p, "")
+				}
+
 				s.Spin(w, r)
 				return
 			}
@@ -156,6 +182,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		currentUser = &users.User{LastRecipes: []users.Recipe{}}
 	}
 
+	p.GenerationStartedAt = s.now().UTC()
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, AlreadyExists) {
 			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
@@ -217,34 +244,36 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		p.LastRecipes = append(p.LastRecipes, last.Title)
 	}
 
+	s.startGenerationIfNeeded(hash, p, currentUser.ID)
+	redirectToHash(w, r, hash)
+}
+
+func (s *server) startGenerationIfNeeded(hash string, p *generatorParams, userID string) bool {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		// copy over request id to new context? can't be same context because end of http request will cancel it.
-		ctx := context.Background()
+
+		ctx, cancel := context.WithTimeout(context.Background(), generationAttemptTimeout)
+		defer cancel()
+
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
+		if err == nil {
+			err = s.SaveShoppingList(ctx, shoppingList, hash)
+		}
 		if err != nil {
-			slog.ErrorContext(ctx, "generate error", "error", err)
+			slog.ErrorContext(ctx, "generate error", "hash", hash, "error", err)
 			return
 		}
 
-		// add saved recipes here rather than each
-
-		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
-			slog.ErrorContext(ctx, "save error", "error", err)
-		}
-		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
-
-		// Use the current user ID when saving recipes to the user profile
-		// needs user to be logged in. Only do on finalize?
-		if currentUser.ID != "" {
-			if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
-				slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
+		if userID != "" {
+			if err := s.saveRecipesToUserProfile(context.Background(), userID, p.Saved); err != nil {
+				slog.Error("failed to save recipes to user profile", "user_id", userID, "error", err)
 			}
 		}
 	}()
-	redirectToHash(w, r, hash)
+
+	return true
 }
 func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
