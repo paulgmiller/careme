@@ -16,6 +16,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -101,20 +102,51 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	currentUser, err := users.FromRequest(r, s.storage)
+	if err != nil {
+		if errors.Is(err, users.ErrNotFound) {
+			users.ClearCookie(w)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+	if currentUser == nil {
+		currentUser = &users.User{LastRecipes: []users.Recipe{}}
+	}
+
 	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
 
 		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 		if err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
+				startArg := r.URL.Query().Get("start")
+				if startTime, err := time.Parse(time.RFC3339Nano, startArg); err == nil {
+					if time.Since(startTime) > time.Minute*10 {
+						p, err := loadParamsFromHash(ctx, hashParam, s.cache)
+						if err != nil {
+							slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+							http.Error(w, "recipe not found or expired", http.StatusNotFound)
+							return
+						}
+						s.kickgeneation(ctx, p, currentUser)
+						redirectToHash(w, r, p.Hash())
+						return
+					}
+				}
 				//how do we time this out and go try and regenerate
 				//should we put start time in params or a seperate blob
 				s.Spin(w, r)
+
 				return
 			}
 			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
 			return
 		}
+		//redirect to no start query if present?
 		p, err := loadParamsFromHash(ctx, hashParam, s.cache)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
@@ -140,21 +172,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// p.UserID = currentUser.ID
 
 	//if params are already saved redirect and assume someone kicks off genration
-
-	currentUser, err := users.FromRequest(r, s.storage)
-	if err != nil {
-		if errors.Is(err, users.ErrNotFound) {
-			users.ClearCookie(w)
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
-	}
-	if currentUser == nil {
-		currentUser = &users.User{LastRecipes: []users.Recipe{}}
-	}
 
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, AlreadyExists) {
@@ -210,12 +227,20 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.kickgeneation(ctx, p, currentUser)
+
+	redirectToHash(w, r, hash)
+}
+
+func (s *server) kickgeneation(ctx context.Context, p *generatorParams, currentUser *users.User) {
 	for _, last := range currentUser.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
 			break
 		}
 		p.LastRecipes = append(p.LastRecipes, last.Title)
 	}
+
+	hash := p.Hash()
 
 	s.wg.Add(1)
 	go func() {
@@ -244,8 +269,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	redirectToHash(w, r, hash)
 }
+
 func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ctx := r.Context()
@@ -266,11 +291,9 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 }
 
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string) {
-	http.Redirect(w, r, "/recipes?h="+hash, http.StatusSeeOther)
-}
-
-func (s *server) Wait() {
-	s.wg.Wait()
+	start := url.QueryEscape(time.Now().Format(time.RFC3339Nano))
+	redirectUrl := fmt.Sprintf("/recipes?h=%s&start=%s", hash, start)
+	http.Redirect(w, r, redirectUrl, http.StatusSeeOther)
 }
 
 // saveRecipesToUserProfile adds saved recipes to the user's profile
