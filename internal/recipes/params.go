@@ -155,6 +155,7 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 	return p, nil
 }
 
+//Add more thought process behind simple truth and kroger being included here
 func DefaultStaples() []filter {
 	return []filter{
 		{
@@ -175,7 +176,7 @@ func DefaultStaples() []filter {
 		{
 			Term:   "shellfish",
 			Brands: []string{"Sand Bar", "Kroger"},
-			Frozen: true, // remove after 500 sadness?
+			//Frozen: true, // remove after 500 sadness?
 		},
 		{
 			Term:   "lamb",
@@ -183,7 +184,7 @@ func DefaultStaples() []filter {
 		},
 		{
 			Term:   "produce vegetable",
-			Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
+			//Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
 		},
 	}
 }
