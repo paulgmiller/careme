@@ -37,12 +37,12 @@ func FromRequest(r *http.Request, store *Storage) (*User, error) {
 	cookie, err := r.Cookie(CookieName)
 	if err != nil {
 		if errors.Is(err, http.ErrNoCookie) {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
 	if cookie.Value == "" {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	user, err := store.GetByID(cookie.Value)
 	if err != nil {
