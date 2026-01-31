@@ -99,61 +99,63 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	FormatChatHTML(p, list, w)
 }
 
-func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+const (
+	queryArgHash  = "h"
+	queryArgStart = "start"
+)
 
-	currentUser, err := users.FromRequest(r, s.storage)
-	if err != nil {
-		if errors.Is(err, users.ErrNotFound) {
-			users.ClearCookie(w)
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	startArg := r.URL.Query().Get(queryArgStart)
+	hashParam := r.URL.Query().Get(queryArgHash)
+	if startTime, err := time.Parse(time.RFC3339Nano, startArg); err == nil {
+		if time.Since(startTime) > time.Minute*10 {
+			p, err := loadParamsFromHash(ctx, hashParam, s.cache)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+				http.Error(w, "recipe not found or expired", http.StatusNotFound)
+				return
+			}
+			currentUser, err := users.FromRequest(r, s.storage)
+			if err != nil {
+				if errors.Is(err, users.ErrNotFound) {
+					users.ClearCookie(w)
+					http.Redirect(w, r, "/", http.StatusSeeOther)
+					return
+				}
+				slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
+				http.Error(w, "unable to load account", http.StatusInternalServerError)
+				return
+			}
+			s.kickgeneation(ctx, p, currentUser)
+			redirectToHash(w, r, p.Hash(), true /*useStart*/)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
 	}
-	if currentUser == nil {
-		currentUser = &users.User{LastRecipes: []users.Recipe{}}
-	}
+	s.Spin(w, r)
+	return
+}
 
-	if hashParam := r.URL.Query().Get("h"); hashParam != "" {
-
+func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if hashParam := r.URL.Query().Get(queryArgHash); hashParam != "" {
 		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 		if err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
-				startArg := r.URL.Query().Get("start")
-				if startTime, err := time.Parse(time.RFC3339Nano, startArg); err == nil {
-					if time.Since(startTime) > time.Minute*10 {
-						p, err := loadParamsFromHash(ctx, hashParam, s.cache)
-						if err != nil {
-							slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
-							http.Error(w, "recipe not found or expired", http.StatusNotFound)
-							return
-						}
-						s.kickgeneation(ctx, p, currentUser)
-						redirectToHash(w, r, p.Hash())
-						return
-					}
-				}
-				//how do we time this out and go try and regenerate
-				//should we put start time in params or a seperate blob
-				s.Spin(w, r)
-
-				return
+				s.notFound(ctx, w, r)
 			}
 			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
 			return
 		}
+		if r.URL.Query().Has(queryArgStart) {
+			redirectToHash(w, r, hashParam, false /*useStart*/)
+			return
+		}
+
 		//redirect to no start query if present?
 		p, err := loadParamsFromHash(ctx, hashParam, s.cache)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
-			p = DefaultParams(&locations.Location{
-				ID:   "",
-				Name: "Unknown Location",
-			}, time.Now())
 		}
 		if r.URL.Query().Get("mail") == "true" {
 			FormatMail(p, *slist, w)
@@ -176,7 +178,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, AlreadyExists) {
 			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
-			redirectToHash(w, r, p.Hash())
+			redirectToHash(w, r, p.Hash(), false /*useStart*/)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to save params", "error", err)
@@ -184,9 +186,19 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//After this failures lead to recipe orphaning.
-
 	hash := p.Hash()
+
+	currentUser, err := users.FromRequest(r, s.storage)
+	if err != nil {
+		if errors.Is(err, users.ErrNotFound) {
+			users.ClearCookie(w)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
 
 	// Handle finalize - save recipes to user profile and display filtered list
 	if r.URL.Query().Get("finalize") == "true" {
@@ -223,13 +235,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to save finalized recipes", http.StatusInternalServerError)
 			return
 		}
-		redirectToHash(w, r, hash)
+		redirectToHash(w, r, hash, false /*useStart*/)
 		return
 	}
 
 	s.kickgeneation(ctx, p, currentUser)
 
-	redirectToHash(w, r, hash)
+	redirectToHash(w, r, hash, true /*useStart*/)
 }
 
 func (s *server) kickgeneation(ctx context.Context, p *generatorParams, currentUser *users.User) {
@@ -290,10 +302,15 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func redirectToHash(w http.ResponseWriter, r *http.Request, hash string) {
-	start := url.QueryEscape(time.Now().Format(time.RFC3339Nano))
-	redirectUrl := fmt.Sprintf("/recipes?h=%s&start=%s", hash, start)
-	http.Redirect(w, r, redirectUrl, http.StatusSeeOther)
+func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStart bool) {
+	u := url.URL{Path: "/recipes"}
+	args := url.Values{}
+	args.Set(queryArgHash, hash)
+	if useStart {
+		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
+	}
+	u.RawQuery = args.Encode()
+	http.Redirect(w, r, u.String(), http.StatusSeeOther)
 }
 
 // saveRecipesToUserProfile adds saved recipes to the user's profile
