@@ -126,7 +126,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
-			s.kickgeneation(ctx, p, currentUser)
+			s.kickgeneration(ctx, p, currentUser)
 			redirectToHash(w, r, p.Hash(), true /*useStart*/)
 			return
 		}
@@ -153,10 +153,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		//redirect to no start query if present?
+
 		p, err := loadParamsFromHash(ctx, hashParam, s.cache)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+			http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
+			return
 		}
 		if r.URL.Query().Get("mail") == "true" {
 			FormatMail(p, *slist, w)
@@ -240,12 +242,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.kickgeneation(ctx, p, currentUser)
+	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
 }
 
-func (s *server) kickgeneation(ctx context.Context, p *generatorParams, currentUser *users.User) {
+func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *users.User) {
 	for _, last := range currentUser.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
 			break
