@@ -142,6 +142,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
 				s.notFound(ctx, w, r)
+				return
 			}
 			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
 			http.Error(w, "recipe not found or expired", http.StatusNotFound)
@@ -311,6 +312,10 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStar
 	}
 	u.RawQuery = args.Encode()
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
+}
+
+func (s *server) Wait() {
+	s.wg.Wait()
 }
 
 // saveRecipesToUserProfile adds saved recipes to the user's profile
