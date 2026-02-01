@@ -60,12 +60,24 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	savedHash := recipeHashes[0]
 	dismissedHashes := recipeHashes[1:3]
 
-	// Step 4: finalize with the saved/dismissed selections.
+	//step 4 todo  regenrate again with commentary then save two more
+
+	// Step 5: finalize with the saved/dismissed selections.
 	finalizeURL := buildRecipesURL(srv.URL, location, date, conversationID, savedHash, dismissedHashes, true)
 	_, finalizedBody := followUntilRecipes(t, client, finalizeURL)
-	if countArticles(finalizedBody) != 1 {
-		t.Fatalf("expected finalized page to show 1 recipe, got %d", countArticles(finalizedBody))
+	recipeHashes = extractRecipeHashes(t, finalizedBody)
+	if len(recipeHashes) != 1 {
+		t.Fatalf("expected finalized page to show 1 recipe, got %d", len(recipeHashes))
 	}
+	if recipeHashes[0] != savedHash {
+		t.Fatalf("expected finalized recipe to be %s, got %s", savedHash, recipeHashes[0])
+	}
+	for _, dismissed := range dismissedHashes {
+		if recipeHashes[0] == dismissed {
+			t.Fatalf("finalized recipe %s was in dismissed list", dismissed)
+		}
+	}
+	
 }
 
 func newTestServer(t *testing.T) *httptest.Server {
@@ -210,6 +222,8 @@ func isSpinner(body string) bool {
 	return strings.Contains(body, "<title>Generating") || strings.Contains(body, "Please wait")
 }
 
+//basically makes relative ref full based on host from base
+// just hard code a host somewhere in the test instead?
 func resolveURL(t *testing.T, base, ref string) string {
 	t.Helper()
 	baseURL, err := url.Parse(base)
