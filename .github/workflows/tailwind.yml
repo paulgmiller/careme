@@ -17,7 +17,10 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: ".node-version"
+
+      - name: Pin npm version
+        run: npm install -g npm@10.5.0
 
       - name: Generate Tailwind CSS
         run: bash tailwind/generate.sh
