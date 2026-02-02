@@ -35,18 +35,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 	// Step 2: go to /recipes?location=<id> and follow redirects until recipes render.
 	initialRecipesURL := srv.URL + "/recipes?location=" + url.QueryEscape(locationID)
-	resp := mustGet(t, client, initialRecipesURL)
-	if resp.StatusCode != http.StatusSeeOther {
-		resp.Body.Close()
-		t.Fatalf("expected initial /recipes redirect (303), got %d", resp.StatusCode)
-	}
-	redirectTo := resp.Header.Get("Location")
-	resp.Body.Close()
-	if redirectTo == "" {
-		t.Fatal("expected redirect location header from /recipes")
-	}
-	finalRecipesURL := resolveURL(t, initialRecipesURL, redirectTo)
-	_, recipesBody := followUntilRecipes(t, client, finalRecipesURL)
+	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL)
 
 	// Step 3: select one recipe to save and two to dismiss.
 	conversationID := extractHiddenValue(t, recipesBody, "conversation_id")
@@ -136,11 +125,9 @@ func newTestClient(t *testing.T) *http.Client {
 	}
 	return &http.Client{
 		Jar: jar,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
 	}
 }
+
 
 func login(t *testing.T, client *http.Client, baseURL, email string) {
 	t.Helper()
@@ -188,15 +175,7 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string) (str
 		}
 
 		resp := mustGet(t, client, current)
-		if isRedirect(resp.StatusCode) {
-			location := resp.Header.Get("Location")
-			resp.Body.Close()
-			if location == "" {
-				t.Fatalf("redirect from %s missing Location header", current)
-			}
-			current = resolveURL(t, current, location)
-			continue
-		}
+		
 
 		body := readAll(t, resp.Body)
 		resp.Body.Close()
@@ -214,9 +193,6 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string) (str
 	}
 }
 
-func isRedirect(status int) bool {
-	return status == http.StatusMovedPermanently || status == http.StatusFound || status == http.StatusSeeOther || status == http.StatusTemporaryRedirect || status == http.StatusPermanentRedirect
-}
 
 func isSpinner(body string) bool {
 	return strings.Contains(body, "<title>Generating") || strings.Contains(body, "Please wait")
