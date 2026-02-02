@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -73,6 +72,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
+	ctx := t.Context()
 
 	cfg := &config.Config{Mocks: config.MockConfig{Enable: true}}
 	cacheDir := filepath.Join(t.TempDir(), "cache")
@@ -83,7 +83,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("failed to create generator: %v", err)
 	}
-	locationServer, err := locations.New(context.Background(), cfg)
+	locationServer, err := locations.New(ctx, cfg)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}
