@@ -1,6 +1,10 @@
 {
   "name": "careme-tailwind",
   "private": true,
+  "engines": {
+    "node": "20.11.1",
+    "npm": "10.5.0"
+  },
   "devDependencies": {
     "@tailwindcss/cli": "4.1.18",
     "tailwindcss": "4.1.18"
