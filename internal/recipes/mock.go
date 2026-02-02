@@ -349,6 +349,8 @@ func (_ mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	if id == "" {
 		id = uuid.NewString()
 	}
+	// fake like we're taking time to call an LLM so we get the spinner.
+	time.Sleep(100 * time.Millisecond)
 
 	// Select 3 random recipes from the pool of 20
 	// Create a new random generator with current time as seed
