@@ -35,7 +35,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 	// Step 2: go to /recipes?location=<id> and follow redirects until recipes render.
 	initialRecipesURL := srv.URL + "/recipes?location=" + url.QueryEscape(locationID)
-	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL)
+	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL, true /*expectSpinner*/)
 
 	// Step 3: select one recipe to save and two to dismiss.
 	conversationID := extractHiddenValue(t, recipesBody, "conversation_id")
@@ -53,7 +53,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 	// Step 5: finalize with the saved/dismissed selections.
 	finalizeURL := buildRecipesURL(srv.URL, location, date, conversationID, savedHash, dismissedHashes, true)
-	_, finalizedBody := followUntilRecipes(t, client, finalizeURL)
+	_, finalizedBody := followUntilRecipes(t, client, finalizeURL, false /*expectSpinner*/)
 	recipeHashes = extractRecipeHashes(t, finalizedBody)
 	if len(recipeHashes) != 1 {
 		t.Fatalf("expected finalized page to show 1 recipe, got %d", len(recipeHashes))
@@ -66,7 +66,9 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 			t.Fatalf("finalized recipe %s was in dismissed list", dismissed)
 		}
 	}
-	
+
+	//TODO step 6 make sure recipes are saved to user page?
+
 }
 
 func newTestServer(t *testing.T) *httptest.Server {
@@ -91,6 +93,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	users.NewHandler(userStorage, locationServer).Register(mux)
 	recipes.NewHandler(cfg, userStorage, generator, locationServer, cacheStore).Register(mux)
 
+	//todo find a better way to mock this or move it to web.go?
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -111,7 +114,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 			return
 		}
 		users.SetCookie(w, user.ID, sessionDuration)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		w.WriteHeader(http.StatusOK)
 	})
 
 	return httptest.NewServer(WithMiddleware(mux))
@@ -128,7 +131,6 @@ func newTestClient(t *testing.T) *http.Client {
 	}
 }
 
-
 func login(t *testing.T, client *http.Client, baseURL, email string) {
 	t.Helper()
 	form := url.Values{}
@@ -138,9 +140,9 @@ func login(t *testing.T, client *http.Client, baseURL, email string) {
 		t.Fatalf("login request failed: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusSeeOther {
+	if resp.StatusCode != http.StatusOK {
 		body := readAll(t, resp.Body)
-		t.Fatalf("expected login redirect (303), got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected login 200, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -164,23 +166,23 @@ func mustGetBody(t *testing.T, client *http.Client, url string) string {
 	return readAll(t, resp.Body)
 }
 
-func followUntilRecipes(t *testing.T, client *http.Client, startURL string) (string, string) {
+func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectSpinner bool) (string, string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	current := startURL
-
+	sawSpinner := false
 	for {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for recipes page starting at %s", startURL)
 		}
 
 		resp := mustGet(t, client, current)
-		
 
 		body := readAll(t, resp.Body)
 		resp.Body.Close()
 
 		if isSpinner(body) {
+			sawSpinner = true
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
@@ -189,28 +191,16 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string) (str
 			t.Fatalf("expected recipes page 200, got %d: %s", resp.StatusCode, body)
 		}
 
+		if sawSpinner != expectSpinner {
+			t.Fatal("expected spinner but never got one")
+		}
+
 		return current, body
 	}
 }
 
-
 func isSpinner(body string) bool {
 	return strings.Contains(body, "<title>Generating") || strings.Contains(body, "Please wait")
-}
-
-//basically makes relative ref full based on host from base
-// just hard code a host somewhere in the test instead?
-func resolveURL(t *testing.T, base, ref string) string {
-	t.Helper()
-	baseURL, err := url.Parse(base)
-	if err != nil {
-		t.Fatalf("invalid base URL %s: %v", base, err)
-	}
-	refURL, err := url.Parse(ref)
-	if err != nil {
-		t.Fatalf("invalid redirect URL %s: %v", ref, err)
-	}
-	return baseURL.ResolveReference(refURL).String()
 }
 
 func extractLocationID(t *testing.T, body string) string {
@@ -268,10 +258,6 @@ func buildRecipesURL(base, location, date, conversationID, savedHash string, dis
 		params.Set("finalize", "true")
 	}
 	return base + "/recipes?" + params.Encode()
-}
-
-func countArticles(body string) int {
-	return strings.Count(body, "<article")
 }
 
 func readAll(t *testing.T, r io.Reader) string {
