@@ -10,7 +10,7 @@ import (
 )
 
 // Test that the HTML contains Save and Dismiss buttons for recipes
-func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
+func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Create a shopping list with multiple recipes
 	multiRecipeList := ai.ShoppingList{
 		Recipes: []ai.Recipe{
@@ -40,7 +40,7 @@ func TestFormatChatHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatChatHTML(p, multiRecipeList, w)
+	FormatShoppingListHTML(p, multiRecipeList, w)
 	html := w.Body.String()
 
 	// Verify HTML is valid
