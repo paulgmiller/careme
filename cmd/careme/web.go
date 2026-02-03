@@ -124,6 +124,22 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, cfg.Clerk.Signup(), http.StatusSeeOther)
 	})
+	mux.HandleFunc("/auth/establish", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.Clerk.PublishableKey == "" {
+			http.Error(w, "clerk publishable key missing", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		data := struct {
+			PublishableKey string
+		}{
+			PublishableKey: cfg.Clerk.PublishableKey,
+		}
+		if err := templates.AuthEstablish.Execute(w, data); err != nil {
+			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
 
 	const sessionCookieName = "__session" // change if yours differs
 	//TODO move ot auth?

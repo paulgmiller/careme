@@ -11,6 +11,7 @@ var htmlFiles embed.FS
 
 var Home,
 	Spin,
+	AuthEstablish,
 	User,
 	ShoppingList,
 	Recipe,
@@ -24,6 +25,7 @@ func init() {
 	}
 	Home = ensure(tmpls, "home.html")
 	Spin = ensure(tmpls, "spinner.html")
+	AuthEstablish = ensure(tmpls, "auth_establish.html")
 	User = ensure(tmpls, "user.html")
 	ShoppingList = ensure(tmpls, "shoppinglist.html")
 	Recipe = ensure(tmpls, "recipe.html")

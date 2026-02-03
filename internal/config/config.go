@@ -26,20 +26,21 @@ type MockConfig struct {
 }
 
 type ClerkConfig struct {
-	SecretKey string
-	Domain    string
+	SecretKey       string
+	PublishableKey  string
+	Domain          string
 }
 
 func (c *ClerkConfig) IsEnabled() bool {
-	return c.SecretKey != "" && c.Domain != ""
+	return c.SecretKey != "" && c.Domain != "" && c.PublishableKey != ""
 }
 
 func (c *ClerkConfig) Signin() string {
-	return fmt.Sprintf("https://%s/sign-in?redirect_url=%s", c.Domain, "http://localhost:8080/")
+	return fmt.Sprintf("https://%s/sign-in?redirect_url=%s", c.Domain, "http://localhost:8080/auth/establish")
 }
 
 func (c *ClerkConfig) Signup() string {
-	return fmt.Sprintf("https://%s/sign-up?redirect_url=%s", c.Domain, "http://localhost:8080/")
+	return fmt.Sprintf("https://%s/sign-up?redirect_url=%s", c.Domain, "http://localhost:8080/auth/establish")
 }
 
 func Load() (*Config, error) {
@@ -55,8 +56,9 @@ func Load() (*Config, error) {
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv
 		},
 		Clerk: ClerkConfig{
-			SecretKey: os.Getenv("CLERK_SECRET_KEY"),
-			Domain:    os.Getenv("CLERK_DOMAIN"),
+			SecretKey:      os.Getenv("CLERK_SECRET_KEY"),
+			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
+			Domain:         os.Getenv("CLERK_DOMAIN"),
 		},
 	}
 
