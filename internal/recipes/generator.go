@@ -96,6 +96,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	// should never happen? How do you get save on first generte?
 	// shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
+	//TODO this does not get saved in params and thus must be loaded from html
+	// could update params after first generation or pregenerate before we save params.
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return shoppingList, nil

@@ -76,36 +76,26 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var loadedParams *generatorParams
-	if recipe.OriginHash != "" {
-		loadedp, err := loadParamsFromHash(ctx, recipe.OriginHash, s.cache)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
-			// http.Error(w, "recipe not found or expired", http.StatusNotFound)
-			// return
-		} else {
-			loadedParams = loadedp
-		}
-		if loadedParams != nil {
-			if slist, err := s.FromCache(ctx, recipe.OriginHash); err == nil {
-				if slist.ConversationID != "" {
-					loadedParams.ConversationID = slist.ConversationID
-				}
-			} else {
-				slog.DebugContext(ctx, "failed to load shopping list for conversation id", "hash", recipe.OriginHash, "error", err)
-			}
-		}
-	}
-
-	// TODO: Re-enable single-recipe updates once we finalize the regen flow.
-
-	p := loadedParams
-	if p == nil || p.Location == nil {
-		p = DefaultParams(&locations.Location{
+	if recipe.OriginHash == "" {
+		slog.WarnContext(ctx, "recipe missing origin hash Probably and old recipe", "hash", hash)
+		p := DefaultParams(&locations.Location{
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
+		FormatRecipeHTML(p, *recipe, w)
+		return
 	}
+
+	p, err := loadParamsFromHash(ctx, recipe.OriginHash, s.cache)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
+		http.Error(w, "recipe not found or expired", http.StatusNotFound)
+		return
+	}
+
+	// TODO this p is mising converastion id. See todo in generate recipes we can pregenerate it or update it after generation.
+
+	// TODO: Add questions or regneration to signle recipes
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
 	FormatRecipeHTML(p, *recipe, w)
