@@ -17,6 +17,8 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/users"
+
+	"golang.org/x/net/html"
 )
 
 func TestWebEndToEndFlowWithMocks(t *testing.T) {
@@ -173,7 +175,9 @@ func mustGetBody(t *testing.T, client *http.Client, url string) string {
 		body := readAll(t, resp.Body)
 		t.Fatalf("GET %s expected 200, got %d: %s", url, resp.StatusCode, body)
 	}
-	return readAll(t, resp.Body)
+	body := readAll(t, resp.Body)
+	requireValidHTML(t, url, resp.Header.Get("Content-Type"), body)
+	return body
 }
 
 func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectSpinner bool) (string, string) {
@@ -279,4 +283,36 @@ func readAll(t *testing.T, r io.Reader) string {
 		t.Fatalf("failed to read response body: %v", err)
 	}
 	return string(data)
+}
+
+func requireValidHTML(t *testing.T, url, contentType, body string) {
+	t.Helper()
+	if strings.TrimSpace(body) == "" {
+		t.Fatalf("GET %s returned empty body", url)
+	}
+	if contentType != "" && !strings.Contains(strings.ToLower(contentType), "text/html") {
+		t.Fatalf("GET %s expected HTML content-type, got %q", url, contentType)
+	}
+	if !strings.Contains(strings.ToLower(body), "<html") {
+		t.Fatalf("GET %s expected HTML body, missing <html> tag", url)
+	}
+	doc, err := html.Parse(strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("GET %s returned invalid HTML: %v", url, err)
+	}
+	if !hasElement(doc, "body") {
+		t.Fatalf("GET %s expected HTML body element", url)
+	}
+}
+
+func hasElement(n *html.Node, name string) bool {
+	if n.Type == html.ElementNode && n.Data == name {
+		return true
+	}
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		if hasElement(child, name) {
+			return true
+		}
+	}
+	return false
 }
