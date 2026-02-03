@@ -35,10 +35,11 @@ func (c *ClerkConfig) IsEnabled() bool {
 }
 
 func (c *ClerkConfig) Signin() string {
-	return fmt.Sprintf("https://%s/sign-in", c.Domain)
+	return fmt.Sprintf("https://%s/sign-in?redirect_url=%s", c.Domain, "http://localhost:8080/")
 }
+
 func (c *ClerkConfig) Signup() string {
-	return fmt.Sprintf("https://%s/sign-up", c.Domain)
+	return fmt.Sprintf("https://%s/sign-up?redirect_url=%s", c.Domain, "http://localhost:8080/")
 }
 
 func Load() (*Config, error) {

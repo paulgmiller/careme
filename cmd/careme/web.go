@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -162,7 +163,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: WithMiddleware(mux),
+		Handler: debugAuth(clerkClient.WithClerkHTTP(WithMiddleware(mux))),
 	}
 
 	// Channel to listen for errors coming from the server
@@ -223,4 +224,44 @@ func gracefulShutdown(svr *http.Server, recipesWait func()) error {
 		return ctx.Err()
 	}
 	return nil
+}
+
+func debugAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		hasDB := q.Has("__clerk_db_jwt")
+
+		authz := r.Header.Get("Authorization")
+		hasAuthz := authz != ""
+
+		// list cookie names only (don’t log values)
+		cookieNames := []string{}
+		for _, c := range r.Cookies() {
+			cookieNames = append(cookieNames, c.Name)
+		}
+
+		if r.Header.Get("Authorization") == "" {
+			if c, err := r.Cookie("__session"); err == nil && c.Value != "" {
+				r.Header.Set("Authorization", "Bearer "+c.Value)
+			}
+		}
+
+		log.Printf("auth-debug path=%s host=%s xf_proto=%q xf_host=%q hasAuthz=%t has__clerk_db_jwt=%t cookies=%v",
+			r.URL.Path,
+			r.Host,
+			r.Header.Get("X-Forwarded-Proto"),
+			r.Header.Get("X-Forwarded-Host"),
+			hasAuthz,
+			hasDB,
+			cookieNames,
+		)
+
+		next.ServeHTTP(w, r)
+
+		/*if claims, ok := clerk.SessionClaimsFromContext(r.Context()); ok {
+			log.Printf("auth-debug claims ok sub=%s sid=%s", claims.Subject, claims.SessionID)
+		} else {
+			log.Printf("auth-debug claims missing (middleware did not authenticate)")
+		}*/
+	})
 }
