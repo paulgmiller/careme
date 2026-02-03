@@ -8,6 +8,76 @@
   {{template "tailwind_head" .Style}}
 
   {{.ClarityScript}}
+  {{if .UseClerk}}
+  <script
+    async
+    crossorigin="anonymous"
+    data-clerk-publishable-key="{{.ClerkPublish}}"
+    src="https://{{.ClerkFrontend}}/npm/@clerk/clerk-js@5/dist/clerk.browser.js">
+  </script>
+  <script>
+    window.addEventListener("load", async () => {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.has("__clerk_db_jwt")) {
+        return;
+      }
+      const waitForClerk = () => new Promise((resolve) => {
+        if (window.Clerk && typeof window.Clerk.load === "function") {
+          resolve(true);
+          return;
+        }
+        let waited = 0;
+        const timer = setInterval(() => {
+          waited += 50;
+          if (window.Clerk && typeof window.Clerk.load === "function") {
+            clearInterval(timer);
+            resolve(true);
+            return;
+          }
+          if (waited >= 2000) {
+            clearInterval(timer);
+            resolve(false);
+          }
+        }, 50);
+      });
+      const clerkReady = await waitForClerk();
+      if (!clerkReady) {
+        return;
+      }
+      try {
+        await window.Clerk.load();
+      } catch (err) {
+        return;
+      }
+      const waitForSession = () => new Promise((resolve) => {
+        if (window.Clerk && window.Clerk.session) {
+          resolve(true);
+          return;
+        }
+        let waited = 0;
+        const timer = setInterval(() => {
+          waited += 50;
+          if (window.Clerk && window.Clerk.session) {
+            clearInterval(timer);
+            resolve(true);
+            return;
+          }
+          if (waited >= 2000) {
+            clearInterval(timer);
+            resolve(false);
+          }
+        }, 50);
+      });
+      const hasSession = await waitForSession();
+      if (!hasSession) {
+        return;
+      }
+      params.delete("__clerk_db_jwt");
+      const next = window.location.pathname + (params.toString() ? `?${params.toString()}` : "");
+      window.location.replace(next);
+    });
+  </script>
+  {{end}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
   <main class="px-4 py-10">
@@ -91,6 +161,18 @@
           </ol>
 
           <!-- Signed-out state -->
+          {{if .UseClerk}}
+          <div class="mt-6 flex flex-col gap-3 sm:flex-row">
+            <a href="{{.SignInURL}}"
+               class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+              Sign in
+            </a>
+            <a href="{{.SignUpURL}}"
+               class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+              Sign up
+            </a>
+          </div>
+          {{else}}
           <form method="POST" action="/login" class="mt-6">
             <label for="email" class="block text-sm font-medium text-gray-700">
               Enter your email to continue:
@@ -104,6 +186,7 @@
               </button>
             </div>
           </form>
+          {{end}}
           {{end}}
         </div>
       </div>

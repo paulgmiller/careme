@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
@@ -17,11 +18,15 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/clerk/clerk-sdk-go/v2"
+	"github.com/clerk/clerk-sdk-go/v2/session"
 )
 
 //go:embed favicon.png
@@ -39,6 +44,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	}
 
 	userStorage := users.NewStorage(cache)
+	authHandler := auth.NewClerkAuth(cfg, userStorage)
 
 	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
@@ -89,10 +95,20 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			ClarityScript template.HTML
 			User          *users.User
 			Style         seasons.Style
+			UseClerk      bool
+			SignInURL     string
+			SignUpURL     string
+			ClerkFrontend string
+			ClerkPublish  string
 		}{
 			ClarityScript: templates.ClarityScript(),
 			User:          currentUser,
 			Style:         seasons.GetCurrentStyle(),
+			UseClerk:      authHandler.Enabled(),
+			SignInURL:     addRedirectParam(authHandler.SignInURL(), currentRedirectURL(r)),
+			SignUpURL:     addRedirectParam(authHandler.SignUpURL(), currentRedirectURL(r)),
+			ClerkFrontend: cfg.Clerk.FrontendAPI,
+			ClerkPublish:  cfg.Clerk.PublishableKey,
 		}
 		if err := templates.Home.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
@@ -103,6 +119,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if authHandler.Enabled() {
+			http.Redirect(w, r, authHandler.SignInURL(), http.StatusSeeOther)
 			return
 		}
 		if err := r.ParseForm(); err != nil {
@@ -129,7 +149,18 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		if authHandler.Enabled() {
+			if claims, ok := clerk.SessionClaimsFromContext(r.Context()); ok && claims.SessionID != "" {
+				if _, err := session.Revoke(r.Context(), &session.RevokeParams{ID: claims.SessionID}); err != nil {
+					slog.WarnContext(r.Context(), "failed to revoke clerk session", "error", err)
+				}
+			}
+		}
 		users.ClearCookie(w)
+		if authHandler.Enabled() && authHandler.SignOutURL() != "" {
+			http.Redirect(w, r, authHandler.SignOutURL(), http.StatusSeeOther)
+			return
+		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 
@@ -149,7 +180,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: WithMiddleware(mux),
+		Handler: WithMiddleware(authHandler.Middleware(mux)),
 	}
 
 	// Channel to listen for errors coming from the server
@@ -210,4 +241,64 @@ func gracefulShutdown(svr *http.Server, recipesWait func()) error {
 		return ctx.Err()
 	}
 	return nil
+}
+
+func currentRedirectURL(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	scheme := requestScheme(r)
+	host := forwardedHost(r)
+	if host == "" {
+		host = r.Host
+	}
+	if scheme == "" || host == "" {
+		return ""
+	}
+	u := url.URL{
+		Scheme: scheme,
+		Host:   host,
+		Path:   r.URL.Path,
+	}
+	u.RawQuery = r.URL.RawQuery
+	return u.String()
+}
+
+func requestScheme(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); proto != "" {
+		return proto
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func forwardedHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); host != "" {
+		return host
+	}
+	return ""
+}
+
+func addRedirectParam(baseURL, redirectURL string) string {
+	if baseURL == "" || redirectURL == "" {
+		return baseURL
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return baseURL
+	}
+	q := parsed.Query()
+	if q.Get("redirect_url") == "" {
+		q.Set("redirect_url", redirectURL)
+	}
+	parsed.RawQuery = q.Encode()
+	return parsed.String()
 }

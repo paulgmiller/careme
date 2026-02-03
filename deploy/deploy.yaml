@@ -32,6 +32,10 @@ spec:
           env:
             - name: CLARITY_PROJECT_ID
               value: "td2gxd3sq9"
+            - name: CLERK_SIGN_IN_URL
+              value: https://accounts.careme.cooking/sign-in
+            - name: CLERK_SIGN_UP_URL
+              value: https://accounts.careme.cooking/sign-up
           volumeMounts:
             - name: recipes
               mountPath: /recipes

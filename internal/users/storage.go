@@ -180,6 +180,51 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 	return &newUser, nil
 }
 
+func (s *Storage) FindOrCreateByClerkUser(clerkUserID string, emails []string) (*User, error) {
+	if clerkUserID == "" {
+		return nil, fmt.Errorf("clerk user id is required")
+	}
+	normalized := uniqueNormalizedEmails(emails)
+	if len(normalized) == 0 {
+		return nil, fmt.Errorf("at least one email is required")
+	}
+
+	user, err := s.GetByID(clerkUserID)
+	if err == nil {
+		updated := mergeEmails(user, normalized)
+		if updated {
+			if err := s.Update(user); err != nil {
+				return nil, fmt.Errorf("failed to update user emails: %w", err)
+			}
+		}
+		for _, email := range normalized {
+			if err := s.cache.Put(context.TODO(), emailPrefix+email, user.ID, cache.Unconditional()); err != nil {
+				return nil, fmt.Errorf("failed to index user by email: %w", err)
+			}
+		}
+		return user, nil
+	}
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+
+	newUser := User{
+		ID:          clerkUserID,
+		Email:       normalized,
+		CreatedAt:   time.Now(),
+		ShoppingDay: time.Saturday.String(),
+	}
+	if err := s.Update(&newUser); err != nil {
+		return nil, fmt.Errorf("failed to create new user: %w", err)
+	}
+	for _, email := range normalized {
+		if err := s.cache.Put(context.TODO(), emailPrefix+email, newUser.ID, cache.Unconditional()); err != nil {
+			return nil, fmt.Errorf("failed to index new user by email: %w", err)
+		}
+	}
+	return &newUser, nil
+}
+
 func (s *Storage) Update(user *User) error {
 	if err := user.Validate(); err != nil {
 		return fmt.Errorf("invalid user: %w", err)
@@ -198,4 +243,39 @@ func (s *Storage) Update(user *User) error {
 func normalizeEmail(email string) string {
 	// remove . from before @?
 	return strings.TrimSpace(strings.ToLower(email))
+}
+
+func uniqueNormalizedEmails(emails []string) []string {
+	seen := make(map[string]struct{}, len(emails))
+	normalized := make([]string, 0, len(emails))
+	for _, email := range emails {
+		normalizedEmail := normalizeEmail(email)
+		if normalizedEmail == "" {
+			continue
+		}
+		if _, ok := seen[normalizedEmail]; ok {
+			continue
+		}
+		seen[normalizedEmail] = struct{}{}
+		normalized = append(normalized, normalizedEmail)
+	}
+	return normalized
+}
+
+func mergeEmails(user *User, emails []string) bool {
+	updated := false
+	for _, email := range emails {
+		found := false
+		for _, existing := range user.Email {
+			if strings.EqualFold(existing, email) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			user.Email = append(user.Email, email)
+			updated = true
+		}
+	}
+	return updated
 }

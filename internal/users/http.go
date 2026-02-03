@@ -1,10 +1,26 @@
 package users
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
 )
+
+type contextKey string
+
+const userContextKey contextKey = "careme_user"
+
+// ContextWithUser stores the user in context for request-scoped access.
+func ContextWithUser(ctx context.Context, user *User) context.Context {
+	return context.WithValue(ctx, userContextKey, user)
+}
+
+// UserFromContext returns the user stored in context, if any.
+func UserFromContext(ctx context.Context) (*User, bool) {
+	user, ok := ctx.Value(userContextKey).(*User)
+	return user, ok && user != nil
+}
 
 // SetCookie stores the user identifier in the browser for the given duration.
 func SetCookie(w http.ResponseWriter, userID string, duration time.Duration) {
@@ -34,6 +50,9 @@ func ClearCookie(w http.ResponseWriter) {
 
 // FromRequest extracts the current user from the incoming request cookie.
 func FromRequest(r *http.Request, store *Storage) (*User, error) {
+	if user, ok := UserFromContext(r.Context()); ok {
+		return user, nil
+	}
 	cookie, err := r.Cookie(CookieName)
 	if err != nil {
 		if errors.Is(err, http.ErrNoCookie) {
