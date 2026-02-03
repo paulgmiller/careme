@@ -134,7 +134,6 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		}
 	}
 	s.Spin(w, r)
-	return
 }
 
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +161,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.URL.Query().Get("mail") == "true" {
-			FormatMail(p, *slist, w)
+			if err := FormatMail(p, *slist, w); err != nil {
+				slog.ErrorContext(ctx, "failed to render mail template", "error", err)
+				http.Error(w, "failed to render mail template", http.StatusInternalServerError)
+			}
 			return
 		}
 		FormatShoppingListHTML(p, *slist, w)
@@ -180,7 +182,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	//if params are already saved redirect and assume someone kicks off genration
 
 	if err := s.SaveParams(ctx, p); err != nil {
-		if errors.Is(err, AlreadyExists) {
+		if errors.Is(err, ErrAlreadyExists) {
 			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
 			redirectToHash(w, r, p.Hash(), false /*useStart*/)
 			return
@@ -390,7 +392,11 @@ func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
-	defer ingredientblob.Close()
+	defer func() {
+		if err := ingredientblob.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close cached ingredients", "location", p.String(), "error", err)
+		}
+	}()
 	dec := json.NewDecoder(ingredientblob)
 	var ingredients []kroger.Ingredient
 	err = dec.Decode(&ingredients)

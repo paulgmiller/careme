@@ -48,7 +48,9 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		w.Write(tailwindCSS)
+		if _, err := w.Write(tailwindCSS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
+		}
 	})
 
 	locationserver, err := locations.New(context.TODO(), cfg)
@@ -132,13 +134,17 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	})
 
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write readiness response", "error", err)
+		}
 	})
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png") // <= without this, many UAs ignore it
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		w.Write(favicon)
+		if _, err := w.Write(favicon); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write favicon", "error", err)
+		}
 	})
 
 	server := &http.Server{
@@ -181,7 +187,9 @@ func gracefulShutdown(svr *http.Server, recipesWait func()) error {
 	if err := svr.Shutdown(ctx); err != nil {
 		slog.Error("Server shutdown error", "error", err)
 		// Force close after timeout
-		svr.Close()
+		if closeErr := svr.Close(); closeErr != nil {
+			slog.Error("Server close error", "error", closeErr)
+		}
 		return err
 	}
 

@@ -80,7 +80,11 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				fmt.Printf("Kroger Response Close Error: %v\n", err)
+			}
+		}()
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {

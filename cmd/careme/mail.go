@@ -132,7 +132,7 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 		p.LastRecipes = append(p.LastRecipes, last.Title)
 	}
 	if err := rio.SaveParams(ctx, p); err != nil {
-		if errors.Is(err, recipes.AlreadyExists) {
+		if errors.Is(err, recipes.ErrAlreadyExists) {
 			slog.InfoContext(ctx, "params already exist, another process likely generated", "user", user.ID)
 			return
 		}
@@ -154,7 +154,10 @@ func (m *mailer) sendEmail(ctx context.Context, user users.User) {
 	}
 
 	var buf bytes.Buffer
-	recipes.FormatMail(p, *shoppingList, &buf)
+	if err := recipes.FormatMail(p, *shoppingList, &buf); err != nil {
+		slog.ErrorContext(ctx, "failed to format mail", "error", err)
+		return
+	}
 
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"

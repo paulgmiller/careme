@@ -55,7 +55,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to create logsink: %v", err)
 		}
-		defer closer.Close()
+		defer func() {
+			if err := closer.Close(); err != nil {
+				slog.Error("failed to close logsink", "error", err)
+			}
+		}()
 		slog.SetDefault(slog.New(multi.Fanout(handler, slog.NewTextHandler(os.Stdout, nil))))
 		// log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
 

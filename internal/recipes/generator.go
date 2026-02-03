@@ -74,11 +74,9 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		/*if len(p.Saved) > 0 {
 			instructions += " Enjoyed and saved :"
 		}*/
-		for _, saved := range p.Saved {
-			// This ended up giving me a "Preference update + replacements requested" recipe
-			// instructions += saved.Title + "; " //is this enough or do we keep the exact one?
-			shoppingList.Recipes = append(shoppingList.Recipes, saved)
-		}
+		// This ended up giving me a "Preference update + replacements requested" recipe
+		// instructions += saved.Title + "; " //is this enough or do we keep the exact one?
+		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 		return shoppingList, nil
@@ -124,7 +122,11 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 	var ingredients []kroger.Ingredient
 
 	if ingredientblob, err := g.cache.Get(ctx, lochash); err == nil {
-		defer ingredientblob.Close()
+		defer func() {
+			if err := ingredientblob.Close(); err != nil {
+				slog.ErrorContext(ctx, "failed to close cached ingredients reader", "location", p.String(), "error", err)
+			}
+		}()
 		jsonReader := json.NewDecoder(ingredientblob)
 		if err := jsonReader.Decode(&ingredients); err == nil {
 			slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(ingredients))

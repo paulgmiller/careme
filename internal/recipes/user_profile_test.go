@@ -17,7 +17,11 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Fatalf("failed to remove temp dir: %v", err)
+		}
+	})
 
 	tmpCache := cache.NewFileCache(tmpDir)
 	storage := users.NewStorage(tmpCache)
@@ -84,7 +88,11 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Fatalf("failed to remove temp dir: %v", err)
+		}
+	})
 
 	tmpCache := cache.NewFileCache(tmpDir)
 	storage := users.NewStorage(tmpCache)
@@ -156,7 +164,11 @@ func TestSaveRecipesToUserProfile_InvalidUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Fatalf("failed to remove temp dir: %v", err)
+		}
+	})
 
 	tmpCache := cache.NewFileCache(tmpDir)
 	storage := users.NewStorage(tmpCache)

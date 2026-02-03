@@ -109,8 +109,13 @@ func (fc *FileCache) Put(_ context.Context, key, value string, opts PutOptions) 
 			}
 			return err
 		}
-		defer f.Close()
 		if _, err := f.WriteString(value); err != nil {
+			if closeErr := f.Close(); closeErr != nil {
+				return errors.Join(err, closeErr)
+			}
+			return err
+		}
+		if err := f.Close(); err != nil {
 			return err
 		}
 		return nil
