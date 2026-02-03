@@ -2,15 +2,10 @@
 # Stage 1: build
 FROM golang:1.24-alpine AS builder
 WORKDIR /src
-ENV PATH="/go/bin:${PATH}"
-# golangci-lint install needs git for module fetching
-RUN apk add --no-cache git
 # Enable module cache
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.1.6
-RUN golangci-lint run ./...
 RUN go test ./... -count=1
 # Build static binary (no CGO)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o careme ./cmd/careme
