@@ -4,7 +4,10 @@ go 1.24.6
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
-require github.com/samber/lo v1.51.0
+require (
+	github.com/clerk/clerk-sdk-go/v2 v2.0.0
+	github.com/samber/lo v1.51.0
+)
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.2

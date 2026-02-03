@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
@@ -39,6 +40,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	}
 
 	userStorage := users.NewStorage(cache)
+	authManager, err := auth.NewManager(cfg, userStorage)
+	if err != nil {
+		return fmt.Errorf("failed to configure auth: %w", err)
+	}
 
 	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
@@ -59,10 +64,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	}
 	locations.Register(locationserver, mux)
 
-	userHandler := users.NewHandler(userStorage, locationserver)
+	userHandler := users.NewHandler(userStorage, locationserver, authManager)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache, authManager)
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
@@ -75,10 +80,12 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		currentUser, err := users.FromRequest(r, userStorage)
+		currentUser, err := authManager.CurrentUser(r)
 		if err != nil {
 			if errors.Is(err, users.ErrNotFound) {
-				users.ClearCookie(w)
+				if authManager.Offline() {
+					users.ClearCookie(w)
+				}
 			} else {
 				slog.ErrorContext(ctx, "failed to load user from cookie", "error", err)
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -89,10 +96,16 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			ClarityScript template.HTML
 			User          *users.User
 			Style         seasons.Style
+			SignInURL     string
+			SignUpURL     string
+			AuthOffline   bool
 		}{
 			ClarityScript: templates.ClarityScript(),
 			User:          currentUser,
 			Style:         seasons.GetCurrentStyle(),
+			SignInURL:     authManager.SignInURL(),
+			SignUpURL:     authManager.SignUpURL(),
+			AuthOffline:   authManager.Offline(),
 		}
 		if err := templates.Home.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
@@ -101,6 +114,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	})
 
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		if !authManager.Offline() {
+			http.Redirect(w, r, authManager.SignInURL(), http.StatusSeeOther)
+			return
+		}
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -124,13 +141,21 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 
+	mux.HandleFunc("/signup", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, authManager.SignUpURL(), http.StatusSeeOther)
+	})
+
 	mux.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 		users.ClearCookie(w)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		if authManager.Offline() {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, authManager.SignOutURL(), http.StatusSeeOther)
 	})
 
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {

@@ -180,6 +180,56 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 	return &newUser, nil
 }
 
+func (s *Storage) FindOrCreateByID(id string, email string) (*User, error) {
+	user, err := s.GetByID(id)
+	if err == nil {
+		return s.ensureEmail(user, email)
+	}
+
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+
+	if strings.TrimSpace(email) == "" {
+		return nil, errors.New("email is required to create user")
+	}
+
+	newUser := User{
+		ID:          id,
+		Email:       []string{normalizeEmail(email)},
+		CreatedAt:   time.Now(),
+		ShoppingDay: time.Saturday.String(),
+	}
+	if err := s.Update(&newUser); err != nil {
+		return nil, fmt.Errorf("failed to create new user: %w", err)
+	}
+	if err := s.cache.Put(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID, cache.Unconditional()); err != nil {
+		return nil, fmt.Errorf("failed to index new user by email: %w", err)
+	}
+	return &newUser, nil
+}
+
+func (s *Storage) ensureEmail(user *User, email string) (*User, error) {
+	if user == nil {
+		return nil, ErrNotFound
+	}
+	email = normalizeEmail(email)
+	if email == "" {
+		return user, nil
+	}
+	if slices.Contains(user.Email, email) {
+		return user, nil
+	}
+	user.Email = append(user.Email, email)
+	if err := s.Update(user); err != nil {
+		return nil, err
+	}
+	if err := s.cache.Put(context.TODO(), emailPrefix+email, user.ID, cache.Unconditional()); err != nil {
+		return nil, fmt.Errorf("failed to index user by email: %w", err)
+	}
+	return user, nil
+}
+
 func (s *Storage) Update(user *User) error {
 	if err := user.Validate(); err != nil {
 		return fmt.Errorf("invalid user: %w", err)

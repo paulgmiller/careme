@@ -17,18 +17,25 @@ type locationGetter interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
 
+type authProvider interface {
+	CurrentUser(r *http.Request) (*User, error)
+	Offline() bool
+}
+
 type server struct {
 	storage   *Storage
 	userTmpl  *template.Template // just remove or is htis useful?
 	locGetter locationGetter
+	auth      authProvider
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, locGetter locationGetter) *server {
+func NewHandler(storage *Storage, locGetter locationGetter, auth authProvider) *server {
 	return &server{
 		storage:   storage,
 		userTmpl:  templates.User,
 		locGetter: locGetter,
+		auth:      auth,
 	}
 }
 
@@ -39,7 +46,7 @@ func (s *server) Register(mux *http.ServeMux) {
 
 func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	currentUser, err := FromRequest(r, s.storage)
+	currentUser, err := s.auth.CurrentUser(r)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load user for user page", "error", err)
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -87,10 +94,12 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	currentUser, err := FromRequest(r, s.storage)
+	currentUser, err := s.auth.CurrentUser(r)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			ClearCookie(w)
+			if s.auth.Offline() {
+				ClearCookie(w)
+			}
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}

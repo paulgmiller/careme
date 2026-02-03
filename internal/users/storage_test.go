@@ -1,6 +1,7 @@
 package users
 
 import (
+	"careme/internal/cache"
 	"strings"
 	"testing"
 	"time"
@@ -79,4 +80,52 @@ func TestUserValidate(t *testing.T) {
 			t.Fatalf("expected invalid favorite store error, got %v", err)
 		}
 	})
+}
+
+func TestFindOrCreateByID(t *testing.T) {
+	store := NewStorage(cache.NewFileCache(t.TempDir()))
+
+	user, err := store.FindOrCreateByID("clerk_123", "Test@Example.com")
+	if err != nil {
+		t.Fatalf("expected user to be created, got error: %v", err)
+	}
+	if got, want := user.ID, "clerk_123"; got != want {
+		t.Fatalf("unexpected user ID: got %s want %s", got, want)
+	}
+	if len(user.Email) != 1 || user.Email[0] != "test@example.com" {
+		t.Fatalf("unexpected email list: %#v", user.Email)
+	}
+
+	byEmail, err := store.GetByEmail("test@example.com")
+	if err != nil {
+		t.Fatalf("expected user to be indexed by email, got error: %v", err)
+	}
+	if byEmail.ID != user.ID {
+		t.Fatalf("email lookup returned wrong user: got %s want %s", byEmail.ID, user.ID)
+	}
+}
+
+func TestFindOrCreateByIDAddsEmail(t *testing.T) {
+	store := NewStorage(cache.NewFileCache(t.TempDir()))
+
+	_, err := store.FindOrCreateByID("clerk_456", "first@example.com")
+	if err != nil {
+		t.Fatalf("expected user to be created, got error: %v", err)
+	}
+
+	user, err := store.FindOrCreateByID("clerk_456", "second@example.com")
+	if err != nil {
+		t.Fatalf("expected user to be updated, got error: %v", err)
+	}
+	if len(user.Email) != 2 {
+		t.Fatalf("expected two emails, got %d", len(user.Email))
+	}
+
+	byEmail, err := store.GetByEmail("second@example.com")
+	if err != nil {
+		t.Fatalf("expected second email to be indexed, got error: %v", err)
+	}
+	if byEmail.ID != user.ID {
+		t.Fatalf("email lookup returned wrong user: got %s want %s", byEmail.ID, user.ID)
+	}
 }

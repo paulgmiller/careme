@@ -27,6 +27,11 @@ type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
 
+type authProvider interface {
+	CurrentUser(r *http.Request) (*users.User, error)
+	Offline() bool
+}
+
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
 }
@@ -38,12 +43,13 @@ type server struct {
 	cache     cache.Cache
 	generator generator
 	locServer locServer
+	auth      authProvider
 	wg        sync.WaitGroup
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, auth authProvider) *server {
 	return &server{
 		recipeio:  recipeio{Cache: c},
 		cache:     c,
@@ -51,6 +57,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		storage:   storage,
 		generator: generator,
 		locServer: locServer,
+		auth:      auth,
 	}
 }
 
@@ -117,10 +124,12 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 				http.Error(w, "recipe not found or expired", http.StatusNotFound)
 				return
 			}
-			currentUser, err := users.FromRequest(r, s.storage)
+			currentUser, err := s.auth.CurrentUser(r)
 			if err != nil {
 				if errors.Is(err, users.ErrNotFound) {
-					users.ClearCookie(w)
+					if s.auth.Offline() {
+						users.ClearCookie(w)
+					}
 					http.Redirect(w, r, "/", http.StatusSeeOther)
 					return
 				}
@@ -194,10 +203,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	currentUser, err := users.FromRequest(r, s.storage)
+	currentUser, err := s.auth.CurrentUser(r)
 	if err != nil {
 		if errors.Is(err, users.ErrNotFound) {
-			users.ClearCookie(w)
+			if s.auth.Offline() {
+				users.ClearCookie(w)
+			}
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}

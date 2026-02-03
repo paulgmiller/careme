@@ -91,6 +91,7 @@
           </ol>
 
           <!-- Signed-out state -->
+          {{if .AuthOffline}}
           <form method="POST" action="/login" class="mt-6">
             <label for="email" class="block text-sm font-medium text-gray-700">
               Enter your email to continue:
@@ -104,6 +105,18 @@
               </button>
             </div>
           </form>
+          {{else}}
+          <div class="mt-6 flex flex-col gap-3 sm:flex-row">
+            <a href="{{.SignInURL}}"
+               class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+              Sign in
+            </a>
+            <a href="{{.SignUpURL}}"
+               class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+              Create account
+            </a>
+          </div>
+          {{end}}
           {{end}}
         </div>
       </div>
