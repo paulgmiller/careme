@@ -2,6 +2,7 @@ package main
 
 import (
 	"careme/internal/cache"
+	"careme/internal/clerk"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/logs"
@@ -19,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -36,6 +36,11 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
+	}
+
+	clerkClient, err := clerk.NewClient(cfg.Clerk.SecretKey)
+	if err != nil {
+		return fmt.Errorf("failed to create clerk client: %w", err)
 	}
 
 	userStorage := users.NewStorage(cache)
@@ -59,10 +64,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	}
 	locations.Register(locationserver, mux)
 
-	userHandler := users.NewHandler(userStorage, locationserver)
+	userHandler := users.NewHandler(userStorage, locationserver, clerkClient)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache, clerkClient)
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
@@ -75,16 +80,27 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		currentUser, err := users.FromRequest(r, userStorage)
+
+		var currentUser *users.User
+		clerkUserID, err := clerk.GetUserIDFromRequest(r)
 		if err != nil {
-			if errors.Is(err, users.ErrNotFound) {
-				users.ClearCookie(w)
-			} else {
-				slog.ErrorContext(ctx, "failed to load user from cookie", "error", err)
+			if !errors.Is(err, clerk.ErrNoSession) {
+				slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+				http.Error(w, "unable to load account", http.StatusInternalServerError)
+				return
+			}
+			//no user is fine we'll just pass nil currentUser to template
+
+		} else {
+			slog.InfoContext(ctx, "found clerk user ID", "clerk_user_id", clerkUserID)
+			currentUser, err = userStorage.FindOrCreateFromClerk(ctx, clerkUserID, clerkClient)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
 		}
+
 		data := struct {
 			ClarityScript template.HTML
 			User          *users.User
@@ -100,36 +116,33 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 	})
 
-	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "invalid form submission", http.StatusBadRequest)
-			return
-		}
-		email := strings.TrimSpace(r.FormValue("email"))
-		if email == "" {
-			http.Error(w, "email is required", http.StatusBadRequest)
-			return
-		}
-		user, err := userStorage.FindOrCreateByEmail(email)
-		if err != nil {
-			slog.ErrorContext(r.Context(), "failed to find or create user", "error", err)
-			http.Error(w, fmt.Sprintf("unable to sign in: %v", err), http.StatusInternalServerError)
-			return
-		}
-		users.SetCookie(w, user.ID, sessionDuration)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+	//why are these diffeerent?
+	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, cfg.Clerk.Signin(), http.StatusSeeOther)
+	})
+	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, cfg.Clerk.Signup(), http.StatusSeeOther)
 	})
 
+	const sessionCookieName = "__session" // change if yours differs
+	//TODO move ot auth?
 	mux.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		users.ClearCookie(w)
+		//	c, err := r.Cookie(sessionCookieName)
+		//		// PSEUDOCODE (because the exact claim shape depends on token type):
+		// verified, _ := clerk.VerifyToken(c.Value, clerk.VerifyTokenParams{...})
+		// sessID := verified.SessionID
+		// if sessID != "" { session.Revoke(ctx, &session.RevokeParams{ID: sessID}) }
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     sessionCookieName,
+			Value:    "",
+			Path:     "/",
+			Expires:  time.Unix(0, 0),
+			MaxAge:   -1,
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		})
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 

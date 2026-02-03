@@ -2,6 +2,7 @@ package users
 
 import (
 	"careme/internal/cache"
+	"careme/internal/clerk"
 	"context"
 	"encoding/json"
 	"errors"
@@ -177,6 +178,49 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 	if err := s.cache.Put(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID, cache.Unconditional()); err != nil {
 		return nil, fmt.Errorf("failed to index new user by email: %w", err)
 	}
+	return &newUser, nil
+}
+
+// interface for clerk client
+func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, clerkClient *clerk.Client) (*User, error) {
+	user, err := s.GetByID(clerkUserID)
+	if err == nil {
+		return user, nil
+	}
+
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+
+	clerkUser, err := clerkClient.GetUser(ctx, clerkUserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch clerk user: %w", err)
+	}
+
+	// Get primary email from Clerk user.
+	// do we need to rync this ever?
+	var primaryEmail string
+	for _, emailAddr := range clerkUser.EmailAddresses {
+		if clerkUser.PrimaryEmailAddressID != nil &&
+			emailAddr.ID == *clerkUser.PrimaryEmailAddressID {
+			primaryEmail = emailAddr.EmailAddress
+			break
+		}
+	}
+
+	newUser := User{
+		ID:          uuid.New().String(),
+		Email:       []string{normalizeEmail(primaryEmail)},
+		CreatedAt:   time.Now(),
+		ShoppingDay: time.Saturday.String(),
+	}
+	if err := s.Update(&newUser); err != nil {
+		return nil, fmt.Errorf("failed to create new user: %w", err)
+	}
+	if err := s.cache.Put(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID, cache.Unconditional()); err != nil {
+		return nil, fmt.Errorf("failed to index new user by email: %w", err)
+	}
+	slog.InfoContext(ctx, "created new user", "id", clerkUserID, "email", primaryEmail)
 	return &newUser, nil
 }
 

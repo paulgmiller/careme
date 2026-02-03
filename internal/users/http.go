@@ -1,11 +1,6 @@
 package users
 
-import (
-	"errors"
-	"net/http"
-	"time"
-)
-
+/* Deprecated
 // SetCookie stores the user identifier in the browser for the given duration.
 func SetCookie(w http.ResponseWriter, userID string, duration time.Duration) {
 	http.SetCookie(w, &http.Cookie{
@@ -33,6 +28,7 @@ func ClearCookie(w http.ResponseWriter) {
 }
 
 // FromRequest extracts the current user from the incoming request cookie.
+// Depredcated?
 func FromRequest(r *http.Request, store *Storage) (*User, error) {
 	cookie, err := r.Cookie(CookieName)
 	if err != nil {
@@ -50,3 +46,4 @@ func FromRequest(r *http.Request, store *Storage) (*User, error) {
 	}
 	return user, nil
 }
+*/

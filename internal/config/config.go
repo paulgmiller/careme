@@ -9,6 +9,7 @@ type Config struct {
 	AI     AIConfig     `json:"ai"`
 	Kroger KrogerConfig `json:"kroger"`
 	Mocks  MockConfig   `json:"mocks"`
+	Clerk  ClerkConfig  `json:"clerk"`
 }
 
 type AIConfig struct {
@@ -24,6 +25,22 @@ type MockConfig struct {
 	Enable bool
 }
 
+type ClerkConfig struct {
+	SecretKey string
+	Domain    string
+}
+
+func (c *ClerkConfig) IsEnabled() bool {
+	return c.SecretKey != "" && c.Domain != ""
+}
+
+func (c *ClerkConfig) Signin() string {
+	return fmt.Sprintf("https://%s/sign-in", c.Domain)
+}
+func (c *ClerkConfig) Signup() string {
+	return fmt.Sprintf("https://%s/sign-up", c.Domain)
+}
+
 func Load() (*Config, error) {
 	config := &Config{
 		AI: AIConfig{
@@ -36,6 +53,10 @@ func Load() (*Config, error) {
 		Mocks: MockConfig{
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv
 		},
+		Clerk: ClerkConfig{
+			SecretKey: os.Getenv("CLERK_SECRET_KEY"),
+			Domain:    os.Getenv("CLERK_DOMAIN"),
+		},
 	}
 
 	return config, validate(config)
@@ -45,6 +66,10 @@ func validate(cfg *Config) error {
 	if cfg.Mocks.Enable {
 		return nil
 	}
+	if !cfg.Clerk.IsEnabled() {
+		return fmt.Errorf("clerk configuration must be set")
+	}
+
 	if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
 		return fmt.Errorf("kroger client ID and secret must be set")
 	}
