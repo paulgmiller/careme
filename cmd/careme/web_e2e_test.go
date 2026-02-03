@@ -46,6 +46,8 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	}
 
 	savedHash := recipeHashes[0]
+	// Step 2b: load a shared recipe page directly.
+	_ = mustGetBody(t, client, srv.URL+"/recipe/"+url.PathEscape(savedHash))
 	dismissedHashes := recipeHashes[1:3]
 
 	//step 4 todo  regenrate again with commentary then save two more

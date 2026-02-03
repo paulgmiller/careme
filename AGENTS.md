@@ -23,6 +23,7 @@
 - Prefer simple html to javascript frameworks
 
 ## Testing Guidelines
+- Always run tests after making code changes. Default to `go test ./...`; use a narrower `go test ./... -run TestName` only when appropriate for quick iteration. If you cannot run tests, explicitly say why.
 - Place tests alongside code in `*_test.go`; prefer table-driven cases and explicit fixtures over implicit globals.
 - Use `go test ./... -run TestName` for targeted debugging; keep deterministic by avoiding network calls and using fakes where possible.
 - When touching recipe generation or Kroger client code, add assertions that cover API shape changes and template output (see existing tests in `internal/recipes` and `internal/html`).
