@@ -129,7 +129,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if strings.Contains(html, `name="saved"`) || strings.Contains(html, `name="dismissed"`) {
 		t.Error("recipe HTML should not contain save/dismiss inputs")
 	}
-	if !strings.Contains(html, `name="question"`) {
-		t.Error("recipe HTML should contain question input")
+	if strings.Contains(html, `name="question"`) {
+		t.Error("recipe HTML should not contain question input")
 	}
 }

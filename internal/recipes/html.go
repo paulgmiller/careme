@@ -49,7 +49,6 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, writer http.Response
 		ClarityScript template.HTML
 		Recipe        ai.Recipe
 		OriginHash    string
-		CanAsk        bool
 		Style         seasons.Style
 	}{
 		Location:      *p.Location,
@@ -57,7 +56,6 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, writer http.Response
 		ClarityScript: templates.ClarityScript(),
 		Recipe:        recipe,
 		OriginHash:    recipe.OriginHash,
-		CanAsk:        p.ConversationID != "",
 		Style:         seasons.GetCurrentStyle(),
 	}
 

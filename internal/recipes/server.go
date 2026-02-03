@@ -17,7 +17,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -98,21 +97,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	question := strings.TrimSpace(r.URL.Query().Get("question"))
-	if question != "" {
-		if loadedParams == nil || loadedParams.ConversationID == "" {
-			http.Error(w, "recipe updates are unavailable for this link", http.StatusBadRequest)
-			return
-		}
-		updatedRecipe, err := s.updateSingleRecipe(ctx, loadedParams, recipe, question)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to update recipe", "hash", hash, "error", err)
-			http.Error(w, "failed to update recipe", http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, r, "/recipe/"+updatedRecipe.ComputeHash(), http.StatusSeeOther)
-		return
-	}
+	// TODO: Re-enable single-recipe updates once we finalize the regen flow.
 
 	p := loadedParams
 	if p == nil || p.Location == nil {
@@ -271,64 +256,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
-}
-
-func (s *server) updateSingleRecipe(ctx context.Context, base *generatorParams, current *ai.Recipe, question string) (*ai.Recipe, error) {
-	if base == nil || base.Location == nil {
-		return nil, fmt.Errorf("missing recipe context")
-	}
-	if base.ConversationID == "" {
-		return nil, fmt.Errorf("missing recipe conversation")
-	}
-	if current == nil || current.OriginHash == "" {
-		return nil, fmt.Errorf("missing recipe origin")
-	}
-	updateParams := *base
-	updateParams.Saved = nil
-	updateParams.Dismissed = nil
-	updateParams.Instructions = buildRecipeUpdateInstruction(current, question)
-
-	updatedList, err := s.generator.GenerateRecipes(ctx, &updateParams)
-	if err != nil {
-		return nil, err
-	}
-	if len(updatedList.Recipes) == 0 {
-		return nil, fmt.Errorf("no recipes returned for update")
-	}
-	updatedRecipe := pickUpdatedRecipe(current, updatedList.Recipes)
-	if len(updatedList.Recipes) > 1 {
-		slog.InfoContext(ctx, "multiple recipes returned for single update", "count", len(updatedList.Recipes), "selected", updatedRecipe.Title)
-	}
-	if err := s.SaveRecipes(ctx, []ai.Recipe{updatedRecipe}, current.OriginHash); err != nil {
-		return nil, err
-	}
-	return &updatedRecipe, nil
-}
-
-func buildRecipeUpdateInstruction(recipe *ai.Recipe, question string) string {
-	title := ""
-	if recipe != nil {
-		title = recipe.Title
-	}
-	return fmt.Sprintf("Update only the recipe titled %q based on this request: %s. Keep it a single recipe. If the request is a question, answer it by updating the recipe description or instructions. Return exactly one recipe in the same JSON schema; do not add extra recipes.", title, question)
-}
-
-func pickUpdatedRecipe(original *ai.Recipe, recipes []ai.Recipe) ai.Recipe {
-	if len(recipes) == 0 {
-		return ai.Recipe{}
-	}
-	originalTitle := ""
-	if original != nil {
-		originalTitle = strings.TrimSpace(original.Title)
-	}
-	if originalTitle != "" {
-		for _, candidate := range recipes {
-			if strings.EqualFold(strings.TrimSpace(candidate.Title), originalTitle) {
-				return candidate
-			}
-		}
-	}
-	return recipes[0]
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *users.User) {
