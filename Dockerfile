@@ -3,6 +3,8 @@
 FROM golang:1.24-alpine AS builder
 WORKDIR /src
 ENV PATH="/go/bin:${PATH}"
+# golangci-lint install needs git for module fetching
+RUN apk add --no-cache git
 # Enable module cache
 COPY go.mod go.sum ./
 RUN go mod download
