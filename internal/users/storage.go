@@ -120,7 +120,11 @@ func (s *Storage) GetByID(id string) (*User, error) {
 		}
 		return nil, err
 	}
-	defer userBytes.Close()
+	defer func() {
+		if err := userBytes.Close(); err != nil {
+			slog.Error("failed to close user reader", "error", err, "user_id", id)
+		}
+	}()
 	decoder := json.NewDecoder(userBytes)
 
 	var user User
@@ -139,7 +143,11 @@ func (s *Storage) GetByEmail(email string) (*User, error) {
 		}
 		return nil, err
 	}
-	defer id.Close()
+	defer func() {
+		if err := id.Close(); err != nil {
+			slog.Error("failed to close user email reader", "error", err, "email", normalized)
+		}
+	}()
 	data, err := io.ReadAll(id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read user ID: %w", err)

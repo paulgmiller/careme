@@ -27,7 +27,11 @@ func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recip
 	if err != nil {
 		return nil, err
 	}
-	defer recipe.Close()
+	defer func() {
+		if err := recipe.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close cached recipe", "hash", hash, "error", err)
+		}
+	}()
 
 	var singleRecipe ai.Recipe
 	err = json.NewDecoder(recipe).Decode(&singleRecipe)
@@ -42,7 +46,11 @@ func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 	if err != nil {
 		return nil, err
 	}
-	defer shoppinglist.Close()
+	defer func() {
+		if err := shoppinglist.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close cached shopping list", "hash", hash, "error", err)
+		}
+	}()
 
 	var list ai.ShoppingList
 	err = json.NewDecoder(shoppinglist).Decode(&list)
@@ -77,13 +85,13 @@ func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, origin
 	return errors.Join(errs...)
 }
 
-var AlreadyExists = errors.New("already exists")
+var ErrAlreadyExists = errors.New("already exists")
 
 func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	paramsJSON := lo.Must(json.Marshal(p))
 	if err := rio.Cache.Put(ctx, p.Hash()+".params", string(paramsJSON), cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
-			return AlreadyExists
+			return ErrAlreadyExists
 		}
 		slog.ErrorContext(ctx, "failed to cache params", "location", p.String(), "error", err)
 		return err

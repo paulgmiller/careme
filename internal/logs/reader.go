@@ -112,7 +112,11 @@ func (r *Reader) readBlobLogs(ctx context.Context, blobName string, w io.Writer)
 	if err != nil {
 		return fmt.Errorf("failed to download blob: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close log blob stream", "error", err, "blob", blobName)
+		}
+	}()
 
 	_, err = io.Copy(w, resp.Body)
 	return err

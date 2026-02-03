@@ -84,7 +84,11 @@ func loadParamsFromHash(ctx context.Context, hash string, c cache.Cache) (*gener
 	if err != nil {
 		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
 	}
-	defer paramsReader.Close()
+	defer func() {
+		if err := paramsReader.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close params reader", "hash", hash, "error", err)
+		}
+	}()
 
 	var params generatorParams
 	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {

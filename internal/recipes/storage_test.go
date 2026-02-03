@@ -15,7 +15,11 @@ func TestRecipeFileNaming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Fatalf("failed to remove temp dir: %v", err)
+		}
+	})
 
 	fileCache := cache.NewFileCache(tmpDir)
 

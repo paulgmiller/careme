@@ -139,7 +139,11 @@ func login(t *testing.T, client *http.Client, baseURL, email string) {
 	if err != nil {
 		t.Fatalf("login request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close login response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		body := readAll(t, resp.Body)
 		t.Fatalf("expected login 200, got %d: %s", resp.StatusCode, body)
@@ -158,7 +162,11 @@ func mustGet(t *testing.T, client *http.Client, url string) *http.Response {
 func mustGetBody(t *testing.T, client *http.Client, url string) string {
 	t.Helper()
 	resp := mustGet(t, client, url)
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		body := readAll(t, resp.Body)
 		t.Fatalf("GET %s expected 200, got %d: %s", url, resp.StatusCode, body)
@@ -179,7 +187,9 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expe
 		resp := mustGet(t, client, current)
 
 		body := readAll(t, resp.Body)
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
 
 		if isSpinner(body) {
 			sawSpinner = true

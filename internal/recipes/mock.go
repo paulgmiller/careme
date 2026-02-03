@@ -344,7 +344,7 @@ var mockRecipes = []ai.Recipe{
 	},
 }
 
-func (_ mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	id := p.ConversationID
 	if id == "" {
 		id = uuid.NewString()

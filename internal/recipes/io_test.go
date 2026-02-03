@@ -15,7 +15,11 @@ func TestSaveParams_IsAtomic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Fatalf("failed to remove temp dir: %v", err)
+		}
+	})
 
 	rio := IO(cache.NewFileCache(tmpDir))
 	p := DefaultParams(&locations.Location{ID: "123", Name: "Test Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
@@ -39,7 +43,7 @@ func TestSaveParams_IsAtomic(t *testing.T) {
 		switch {
 		case err == nil:
 			ok++
-		case errors.Is(err, AlreadyExists):
+		case errors.Is(err, ErrAlreadyExists):
 			alreadyExists++
 		default:
 			other++
@@ -47,6 +51,6 @@ func TestSaveParams_IsAtomic(t *testing.T) {
 	}
 
 	if ok != 1 || other != 0 || alreadyExists != n-1 {
-		t.Fatalf("expected 1 success + %d AlreadyExists, got ok=%d alreadyExists=%d other=%d", n-1, ok, alreadyExists, other)
+		t.Fatalf("expected 1 success + %d ErrAlreadyExists, got ok=%d alreadyExists=%d other=%d", n-1, ok, alreadyExists, other)
 	}
 }

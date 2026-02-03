@@ -24,7 +24,7 @@ var fakes = map[string]Location{
 	},
 }
 
-func (_ mock) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
+func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	l, ok := fakes[locationID]
 	if !ok {
 		return nil, fmt.Errorf("no location %s", locationID)
@@ -32,6 +32,6 @@ func (_ mock) GetLocationByID(ctx context.Context, locationID string) (*Location
 	return &l, nil
 }
 
-func (_ mock) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
+func (m mock) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
 	return lo.Values(fakes), nil
 }
