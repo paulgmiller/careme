@@ -12,6 +12,7 @@ var htmlFiles embed.FS
 var Home,
 	Spin,
 	User,
+	ShoppingList,
 	Recipe,
 	Location,
 	Mail *template.Template
@@ -24,7 +25,8 @@ func init() {
 	Home = ensure(tmpls, "home.html")
 	Spin = ensure(tmpls, "spinner.html")
 	User = ensure(tmpls, "user.html")
-	Recipe = ensure(tmpls, "chat.html")
+	ShoppingList = ensure(tmpls, "shoppinglist.html")
+	Recipe = ensure(tmpls, "recipe.html")
 	Location = ensure(tmpls, "locations.html")
 	Mail = ensure(tmpls, "mail.html")
 

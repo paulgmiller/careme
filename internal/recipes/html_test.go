@@ -43,11 +43,11 @@ var list = ai.ShoppingList{
 	},
 }
 
-func TestFormatChatHTML_ValidHTML(t *testing.T) {
+func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatChatHTML(p, list, w)
+	FormatShoppingListHTML(p, list, w)
 	html := w.Body.String()
 	if w.Code != http.StatusOK {
 		t.Error("Want ok statuscode")
@@ -59,7 +59,7 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatChatHTML(p, list, w)
+	FormatShoppingListHTML(p, list, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -68,12 +68,12 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 	}
 }
 
-func TestFormatChatHTML_IncludesClarityScript(t *testing.T) {
+func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	templates.SetClarity("test456")
 	w := httptest.NewRecorder()
-	FormatChatHTML(p, list, w)
+	FormatShoppingListHTML(p, list, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.clarity.ms/tag/")) {
 		t.Error("HTML should contain Clarity script URL")
 	}
@@ -83,22 +83,22 @@ func TestFormatChatHTML_IncludesClarityScript(t *testing.T) {
 	}
 }
 
-func TestFormatChatHTML_NoClarityWhenEmpty(t *testing.T) {
+func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	templates.SetClarity("")
 	w := httptest.NewRecorder()
-	FormatChatHTML(p, list, w)
+	FormatShoppingListHTML(p, list, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")
 	}
 }
 
-func TestFormatChatHTML_HomePageLink(t *testing.T) {
+func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatChatHTML(p, list, w)
+	FormatShoppingListHTML(p, list, w)
 	html := w.Body.String()
 
 	// Verify "Careme Recipes" is a link to home page
@@ -107,5 +107,29 @@ func TestFormatChatHTML_HomePageLink(t *testing.T) {
 	}
 	if !strings.Contains(html, "Careme Recipes</a>") {
 		t.Error("HTML should contain 'Careme Recipes' as a link")
+	}
+}
+
+func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
+	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.ConversationID = "convo123"
+	w := httptest.NewRecorder()
+	FormatRecipeHTML(p, list.Recipes[0], w)
+	html := w.Body.String()
+
+	isValidHTML(t, html)
+
+	if strings.Contains(html, "Finalize") {
+		t.Error("recipe HTML should not contain Finalize button")
+	}
+	if strings.Contains(html, "Regenerate") {
+		t.Error("recipe HTML should not contain Regenerate button")
+	}
+	if strings.Contains(html, `name="saved"`) || strings.Contains(html, `name="dismissed"`) {
+		t.Error("recipe HTML should not contain save/dismiss inputs")
+	}
+	if strings.Contains(html, `name="question"`) {
+		t.Error("recipe HTML should not contain question input")
 	}
 }

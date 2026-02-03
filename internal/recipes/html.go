@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-// FormatChatHTML renders the raw AI chat (JSON or free-form text) for a location.
-func FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer http.ResponseWriter) {
+// FormatShoppingListHTML renders the multi-recipe shopping list view.
+func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, writer http.ResponseWriter) {
 	// TODO just put params into shopping list and pass that up?
 	data := struct {
 		Location       locations.Location
@@ -34,6 +34,29 @@ func FormatChatHTML(p *generatorParams, l ai.ShoppingList, writer http.ResponseW
 		ShoppingList:   shoppingListForDisplay(l.Recipes),
 		ConversationID: l.ConversationID,
 		Style:          seasons.GetCurrentStyle(),
+	}
+
+	if err := templates.ShoppingList.Execute(writer, data); err != nil {
+		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// FormatRecipeHTML renders a single recipe view.
+func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, writer http.ResponseWriter) {
+	data := struct {
+		Location      locations.Location
+		Date          string
+		ClarityScript template.HTML
+		Recipe        ai.Recipe
+		OriginHash    string
+		Style         seasons.Style
+	}{
+		Location:      *p.Location,
+		Date:          p.Date.Format("2006-01-02"),
+		ClarityScript: templates.ClarityScript(),
+		Recipe:        recipe,
+		OriginHash:    recipe.OriginHash,
+		Style:         seasons.GetCurrentStyle(),
 	}
 
 	if err := templates.Recipe.Execute(writer, data); err != nil {

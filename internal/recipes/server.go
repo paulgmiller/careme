@@ -76,27 +76,29 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := DefaultParams(&locations.Location{
-		ID:   "",
-		Name: "Unknown Location",
-	}, time.Now())
-	if recipe.OriginHash != "" {
-		loadedp, err := loadParamsFromHash(ctx, recipe.OriginHash, s.cache)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
-			// http.Error(w, "recipe not found or expired", http.StatusNotFound)
-			// return
-		} else {
-			p = loadedp
-		}
+	if recipe.OriginHash == "" {
+		slog.WarnContext(ctx, "recipe missing origin hash Probably and old recipe", "hash", hash)
+		p := DefaultParams(&locations.Location{
+			ID:   "",
+			Name: "Unknown Location",
+		}, time.Now())
+		FormatRecipeHTML(p, *recipe, w)
+		return
 	}
 
-	list := ai.ShoppingList{
-		Recipes: []ai.Recipe{*recipe},
+	p, err := loadParamsFromHash(ctx, recipe.OriginHash, s.cache)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
+		http.Error(w, "recipe not found or expired", http.StatusNotFound)
+		return
 	}
+
+	// TODO this p is mising converastion id. See todo in generate recipes we can pregenerate it or update it after generation.
+
+	// TODO: Add questions or regneration to signle recipes
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
-	FormatChatHTML(p, list, w)
+	FormatRecipeHTML(p, *recipe, w)
 }
 
 const (
@@ -153,7 +155,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-
 		p, err := loadParamsFromHash(ctx, hashParam, s.cache)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
@@ -164,7 +165,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			FormatMail(p, *slist, w)
 			return
 		}
-		FormatChatHTML(p, *slist, w)
+		FormatShoppingListHTML(p, *slist, w)
 		return
 	}
 
