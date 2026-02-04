@@ -1,7 +1,7 @@
 package users
 
 import (
-	"careme/internal/clerk"
+	auth "careme/internal/clerk"
 	"careme/internal/locations"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -20,13 +20,13 @@ type locationGetter interface {
 
 type server struct {
 	storage   *Storage
-	userTmpl  *template.Template // just remove or is htis useful?
+	userTmpl  *template.Template // just remove or is this useful?
 	locGetter locationGetter
-	clerk     *clerk.Client
+	clerk     auth.AuthClient // make an interface
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, locGetter locationGetter, clerkClient *clerk.Client) *server {
+func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient) *server {
 	return &server{
 		storage:   storage,
 		userTmpl:  templates.User,
@@ -44,20 +44,18 @@ func (s *server) Register(mux *http.ServeMux) {
 func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var currentUser *User
-	clerkUserID, err := clerk.GetUserIDFromRequest(r)
+	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
-		if !errors.Is(err, clerk.ErrNoSession) {
+		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
-
 	}
 	slog.InfoContext(ctx, "found clerk user ID", "clerk_user_id", clerkUserID)
-	currentUser, err = s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
+	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -101,9 +99,9 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	clerkUserID, err := clerk.GetUserIDFromRequest(r)
+	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
-		if !errors.Is(err, clerk.ErrNoSession) {
+		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return

@@ -1,9 +1,10 @@
-package clerk
+package auth
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/clerk/clerk-sdk-go/v2"
@@ -16,40 +17,58 @@ var (
 )
 
 // Client wraps Clerk SDK functionality
-type Client struct {
+// todo private
+type clerkClient struct {
 	secretKey string
 }
 
+type AuthClient interface {
+	GetUserEmail(ctx context.Context, clerkUserID string) (string, error)
+	GetUserIDFromRequest(r *http.Request) (string, error)
+}
+
+var _ AuthClient = (*clerkClient)(nil)
+
 // NewClient creates a new Clerk client wrapper
-func NewClient(secretKey string) (*Client, error) {
+func NewClient(secretKey string) (*clerkClient, error) {
 	if secretKey == "" {
 		return nil, fmt.Errorf("clerk secret key is required")
 	}
 
 	// Set the global Clerk secret key
+	//use a local client instead?
 	clerk.SetKey(secretKey)
 
-	return &Client{
+	return &clerkClient{
 		secretKey: secretKey,
 	}, nil
 }
 
-// GetUser retrieves a user by their Clerk user ID
-func (c *Client) GetUser(ctx context.Context, userID string) (*clerk.User, error) {
-	u, err := user.Get(ctx, userID)
+func (c *clerkClient) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {
+	clerkUser, err := user.Get(ctx, clerkUserID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch user: %w", err)
+		return "", fmt.Errorf("failed to fetch clerk user: %w", err)
 	}
-	return u, nil
+
+	// Get primary email from Clerk user.
+	// do we need to rync this ever?
+	var primaryEmail string
+	for _, emailAddr := range clerkUser.EmailAddresses {
+		if clerkUser.PrimaryEmailAddressID != nil &&
+			emailAddr.ID == *clerkUser.PrimaryEmailAddressID {
+			primaryEmail = emailAddr.EmailAddress
+			break
+		}
+	}
+
+	if primaryEmail == "" {
+		return "", fmt.Errorf("no primary email found for clerk user %s", clerkUserID)
+	}
+
+	return primaryEmail, nil
 }
 
-// RequireAuth is middleware that requires a valid Clerk session
-func (c *Client) RequireAuth(next http.Handler) http.Handler {
-	return clerkhttp.RequireHeaderAuthorization()(next)
-}
-
-// GetUserIDFromRequest extracts the user ID from a Clerk session in the request context
-func GetUserIDFromRequest(r *http.Request) (string, error) {
+func (c *clerkClient) GetUserIDFromRequest(r *http.Request) (string, error) {
 	sessionClaims, ok := clerk.SessionClaimsFromContext(r.Context())
 	if !ok || sessionClaims == nil {
 		return "", ErrNoSession
@@ -57,8 +76,26 @@ func GetUserIDFromRequest(r *http.Request) (string, error) {
 	return sessionClaims.Subject, nil
 }
 
+// GetUser retrieves a user by their Clerk user ID
+/*func (c *Client) GetUser(ctx context.Context, userID string) (*clerk.User, error) {
+	u, err := user.Get(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user: %w", err)
+	}
+	return u, nil
+}*/
+
+func (c *clerkClient) FromRequest(ctx context.Context, req *http.Request) (string, error) {
+	clerkUserID, err := c.GetUserIDFromRequest(req)
+	if err != nil {
+		return "", err
+	}
+	slog.InfoContext(ctx, "found clerk user ID", "clerk_user_id", clerkUserID)
+	return clerkUserID, nil
+}
+
 // WithClerkHTTP wraps the http.Handler with Clerk's authentication middleware
-func (c *Client) WithClerkHTTP(handler http.Handler) http.Handler {
+func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 
 	purgeAndRedirect := clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Clear any existing Clerk cookies by setting them to expired
@@ -78,5 +115,4 @@ func (c *Client) WithClerkHTTP(handler http.Handler) http.Handler {
 		}
 		clerkhttp.WithHeaderAuthorization(purgeAndRedirect)(handler)
 	})
-
 }

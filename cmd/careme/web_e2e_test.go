@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	auth "careme/internal/clerk"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"
@@ -30,9 +31,6 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	// Step 1: query locations for 90005 and ensure it returns a /recipes?location link.
 	locationsBody := mustGetBody(t, client, srv.URL+"/locations?zip=90005")
 	locationID := extractLocationID(t, locationsBody)
-
-	// Log in to avoid redirect back to home when hitting /recipes.
-	login(t, client, srv.URL, "test@example.com")
 
 	// Step 2: go to /recipes?location=<id> and follow redirects until recipes render.
 	initialRecipesURL := srv.URL + "/recipes?location=" + url.QueryEscape(locationID)
@@ -92,34 +90,12 @@ func newTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("failed to create location server: %v", err)
 	}
 
+	mockAuth := auth.Mock(cfg)
+
 	mux := http.NewServeMux()
 	locations.Register(locationServer, mux)
-	users.NewHandler(userStorage, locationServer).Register(mux)
-	recipes.NewHandler(cfg, userStorage, generator, locationServer, cacheStore).Register(mux)
-
-	//todo find a better way to mock this or move it to web.go?
-	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "invalid form submission", http.StatusBadRequest)
-			return
-		}
-		email := strings.TrimSpace(r.FormValue("email"))
-		if email == "" {
-			http.Error(w, "email is required", http.StatusBadRequest)
-			return
-		}
-		user, err := userStorage.FindOrCreateByEmail(email)
-		if err != nil {
-			http.Error(w, "unable to sign in", http.StatusInternalServerError)
-			return
-		}
-		users.SetCookie(w, user.ID, sessionDuration)
-		w.WriteHeader(http.StatusOK)
-	})
+	users.NewHandler(userStorage, locationServer, mockAuth).Register(mux)
+	recipes.NewHandler(cfg, userStorage, generator, locationServer, cacheStore, mockAuth).Register(mux)
 
 	return httptest.NewServer(WithMiddleware(mux))
 }
@@ -132,25 +108,6 @@ func newTestClient(t *testing.T) *http.Client {
 	}
 	return &http.Client{
 		Jar: jar,
-	}
-}
-
-func login(t *testing.T, client *http.Client, baseURL, email string) {
-	t.Helper()
-	form := url.Values{}
-	form.Set("email", email)
-	resp, err := client.PostForm(baseURL+"/login", form)
-	if err != nil {
-		t.Fatalf("login request failed: %v", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Fatalf("failed to close login response body: %v", err)
-		}
-	}()
-	if resp.StatusCode != http.StatusOK {
-		body := readAll(t, resp.Body)
-		t.Fatalf("expected login 200, got %d: %s", resp.StatusCode, body)
 	}
 }
 

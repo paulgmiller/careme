@@ -3,7 +3,7 @@ package recipes
 import (
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/clerk"
+	auth "careme/internal/clerk"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/locations"
@@ -40,12 +40,12 @@ type server struct {
 	generator generator
 	locServer locServer
 	wg        sync.WaitGroup
-	clerk     *clerk.Client
+	clerk     auth.AuthClient
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, clerkClient *clerk.Client) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
 		recipeio:  recipeio{Cache: c},
 		cache:     c,
@@ -124,9 +124,9 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 				http.Error(w, "recipe not found or expired", http.StatusNotFound)
 				return
 			}
-			clerkUserID, err := clerk.GetUserIDFromRequest(r)
+			clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 			if err != nil {
-				if !errors.Is(err, clerk.ErrNoSession) {
+				if !errors.Is(err, auth.ErrNoSession) {
 					slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
 					http.Error(w, "unable to load account", http.StatusInternalServerError)
 					return
@@ -206,13 +206,14 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	clerkUserID, err := clerk.GetUserIDFromRequest(r)
+	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
-		if !errors.Is(err, clerk.ErrNoSession) {
+		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
+		slog.InfoContext(ctx, "failed got no sesion from request", "error", err, "url", r.URL.String())
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}

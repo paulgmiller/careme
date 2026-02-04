@@ -24,6 +24,7 @@ type KrogerConfig struct {
 
 type MockConfig struct {
 	Enable bool
+	Email  string
 }
 
 type ClerkConfig struct {
@@ -66,6 +67,7 @@ func Load() (*Config, error) {
 		},
 		Mocks: MockConfig{
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv
+			Email:  os.Getenv("MOCK_USER_EMAIL"),
 		},
 		Clerk: ClerkConfig{
 			SecretKey:      os.Getenv("CLERK_SECRET_KEY"),

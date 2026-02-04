@@ -2,7 +2,7 @@ package main
 
 import (
 	"careme/internal/cache"
-	"careme/internal/clerk"
+	auth "careme/internal/clerk"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/logs"
@@ -39,7 +39,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
-	clerkClient, err := clerk.NewClient(cfg.Clerk.SecretKey)
+	authClient, err := auth.NewClient(cfg.Clerk.SecretKey)
 	if err != nil {
 		return fmt.Errorf("failed to create clerk client: %w", err)
 	}
@@ -65,10 +65,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	}
 	locations.Register(locationserver, mux)
 
-	userHandler := users.NewHandler(userStorage, locationserver, clerkClient)
+	userHandler := users.NewHandler(userStorage, locationserver, authClient)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache, clerkClient)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache, authClient)
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
@@ -81,11 +81,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-
 		var currentUser *users.User
-		clerkUserID, err := clerk.GetUserIDFromRequest(r)
+		clerkUserID, err := authClient.GetUserIDFromRequest(r)
 		if err != nil {
-			if !errors.Is(err, clerk.ErrNoSession) {
+			if !errors.Is(err, auth.ErrNoSession) {
 				slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
@@ -93,15 +92,13 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			//no user is fine we'll just pass nil currentUser to template
 
 		} else {
-			slog.InfoContext(ctx, "found clerk user ID", "clerk_user_id", clerkUserID)
-			currentUser, err = userStorage.FindOrCreateFromClerk(ctx, clerkUserID, clerkClient)
+			currentUser, err = userStorage.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
 			if err != nil {
 				slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
 		}
-
 		data := struct {
 			ClarityScript template.HTML
 			User          *users.User
@@ -117,7 +114,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 	})
 
-	//why are these diffeerent?
+	//Move signin/up/auth/establish/logout to auth package?
 	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, cfg.Clerk.Signin(), http.StatusSeeOther)
 	})
@@ -179,7 +176,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: debugAuth(clerkClient.WithClerkHTTP(WithMiddleware(mux))),
+		Handler: debugAuth(authClient.WithAuthHTTP(WithMiddleware(mux))),
 	}
 
 	// Channel to listen for errors coming from the server
@@ -256,12 +253,6 @@ func debugAuth(next http.Handler) http.Handler {
 			cookieNames = append(cookieNames, c.Name)
 		}
 
-		if r.Header.Get("Authorization") == "" {
-			if c, err := r.Cookie("__session"); err == nil && c.Value != "" {
-				r.Header.Set("Authorization", "Bearer "+c.Value)
-			}
-		}
-
 		log.Printf("auth-debug path=%s host=%s xf_proto=%q xf_host=%q hasAuthz=%t has__clerk_db_jwt=%t cookies=%v",
 			r.URL.Path,
 			r.Host,
@@ -274,10 +265,5 @@ func debugAuth(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 
-		/*if claims, ok := clerk.SessionClaimsFromContext(r.Context()); ok {
-			log.Printf("auth-debug claims ok sub=%s sid=%s", claims.Subject, claims.SessionID)
-		} else {
-			log.Printf("auth-debug claims missing (middleware did not authenticate)")
-		}*/
 	})
 }

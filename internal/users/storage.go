@@ -2,7 +2,6 @@ package users
 
 import (
 	"careme/internal/cache"
-	"careme/internal/clerk"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 var daysOfWeek = [...]string{
@@ -156,33 +153,12 @@ func (s *Storage) GetByEmail(email string) (*User, error) {
 	return s.GetByID(string(data))
 }
 
-func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
-	user, err := s.GetByEmail(email)
-	if err == nil {
-		return user, nil
-	}
-
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return nil, err
-	}
-
-	newUser := User{
-		ID:          uuid.New().String(),
-		Email:       []string{normalizeEmail(email)},
-		CreatedAt:   time.Now(),
-		ShoppingDay: time.Saturday.String(),
-	}
-	if err := s.Update(&newUser); err != nil {
-		return nil, fmt.Errorf("failed to create new user: %w", err)
-	}
-	if err := s.cache.Put(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID, cache.Unconditional()); err != nil {
-		return nil, fmt.Errorf("failed to index new user by email: %w", err)
-	}
-	return &newUser, nil
+type emailFetcher interface {
+	GetUserEmail(ctx context.Context, userID string) (string, error)
 }
 
 // interface for clerk client
-func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, clerkClient *clerk.Client) (*User, error) {
+func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*User, error) {
 	user, err := s.GetByID(clerkUserID)
 	if err == nil {
 		return user, nil
@@ -192,20 +168,9 @@ func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string,
 		return nil, err
 	}
 
-	clerkUser, err := clerkClient.GetUser(ctx, clerkUserID)
+	primaryEmail, err := emailFetcher.GetUserEmail(ctx, clerkUserID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch clerk user: %w", err)
-	}
-
-	// Get primary email from Clerk user.
-	// do we need to rync this ever?
-	var primaryEmail string
-	for _, emailAddr := range clerkUser.EmailAddresses {
-		if clerkUser.PrimaryEmailAddressID != nil &&
-			emailAddr.ID == *clerkUser.PrimaryEmailAddressID {
-			primaryEmail = emailAddr.EmailAddress
-			break
-		}
+		return nil, fmt.Errorf("failed to fetch user email from clerk: %w", err)
 	}
 
 	newUser := User{
