@@ -1,0 +1,23 @@
+{{if (ClerkEnabled)}}
+<script
+  async
+  crossorigin="anonymous"
+  data-clerk-publishable-key="{{ClerkPublishableKey}}"
+  src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js">
+</script>
+
+<script>
+  // Minimal: initialize Clerk so it can keep session tokens refreshed
+  (async () => {
+    // wait until Clerk is present
+    while (!window.Clerk?.load) await new Promise(r => setTimeout(r, 10));
+    await Clerk.load();
+
+    // Optional: if you want to be extra defensive, force-refresh occasionally
+    // (Clerk docs describe forcing refresh via skipCache on getToken)
+    // setInterval(async () => {
+    //   if (Clerk.session) await Clerk.session.getToken({ skipCache: true });
+    // }, 45_000);
+  })();
+</script>
+{{end}}

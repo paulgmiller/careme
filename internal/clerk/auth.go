@@ -59,5 +59,14 @@ func GetUserIDFromRequest(r *http.Request) (string, error) {
 
 // WithClerkHTTP wraps the http.Handler with Clerk's authentication middleware
 func (c *Client) WithClerkHTTP(handler http.Handler) http.Handler {
-	return clerkhttp.WithHeaderAuthorization()(handler)
+
+	purgeAndRedirect := clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Clear any existing Clerk cookies by setting them to expired
+		http.SetCookie(w, &http.Cookie{
+			Name:  "__session",
+			Value: "",
+		})
+		http.Redirect(w, r, r.RequestURI, http.StatusFound)
+	}))
+	return clerkhttp.WithHeaderAuthorization(purgeAndRedirect)(handler)
 }
