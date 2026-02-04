@@ -68,5 +68,15 @@ func (c *Client) WithClerkHTTP(handler http.Handler) http.Handler {
 		})
 		http.Redirect(w, r, r.RequestURI, http.StatusFound)
 	}))
-	return clerkhttp.WithHeaderAuthorization(purgeAndRedirect)(handler)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Header.Get("Authorization") == "" {
+			if c, err := r.Cookie("__session"); err == nil && c.Value != "" {
+				r.Header.Set("Authorization", "Bearer "+c.Value)
+			}
+		}
+		clerkhttp.WithHeaderAuthorization(purgeAndRedirect)(handler)
+	})
+
 }

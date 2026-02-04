@@ -132,7 +132,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 					return
 				}
 				http.Redirect(w, r, "/", http.StatusSeeOther)
-
+				return
 			}
 			currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
 			if err != nil {
@@ -214,7 +214,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
-
+		return
 	}
 
 	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -26,21 +27,32 @@ type MockConfig struct {
 }
 
 type ClerkConfig struct {
-	SecretKey       string
-	PublishableKey  string
-	Domain          string
+	SecretKey      string
+	PublishableKey string
+	Domain         string
+	Prod           bool
 }
 
 func (c *ClerkConfig) IsEnabled() bool {
 	return c.SecretKey != "" && c.Domain != "" && c.PublishableKey != ""
 }
 
+var locahostredirect = "?redirect_url=http://localhost:8080/auth/establish"
+
 func (c *ClerkConfig) Signin() string {
-	return fmt.Sprintf("https://%s/sign-in?redirect_url=%s", c.Domain, "http://localhost:8080/auth/establish")
+	url := fmt.Sprintf("https://%s/sign-in", c.Domain)
+	if !c.Prod {
+		url += locahostredirect
+	}
+	return url
 }
 
 func (c *ClerkConfig) Signup() string {
-	return fmt.Sprintf("https://%s/sign-up?redirect_url=%s", c.Domain, "http://localhost:8080/auth/establish")
+	url := fmt.Sprintf("https://%s/sign-up", c.Domain)
+	if !c.Prod {
+		url += locahostredirect
+	}
+	return url
 }
 
 func Load() (*Config, error) {
@@ -60,6 +72,9 @@ func Load() (*Config, error) {
 			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
 			Domain:         os.Getenv("CLERK_DOMAIN"),
 		},
+	}
+	if strings.HasSuffix(config.Clerk.Domain, "careme.cooking") {
+		config.Clerk.Prod = true
 	}
 
 	return config, validate(config)

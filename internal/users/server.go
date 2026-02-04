@@ -40,6 +40,7 @@ func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
 }
 
+// used on user page to manaully save recipes
 func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -51,20 +52,15 @@ func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
-		//no user is fine we'll just pass nil currentUser to template
-
-	} else {
-		slog.InfoContext(ctx, "found clerk user ID", "clerk_user_id", clerkUserID)
-		currentUser, err = s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if currentUser == nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+
+	}
+	slog.InfoContext(ctx, "found clerk user ID", "clerk_user_id", clerkUserID)
+	currentUser, err = s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 
@@ -113,7 +109,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
-
+		return
 	}
 
 	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)

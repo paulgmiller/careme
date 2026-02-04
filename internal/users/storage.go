@@ -209,7 +209,7 @@ func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string,
 	}
 
 	newUser := User{
-		ID:          uuid.New().String(),
+		ID:          clerkUserID, //do we need this o be independent for housholds?
 		Email:       []string{normalizeEmail(primaryEmail)},
 		CreatedAt:   time.Now(),
 		ShoppingDay: time.Saturday.String(),
