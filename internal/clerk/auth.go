@@ -76,15 +76,6 @@ func (c *clerkClient) GetUserIDFromRequest(r *http.Request) (string, error) {
 	return sessionClaims.Subject, nil
 }
 
-// GetUser retrieves a user by their Clerk user ID
-/*func (c *Client) GetUser(ctx context.Context, userID string) (*clerk.User, error) {
-	u, err := user.Get(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch user: %w", err)
-	}
-	return u, nil
-}*/
-
 func (c *clerkClient) FromRequest(ctx context.Context, req *http.Request) (string, error) {
 	clerkUserID, err := c.GetUserIDFromRequest(req)
 	if err != nil {
@@ -98,6 +89,7 @@ func (c *clerkClient) FromRequest(ctx context.Context, req *http.Request) (strin
 func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 
 	purgeAndRedirect := clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("authorization failure, purging cookies and redirecting")
 		// Clear any existing Clerk cookies by setting them to expired
 		http.SetCookie(w, &http.Cookie{
 			Name:  "__session",
@@ -106,13 +98,46 @@ func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 		http.Redirect(w, r, r.RequestURI, http.StatusFound)
 	}))
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useSessionCookie := clerkhttp.AuthorizationJWTExtractor(func(r *http.Request) string {
 
-		if r.Header.Get("Authorization") == "" {
-			if c, err := r.Cookie("__session"); err == nil && c.Value != "" {
-				r.Header.Set("Authorization", "Bearer "+c.Value)
-			}
+		if c, err := r.Cookie("__session"); err == nil {
+			return c.Value
 		}
-		clerkhttp.WithHeaderAuthorization(purgeAndRedirect)(handler)
+		return ""
+	})
+
+	wrapped := clerkhttp.WithHeaderAuthorization(purgeAndRedirect, useSessionCookie)(handler)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wrapped.ServeHTTP(w, r)
 	})
 }
+
+/* Toss this in if you're confused :)
+func debugAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		hasDB := q.Has("__clerk_db_jwt")
+
+		authz := r.Header.Get("Authorization")
+		hasAuthz := authz != ""
+
+		// list cookie names only (don’t log values)
+		cookieNames := []string{}
+		for _, c := range r.Cookies() {
+			cookieNames = append(cookieNames, c.Name)
+		}
+
+		log.Printf("auth-debug path=%s host=%s xf_proto=%q xf_host=%q hasAuthz=%t has__clerk_db_jwt=%t cookies=%v",
+			r.URL.Path,
+			r.Host,
+			r.Header.Get("X-Forwarded-Proto"),
+			r.Header.Get("X-Forwarded-Host"),
+			hasAuthz,
+			hasDB,
+			cookieNames,
+		)
+
+		next.ServeHTTP(w, r)
+
+	})
+}*/
