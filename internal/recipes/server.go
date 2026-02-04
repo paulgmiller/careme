@@ -89,8 +89,12 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	p, err := loadParamsFromHash(ctx, recipe.OriginHash, s.cache)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
-		http.Error(w, "recipe not found or expired", http.StatusNotFound)
-		return
+		//http.Error(w, "recipe not found or expired", http.StatusNotFound)
+		//return
+		p = DefaultParams(&locations.Location{
+			ID:   "",
+			Name: "Unknown Location",
+		}, time.Now())
 	}
 
 	// TODO this p is mising converastion id. See todo in generate recipes we can pregenerate it or update it after generation.
