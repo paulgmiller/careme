@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
@@ -19,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -30,12 +30,15 @@ var favicon []byte
 //go:embed static/tailwind.css
 var tailwindCSS []byte
 
-const sessionDuration = 365 * 24 * time.Hour
-
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
+	}
+
+	authClient, err := auth.NewClient(cfg.Clerk.SecretKey)
+	if err != nil {
+		return fmt.Errorf("failed to create clerk client: %w", err)
 	}
 
 	userStorage := users.NewStorage(cache)
@@ -59,10 +62,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	}
 	locations.Register(locationserver, mux)
 
-	userHandler := users.NewHandler(userStorage, locationserver)
+	userHandler := users.NewHandler(userStorage, locationserver, authClient)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache, authClient)
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
@@ -75,12 +78,21 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		currentUser, err := users.FromRequest(r, userStorage)
+		var currentUser *users.User
+		clerkUserID, err := authClient.GetUserIDFromRequest(r)
 		if err != nil {
-			if errors.Is(err, users.ErrNotFound) {
-				users.ClearCookie(w)
-			} else {
-				slog.ErrorContext(ctx, "failed to load user from cookie", "error", err)
+			if !errors.Is(err, auth.ErrNoSession) {
+				slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+				http.Error(w, "unable to load account", http.StatusInternalServerError)
+				return
+			}
+			//no user is fine we'll just pass nil currentUser to template
+			// just have two different templates?
+
+		} else {
+			currentUser, err = userStorage.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
@@ -100,37 +112,32 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 	})
 
-	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+	//TODO move signin/up/auth/establish/logout to auth package
+	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, cfg.Clerk.Signin(), http.StatusSeeOther)
+	})
+	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, cfg.Clerk.Signup(), http.StatusSeeOther)
+	})
+	mux.HandleFunc("/auth/establish", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.Clerk.PublishableKey == "" {
+			http.Error(w, "clerk publishable key missing", http.StatusInternalServerError)
 			return
 		}
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "invalid form submission", http.StatusBadRequest)
-			return
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		data := struct {
+			PublishableKey string
+		}{
+			PublishableKey: cfg.Clerk.PublishableKey,
 		}
-		email := strings.TrimSpace(r.FormValue("email"))
-		if email == "" {
-			http.Error(w, "email is required", http.StatusBadRequest)
-			return
+		if err := templates.AuthEstablish.Execute(w, data); err != nil {
+			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
 		}
-		user, err := userStorage.FindOrCreateByEmail(email)
-		if err != nil {
-			slog.ErrorContext(r.Context(), "failed to find or create user", "error", err)
-			http.Error(w, fmt.Sprintf("unable to sign in: %v", err), http.StatusInternalServerError)
-			return
-		}
-		users.SetCookie(w, user.ID, sessionDuration)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 
 	mux.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		users.ClearCookie(w)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		authClient.Logout(w, r)
 	})
 
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +156,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: WithMiddleware(mux),
+		Handler: authClient.WithAuthHTTP(WithMiddleware(mux)),
 	}
 
 	// Channel to listen for errors coming from the server

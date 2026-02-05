@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"careme/internal/ai"
+	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
@@ -39,11 +40,12 @@ type server struct {
 	generator generator
 	locServer locServer
 	wg        sync.WaitGroup
+	clerk     auth.AuthClient
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
 		recipeio:  recipeio{Cache: c},
 		cache:     c,
@@ -51,6 +53,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		storage:   storage,
 		generator: generator,
 		locServer: locServer,
+		clerk:     clerkClient,
 	}
 }
 
@@ -121,14 +124,19 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 				http.Error(w, "recipe not found or expired", http.StatusNotFound)
 				return
 			}
-			currentUser, err := users.FromRequest(r, s.storage)
+			clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 			if err != nil {
-				if errors.Is(err, users.ErrNotFound) {
-					users.ClearCookie(w)
-					http.Redirect(w, r, "/", http.StatusSeeOther)
+				if !errors.Is(err, auth.ErrNoSession) {
+					slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+					http.Error(w, "unable to load account", http.StatusInternalServerError)
 					return
 				}
-				slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
@@ -198,14 +206,21 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	currentUser, err := users.FromRequest(r, s.storage)
+	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
-		if errors.Is(err, users.ErrNotFound) {
-			users.ClearCookie(w)
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+		if !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load user for recipes", "error", err)
+		slog.InfoContext(ctx, "failed got no sesion from request", "error", err, "url", r.URL.String())
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}

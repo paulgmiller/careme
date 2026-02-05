@@ -5,7 +5,7 @@ metadata:
   labels:
     app: careme
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: careme
@@ -28,7 +28,7 @@ spec:
               name: http
           envFrom:
             - secretRef:
-                name: careme-secrets
+                name: careme-secrets3
           env:
             - name: CLARITY_PROJECT_ID
               value: "td2gxd3sq9"

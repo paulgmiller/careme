@@ -11,6 +11,7 @@ var htmlFiles embed.FS
 
 var Home,
 	Spin,
+	AuthEstablish,
 	User,
 	ShoppingList,
 	Recipe,
@@ -18,12 +19,18 @@ var Home,
 	Mail *template.Template
 
 func init() {
-	tmpls, err := template.ParseFS(htmlFiles, "*.html")
+	clerkPublishableKey = os.Getenv("CLERK_PUBLISHABLE_KEY")
+	funcs := template.FuncMap{
+		"ClerkEnabled":        ClerkEnabled,
+		"ClerkPublishableKey": ClerkPublishableKey,
+	}
+	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {
 		panic(err.Error())
 	}
 	Home = ensure(tmpls, "home.html")
 	Spin = ensure(tmpls, "spinner.html")
+	AuthEstablish = ensure(tmpls, "auth_establish.html")
 	User = ensure(tmpls, "user.html")
 	ShoppingList = ensure(tmpls, "shoppinglist.html")
 	Recipe = ensure(tmpls, "recipe.html")
@@ -47,6 +54,7 @@ func SetClarity(project string) {
 }
 
 var clarityproject string
+var clerkPublishableKey string
 
 // ClarityScript generates the Microsoft Clarity tracking script HTML
 func ClarityScript() template.HTML {
@@ -63,4 +71,14 @@ func ClarityScript() template.HTML {
 </script>`
 
 	return template.HTML(script)
+}
+
+// ClerkEnabled reports whether Clerk is configured for templates.
+func ClerkEnabled() bool {
+	return clerkPublishableKey != ""
+}
+
+// ClerkPublishableKey returns the Clerk publishable key for templates.
+func ClerkPublishableKey() string {
+	return clerkPublishableKey
 }

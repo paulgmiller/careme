@@ -13,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 var daysOfWeek = [...]string{
@@ -155,8 +153,13 @@ func (s *Storage) GetByEmail(email string) (*User, error) {
 	return s.GetByID(string(data))
 }
 
-func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
-	user, err := s.GetByEmail(email)
+type emailFetcher interface {
+	GetUserEmail(ctx context.Context, userID string) (string, error)
+}
+
+// interface for clerk client
+func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*User, error) {
+	user, err := s.GetByID(clerkUserID)
 	if err == nil {
 		return user, nil
 	}
@@ -165,9 +168,14 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 		return nil, err
 	}
 
+	primaryEmail, err := emailFetcher.GetUserEmail(ctx, clerkUserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user email from clerk: %w", err)
+	}
+
 	newUser := User{
-		ID:          uuid.New().String(),
-		Email:       []string{normalizeEmail(email)},
+		ID:          clerkUserID, //do we need this o be independent for housholds?
+		Email:       []string{normalizeEmail(primaryEmail)},
 		CreatedAt:   time.Now(),
 		ShoppingDay: time.Saturday.String(),
 	}
@@ -177,6 +185,7 @@ func (s *Storage) FindOrCreateByEmail(email string) (*User, error) {
 	if err := s.cache.Put(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID, cache.Unconditional()); err != nil {
 		return nil, fmt.Errorf("failed to index new user by email: %w", err)
 	}
+	slog.InfoContext(ctx, "created new user", "id", clerkUserID, "email", primaryEmail)
 	return &newUser, nil
 }
 

@@ -1,6 +1,7 @@
 package users
 
 import (
+	"careme/internal/auth"
 	"careme/internal/locations"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -19,16 +20,18 @@ type locationGetter interface {
 
 type server struct {
 	storage   *Storage
-	userTmpl  *template.Template // just remove or is htis useful?
+	userTmpl  *template.Template // just remove or is this useful?
 	locGetter locationGetter
+	clerk     auth.AuthClient // make an interface
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, locGetter locationGetter) *server {
+func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient) *server {
 	return &server{
 		storage:   storage,
 		userTmpl:  templates.User,
 		locGetter: locGetter,
+		clerk:     clerkClient,
 	}
 }
 
@@ -37,16 +40,25 @@ func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
 }
 
+// used on user page to manaully save recipes
 func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	currentUser, err := FromRequest(r, s.storage)
+
+	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load user for user page", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		if !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	if currentUser == nil {
-		http.Redirect(w, r, "/user", http.StatusSeeOther)
+	slog.InfoContext(ctx, "found clerk user ID", "clerk_user_id", clerkUserID)
+	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 
@@ -87,19 +99,21 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	currentUser, err := FromRequest(r, s.storage)
+	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ClearCookie(w)
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+		if !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load user for user page", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	if currentUser == nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+
+	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 
