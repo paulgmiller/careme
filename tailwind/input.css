@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @source "../internal/templates/**/*.html";
 
-@custom-variant dark (@media (prefers-color-scheme: dark));
 
 @theme {
   --color-brand-50: var(--brand-50);
@@ -15,6 +14,9 @@
   --color-brand-800: var(--brand-800);
   --color-brand-900: var(--brand-900);
 }
+/* This seems like not the right way to do this. 
+https://tailwindcss.com/docs/adding-custom-variants#custom-variants 
+@custom-variant dark (@media (prefers-color-scheme: dark));
 
 @layer utilities {
   @media (prefers-color-scheme: dark) {
@@ -89,3 +91,4 @@
     }
   }
 }
+*/
