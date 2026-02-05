@@ -87,6 +87,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 				return
 			}
 			//no user is fine we'll just pass nil currentUser to template
+			// just have two different templates?
 
 		} else {
 			currentUser, err = userStorage.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
@@ -111,7 +112,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 	})
 
-	//Move signin/up/auth/establish/logout to auth package?
+	//TODO move signin/up/auth/establish/logout to auth package
 	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, cfg.Clerk.Signin(), http.StatusSeeOther)
 	})

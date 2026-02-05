@@ -38,7 +38,7 @@ func NewClient(secretKey string) (*clerkClient, error) {
 	}
 
 	// Set the global Clerk secret key
-	//use a local client instead?
+	//TODO use a local client instead? GLOBALS BAD
 	clerk.SetKey(secretKey)
 
 	return &clerkClient{
@@ -93,10 +93,7 @@ func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	purgeAndRedirect := clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("authorization failure, purging cookies and redirecting")
 		// Clear any existing Clerk cookies by setting them to expired
-		http.SetCookie(w, &http.Cookie{
-			Name:  "__session",
-			Value: "",
-		})
+		clearCookie(w, "__session")
 		http.Redirect(w, r, r.RequestURI, http.StatusFound)
 	}))
 
