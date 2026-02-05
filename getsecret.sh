@@ -9,7 +9,7 @@ if [[ $# -gt 3 ]]; then
   exit 1
 fi
 
-SECRET_NAME="${1:-careme-secrets}"
+SECRET_NAME="${1:-careme-secrets3}"
 NAMESPACE="${2:-careme}"
 OUTPUT_FILE="${3:-.env}"
 
