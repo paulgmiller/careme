@@ -30,8 +30,6 @@ var favicon []byte
 //go:embed static/tailwind.css
 var tailwindCSS []byte
 
-const sessionDuration = 365 * 24 * time.Hour
-
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
 	if err != nil {
