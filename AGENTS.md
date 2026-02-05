@@ -6,6 +6,7 @@
 - `internal/templates` and `cmd/careme/favicon.png`: HTML templates and assets for the UI; `internal/html` holds helpers (e.g., Clarity snippet).
 - `internal/cache`, `internal/logsink`, `internal/ai`, `internal/users`: Cross-cutting services (caching, logging, AI provider glue, user storage).
 - `recipes/`: Local output directory created at runtime; keep it out of commits unless intentionally adding fixtures.
+- `internal/auth` : mostly clerk authorization
 
 ## Build, Test, and Development Commands
 - `go fmt ./...` then `go vet ./...`: Baseline formatting and static checks.
@@ -15,6 +16,7 @@
 - `go run ./cmd/careme -serve -addr :8080`: Start the web server (requires env vars below).
 - `go run ./cmd/careme -zipcode 98101`: Helper to list Kroger location IDs by ZIP.
 - `go build -o bin/careme ./cmd/careme`: Produce a local binary for manual runs.
+- `tailwind\generate.sh`: run when ever you change css or html
 
 ## Coding Style & Naming Conventions
 - Go 1.24; keep code `gofmt`-clean before review. Favor small, focused functions and table-driven tests.
