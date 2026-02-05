@@ -9,14 +9,14 @@ if [ -z "$content_files" ]; then
   echo "No tracked template files found under internal/templates." >&2
   exit 1
 fi
-content_arg=$(printf '%s' "$content_files" | paste -sd, -)
+content_arg=$(printf '%s' "$content_files" | sed 's|^|../|' | paste -sd, -)
 
 docker run --rm \
   -v "$(pwd)":/workspace \
-  -w /workspace \
+  -w /workspace/tailwind \
   -e CONTENT_ARG="$content_arg" \
   careme-tailwind:local \
-  sh -c '"$TAILWIND_BIN" -i ./tailwind/input.css -o ./cmd/careme/static/tailwind.css --minify --content "$CONTENT_ARG"'
+  sh -c '"$TAILWIND_BIN" -i ./input.css -o ../cmd/careme/static/tailwind.css --minify --content "$CONTENT_ARG"'
 
 # Normalize output to include a trailing newline for stable diffs.
 if [ -s ./cmd/careme/static/tailwind.css ] && [ "$(tail -c1 ./cmd/careme/static/tailwind.css)" != $'\n' ]; then
