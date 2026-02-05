@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
+	"github.com/clerk/clerk-sdk-go/v2/session"
 	"github.com/clerk/clerk-sdk-go/v2/user"
 )
 
@@ -109,6 +111,35 @@ func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	wrapped := clerkhttp.WithHeaderAuthorization(purgeAndRedirect, useSessionCookie)(handler)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wrapped.ServeHTTP(w, r)
+	})
+}
+
+func (c *clerkClient) Logout(w http.ResponseWriter, r *http.Request) {
+	claims, ok := clerk.SessionClaimsFromContext(r.Context())
+	if ok && claims.SessionID != "" {
+		// Revoke the active Clerk session (sid claim).
+		_, _ = session.Revoke(r.Context(), &session.RevokeParams{ID: claims.SessionID})
+	}
+
+	// Clear app-domain cookies that can re-bootstrap auth.
+	clearCookie(w, "__session")
+	clearCookie(w, "__clerk_db_jwt") // common in dev flows
+	clearCookie(w, "__client")       // if present in your setup
+
+	// Redirect to a logged-out page in your app.
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func clearCookie(w http.ResponseWriter, name string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true, // keep this true in prod
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 

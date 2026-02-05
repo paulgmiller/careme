@@ -135,26 +135,8 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 	})
 
-	const sessionCookieName = "__session" // change if yours differs
-	//TODO move ot auth?
 	mux.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		//	c, err := r.Cookie(sessionCookieName)
-		//		// PSEUDOCODE (because the exact claim shape depends on token type):
-		// verified, _ := clerk.VerifyToken(c.Value, clerk.VerifyTokenParams{...})
-		// sessID := verified.SessionID
-		// if sessID != "" { session.Revoke(ctx, &session.RevokeParams{ID: sessID}) }
-
-		http.SetCookie(w, &http.Cookie{
-			Name:     sessionCookieName,
-			Value:    "",
-			Path:     "/",
-			Expires:  time.Unix(0, 0),
-			MaxAge:   -1,
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteLaxMode,
-		})
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		authClient.Logout(w, r)
 	})
 
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
