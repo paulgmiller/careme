@@ -2,8 +2,8 @@ package recipes
 
 import (
 	"careme/internal/ai"
+	"careme/internal/auth"
 	"careme/internal/cache"
-	auth "careme/internal/clerk"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/locations"

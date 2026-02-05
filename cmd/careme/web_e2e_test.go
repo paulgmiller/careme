@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/auth"
 	"careme/internal/cache"
-	auth "careme/internal/clerk"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"

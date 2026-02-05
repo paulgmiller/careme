@@ -1,7 +1,7 @@
 package users
 
 import (
-	auth "careme/internal/clerk"
+	"careme/internal/auth"
 	"careme/internal/locations"
 	"careme/internal/seasons"
 	"careme/internal/templates"

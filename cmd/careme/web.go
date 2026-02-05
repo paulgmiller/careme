@@ -1,8 +1,8 @@
 package main
 
 import (
+	"careme/internal/auth"
 	"careme/internal/cache"
-	auth "careme/internal/clerk"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/logs"
