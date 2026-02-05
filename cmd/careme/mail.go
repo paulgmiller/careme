@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/sendgrid/rest"
@@ -58,7 +57,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	// shove into cfg?
-	sendgridkey := os.Getenv("SENDGRID_API_KEY")
+	sendgridkey := cfg.SendGrid.APIKey
 	if sendgridkey == "" {
 		return nil, fmt.Errorf("SENDGRID_API_KEY environment variable is not set")
 	}
