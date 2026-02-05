@@ -40,6 +40,7 @@ func (c *ClerkConfig) IsEnabled() bool {
 
 var locahostredirect = "?redirect_url=http://localhost:8080/auth/establish"
 
+// move to auth pacakage?
 func (c *ClerkConfig) Signin() string {
 	url := fmt.Sprintf("https://%s/sign-in", c.Domain)
 	if !c.Prod {
