@@ -12,6 +12,7 @@ import (
 	"careme/internal/templates"
 	"careme/internal/users"
 	"context"
+	"crypto/sha256"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -47,10 +48,16 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
+	tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == tailwindETag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("Cache-Control", "public, max-age=0, no-cache")
+		w.Header().Set("ETag", tailwindETag)
 		if _, err := w.Write(tailwindCSS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
 		}
