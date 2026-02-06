@@ -37,6 +37,4 @@ func (r *readyOnce) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if _, err := w.Write([]byte("OK")); err != nil {
 		slog.ErrorContext(req.Context(), "failed to write readiness response", "error", err)
 	}
-
-	w.WriteHeader(http.StatusOK)
 }
