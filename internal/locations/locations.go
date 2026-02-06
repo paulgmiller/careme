@@ -111,15 +111,8 @@ func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) 
 	return locations, nil
 }
 
-var readyOnce sync.Once
-
 func Ready(ctx context.Context, l locationGetter) error {
-	// no need to do this more than once since locations don't change often and we cache them
-	// just do it for a single known location to ensure the client is working
-	var err error
-	readyOnce.Do(func() {
-		_, err = l.GetLocationsByZip(ctx, "98005") //magic number is my zip code :)
-	})
+	_, err := l.GetLocationsByZip(ctx, "98005") //magic number is my zip code :)
 	return err
 }
 

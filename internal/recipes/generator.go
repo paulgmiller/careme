@@ -31,7 +31,6 @@ type Generator struct {
 	aiClient     aiClient
 	krogerClient kroger.ClientWithResponsesInterface // probably need only subset
 	cache        cache.Cache
-	ready        sync.Once
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
@@ -253,11 +252,7 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 }
 
 func (g *Generator) Ready(ctx context.Context) error {
-	var err error
-	g.ready.Do(func() {
-		err = g.aiClient.Ready(ctx)
-	})
-	return err
+	return g.aiClient.Ready(ctx)
 }
 
 // toStr returns the string value if non-nil, or "empty" otherwise.

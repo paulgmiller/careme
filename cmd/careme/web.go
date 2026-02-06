@@ -147,11 +147,13 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		authClient.Logout(w, r)
 	})
 
-	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		if _, err := w.Write([]byte("OK")); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write readiness response", "error", err)
-		}
+	ro := &readyOnce{}
+	ro.Add(generator.Ready)
+	ro.Add(func(ctx context.Context) error {
+		return locations.Ready(ctx, locationserver)
 	})
+
+	mux.Handle("/ready", ro)
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png") // <= without this, many UAs ignore it
