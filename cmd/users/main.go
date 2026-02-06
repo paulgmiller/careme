@@ -5,7 +5,6 @@ import (
 	"careme/internal/users"
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"strings"
 )
@@ -19,7 +18,7 @@ func main() {
 	ctx := context.Background()
 	cache, err := cache.MakeCache()
 	if err != nil {
-		log.Fatalf("failed to create cache: %s", err)
+		log.Fatalf("failed to create cache: %w", err)
 	}
 
 	userStorage := users.NewStorage(cache)
@@ -29,14 +28,29 @@ func main() {
 	}
 	log.Printf("found %d users", len(userList))
 	log.Printf("looking for user with email containing \"%s\"", userEmail)
-	usersMap := map[string]bool{}
+	var old users.User
+	var new []users.User
 	for _, u := range userList {
+		//if !slices.Contains(u.Email, userEmail) {
+		//	continue
+		//}
 		log.Printf("user: %s, email: %s recipes: %d", u.ID, u.Email, len(u.LastRecipes))
-		usersMap[u.Email[0]] = true
+		if isOld(u.ID) {
+			old = u
+		} else {
+			new = append(new, u)
+		}
 	}
 
-	for email := range usersMap {
-		fmt.Println(email)
+	for _, n := range new {
+		log.Printf("%s -> %s, email: %s ", old.ID, n.ID, n.Email)
+		if move {
+			n.LastRecipes = append(old.LastRecipes, n.LastRecipes...)
+			n.FavoriteStore = old.FavoriteStore
+			if err := userStorage.Update(&n); err != nil {
+				log.Fatalf("failed to save user: %v", err)
+			}
+		}
 	}
 
 }

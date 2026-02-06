@@ -46,7 +46,14 @@ func main() {
 	}
 
 	for _, i := range ings {
-		fmt.Println(*i.Description)
+		fmt.Println(toString(i.Description))
 	}
 
+}
+
+func toString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
