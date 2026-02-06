@@ -251,3 +251,12 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 
 	return messages, nil
 }
+
+func (c *Client) Ready(ctx context.Context) error {
+	// more CORRECT to do a very simple response request with allowed tokens 1 but this seems cheaper
+	// https://chatgpt.com/share/6984da16-ff88-8009-8486-4e0479ac6a01
+	// could only do it once to ensure startup
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	_, err := client.Models.List(ctx)
+	return err
+}

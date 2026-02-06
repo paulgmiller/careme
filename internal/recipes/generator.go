@@ -23,6 +23,7 @@ import (
 type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 	Regenerate(ctx context.Context, newinstruction string, conversationID string) (*ai.ShoppingList, error)
+	Ready(ctx context.Context) error
 }
 
 type Generator struct {
@@ -30,6 +31,7 @@ type Generator struct {
 	aiClient     aiClient
 	krogerClient kroger.ClientWithResponsesInterface // probably need only subset
 	cache        cache.Cache
+	ready        sync.Once
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
@@ -248,6 +250,14 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 	}
 
 	return ingredients, nil
+}
+
+func (g *Generator) Ready(ctx context.Context) error {
+	var err error
+	g.ready.Do(func() {
+		err = g.aiClient.Ready(ctx)
+	})
+	return err
 }
 
 // toStr returns the string value if non-nil, or "empty" otherwise.

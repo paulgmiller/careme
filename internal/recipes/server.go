@@ -30,6 +30,7 @@ type locServer interface {
 
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
+	Ready(ctx context.Context) error
 }
 
 type server struct {
