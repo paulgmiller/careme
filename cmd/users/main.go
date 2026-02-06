@@ -19,7 +19,7 @@ func main() {
 	ctx := context.Background()
 	cache, err := cache.MakeCache()
 	if err != nil {
-		log.Fatalf("failed to create cache: %w", err)
+		log.Fatalf("failed to create cache: %s", err)
 	}
 
 	userStorage := users.NewStorage(cache)
@@ -35,7 +35,7 @@ func main() {
 		usersMap[u.Email[0]] = true
 	}
 
-	for email, _ := range usersMap {
+	for email := range usersMap {
 		fmt.Println(email)
 	}
 
