@@ -5,6 +5,7 @@ import (
 	"careme/internal/users"
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"strings"
 )
@@ -28,29 +29,14 @@ func main() {
 	}
 	log.Printf("found %d users", len(userList))
 	log.Printf("looking for user with email containing \"%s\"", userEmail)
-	var old users.User
-	var new []users.User
+	usersMap := map[string]bool{}
 	for _, u := range userList {
 		log.Printf("user: %s, email: %s recipes: %d", u.ID, u.Email, len(u.LastRecipes))
-		//if !slices.Contains(u.Email, userEmail) {
-		//	continue
-		//}
-		if isOld(u.ID) {
-			old = u
-		} else {
-			new = append(new, u)
-		}
+		usersMap[u.Email[0]] = true
 	}
 
-	for _, n := range new {
-		log.Printf("%s -> %s, email: %s ", old.ID, n.ID, n.Email)
-		if move {
-			n.LastRecipes = append(old.LastRecipes, n.LastRecipes...)
-			n.FavoriteStore = old.FavoriteStore
-			if err := userStorage.Update(&n); err != nil {
-				log.Fatalf("failed to save user: %v", err)
-			}
-		}
+	for email, _ := range usersMap {
+		fmt.Println(email)
 	}
 
 }

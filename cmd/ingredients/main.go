@@ -21,17 +21,17 @@ func main() {
 	ctx := context.Background()
 	cache, err := cache.MakeCache()
 	if err != nil {
-		log.Fatalf("failed to create cache: %w", err)
+		log.Fatalf("failed to create cache: %s", err)
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load configuration: %v", err)
+		log.Fatalf("failed to load configuration: %s", err)
 	}
 
 	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
-		log.Fatalf("failed to create recipe generator: %w", err)
+		log.Fatalf("failed to create recipe generator: %s", err)
 	}
 
 	g, ok := generator.(*recipes.Generator)
@@ -42,7 +42,7 @@ func main() {
 	f := recipes.Filter(ingredient, []string{"*"}, false /*frozen*/)
 	ings, err := g.GetIngredients(ctx, location, f, 0)
 	if err != nil {
-		log.Fatalf("failed to get ingredients: %w", err)
+		log.Fatalf("failed to get ingredients: %s", err)
 	}
 
 	for _, i := range ings {
