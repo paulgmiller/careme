@@ -100,7 +100,6 @@ func (s *Storage) List(ctx context.Context) ([]User, error) {
 	}
 	var users []User
 	for _, id := range userids {
-		slog.InfoContext(ctx, "loading user", "id", id)
 		user, err := s.GetByID(id)
 		if err != nil {
 			return nil, err
