@@ -1,6 +1,7 @@
 package walmart
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -166,7 +167,8 @@ func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) 
 	}
 	defer resp.Body.Close()
 
-	io.Copy(os.Stdout, resp.Body) // ensure body is fully read for connection reuse
+	var buf bytes.Buffer
+	io.Copy(&buf, resp.Body) // ensure body is fully read for connection reuse
 
 	slog.InfoContext(ctx, "received Walmart stores response", "status", resp.StatusCode)
 
@@ -174,7 +176,7 @@ func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) 
 		return nil, fmt.Errorf("stores request failed: status %d", resp.StatusCode) //, strings.TrimSpace(string(body)))
 	}
 
-	return []byte{}, nil
+	return buf.Bytes(), nil
 }
 
 func (c *Client) applyAuthHeaders(req *http.Request) error {
@@ -198,7 +200,6 @@ func buildSignature(privateKey *rsa.PrivateKey, consumerID, timestamp, keyVersio
 		"WM_CONSUMER.INTIMESTAMP": timestamp,
 		"WM_SEC.KEY_VERSION":      keyVersion,
 	})
-	slog.Info("signing payload", "payload", payload)
 	sum := sha256.Sum256([]byte(payload))
 
 	sig, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, sum[:])
