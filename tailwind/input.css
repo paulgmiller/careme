@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @source "../internal/templates/**/*.html";
 
+
 @theme {
   --color-brand-50: var(--brand-50);
   --color-brand-100: var(--brand-100);
@@ -13,3 +14,81 @@
   --color-brand-800: var(--brand-800);
   --color-brand-900: var(--brand-900);
 }
+/* This seems like not the right way to do this. 
+https://tailwindcss.com/docs/adding-custom-variants#custom-variants 
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@layer utilities {
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+    }
+
+    body {
+      background-color: var(--color-slate-950);
+      color: var(--color-slate-100);
+    }
+
+    a {
+      color: var(--color-brand-300);
+    }
+
+    a:hover {
+      color: var(--color-brand-200);
+    }
+
+    .bg-white,
+    .bg-white\/60,
+    .bg-white\/90,
+    .bg-white\/95,
+    .bg-brand-50,
+    .bg-brand-50\/60,
+    .bg-gray-50,
+    .bg-emerald-50,
+    .bg-red-50 {
+      background-color: var(--color-slate-900);
+    }
+
+    .from-brand-50 {
+      --tw-gradient-from: var(--color-slate-950);
+      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+    }
+
+    .to-white {
+      --tw-gradient-to: var(--color-slate-900);
+      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+    }
+
+    .border-gray-200,
+    .border-gray-300,
+    .border-brand-100,
+    .border-brand-200,
+    .border-brand-300,
+    .border-emerald-200,
+    .border-red-500,
+    .divide-brand-100 > :not(:last-child) {
+      border-color: var(--color-slate-700);
+    }
+
+    .text-gray-500,
+    .text-gray-600,
+    .text-gray-700,
+    .text-gray-900 {
+      color: var(--color-slate-100);
+    }
+
+    .text-emerald-700,
+    .text-red-700 {
+      color: var(--color-slate-100);
+    }
+
+    input,
+    select,
+    textarea {
+      background-color: var(--color-slate-900);
+      color: var(--color-slate-100);
+      border-color: var(--color-slate-700);
+    }
+  }
+}
+*/

@@ -111,6 +111,11 @@ func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) 
 	return locations, nil
 }
 
+func Ready(ctx context.Context, l locationGetter) error {
+	_, err := l.GetLocationsByZip(ctx, "98005") //magic number is my zip code :)
+	return err
+}
+
 func Register(l locationGetter, mux *http.ServeMux) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

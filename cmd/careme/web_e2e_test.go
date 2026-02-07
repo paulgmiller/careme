@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
@@ -27,6 +27,10 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(t)
+	resp := mustGet(t, client, srv.URL+"/ready") //our readiness probe works even with mocks?
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /ready to return 200 OK, got %d", resp.StatusCode)
+	}
 
 	// Step 1: query locations for 90005 and ensure it returns a /recipes?location link.
 	locationsBody := mustGetBody(t, client, srv.URL+"/locations?zip=90005")
@@ -97,18 +101,19 @@ func newTestServer(t *testing.T) *httptest.Server {
 	users.NewHandler(userStorage, locationServer, mockAuth).Register(mux)
 	recipes.NewHandler(cfg, userStorage, generator, locationServer, cacheStore, mockAuth).Register(mux)
 
+	ro := &readyOnce{}
+	ro.Add(generator.Ready)
+	ro.Add(func(ctx context.Context) error {
+		return locations.Ready(ctx, locationServer)
+	})
+
+	mux.Handle("/ready", ro)
+
 	return httptest.NewServer(WithMiddleware(mux))
 }
 
 func newTestClient(t *testing.T) *http.Client {
-	t.Helper()
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatalf("failed to create cookie jar: %v", err)
-	}
-	return &http.Client{
-		Jar: jar,
-	}
+	return &http.Client{}
 }
 
 func mustGet(t *testing.T, client *http.Client, url string) *http.Response {
