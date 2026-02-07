@@ -32,3 +32,15 @@ func (c *mockClient) GetUserEmail(ctx context.Context, clerkUserID string) (stri
 func (c *mockClient) GetUserIDFromRequest(r *http.Request) (string, error) {
 	return "mock-clerk-user-id", nil
 }
+
+func (c *mockClient) WithAuthHTTP(handler http.Handler) http.Handler {
+	return handler
+}
+
+func (c *mockClient) logout(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "not implemented in mock auth client", http.StatusNotImplemented)
+}
+
+func (c *mockClient) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/logout", c.logout)
+}

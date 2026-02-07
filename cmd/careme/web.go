@@ -37,10 +37,13 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
-	authClient, err := auth.NewClient(cfg.Clerk.SecretKey)
+	authClient, err := auth.NewFromConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to create clerk client: %w", err)
+		return fmt.Errorf("failed to create auth client: %w", err)
 	}
+
+	mux := http.NewServeMux()
+	authClient.Register(mux)
 
 	userStorage := users.NewStorage(cache)
 
@@ -48,8 +51,8 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
-	tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
-	mux := http.NewServeMux()
+
+  tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
 	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("If-None-Match") == tailwindETag {
 			w.WriteHeader(http.StatusNotModified)
@@ -117,34 +120,6 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
-	})
-
-	//TODO move signin/up/auth/establish/logout to auth package
-	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, cfg.Clerk.Signin(), http.StatusSeeOther)
-	})
-	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, cfg.Clerk.Signup(), http.StatusSeeOther)
-	})
-	mux.HandleFunc("/auth/establish", func(w http.ResponseWriter, r *http.Request) {
-		if cfg.Clerk.PublishableKey == "" {
-			http.Error(w, "clerk publishable key missing", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		data := struct {
-			PublishableKey string
-		}{
-			PublishableKey: cfg.Clerk.PublishableKey,
-		}
-		if err := templates.AuthEstablish.Execute(w, data); err != nil {
-			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)
-			http.Error(w, "template error", http.StatusInternalServerError)
-		}
-	})
-
-	mux.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		authClient.Logout(w, r)
 	})
 
 	ro := &readyOnce{}
