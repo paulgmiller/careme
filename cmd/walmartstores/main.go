@@ -35,13 +35,13 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	slog.Info("taxonomy request")
-	taxonomy, err := client.Taxonomy(ctx)
-	if err != nil {
-		exitErr(fmt.Errorf("request taxonomy: %w", err))
-		return
-	}
-	fmt.Printf("taxonomy: %s\n", string(taxonomy))
+	//slog.Info("taxonomy request")
+	//taxonomy, err := client.Taxonomy(ctx)
+	//if err != nil {
+	// exitErr(fmt.Errorf("request taxonomy: %w", err))
+	//	return
+	//}
+	//fmt.Printf("taxonomy: %s\n", string(taxonomy))
 
 	slog.Info("querying Walmart stores", "zip", *zip)
 	raw, err := client.SearchStoresByZIP(ctx, *zip)
