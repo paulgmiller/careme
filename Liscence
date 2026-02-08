@@ -1,0 +1,81 @@
+Business Source License 1.1
+
+License text copyright (c) 2026 <Your Name or Company>.
+All rights reserved.
+
+------------------------------------------------------------
+TERMS
+
+The Licensor hereby grants you the right to copy, modify, create
+derivative works, and redistribute the Software, subject to the
+limitations below.
+
+This license is governed by the Business Source License 1.1.
+
+------------------------------------------------------------
+DEFINITIONS
+
+"Licensor" means the copyright owner or entity granting this license.
+
+"Software" means the software and associated documentation covered
+by this license.
+
+"Commercial Use" means any use of the Software primarily intended
+for or directed toward commercial advantage or monetary compensation,
+including but not limited to:
+- Offering the Software as part of a paid product or service
+- Using the Software to provide services to third parties for a fee
+- Using the Software internally within a for-profit organization
+  where the Software materially supports revenue-generating activity
+
+"Personal Use" means use by an individual for personal, educational,
+or hobby purposes, with no commercial intent.
+
+------------------------------------------------------------
+GRANT OF RIGHTS
+
+You may use, modify, and redistribute the Software for Personal Use
+only.
+
+You may not use the Software for Commercial Use unless you obtain
+a separate commercial license from the Licensor.
+
+------------------------------------------------------------
+RESTRICTIONS
+
+You may not:
+- Use the Software for Commercial Use
+- Sell, sublicense, or otherwise monetize the Software
+- Offer the Software as a hosted or managed service
+- Remove or alter this license notice
+
+------------------------------------------------------------
+CHANGE LICENSE
+
+Effective on the Change Date, the Software will automatically be
+relicensed under the MIT License.
+
+Change Date: 3 years after the date of first public release of this
+Software, defined as <YYYY-MM-DD>.
+
+------------------------------------------------------------
+MIT LICENSE (Effective on the Change Date)
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject
+to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
