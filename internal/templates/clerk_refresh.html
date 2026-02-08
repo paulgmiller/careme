@@ -11,6 +11,17 @@
   (async () => {
     // wait until Clerk is present
     while (!window.Clerk?.load) await new Promise(r => setTimeout(r, 10));
+    // Track whether a session exists before Clerk finishes loading.
+    const hadSessionOnLoad = Boolean(Clerk.session);
+
+    // Clerk calls listeners with a state object; pull out the session field.
+    Clerk.addListener(({ session }) => {
+      // If a session appears after initial load, reload to ensure SSR auth state matches.
+      if (!hadSessionOnLoad && session) {
+        window.location.reload();
+      }
+    });
+
     await Clerk.load();
 
     // Optional: if you want to be extra defensive, force-refresh occasionally
