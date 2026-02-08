@@ -32,7 +32,7 @@
                   class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Recipes!
                 </a>
-                <button type="button" data-instructions-button data-recipes-url="/recipes?location={{.ID}}"
+                <button type="button" data-instructions-button
                   class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Instructions
                 </button>
@@ -42,15 +42,30 @@
                     aria-pressed="{{if eq $.FavoriteStore .ID}}true{{else}}false{{end}}"
                     class="rounded-full border border-brand-300 bg-white p-2 text-brand-600 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     <span class="sr-only">Set as favorite</span>
-                    <svg data-favorite-icon="empty" class="h-5 w-5 {{if eq $.FavoriteStore .ID}}hidden{{end}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M11.48 3.499a.75.75 0 011.04 0l2.26 2.3 3.2.46a.75.75 0 01.42 1.28l-2.32 2.26.55 3.18a.75.75 0 01-1.09.79L12 11.52l-2.86 1.5a.75.75 0 01-1.09-.8l.55-3.17-2.32-2.26a.75.75 0 01.42-1.28l3.2-.46 2.26-2.3z" />
-                    </svg>
-                    <svg data-favorite-icon="filled" class="h-5 w-5 text-amber-500 {{if eq $.FavoriteStore .ID}}{{else}}hidden{{end}}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <svg data-favorite-icon class="h-5 w-5 {{if eq $.FavoriteStore .ID}}text-amber-500 fill-current stroke-current{{else}}text-brand-600 fill-transparent stroke-current{{end}}" viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M11.48 3.499a.75.75 0 011.04 0l2.26 2.3 3.2.46a.75.75 0 01.42 1.28l-2.32 2.26.55 3.18a.75.75 0 01-1.09.79L12 11.52l-2.86 1.5a.75.75 0 01-1.09-.8l.55-3.17-2.32-2.26a.75.75 0 01.42-1.28l3.2-.46 2.26-2.3z" />
                     </svg>
                   </button>
                 </form>
               </div>
+            </div>
+            <div data-instructions-panel class="mt-4 hidden rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <form method="GET" action="/recipes" class="flex flex-col gap-3">
+                <input type="hidden" name="location" value="{{.ID}}" />
+                <label class="text-sm font-semibold text-brand-700">Recipe instructions</label>
+                <textarea name="instructions" rows="3" placeholder="Example: No seafood, focus on quick weeknight meals."
+                  class="w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300"></textarea>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button type="submit"
+                    class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Generate
+                  </button>
+                  <button type="button" data-instructions-cancel
+                    class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Cancel
+                  </button>
+                </div>
+              </form>
             </div>
           </li>
           {{end}}
@@ -62,26 +77,23 @@
   </main>
   <script>
     (() => {
-      const buildRecipesUrl = (baseUrl, instructions) => {
-        const url = new URL(baseUrl, window.location.origin);
-        const trimmed = instructions.trim();
-        if (trimmed !== "") {
-          url.searchParams.set("instructions", trimmed);
-        }
-        return url.toString();
-      };
-
       document.querySelectorAll("[data-instructions-button]").forEach((button) => {
         button.addEventListener("click", () => {
-          const baseUrl = button.dataset.recipesUrl;
-          if (!baseUrl) {
+          const container = button.closest("li");
+          if (!container) {
             return;
           }
-          const instructions = window.prompt("Add any recipe instructions?");
-          if (instructions === null) {
+          const panel = container.querySelector("[data-instructions-panel]");
+          if (!panel) {
             return;
           }
-          window.location.assign(buildRecipesUrl(baseUrl, instructions));
+          panel.classList.toggle("hidden");
+          if (!panel.classList.contains("hidden")) {
+            const input = panel.querySelector("textarea[name='instructions']");
+            if (input) {
+              input.focus();
+            }
+          }
         });
       });
 
@@ -92,14 +104,13 @@
             return;
           }
           const isFavorite = input.value === favoriteID;
-          const emptyIcon = form.querySelector("[data-favorite-icon='empty']");
-          const filledIcon = form.querySelector("[data-favorite-icon='filled']");
+          const icon = form.querySelector("[data-favorite-icon]");
           const button = form.querySelector("[data-favorite-button]");
-          if (emptyIcon) {
-            emptyIcon.classList.toggle("hidden", isFavorite);
-          }
-          if (filledIcon) {
-            filledIcon.classList.toggle("hidden", !isFavorite);
+          if (icon) {
+            icon.classList.toggle("text-amber-500", isFavorite);
+            icon.classList.toggle("fill-current", isFavorite);
+            icon.classList.toggle("text-brand-600", !isFavorite);
+            icon.classList.toggle("fill-transparent", !isFavorite);
           }
           if (button) {
             button.setAttribute("aria-pressed", isFavorite ? "true" : "false");
@@ -140,6 +151,16 @@
               button.removeAttribute("aria-busy");
             }
           }
+        });
+      });
+
+      document.querySelectorAll("[data-instructions-panel]").forEach((panel) => {
+        const cancelButton = panel.querySelector("[data-instructions-cancel]");
+        if (!cancelButton) {
+          return;
+        }
+        cancelButton.addEventListener("click", () => {
+          panel.classList.add("hidden");
         });
       });
     })();
