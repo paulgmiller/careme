@@ -6,6 +6,7 @@ import (
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"context"
+	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -38,6 +39,7 @@ func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.Aut
 func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/user", s.handleUser)
 	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
+	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
 }
 
 // used on user page to manaully save recipes
@@ -173,5 +175,57 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
+	}
+}
+
+func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+	if err != nil {
+		if !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form submission", http.StatusBadRequest)
+		return
+	}
+
+	favoriteStore := strings.TrimSpace(r.FormValue("favorite_store"))
+	if favoriteStore == "" && !r.Form.Has("favorite_store") {
+		http.Error(w, "missing favorite_store", http.StatusBadRequest)
+		return
+	}
+	currentUser.FavoriteStore = favoriteStore
+	if err := s.storage.Update(currentUser); err != nil {
+		slog.ErrorContext(ctx, "failed to update user", "error", err)
+		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(struct {
+		FavoriteStore string `json:"favorite_store"`
+	}{
+		FavoriteStore: currentUser.FavoriteStore,
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to write favorite response", "error", err)
 	}
 }

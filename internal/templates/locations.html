@@ -36,15 +36,15 @@
                   class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Instructions
                 </button>
-                <form method="POST" action="/user" data-favorite-form>
+                <form method="POST" action="/user/favorite" data-favorite-form>
                   <input type="hidden" name="favorite_store" value="{{.ID}}" />
                   <button type="submit" data-favorite-button title="Set as favorite" aria-label="Set as favorite"
                     aria-pressed="{{if eq $.FavoriteStore .ID}}true{{else}}false{{end}}"
-                    class="rounded-full border border-brand-300 bg-white p-2 text-brand-600 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    class="rounded-lg border border-brand-300 bg-white p-2 text-brand-600 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     <span class="sr-only">Set as favorite</span>
-                    <svg data-favorite-icon class="h-5 w-5 {{if eq $.FavoriteStore .ID}}text-amber-500 fill-current stroke-current{{else}}text-brand-600 fill-transparent stroke-current{{end}}" viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M11.48 3.499a.75.75 0 011.04 0l2.26 2.3 3.2.46a.75.75 0 01.42 1.28l-2.32 2.26.55 3.18a.75.75 0 01-1.09.79L12 11.52l-2.86 1.5a.75.75 0 01-1.09-.8l.55-3.17-2.32-2.26a.75.75 0 01.42-1.28l3.2-.46 2.26-2.3z" />
-                    </svg>
+                    <span data-favorite-icon class="text-lg leading-none {{if eq $.FavoriteStore .ID}}text-amber-500{{else}}text-brand-600{{end}}" aria-hidden="true">
+                      {{if eq $.FavoriteStore .ID}}★{{else}}☆{{end}}
+                    </span>
                   </button>
                 </form>
               </div>
@@ -98,7 +98,8 @@
       });
 
       const updateFavoriteUI = (favoriteID) => {
-        document.querySelectorAll("[data-favorite-form]").forEach((form) => {
+        const forms = Array.from(document.querySelectorAll("[data-favorite-form]"));
+        forms.forEach((form) => {
           const input = form.querySelector("input[name='favorite_store']");
           if (!input) {
             return;
@@ -108,9 +109,8 @@
           const button = form.querySelector("[data-favorite-button]");
           if (icon) {
             icon.classList.toggle("text-amber-500", isFavorite);
-            icon.classList.toggle("fill-current", isFavorite);
             icon.classList.toggle("text-brand-600", !isFavorite);
-            icon.classList.toggle("fill-transparent", !isFavorite);
+            icon.textContent = isFavorite ? "★" : "☆";
           }
           if (button) {
             button.setAttribute("aria-pressed", isFavorite ? "true" : "false");
@@ -121,6 +121,7 @@
       document.querySelectorAll("[data-favorite-form]").forEach((form) => {
         form.addEventListener("submit", async (event) => {
           event.preventDefault();
+          const favoriteStore = form.querySelector("input[name='favorite_store']")?.value;
           const button = form.querySelector("[data-favorite-button]");
           if (button) {
             button.disabled = true;
@@ -136,13 +137,21 @@
               body,
               credentials: "same-origin",
             });
+            if (response.status === 401) {
+              window.location.assign("/");
+              return;
+            }
             if (!response.ok) {
               throw new Error("favorite update failed");
             }
-            const favoriteStore = form.querySelector("input[name='favorite_store']")?.value;
-            if (favoriteStore) {
-              updateFavoriteUI(favoriteStore);
+            let payload = null;
+            try {
+              payload = await response.json();
+            } catch (error) {
+              payload = null;
             }
+            const updatedFavorite = payload?.favorite_store ?? favoriteStore ?? "";
+            updateFavoriteUI(updatedFavorite);
           } catch (error) {
             console.error(error);
           } finally {
