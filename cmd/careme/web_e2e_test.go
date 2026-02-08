@@ -97,7 +97,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	mockAuth := auth.Mock(cfg)
 
 	mux := http.NewServeMux()
-	locations.Register(locationServer, mux)
+	locations.Register(locationServer, mux, nil)
 	users.NewHandler(userStorage, locationServer, mockAuth).Register(mux)
 	recipes.NewHandler(cfg, userStorage, generator, locationServer, cacheStore, mockAuth).Register(mux)
 

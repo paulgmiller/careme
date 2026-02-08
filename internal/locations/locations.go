@@ -116,7 +116,7 @@ func Ready(ctx context.Context, l locationGetter) error {
 	return err
 }
 
-func Register(l locationGetter, mux *http.ServeMux) {
+func Register(l locationGetter, mux *http.ServeMux, favoriteStoreID func(context.Context, *http.Request) (string, error)) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		/*_, err := users.FromRequest(r, userStorage)
@@ -142,14 +142,23 @@ func Register(l locationGetter, mux *http.ServeMux) {
 			http.Error(w, "could not get locations", http.StatusInternalServerError)
 			return
 		}
+		var favoriteStore string
+		if favoriteStoreID != nil {
+			favoriteStore, err = favoriteStoreID(ctx, r)
+			if err != nil {
+				slog.WarnContext(ctx, "failed to resolve favorite store for locations", "error", err)
+			}
+		}
 		data := struct {
 			Locations     []Location
 			Zip           string
+			FavoriteStore string
 			ClarityScript template.HTML
 			Style         seasons.Style
 		}{
 			Locations:     locs,
 			Zip:           zip,
+			FavoriteStore: favoriteStore,
 			ClarityScript: templates.ClarityScript(),
 			Style:         seasons.GetCurrentStyle(),
 		}

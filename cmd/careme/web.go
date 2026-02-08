@@ -52,7 +52,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-  tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
+	tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
 	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("If-None-Match") == tailwindETag {
 			w.WriteHeader(http.StatusNotModified)
@@ -70,7 +70,20 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
-	locations.Register(locationserver, mux)
+	locations.Register(locationserver, mux, func(ctx context.Context, r *http.Request) (string, error) {
+		clerkUserID, err := authClient.GetUserIDFromRequest(r)
+		if err != nil {
+			if errors.Is(err, auth.ErrNoSession) {
+				return "", nil
+			}
+			return "", err
+		}
+		currentUser, err := userStorage.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
+		if err != nil {
+			return "", err
+		}
+		return currentUser.FavoriteStore, nil
+	})
 
 	userHandler := users.NewHandler(userStorage, locationserver, authClient)
 	userHandler.Register(mux)
