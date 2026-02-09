@@ -21,18 +21,50 @@
         <ul class="divide-y divide-brand-100">
           {{range .Locations}}
           <li class="px-8 py-6">
-            <div class="flex items-start justify-between gap-4">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <a href="/recipes?location={{.ID}}"
                 class="flex flex-1 flex-col gap-1 rounded-xl py-2 transition hover:bg-brand-50 focus:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                 <span class="text-lg font-semibold text-brand-700">{{.Name}}</span>
                 <span class="text-sm text-gray-600">{{.Address}}</span>
               </a>
-              <form method="POST" action="/user">
-                <input type="hidden" name="favorite_store" value="{{.ID}}" />
-                <button type="submit"
-                  class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-600 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Set as Favorite
+              <div class="flex flex-wrap items-center gap-2">
+                <a href="/recipes?location={{.ID}}"
+                  class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Recipes!
+                </a>
+                <button type="button" data-instructions-button
+                  class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Instructions
                 </button>
+                <form method="POST" action="/user/favorite" data-favorite-form>
+                  <input type="hidden" name="favorite_store" value="{{.ID}}" />
+                  <button type="submit" data-favorite-button title="Set as favorite" aria-label="Set as favorite"
+                    aria-pressed="{{if eq $.FavoriteStore .ID}}true{{else}}false{{end}}"
+                    class="rounded-lg border border-brand-300 bg-white p-2 text-brand-600 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    <span class="sr-only">Set as favorite</span>
+                    <span data-favorite-icon class="text-lg leading-none {{if eq $.FavoriteStore .ID}}text-amber-500{{else}}text-brand-600{{end}}" aria-hidden="true">
+                      {{if eq $.FavoriteStore .ID}}★{{else}}☆{{end}}
+                    </span>
+                  </button>
+                </form>
+              </div>
+            </div>
+            <div data-instructions-panel class="mt-4 hidden rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <form method="GET" action="/recipes" class="flex flex-col gap-3">
+                <input type="hidden" name="location" value="{{.ID}}" />
+                <label class="text-sm font-semibold text-brand-700">Recipe instructions</label>
+                <textarea name="instructions" rows="3" placeholder="Example: No seafood, focus on quick weeknight meals."
+                  class="w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300"></textarea>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button type="submit"
+                    class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Generate
+                  </button>
+                  <button type="button" data-instructions-cancel
+                    class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Cancel
+                  </button>
+                </div>
               </form>
             </div>
           </li>
@@ -43,5 +75,105 @@
       <p class="mt-6 text-center text-sm text-gray-500">Can’t find the right store? Try a different ZIP code from the home page.</p>
     </section>
   </main>
+  {{template "clerk_refresh.html" .}}
+  <script>
+    (() => {
+      document.querySelectorAll("[data-instructions-button]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const container = button.closest("li");
+          if (!container) {
+            return;
+          }
+          const panel = container.querySelector("[data-instructions-panel]");
+          if (!panel) {
+            return;
+          }
+          panel.classList.toggle("hidden");
+          if (!panel.classList.contains("hidden")) {
+            const input = panel.querySelector("textarea[name='instructions']");
+            if (input) {
+              input.focus();
+            }
+          }
+        });
+      });
+
+      const updateFavoriteUI = (favoriteID) => {
+        const forms = Array.from(document.querySelectorAll("[data-favorite-form]"));
+        forms.forEach((form) => {
+          const input = form.querySelector("input[name='favorite_store']");
+          if (!input) {
+            return;
+          }
+          const isFavorite = input.value === favoriteID;
+          const icon = form.querySelector("[data-favorite-icon]");
+          const button = form.querySelector("[data-favorite-button]");
+          if (icon) {
+            icon.classList.toggle("text-amber-500", isFavorite);
+            icon.classList.toggle("text-brand-600", !isFavorite);
+            icon.textContent = isFavorite ? "★" : "☆";
+          }
+          if (button) {
+            button.setAttribute("aria-pressed", isFavorite ? "true" : "false");
+          }
+        });
+      };
+
+      document.querySelectorAll("[data-favorite-form]").forEach((form) => {
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const favoriteStore = form.querySelector("input[name='favorite_store']")?.value;
+          const button = form.querySelector("[data-favorite-button]");
+          if (button) {
+            button.disabled = true;
+            button.setAttribute("aria-busy", "true");
+          }
+          try {
+            const body = new URLSearchParams(new FormData(form));
+            const response = await fetch(form.action, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+              },
+              body,
+              credentials: "same-origin",
+            });
+            if (response.status === 401) {
+              window.location.assign("/");
+              return;
+            }
+            if (!response.ok) {
+              throw new Error("favorite update failed");
+            }
+            let payload = null;
+            try {
+              payload = await response.json();
+            } catch (error) {
+              payload = null;
+            }
+            const updatedFavorite = payload?.favorite_store ?? favoriteStore ?? "";
+            updateFavoriteUI(updatedFavorite);
+          } catch (error) {
+            console.error(error);
+          } finally {
+            if (button) {
+              button.disabled = false;
+              button.removeAttribute("aria-busy");
+            }
+          }
+        });
+      });
+
+      document.querySelectorAll("[data-instructions-panel]").forEach((panel) => {
+        const cancelButton = panel.querySelector("[data-instructions-cancel]");
+        if (!cancelButton) {
+          return;
+        }
+        cancelButton.addEventListener("click", () => {
+          panel.classList.add("hidden");
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

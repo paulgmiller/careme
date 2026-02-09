@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -78,7 +77,6 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	ctx := t.Context()
 
 	cfg := &config.Config{Mocks: config.MockConfig{Enable: true}}
 	cacheDir := filepath.Join(t.TempDir(), "cache")
@@ -89,7 +87,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("failed to create generator: %v", err)
 	}
-	locationServer, err := locations.New(ctx, cfg)
+	locationStorage, err := locations.New(cfg)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}
@@ -97,15 +95,13 @@ func newTestServer(t *testing.T) *httptest.Server {
 	mockAuth := auth.Mock(cfg)
 
 	mux := http.NewServeMux()
-	locations.Register(locationServer, mux)
-	users.NewHandler(userStorage, locationServer, mockAuth).Register(mux)
-	recipes.NewHandler(cfg, userStorage, generator, locationServer, cacheStore, mockAuth).Register(mux)
+	locationServer := locations.NewServer(locationStorage, userStorage)
+	locationServer.Register(mux, mockAuth)
+	users.NewHandler(userStorage, locationStorage, mockAuth).Register(mux)
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(mux)
 
 	ro := &readyOnce{}
-	ro.Add(generator.Ready)
-	ro.Add(func(ctx context.Context) error {
-		return locations.Ready(ctx, locationServer)
-	})
+	ro.Add(generator, locationServer)
 
 	mux.Handle("/ready", ro)
 

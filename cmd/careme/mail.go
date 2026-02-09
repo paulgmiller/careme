@@ -10,6 +10,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/users"
+	utypes "careme/internal/users/types"
 	"context"
 	"errors"
 	"fmt"
@@ -52,7 +53,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-	locationserver, err := locations.New(context.TODO(), cfg)
+	locationserver, err := locations.New(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -103,7 +104,7 @@ func (m *mailer) Iterate(ctx context.Context, duration time.Duration) {
 	}
 }
 
-func (m *mailer) sendEmail(ctx context.Context, user users.User) {
+func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	if user.FavoriteStore == "" {
 		slog.InfoContext(ctx, "no favorite store", "user", user.ID)
 		return

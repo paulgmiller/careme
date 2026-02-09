@@ -11,6 +11,7 @@ import (
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
+	utypes "careme/internal/users/types"
 	"context"
 	"crypto/sha256"
 	_ "embed"
@@ -66,16 +67,18 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 	})
 
-	locationserver, err := locations.New(context.TODO(), cfg)
+	locationStorage, err := locations.New(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
-	locations.Register(locationserver, mux)
 
-	userHandler := users.NewHandler(userStorage, locationserver, authClient)
+	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache, authClient)
+	locationServer := locations.NewServer(locationStorage, userStorage)
+	locationServer.Register(mux, authClient)
+
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
@@ -88,28 +91,21 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		var currentUser *users.User
-		clerkUserID, err := authClient.GetUserIDFromRequest(r)
+		var currentUser *utypes.User
+		currentUser, err := userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
 			if !errors.Is(err, auth.ErrNoSession) {
-				slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
 			//no user is fine we'll just pass nil currentUser to template
 			// just have two different templates?
 
-		} else {
-			currentUser, err = userStorage.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-				http.Error(w, "unable to load account", http.StatusInternalServerError)
-				return
-			}
 		}
 		data := struct {
 			ClarityScript  template.HTML
-			User           *users.User
+			User           *utypes.User
 			Style          seasons.Style
 			ServerSignedIn bool
 		}{
@@ -125,10 +121,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	})
 
 	ro := &readyOnce{}
-	ro.Add(generator.Ready)
-	ro.Add(func(ctx context.Context) error {
-		return locations.Ready(ctx, locationserver)
-	})
+	ro.Add(generator, locationServer)
 
 	mux.Handle("/ready", ro)
 
