@@ -121,8 +121,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	})
 
 	ro := &readyOnce{}
-	ro.Add(generator.Ready)
-	ro.Add(locationServer.Ready)
+	ro.Add(generator, locationServer)
 
 	mux.Handle("/ready", ro)
 

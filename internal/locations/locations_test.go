@@ -165,8 +165,8 @@ func newJSONResponse(status int, body string) *http.Response {
 	}
 }
 
-func newTestLocationServer(client krogerClient) *locationServer {
-	return &locationServer{
+func newTestLocationServer(client krogerClient) *locationStorage {
+	return &locationStorage{
 		locationCache: make(map[string]Location),
 		client:        client,
 	}
