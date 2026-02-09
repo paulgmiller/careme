@@ -21,7 +21,7 @@ spec:
         runAsGroup: 65532
       containers:
         - name: careme
-          image: ghcr.io/paulgmiller/careme:f30296d
+          image: ghcr.io/paulgmiller/careme:e351abc
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -45,8 +45,8 @@ spec:
             httpGet:
               path: /ready
               port: http
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: 15
+            periodSeconds: 20
           resources:
             requests:
               cpu: 50m
