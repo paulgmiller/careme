@@ -88,7 +88,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
-		_, err = s.clerk.GetUserIDFromRequest(r)
 		FormatRecipeHTML(p, *recipe, signedIn, w)
 		return
 	}
