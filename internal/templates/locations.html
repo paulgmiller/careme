@@ -75,6 +75,7 @@
       <p class="mt-6 text-center text-sm text-gray-500">Can’t find the right store? Try a different ZIP code from the home page.</p>
     </section>
   </main>
+  {{template "clerk_refresh.html" .}}
   <script>
     (() => {
       document.querySelectorAll("[data-instructions-button]").forEach((button) => {
