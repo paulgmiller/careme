@@ -52,7 +52,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-  tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
+	tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
 	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("If-None-Match") == tailwindETag {
 			w.WriteHeader(http.StatusNotModified)
@@ -108,13 +108,15 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			}
 		}
 		data := struct {
-			ClarityScript template.HTML
-			User          *users.User
-			Style         seasons.Style
+			ClarityScript  template.HTML
+			User           *users.User
+			Style          seasons.Style
+			ServerSignedIn bool
 		}{
-			ClarityScript: templates.ClarityScript(),
-			User:          currentUser,
-			Style:         seasons.GetCurrentStyle(),
+			ClarityScript:  templates.ClarityScript(),
+			User:           currentUser,
+			Style:          seasons.GetCurrentStyle(),
+			ServerSignedIn: currentUser != nil,
 		}
 		if err := templates.Home.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)

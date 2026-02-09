@@ -12,7 +12,7 @@ import (
 )
 
 // FormatShoppingListHTML renders the multi-recipe shopping list view.
-func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, writer http.ResponseWriter) {
+func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
 	// TODO just put params into shopping list and pass that up?
 	data := struct {
 		Location       locations.Location
@@ -24,6 +24,7 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, writer http.R
 		ShoppingList   []ai.Ingredient
 		ConversationID string
 		Style          seasons.Style
+		ServerSignedIn bool
 	}{
 		Location:       *p.Location,
 		Date:           p.Date.Format("2006-01-02"),
@@ -34,6 +35,7 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, writer http.R
 		ShoppingList:   shoppingListForDisplay(l.Recipes),
 		ConversationID: l.ConversationID,
 		Style:          seasons.GetCurrentStyle(),
+		ServerSignedIn: signedIn,
 	}
 
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
@@ -42,21 +44,23 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, writer http.R
 }
 
 // FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, writer http.ResponseWriter) {
+func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, writer http.ResponseWriter) {
 	data := struct {
-		Location      locations.Location
-		Date          string
-		ClarityScript template.HTML
-		Recipe        ai.Recipe
-		OriginHash    string
-		Style         seasons.Style
+		Location       locations.Location
+		Date           string
+		ClarityScript  template.HTML
+		Recipe         ai.Recipe
+		OriginHash     string
+		Style          seasons.Style
+		ServerSignedIn bool
 	}{
-		Location:      *p.Location,
-		Date:          p.Date.Format("2006-01-02"),
-		ClarityScript: templates.ClarityScript(),
-		Recipe:        recipe,
-		OriginHash:    recipe.OriginHash,
-		Style:         seasons.GetCurrentStyle(),
+		Location:       *p.Location,
+		Date:           p.Date.Format("2006-01-02"),
+		ClarityScript:  templates.ClarityScript(),
+		Recipe:         recipe,
+		OriginHash:     recipe.OriginHash,
+		Style:          seasons.GetCurrentStyle(),
+		ServerSignedIn: signedIn,
 	}
 
 	if err := templates.Recipe.Execute(writer, data); err != nil {
