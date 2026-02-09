@@ -47,7 +47,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, w)
+	FormatShoppingListHTML(p, list, true, w)
 	html := w.Body.String()
 	if w.Code != http.StatusOK {
 		t.Error("Want ok statuscode")
@@ -59,7 +59,7 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, w)
+	FormatShoppingListHTML(p, list, true, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -73,7 +73,7 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	templates.SetClarity("test456")
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, w)
+	FormatShoppingListHTML(p, list, true, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.clarity.ms/tag/")) {
 		t.Error("HTML should contain Clarity script URL")
 	}
@@ -88,7 +88,7 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	templates.SetClarity("")
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, w)
+	FormatShoppingListHTML(p, list, true, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")
 	}
@@ -98,7 +98,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, w)
+	FormatShoppingListHTML(p, list, true, w)
 	html := w.Body.String()
 
 	// Verify "Careme Recipes" is a link to home page
@@ -115,7 +115,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], w)
+	FormatRecipeHTML(p, list.Recipes[0], true, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)

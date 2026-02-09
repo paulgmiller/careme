@@ -102,6 +102,9 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
+		// if session expires this is less than optimal. We want to give them just the
+		// clerk_refresh and seee if they are then logged in. But we only want to do that once?
+		// TODO stick just show a sign in button on user page if no session
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -159,12 +162,14 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Success           bool
 		FavoriteStoreName string
 		Style             seasons.Style
+		ServerSignedIn    bool
 	}{
 		ClarityScript:     templates.ClarityScript(),
 		User:              currentUser,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
 		Style:             seasons.GetCurrentStyle(),
+		ServerSignedIn:    true,
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)

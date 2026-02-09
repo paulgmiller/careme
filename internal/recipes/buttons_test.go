@@ -40,7 +40,7 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, multiRecipeList, w)
+	FormatShoppingListHTML(p, multiRecipeList, true, w)
 	html := w.Body.String()
 
 	// Verify HTML is valid
