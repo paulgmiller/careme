@@ -32,6 +32,7 @@
                   class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Recipes!
                 </a>
+                {{if $.ServerSignedIn}}
                 <button type="button" data-instructions-button
                   class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Instructions
@@ -47,8 +48,10 @@
                     </span>
                   </button>
                 </form>
+                {{end}}
               </div>
             </div>
+            {{if $.ServerSignedIn}}
             <div data-instructions-panel class="mt-4 hidden rounded-xl border border-brand-100 bg-brand-50/40 p-4">
               <form method="GET" action="/recipes" class="flex flex-col gap-3">
                 <input type="hidden" name="location" value="{{.ID}}" />
@@ -67,6 +70,7 @@
                 </div>
               </form>
             </div>
+            {{end}}
           </li>
           {{end}}
         </ul>
