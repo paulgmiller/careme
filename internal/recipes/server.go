@@ -79,6 +79,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "recipe not found", http.StatusNotFound)
 		return
 	}
+	_, err = s.clerk.GetUserIDFromRequest(r)
+	signedIn := !errors.Is(err, auth.ErrNoSession)
 
 	if recipe.OriginHash == "" {
 		slog.WarnContext(ctx, "recipe missing origin hash Probably and old recipe", "hash", hash)
@@ -86,7 +88,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
-		FormatRecipeHTML(p, *recipe, w)
+		FormatRecipeHTML(p, *recipe, signedIn, w)
 		return
 	}
 
@@ -105,8 +107,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: Add questions or regneration to signle recipes
 
-	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash)
-	FormatRecipeHTML(p, *recipe, w)
+	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
+	FormatRecipeHTML(p, *recipe, signedIn, w)
 }
 
 const (
@@ -180,7 +182,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		FormatShoppingListHTML(p, *slist, w)
+		_, err = s.clerk.GetUserIDFromRequest(r)
+		signedIn := !errors.Is(err, auth.ErrNoSession)
+		FormatShoppingListHTML(p, *slist, signedIn, w)
 		return
 	}
 
