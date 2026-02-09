@@ -67,16 +67,18 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 	})
 
-	locationserver, err := locations.New(context.TODO(), cfg)
+	locationStorage, err := locations.New(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
-	locationserver.Register(mux, authClient)
 
-	userHandler := users.NewHandler(userStorage, locationserver, authClient)
+	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache, authClient)
+	locationServer := locations.NewServer(locationStorage, userStorage)
+	locationServer.Register(mux, authClient)
+
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
@@ -120,9 +122,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	ro := &readyOnce{}
 	ro.Add(generator.Ready)
-	ro.Add(func(ctx context.Context) error {
-		return locations.Ready(ctx, locationserver)
-	})
+	ro.Add(locationServer.Ready)
 
 	mux.Handle("/ready", ro)
 

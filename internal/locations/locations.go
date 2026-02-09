@@ -26,20 +26,23 @@ type userLookup interface {
 	FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error)
 }
 
-type locationServer struct {
+type locationStorage struct {
 	locationCache map[string]Location
 	cacheLock     sync.Mutex // to protect locationMap
 	client        krogerClient
-	userStorage   userLookup
+}
+
+type locationServer struct {
+	storage     locationGetter
+	userStorage userLookup
 }
 
 type locationGetter interface {
 	GetLocationByID(ctx context.Context, locationID string) (*Location, error)
 	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
-	Register(mux *http.ServeMux, authClient auth.AuthClient)
 }
 
-func New(ctx context.Context, cfg *config.Config) (locationGetter, error) {
+func New(cfg *config.Config) (locationGetter, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -48,14 +51,22 @@ func New(ctx context.Context, cfg *config.Config) (locationGetter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
 	}
-	return &locationServer{
+	return &locationStorage{
 		locationCache: make(map[string]Location),
 		cacheLock:     sync.Mutex{},
 		client:        client,
 	}, nil
+
 }
 
-func (l *locationServer) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
+func NewServer(storage locationGetter, userStorage userLookup) *locationServer {
+	return &locationServer{
+		storage:     storage,
+		userStorage: userStorage,
+	}
+}
+
+func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	l.cacheLock.Lock()
 
 	if loc, exists := l.locationCache[locationID]; exists {
@@ -91,7 +102,7 @@ type Location struct {
 	State   string `json:"state"`
 }
 
-func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
+func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
 	locparams := &kroger.LocationListParams{
 		FilterZipCodeNear: &zipcode,
 	}
@@ -120,8 +131,8 @@ func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) 
 	return locations, nil
 }
 
-func Ready(ctx context.Context, l locationGetter) error {
-	_, err := l.GetLocationsByZip(ctx, "98005") //magic number is my zip code :)
+func (l *locationServer) Ready(ctx context.Context) error {
+	_, err := l.storage.GetLocationsByZip(ctx, "98005") //magic number is my zip code :)
 	return err
 }
 
@@ -143,7 +154,7 @@ func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient
 			http.Error(w, "provide a zip code with ?zip=12345", http.StatusBadRequest)
 			return
 		}
-		locs, err := l.GetLocationsByZip(ctx, zip)
+		locs, err := l.storage.GetLocationsByZip(ctx, zip)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to get locations for zip", "zip", zip, "error", err)
 			http.Error(w, "could not get locations", http.StatusInternalServerError)
@@ -154,17 +165,19 @@ func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient
 			favoriteStore = currentUser.FavoriteStore
 		}
 		data := struct {
-			Locations     []Location
-			Zip           string
-			FavoriteStore string
-			ClarityScript template.HTML
-			Style         seasons.Style
+			Locations      []Location
+			Zip            string
+			FavoriteStore  string
+			ClarityScript  template.HTML
+			Style          seasons.Style
+			ServerSignedIn bool
 		}{
-			Locations:     locs,
-			Zip:           zip,
-			FavoriteStore: favoriteStore,
-			ClarityScript: templates.ClarityScript(),
-			Style:         seasons.GetCurrentStyle(),
+			Locations:      locs,
+			Zip:            zip,
+			FavoriteStore:  favoriteStore,
+			ClarityScript:  templates.ClarityScript(),
+			Style:          seasons.GetCurrentStyle(),
+			ServerSignedIn: currentUser != nil,
 		}
 		if err := templates.Location.Execute(w, data); err != nil {
 			http.Error(w, "template error", http.StatusInternalServerError)
