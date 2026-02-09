@@ -1,8 +1,10 @@
 package locations
 
 import (
+	"careme/internal/auth"
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/samber/lo"
 )
@@ -34,4 +36,7 @@ func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location
 
 func (m mock) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
 	return lo.Values(fakes), nil
+}
+
+func (m mock) Register(_ *http.ServeMux, _ auth.AuthClient) {
 }

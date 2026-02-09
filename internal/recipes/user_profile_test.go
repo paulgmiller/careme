@@ -4,6 +4,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/users"
+	utypes "careme/internal/users/types"
 	"context"
 	"os"
 	"strings"
@@ -27,12 +28,12 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 	storage := users.NewStorage(tmpCache)
 
 	// Create a test user
-	testUser := &users.User{
+	testUser := &utypes.User{
 		ID:          "test-user-id",
 		Email:       []string{"test@example.com"},
 		CreatedAt:   time.Now(),
 		ShoppingDay: "Saturday",
-		LastRecipes: []users.Recipe{},
+		LastRecipes: []utypes.Recipe{},
 	}
 	if err := storage.Update(testUser); err != nil {
 		t.Fatalf("failed to create test user: %v", err)
@@ -110,17 +111,17 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 	}
 
 	// Create a test user with an existing recipe
-	existingRecipe := users.Recipe{
+	existingRecipe := utypes.Recipe{
 		Title:     savedRecipes[0].Title,
 		Hash:      savedRecipes[0].ComputeHash(),
 		CreatedAt: time.Now().Add(-24 * time.Hour),
 	}
-	testUser := &users.User{
+	testUser := &utypes.User{
 		ID:          "test-user-id",
 		Email:       []string{"test@example.com"},
 		CreatedAt:   time.Now(),
 		ShoppingDay: "Saturday",
-		LastRecipes: []users.Recipe{existingRecipe},
+		LastRecipes: []utypes.Recipe{existingRecipe},
 	}
 	if err := storage.Update(testUser); err != nil {
 		t.Fatalf("failed to create test user: %v", err)

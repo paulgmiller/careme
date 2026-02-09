@@ -1,11 +1,14 @@
 package locations
 
 import (
+	"careme/internal/auth"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/seasons"
 	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -19,15 +22,21 @@ type krogerClient interface {
 	LocationDetailsWithResponse(ctx context.Context, locationId string, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationDetailsResponse, error)
 }
 
+type userLookup interface {
+	FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error)
+}
+
 type locationServer struct {
 	locationCache map[string]Location
 	cacheLock     sync.Mutex // to protect locationMap
 	client        krogerClient
+	userStorage   userLookup
 }
 
 type locationGetter interface {
 	GetLocationByID(ctx context.Context, locationID string) (*Location, error)
 	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
+	Register(mux *http.ServeMux, authClient auth.AuthClient)
 }
 
 func New(ctx context.Context, cfg *config.Config) (locationGetter, error) {
@@ -116,20 +125,19 @@ func Ready(ctx context.Context, l locationGetter) error {
 	return err
 }
 
-func Register(l locationGetter, mux *http.ServeMux, favoriteStoreID func(context.Context, *http.Request) (string, error)) {
+func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		/*_, err := users.FromRequest(r, userStorage)
+
+		currentUser, err := l.userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
-			if errors.Is(err, users.ErrNotFound) {
-				users.ClearCookie(w)
-				http.Redirect(w, r, "/", http.StatusSeeOther)
+			if !errors.Is(err, auth.ErrNoSession) {
+				http.Error(w, "unable to load account", http.StatusInternalServerError)
+				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
 				return
 			}
-			slog.ErrorContext(ctx, "failed to load user for locations", "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}*/
+		}
+
 		zip := r.URL.Query().Get("zip")
 		if zip == "" {
 			slog.InfoContext(ctx, "no zip code provided to /locations")
@@ -143,11 +151,8 @@ func Register(l locationGetter, mux *http.ServeMux, favoriteStoreID func(context
 			return
 		}
 		var favoriteStore string
-		if favoriteStoreID != nil {
-			favoriteStore, err = favoriteStoreID(ctx, r)
-			if err != nil {
-				slog.WarnContext(ctx, "failed to resolve favorite store for locations", "error", err)
-			}
+		if currentUser != nil {
+			favoriteStore = currentUser.FavoriteStore
 		}
 		data := struct {
 			Locations     []Location

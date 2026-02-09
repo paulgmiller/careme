@@ -3,6 +3,7 @@ package main
 import (
 	"careme/internal/cache"
 	"careme/internal/users"
+	utypes "careme/internal/users/types"
 	"context"
 	"flag"
 	"log"
@@ -28,8 +29,8 @@ func main() {
 	}
 	log.Printf("found %d users", len(userList))
 	log.Printf("looking for user with email containing \"%s\"", userEmail)
-	var old users.User
-	var new []users.User
+	var old utypes.User
+	var new []utypes.User
 	for _, u := range userList {
 		//if !slices.Contains(u.Email, userEmail) {
 		//	continue

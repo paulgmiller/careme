@@ -1,6 +1,7 @@
 package users
 
 import (
+	utypes "careme/internal/users/types"
 	"strings"
 	"testing"
 	"time"
@@ -11,12 +12,12 @@ func TestUserValidate(t *testing.T) {
 		newer := time.Date(2024, time.December, 1, 0, 0, 0, 0, time.UTC)
 		older := newer.Add(-24 * time.Hour)
 		oldest := newer.Add(-48 * time.Hour)
-		user := &User{
+		user := &utypes.User{
 			ID:            "user-1",
 			ShoppingDay:   time.Monday.String(),
 			Email:         []string{"alice@example.com"},
 			FavoriteStore: "1234",
-			LastRecipes: []Recipe{
+			LastRecipes: []utypes.Recipe{
 				{Title: "newer", CreatedAt: newer},
 				{Title: "oldest", CreatedAt: oldest},
 				{Title: "older", CreatedAt: older},
@@ -35,7 +36,7 @@ func TestUserValidate(t *testing.T) {
 	})
 
 	t.Run("invalid shopping day", func(t *testing.T) {
-		user := &User{
+		user := &utypes.User{
 			ShoppingDay: "Caturday",
 			Email:       []string{"bob@example.com"},
 		}
@@ -47,7 +48,7 @@ func TestUserValidate(t *testing.T) {
 	})
 
 	t.Run("missing email", func(t *testing.T) {
-		user := &User{ShoppingDay: time.Friday.String()}
+		user := &utypes.User{ShoppingDay: time.Friday.String()}
 
 		err := user.Validate()
 		if err == nil || err.Error() != "at least one email is required" {
@@ -56,7 +57,7 @@ func TestUserValidate(t *testing.T) {
 	})
 
 	t.Run("invalid email address", func(t *testing.T) {
-		user := &User{
+		user := &utypes.User{
 			ShoppingDay: time.Saturday.String(),
 			Email:       []string{"not-an-email"},
 		}
@@ -68,7 +69,7 @@ func TestUserValidate(t *testing.T) {
 	})
 
 	t.Run("invalid favorite store", func(t *testing.T) {
-		user := &User{
+		user := &utypes.User{
 			ShoppingDay:   time.Sunday.String(),
 			Email:         []string{"charlie@example.com"},
 			FavoriteStore: "store-99",

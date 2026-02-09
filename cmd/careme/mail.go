@@ -10,6 +10,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/users"
+	utypes "careme/internal/users/types"
 	"context"
 	"errors"
 	"fmt"
@@ -103,7 +104,7 @@ func (m *mailer) Iterate(ctx context.Context, duration time.Duration) {
 	}
 }
 
-func (m *mailer) sendEmail(ctx context.Context, user users.User) {
+func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	if user.FavoriteStore == "" {
 		slog.InfoContext(ctx, "no favorite store", "user", user.ID)
 		return

@@ -5,6 +5,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/seasons"
 	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 	"context"
 	"encoding/json"
 	"errors"
@@ -46,7 +47,7 @@ func (s *server) Register(mux *http.ServeMux) {
 func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
@@ -54,13 +55,6 @@ func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-	slog.InfoContext(ctx, "found clerk user ID", "clerk_user_id", clerkUserID)
-	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 
@@ -81,7 +75,7 @@ func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	newRecipe := Recipe{
+	newRecipe := utypes.Recipe{
 		Title:     recipeTitle,
 		Hash:      hash,
 		CreatedAt: time.Now(),
@@ -161,7 +155,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	}
 	data := struct {
 		ClarityScript     template.HTML
-		User              *User
+		User              *utypes.User
 		Success           bool
 		FavoriteStoreName string
 		Style             seasons.Style

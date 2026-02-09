@@ -10,6 +10,7 @@ import (
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
+	utypes "careme/internal/users/types"
 	"context"
 	"encoding/json"
 	"errors"
@@ -125,7 +126,8 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 				http.Error(w, "recipe not found or expired", http.StatusNotFound)
 				return
 			}
-			clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+
+			currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
 			if err != nil {
 				if !errors.Is(err, auth.ErrNoSession) {
 					slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
@@ -133,12 +135,6 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 					return
 				}
 				http.Redirect(w, r, "/", http.StatusSeeOther)
-				return
-			}
-			currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
 			s.kickgeneration(ctx, p, currentUser)
@@ -207,7 +203,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
@@ -216,13 +212,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.InfoContext(ctx, "failed got no sesion from request", "error", err, "url", r.URL.String())
 		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 
@@ -270,7 +259,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, hash, true /*useStart*/)
 }
 
-func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *users.User) {
+func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
 	for _, last := range currentUser.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
 			break
@@ -366,13 +355,13 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 		// Check if recipe already exists in user's last recipes
 		hash := recipe.ComputeHash()
 
-		_, exists := lo.Find(currentUser.LastRecipes, func(r users.Recipe) bool {
+		_, exists := lo.Find(currentUser.LastRecipes, func(r utypes.Recipe) bool {
 			return r.Hash == hash
 		})
 		if exists {
 			continue
 		}
-		newRecipe := users.Recipe{
+		newRecipe := utypes.Recipe{
 			Title:     recipe.Title,
 			Hash:      hash,
 			CreatedAt: addTime,
