@@ -2,8 +2,11 @@ package locations
 
 import (
 	"careme/internal/auth"
+	"careme/internal/seasons"
+	"careme/internal/templates"
 	"context"
 	"fmt"
+	"html/template"
 	"net/http"
 
 	"github.com/samber/lo"
@@ -38,5 +41,23 @@ func (m mock) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location
 	return lo.Values(fakes), nil
 }
 
-func (m mock) Register(_ *http.ServeMux, _ auth.AuthClient) {
+func (m mock) Register(mux *http.ServeMux, _ auth.AuthClient) {
+	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
+		data := struct {
+			Locations     []Location
+			Zip           string
+			FavoriteStore string
+			ClarityScript template.HTML
+			Style         seasons.Style
+		}{
+			Locations:     lo.Values(fakes),
+			Zip:           r.URL.Query().Get("zip"),
+			FavoriteStore: "",
+			ClarityScript: templates.ClarityScript(),
+			Style:         seasons.GetCurrentStyle(),
+		}
+		if err := templates.Location.Execute(w, data); err != nil {
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
 }

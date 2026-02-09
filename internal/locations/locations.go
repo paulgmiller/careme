@@ -128,7 +128,6 @@ func Ready(ctx context.Context, l locationGetter) error {
 func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-
 		currentUser, err := l.userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
 			if !errors.Is(err, auth.ErrNoSession) {
