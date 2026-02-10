@@ -145,27 +145,18 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recipe, err := s.SingleFromCache(ctx, hash)
-	if err != nil {
-		http.Error(w, "recipe not found", http.StatusNotFound)
-		return
-	}
-
 	conversationID := strings.TrimSpace(r.FormValue("conversation_id"))
-	if conversationID == "" && recipe.OriginHash != "" {
-		if slist, err := s.FromCache(ctx, recipe.OriginHash); err == nil {
-			conversationID = slist.ConversationID
-		} else if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load conversation id", "hash", recipe.OriginHash, "error", err)
-		}
-	}
 	if conversationID == "" {
-		http.Error(w, "conversation id not available", http.StatusBadRequest)
+		slog.ErrorContext(ctx, "failed to load conversation id", "hash", hash)
+		http.Error(w, "conversation id not found", http.StatusInternalServerError)
 		return
 	}
 
-	prompt := fmt.Sprintf("Question about the recipe titled %q. Answer in plain text, be concise, and do not regenerate the full recipe. Question: %s", recipe.Title, question)
-	answer, err := s.generator.AskQuestion(ctx, prompt, conversationID)
+	//this is going to take a while. Start a go routine? and spin?
+	// can't use request context because it will be canceled when request finishes but we want to finish processing question and save it to cache.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 45*time.Second)
+	defer cancel()
+	answer, err := s.generator.AskQuestion(ctx, question, conversationID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to answer question", "hash", hash, "error", err)
 		http.Error(w, "failed to answer question", http.StatusInternalServerError)
@@ -368,7 +359,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 	go func() {
 		defer s.wg.Done()
 		// copy over request id to new context? can't be same context because end of http request will cancel it.
-		ctx := context.Background()
+		ctx := context.WithoutCancel(ctx)
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {

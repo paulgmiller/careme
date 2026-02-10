@@ -104,10 +104,10 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 # Instructions
 - Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch is also good.
 - Recipes should use diverse cooking methods and represent a variety of cuisines.
-- Provide clear, step-by-step instructions and an ingredient list for each recipe. repeat amounts and prep for each recipe in instructions. 
+- Provide clear, step-by-step instructions and an ingredient list for each recipe. repeat amounts and prep for each recipe in instructions.
 - Recipes should take under 1 hour to prepare, unless the user asks for something longer
 - Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles and a local brand if possible. Really put your Sommielier hat on for this.
-- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but but don't pay more for something on sale than a similar ingredient that isn't) 
+- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but but don't pay more for something on sale than a similar ingredient that isn't)
 
 
 # Output Format
