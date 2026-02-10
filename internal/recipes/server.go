@@ -135,6 +135,12 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
+	_, err := s.clerk.GetUserIDFromRequest(r)
+	if errors.Is(err, auth.ErrNoSession) {
+		http.Error(w, "must be logged in to ask a question", http.StatusUnauthorized)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return

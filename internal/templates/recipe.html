@@ -85,7 +85,7 @@
               <p class="text-xs text-gray-500">Ask about swaps, prep, or timing.</p>
             </div>
 
-            {{if .ConversationID}}
+            {{if and .ServerSignedIn .ConversationID}}
             <form method="POST" action="/recipe/{{.RecipeHash}}/question" class="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label for="question" class="text-sm font-medium text-gray-700 sm:w-40">Ask a question</label>
               <input id="question"
@@ -99,8 +99,10 @@
                 Ask
               </button>
             </form>
-            {{else}}
+            {{else if .ServerSignedIn}}
             <p class="text-sm text-gray-500">Questions are unavailable for this recipe.</p>
+            {{else}}
+            <p class="text-sm text-gray-500">Sign in to ask follow-up questions.</p>
             {{end}}
 
             {{if .Thread}}
@@ -114,7 +116,7 @@
               </div>
               {{end}}
             </div>
-            {{else if .ConversationID}}
+            {{else if and .ServerSignedIn .ConversationID}}
             <p class="text-sm text-gray-500">No questions yet.</p>
             {{end}}
           </section>

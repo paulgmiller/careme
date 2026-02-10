@@ -133,3 +133,21 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 		t.Error("recipe HTML should contain question input")
 	}
 }
+
+func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
+	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.ConversationID = "convo123"
+	w := httptest.NewRecorder()
+	FormatRecipeHTML(p, list.Recipes[0], false, []RecipeThreadEntry{}, w)
+	html := w.Body.String()
+
+	isValidHTML(t, html)
+
+	if strings.Contains(html, `name="question"`) {
+		t.Error("recipe HTML should not contain question input when signed out")
+	}
+	if !strings.Contains(html, "Sign in to ask follow-up questions.") {
+		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
+	}
+}
