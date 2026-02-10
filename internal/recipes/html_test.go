@@ -115,7 +115,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], true, nil, "hash123", w)
+	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)

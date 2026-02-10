@@ -44,7 +44,7 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool
 }
 
 // FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, recipeHash string, writer http.ResponseWriter) {
+func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, writer http.ResponseWriter) {
 	data := struct {
 		Location       locations.Location
 		Date           string
@@ -64,7 +64,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		OriginHash:     recipe.OriginHash,
 		ConversationID: p.ConversationID,
 		Thread:         thread,
-		RecipeHash:     recipeHash,
+		RecipeHash:     recipe.ComputeHash(),
 		Style:          seasons.GetCurrentStyle(),
 		ServerSignedIn: signedIn,
 	}

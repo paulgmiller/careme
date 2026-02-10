@@ -96,7 +96,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		if err != nil && !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
 		}
-		FormatRecipeHTML(p, *recipe, signedIn, thread, hash, w)
+		FormatRecipeHTML(p, *recipe, signedIn, thread, w)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(p, *recipe, signedIn, thread, hash, w)
+	FormatRecipeHTML(p, *recipe, signedIn, thread, w)
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +145,8 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//two problems here 1) user can shove in different conversation id.
+	//2) not scoped to specfic recipe. Should shove recipe title in or fork a new conversation id. ideally
 	conversationID := strings.TrimSpace(r.FormValue("conversation_id"))
 	if conversationID == "" {
 		slog.ErrorContext(ctx, "failed to load conversation id", "hash", hash)
