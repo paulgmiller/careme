@@ -3,6 +3,7 @@ package recipes
 import (
 	"careme/internal/ai"
 	"context"
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"time"
@@ -389,4 +390,9 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 		ConversationID: id,
 		Recipes:        selectedRecipes,
 	}, nil
+}
+
+func (m mock) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+	_ = conversationID
+	return fmt.Sprintf("Mock answer: %s", question), nil
 }

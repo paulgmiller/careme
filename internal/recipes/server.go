@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,7 @@ type locServer interface {
 
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
+	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	Ready(ctx context.Context) error
 }
 
@@ -62,6 +64,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
+	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
 	//maybe this should be under locations server?
 	mux.HandleFunc("GET /ingredients/{location}", s.ingredients)
 
@@ -89,7 +92,11 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
-		FormatRecipeHTML(p, *recipe, signedIn, w)
+		thread, err := s.ThreadFromCache(ctx, hash)
+		if err != nil && !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
+		}
+		FormatRecipeHTML(p, *recipe, signedIn, thread, hash, w)
 		return
 	}
 
@@ -104,12 +111,85 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		}, time.Now())
 	}
 
-	// TODO this p is mising converastion id. See todo in generate recipes we can pregenerate it or update it after generation.
+	if p.ConversationID == "" {
+		if slist, err := s.FromCache(ctx, recipe.OriginHash); err == nil {
+			p.ConversationID = slist.ConversationID
+		} else if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to load conversation id", "hash", recipe.OriginHash, "error", err)
+		}
+	}
 
-	// TODO: Add questions or regneration to signle recipes
+	thread, err := s.ThreadFromCache(ctx, hash)
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
+	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(p, *recipe, signedIn, w)
+	FormatRecipeHTML(p, *recipe, signedIn, thread, hash, w)
+}
+
+func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hash := r.PathValue("hash")
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	question := strings.TrimSpace(r.FormValue("question"))
+	if question == "" {
+		http.Error(w, "missing question", http.StatusBadRequest)
+		return
+	}
+
+	recipe, err := s.SingleFromCache(ctx, hash)
+	if err != nil {
+		http.Error(w, "recipe not found", http.StatusNotFound)
+		return
+	}
+
+	conversationID := strings.TrimSpace(r.FormValue("conversation_id"))
+	if conversationID == "" && recipe.OriginHash != "" {
+		if slist, err := s.FromCache(ctx, recipe.OriginHash); err == nil {
+			conversationID = slist.ConversationID
+		} else if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to load conversation id", "hash", recipe.OriginHash, "error", err)
+		}
+	}
+	if conversationID == "" {
+		http.Error(w, "conversation id not available", http.StatusBadRequest)
+		return
+	}
+
+	prompt := fmt.Sprintf("Question about the recipe titled %q. Answer in plain text, be concise, and do not regenerate the full recipe. Question: %s", recipe.Title, question)
+	answer, err := s.generator.AskQuestion(ctx, prompt, conversationID)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to answer question", "hash", hash, "error", err)
+		http.Error(w, "failed to answer question", http.StatusInternalServerError)
+		return
+	}
+
+	thread, err := s.ThreadFromCache(ctx, hash)
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
+		http.Error(w, "failed to load recipe thread", http.StatusInternalServerError)
+		return
+	}
+	thread = append(thread, RecipeThreadEntry{
+		Question:  question,
+		Answer:    answer,
+		CreatedAt: time.Now(),
+	})
+	if err := s.SaveThread(ctx, hash, thread); err != nil {
+		http.Error(w, "failed to save question", http.StatusInternalServerError)
+		return
+	}
+
+	redirect := url.URL{Path: "/recipe/" + url.PathEscape(hash)}
+	http.Redirect(w, r, redirect.String(), http.StatusSeeOther)
 }
 
 const (

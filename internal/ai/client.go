@@ -174,6 +174,38 @@ func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversa
 	return responseToShoppingList(ctx, resp)
 }
 
+func (c *Client) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return "", fmt.Errorf("question is required")
+	}
+	if conversationID == "" {
+		return "", fmt.Errorf("conversation ID is required for questions")
+	}
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+
+	params := responses.ResponseNewParams{
+		Model:        c.model,
+		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(question)},
+		},
+		Store: openai.Bool(true),
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfString: openai.String(conversationID),
+		},
+	}
+	resp, err := client.Responses.New(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("failed to answer question: %w", err)
+	}
+	answer := strings.TrimSpace(resp.OutputText())
+	if answer == "" {
+		return "", fmt.Errorf("empty response from model")
+	}
+	return answer, nil
+}
+
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
 func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)

@@ -79,6 +79,46 @@
             </div>
           </article>
 
+          <section class="space-y-4 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-lg font-semibold text-brand-700">Questions</h3>
+              <p class="text-xs text-gray-500">Ask about swaps, prep, or timing.</p>
+            </div>
+
+            {{if .ConversationID}}
+            <form method="POST" action="/recipe/{{.RecipeHash}}/question" class="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label for="question" class="text-sm font-medium text-gray-700 sm:w-40">Ask a question</label>
+              <input id="question"
+                     type="text"
+                     name="question"
+                     placeholder="e.g. Can I swap the protein?"
+                     class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
+              <button type="submit"
+                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Ask
+              </button>
+            </form>
+            {{else}}
+            <p class="text-sm text-gray-500">Questions are unavailable for this recipe.</p>
+            {{end}}
+
+            {{if .Thread}}
+            <div class="space-y-4">
+              {{range .Thread}}
+              <div class="rounded-xl border border-brand-100 bg-brand-50/70 p-4">
+                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">You asked</p>
+                <p class="mt-1 text-sm text-gray-700">{{.Question}}</p>
+                <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Careme</p>
+                <p class="mt-1 whitespace-pre-line text-sm text-gray-700">{{.Answer}}</p>
+              </div>
+              {{end}}
+            </div>
+            {{else if .ConversationID}}
+            <p class="text-sm text-gray-500">No questions yet.</p>
+            {{end}}
+          </section>
+
         </div>
       </div>
 

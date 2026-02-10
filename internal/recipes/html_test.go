@@ -115,7 +115,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], true, w)
+	FormatRecipeHTML(p, list.Recipes[0], true, nil, "hash123", w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -129,7 +129,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if strings.Contains(html, `name="saved"`) || strings.Contains(html, `name="dismissed"`) {
 		t.Error("recipe HTML should not contain save/dismiss inputs")
 	}
-	if strings.Contains(html, `name="question"`) {
-		t.Error("recipe HTML should not contain question input")
+	if !strings.Contains(html, `name="question"`) {
+		t.Error("recipe HTML should contain question input")
 	}
 }
