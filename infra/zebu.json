@@ -1,0 +1,315 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "managedClusters_zebu_name": {
+      "type": "String"
+    },
+    "userAssignedIdentities_zebu_agentpool_externalid": {
+      "type": "String"
+    },
+    "virtualNetworks_zebu_vnet_name": {
+      "type": "String"
+    }
+  },
+  "resources": [
+    {
+      "apiVersion": "2024-07-01",
+      "location": "westus3",
+      "name": "[parameters('virtualNetworks_zebu_vnet_name')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.0.0.0/8"
+          ]
+        },
+        "enableDdosProtection": false,
+        "privateEndpointVNetPolicies": "Disabled",
+        "subnets": [
+          {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_zebu_vnet_name'), 'default')]",
+            "name": "default",
+            "properties": {
+              "addressPrefix": "10.240.0.0/16",
+              "delegations": [],
+              "privateEndpointNetworkPolicies": "Disabled",
+              "privateLinkServiceNetworkPolicies": "Enabled",
+              "serviceEndpoints": [
+                {
+                  "locations": [
+                    "westus3",
+                    "eastus"
+                  ],
+                  "service": "Microsoft.Storage"
+                }
+              ]
+            },
+            "type": "Microsoft.Network/virtualNetworks/subnets"
+          },
+          {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_zebu_vnet_name'), 'dns')]",
+            "name": "dns",
+            "properties": {
+              "addressPrefix": "10.241.0.0/28",
+              "delegations": [],
+              "privateEndpointNetworkPolicies": "Disabled",
+              "privateLinkServiceNetworkPolicies": "Enabled"
+            },
+            "type": "Microsoft.Network/virtualNetworks/subnets"
+          }
+        ],
+        "virtualNetworkPeerings": []
+      },
+      "type": "Microsoft.Network/virtualNetworks"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_zebu_vnet_name'), 'default')]"
+      ],
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "location": "westus3",
+      "name": "[parameters('managedClusters_zebu_name')]",
+      "properties": {
+        "addonProfiles": {
+          "azureKeyvaultSecretsProvider": {
+            "enabled": false
+          },
+          "azurepolicy": {
+            "enabled": false
+          },
+          "httpApplicationRouting": {
+            "enabled": false
+          }
+        },
+        "agentPoolProfiles": [
+          {
+            "count": 2,
+            "enableAutoScaling": false,
+            "enableEncryptionAtHost": false,
+            "enableFIPS": false,
+            "enableNodePublicIP": false,
+            "enableUltraSSD": false,
+            "kubeletDiskType": "OS",
+            "maxPods": 250,
+            "mode": "System",
+            "name": "main",
+            "orchestratorVersion": "1.33.6",
+            "osDiskSizeGB": 128,
+            "osDiskType": "Managed",
+            "osSKU": "Ubuntu",
+            "osType": "Linux",
+            "powerState": {
+              "code": "Running"
+            },
+            "scaleDownMode": "Delete",
+            "securityProfile": {
+              "enableSecureBoot": false,
+              "enableVTPM": false
+            },
+            "type": "VirtualMachineScaleSets",
+            "upgradeSettings": {
+              "maxSurge": "10%",
+              "maxUnavailable": "0",
+              "undrainableNodeBehavior": "Schedule"
+            },
+            "vmSize": "Standard_B2s_v2",
+            "vnetSubnetID": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_zebu_vnet_name'), 'default')]"
+          }
+        ],
+        "autoUpgradeProfile": {
+          "upgradeChannel": "stable"
+        },
+        "azureMonitorProfile": {
+          "metrics": {
+            "enabled": false
+          }
+        },
+        "bootstrapProfile": {
+          "artifactSource": "Direct"
+        },
+        "disableLocalAccounts": false,
+        "dnsPrefix": "[concat(parameters('managedClusters_zebu_name'), '-dns')]",
+        "enableRBAC": true,
+        "identityProfile": {
+          "kubeletidentity": {
+            "clientId": "eed6c37c-24b2-4b76-980a-8453ff1b12bd",
+            "objectId": "687a9a3d-7a14-403a-b885-730dccfe7c6d",
+            "resourceId": "[parameters('userAssignedIdentities_zebu_agentpool_externalid')]"
+          }
+        },
+        "kubernetesVersion": "1.33.6",
+        "metricsProfile": {
+          "costAnalysis": {
+            "enabled": false
+          }
+        },
+        "networkProfile": {
+          "dnsServiceIP": "10.0.0.10",
+          "ipFamilies": [
+            "IPv4"
+          ],
+          "loadBalancerProfile": {
+            "backendPoolType": "nodeIPConfiguration",
+            "managedOutboundIPs": {
+              "count": 1
+            }
+          },
+          "loadBalancerSku": "standard",
+          "networkDataplane": "cilium",
+          "networkPlugin": "azure",
+          "networkPluginMode": "overlay",
+          "networkPolicy": "cilium",
+          "outboundType": "loadBalancer",
+          "podCidr": "192.168.0.0/16",
+          "podCidrs": [
+            "192.168.0.0/16"
+          ],
+          "serviceCidr": "10.0.0.0/16",
+          "serviceCidrs": [
+            "10.0.0.0/16"
+          ]
+        },
+        "nodeProvisioningProfile": {
+          "defaultNodePools": "Auto",
+          "mode": "Manual"
+        },
+        "nodeResourceGroup": "[concat('MC_', parameters('managedClusters_zebu_name'), '_', parameters('managedClusters_zebu_name'), '_westus3')]",
+        "oidcIssuerProfile": {
+          "enabled": false
+        },
+        "securityProfile": {},
+        "servicePrincipalProfile": {
+          "clientId": "msi"
+        },
+        "storageProfile": {
+          "diskCSIDriver": {
+            "enabled": true
+          },
+          "fileCSIDriver": {
+            "enabled": true
+          },
+          "snapshotController": {
+            "enabled": true
+          }
+        },
+        "supportPlan": "KubernetesOfficial",
+        "windowsProfile": {
+          "adminUsername": "azureuser",
+          "enableCSIProxy": true
+        },
+        "workloadAutoScalerProfile": {}
+      },
+      "sku": {
+        "name": "Base",
+        "tier": "Free"
+      },
+      "type": "Microsoft.ContainerService/managedClusters"
+    },
+    {
+      "apiVersion": "2024-07-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworks_zebu_vnet_name'))]"
+      ],
+      "name": "[concat(parameters('virtualNetworks_zebu_vnet_name'), '/default')]",
+      "properties": {
+        "addressPrefix": "10.240.0.0/16",
+        "delegations": [],
+        "privateEndpointNetworkPolicies": "Disabled",
+        "privateLinkServiceNetworkPolicies": "Enabled",
+        "serviceEndpoints": [
+          {
+            "locations": [
+              "westus3",
+              "eastus"
+            ],
+            "service": "Microsoft.Storage"
+          }
+        ]
+      },
+      "type": "Microsoft.Network/virtualNetworks/subnets"
+    },
+    {
+      "apiVersion": "2024-07-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworks_zebu_vnet_name'))]"
+      ],
+      "name": "[concat(parameters('virtualNetworks_zebu_vnet_name'), '/dns')]",
+      "properties": {
+        "addressPrefix": "10.241.0.0/28",
+        "delegations": [],
+        "privateEndpointNetworkPolicies": "Disabled",
+        "privateLinkServiceNetworkPolicies": "Enabled"
+      },
+      "type": "Microsoft.Network/virtualNetworks/subnets"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerService/managedClusters', parameters('managedClusters_zebu_name'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_zebu_vnet_name'), 'default')]"
+      ],
+      "name": "[concat(parameters('managedClusters_zebu_name'), '/main')]",
+      "properties": {
+        "count": 2,
+        "enableAutoScaling": false,
+        "enableEncryptionAtHost": false,
+        "enableFIPS": false,
+        "enableNodePublicIP": false,
+        "enableUltraSSD": false,
+        "kubeletDiskType": "OS",
+        "maxPods": 250,
+        "mode": "System",
+        "orchestratorVersion": "1.33.6",
+        "osDiskSizeGB": 128,
+        "osDiskType": "Managed",
+        "osSKU": "Ubuntu",
+        "osType": "Linux",
+        "powerState": {
+          "code": "Running"
+        },
+        "scaleDownMode": "Delete",
+        "securityProfile": {
+          "enableSecureBoot": false,
+          "enableVTPM": false
+        },
+        "type": "VirtualMachineScaleSets",
+        "upgradeSettings": {
+          "maxSurge": "10%",
+          "maxUnavailable": "0",
+          "undrainableNodeBehavior": "Schedule"
+        },
+        "vmSize": "Standard_B2s_v2",
+        "vnetSubnetID": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_zebu_vnet_name'), 'default')]"
+      },
+      "type": "Microsoft.ContainerService/managedClusters/agentPools"
+    },
+    {
+      "apiVersion": "2025-04-02-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerService/managedClusters/agentPools', parameters('managedClusters_zebu_name'), 'main')]",
+        "[resourceId('Microsoft.ContainerService/managedClusters', parameters('managedClusters_zebu_name'))]"
+      ],
+      "name": "[concat(parameters('managedClusters_zebu_name'), '/main/aks-main-11118102-vmss000000')]",
+      "properties": {
+        "network": {}
+      },
+      "type": "Microsoft.ContainerService/managedClusters/agentPools/machines"
+    },
+    {
+      "apiVersion": "2025-04-02-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerService/managedClusters/agentPools', parameters('managedClusters_zebu_name'), 'main')]",
+        "[resourceId('Microsoft.ContainerService/managedClusters', parameters('managedClusters_zebu_name'))]"
+      ],
+      "name": "[concat(parameters('managedClusters_zebu_name'), '/main/aks-main-11118102-vmss000001')]",
+      "properties": {
+        "network": {}
+      },
+      "type": "Microsoft.ContainerService/managedClusters/agentPools/machines"
+    }
+  ],
+  "variables": {}
+}
