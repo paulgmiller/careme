@@ -44,13 +44,16 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool
 }
 
 // FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, writer http.ResponseWriter) {
+func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, writer http.ResponseWriter) {
 	data := struct {
 		Location       locations.Location
 		Date           string
 		ClarityScript  template.HTML
 		Recipe         ai.Recipe
 		OriginHash     string
+		ConversationID string
+		Thread         []RecipeThreadEntry
+		RecipeHash     string
 		Style          seasons.Style
 		ServerSignedIn bool
 	}{
@@ -59,6 +62,9 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, write
 		ClarityScript:  templates.ClarityScript(),
 		Recipe:         recipe,
 		OriginHash:     recipe.OriginHash,
+		ConversationID: p.ConversationID,
+		Thread:         thread,
+		RecipeHash:     recipe.ComputeHash(),
 		Style:          seasons.GetCurrentStyle(),
 		ServerSignedIn: signedIn,
 	}

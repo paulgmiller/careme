@@ -71,6 +71,20 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		}
 	}
 
+	// Step 6: ask a question on the finalized single recipe page.
+	question := "Can I use skirt steak instead?"
+	questionURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/question"
+	questionBody := mustPostFormBody(t, client, questionURL, url.Values{
+		"conversation_id": {conversationID},
+		"question":        {question},
+	})
+	if !strings.Contains(questionBody, question) {
+		t.Fatalf("expected question thread to include question %q", question)
+	}
+	if !strings.Contains(questionBody, "Mock answer: "+question) {
+		t.Fatalf("expected question thread to include mock answer for %q", question)
+	}
+
 	//TODO step 6 make sure recipes are saved to user page?
 
 }
@@ -135,6 +149,26 @@ func mustGetBody(t *testing.T, client *http.Client, url string) string {
 	}
 	body := readAll(t, resp.Body)
 	requireValidHTML(t, url, resp.Header.Get("Content-Type"), body)
+	return body
+}
+
+func mustPostFormBody(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
+	t.Helper()
+	resp, err := client.PostForm(targetURL, data)
+	if err != nil {
+		t.Fatalf("POST %s failed: %v", targetURL, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body := readAll(t, resp.Body)
+		t.Fatalf("POST %s expected 200 after redirect, got %d: %s", targetURL, resp.StatusCode, body)
+	}
+	body := readAll(t, resp.Body)
+	requireValidHTML(t, targetURL, resp.Header.Get("Content-Type"), body)
 	return body
 }
 

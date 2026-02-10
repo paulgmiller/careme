@@ -104,10 +104,10 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 # Instructions
 - Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch is also good.
 - Recipes should use diverse cooking methods and represent a variety of cuisines.
-- Provide clear, step-by-step instructions and an ingredient list for each recipe. repeat amounts and prep for each recipe in instructions. 
+- Provide clear, step-by-step instructions and an ingredient list for each recipe. repeat amounts and prep for each recipe in instructions.
 - Recipes should take under 1 hour to prepare, unless the user asks for something longer
 - Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles and a local brand if possible. Really put your Sommielier hat on for this.
-- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but but don't pay more for something on sale than a similar ingredient that isn't) 
+- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but but don't pay more for something on sale than a similar ingredient that isn't)
 
 
 # Output Format
@@ -172,6 +172,38 @@ func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversa
 	}
 
 	return responseToShoppingList(ctx, resp)
+}
+
+func (c *Client) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return "", fmt.Errorf("question is required")
+	}
+	if conversationID == "" {
+		return "", fmt.Errorf("conversation ID is required for questions")
+	}
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+
+	params := responses.ResponseNewParams{
+		Model:        c.model,
+		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(question)},
+		},
+		Store: openai.Bool(true),
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfString: openai.String(conversationID),
+		},
+	}
+	resp, err := client.Responses.New(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("failed to answer question: %w", err)
+	}
+	answer := strings.TrimSpace(resp.OutputText())
+	if answer == "" {
+		return "", fmt.Errorf("empty response from model")
+	}
+	return answer, nil
 }
 
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?

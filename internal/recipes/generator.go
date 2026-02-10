@@ -23,6 +23,7 @@ import (
 type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 	Regenerate(ctx context.Context, newinstruction string, conversationID string) (*ai.ShoppingList, error)
+	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	Ready(ctx context.Context) error
 }
 
@@ -100,6 +101,10 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return shoppingList, nil
+}
+
+func (g *Generator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+	return g.aiClient.AskQuestion(ctx, question, conversationID)
 }
 
 type filter struct {
