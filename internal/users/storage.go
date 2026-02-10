@@ -151,6 +151,6 @@ func (s *Storage) Update(user *utypes.User) error {
 }
 
 func normalizeEmail(email string) string {
-	// remove . from before @?
+	// remove . from before @? or +<suffix?
 	return strings.TrimSpace(strings.ToLower(email))
 }
