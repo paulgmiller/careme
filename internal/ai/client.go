@@ -43,7 +43,7 @@ type Recipe struct {
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
-	WineStyles   []string     `json:"wine_styles,omitempty"`
+	WineStyles   []string     `json:"wine_styles"`
 	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      //not in schema
 	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` //not in schema
 }
