@@ -46,9 +46,16 @@ func main() {
 	}
 
 	for _, i := range ings {
-		fmt.Println(toString(i.Description))
+		fmt.Printf("%s:$%s original ($%s)\n", toString(i.Description), toFloat(i.PriceSale), toFloat(i.PriceRegular))
 	}
 
+}
+
+func toFloat(f *float32) string {
+	if f == nil {
+		return "0"
+	}
+	return fmt.Sprintf("%.2f", *f)
 }
 
 func toString(s *string) string {
