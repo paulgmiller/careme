@@ -178,6 +178,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		styles := wineStyles(slist.Recipes)
+		slog.InfoContext(ctx, "wines!", "hash", hashParam, "wine_styles", styles)
 		_, err = s.clerk.GetUserIDFromRequest(r)
 		signedIn := !errors.Is(err, auth.ErrNoSession)
 		FormatShoppingListHTML(p, *slist, signedIn, w)
@@ -239,6 +241,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to save recipes", http.StatusInternalServerError)
 			return
 		}
+		//styles := wineStyles(p.Saved)
+		// todo regeenrate after grabbing list of wine styles from store.
 		slog.InfoContext(ctx, "finalized recipes", "user_id", currentUser.ID, "count", len(p.Saved))
 
 		// Display the saved recipes
@@ -261,6 +265,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
+}
+
+func wineStyles(recipes []ai.Recipe) []string {
+	styles := lo.Flatten(lo.Map(recipes, func(r ai.Recipe, _ int) []string {
+		return r.WineStyles
+	}))
+	return lo.Uniq(styles)
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
