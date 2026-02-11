@@ -74,7 +74,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	// Step 6: ask a question on the finalized single recipe page.
 	question := "Can I use skirt steak instead?"
 	questionURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/question"
-	questionBody := mustPostFormBody(t, client, questionURL, url.Values{
+	questionBody := mustPostFormBodyHTMX(t, client, questionURL, url.Values{
 		"conversation_id": {conversationID},
 		"question":        {question},
 	})
@@ -170,6 +170,30 @@ func mustPostFormBody(t *testing.T, client *http.Client, targetURL string, data 
 	body := readAll(t, resp.Body)
 	requireValidHTML(t, targetURL, resp.Header.Get("Content-Type"), body)
 	return body
+}
+
+func mustPostFormBodyHTMX(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		t.Fatalf("POST %s failed to build request: %v", targetURL, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s failed: %v", targetURL, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body := readAll(t, resp.Body)
+		t.Fatalf("POST %s expected 200, got %d: %s", targetURL, resp.StatusCode, body)
+	}
+	return readAll(t, resp.Body)
 }
 
 func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectSpinner bool) (string, string) {

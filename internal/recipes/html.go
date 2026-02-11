@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -76,6 +77,10 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
 func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer http.ResponseWriter) {
+	//memory waste because we alwways resort?
+	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
 	data := struct {
 		ConversationID string
 		Thread         []RecipeThreadEntry

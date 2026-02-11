@@ -130,6 +130,10 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
 	hash := r.PathValue("hash")
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
@@ -137,9 +141,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.clerk.GetUserIDFromRequest(r)
 	if errors.Is(err, auth.ErrNoSession) {
-		if isHTMXRequest(r) {
-			w.Header().Set("HX-Redirect", "/")
-		}
+		w.Header().Set("HX-Redirect", "/")
 		http.Error(w, "must be logged in to ask a question", http.StatusUnauthorized)
 		return
 	}
@@ -190,13 +192,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isHTMXRequest(r) {
-		FormatRecipeThreadHTML(thread, true, conversationID, w)
-		return
-	}
-
-	redirect := url.URL{Path: "/recipe/" + url.PathEscape(hash)}
-	http.Redirect(w, r, redirect.String(), http.StatusSeeOther)
+	FormatRecipeThreadHTML(thread, true, conversationID, w)
 }
 
 const (

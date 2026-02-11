@@ -160,3 +160,32 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
 	}
 }
+
+func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
+	w := httptest.NewRecorder()
+	now := time.Now()
+	thread := []RecipeThreadEntry{
+		{
+			Question:  "older question",
+			Answer:    "older answer",
+			CreatedAt: now.Add(-1 * time.Hour),
+		},
+		{
+			Question:  "newer question",
+			Answer:    "newer answer",
+			CreatedAt: now,
+		},
+	}
+
+	FormatRecipeThreadHTML(thread, true, "conv123", w)
+	body := w.Body.String()
+
+	newerIndex := strings.Index(body, "newer question")
+	olderIndex := strings.Index(body, "older question")
+	if newerIndex == -1 || olderIndex == -1 {
+		t.Fatalf("expected both questions in output, body: %s", body)
+	}
+	if newerIndex > olderIndex {
+		t.Fatalf("expected newer question before older question, body: %s", body)
+	}
+}
