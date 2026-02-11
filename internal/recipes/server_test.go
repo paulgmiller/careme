@@ -83,7 +83,7 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 	s := &server{
 		recipeio: recipeio{Cache: cacheStore},
 		storage:  users.NewStorage(cacheStore),
-		clerk:    signedInAuth{},
+		clerk:    auth.DefaultMock(),
 	}
 
 	form := url.Values{
@@ -102,36 +102,6 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 	}
 }
 
-type signedInAuth struct{}
-
-func (s signedInAuth) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {
-	return "user@example.com", nil
-}
-
-func (s signedInAuth) GetUserIDFromRequest(r *http.Request) (string, error) {
-	return "user-1", nil
-}
-
-func (s signedInAuth) WithAuthHTTP(handler http.Handler) http.Handler {
-	return handler
-}
-
-func (s signedInAuth) Register(mux *http.ServeMux) {}
-
-type questionGenerator struct{}
-
-func (q questionGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
-	return &ai.ShoppingList{}, nil
-}
-
-func (q questionGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
-	return "Try chicken thighs at the same cook time.", nil
-}
-
-func (q questionGenerator) Ready(ctx context.Context) error {
-	return nil
-}
-
 type captureQuestionGenerator struct {
 	lastQuestion string
 }
@@ -142,7 +112,7 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 
 func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	c.lastQuestion = question
-	return "captured", nil
+	return "Try chicken thighs at the same cook time.", nil
 }
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
@@ -154,8 +124,8 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	s := &server{
 		recipeio:  recipeio{Cache: cacheStore},
 		storage:   users.NewStorage(cacheStore),
-		clerk:     signedInAuth{},
-		generator: questionGenerator{},
+		clerk:     auth.DefaultMock(),
+		generator: &captureQuestionGenerator{},
 	}
 
 	form := url.Values{
@@ -222,7 +192,7 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	s := &server{
 		recipeio:  recipeio{Cache: cacheStore},
 		storage:   users.NewStorage(cacheStore),
-		clerk:     signedInAuth{},
+		clerk:     auth.DefaultMock(),
 		generator: g,
 	}
 
