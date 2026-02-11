@@ -16,6 +16,8 @@ import (
 	"sync"
 )
 
+const htmxPageCSP = "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'"
+
 type krogerClient interface {
 	LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error)
 	// LocationDetailsWithResponse request
