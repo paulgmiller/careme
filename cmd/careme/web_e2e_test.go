@@ -155,26 +155,6 @@ func mustGetBody(t *testing.T, client *http.Client, url string) string {
 	return body
 }
 
-func mustPostFormBody(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
-	t.Helper()
-	resp, err := client.PostForm(targetURL, data)
-	if err != nil {
-		t.Fatalf("POST %s failed: %v", targetURL, err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Fatalf("failed to close response body: %v", err)
-		}
-	}()
-	if resp.StatusCode != http.StatusOK {
-		body := readAll(t, resp.Body)
-		t.Fatalf("POST %s expected 200 after redirect, got %d: %s", targetURL, resp.StatusCode, body)
-	}
-	body := readAll(t, resp.Body)
-	requireValidHTML(t, targetURL, resp.Header.Get("Content-Type"), body)
-	return body
-}
-
 func mustPostFormBodyHTMX(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
