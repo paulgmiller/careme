@@ -28,6 +28,12 @@ bash tailwind/generate.sh
 ```
 if you change input css or any *.html
 
+## Frontend Approach
+- Prefer server-rendered HTML and HTMX for interactive behavior.
+- Avoid SPA-style architecture for routine page interactions.
+- Keep custom JavaScript minimal and focused on browser-only APIs.
+- Migration plan: [docs/htmx-migration-plan.md](docs/htmx-migration-plan.md)
+
 ## Live site
 
 * Uptime https://stats.uptimerobot.com/ehEFlvlNM9

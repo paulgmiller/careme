@@ -32,6 +32,9 @@ var favicon []byte
 //go:embed static/tailwind.css
 var tailwindCSS []byte
 
+//go:embed static/htmx@2.0.8.js
+var htmx208JS []byte
+
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
 	if err != nil {
@@ -53,6 +56,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
+	//using etags for caching because this changes somewhat often
 	tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
 	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("If-None-Match") == tailwindETag {
@@ -64,6 +68,15 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		w.Header().Set("ETag", tailwindETag)
 		if _, err := w.Write(tailwindCSS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
+		}
+	})
+
+	//intentionally versioned so that we can cache aggressively
+	mux.HandleFunc("/static/htmx@2.0.8.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, immutable")
+		if _, err := w.Write(htmx208JS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write htmx js", "error", err)
 		}
 	})
 
