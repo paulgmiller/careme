@@ -65,6 +65,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	if recipeHashes[0] != savedHash {
 		t.Fatalf("expected finalized recipe to be %s, got %s", savedHash, recipeHashes[0])
 	}
+	savedTitle := extractRecipeTitleForHash(t, finalizedBody, savedHash)
 	for _, dismissed := range dismissedHashes {
 		if recipeHashes[0] == dismissed {
 			t.Fatalf("finalized recipe %s was in dismissed list", dismissed)
@@ -77,12 +78,14 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	questionBody := mustPostFormBodyHTMX(t, client, questionURL, url.Values{
 		"conversation_id": {conversationID},
 		"question":        {question},
+		"recipe_title":    {savedTitle},
 	})
 	if !strings.Contains(questionBody, question) {
 		t.Fatalf("expected question thread to include question %q", question)
 	}
-	if !strings.Contains(questionBody, "Mock answer: "+question) {
-		t.Fatalf("expected question thread to include mock answer for %q", question)
+	expectedPrompt := "Regarding " + savedTitle + ": " + question
+	if !strings.Contains(questionBody, "Mock answer: "+expectedPrompt) {
+		t.Fatalf("expected question thread to include mock answer for %q", expectedPrompt)
 	}
 
 	//TODO step 6 make sure recipes are saved to user page?
@@ -275,6 +278,16 @@ func extractRecipeHashes(t *testing.T, body string) []string {
 		hashes = append(hashes, match[1])
 	}
 	return hashes
+}
+
+func extractRecipeTitleForHash(t *testing.T, body, hash string) string {
+	t.Helper()
+	re := regexp.MustCompile(`<a href="/recipe/` + regexp.QuoteMeta(hash) + `"[^>]*>\s*([^<]+)\s*</a>`)
+	match := re.FindStringSubmatch(body)
+	if len(match) < 2 {
+		t.Fatalf("expected finalized page to include title link for hash %q", hash)
+	}
+	return strings.TrimSpace(match[1])
 }
 
 func buildRecipesURL(base, location, date, conversationID, savedHash string, dismissedHashes []string, finalize bool) string {

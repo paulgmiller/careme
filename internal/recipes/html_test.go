@@ -132,6 +132,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should contain question input")
 	}
+	if !strings.Contains(html, `name="recipe_title"`) {
+		t.Error("recipe HTML should include recipe title hidden input")
+	}
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("recipe HTML should include htmx script")
 	}

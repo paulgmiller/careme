@@ -102,6 +102,7 @@
                      name="question"
                      placeholder="e.g. Can I swap the protein?"
                      class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <input type="hidden" name="recipe_title" value="{{.Recipe.Title}}" />
               <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
               <button type="submit"
                       id="ask-question-submit"
