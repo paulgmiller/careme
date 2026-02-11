@@ -26,6 +26,8 @@ import (
 	"github.com/samber/lo"
 )
 
+const htmxPageCSP = "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'"
+
 type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
@@ -72,12 +74,14 @@ func (s *server) Register(mux *http.ServeMux) {
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
 	hash := r.PathValue("hash")
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
 
+	w.Header().Set("Content-Security-Policy", htmxPageCSP)
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
 		http.Error(w, "recipe not found", http.StatusNotFound)

@@ -16,6 +16,8 @@ import (
 	"sync"
 )
 
+const htmxPageCSP = "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'"
+
 type krogerClient interface {
 	LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error)
 	// LocationDetailsWithResponse request
@@ -158,6 +160,7 @@ func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient
 		if currentUser != nil {
 			favoriteStore = currentUser.FavoriteStore
 		}
+		w.Header().Set("Content-Security-Policy", htmxPageCSP)
 		if err := l.renderLocationsPage(w, ctx, zip, favoriteStore, currentUser != nil); err != nil {
 			slog.ErrorContext(ctx, "failed to render locations page", "zip", zip, "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
