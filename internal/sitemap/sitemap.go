@@ -5,17 +5,44 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
-	"sync"
 	"time"
 )
 
+type record struct {
+	loc     string
+	lastmod time.Time
+}
+
+type op struct {
+	trackHash string
+	snapshot  chan []record
+}
+
 type Server struct {
-	mu   sync.RWMutex
-	urls map[string]time.Time
+	ops chan op
 }
 
 func New() *Server {
-	return &Server{urls: make(map[string]time.Time)}
+	s := &Server{ops: make(chan op)}
+	go s.run()
+	return s
+}
+
+func (s *Server) run() {
+	urls := make(map[string]time.Time)
+	for msg := range s.ops {
+		switch {
+		case msg.trackHash != "":
+			url := "/recipes?h=" + msg.trackHash
+			urls[url] = time.Now().UTC()
+		case msg.snapshot != nil:
+			records := make([]record, 0, len(urls))
+			for loc, lastmod := range urls {
+				records = append(records, record{loc: loc, lastmod: lastmod})
+			}
+			msg.snapshot <- records
+		}
+	}
 }
 
 func (s *Server) Register(mux *http.ServeMux) {
@@ -26,10 +53,7 @@ func (s *Server) TrackShoppingList(hash string) {
 	if hash == "" {
 		return
 	}
-	url := "/recipes?h=" + hash
-	s.mu.Lock()
-	s.urls[url] = time.Now().UTC()
-	s.mu.Unlock()
+	s.ops <- op{trackHash: hash}
 }
 
 type urlSet struct {
@@ -43,18 +67,14 @@ type urlEntry struct {
 	LastMod string `xml:"lastmod,omitempty"`
 }
 
-func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
-	type record struct {
-		loc     string
-		lastmod time.Time
-	}
+func (s *Server) snapshot() []record {
+	out := make(chan []record, 1)
+	s.ops <- op{snapshot: out}
+	return <-out
+}
 
-	s.mu.RLock()
-	records := make([]record, 0, len(s.urls))
-	for loc, lastmod := range s.urls {
-		records = append(records, record{loc: loc, lastmod: lastmod})
-	}
-	s.mu.RUnlock()
+func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
+	records := s.snapshot()
 
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].loc < records[j].loc
