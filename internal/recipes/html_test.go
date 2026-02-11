@@ -132,6 +132,15 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should contain question input")
 	}
+	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
+		t.Error("recipe HTML should include htmx script")
+	}
+	if !strings.Contains(html, `id="question-thread"`) {
+		t.Error("recipe HTML should contain question thread container")
+	}
+	if !strings.Contains(html, `id="question-loading"`) {
+		t.Error("recipe HTML should contain question loading indicator")
+	}
 }
 
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {

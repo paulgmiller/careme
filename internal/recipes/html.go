@@ -74,6 +74,23 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 	}
 }
 
+// FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer http.ResponseWriter) {
+	data := struct {
+		ConversationID string
+		Thread         []RecipeThreadEntry
+		ServerSignedIn bool
+	}{
+		ConversationID: conversationID,
+		Thread:         thread,
+		ServerSignedIn: signedIn,
+	}
+
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
+		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // drops clarity, instructions and most of shoppinglist
 func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
 	// TODO just put params into shopping list and pass that up?

@@ -137,6 +137,9 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.clerk.GetUserIDFromRequest(r)
 	if errors.Is(err, auth.ErrNoSession) {
+		if isHTMXRequest(r) {
+			w.Header().Set("HX-Redirect", "/")
+		}
 		http.Error(w, "must be logged in to ask a question", http.StatusUnauthorized)
 		return
 	}
@@ -184,6 +187,11 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	})
 	if err := s.SaveThread(ctx, hash, thread); err != nil {
 		http.Error(w, "failed to save question", http.StatusInternalServerError)
+		return
+	}
+
+	if isHTMXRequest(r) {
+		FormatRecipeThreadHTML(thread, true, conversationID, w)
 		return
 	}
 
@@ -420,6 +428,10 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStar
 	}
 	u.RawQuery = args.Encode()
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
+}
+
+func isHTMXRequest(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
 
 func (s *server) Wait() {
