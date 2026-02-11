@@ -13,8 +13,6 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strings"
 	"sync"
 )
 
@@ -26,7 +24,6 @@ type krogerClient interface {
 
 type userLookup interface {
 	FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error)
-	Update(user *utypes.User) error
 }
 
 type locationStorage struct {
@@ -166,61 +163,6 @@ func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
-
-	mux.HandleFunc("POST /locations/favorite", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "invalid form submission", http.StatusBadRequest)
-			return
-		}
-		zip := strings.TrimSpace(r.FormValue("zip"))
-		if zip == "" {
-			http.Error(w, "missing zip", http.StatusBadRequest)
-			return
-		}
-		favoriteStore := strings.TrimSpace(r.FormValue("favorite_store"))
-		if favoriteStore == "" && !r.Form.Has("favorite_store") {
-			http.Error(w, "missing favorite_store", http.StatusBadRequest)
-			return
-		}
-
-		currentUser, err := l.userStorage.FromRequest(ctx, r, authClient)
-		if err != nil {
-			if !errors.Is(err, auth.ErrNoSession) {
-				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
-				http.Error(w, "unable to load account", http.StatusInternalServerError)
-				return
-			}
-			if isHTMXRequest(r) {
-				w.Header().Set("HX-Redirect", "/")
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
-
-		currentUser.FavoriteStore = favoriteStore
-		if err := l.userStorage.Update(currentUser); err != nil {
-			slog.ErrorContext(ctx, "failed to update favorite store", "favorite_store", favoriteStore, "error", err)
-			http.Error(w, "unable to save favorite store", http.StatusInternalServerError)
-			return
-		}
-
-		if !isHTMXRequest(r) {
-			http.Redirect(w, r, "/locations?zip="+url.QueryEscape(zip), http.StatusSeeOther)
-			return
-		}
-
-		if err := l.renderLocationsPage(w, ctx, zip, favoriteStore, true); err != nil {
-			slog.ErrorContext(ctx, "failed to render updated locations page", "zip", zip, "error", err)
-			http.Error(w, "template error", http.StatusInternalServerError)
-		}
-	})
-}
-
-func isHTMXRequest(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
 
 func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, zip string, favoriteStore string, serverSignedIn bool) error {

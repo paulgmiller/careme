@@ -12,6 +12,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -190,6 +191,9 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
+		if isHTMXRequest(r) {
+			w.Header().Set("HX-Redirect", "/")
+		}
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -217,6 +221,17 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 		return
 	}
+	zip := strings.TrimSpace(r.FormValue("zip"))
+	if zip != "" {
+		redirectURL := "/locations?zip=" + url.QueryEscape(zip)
+		if isHTMXRequest(r) {
+			w.Header().Set("HX-Redirect", redirectURL)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -227,4 +242,8 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		slog.ErrorContext(ctx, "failed to write favorite response", "error", err)
 	}
+}
+
+func isHTMXRequest(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
