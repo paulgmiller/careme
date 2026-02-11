@@ -28,6 +28,11 @@ bash tailwind/generate.sh
 ```
 if you change input css or any *.html
 
+For JavaScript moved out of templates:
+```
+bash scripts/lint-js.sh
+```
+
 ## Live site
 
 * Uptime https://stats.uptimerobot.com/ehEFlvlNM9

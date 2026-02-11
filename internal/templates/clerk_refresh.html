@@ -5,38 +5,5 @@
   data-clerk-publishable-key="{{ClerkPublishableKey}}"
   src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js">
 </script>
-
-<script>
-  (async () => {
-    const serverSignedIn = {{.ServerSignedIn}};
-    {{/* https://chatgpt.com/share/698a36fe-0834-8009-8f5e-d7dfcccae7c0
-    // Without this, you can get stuck in:
-    //  1) SSR renders logged-out (expired/missing __session)
-    //  2) Clerk loads and reports signed-in (it can rehydrate from client state)
-    //  3) You reload to let SSR see the fresh session
-    //  4) SSR *still* renders logged-out (cookie timing/scope, caching, stricter validation, dev quirks)
-    //  5) Clerk still reports signed-in -> reload again -> forever
-    //
-    // sessionStorage is per-tab and clears when the tab closes, which is ideal here.
-    */}}
-    const key = `clerk-ssr-sync-reloaded:${location.pathname}${location.search}`;
-
-    // Wait for the Clerk global to exist, then initialize it.
-    while (!window.Clerk?.load) await new Promise(r => setTimeout(r, 10));
-    await Clerk.load();
-
-    const clerkSignedIn = !!Clerk.isSignedIn;
-
-    {{/* The core fix:
-    // If SSR thought we're signed-out, but Clerk says we're signed-in,
-    // then Clerk likely just re-established a valid browser session *after* SSR ran.
-    // Do ONE reload so the *next* SSR request includes the refreshed __session cookie.
-    */}}
-    if (!serverSignedIn && clerkSignedIn && !sessionStorage.getItem(key)) {
-      sessionStorage.setItem(key, "1");
-      location.reload();
-      return;
-    }
-  })();
-</script>
+<script src="/static/clerk-refresh.js" data-server-signed-in="{{.ServerSignedIn}}" defer></script>
 {{end}}

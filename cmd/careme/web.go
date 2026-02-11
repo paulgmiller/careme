@@ -14,14 +14,17 @@ import (
 	utypes "careme/internal/users/types"
 	"context"
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"errors"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -29,8 +32,8 @@ import (
 //go:embed favicon.png
 var favicon []byte
 
-//go:embed static/tailwind.css
-var tailwindCSS []byte
+//go:embed static/*
+var staticFiles embed.FS
 
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
@@ -45,6 +48,9 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux := http.NewServeMux()
 	authClient.Register(mux)
+	if err := registerStaticAssets(mux); err != nil {
+		return fmt.Errorf("failed to register static assets: %w", err)
+	}
 
 	userStorage := users.NewStorage(cache)
 
@@ -52,20 +58,6 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
-
-	tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
-	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("If-None-Match") == tailwindETag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=0, no-cache")
-		w.Header().Set("ETag", tailwindETag)
-		if _, err := w.Write(tailwindCSS); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
-		}
-	})
 
 	locationStorage, err := locations.New(cfg)
 	if err != nil {
@@ -195,5 +187,53 @@ func gracefulShutdown(svr *http.Server, recipesWait func()) error {
 		slog.Warn("Timeout waiting for recipe generation goroutines")
 		return ctx.Err()
 	}
+	return nil
+}
+
+func registerStaticAssets(mux *http.ServeMux) error {
+	assets, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		return fmt.Errorf("failed to find embedded static directory: %w", err)
+	}
+
+	entries, err := fs.ReadDir(assets, ".")
+	if err != nil {
+		return fmt.Errorf("failed to list embedded static assets: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		content, err := fs.ReadFile(assets, name)
+		if err != nil {
+			return fmt.Errorf("failed to read embedded static asset %q: %w", name, err)
+		}
+
+		route := "/static/" + name
+		contentType := mime.TypeByExtension(filepath.Ext(name))
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		etag := fmt.Sprintf(`"%x"`, sha256.Sum256(content))
+		assetContent := content
+		assetName := name
+
+		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("If-None-Match") == etag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			w.Header().Set("Content-Type", contentType)
+			w.Header().Set("Cache-Control", "public, max-age=0, no-cache")
+			w.Header().Set("ETag", etag)
+			if _, err := w.Write(assetContent); err != nil {
+				slog.ErrorContext(r.Context(), "failed to write static asset", "asset", assetName, "error", err)
+			}
+		})
+	}
+
 	return nil
 }

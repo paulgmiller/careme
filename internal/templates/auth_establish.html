@@ -10,14 +10,6 @@
       crossorigin="anonymous"
       data-clerk-publishable-key="{{.PublishableKey}}"
       src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"></script>
-    <script>
-      Clerk.load().then(() => {
-        // Just loading Clerk on your domain is often enough to finalize cookies in dev.
-        const url = new URL(location.href);
-        url.searchParams.delete("__clerk_db_jwt");
-        history.replaceState({}, "", url.toString());
-        location.replace("/");
-      });
-    </script>
+    <script src="/static/auth-establish.js" defer></script>
   </body>
 </html>

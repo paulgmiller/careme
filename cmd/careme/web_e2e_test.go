@@ -109,6 +109,9 @@ func newTestServer(t *testing.T) *httptest.Server {
 	mockAuth := auth.Mock(cfg)
 
 	mux := http.NewServeMux()
+	if err := registerStaticAssets(mux); err != nil {
+		t.Fatalf("failed to register static assets: %v", err)
+	}
 	locationServer := locations.NewServer(locationStorage, userStorage)
 	locationServer.Register(mux, mockAuth)
 	users.NewHandler(userStorage, locationStorage, mockAuth).Register(mux)
