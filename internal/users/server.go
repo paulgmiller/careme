@@ -7,12 +7,10 @@ import (
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"context"
-	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -184,6 +182,10 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
 	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
@@ -191,9 +193,7 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
-		if isHTMXRequest(r) {
-			w.Header().Set("HX-Redirect", "/")
-		}
+		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -221,27 +221,8 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 		return
 	}
-	zip := strings.TrimSpace(r.FormValue("zip"))
-	if zip != "" {
-		redirectURL := "/locations?zip=" + url.QueryEscape(zip)
-		if isHTMXRequest(r) {
-			w.Header().Set("HX-Redirect", redirectURL)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(struct {
-		FavoriteStore string `json:"favorite_store"`
-	}{
-		FavoriteStore: currentUser.FavoriteStore,
-	}); err != nil {
-		slog.ErrorContext(ctx, "failed to write favorite response", "error", err)
-	}
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func isHTMXRequest(r *http.Request) bool {

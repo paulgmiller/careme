@@ -32,11 +32,7 @@
                 <form
                   method="POST"
                   action="/user/favorite"
-                  hx-post="/user/favorite"
-                  hx-target="#locations-list"
-                  hx-select="#locations-list"
-                  hx-swap="outerHTML">
-                  <input type="hidden" name="zip" value="{{$.Zip}}" />
+                  hx-post="/user/favorite">
                   <input type="hidden" name="favorite_store" value="{{.ID}}" />
                   <button type="submit" title="Set as favorite" aria-label="Set as favorite"
                     aria-pressed="{{if eq $.FavoriteStore .ID}}true{{else}}false{{end}}"
