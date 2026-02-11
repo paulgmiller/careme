@@ -160,6 +160,7 @@ func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient
 		if currentUser != nil {
 			favoriteStore = currentUser.FavoriteStore
 		}
+		w.Header().Set("Content-Security-Policy", htmxPageCSP)
 		if err := l.renderLocationsPage(w, ctx, zip, favoriteStore, currentUser != nil); err != nil {
 			slog.ErrorContext(ctx, "failed to render locations page", "zip", zip, "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)

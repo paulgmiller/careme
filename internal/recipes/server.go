@@ -74,12 +74,14 @@ func (s *server) Register(mux *http.ServeMux) {
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
 	hash := r.PathValue("hash")
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
 
+	w.Header().Set("Content-Security-Policy", htmxPageCSP)
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
 		http.Error(w, "recipe not found", http.StatusNotFound)
