@@ -130,6 +130,10 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
 	hash := r.PathValue("hash")
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
@@ -137,6 +141,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.clerk.GetUserIDFromRequest(r)
 	if errors.Is(err, auth.ErrNoSession) {
+		w.Header().Set("HX-Redirect", "/")
 		http.Error(w, "must be logged in to ask a question", http.StatusUnauthorized)
 		return
 	}
@@ -150,9 +155,14 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing question", http.StatusBadRequest)
 		return
 	}
+	recipeTitle := strings.TrimSpace(r.FormValue("recipe_title"))
+	questionForModel := question
+	if recipeTitle != "" {
+		questionForModel = fmt.Sprintf("Regarding %s: %s", recipeTitle, question)
+	}
 
-	//two problems here 1) user can shove in different conversation id.
-	//2) not scoped to specfic recipe. Should shove recipe title in or fork a new conversation id. ideally
+	// TODO: conversation id is user-provided form input.
+	// Also still curious if we should fork conversation per recipe
 	conversationID := strings.TrimSpace(r.FormValue("conversation_id"))
 	if conversationID == "" {
 		slog.ErrorContext(ctx, "failed to load conversation id", "hash", hash)
@@ -164,7 +174,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	// can't use request context because it will be canceled when request finishes but we want to finish processing question and save it to cache.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 45*time.Second)
 	defer cancel()
-	answer, err := s.generator.AskQuestion(ctx, question, conversationID)
+	answer, err := s.generator.AskQuestion(ctx, questionForModel, conversationID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to answer question", "hash", hash, "error", err)
 		http.Error(w, "failed to answer question", http.StatusInternalServerError)
@@ -187,8 +197,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirect := url.URL{Path: "/recipe/" + url.PathEscape(hash)}
-	http.Redirect(w, r, redirect.String(), http.StatusSeeOther)
+	FormatRecipeThreadHTML(thread, true, conversationID, w)
 }
 
 const (
@@ -420,6 +429,10 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStar
 	}
 	u.RawQuery = args.Encode()
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
+}
+
+func isHTMXRequest(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
 
 func (s *server) Wait() {

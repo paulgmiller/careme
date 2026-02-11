@@ -65,6 +65,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	if recipeHashes[0] != savedHash {
 		t.Fatalf("expected finalized recipe to be %s, got %s", savedHash, recipeHashes[0])
 	}
+	savedTitle := extractRecipeTitleForHash(t, finalizedBody, savedHash)
 	for _, dismissed := range dismissedHashes {
 		if recipeHashes[0] == dismissed {
 			t.Fatalf("finalized recipe %s was in dismissed list", dismissed)
@@ -74,15 +75,17 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	// Step 6: ask a question on the finalized single recipe page.
 	question := "Can I use skirt steak instead?"
 	questionURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/question"
-	questionBody := mustPostFormBody(t, client, questionURL, url.Values{
+	questionBody := mustPostFormBodyHTMX(t, client, questionURL, url.Values{
 		"conversation_id": {conversationID},
 		"question":        {question},
+		"recipe_title":    {savedTitle},
 	})
 	if !strings.Contains(questionBody, question) {
 		t.Fatalf("expected question thread to include question %q", question)
 	}
-	if !strings.Contains(questionBody, "Mock answer: "+question) {
-		t.Fatalf("expected question thread to include mock answer for %q", question)
+	expectedPrompt := "Regarding " + savedTitle + ": " + question
+	if !strings.Contains(questionBody, "Mock answer: "+expectedPrompt) {
+		t.Fatalf("expected question thread to include mock answer for %q", expectedPrompt)
 	}
 
 	//TODO step 6 make sure recipes are saved to user page?
@@ -152,9 +155,15 @@ func mustGetBody(t *testing.T, client *http.Client, url string) string {
 	return body
 }
 
-func mustPostFormBody(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
+func mustPostFormBodyHTMX(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
 	t.Helper()
-	resp, err := client.PostForm(targetURL, data)
+	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		t.Fatalf("POST %s failed to build request: %v", targetURL, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("POST %s failed: %v", targetURL, err)
 	}
@@ -165,11 +174,9 @@ func mustPostFormBody(t *testing.T, client *http.Client, targetURL string, data 
 	}()
 	if resp.StatusCode != http.StatusOK {
 		body := readAll(t, resp.Body)
-		t.Fatalf("POST %s expected 200 after redirect, got %d: %s", targetURL, resp.StatusCode, body)
+		t.Fatalf("POST %s expected 200, got %d: %s", targetURL, resp.StatusCode, body)
 	}
-	body := readAll(t, resp.Body)
-	requireValidHTML(t, targetURL, resp.Header.Get("Content-Type"), body)
-	return body
+	return readAll(t, resp.Body)
 }
 
 func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectSpinner bool) (string, string) {
@@ -251,6 +258,16 @@ func extractRecipeHashes(t *testing.T, body string) []string {
 		hashes = append(hashes, match[1])
 	}
 	return hashes
+}
+
+func extractRecipeTitleForHash(t *testing.T, body, hash string) string {
+	t.Helper()
+	re := regexp.MustCompile(`<a href="/recipe/` + regexp.QuoteMeta(hash) + `"[^>]*>\s*([^<]+)\s*</a>`)
+	match := re.FindStringSubmatch(body)
+	if len(match) < 2 {
+		t.Fatalf("expected finalized page to include title link for hash %q", hash)
+	}
+	return strings.TrimSpace(match[1])
 }
 
 func buildRecipesURL(base, location, date, conversationID, savedHash string, dismissedHashes []string, finalize bool) string {

@@ -132,6 +132,21 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should contain question input")
 	}
+	if !strings.Contains(html, `name="recipe_title"`) {
+		t.Error("recipe HTML should include recipe title hidden input")
+	}
+	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
+		t.Error("recipe HTML should include htmx script")
+	}
+	if !strings.Contains(html, `id="question-thread"`) {
+		t.Error("recipe HTML should contain question thread container")
+	}
+	if !strings.Contains(html, `id="question-error"`) {
+		t.Error("recipe HTML should contain question error surface")
+	}
+	if !strings.Contains(html, `hx-on::response-error=`) {
+		t.Error("recipe HTML should define htmx response-error behavior")
+	}
 }
 
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
@@ -149,5 +164,34 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	}
 	if !strings.Contains(html, "Sign in to ask follow-up questions.") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
+	}
+}
+
+func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
+	w := httptest.NewRecorder()
+	now := time.Now()
+	thread := []RecipeThreadEntry{
+		{
+			Question:  "older question",
+			Answer:    "older answer",
+			CreatedAt: now.Add(-1 * time.Hour),
+		},
+		{
+			Question:  "newer question",
+			Answer:    "newer answer",
+			CreatedAt: now,
+		},
+	}
+
+	FormatRecipeThreadHTML(thread, true, "conv123", w)
+	body := w.Body.String()
+
+	newerIndex := strings.Index(body, "newer question")
+	olderIndex := strings.Index(body, "older question")
+	if newerIndex == -1 || olderIndex == -1 {
+		t.Fatalf("expected both questions in output, body: %s", body)
+	}
+	if newerIndex > olderIndex {
+		t.Fatalf("expected newer question before older question, body: %s", body)
 	}
 }

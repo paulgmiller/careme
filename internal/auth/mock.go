@@ -17,11 +17,17 @@ var _ AuthClient = (*mockClient)(nil)
 func Mock(cfg *config.Config) AuthClient {
 	email := cfg.Mocks.Email
 	if email == "" {
-		email = "you@careme.cooking"
+		return DefaultMock()
 	}
 
 	return &mockClient{
 		email: email,
+	}
+}
+
+func DefaultMock() AuthClient {
+	return &mockClient{
+		email: "you@careme.cooking",
 	}
 }
 
