@@ -46,6 +46,9 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool
 
 // FormatRecipeHTML renders a single recipe view.
 func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, writer http.ResponseWriter) {
+	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
 	data := struct {
 		Location       locations.Location
 		Date           string

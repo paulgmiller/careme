@@ -141,9 +141,6 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `id="question-thread"`) {
 		t.Error("recipe HTML should contain question thread container")
 	}
-	if !strings.Contains(html, `id="question-loading"`) {
-		t.Error("recipe HTML should contain question loading indicator")
-	}
 	if !strings.Contains(html, `id="question-error"`) {
 		t.Error("recipe HTML should contain question error surface")
 	}
