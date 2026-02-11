@@ -93,8 +93,9 @@
                   hx-swap="outerHTML"
                   hx-indicator="#question-loading"
                   hx-disabled-elt="#question,#ask-question-submit"
-                  hx-on::before-request="document.getElementById('ask-question-submit').textContent='Asking...';"
+                  hx-on::before-request="document.getElementById('ask-question-submit').textContent='Asking...'; document.getElementById('question-error').classList.add('hidden');"
                   hx-on::after-request="document.getElementById('ask-question-submit').textContent='Ask'; if(event.detail.successful){ this.reset(); }"
+                  hx-on::response-error="document.getElementById('question-error').classList.remove('hidden');"
                   class="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label for="question" class="text-sm font-medium text-gray-700 sm:w-40">Ask a question</label>
               <input id="question"
@@ -117,6 +118,7 @@
               </svg>
               <span>Answering your question...</span>
             </div>
+            <p id="question-error" class="hidden text-sm font-medium text-red-700">Could not answer your question. Please try again.</p>
             {{else if .ServerSignedIn}}
             <p class="text-sm text-gray-500">Questions are unavailable for this recipe.</p>
             {{else}}

@@ -144,6 +144,12 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `id="question-loading"`) {
 		t.Error("recipe HTML should contain question loading indicator")
 	}
+	if !strings.Contains(html, `id="question-error"`) {
+		t.Error("recipe HTML should contain question error surface")
+	}
+	if !strings.Contains(html, `hx-on::response-error=`) {
+		t.Error("recipe HTML should define htmx response-error behavior")
+	}
 }
 
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
