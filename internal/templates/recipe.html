@@ -93,7 +93,8 @@
                   hx-swap="outerHTML"
                   hx-indicator="#question-loading"
                   hx-disabled-elt="#question,#ask-question-submit"
-                  hx-on::after-request="if(event.detail.successful){ this.reset(); }"
+                  hx-on::before-request="document.getElementById('ask-question-submit').textContent='Asking...';"
+                  hx-on::after-request="document.getElementById('ask-question-submit').textContent='Ask'; if(event.detail.successful){ this.reset(); }"
                   class="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label for="question" class="text-sm font-medium text-gray-700 sm:w-40">Ask a question</label>
               <input id="question"
@@ -104,7 +105,7 @@
               <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
               <button type="submit"
                       id="ask-question-submit"
-                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-brand-400 disabled:text-white/90">
                 Ask
               </button>
             </form>
