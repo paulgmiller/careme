@@ -89,6 +89,26 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		t.Fatalf("expected question thread to include mock answer for %q", expectedPrompt)
 	}
 
+	// Step 7: submit cooked feedback and ensure it persists on the recipe page.
+	feedbackURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/feedback"
+	feedbackComment := "Turned out great. Next time add more lime."
+	feedbackBody := mustPostFormBodyHTMX(t, client, feedbackURL, url.Values{
+		"cooked":   {"true"},
+		"stars":    {"4"},
+		"feedback": {feedbackComment},
+	})
+	if !strings.Contains(feedbackBody, "Saved") {
+		t.Fatalf("expected feedback response to include saved confirmation, got: %s", feedbackBody)
+	}
+
+	recipeBody := mustGetBody(t, client, srv.URL+"/recipe/"+url.PathEscape(savedHash))
+	if !strings.Contains(recipeBody, feedbackComment) {
+		t.Fatalf("expected recipe page to contain saved feedback comment %q", feedbackComment)
+	}
+	if !strings.Contains(recipeBody, `data-initial-stars="4"`) {
+		t.Fatalf("expected recipe page to persist stars value, got body: %s", recipeBody)
+	}
+
 	//TODO step 6 make sure recipes are saved to user page?
 
 }

@@ -216,3 +216,132 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 		t.Fatalf("expected generator question %q, got %q", want, got)
 	}
 }
+
+func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	form := url.Values{
+		"cooked": {"true"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/feedback", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleFeedback(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Saved") {
+		t.Fatalf("expected success message, got body: %s", rr.Body.String())
+	}
+
+	feedback, err := s.FeedbackFromCache(t.Context(), "hash")
+	if err != nil {
+		t.Fatalf("expected feedback to be saved: %v", err)
+	}
+	if !feedback.Cooked {
+		t.Fatal("expected cooked=true")
+	}
+	if feedback.Stars != 0 {
+		t.Fatalf("expected stars=0, got %d", feedback.Stars)
+	}
+	if feedback.Comment != "" {
+		t.Fatalf("expected empty comment, got %q", feedback.Comment)
+	}
+}
+
+func TestHandleFeedback_SavesStarsAndComment(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	form := url.Values{
+		"cooked":   {"true"},
+		"stars":    {"4"},
+		"feedback": {"Great flavor and easy cleanup."},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/feedback", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleFeedback(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	feedback, err := s.FeedbackFromCache(t.Context(), "hash")
+	if err != nil {
+		t.Fatalf("expected feedback to be saved: %v", err)
+	}
+	if !feedback.Cooked {
+		t.Fatal("expected cooked=true")
+	}
+	if feedback.Stars != 4 {
+		t.Fatalf("expected stars=4, got %d", feedback.Stars)
+	}
+	if feedback.Comment != "Great flavor and easy cleanup." {
+		t.Fatalf("unexpected comment: %q", feedback.Comment)
+	}
+}
+
+func TestHandleFeedback_InvalidStarsRejected(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	form := url.Values{
+		"cooked": {"true"},
+		"stars":  {"7"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/feedback", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleFeedback(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+func TestHandleFeedback_RejectsNonHTMXRequest(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	form := url.Values{
+		"cooked": {"true"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/feedback", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleFeedback(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}

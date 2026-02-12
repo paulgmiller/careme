@@ -125,7 +125,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, w)
+	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -157,6 +157,15 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `hx-on::response-error=`) {
 		t.Error("recipe HTML should define htmx response-error behavior")
 	}
+	if !strings.Contains(html, "I cooked it!") {
+		t.Error("recipe HTML should contain I cooked it button")
+	}
+	if !strings.Contains(html, `name="stars"`) {
+		t.Error("recipe HTML should contain stars feedback controls")
+	}
+	if !strings.Contains(html, `name="feedback"`) {
+		t.Error("recipe HTML should contain text feedback control")
+	}
 }
 
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
@@ -164,7 +173,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], false, []RecipeThreadEntry{}, w)
+	FormatRecipeHTML(p, list.Recipes[0], false, []RecipeThreadEntry{}, RecipeFeedback{}, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
