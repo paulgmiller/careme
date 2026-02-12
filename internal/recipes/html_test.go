@@ -3,10 +3,12 @@ package recipes
 import (
 	"bytes"
 	"careme/internal/ai"
+	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/templates"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,13 @@ func isValidHTML(t *testing.T, htmlStr string) {
 	if err != nil {
 		t.Fatalf("rendered HTML is not valid: %v\nHTML:\n%s", err, htmlStr)
 	}
+}
+
+func TestMain(m *testing.M) {
+	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+		panic(err)
+	}
+	os.Exit(m.Run())
 }
 
 var list = ai.ShoppingList{
@@ -71,7 +80,8 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	templates.SetClarity("test456")
+
+	templates.Clarityproject = "test456"
 	w := httptest.NewRecorder()
 	FormatShoppingListHTML(p, list, true, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.clarity.ms/tag/")) {
@@ -86,7 +96,7 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	templates.SetClarity("")
+	templates.Clarityproject = ""
 	w := httptest.NewRecorder()
 	FormatShoppingListHTML(p, list, true, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("clarity.ms")) {

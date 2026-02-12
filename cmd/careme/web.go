@@ -39,6 +39,9 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	mux := http.NewServeMux()
 	authClient.Register(mux)
 	static.Register(mux)
+	if err := templates.Init(cfg, static.TailwindAssetPath); err != nil {
+		return fmt.Errorf("failed to initialize templates: %w", err)
+	}
 
 	userStorage := users.NewStorage(cache)
 
