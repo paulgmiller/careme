@@ -69,72 +69,56 @@
                     <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-3">
-                    <input type="radio" {{if .Saved}}checked{{end}} name="recipe-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" onchange="document.getElementById('saved-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('dismissed-{{.ComputeHash}}').value = ''; setRecipeDetailsVisible('{{.ComputeHash}}', false); updateFinalizeButton();" />
+                    <input type="radio" {{if .Saved}}checked{{end}} name="choice-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" />
                     <label for="save-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-emerald-500 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 cursor-pointer transition hover:bg-emerald-100 peer-checked/save:bg-emerald-600 peer-checked/save:text-white peer-checked/save:border-emerald-700">
                       Save
                     </label>
-                    <input type="radio" name="recipe-{{.ComputeHash}}" value="dismiss" id="dismiss-{{.ComputeHash}}" class="peer/dismiss hidden" onchange="document.getElementById('dismissed-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('saved-{{.ComputeHash}}').value = ''; setRecipeDetailsVisible('{{.ComputeHash}}', false); updateFinalizeButton();" />
+                    <input type="radio" name="choice-{{.ComputeHash}}" value="dismiss" id="dismiss-{{.ComputeHash}}" class="peer/dismiss hidden" />
                     <label for="dismiss-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-red-500 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 cursor-pointer transition hover:bg-red-100 peer-checked/dismiss:bg-red-600 peer-checked/dismiss:text-white peer-checked/dismiss:border-red-700">
                       Dismiss
                     </label>
-                    <button type="button"
-                            id="details-{{.ComputeHash}}-button"
-                            aria-controls="details-{{.ComputeHash}}"
-                            aria-expanded="{{if .Saved}}false{{else}}true{{end}}"
-                            onclick="toggleRecipeDetails('{{.ComputeHash}}')"
-                            class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      {{if .Saved}}Show details{{else}}Hide details{{end}}
-                    </button>
-                    <input type="hidden" name="saved" id="saved-{{.ComputeHash}}" value="{{if .Saved}}{{.ComputeHash}}{{end}}" />
-                    <input type="hidden" name="dismissed" id="dismissed-{{.ComputeHash}}" value="" />
                   </div>
                 </header>
 
-              <section id="details-{{.ComputeHash}}" class="space-y-6 {{if .Saved}}hidden{{end}}">
-                <div class="grid gap-6 md:grid-cols-2">
-                  <div>
-                    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Ingredients</h3>
-                    <ul class="mt-3 space-y-2 text-gray-700">
-                      {{range .Ingredients}}
-                      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                        <span class="font-medium text-brand-700">{{.Name}}</span>
-                        <span class="text-gray-600">{{.Quantity}}</span>
-                        <span class="text-gray-500">{{.Price}}</span>
-                      </li>
-                      {{end}}
-                    </ul>
+              <details class="rounded-xl border border-brand-100 bg-brand-50/40 p-4" {{if not .Saved}}open{{end}}>
+                <summary class="cursor-pointer text-sm font-medium text-brand-700">Recipe details</summary>
+                <section class="mt-4 space-y-6">
+                  <div class="grid gap-6 md:grid-cols-2">
+                    <div>
+                      <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Ingredients</h3>
+                      <ul class="mt-3 space-y-2 text-gray-700">
+                        {{range .Ingredients}}
+                        <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
+                          <span class="font-medium text-brand-700">{{.Name}}</span>
+                          <span class="text-gray-600">{{.Quantity}}</span>
+                          <span class="text-gray-500">{{.Price}}</span>
+                        </li>
+                        {{end}}
+                      </ul>
+                    </div>
+                    <div>
+                      <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
+                      <ol class="mt-3 list-decimal space-y-2 pl-5 text-gray-700">
+                        {{range .Instructions}}
+                        <li>{{.}}</li>
+                        {{end}}
+                      </ol>
+                    </div>
                   </div>
-                  <div>
-                    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
-                    <ol class="mt-3 list-decimal space-y-2 pl-5 text-gray-700">
-                      {{range .Instructions}}
-                      <li>{{.}}</li>
-                      {{end}}
-                    </ol>
-                  </div>
-                </div>
 
-                <div class="space-y-2 text-sm text-gray-600">
-                  <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
-                  <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
-                </div>
-              </section>
+                  <div class="space-y-2 text-sm text-gray-600">
+                    <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
+                    <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
+                  </div>
+                </section>
+              </details>
             </article>
             {{end}}
 
             {{if .ShoppingList}}
-            <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
-                <button type="button"
-                        id="shoppingListToggle"
-                        aria-controls="shoppingListPanel"
-                        aria-expanded="false"
-                        class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Show
-                </button>
-              </div>
-              <div id="shoppingListPanel" class="mt-4 hidden">
+            <details class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+              <summary class="cursor-pointer text-lg font-semibold text-brand-700">Shopping list</summary>
+              <div class="mt-4">
                 <ul class="space-y-2 text-gray-700">
                   {{range .ShoppingList}}
                   <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
@@ -144,7 +128,7 @@
                   {{end}}
                 </ul>
               </div>
-            </section>
+            </details>
             {{end}}
           </div>
           </form>
@@ -168,21 +152,6 @@
   </main>
 
   <script>
-    function updateFinalizeButton() {
-      const form = document.getElementById('regenerateForm');
-      const savedInputs = form.querySelectorAll('input[name="saved"]');
-      const finalizeButton = document.getElementById('finalizeButton');
-
-      // Check if any saved inputs have non-empty values
-      const hasSavedRecipes = Array.from(savedInputs).some(input => input.value.trim() !== '');
-
-      // Enable/disable the button based on whether recipes are saved
-      finalizeButton.disabled = !hasSavedRecipes;
-    }
-
-    // Initialize button state on page load
-    document.addEventListener('DOMContentLoaded', updateFinalizeButton);
-
     async function shareRecipes() {
       try {
         await navigator.share({title: document.title, url: window.location.href});
@@ -192,39 +161,6 @@
         }
         window.prompt('Copy this link:', window.location.href);
       }
-    }
-
-    function toggleRecipeDetails(hash) {
-      const panel = document.getElementById('details-' + hash);
-      if (!panel) {
-        return;
-      }
-      const isOpen = panel.classList.contains('hidden');
-      setRecipeDetailsVisible(hash, isOpen);
-    }
-
-    function setRecipeDetailsVisible(hash, isVisible) {
-      const panel = document.getElementById('details-' + hash);
-      if (!panel) {
-        return;
-      }
-      panel.classList.toggle('hidden', !isVisible);
-      const button = document.getElementById('details-' + hash + '-button');
-      if (button) {
-        button.setAttribute('aria-expanded', isVisible ? 'true' : 'false');
-        button.textContent = isVisible ? 'Hide details' : 'Show details';
-      }
-    }
-
-    const shoppingListToggle = document.getElementById('shoppingListToggle');
-    const shoppingListPanel = document.getElementById('shoppingListPanel');
-    if (shoppingListToggle && shoppingListPanel) {
-      shoppingListToggle.addEventListener('click', function () {
-        shoppingListPanel.classList.toggle('hidden');
-        const isOpen = !shoppingListPanel.classList.contains('hidden');
-        shoppingListToggle.textContent = isOpen ? 'Hide' : 'Show';
-        shoppingListToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      });
     }
   </script>
   {{template "clerk_refresh.html" .}}

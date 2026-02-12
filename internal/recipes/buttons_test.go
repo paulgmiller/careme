@@ -46,12 +46,9 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Verify HTML is valid
 	isValidHTML(t, html)
 
-	// Check for Save and Dismiss radio buttons and labels
-	if !strings.Contains(html, `name="saved"`) {
-		t.Error("HTML should contain saved hidden inputs")
-	}
-	if !strings.Contains(html, `name="dismissed"`) {
-		t.Error("HTML should contain dismissed hidden inputs")
+	// Check for Save and Dismiss recipe-choice inputs
+	if !strings.Contains(html, `name="choice-`) {
+		t.Error("HTML should contain recipe choice inputs")
 	}
 
 	// Check for radio buttons
@@ -66,8 +63,8 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	if !strings.Contains(html, `Dismiss`) {
 		t.Error("HTML should contain Dismiss label text")
 	}
-	if !strings.Contains(html, `Details`) {
-		t.Error("HTML should contain Details button text")
+	if !strings.Contains(html, `Recipe details`) {
+		t.Error("HTML should contain Recipe details summary text")
 	}
 
 	// Check that "Regenerate" button exists
