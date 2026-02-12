@@ -1,48 +1,81 @@
 package sitemap
 
 import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
 	"encoding/xml"
+	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"os"
 	"sort"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 )
 
-type record struct {
-	loc     string
-	lastmod time.Time
+const (
+	sitemapContainer = "recipes"
+	sitemapBlobName  = "sitemap/urls.ndjson"
+)
+
+type urlStore interface {
+	Append(ctx context.Context, entry sitemapEntry) error
+	ReadAll(ctx context.Context) ([]sitemapEntry, error)
 }
 
-type op struct {
-	trackHash string
-	snapshot  chan []record
+type appendBlobStore struct {
+	blob *appendblob.Client
+}
+
+type sitemapEntry struct {
+	URL     string    `json:"url"`
+	LastMod time.Time `json:"lastmod"`
 }
 
 type Server struct {
-	ops chan op
+	store urlStore
 }
 
 func New() *Server {
-	s := &Server{ops: make(chan op)}
-	go s.run()
-	return s
+	store, err := newAppendBlobStoreFromEnv(context.Background())
+	if err != nil {
+		slog.Warn("sitemap disabled: append blob store unavailable", "error", err)
+		return &Server{store: disabledStore{}}
+	}
+	return &Server{store: store}
 }
 
-func (s *Server) run() {
-	urls := make(map[string]time.Time)
-	for msg := range s.ops {
-		switch {
-		case msg.trackHash != "":
-			url := "/recipes?h=" + msg.trackHash
-			urls[url] = time.Now().UTC()
-		case msg.snapshot != nil:
-			records := make([]record, 0, len(urls))
-			for loc, lastmod := range urls {
-				records = append(records, record{loc: loc, lastmod: lastmod})
-			}
-			msg.snapshot <- records
-		}
+func newAppendBlobStoreFromEnv(ctx context.Context) (*appendBlobStore, error) {
+	accountName, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
+	if !ok {
+		return nil, fmt.Errorf("AZURE_STORAGE_ACCOUNT_NAME could not be found")
 	}
+	accountKey, ok := os.LookupEnv("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY")
+	if !ok {
+		return nil, fmt.Errorf("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY could not be found")
+	}
+	cred, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create shared key credential: %w", err)
+	}
+	blobURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s/%s", accountName, url.PathEscape(sitemapContainer), sitemapBlobName)
+	blob, err := appendblob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create append blob client: %w", err)
+	}
+	_, err = blob.Create(ctx, nil)
+	if err != nil && !bloberror.HasCode(err, bloberror.BlobAlreadyExists) {
+		return nil, fmt.Errorf("failed to create sitemap append blob: %w", err)
+	}
+	return &appendBlobStore{blob: blob}, nil
 }
 
 func (s *Server) Register(mux *http.ServeMux) {
@@ -53,7 +86,10 @@ func (s *Server) TrackShoppingList(hash string) {
 	if hash == "" {
 		return
 	}
-	s.ops <- op{trackHash: hash}
+	entry := sitemapEntry{URL: "/recipes?h=" + hash, LastMod: time.Now().UTC()}
+	if err := s.store.Append(context.Background(), entry); err != nil {
+		slog.Error("failed to append sitemap url", "error", err, "url", entry.URL)
+	}
 }
 
 type urlSet struct {
@@ -67,26 +103,29 @@ type urlEntry struct {
 	LastMod string `xml:"lastmod,omitempty"`
 }
 
-func (s *Server) snapshot() []record {
-	out := make(chan []record, 1)
-	s.ops <- op{snapshot: out}
-	return <-out
-}
-
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
-	records := s.snapshot()
-
-	sort.Slice(records, func(i, j int) bool {
-		return records[i].loc < records[j].loc
-	})
-
-	entries := make([]urlEntry, 0, len(records))
-	for _, record := range records {
-		entries = append(entries, urlEntry{
-			Loc:     record.loc,
-			LastMod: record.lastmod.Format(time.RFC3339),
-		})
+	records, err := s.store.ReadAll(r.Context())
+	if err != nil {
+		http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "failed to read sitemap urls", "error", err)
+		return
 	}
+
+	latest := make(map[string]time.Time, len(records))
+	for _, record := range records {
+		if record.URL == "" {
+			continue
+		}
+		if ts, ok := latest[record.URL]; !ok || record.LastMod.After(ts) {
+			latest[record.URL] = record.LastMod
+		}
+	}
+
+	entries := make([]urlEntry, 0, len(latest))
+	for loc, lastmod := range latest {
+		entries = append(entries, urlEntry{Loc: loc, LastMod: lastmod.Format(time.RFC3339)})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Loc < entries[j].Loc })
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	if _, err := w.Write([]byte(xml.Header)); err != nil {
@@ -100,3 +139,71 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(r.Context(), "failed to encode sitemap", "error", err)
 	}
 }
+
+func (a *appendBlobStore) Append(ctx context.Context, entry sitemapEntry) error {
+	payload, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	payload = append(payload, '\n')
+	_, err = a.blob.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(payload)}, nil)
+	if err != nil {
+		if bloberror.HasCode(err, bloberror.BlobNotFound) {
+			if _, createErr := a.blob.Create(ctx, nil); createErr != nil && !bloberror.HasCode(createErr, bloberror.BlobAlreadyExists) {
+				return createErr
+			}
+			_, err = a.blob.AppendBlock(ctx, readSeekNopCloser{bytes.NewReader(payload)}, nil)
+		}
+	}
+	return err
+}
+
+func (a *appendBlobStore) ReadAll(ctx context.Context) ([]sitemapEntry, error) {
+	resp, err := a.blob.DownloadStream(ctx, nil)
+	if err != nil {
+		if bloberror.HasCode(err, bloberror.BlobNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.ErrorContext(ctx, "failed to close sitemap blob stream", "error", closeErr)
+		}
+	}()
+	return parseEntries(resp.Body)
+}
+
+func parseEntries(r io.Reader) ([]sitemapEntry, error) {
+	entries := make([]sitemapEntry, 0)
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var entry sitemapEntry
+		if err := json.Unmarshal(line, &entry); err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+type disabledStore struct{}
+
+func (disabledStore) Append(_ context.Context, _ sitemapEntry) error {
+	return errors.New("append blob store is disabled")
+}
+
+func (disabledStore) ReadAll(_ context.Context) ([]sitemapEntry, error) {
+	return nil, nil
+}
+
+type readSeekNopCloser struct{ io.ReadSeeker }
+
+func (r readSeekNopCloser) Close() error { return nil }
