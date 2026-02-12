@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -44,7 +45,10 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool
 }
 
 // FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, writer http.ResponseWriter) {
+func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, writer http.ResponseWriter) {
+	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
 	data := struct {
 		Location       locations.Location
 		Date           string
@@ -53,6 +57,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		OriginHash     string
 		ConversationID string
 		Thread         []RecipeThreadEntry
+		Feedback       RecipeFeedback
 		RecipeHash     string
 		Style          seasons.Style
 		ServerSignedIn bool
@@ -64,6 +69,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		OriginHash:     recipe.OriginHash,
 		ConversationID: p.ConversationID,
 		Thread:         thread,
+		Feedback:       feedback,
 		RecipeHash:     recipe.ComputeHash(),
 		Style:          seasons.GetCurrentStyle(),
 		ServerSignedIn: signedIn,
@@ -71,6 +77,27 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer http.ResponseWriter) {
+	//memory waste because we alwways resort?
+	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
+	data := struct {
+		ConversationID string
+		Thread         []RecipeThreadEntry
+		ServerSignedIn bool
+	}{
+		ConversationID: conversationID,
+		Thread:         thread,
+		ServerSignedIn: signedIn,
+	}
+
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
+		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 

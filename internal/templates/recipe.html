@@ -80,45 +80,111 @@
           </article>
 
           <section class="space-y-4 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <h3 class="text-lg font-semibold text-brand-700">Questions</h3>
-              <p class="text-xs text-gray-500">Ask about swaps, prep, or timing.</p>
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold text-brand-700">Chef Feedback</h3>
+              <p class="text-xs text-gray-500">Ask about the recipe and share how it turned out.</p>
             </div>
 
             {{if and .ServerSignedIn .ConversationID}}
-            <form method="POST" action="/recipe/{{.RecipeHash}}/question" class="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label for="question" class="text-sm font-medium text-gray-700 sm:w-40">Ask a question</label>
+            <form method="POST"
+                  action="/recipe/{{.RecipeHash}}/question"
+                  hx-post="/recipe/{{.RecipeHash}}/question"
+                  hx-target="#question-thread"
+                  hx-swap="outerHTML"
+                  hx-disabled-elt="#question,#ask-question-submit"
+                  hx-on::before-request="document.getElementById('ask-question-submit').textContent='Asking...'; document.getElementById('question-error').classList.add('hidden');"
+                  hx-on::after-request="document.getElementById('ask-question-submit').textContent='Ask'; if(event.detail.successful){ this.reset(); }"
+                  hx-on::response-error="document.getElementById('question-error').classList.remove('hidden');"
+                  class="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label for="question" class="text-sm font-medium text-gray-700 sm:w-40">Ask Careme</label>
               <input id="question"
                      type="text"
                      name="question"
                      placeholder="e.g. Can I swap the protein?"
                      class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <input type="hidden" name="recipe_title" value="{{.Recipe.Title}}" />
               <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
-              <button type="submit"
-                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                Ask
-              </button>
+              <div class="flex items-center gap-2">
+                <button type="submit"
+                        id="ask-question-submit"
+                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-brand-400 disabled:text-white/90">
+                  Ask
+                </button>
+                <button type="button"
+                        id="cooked-feedback-button"
+                        hx-post="/recipe/{{.RecipeHash}}/feedback"
+                        hx-vals='{"cooked":"true"}'
+                        hx-swap="none"
+                        hx-disabled-elt="#cooked-feedback-button"
+                        onclick="document.getElementById('feedback-panel').classList.remove('hidden'); document.getElementById('feedback-status').textContent='';"
+                        class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-brand-400">
+                  {{if .Feedback.Cooked}}Update feedback{{else}}I cooked it!{{end}}
+                </button>
+              </div>
             </form>
+            <p id="question-error" class="hidden text-sm font-medium text-red-700">Could not answer your question. Please try again.</p>
             {{else if .ServerSignedIn}}
-            <p class="text-sm text-gray-500">Questions are unavailable for this recipe.</p>
+            <div class="flex flex-wrap items-center gap-3">
+              <p class="text-sm text-gray-500">Questions are unavailable for this recipe.</p>
+              <button type="button"
+                      id="cooked-feedback-button"
+                      hx-post="/recipe/{{.RecipeHash}}/feedback"
+                      hx-vals='{"cooked":"true"}'
+                      hx-swap="none"
+                      hx-disabled-elt="#cooked-feedback-button"
+                      onclick="document.getElementById('feedback-panel').classList.remove('hidden'); document.getElementById('feedback-status').textContent='';"
+                      class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-brand-400">
+                {{if .Feedback.Cooked}}Update feedback{{else}}I cooked it!{{end}}
+              </button>
+            </div>
             {{else}}
             <p class="text-sm text-gray-500">Sign in to ask follow-up questions.</p>
             {{end}}
 
-            {{if .Thread}}
-            <div class="space-y-4">
-              {{range .Thread}}
-              <div class="rounded-xl border border-brand-100 bg-brand-50/70 p-4">
-                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">You asked</p>
-                <p class="mt-1 text-sm text-gray-700">{{.Question}}</p>
-                <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Careme</p>
-                <p class="mt-1 whitespace-pre-line text-sm text-gray-700">{{.Answer}}</p>
-              </div>
-              {{end}}
+            {{if .ServerSignedIn}}
+            <div id="feedback-panel" class="{{if not .Feedback.Cooked}}hidden {{end}}space-y-3 rounded-xl border border-brand-100 bg-brand-50/70 p-4">
+              <h4 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Cooked It?</h4>
+              <form method="POST"
+                    action="/recipe/{{.RecipeHash}}/feedback"
+                    hx-post="/recipe/{{.RecipeHash}}/feedback"
+                    hx-target="#feedback-status"
+                    hx-swap="innerHTML"
+                    hx-on::before-request="document.getElementById('feedback-submit').textContent='Saving...';"
+                    hx-on::after-request="document.getElementById('feedback-submit').textContent='Save feedback';"
+                    class="space-y-3">
+                <input type="hidden" name="cooked" value="true" />
+                <div class="space-y-1">
+                  <p class="text-sm font-medium text-gray-700">Rating</p>
+                  <div id="star-rating" data-initial-stars="{{.Feedback.Stars}}" class="inline-flex items-center gap-1" role="radiogroup" aria-label="Recipe rating">
+                    <button type="button" data-star="1" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="1 star">☆</button>
+                    <button type="button" data-star="2" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="2 stars">☆</button>
+                    <button type="button" data-star="3" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="3 stars">☆</button>
+                    <button type="button" data-star="4" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="4 stars">☆</button>
+                    <button type="button" data-star="5" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="5 stars">☆</button>
+                  </div>
+                  <input id="stars-input" type="hidden" name="stars" value="{{if gt .Feedback.Stars 0}}{{.Feedback.Stars}}{{end}}" />
+                </div>
+                <label for="feedback" class="block text-sm font-medium text-gray-700">Notes</label>
+                <textarea id="feedback"
+                          name="feedback"
+                          rows="3"
+                          placeholder="What worked well or what would you change?"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400">{{.Feedback.Comment}}</textarea>
+                <div class="flex items-center gap-3">
+                  <button type="submit"
+                          id="feedback-submit"
+                          class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Save feedback
+                  </button>
+                  <span id="feedback-status" class="text-sm font-medium text-green-700" aria-live="polite"></span>
+                </div>
+              </form>
             </div>
-            {{else if and .ServerSignedIn .ConversationID}}
-            <p class="text-sm text-gray-500">No questions yet.</p>
+            {{else}}
+            <p class="text-sm text-gray-500">Sign in to save cooked feedback and ratings.</p>
             {{end}}
+
+            {{template "recipe_thread" .}}
           </section>
 
         </div>
@@ -127,6 +193,59 @@
       <p class="text-center text-sm text-gray-500">Generated by Careme.</p>
     </section>
   </main>
+  <script>
+    function renderStars(selectedStars) {
+      const selected = Number(selectedStars) || 0;
+      const buttons = document.querySelectorAll('#star-rating [data-star]');
+      buttons.forEach((button) => {
+        const value = Number(button.dataset.star || 0);
+        const filled = value <= selected;
+        button.textContent = filled ? '★' : '☆';
+        button.classList.toggle('text-amber-500', filled);
+        button.classList.toggle('text-gray-300', !filled);
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const rating = document.getElementById('star-rating');
+      const input = document.getElementById('stars-input');
+      if (!rating || !input) return;
+
+      const initial = Number(rating.dataset.initialStars || input.value || 0);
+      if (initial > 0) {
+        input.value = String(initial);
+      }
+      renderStars(initial);
+
+      rating.querySelectorAll('[data-star]').forEach((button) => {
+        button.addEventListener('click', function () {
+          const stars = Number(button.dataset.star || 0);
+          input.value = stars > 0 ? String(stars) : '';
+          renderStars(stars);
+        });
+      });
+    });
+  </script>
+  <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
+
+{{define "recipe_thread"}}
+<div id="question-thread">
+  {{if .Thread}}
+  <div class="space-y-4">
+    {{range .Thread}}
+    <div class="rounded-xl border border-brand-100 bg-brand-50/70 p-4">
+      <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">You asked</p>
+      <p class="mt-1 text-sm text-gray-700">{{.Question}}</p>
+      <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Careme</p>
+      <p class="mt-1 whitespace-pre-line text-sm text-gray-700">{{.Answer}}</p>
+    </div>
+    {{end}}
+  </div>
+  {{else if and .ServerSignedIn .ConversationID}}
+  <p class="text-sm text-gray-500">No questions yet.</p>
+  {{end}}
+</div>
+{{end}}

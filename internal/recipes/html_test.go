@@ -3,10 +3,12 @@ package recipes
 import (
 	"bytes"
 	"careme/internal/ai"
+	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/templates"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,13 @@ func isValidHTML(t *testing.T, htmlStr string) {
 	if err != nil {
 		t.Fatalf("rendered HTML is not valid: %v\nHTML:\n%s", err, htmlStr)
 	}
+}
+
+func TestMain(m *testing.M) {
+	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+		panic(err)
+	}
+	os.Exit(m.Run())
 }
 
 var list = ai.ShoppingList{
@@ -71,7 +80,8 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	templates.SetClarity("test456")
+
+	templates.Clarityproject = "test456"
 	w := httptest.NewRecorder()
 	FormatShoppingListHTML(p, list, true, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.clarity.ms/tag/")) {
@@ -86,7 +96,7 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	templates.SetClarity("")
+	templates.Clarityproject = ""
 	w := httptest.NewRecorder()
 	FormatShoppingListHTML(p, list, true, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("clarity.ms")) {
@@ -115,7 +125,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, w)
+	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -132,6 +142,30 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should contain question input")
 	}
+	if !strings.Contains(html, `name="recipe_title"`) {
+		t.Error("recipe HTML should include recipe title hidden input")
+	}
+	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
+		t.Error("recipe HTML should include htmx script")
+	}
+	if !strings.Contains(html, `id="question-thread"`) {
+		t.Error("recipe HTML should contain question thread container")
+	}
+	if !strings.Contains(html, `id="question-error"`) {
+		t.Error("recipe HTML should contain question error surface")
+	}
+	if !strings.Contains(html, `hx-on::response-error=`) {
+		t.Error("recipe HTML should define htmx response-error behavior")
+	}
+	if !strings.Contains(html, "I cooked it!") {
+		t.Error("recipe HTML should contain I cooked it button")
+	}
+	if !strings.Contains(html, `name="stars"`) {
+		t.Error("recipe HTML should contain stars feedback controls")
+	}
+	if !strings.Contains(html, `name="feedback"`) {
+		t.Error("recipe HTML should contain text feedback control")
+	}
 }
 
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
@@ -139,7 +173,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], false, []RecipeThreadEntry{}, w)
+	FormatRecipeHTML(p, list.Recipes[0], false, []RecipeThreadEntry{}, RecipeFeedback{}, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -149,5 +183,34 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	}
 	if !strings.Contains(html, "Sign in to ask follow-up questions.") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
+	}
+}
+
+func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
+	w := httptest.NewRecorder()
+	now := time.Now()
+	thread := []RecipeThreadEntry{
+		{
+			Question:  "older question",
+			Answer:    "older answer",
+			CreatedAt: now.Add(-1 * time.Hour),
+		},
+		{
+			Question:  "newer question",
+			Answer:    "newer answer",
+			CreatedAt: now,
+		},
+	}
+
+	FormatRecipeThreadHTML(thread, true, "conv123", w)
+	body := w.Body.String()
+
+	newerIndex := strings.Index(body, "newer question")
+	olderIndex := strings.Index(body, "older question")
+	if newerIndex == -1 || olderIndex == -1 {
+		t.Fatalf("expected both questions in output, body: %s", body)
+	}
+	if newerIndex > olderIndex {
+		t.Fatalf("expected newer question before older question, body: %s", body)
 	}
 }

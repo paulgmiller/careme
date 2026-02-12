@@ -9,6 +9,10 @@
 - `internal/auth` : mostly clerk authorization
 
 ## Build, Test, and Development Commands
+- Sandbox-safe Go cache setup (recommended before running Go commands in restricted environments):
+  - `export GOCACHE=/tmp/go-build`
+  - `export GOMODCACHE=/tmp/go-modcache`
+  - Alternative persistent path inside repo: `export GOCACHE=$PWD/.cache/go-build && export GOMODCACHE=$PWD/.cache/go-modcache`
 - `go fmt ./...` then `go vet ./...`: Baseline formatting and static checks.
 - `golangci-lint run  ./...`: For expanded go linters
 - `export ENABLE_MOCKS=1`: to test without kroger, openai credentials

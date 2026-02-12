@@ -10,12 +10,11 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
+	"careme/internal/static"
 	"careme/internal/templates"
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
 	"context"
-	"crypto/sha256"
-	_ "embed"
 	"errors"
 	"fmt"
 	"html/template"
@@ -26,12 +25,6 @@ import (
 	"syscall"
 	"time"
 )
-
-//go:embed favicon.png
-var favicon []byte
-
-//go:embed static/tailwind.css
-var tailwindCSS []byte
 
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
@@ -46,6 +39,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux := http.NewServeMux()
 	authClient.Register(mux)
+	static.Register(mux)
 
 	userStorage := users.NewStorage(cache)
 
@@ -53,20 +47,6 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
-
-	tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
-	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("If-None-Match") == tailwindETag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=0, no-cache")
-		w.Header().Set("ETag", tailwindETag)
-		if _, err := w.Write(tailwindCSS); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
-		}
-	})
 
 	locationStorage, err := locations.New(cfg)
 	if err != nil {
@@ -128,14 +108,6 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	ro.Add(generator, locationServer)
 
 	mux.Handle("/ready", ro)
-
-	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png") // <= without this, many UAs ignore it
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		if _, err := w.Write(favicon); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write favicon", "error", err)
-		}
-	})
 
 	server := &http.Server{
 		Addr:    addr,

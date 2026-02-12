@@ -3,21 +3,17 @@ package sitemap
 import (
 	"bufio"
 	"bytes"
+	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"os"
 	"sort"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 )
 
@@ -26,13 +22,7 @@ const (
 	sitemapBlobName  = "sitemap/urls.ndjson"
 )
 
-type urlStore interface {
-	Append(ctx context.Context, entry sitemapEntry) error
-	ReadAll(ctx context.Context) ([]sitemapEntry, error)
-}
-
 type appendBlobStore struct {
-	blob *appendblob.Client
 }
 
 type sitemapEntry struct {
@@ -41,41 +31,12 @@ type sitemapEntry struct {
 }
 
 type Server struct {
-	store urlStore
+	cache cache.ListCache
 }
 
-func New() *Server {
-	store, err := newAppendBlobStoreFromEnv(context.Background())
-	if err != nil {
-		slog.Warn("sitemap disabled: append blob store unavailable", "error", err)
-		return &Server{store: disabledStore{}}
-	}
-	return &Server{store: store}
-}
+func New(c cache.ListCache) *Server {
 
-func newAppendBlobStoreFromEnv(ctx context.Context) (*appendBlobStore, error) {
-	accountName, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
-	if !ok {
-		return nil, fmt.Errorf("AZURE_STORAGE_ACCOUNT_NAME could not be found")
-	}
-	accountKey, ok := os.LookupEnv("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY")
-	if !ok {
-		return nil, fmt.Errorf("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY could not be found")
-	}
-	cred, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create shared key credential: %w", err)
-	}
-	blobURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s/%s", accountName, url.PathEscape(sitemapContainer), sitemapBlobName)
-	blob, err := appendblob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create append blob client: %w", err)
-	}
-	_, err = blob.Create(ctx, nil)
-	if err != nil && !bloberror.HasCode(err, bloberror.BlobAlreadyExists) {
-		return nil, fmt.Errorf("failed to create sitemap append blob: %w", err)
-	}
-	return &appendBlobStore{blob: blob}, nil
+	return &Server{cache: c}
 }
 
 func (s *Server) Register(mux *http.ServeMux) {

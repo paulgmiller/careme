@@ -7,7 +7,6 @@ import (
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"context"
-	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -183,6 +182,10 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
 	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
@@ -190,6 +193,7 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -217,14 +221,10 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusNoContent)
+}
 
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(struct {
-		FavoriteStore string `json:"favorite_store"`
-	}{
-		FavoriteStore: currentUser.FavoriteStore,
-	}); err != nil {
-		slog.ErrorContext(ctx, "failed to write favorite response", "error", err)
-	}
+func isHTMXRequest(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
