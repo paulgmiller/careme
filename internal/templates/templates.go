@@ -23,6 +23,7 @@ func init() {
 	funcs := template.FuncMap{
 		"ClerkEnabled":        ClerkEnabled,
 		"ClerkPublishableKey": ClerkPublishableKey,
+		"TailwindAssetPath":   TailwindAssetPath,
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {
@@ -53,8 +54,14 @@ func SetClarity(project string) {
 	clarityproject = project
 }
 
+// SetTailwindAssetPath sets the served Tailwind path used by templates.
+func SetTailwindAssetPath(path string) {
+	tailwindAssetPath = path
+}
+
 var clarityproject string
 var clerkPublishableKey string
+var tailwindAssetPath = "/static/tailwind.css"
 
 // ClarityScript generates the Microsoft Clarity tracking script HTML
 func ClarityScript() template.HTML {
@@ -81,4 +88,9 @@ func ClerkEnabled() bool {
 // ClerkPublishableKey returns the Clerk publishable key for templates.
 func ClerkPublishableKey() string {
 	return clerkPublishableKey
+}
+
+// TailwindAssetPath returns the served Tailwind stylesheet URL.
+func TailwindAssetPath() string {
+	return tailwindAssetPath
 }
