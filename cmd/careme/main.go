@@ -3,6 +3,8 @@ package main
 import (
 	"careme/internal/config"
 	"careme/internal/logsink"
+	"careme/internal/static"
+	"careme/internal/templates"
 	"context"
 	_ "embed"
 	"flag"
@@ -50,6 +52,11 @@ func main() {
 		slog.SetDefault(slog.New(multi.Fanout(handler, slog.NewTextHandler(os.Stdout, nil))))
 		// log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
 
+	}
+
+	static.Init()
+	if err := templates.Init(cfg, static.TailwindAssetPath); err != nil {
+		log.Fatalf("failed to initialize templates: %w", err)
 	}
 
 	if mail {

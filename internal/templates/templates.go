@@ -19,11 +19,11 @@ var Home,
 	Location,
 	Mail *template.Template
 
-func Init(config *config.Config, tailwindhash string) error {
+func Init(config *config.Config, tailwindAssetPath string) error {
 	funcs := template.FuncMap{
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
-		"TailwindAssetPath":   func() string { return "/static/tailwind-" + tailwindhash + ".css" },
+		"TailwindAssetPath":   func() string { return tailwindAssetPath },
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {

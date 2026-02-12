@@ -19,10 +19,13 @@ var favicon []byte
 
 var TailwindAssetPath string
 
-// Register serves static assets and wires template asset paths.
-func Register(mux *http.ServeMux) {
+func Init() {
 	tailwindHash := fmt.Sprintf("%x", sha256.Sum256(tailwindCSS))
 	TailwindAssetPath = fmt.Sprintf("/static/tailwind.%s.css", tailwindHash[:12])
+}
+
+// Register serves static assets and wires template asset paths.
+func Register(mux *http.ServeMux) {
 
 	mux.HandleFunc(TailwindAssetPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
