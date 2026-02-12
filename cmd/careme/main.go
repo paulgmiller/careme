@@ -56,7 +56,7 @@ func main() {
 
 	static.Init()
 	if err := templates.Init(cfg, static.TailwindAssetPath); err != nil {
-		log.Fatalf("failed to initialize templates: %w", err)
+		log.Fatalf("failed to initialize templates: %s", err)
 	}
 
 	if mail {
