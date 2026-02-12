@@ -17,12 +17,7 @@ Move interactive UI behavior toward server-rendered HTML with [HTMX](https://htm
 - Priority: low.
 
 ### `internal/templates/locations.html`
-- Current state: JavaScript-heavy interactions.
-- Plan:
-  - Use `hx-post` for favorite store updates.
-  - Swap updated server-rendered list fragment in place.
-  - Use semantic `<details>` for instruction panel toggle.
-- Priority: high.
+- Current state: migrated
 
 ### `internal/templates/shoppinglist.html`
 - Current state: most JavaScript-heavy page.
@@ -33,11 +28,7 @@ Move interactive UI behavior toward server-rendered HTML with [HTMX](https://htm
 - Priority: high.
 
 ### `internal/templates/recipe.html`
-- Current state: form uses full POST+redirect flow.
-- Plan:
-  - Convert question submission to HTMX.
-  - Return and swap/append question thread fragments from server.
-- Priority: medium.
+- Current state: migrated
 
 ### `internal/templates/user.html`
 - Current state: full page POST roundtrips.
