@@ -16,6 +16,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/templates"
 	"careme/internal/users"
 
 	"golang.org/x/net/html"
@@ -116,6 +117,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	cfg := &config.Config{Mocks: config.MockConfig{Enable: true}}
+	err := templates.Init(cfg, "dummyhash") //initialize templates so they don't hit the file system during tests
+	if err != nil {
+		t.Fatalf("failed to create templates %v", err)
+	}
+
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)

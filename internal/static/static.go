@@ -1,7 +1,6 @@
 package static
 
 import (
-	"careme/internal/templates"
 	"crypto/sha256"
 	_ "embed"
 	"fmt"
@@ -18,13 +17,17 @@ var htmx208JS []byte
 //go:embed favicon.png
 var favicon []byte
 
+var TailwindAssetPath string
+
+func Init() {
+	tailwindHash := fmt.Sprintf("%x", sha256.Sum256(tailwindCSS))
+	TailwindAssetPath = fmt.Sprintf("/static/tailwind.%s.css", tailwindHash[:12])
+}
+
 // Register serves static assets and wires template asset paths.
 func Register(mux *http.ServeMux) {
-	tailwindHash := fmt.Sprintf("%x", sha256.Sum256(tailwindCSS))
-	tailwindAssetPath := fmt.Sprintf("/static/tailwind.%s.css", tailwindHash[:12])
-	templates.SetTailwindAssetPath(tailwindAssetPath)
 
-	mux.HandleFunc(tailwindAssetPath, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(TailwindAssetPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		if _, err := w.Write(tailwindCSS); err != nil {
