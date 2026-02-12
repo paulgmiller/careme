@@ -1,0 +1,40 @@
+package static
+
+import (
+	"careme/internal/templates"
+	"crypto/sha256"
+	_ "embed"
+	"fmt"
+	"log/slog"
+	"net/http"
+)
+
+//go:embed tailwind.css
+var tailwindCSS []byte
+
+//go:embed htmx@2.0.8.js
+var htmx208JS []byte
+
+// Register serves static assets and wires template asset paths.
+func Register(mux *http.ServeMux) {
+	tailwindHash := fmt.Sprintf("%x", sha256.Sum256(tailwindCSS))
+	tailwindAssetPath := fmt.Sprintf("/static/tailwind.%s.css", tailwindHash[:12])
+	templates.SetTailwindAssetPath(tailwindAssetPath)
+
+	mux.HandleFunc(tailwindAssetPath, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		if _, err := w.Write(tailwindCSS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
+		}
+	})
+
+	// Intentionally versioned so that we can cache aggressively.
+	mux.HandleFunc("/static/htmx@2.0.8.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		if _, err := w.Write(htmx208JS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write htmx js", "error", err)
+		}
+	})
+}
