@@ -109,12 +109,86 @@
                       class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-brand-400 disabled:text-white/90">
                 Ask
               </button>
+              <button type="button"
+                      id="cooked-feedback-button"
+                      hx-post="/recipe/{{.RecipeHash}}/feedback"
+                      hx-vals='{"cooked":"true"}'
+                      hx-target="#feedback-status"
+                      hx-swap="innerHTML"
+                      hx-disabled-elt="#cooked-feedback-button"
+                      onclick="document.getElementById('feedback-panel').classList.remove('hidden');"
+                      class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-brand-400">
+                I cooked it!
+              </button>
             </form>
             <p id="question-error" class="hidden text-sm font-medium text-red-700">Could not answer your question. Please try again.</p>
             {{else if .ServerSignedIn}}
-            <p class="text-sm text-gray-500">Questions are unavailable for this recipe.</p>
+            <div class="flex flex-wrap items-center gap-3">
+              <p class="text-sm text-gray-500">Questions are unavailable for this recipe.</p>
+              <button type="button"
+                      id="cooked-feedback-button"
+                      hx-post="/recipe/{{.RecipeHash}}/feedback"
+                      hx-vals='{"cooked":"true"}'
+                      hx-target="#feedback-status"
+                      hx-swap="innerHTML"
+                      hx-disabled-elt="#cooked-feedback-button"
+                      onclick="document.getElementById('feedback-panel').classList.remove('hidden');"
+                      class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-brand-400">
+                I cooked it!
+              </button>
+            </div>
             {{else}}
             <p class="text-sm text-gray-500">Sign in to ask follow-up questions.</p>
+            {{end}}
+
+            {{if .ServerSignedIn}}
+            <div id="feedback-panel" class="{{if not .Feedback.Cooked}}hidden {{end}}space-y-3 rounded-xl border border-brand-100 bg-brand-50/70 p-4">
+              <h4 class="text-sm font-semibold uppercase tracking-wide text-gray-500">How did it turn out?</h4>
+              <form method="POST"
+                    action="/recipe/{{.RecipeHash}}/feedback"
+                    hx-post="/recipe/{{.RecipeHash}}/feedback"
+                    hx-target="#feedback-status"
+                    hx-swap="innerHTML"
+                    hx-on::before-request="document.getElementById('feedback-submit').textContent='Saving...';"
+                    hx-on::after-request="document.getElementById('feedback-submit').textContent='Save feedback';"
+                    class="space-y-3">
+                <input type="hidden" name="cooked" value="true" />
+                <div class="flex flex-wrap gap-3 text-sm text-gray-700">
+                  <label for="stars-1" class="inline-flex items-center gap-2">
+                    <input id="stars-1" type="radio" name="stars" value="1" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 1}}checked{{end}} />
+                    1 star
+                  </label>
+                  <label for="stars-2" class="inline-flex items-center gap-2">
+                    <input id="stars-2" type="radio" name="stars" value="2" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 2}}checked{{end}} />
+                    2 stars
+                  </label>
+                  <label for="stars-3" class="inline-flex items-center gap-2">
+                    <input id="stars-3" type="radio" name="stars" value="3" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 3}}checked{{end}} />
+                    3 stars
+                  </label>
+                  <label for="stars-4" class="inline-flex items-center gap-2">
+                    <input id="stars-4" type="radio" name="stars" value="4" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 4}}checked{{end}} />
+                    4 stars
+                  </label>
+                  <label for="stars-5" class="inline-flex items-center gap-2">
+                    <input id="stars-5" type="radio" name="stars" value="5" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 5}}checked{{end}} />
+                    5 stars
+                  </label>
+                </div>
+                <label for="feedback" class="block text-sm font-medium text-gray-700">Notes</label>
+                <textarea id="feedback"
+                          name="feedback"
+                          rows="3"
+                          placeholder="What worked well or what would you change?"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400">{{.Feedback.Comment}}</textarea>
+                <button type="submit"
+                        id="feedback-submit"
+                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Save feedback
+                </button>
+              </form>
+              <div id="feedback-status"></div>
+            </div>
             {{end}}
 
             {{template "recipe_thread" .}}

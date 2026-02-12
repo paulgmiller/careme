@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +66,7 @@ func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
+	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
 	//maybe this should be under locations server?
 	mux.HandleFunc("GET /ingredients/{location}", s.ingredients)
 
@@ -85,6 +87,13 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = s.clerk.GetUserIDFromRequest(r)
 	signedIn := !errors.Is(err, auth.ErrNoSession)
+	feedback, err := s.FeedbackFromCache(ctx, hash)
+	if err != nil {
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to load recipe feedback", "hash", hash, "error", err)
+		}
+		feedback = &RecipeFeedback{}
+	}
 
 	if recipe.OriginHash == "" {
 		slog.WarnContext(ctx, "recipe missing origin hash Probably and old recipe", "hash", hash)
@@ -96,7 +105,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		if err != nil && !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
 		}
-		FormatRecipeHTML(p, *recipe, signedIn, thread, w)
+		FormatRecipeHTML(p, *recipe, signedIn, thread, *feedback, w)
 		return
 	}
 
@@ -125,7 +134,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(p, *recipe, signedIn, thread, w)
+	FormatRecipeHTML(p, *recipe, signedIn, thread, *feedback, w)
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +207,78 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	FormatRecipeThreadHTML(thread, true, conversationID, w)
+}
+
+func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hash := r.PathValue("hash")
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+
+	feedback := RecipeFeedback{}
+	existing, err := s.FeedbackFromCache(ctx, hash)
+	if err != nil {
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to load existing feedback", "hash", hash, "error", err)
+			http.Error(w, "failed to load existing feedback", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		feedback = *existing
+	}
+
+	changed := false
+	if values, ok := r.PostForm["cooked"]; ok && len(values) > 0 {
+		cooked, err := parseFeedbackBool(values[len(values)-1])
+		if err != nil {
+			http.Error(w, "invalid cooked value", http.StatusBadRequest)
+			return
+		}
+		feedback.Cooked = cooked
+		changed = true
+	}
+	if values, ok := r.PostForm["stars"]; ok && len(values) > 0 {
+		starValue := strings.TrimSpace(values[len(values)-1])
+		if starValue == "" {
+			feedback.Stars = 0
+		} else {
+			stars, err := strconv.Atoi(starValue)
+			if err != nil || stars < 1 || stars > 5 {
+				http.Error(w, "stars must be between 1 and 5", http.StatusBadRequest)
+				return
+			}
+			feedback.Stars = stars
+		}
+		changed = true
+	}
+	if values, ok := r.PostForm["feedback"]; ok && len(values) > 0 {
+		feedback.Comment = strings.TrimSpace(values[len(values)-1])
+		changed = true
+	}
+	if !changed {
+		http.Error(w, "no feedback provided", http.StatusBadRequest)
+		return
+	}
+
+	feedback.UpdatedAt = time.Now()
+	if err := s.SaveFeedback(ctx, hash, feedback); err != nil {
+		http.Error(w, "failed to save feedback", http.StatusInternalServerError)
+		return
+	}
+
+	if isHTMXRequest(r) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `<p class="text-sm font-medium text-green-700">Feedback saved.</p>`)
+		return
+	}
+
+	http.Redirect(w, r, "/recipe/"+url.PathEscape(hash), http.StatusSeeOther)
 }
 
 const (
@@ -433,6 +514,17 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStar
 
 func isHTMXRequest(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
+}
+
+func parseFeedbackBool(value string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "on", "yes":
+		return true, nil
+	case "", "0", "false", "off", "no":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean: %q", value)
+	}
 }
 
 func (s *server) Wait() {

@@ -45,7 +45,7 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool
 }
 
 // FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, writer http.ResponseWriter) {
+func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
@@ -57,6 +57,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		OriginHash     string
 		ConversationID string
 		Thread         []RecipeThreadEntry
+		Feedback       RecipeFeedback
 		RecipeHash     string
 		Style          seasons.Style
 		ServerSignedIn bool
@@ -68,6 +69,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		OriginHash:     recipe.OriginHash,
 		ConversationID: p.ConversationID,
 		Thread:         thread,
+		Feedback:       feedback,
 		RecipeHash:     recipe.ComputeHash(),
 		Style:          seasons.GetCurrentStyle(),
 		ServerSignedIn: signedIn,
