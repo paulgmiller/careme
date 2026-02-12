@@ -15,6 +15,9 @@ var tailwindCSS []byte
 //go:embed htmx@2.0.8.js
 var htmx208JS []byte
 
+//go:embed favicon.png
+var favicon []byte
+
 // Register serves static assets and wires template asset paths.
 func Register(mux *http.ServeMux) {
 	tailwindHash := fmt.Sprintf("%x", sha256.Sum256(tailwindCSS))
@@ -35,6 +38,14 @@ func Register(mux *http.ServeMux) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		if _, err := w.Write(htmx208JS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write htmx js", "error", err)
+		}
+	})
+
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		if _, err := w.Write(favicon); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write favicon", "error", err)
 		}
 	})
 }

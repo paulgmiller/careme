@@ -14,7 +14,6 @@ import (
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"html/template"
@@ -25,9 +24,6 @@ import (
 	"syscall"
 	"time"
 )
-
-//go:embed favicon.png
-var favicon []byte
 
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
@@ -108,14 +104,6 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	ro.Add(generator, locationServer)
 
 	mux.Handle("/ready", ro)
-
-	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png") // <= without this, many UAs ignore it
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		if _, err := w.Write(favicon); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write favicon", "error", err)
-		}
-	})
 
 	server := &http.Server{
 		Addr:    addr,
