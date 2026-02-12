@@ -58,25 +58,14 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	//using etags for caching because this changes somewhat often
 	tailwindHash := fmt.Sprintf("%x", sha256.Sum256(tailwindCSS))
-	tailwindETag := fmt.Sprintf(`"%s"`, tailwindHash)
 	tailwindAssetPath := fmt.Sprintf("/static/tailwind.%s.css", tailwindHash[:12])
 	templates.SetTailwindAssetPath(tailwindAssetPath)
 	mux.HandleFunc(tailwindAssetPath, func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("If-None-Match") == tailwindETag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		w.Header().Set("ETag", tailwindETag)
 		if _, err := w.Write(tailwindCSS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
 		}
-	})
-
-	// backwards compatibility for existing cache entries/bookmarks.
-	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, tailwindAssetPath, http.StatusMovedPermanently)
 	})
 
 	//intentionally versioned so that we can cache aggressively
