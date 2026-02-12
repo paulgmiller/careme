@@ -239,7 +239,7 @@ func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Feedback saved.") {
+	if !strings.Contains(rr.Body.String(), "Saved") {
 		t.Fatalf("expected success message, got body: %s", rr.Body.String())
 	}
 

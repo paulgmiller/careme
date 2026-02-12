@@ -274,7 +274,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 
 	if isHTMXRequest(r) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<p class="text-sm font-medium text-green-700">Feedback saved.</p>`)
+		fmt.Fprint(w, `<span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><span aria-hidden="true">✓</span>Saved</span>`)
 		return
 	}
 

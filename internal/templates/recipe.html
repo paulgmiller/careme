@@ -153,27 +153,16 @@
                     hx-on::after-request="document.getElementById('feedback-submit').textContent='Save feedback';"
                     class="space-y-3">
                 <input type="hidden" name="cooked" value="true" />
-                <div class="flex flex-wrap gap-3 text-sm text-gray-700">
-                  <label for="stars-1" class="inline-flex items-center gap-2">
-                    <input id="stars-1" type="radio" name="stars" value="1" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 1}}checked{{end}} />
-                    1 star
-                  </label>
-                  <label for="stars-2" class="inline-flex items-center gap-2">
-                    <input id="stars-2" type="radio" name="stars" value="2" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 2}}checked{{end}} />
-                    2 stars
-                  </label>
-                  <label for="stars-3" class="inline-flex items-center gap-2">
-                    <input id="stars-3" type="radio" name="stars" value="3" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 3}}checked{{end}} />
-                    3 stars
-                  </label>
-                  <label for="stars-4" class="inline-flex items-center gap-2">
-                    <input id="stars-4" type="radio" name="stars" value="4" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 4}}checked{{end}} />
-                    4 stars
-                  </label>
-                  <label for="stars-5" class="inline-flex items-center gap-2">
-                    <input id="stars-5" type="radio" name="stars" value="5" class="h-4 w-4 border-gray-300 text-brand-600 focus:ring-brand-400" {{if eq .Feedback.Stars 5}}checked{{end}} />
-                    5 stars
-                  </label>
+                <div class="space-y-1">
+                  <p class="text-sm font-medium text-gray-700">Rating</p>
+                  <div id="star-rating" data-initial-stars="{{.Feedback.Stars}}" class="inline-flex items-center gap-1" role="radiogroup" aria-label="Recipe rating">
+                    <button type="button" data-star="1" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="1 star">☆</button>
+                    <button type="button" data-star="2" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="2 stars">☆</button>
+                    <button type="button" data-star="3" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="3 stars">☆</button>
+                    <button type="button" data-star="4" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="4 stars">☆</button>
+                    <button type="button" data-star="5" class="star-button text-2xl leading-none text-gray-300 transition hover:text-amber-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2" aria-label="5 stars">☆</button>
+                  </div>
+                  <input id="stars-input" type="hidden" name="stars" value="{{if gt .Feedback.Stars 0}}{{.Feedback.Stars}}{{end}}" />
                 </div>
                 <label for="feedback" class="block text-sm font-medium text-gray-700">Notes</label>
                 <textarea id="feedback"
@@ -181,13 +170,15 @@
                           rows="3"
                           placeholder="What worked well or what would you change?"
                           class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400">{{.Feedback.Comment}}</textarea>
-                <button type="submit"
-                        id="feedback-submit"
-                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Save feedback
-                </button>
+                <div class="flex items-center gap-3">
+                  <button type="submit"
+                          id="feedback-submit"
+                          class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Save feedback
+                  </button>
+                  <span id="feedback-status" class="text-sm font-medium text-green-700" aria-live="polite"></span>
+                </div>
               </form>
-              <div id="feedback-status"></div>
             </div>
             {{end}}
 
@@ -200,6 +191,39 @@
       <p class="text-center text-sm text-gray-500">Generated by Careme.</p>
     </section>
   </main>
+  <script>
+    function renderStars(selectedStars) {
+      const selected = Number(selectedStars) || 0;
+      const buttons = document.querySelectorAll('#star-rating [data-star]');
+      buttons.forEach((button) => {
+        const value = Number(button.dataset.star || 0);
+        const filled = value <= selected;
+        button.textContent = filled ? '★' : '☆';
+        button.classList.toggle('text-amber-500', filled);
+        button.classList.toggle('text-gray-300', !filled);
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const rating = document.getElementById('star-rating');
+      const input = document.getElementById('stars-input');
+      if (!rating || !input) return;
+
+      const initial = Number(rating.dataset.initialStars || input.value || 0);
+      if (initial > 0) {
+        input.value = String(initial);
+      }
+      renderStars(initial);
+
+      rating.querySelectorAll('[data-star]').forEach((button) => {
+        button.addEventListener('click', function () {
+          const stars = Number(button.dataset.star || 0);
+          input.value = stars > 0 ? String(stars) : '';
+          renderStars(stars);
+        });
+      });
+    });
+  </script>
   <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
