@@ -120,16 +120,38 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 	p := DefaultParams(l, date)
 	p.Instructions = r.URL.Query().Get("instructions")
 
-	// Handle saved and dismissed recipe hashes from checkboxes
-	// Query().Get returns first value, Query() returns all values
-	// will be empty values for every recipe and two for ones with no action
-	// TODO look at way not to duplicate so many query arguments and pass down just a saved list or a query arg for each saved item.
+	// Handle saved and dismissed recipe hashes from query params.
+	// Accept both legacy hidden fields (saved/dismissed) and current choice-{hash}=save|dismiss fields.
 	clean := func(s string, _ int) (string, bool) {
 		ts := strings.TrimSpace(s)
 		return ts, ts != ""
 	}
 	savedHashes := lo.FilterMap(r.URL.Query()["saved"], clean)
 	dismissedHashes := lo.FilterMap(r.URL.Query()["dismissed"], clean)
+	for key, values := range r.URL.Query() {
+		if !strings.HasPrefix(key, "choice-") {
+			continue
+		}
+		hash := strings.TrimSpace(strings.TrimPrefix(key, "choice-"))
+		if hash == "" {
+			continue
+		}
+		var choice string
+		for i := len(values) - 1; i >= 0; i-- {
+			if v := strings.TrimSpace(values[i]); v != "" {
+				choice = strings.ToLower(v)
+				break
+			}
+		}
+		switch choice {
+		case "save":
+			savedHashes = append(savedHashes, hash)
+		case "dismiss":
+			dismissedHashes = append(dismissedHashes, hash)
+		}
+	}
+	savedHashes = lo.Uniq(savedHashes)
+	dismissedHashes = lo.Uniq(dismissedHashes)
 	// Load saved recipes from cache by their hashes
 	// TODO is it overkill to pull full recip in param instead of just hash?
 	for _, hash := range savedHashes {
