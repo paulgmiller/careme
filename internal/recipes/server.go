@@ -211,6 +211,10 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
 	hash := r.PathValue("hash")
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
@@ -272,13 +276,12 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isHTMXRequest(r) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><span aria-hidden="true">✓</span>Saved</span>`)
-		return
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, err = fmt.Fprint(w, `<span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><span aria-hidden="true">✓</span>Saved</span>`)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to write feedback response", "hash", hash, "error", err)
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
-
-	http.Redirect(w, r, "/recipe/"+url.PathEscape(hash), http.StatusSeeOther)
 }
 
 const (
