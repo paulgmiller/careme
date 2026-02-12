@@ -56,16 +56,13 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-	//using etags for caching because this changes somewhat often
-	tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
-	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("If-None-Match") == tailwindETag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
+	//make filename use hash to force cach invalidation (etag really failed here)
+	tailwindHash := fmt.Sprintf("%x", sha256.Sum256(tailwindCSS))
+	tailwindAssetPath := fmt.Sprintf("/static/tailwind.%s.css", tailwindHash[:12])
+	templates.SetTailwindAssetPath(tailwindAssetPath)
+	mux.HandleFunc(tailwindAssetPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=0, no-cache")
-		w.Header().Set("ETag", tailwindETag)
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		if _, err := w.Write(tailwindCSS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
 		}
@@ -74,7 +71,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	//intentionally versioned so that we can cache aggressively
 	mux.HandleFunc("/static/htmx@2.0.8.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, immutable")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		if _, err := w.Write(htmx208JS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write htmx js", "error", err)
 		}
