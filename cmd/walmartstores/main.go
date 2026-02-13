@@ -44,12 +44,14 @@ func main() {
 	//fmt.Printf("taxonomy: %s\n", string(taxonomy))
 
 	slog.Info("querying Walmart stores", "zip", *zip)
-	raw, err := client.SearchStoresByZIP(ctx, *zip)
+	stores, err := client.SearchStoresByZIP(ctx, *zip)
 	if err != nil {
 		exitErr(err)
 	}
 
-	fmt.Println(string(raw))
+	for _, store := range stores {
+		fmt.Printf("Store: %s: %s\n", store.Name, store.StreetAddress)
+	}
 }
 
 func envOrDefault(key, fallback string) string {

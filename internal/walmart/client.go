@@ -131,7 +131,9 @@ func (c *Client) Taxonomy(ctx context.Context) (json.RawMessage, error) {
 // docs https://walmart.io/docs/affiliates/v1/stores
 // example https://developer.api.walmart.com/api-proxy/service/affil/v2/stores?zip=98007
 // example https://developer.api.walmart.com/api-proxy/service/affil/v2/stores?zip=77063
-func (c *Client) SearchStoresByZIP(ctx context.Context, zip string) (json.RawMessage, error) {
+// SearchStoresByZIPData returns typed store locations for the provided ZIP code.
+func (c *Client) SearchStoresByZIP(ctx context.Context, zip string) ([]Store, error) {
+	zip = strings.TrimSpace(zip)
 	if zip == "" {
 		return nil, errors.New("zip code is required")
 	}
@@ -139,7 +141,15 @@ func (c *Client) SearchStoresByZIP(ctx context.Context, zip string) (json.RawMes
 	// Match Walmart ZIP sample path: /api-proxy/service/affil/v2/stores?zip=...
 	params := url.Values{}
 	params.Set("zip", zip)
-	return c.searchStoresWithParams(ctx, params)
+	raw, err := c.searchStoresWithParams(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	stores, err := ParseStores(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse stores response: %w", err)
+	}
+	return stores, nil
 }
 
 func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) (json.RawMessage, error) {
