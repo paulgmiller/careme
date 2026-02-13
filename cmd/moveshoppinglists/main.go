@@ -148,7 +148,7 @@ func copyKey(ctx context.Context, c cache.Cache, srcKey, dstKey string, apply bo
 		return 0, 0, fmt.Errorf("write %q: %w", dstKey, err)
 	}
 
-	_ = lo.Mustfmt.Fprintf(out, "copied %s -> %s\n", srcKey, dstKey))
+	_ = lo.Must(fmt.Fprintf(out, "copied %s -> %s\n", srcKey, dstKey))
 	return 1, 0, nil
 }
 
