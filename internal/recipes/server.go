@@ -472,6 +472,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
+			return
 		}
 		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
 
