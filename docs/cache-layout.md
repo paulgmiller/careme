@@ -24,10 +24,10 @@ Not all cache entries live in a prefixed subdirectory:
   written by `internal/recipes/io.go` (`SaveShoppingList`), read by `internal/recipes/io.go` (`FromCache`)
 
 - `<shopping_hash>.params`: JSON `generatorParams` used to reconstruct request state  
-  written by `internal/recipes/io.go` (`SaveParams`), read by `internal/recipes/params.go` (`loadParamsFromHash`)
+  written by `internal/recipes/io.go` (`SaveParams`), read by `internal/recipes/io.go` (`ParamsFromCache`)
 
 - `<location_hash>`: JSON `[]kroger.Ingredient` (location/date staple ingredient pool)  
-  written and read by `internal/recipes/generator.go` (`GetStaples`)
+  written by `internal/recipes/io.go` (`SaveIngredients`), read by `internal/recipes/io.go` (`IngredientsFromCache`) via `internal/recipes/generator.go` (`GetStaples`)
 
 ## Notes
 

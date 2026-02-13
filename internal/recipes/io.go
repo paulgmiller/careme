@@ -3,6 +3,7 @@ package recipes
 import (
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/kroger"
 	"context"
 	"encoding/json"
 	"errors"
@@ -61,6 +62,50 @@ func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 
 	slog.InfoContext(ctx, "serving shared shoppingList by hash", "hash", hash)
 	return &list, nil
+}
+
+func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generatorParams, error) {
+	paramsReader, err := rio.Cache.Get(ctx, hash+".params")
+	if err != nil {
+		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
+	}
+	defer func() {
+		if err := paramsReader.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close params reader", "hash", hash, "error", err)
+		}
+	}()
+
+	var params generatorParams
+	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
+		return nil, fmt.Errorf("failed to decode params: %w", err)
+	}
+	return &params, nil
+}
+
+func (rio recipeio) IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error) {
+	ingredientBlob, err := rio.Cache.Get(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := ingredientBlob.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close cached ingredients reader", "hash", hash, "error", err)
+		}
+	}()
+
+	var ingredients []kroger.Ingredient
+	if err := json.NewDecoder(ingredientBlob).Decode(&ingredients); err != nil {
+		return nil, err
+	}
+	return ingredients, nil
+}
+
+func (rio recipeio) SaveIngredients(ctx context.Context, hash string, ingredients []kroger.Ingredient) error {
+	ingredientsJSON, err := json.Marshal(ingredients)
+	if err != nil {
+		return err
+	}
+	return rio.Cache.Put(ctx, hash, string(ingredientsJSON), cache.Unconditional())
 }
 
 // exported for backfilling

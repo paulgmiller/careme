@@ -109,7 +109,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := loadParamsFromHash(ctx, recipe.OriginHash, s.cache)
+	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
 		//http.Error(w, "recipe not found or expired", http.StatusNotFound)
@@ -294,7 +294,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	hashParam := r.URL.Query().Get(queryArgHash)
 	if startTime, err := time.Parse(time.RFC3339Nano, startArg); err == nil {
 		if time.Since(startTime) > time.Minute*10 {
-			p, err := loadParamsFromHash(ctx, hashParam, s.cache)
+			p, err := s.ParamsFromCache(ctx, hashParam)
 			if err != nil {
 				slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 				http.Error(w, "recipe not found or expired", http.StatusNotFound)
@@ -337,7 +337,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		p, err := loadParamsFromHash(ctx, hashParam, s.cache)
+		p, err := s.ParamsFromCache(ctx, hashParam)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 			http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)

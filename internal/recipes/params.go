@@ -2,7 +2,6 @@ package recipes
 
 import (
 	"careme/internal/ai"
-	"careme/internal/cache"
 	"careme/internal/locations"
 	"context"
 	"encoding/base64"
@@ -76,25 +75,6 @@ func (g *generatorParams) LocationHash() string {
 	lo.Must(fnv.Write(bytes))
 	// see comment above this suffix is unceessary but keeps old hashes working
 	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("ingredients")))
-}
-
-// loadParamsFromHash loads generator params from cache using the hash
-func loadParamsFromHash(ctx context.Context, hash string, c cache.Cache) (*generatorParams, error) {
-	paramsReader, err := c.Get(ctx, hash+".params")
-	if err != nil {
-		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
-	}
-	defer func() {
-		if err := paramsReader.Close(); err != nil {
-			slog.ErrorContext(ctx, "failed to close params reader", "hash", hash, "error", err)
-		}
-	}()
-
-	var params generatorParams
-	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
-		return nil, fmt.Errorf("failed to decode params: %w", err)
-	}
-	return &params, nil
 }
 
 func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generatorParams, error) {
