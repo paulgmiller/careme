@@ -9,6 +9,7 @@ import (
 	"careme/internal/logsink"
 	"careme/internal/recipes"
 	"careme/internal/seasons"
+	"careme/internal/sitemap"
 	"careme/internal/static"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -57,6 +58,9 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	locationServer := locations.NewServer(locationStorage, userStorage)
 	locationServer.Register(mux, authClient)
+
+	sitemapHandler := sitemap.New(cache)
+	sitemapHandler.Register(mux)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(mux)
