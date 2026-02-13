@@ -37,10 +37,6 @@ type generator interface {
 	Ready(ctx context.Context) error
 }
 
-type sitemapTracker interface {
-	TrackShoppingList(hash string)
-}
-
 type server struct {
 	recipeio
 	cfg       *config.Config
@@ -50,12 +46,11 @@ type server struct {
 	locServer locServer
 	wg        sync.WaitGroup
 	clerk     auth.AuthClient
-	sitemap   sitemapTracker
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, clerkClient auth.AuthClient, sitemap sitemapTracker) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
 		recipeio:  recipeio{Cache: c},
 		cache:     c,
@@ -64,7 +59,6 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		generator: generator,
 		locServer: locServer,
 		clerk:     clerkClient,
-		sitemap:   sitemap,
 	}
 }
 
@@ -479,9 +473,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			return
-		}
-		if s.sitemap != nil {
-			s.sitemap.TrackShoppingList(hash)
 		}
 		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
 

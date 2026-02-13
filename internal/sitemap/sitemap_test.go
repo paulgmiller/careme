@@ -1,8 +1,12 @@
 package sitemap
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/recipes"
 	"context"
-	"errors"
+	"encoding/xml"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,112 +14,61 @@ import (
 	"time"
 )
 
-type fakeStore struct {
-	entries []sitemapEntry
-	append  error
-	read    error
-}
+func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
+	t.Chdir(t.TempDir())
 
-func (f *fakeStore) Append(_ context.Context, entry sitemapEntry) error {
-	if f.append != nil {
-		return f.append
+	cacheStore := cache.NewFileCache(".")
+
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	hashes := make([]string, 0, 3)
+	for i := range 3 {
+		loc := &locations.Location{
+			ID:      fmt.Sprintf("store-%d", i),
+			Name:    "Test Store",
+			Address: "123 Test St",
+		}
+		params := recipes.DefaultParams(loc, start.AddDate(0, 0, i))
+		hash := params.Hash()
+		if err := cacheStore.Put(context.Background(), hash, `{"mock":"shopping-list"}`, cache.Unconditional()); err != nil {
+			t.Fatalf("failed to save hash %q to cache: %v", hash, err)
+		}
+		hashes = append(hashes, hash)
 	}
-	f.entries = append(f.entries, entry)
-	return nil
-}
 
-func (f *fakeStore) ReadAll(_ context.Context) ([]sitemapEntry, error) {
-	if f.read != nil {
-		return nil, f.read
-	}
-	out := make([]sitemapEntry, len(f.entries))
-	copy(out, f.entries)
-	return out, nil
-}
-
-func TestTrackShoppingListAndRender(t *testing.T) {
-	store := &fakeStore{}
-	h := &Server{store: store}
-	h.TrackShoppingList("hash-1")
-	h.TrackShoppingList("hash-2")
-
+	server := New(cacheStore)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
-	h.handleSitemap(rr, req)
+	server.handleSitemap(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "application/xml") {
-		t.Fatalf("expected application/xml content type, got %q", got)
+		t.Fatalf("expected XML content type, got %q", got)
 	}
-	body := rr.Body.String()
-	if !strings.Contains(body, "/recipes?h=hash-1") {
-		t.Fatalf("expected sitemap to include hash-1 URL, body: %s", body)
+
+	var parsed urlSet
+	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
-	if !strings.Contains(body, "/recipes?h=hash-2") {
-		t.Fatalf("expected sitemap to include hash-2 URL, body: %s", body)
+
+	if len(parsed.URLs) != len(hashes) {
+		t.Fatalf("expected %d sitemap urls, got %d", len(hashes), len(parsed.URLs))
+	}
+
+	for _, hash := range hashes {
+		wantURL := "https://careme.cooking/recipes?h=" + hash
+		if !containsSitemapURL(parsed.URLs, wantURL) {
+			t.Fatalf("missing expected URL %q in sitemap body: %s", wantURL, rr.Body.String())
+		}
 	}
 }
 
-func TestRenderUsesLatestTimestampPerURL(t *testing.T) {
-	store := &fakeStore{entries: []sitemapEntry{
-		{URL: "/recipes?h=hash-1", LastMod: time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)},
-		{URL: "/recipes?h=hash-1", LastMod: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)},
-	}}
-	h := &Server{store: store}
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
-	h.handleSitemap(rr, req)
-
-	body := rr.Body.String()
-	if strings.Count(body, "/recipes?h=hash-1") != 1 {
-		t.Fatalf("expected deduped URL entry, got body: %s", body)
+func containsSitemapURL(entries []urlEntry, want string) bool {
+	for _, entry := range entries {
+		if entry.Loc == want {
+			return true
+		}
 	}
-	if !strings.Contains(body, "2025-01-02T00:00:00Z") {
-		t.Fatalf("expected latest timestamp in body: %s", body)
-	}
-}
-
-func TestHandleSitemapReadError(t *testing.T) {
-	h := &Server{store: &fakeStore{read: errors.New("boom")}}
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
-	h.handleSitemap(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rr.Code)
-	}
-}
-
-func TestRegisterMountsSitemapRoute(t *testing.T) {
-	store := &fakeStore{}
-	h := &Server{store: store}
-	h.TrackShoppingList("known-hash")
-
-	mux := http.NewServeMux()
-	h.Register(mux)
-
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
-	mux.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	if !strings.Contains(rr.Body.String(), "/recipes?h=known-hash") {
-		t.Fatalf("expected sitemap route to serve known hash URL")
-	}
-}
-
-func TestParseEntries(t *testing.T) {
-	input := `{"url":"/recipes?h=a","lastmod":"2025-01-02T00:00:00Z"}
-{"url":"/recipes?h=b","lastmod":"2025-01-03T00:00:00Z"}
-`
-	entries, err := parseEntries(strings.NewReader(input))
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
-	}
+	return false
 }
