@@ -7,21 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 )
-
-const (
-	sitemapContainer = "recipes"
-	sitemapBlobName  = "sitemap/urls.ndjson"
-)
-
-type appendBlobStore struct {
-}
-
-type sitemapEntry struct {
-	URL     string    `json:"url"`
-	LastMod time.Time `json:"lastmod"`
-}
 
 type Server struct {
 	cache cache.ListCache

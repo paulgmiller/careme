@@ -55,7 +55,7 @@ func NewFileCache(dir string) *FileCache {
 	return &FileCache{Dir: dir}
 }
 
-func (fc *FileCache) List(_ context.Context, prefix string, token string) ([]string, error) {
+func (fc *FileCache) List(_ context.Context, prefix string, _ string) ([]string, error) {
 	var keys []string
 	err := filepath.Walk(fc.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -123,4 +123,15 @@ func (fc *FileCache) Put(_ context.Context, key, value string, opts PutOptions) 
 
 	// TODO: IfMatch support (write only if etag matches).
 	return os.WriteFile(fullPath, []byte(value), 0644)
+}
+
+func (fc *FileCache) Delete(_ context.Context, key string) error {
+	err := os.Remove(filepath.Join(fc.Dir, key))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return nil
 }
