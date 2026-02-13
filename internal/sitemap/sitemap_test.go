@@ -5,7 +5,6 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"context"
-	"encoding/base64"
 	"encoding/xml"
 	"fmt"
 	"net/http"
@@ -152,17 +151,4 @@ func containsSitemapURL(entries []urlEntry, want string) bool {
 		}
 	}
 	return false
-}
-
-func withLegacyRecipePrefix(t *testing.T, hash string) string {
-	t.Helper()
-	decoded, err := base64.RawURLEncoding.DecodeString(hash)
-	if err != nil {
-		decoded, err = base64.URLEncoding.DecodeString(hash)
-	}
-	if err != nil {
-		t.Fatalf("failed to decode hash %q: %v", hash, err)
-	}
-	legacyDecoded := append([]byte("recipe"), decoded...)
-	return base64.URLEncoding.EncodeToString(legacyDecoded)
 }
