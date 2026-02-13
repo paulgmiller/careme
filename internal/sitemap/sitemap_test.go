@@ -64,6 +64,24 @@ func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
 	}
 }
 
+func TestHandleRobotsReturnsExpectedContent(t *testing.T) {
+	server := &Server{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
+
+	server.handleRobots(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "text/plain") {
+		t.Fatalf("expected text content type, got %q", got)
+	}
+	if rr.Body.String() != fmt.Sprintf(robots, domain) {
+		t.Fatalf("unexpected robots.txt body:\n%s", rr.Body.String())
+	}
+}
+
 func containsSitemapURL(entries []urlEntry, want string) bool {
 	for _, entry := range entries {
 		if entry.Loc == want {
