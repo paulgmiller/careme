@@ -14,6 +14,9 @@ import (
 )
 
 const recipeCachePrefix = "recipe/"
+const ShoppingListCachePrefix = "shoppinglist/"
+const ingredientsCachePrefix = "ingredients/"
+const paramsCachePrefix = "params/"
 
 type recipeio struct {
 	Cache cache.Cache
@@ -43,9 +46,21 @@ func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recip
 }
 
 func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error) {
-	shoppinglist, err := rio.Cache.Get(ctx, hash)
+	primaryKey := ShoppingListCachePrefix + hash
+	shoppinglist, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, cache.ErrNotFound) {
+			return nil, err
+		}
+		legacyHash, ok := legacyRecipeHash(hash)
+		if !ok {
+			return nil, err
+		}
+		shoppinglist, err = rio.Cache.Get(ctx, legacyHash)
+		if err != nil {
+			return nil, err
+		}
+		slog.InfoContext(ctx, "serving legacy cached shoppingList by hash", "hash", hash, "cache_key", legacyHash)
 	}
 	defer func() {
 		if err := shoppinglist.Close(); err != nil {
@@ -65,9 +80,22 @@ func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 }
 
 func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generatorParams, error) {
-	paramsReader, err := rio.Cache.Get(ctx, hash+".params")
+	primaryKey := paramsCachePrefix + hash
+	paramsReader, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {
-		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
+		if !errors.Is(err, cache.ErrNotFound) {
+			return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
+		}
+		legacyHash, ok := legacyRecipeHash(hash)
+		if !ok {
+			return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
+		}
+		legacyKey := legacyHash + ".params"
+		paramsReader, err = rio.Cache.Get(ctx, legacyKey)
+		if err != nil {
+			return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
+		}
+		slog.InfoContext(ctx, "serving legacy cached params by hash", "hash", hash, "cache_key", legacyKey)
 	}
 	defer func() {
 		if err := paramsReader.Close(); err != nil {
@@ -83,9 +111,21 @@ func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generato
 }
 
 func (rio recipeio) IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error) {
-	ingredientBlob, err := rio.Cache.Get(ctx, hash)
+	primaryKey := ingredientsCachePrefix + hash
+	ingredientBlob, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, cache.ErrNotFound) {
+			return nil, err
+		}
+		legacyHash, ok := legacyLocationHash(hash)
+		if !ok {
+			return nil, err
+		}
+		ingredientBlob, err = rio.Cache.Get(ctx, legacyHash)
+		if err != nil {
+			return nil, err
+		}
+		slog.InfoContext(ctx, "serving legacy cached ingredients by hash", "hash", hash, "cache_key", legacyHash)
 	}
 	defer func() {
 		if err := ingredientBlob.Close(); err != nil {
@@ -105,7 +145,7 @@ func (rio recipeio) SaveIngredients(ctx context.Context, hash string, ingredient
 	if err != nil {
 		return err
 	}
-	return rio.Cache.Put(ctx, hash, string(ingredientsJSON), cache.Unconditional())
+	return rio.Cache.Put(ctx, ingredientsCachePrefix+hash, string(ingredientsJSON), cache.Unconditional())
 }
 
 // exported for backfilling
@@ -134,7 +174,7 @@ var ErrAlreadyExists = errors.New("already exists")
 
 func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	paramsJSON := lo.Must(json.Marshal(p))
-	if err := rio.Cache.Put(ctx, p.Hash()+".params", string(paramsJSON), cache.IfNoneMatch()); err != nil {
+	if err := rio.Cache.Put(ctx, paramsCachePrefix+p.Hash(), string(paramsJSON), cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			return ErrAlreadyExists
 		}
@@ -151,7 +191,7 @@ func (rio *recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.Shop
 	}
 	// we could actually nuke out the rest of recipe and lazily load but not yet
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
-	if err := rio.Cache.Put(ctx, hash, string(shoppingJSON), cache.Unconditional()); err != nil {
+	if err := rio.Cache.Put(ctx, ShoppingListCachePrefix+hash, string(shoppingJSON), cache.Unconditional()); err != nil {
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "hash", hash, "error", err)
 		return err
 	}
