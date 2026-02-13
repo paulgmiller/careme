@@ -292,6 +292,12 @@ const (
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	startArg := r.URL.Query().Get(queryArgStart)
 	hashParam := r.URL.Query().Get(queryArgHash)
+	//okay give them a new start time.
+	if startArg == "" {
+		redirectToHash(w, r, hashParam, true /*useStart*/)
+		return
+	}
+
 	if startTime, err := time.Parse(time.RFC3339Nano, startArg); err == nil {
 		if time.Since(startTime) > time.Minute*10 {
 			p, err := s.ParamsFromCache(ctx, hashParam)
@@ -334,7 +340,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
-			http.Error(w, "recipe not found or expired", http.StatusNotFound)
+			http.Error(w, "invalid recipe", http.StatusInternalServerError)
 			return
 		}
 		if r.URL.Query().Has(queryArgStart) {
