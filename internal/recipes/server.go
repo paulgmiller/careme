@@ -324,7 +324,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if hashParam := r.URL.Query().Get(queryArgHash); hashParam != "" {
 		if normalizedHash, ok := normalizeLegacyRecipeHash(hashParam); ok {
 			slog.InfoContext(ctx, "redirecting legacy hash to canonical hash", "legacy_hash", hashParam, "hash", normalizedHash)
-			redirectToCanonicalHash(w, r, normalizedHash)
+			redirectToHash(w, r, normalizedHash, false /*useStart*/)
 			return
 		}
 		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
@@ -512,19 +512,11 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStart bool) {
 	u := url.URL{Path: "/recipes"}
-	args := url.Values{}
+	args := r.URL.Query()
 	args.Set(queryArgHash, hash)
 	if useStart {
 		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
 	}
-	u.RawQuery = args.Encode()
-	http.Redirect(w, r, u.String(), http.StatusSeeOther)
-}
-
-func redirectToCanonicalHash(w http.ResponseWriter, r *http.Request, hash string) {
-	u := url.URL{Path: "/recipes"}
-	args := r.URL.Query()
-	args.Set(queryArgHash, hash)
 	u.RawQuery = args.Encode()
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
 }

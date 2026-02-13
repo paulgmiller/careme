@@ -105,7 +105,7 @@ func legacyHashToCurrent(hash string, seed string) (string, bool) {
 }
 
 func currentHashToLegacy(hash string, seed string) (string, bool) {
-	decoded, err := decodeCanonicalHash(hash)
+	decoded, err := base64.RawURLEncoding.DecodeString(hash)
 	if err != nil || len(decoded) == 0 {
 		return "", false
 	}
@@ -117,14 +117,6 @@ func currentHashToLegacy(hash string, seed string) (string, bool) {
 	legacyDecoded = append(legacyDecoded, seedBytes...)
 	legacyDecoded = append(legacyDecoded, decoded...)
 	return base64.URLEncoding.EncodeToString(legacyDecoded), true
-}
-
-func decodeCanonicalHash(hash string) ([]byte, error) {
-	decoded, err := base64.RawURLEncoding.DecodeString(hash)
-	if err == nil {
-		return decoded, nil
-	}
-	return base64.URLEncoding.DecodeString(hash)
 }
 
 func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generatorParams, error) {

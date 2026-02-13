@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"careme/internal/cache"
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,17 +18,19 @@ import (
 )
 
 const shoppingListPrefix = "shoppinglist/"
-
-type deleter interface {
-	Delete(ctx context.Context, key string) error
-}
+const paramsPrefix = "params/"
+const ingredientsPrefix = "ingredients/"
+const legacyRecipeHashSeed = "recipe"
+const legacyIngredientsHashSeed = "ingredients"
 
 type migrationStats struct {
 	RootKeys           int
 	ShoppingListKeys   int
-	Moved              int
+	ParamsKeys         int
+	IngredientsKeys    int
+	Copied             int
 	SkippedExisting    int
-	SkippedNonShopping int
+	SkippedUnsupported int
 }
 
 func main() {
@@ -48,12 +50,14 @@ func main() {
 	}
 
 	fmt.Printf(
-		"done: root=%d shoppinglists=%d moved=%d skipped_existing=%d skipped_non_shopping=%d mode=%s\n",
+		"done: root=%d shoppinglists=%d params=%d ingredients=%d copied=%d skipped_existing=%d skipped_unsupported=%d mode=%s\n",
 		stats.RootKeys,
 		stats.ShoppingListKeys,
-		stats.Moved,
+		stats.ParamsKeys,
+		stats.IngredientsKeys,
+		stats.Copied,
 		stats.SkippedExisting,
-		stats.SkippedNonShopping,
+		stats.SkippedUnsupported,
 		mode(apply),
 	)
 }
@@ -74,60 +78,76 @@ func migrateShoppingLists(ctx context.Context, c cache.ListCache, apply bool, ou
 	}
 	stats.RootKeys = len(rootKeys)
 
-	var d deleter
-	if apply {
-		var ok bool
-		d, ok = c.(deleter)
-		if !ok {
-			return stats, fmt.Errorf("cache backend %T does not support delete", c)
-		}
-	}
-
 	for _, key := range rootKeys {
-		payload, err := readKey(ctx, c, key)
-		if err != nil {
-			return stats, fmt.Errorf("read %q: %w", key, err)
-		}
-		if !isShoppingList(payload) {
-			stats.SkippedNonShopping++
-			continue
-		}
-
-		stats.ShoppingListKeys++
-		newKey := shoppingListPrefix + key
-		exists, err := c.Exists(ctx, newKey)
-		if err != nil {
-			return stats, fmt.Errorf("check destination %q: %w", newKey, err)
-		}
-		if exists {
-			stats.SkippedExisting++
-			fmt.Fprintf(out, "skip existing %s -> %s\n", key, newKey)
-			continue
-		}
-
-		if !apply {
-			stats.Moved++
-			fmt.Fprintf(out, "would move %s -> %s\n", key, newKey)
-			continue
-		}
-
-		if err := c.Put(ctx, newKey, string(payload), cache.IfNoneMatch()); err != nil {
-			if errors.Is(err, cache.ErrAlreadyExists) {
-				stats.SkippedExisting++
-				fmt.Fprintf(out, "skip existing %s -> %s\n", key, newKey)
-				continue
+		switch {
+		case strings.HasSuffix(key, ".params"):
+			stats.ParamsKeys++
+			recipeHash := strings.TrimSuffix(key, ".params")
+			newKey := paramsPrefix + canonicalOrOriginalHash(recipeHash, legacyRecipeHashSeed)
+			copied, skipped, err := copyKey(ctx, c, key, newKey, apply, out)
+			if err != nil {
+				return stats, err
 			}
-			return stats, fmt.Errorf("write %q: %w", newKey, err)
+			stats.Copied += copied
+			stats.SkippedExisting += skipped
+			continue
+		case hasLegacyHashSeed(key, legacyIngredientsHashSeed):
+			stats.IngredientsKeys++
+			newKey := ingredientsPrefix + canonicalOrOriginalHash(key, legacyIngredientsHashSeed)
+			copied, skipped, err := copyKey(ctx, c, key, newKey, apply, out)
+			if err != nil {
+				return stats, err
+			}
+			stats.Copied += copied
+			stats.SkippedExisting += skipped
+			continue
+		case hasLegacyHashSeed(key, legacyRecipeHashSeed):
+			stats.ShoppingListKeys++
+			newKey := shoppingListPrefix + canonicalOrOriginalHash(key, legacyRecipeHashSeed)
+			copied, skipped, err := copyKey(ctx, c, key, newKey, apply, out)
+			if err != nil {
+				return stats, err
+			}
+			stats.Copied += copied
+			stats.SkippedExisting += skipped
+		default:
+			stats.SkippedUnsupported++
+			continue
 		}
-		if err := d.Delete(ctx, key); err != nil && !errors.Is(err, cache.ErrNotFound) {
-			return stats, fmt.Errorf("delete %q: %w", key, err)
-		}
-
-		stats.Moved++
-		fmt.Fprintf(out, "moved %s -> %s\n", key, newKey)
 	}
 
 	return stats, nil
+}
+
+func copyKey(ctx context.Context, c cache.Cache, srcKey, dstKey string, apply bool, out io.Writer) (copied int, skippedExisting int, err error) {
+	exists, err := c.Exists(ctx, dstKey)
+	if err != nil {
+		return 0, 0, fmt.Errorf("check destination %q: %w", dstKey, err)
+	}
+	if exists {
+		fmt.Fprintf(out, "skip existing %s -> %s\n", srcKey, dstKey)
+		return 0, 1, nil
+	}
+
+	if !apply {
+		fmt.Fprintf(out, "would copy %s -> %s\n", srcKey, dstKey)
+		return 1, 0, nil
+	}
+
+	payload, err := readKey(ctx, c, srcKey)
+	if err != nil {
+		return 0, 0, fmt.Errorf("read %q: %w", srcKey, err)
+	}
+	if err := c.Put(ctx, dstKey, string(payload), cache.IfNoneMatch()); err != nil {
+		if errors.Is(err, cache.ErrAlreadyExists) {
+			fmt.Fprintf(out, "skip existing %s -> %s\n", srcKey, dstKey)
+			return 0, 1, nil
+		}
+		return 0, 0, fmt.Errorf("write %q: %w", dstKey, err)
+	}
+
+	fmt.Fprintf(out, "copied %s -> %s\n", srcKey, dstKey)
+	return 1, 0, nil
 }
 
 func listRootKeys(ctx context.Context, c cache.ListCache) ([]string, error) {
@@ -209,20 +229,23 @@ func readKey(ctx context.Context, c cache.Cache, key string) ([]byte, error) {
 	return io.ReadAll(r)
 }
 
-func isShoppingList(payload []byte) bool {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &obj); err != nil {
+func hasLegacyHashSeed(hash string, seed string) bool {
+	decoded, err := base64.URLEncoding.DecodeString(hash)
+	if err != nil {
 		return false
 	}
+	seedBytes := []byte(seed)
+	return bytes.HasPrefix(decoded, seedBytes) && len(decoded) > len(seedBytes)
+}
 
-	recipesRaw, ok := obj["recipes"]
-	if !ok {
-		return false
+func canonicalOrOriginalHash(hash string, seed string) string {
+	decoded, err := base64.URLEncoding.DecodeString(hash)
+	if err != nil {
+		return hash
 	}
-	if bytes.Equal(bytes.TrimSpace(recipesRaw), []byte("null")) {
-		return false
+	seedBytes := []byte(seed)
+	if !bytes.HasPrefix(decoded, seedBytes) || len(decoded) == len(seedBytes) {
+		return hash
 	}
-
-	var recipes []json.RawMessage
-	return json.Unmarshal(recipesRaw, &recipes) == nil
+	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):])
 }
