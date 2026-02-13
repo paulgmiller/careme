@@ -16,7 +16,6 @@ import (
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"
-	"careme/internal/sitemap"
 	"careme/internal/templates"
 	"careme/internal/users"
 
@@ -142,7 +141,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer := locations.NewServer(locationStorage, userStorage)
 	locationServer.Register(mux, mockAuth)
 	users.NewHandler(userStorage, locationStorage, mockAuth).Register(mux)
-	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth, sitemap.New()).Register(mux)
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(mux)
 
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)
