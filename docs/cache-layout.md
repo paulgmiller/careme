@@ -19,6 +19,14 @@ The same cache keys are used in both backends. Keys with `/` become subdirectori
 | `users/` | JSON `users/types.User` by user ID | `internal/users/storage.go` (`Update`) | `internal/users/storage.go` (`GetByID`, `List`) |
 | `email2user/` | Plain text user ID keyed by normalized email | `internal/users/storage.go` (`FindOrCreateFromClerk`) | `internal/users/storage.go` (`GetByEmail`) |
 
+## Legacy Root Keys
+
+Legacy root keys may still exist from older deployments and are treated as migration sources:
+
+- `<legacy_seeded_shopping_hash>`: legacy shopping list payload
+- `<legacy_seeded_location_hash>`: legacy ingredient payload
+- `<legacy_seeded_shopping_hash>.params`: legacy params payload
+
 ## Notes
 
 - Cache backend selection is in `internal/cache/azure.go` (`MakeCache`).
@@ -26,3 +34,4 @@ The same cache keys are used in both backends. Keys with `/` become subdirectori
 - Blob names in Azure match the same key strings listed above.
 - Back compatibility: shopping list reads check `shoppinglist/<canonical_hash>` first, then legacy root `<legacy_seeded_shopping_hash>`. Ingredient reads check `ingredients/<canonical_hash>` first, then legacy root `<legacy_seeded_location_hash>`. Params reads check `params/<canonical_hash>` first, then legacy root `<legacy_seeded_shopping_hash>.params`.
 - Hash compatibility: canonical shopping and location hashes are now raw FNV64 URL-safe base64. Legacy seeded hashes (prefixed with `recipe`/`ingredients` in decoded bytes) are still supported for reads; `/recipes?h=...` redirects legacy shopping hashes to canonical hashes.
+- Migration utility: `cmd/moveshoppinglists` copies legacy root keys into prefixed canonical keys (`shoppinglist/`, `ingredients/`, `params/`) and transforms seeded legacy hashes to canonical hashes during copy.

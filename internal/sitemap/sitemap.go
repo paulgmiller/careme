@@ -1,10 +1,8 @@
 package sitemap
 
 import (
-	"bytes"
 	"careme/internal/cache"
 	"careme/internal/recipes"
-	"encoding/base64"
 	"encoding/xml"
 	"fmt"
 	"log/slog"
@@ -46,19 +44,6 @@ type urlSet struct {
 type urlEntry struct {
 	Loc     string `xml:"loc"`
 	LastMod string `xml:"lastmod,omitempty"`
-}
-
-func normalizeLegacyRecipeHash(hash string) string {
-	const legacyPrefix = "recipe"
-	b, err := base64.URLEncoding.DecodeString(hash)
-	if err != nil {
-		return hash
-	}
-	prefixBytes := []byte(legacyPrefix)
-	if !bytes.HasPrefix(b, prefixBytes) || len(b) == len(prefixBytes) {
-		return hash
-	}
-	return base64.RawURLEncoding.EncodeToString(b[len(prefixBytes):])
 }
 
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
