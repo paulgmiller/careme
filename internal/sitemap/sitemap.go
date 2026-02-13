@@ -77,6 +77,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		}
 		entries = append(entries, urlEntry{Loc: domain + "/recipes?h=" + hash})
 	}
+	slog.InfoContext(r.Context(), "serving sitemap with recipe urls", "count", len(entries), "blobcount", len(hashes))
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	if _, err := w.Write([]byte(xml.Header)); err != nil {

@@ -59,10 +59,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	locationServer := locations.NewServer(locationStorage, userStorage)
 	locationServer.Register(mux, authClient)
 
-	sitemapHandler := sitemap.New()
+	sitemapHandler := sitemap.New(cache)
 	sitemapHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient, sitemapHandler)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
