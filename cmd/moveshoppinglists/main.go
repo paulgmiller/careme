@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 const shoppingListPrefix = "shoppinglist/"
@@ -125,12 +127,12 @@ func copyKey(ctx context.Context, c cache.Cache, srcKey, dstKey string, apply bo
 		return 0, 0, fmt.Errorf("check destination %q: %w", dstKey, err)
 	}
 	if exists {
-		fmt.Fprintf(out, "skip existing %s -> %s\n", srcKey, dstKey)
+		_ = lo.Must(fmt.Fprintf(out, "skip existing %s -> %s\n", srcKey, dstKey))
 		return 0, 1, nil
 	}
 
 	if !apply {
-		fmt.Fprintf(out, "would copy %s -> %s\n", srcKey, dstKey)
+		_ = lo.Must(fmt.Fprintf(out, "would copy %s -> %s\n", srcKey, dstKey))
 		return 1, 0, nil
 	}
 
@@ -140,13 +142,13 @@ func copyKey(ctx context.Context, c cache.Cache, srcKey, dstKey string, apply bo
 	}
 	if err := c.Put(ctx, dstKey, string(payload), cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
-			fmt.Fprintf(out, "skip existing %s -> %s\n", srcKey, dstKey)
+			_ = lo.Must(fmt.Fprintf(out, "skip existing %s -> %s\n", srcKey, dstKey))
 			return 0, 1, nil
 		}
 		return 0, 0, fmt.Errorf("write %q: %w", dstKey, err)
 	}
 
-	fmt.Fprintf(out, "copied %s -> %s\n", srcKey, dstKey)
+	_ = lo.Mustfmt.Fprintf(out, "copied %s -> %s\n", srcKey, dstKey))
 	return 1, 0, nil
 }
 
