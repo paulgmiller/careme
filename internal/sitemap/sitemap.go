@@ -2,7 +2,7 @@ package sitemap
 
 import (
 	"careme/internal/cache"
-	"encoding/base64"
+	"careme/internal/recipes"
 	"encoding/xml"
 	"fmt"
 	"log/slog"
@@ -46,17 +46,9 @@ type urlEntry struct {
 	LastMod string `xml:"lastmod,omitempty"`
 }
 
-func fnv64hash(hash string) bool {
-	b, err := base64.URLEncoding.DecodeString(hash)
-	if err != nil || len(b) != 14 {
-		slog.Error("invalid hash in sitemap", "hash", hash, "error", err, "length", len(b))
-		return false
-	}
-	return true
-}
-
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
-	hashes, err := s.cache.List(r.Context(), "", "")
+
+	hashes, err := s.cache.List(r.Context(), recipes.ShoppingListCachePrefix, "")
 	if err != nil {
 		http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
 		slog.ErrorContext(r.Context(), "failed to read sitemap urls", "error", err)
@@ -66,13 +58,8 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 
 	//this is going to get too  big.  at some point we need a real db to find latest
 	//or we track new entries and expire a lsit.
-	for _, hash := range hashes {
-		if hash == "" || strings.Contains(hash, "/") || strings.HasSuffix(hash, ".params") {
-			continue
-		}
-		if !fnv64hash(hash) {
-			continue
-		}
+	for _, key := range hashes {
+		hash := strings.TrimPrefix(key, recipes.ShoppingListCachePrefix)
 		entries = append(entries, urlEntry{Loc: domain + "/recipes?h=" + hash})
 	}
 	slog.InfoContext(r.Context(), "serving sitemap with recipe urls", "count", len(entries), "blobcount", len(hashes))

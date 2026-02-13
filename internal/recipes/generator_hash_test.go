@@ -22,9 +22,17 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 		t.Fatalf("expected equal hashes for same day with different hours: got %s and %s", h1, h2)
 	}
 
-	//make sure we're intentional about breaking hash
-	if h1 != "cmVjaXBl5paGKJp_BFc=" {
-		t.Fatalf("expected hash to be stable and equal to cmVjaXBl5paGKJp_BFc=, got %s", h1)
+	// make sure we're intentional about breaking hash
+	if h1 != "5paGKJp_BFc" {
+		t.Fatalf("expected hash to be stable and equal to 5paGKJp_BFc, got %s", h1)
+	}
+
+	legacyHash, ok := legacyRecipeHash(h1)
+	if !ok {
+		t.Fatal("expected current hash passhed to legacy")
+	}
+	if legacyHash != "cmVjaXBl5paGKJp_BFc=" {
+		t.Fatalf("expected legacy hash to be base64 of recipe hash with prefix, got %s", legacyHash)
 	}
 
 	// ensure stability across multiple calls
@@ -57,5 +65,26 @@ func TestGeneratorParamsLocationHashStableForDifferentHours(t *testing.T) {
 	// ensure stability across multiple calls
 	if lh1 != p1.LocationHash() {
 		t.Fatalf("location hash not stable across multiple calls: %s vs %s", lh1, p1.LocationHash())
+	}
+}
+
+func TestNormalizeLegacyRecipeHash(t *testing.T) {
+	p := DefaultParams(&locations.Location{ID: "loc-legacy", Name: "Legacy Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+	hash := p.Hash()
+	legacyHash, ok := legacyRecipeHash(hash)
+	if !ok {
+		t.Fatal("expected to derive legacy recipe hash")
+	}
+
+	normalized, ok := normalizeLegacyRecipeHash(legacyHash)
+	if !ok {
+		t.Fatal("expected legacy hash normalization to succeed")
+	}
+	if normalized != hash {
+		t.Fatalf("expected normalized hash %q, got %q", hash, normalized)
+	}
+
+	if _, ok := normalizeLegacyRecipeHash(hash); ok {
+		t.Fatalf("expected canonical hash %q not to be treated as legacy", hash)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"careme/internal/locations"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -126,18 +127,12 @@ func Filter(term string, brands []string, frozen bool) filter {
 func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
 	lochash := p.LocationHash()
 	var ingredients []kroger.Ingredient
+	rio := IO(g.cache)
 
-	if ingredientblob, err := g.cache.Get(ctx, lochash); err == nil {
-		defer func() {
-			if err := ingredientblob.Close(); err != nil {
-				slog.ErrorContext(ctx, "failed to close cached ingredients reader", "location", p.String(), "error", err)
-			}
-		}()
-		jsonReader := json.NewDecoder(ingredientblob)
-		if err := jsonReader.Decode(&ingredients); err == nil {
-			slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(ingredients))
-			return ingredients, nil
-		}
+	if cachedIngredients, err := rio.IngredientsFromCache(ctx, lochash); err == nil {
+		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
+		return cachedIngredients, nil
+	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
@@ -163,12 +158,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 
 	mutable.Shuffle(ingredients)
 
-	allingredientsJSON, err := json.Marshal(ingredients)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to marshal ingredients", "location", p.String(), "error", err)
-		return nil, err
-	}
-	if err := g.cache.Put(ctx, p.LocationHash(), string(allingredientsJSON), cache.Unconditional()); err != nil {
+	if err := rio.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}

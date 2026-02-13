@@ -29,7 +29,7 @@ func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
 		}
 		params := recipes.DefaultParams(loc, start.AddDate(0, 0, i))
 		hash := params.Hash()
-		if err := cacheStore.Put(context.Background(), hash, `{"mock":"shopping-list"}`, cache.Unconditional()); err != nil {
+		if err := cacheStore.Put(context.Background(), "shoppinglist/"+hash, `{"mock":"shopping-list"}`, cache.Unconditional()); err != nil {
 			t.Fatalf("failed to save hash %q to cache: %v", hash, err)
 		}
 		hashes = append(hashes, hash)
@@ -61,6 +61,68 @@ func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
 		if !containsSitemapURL(parsed.URLs, wantURL) {
 			t.Fatalf("missing expected URL %q in sitemap body: %s", wantURL, rr.Body.String())
 		}
+	}
+}
+
+func TestHandleSitemapNormalizesLegacyShoppingListHashToCanonical(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	cacheStore := cache.NewFileCache(".")
+	params := recipes.DefaultParams(&locations.Location{ID: "store", Name: "Store"}, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	hash := params.Hash()
+
+	if err := cacheStore.Put(context.Background(), "shoppinglist/"+hash, `{"mock":"legacy"}`, cache.Unconditional()); err != nil {
+		t.Fatalf("failed to save prefixed key: %v", err)
+	}
+
+	server := New(cacheStore)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
+	server.handleSitemap(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var parsed urlSet
+	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
+	}
+	if len(parsed.URLs) != 1 {
+		t.Fatalf("expected one URL, got %d", len(parsed.URLs))
+	}
+	wantURL := "https://careme.cooking/recipes?h=" + hash
+	if parsed.URLs[0].Loc != wantURL {
+		t.Fatalf("expected URL %q, got %q", wantURL, parsed.URLs[0].Loc)
+	}
+}
+
+func TestHandleSitemap_IgnoresNonShoppingListKeys(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	cacheStore := cache.NewFileCache(".")
+	params := recipes.DefaultParams(&locations.Location{ID: "store", Name: "Store"}, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	hash := params.Hash()
+
+	if err := cacheStore.Put(context.Background(), hash, `{"mock":"legacy-root-shopping-list"}`, cache.Unconditional()); err != nil {
+		t.Fatalf("failed to save legacy root key: %v", err)
+	}
+
+	server := New(cacheStore)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
+	server.handleSitemap(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var parsed urlSet
+	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
+	}
+	if len(parsed.URLs) != 0 {
+		t.Fatalf("expected no URLs from non-shoppinglist keys, got %d", len(parsed.URLs))
 	}
 }
 

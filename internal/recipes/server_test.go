@@ -4,6 +4,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/locations"
 	"careme/internal/users"
 	"context"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRedirectToHash(t *testing.T) {
@@ -34,6 +36,66 @@ func TestRedirectToHash(t *testing.T) {
 	location := rr.Header().Get("Location")
 	if !strings.HasPrefix(location, expectedLocation) {
 		t.Errorf("handler returned wrong location: got %v want prefix %v", location, expectedLocation)
+	}
+}
+
+func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
+	p := DefaultParams(&locations.Location{ID: "loc-123", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
+	hash := p.Hash()
+	legacyHash, ok := legacyRecipeHash(hash)
+	if !ok {
+		t.Fatal("expected to derive legacy recipe hash")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(legacyHash), nil)
+	rr := httptest.NewRecorder()
+
+	s := &server{}
+	s.handleRecipes(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+	location := rr.Header().Get("Location")
+	u, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("failed to parse redirect location %q: %v", location, err)
+	}
+	if got := u.Query().Get("h"); got != hash {
+		t.Fatalf("expected redirect hash %q, got %q", hash, got)
+	}
+}
+
+func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
+	p := DefaultParams(&locations.Location{ID: "loc-abc", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
+	hash := p.Hash()
+	legacyHash, ok := legacyRecipeHash(hash)
+	if !ok {
+		t.Fatal("expected to derive legacy recipe hash")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(legacyHash)+"&mail=true&start=2026-01-25T00%3A00%3A00Z", nil)
+	rr := httptest.NewRecorder()
+
+	s := &server{}
+	s.handleRecipes(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+	location := rr.Header().Get("Location")
+	u, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("failed to parse redirect location %q: %v", location, err)
+	}
+	if got := u.Query().Get("h"); got != hash {
+		t.Fatalf("expected redirect hash %q, got %q", hash, got)
+	}
+	if got := u.Query().Get("mail"); got != "true" {
+		t.Fatalf("expected mail=true to be preserved, got %q", got)
+	}
+	if got := u.Query().Get("start"); got != "2026-01-25T00:00:00Z" {
+		t.Fatalf("expected start to be preserved, got %q", got)
 	}
 }
 

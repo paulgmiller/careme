@@ -109,7 +109,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := loadParamsFromHash(ctx, recipe.OriginHash, s.cache)
+	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
 		//http.Error(w, "recipe not found or expired", http.StatusNotFound)
@@ -294,7 +294,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	hashParam := r.URL.Query().Get(queryArgHash)
 	if startTime, err := time.Parse(time.RFC3339Nano, startArg); err == nil {
 		if time.Since(startTime) > time.Minute*10 {
-			p, err := loadParamsFromHash(ctx, hashParam, s.cache)
+			p, err := s.ParamsFromCache(ctx, hashParam)
 			if err != nil {
 				slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 				http.Error(w, "recipe not found or expired", http.StatusNotFound)
@@ -322,6 +322,11 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if hashParam := r.URL.Query().Get(queryArgHash); hashParam != "" {
+		if normalizedHash, ok := normalizeLegacyRecipeHash(hashParam); ok {
+			slog.InfoContext(ctx, "redirecting legacy hash to canonical hash", "legacy_hash", hashParam, "hash", normalizedHash)
+			redirectToHash(w, r, normalizedHash, false /*useStart*/)
+			return
+		}
 		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 		if err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
@@ -337,7 +342,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		p, err := loadParamsFromHash(ctx, hashParam, s.cache)
+		p, err := s.ParamsFromCache(ctx, hashParam)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 			http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
@@ -507,7 +512,7 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStart bool) {
 	u := url.URL{Path: "/recipes"}
-	args := url.Values{}
+	args := r.URL.Query()
 	args.Set(queryArgHash, hash)
 	if useStart {
 		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
