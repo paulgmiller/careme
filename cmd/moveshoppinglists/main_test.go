@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
+	"strings"
 	"testing"
 )
 
@@ -133,6 +135,149 @@ func TestMigrateShoppingListsApply_TransformsLegacySeededHashes(t *testing.T) {
 	if _, err := fc.Get(ctx, ingredientsPrefix+canonicalIngredients); err != nil {
 		t.Fatalf("expected canonical ingredients key: %v", err)
 	}
+}
+
+func TestMigrateShoppingListsApply_DeletesSourceWhenDestinationExists(t *testing.T) {
+	ctx := context.Background()
+	fc := cache.NewFileCache(t.TempDir())
+	canonicalShopping := "5paGKJp_BFc"
+	legacyShopping := toLegacyHash(t, canonicalShopping, legacyRecipeHashSeed)
+	dstKey := shoppingListPrefix + canonicalShopping
+
+	if err := fc.Put(ctx, legacyShopping, `{"recipes":[{"title":"Old"}]}`, cache.Unconditional()); err != nil {
+		t.Fatalf("seed legacy shopping list: %v", err)
+	}
+	if err := fc.Put(ctx, dstKey, `{"recipes":[{"title":"Canonical"}]}`, cache.Unconditional()); err != nil {
+		t.Fatalf("seed canonical shopping list: %v", err)
+	}
+
+	stats, err := migrateShoppingLists(ctx, fc, true, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if stats.Copied != 0 {
+		t.Fatalf("expected 0 copied keys, got %d", stats.Copied)
+	}
+	if stats.SkippedExisting != 1 {
+		t.Fatalf("expected 1 skipped existing key, got %d", stats.SkippedExisting)
+	}
+
+	if _, err := fc.Get(ctx, legacyShopping); !errors.Is(err, cache.ErrNotFound) {
+		t.Fatalf("expected legacy key deleted when destination exists, got err=%v", err)
+	}
+
+	r, err := fc.Get(ctx, dstKey)
+	if err != nil {
+		t.Fatalf("get canonical shopping list: %v", err)
+	}
+	body, err := io.ReadAll(r)
+	_ = r.Close()
+	if err != nil {
+		t.Fatalf("read canonical shopping list: %v", err)
+	}
+	if string(body) != `{"recipes":[{"title":"Canonical"}]}` {
+		t.Fatalf("expected destination payload unchanged, got %q", body)
+	}
+}
+
+func TestMigrateShoppingListsDryRun_DoesNotDeleteSourceWhenDestinationExists(t *testing.T) {
+	ctx := context.Background()
+	fc := cache.NewFileCache(t.TempDir())
+	canonicalShopping := "5paGKJp_BFc"
+	legacyShopping := toLegacyHash(t, canonicalShopping, legacyRecipeHashSeed)
+	dstKey := shoppingListPrefix + canonicalShopping
+
+	if err := fc.Put(ctx, legacyShopping, `{"recipes":[{"title":"Old"}]}`, cache.Unconditional()); err != nil {
+		t.Fatalf("seed legacy shopping list: %v", err)
+	}
+	if err := fc.Put(ctx, dstKey, `{"recipes":[{"title":"Canonical"}]}`, cache.Unconditional()); err != nil {
+		t.Fatalf("seed canonical shopping list: %v", err)
+	}
+
+	stats, err := migrateShoppingLists(ctx, fc, false, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if stats.Copied != 0 {
+		t.Fatalf("expected 0 planned copies when destination exists, got %d", stats.Copied)
+	}
+	if stats.SkippedExisting != 1 {
+		t.Fatalf("expected 1 skipped existing key, got %d", stats.SkippedExisting)
+	}
+
+	if _, err := fc.Get(ctx, legacyShopping); err != nil {
+		t.Fatalf("expected legacy key to remain in dry-run, err=%v", err)
+	}
+}
+
+func TestCopyKeyApply_DeletesSourceWhenPutReportsAlreadyExists(t *testing.T) {
+	ctx := context.Background()
+	srcKey := "legacy"
+	dstKey := "shoppinglist/canonical"
+
+	c := &raceAlreadyExistsCache{
+		srcKey: srcKey,
+		dstKey: dstKey,
+		data: map[string]string{
+			srcKey: `{"recipes":[{"title":"Old"}]}`,
+			dstKey: `{"recipes":[{"title":"Canonical"}]}`,
+		},
+	}
+
+	copied, skippedExisting, err := copyKey(ctx, c, srcKey, dstKey, true, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("copyKey: %v", err)
+	}
+	if copied != 0 {
+		t.Fatalf("expected copied=0, got %d", copied)
+	}
+	if skippedExisting != 1 {
+		t.Fatalf("expected skippedExisting=1, got %d", skippedExisting)
+	}
+	if _, ok := c.data[srcKey]; ok {
+		t.Fatalf("expected source key deleted after concurrent destination existence")
+	}
+	if _, ok := c.data[dstKey]; !ok {
+		t.Fatalf("expected destination key to remain")
+	}
+}
+
+type raceAlreadyExistsCache struct {
+	srcKey string
+	dstKey string
+	data   map[string]string
+}
+
+func (c *raceAlreadyExistsCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
+	v, ok := c.data[key]
+	if !ok {
+		return nil, cache.ErrNotFound
+	}
+	return io.NopCloser(strings.NewReader(v)), nil
+}
+
+func (c *raceAlreadyExistsCache) Exists(_ context.Context, key string) (bool, error) {
+	if key == c.dstKey {
+		return false, nil
+	}
+	_, ok := c.data[key]
+	return ok, nil
+}
+
+func (c *raceAlreadyExistsCache) Put(_ context.Context, key, value string, opts cache.PutOptions) error {
+	if key == c.dstKey && opts.Condition == cache.PutIfNoneMatch {
+		return cache.ErrAlreadyExists
+	}
+	c.data[key] = value
+	return nil
+}
+
+func (c *raceAlreadyExistsCache) Delete(_ context.Context, key string) error {
+	if _, ok := c.data[key]; !ok {
+		return cache.ErrNotFound
+	}
+	delete(c.data, key)
+	return nil
 }
 
 func toLegacyHash(t *testing.T, canonicalHash string, seed string) string {

@@ -127,7 +127,14 @@ func copyKey(ctx context.Context, c cache.Cache, srcKey, dstKey string, apply bo
 		return 0, 0, fmt.Errorf("check destination %q: %w", dstKey, err)
 	}
 	if exists {
-		_ = lo.Must(fmt.Fprintf(out, "skip existing %s -> %s\n", srcKey, dstKey))
+		if apply {
+			if err := deleteKey(ctx, c, srcKey); err != nil {
+				return 0, 0, fmt.Errorf("delete source %q after existing destination %q: %w", srcKey, dstKey, err)
+			}
+			_ = lo.Must(fmt.Fprintf(out, "deleted source %s (destination exists: %s)\n", srcKey, dstKey))
+		} else {
+			_ = lo.Must(fmt.Fprintf(out, "would delete source %s (destination exists: %s)\n", srcKey, dstKey))
+		}
 		return 0, 1, nil
 	}
 
@@ -141,15 +148,26 @@ func copyKey(ctx context.Context, c cache.Cache, srcKey, dstKey string, apply bo
 		return 0, 0, fmt.Errorf("read %q: %w", srcKey, err)
 	}
 	if err := c.Put(ctx, dstKey, string(payload), cache.IfNoneMatch()); err != nil {
-		if errors.Is(err, cache.ErrAlreadyExists) {
-			_ = lo.Must(fmt.Fprintf(out, "skip existing %s -> %s\n", srcKey, dstKey))
-			return 0, 1, nil
-		}
 		return 0, 0, fmt.Errorf("write %q: %w", dstKey, err)
 	}
 
 	_ = lo.Must(fmt.Fprintf(out, "copied %s -> %s\n", srcKey, dstKey))
 	return 1, 0, nil
+}
+
+type cacheDeleter interface {
+	Delete(ctx context.Context, key string) error
+}
+
+func deleteKey(ctx context.Context, c cache.Cache, key string) error {
+	deleter, ok := c.(cacheDeleter)
+	if !ok {
+		return fmt.Errorf("cache does not support delete")
+	}
+	if err := deleter.Delete(ctx, key); err != nil && !errors.Is(err, cache.ErrNotFound) {
+		return err
+	}
+	return nil
 }
 
 func listRootKeys(ctx context.Context, c cache.ListCache) ([]string, error) {
