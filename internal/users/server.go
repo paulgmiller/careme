@@ -131,6 +131,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		if shoppingDay := strings.TrimSpace(r.FormValue("shopping_day")); shoppingDay != "" {
 			currentUser.ShoppingDay = shoppingDay
 		}
+		currentUser.MailOptIn = r.FormValue("mail_opt_in") == "1"
 
 		if err := s.storage.Update(currentUser); err != nil {
 			slog.ErrorContext(ctx, "failed to update user", "error", err)

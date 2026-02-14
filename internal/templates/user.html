@@ -18,7 +18,7 @@
             ← Back to Home
           </a>
           <h1 class="mt-4 text-4xl font-extrabold tracking-tight text-brand-700">User Profile</h1>
-          <p class="mt-2 text-sm text-gray-600">Manage your account details, grocery preferences, and saved recipes.</p>
+          <p class="mt-2 text-sm text-gray-600">Manage your account details, grocery preferences, email preferences, and saved recipes.</p>
           {{if .Success}}
           <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             Settings saved successfully!
@@ -81,6 +81,20 @@
                   <option value="Friday" {{if eq .User.ShoppingDay "Friday" }}selected{{end}}>Friday</option>
                   <option value="Saturday" {{if eq .User.ShoppingDay "Saturday" }}selected{{end}}>Saturday</option>
                 </select>
+              </div>
+
+              <div class="space-y-2">
+                <label for="mail_opt_in" class="text-sm font-medium text-gray-700">Recipe emails</label>
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input id="mail_opt_in"
+                         name="mail_opt_in"
+                         type="checkbox"
+                         value="1"
+                         {{if .User.MailOptIn}}checked{{end}}
+                         class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-400" />
+                  Send me recipe emails
+                </label>
+                <p class="text-xs text-gray-500">Turn this on to receive recipe emails from your saved store preferences.</p>
               </div>
 
               <button type="submit"
