@@ -12,6 +12,7 @@ import (
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,6 +23,14 @@ import (
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
+
+const mailSentPrefix = "mail/sent/"
+
+type mailSentClaim struct {
+	SentAt     time.Time `json:"sent_at"`
+	UserID     string    `json:"user_id"`
+	ParamsHash string    `json:"params_hash"`
+}
 
 type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
@@ -92,6 +101,11 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		return
 	}
 
+	if len(user.Email) == 0 {
+		slog.ErrorContext(ctx, "user has no email", "user", user.ID)
+		return
+	}
+
 	if user.FavoriteStore == "" {
 		slog.InfoContext(ctx, "no favorite store", "user", user.ID)
 		return
@@ -113,6 +127,17 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	}
 
 	paramsHash := p.Hash()
+	sentKey := mailSentPrefix + paramsHash + "/" + user.ID
+	alreadySent, err := m.cache.Exists(ctx, sentKey)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check mail sent status", "user", user.ID, "params_hash", paramsHash, "error", err)
+		return
+	}
+	if alreadySent {
+		slog.InfoContext(ctx, "already emailed user for params hash", "user", user.ID, "params_hash", paramsHash)
+		return
+	}
+
 	rio := recipes.IO(m.cache)
 	shoppingList, err := rio.FromCache(ctx, paramsHash)
 	if err != nil {
@@ -127,6 +152,8 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 				return
 			}
 		}
+
+		//can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
 		if err != nil {
@@ -149,17 +176,33 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	subject := "Your new recipes are ready!"
 
 	plainTextContent := "Check out your new recipes at https://careme.cooking/recipes?h=" + paramsHash
-	for _, email := range user.Email {
-		to := mail.NewEmail("Example User", email) // todo email whole list
-		message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
 
-		// client.Request, _ = sendgrid.SetDataResidency(client.Request, "eu")
-		// uncomment the above line if you are sending mail using a regional EU subuser
-		response, err := m.client.Send(message)
-		if err != nil {
-			slog.ErrorContext(ctx, "mail error", "error", err.Error(), "user", user.Email[0])
-		} else {
-			slog.InfoContext(ctx, "status", slog.Int("status", response.StatusCode), "body", response.Body, "headers", response.Headers)
-		}
+	to := mail.NewEmail(user.Email[0], user.Email[0])
+	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
+	for _, e := range user.Email[1:] {
+		p := mail.NewPersonalization()
+		p.AddTos(mail.NewEmail(e, e))
+		message.AddPersonalizations(p)
+	}
+	// client.Request, _ = sendgrid.SetDataResidency(client.Request, "eu")
+	// uncomment the above line if you are sending mail using a regional EU subuser
+	response, err := m.client.Send(message)
+	if err != nil {
+		slog.ErrorContext(ctx, "mail error", "error", err.Error(), "user", user.Email[0])
+		return
+	}
+	slog.InfoContext(ctx, "status", slog.Int("status", response.StatusCode), "body", response.Body, "headers", response.Headers)
+
+	sentClaim, err := json.Marshal(mailSentClaim{
+		SentAt:     time.Now().UTC(),
+		UserID:     user.ID,
+		ParamsHash: paramsHash,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to encode sent claim", "user", user.ID, "params_hash", paramsHash, "error", err)
+		return
+	}
+	if err := m.cache.Put(ctx, sentKey, string(sentClaim), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
+		slog.ErrorContext(ctx, "failed to record sent mail claim", "user", user.ID, "params_hash", paramsHash, "error", err)
 	}
 }
