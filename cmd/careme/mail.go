@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
@@ -189,6 +190,14 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	response, err := m.client.Send(message)
 	if err != nil {
 		slog.ErrorContext(ctx, "mail error", "error", err.Error(), "user", user.Email[0])
+		return
+	}
+	if response == nil {
+		slog.ErrorContext(ctx, "mail error", "error", "nil sendgrid response", "user", user.Email[0])
+		return
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		slog.ErrorContext(ctx, "mail rejected by sendgrid", "status", response.StatusCode, "body", response.Body, "headers", response.Headers, "user", user.Email[0])
 		return
 	}
 	slog.InfoContext(ctx, "status", slog.Int("status", response.StatusCode), "body", response.Body, "headers", response.Headers)
