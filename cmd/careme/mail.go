@@ -39,8 +39,6 @@ type mailer struct {
 	client      emailClient
 }
 
-const mailRoundLockPrefix = "mail/round/"
-
 // TODO share some of this with web.go? good for mocking?
 func NewMailer(cfg *config.Config) (*mailer, error) {
 	cache, err := cache.MakeCache()
@@ -75,26 +73,8 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}, nil
 }
 
-func (m *mailer) Iterate(ctx context.Context, duration time.Duration) {
-	m.sendRound(ctx, duration, time.Now())
-	ticker := time.NewTicker(duration)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			m.sendRound(ctx, duration, time.Now())
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (m *mailer) sendRound(ctx context.Context, duration time.Duration, now time.Time) {
-	lockKey, ok := m.claimRound(ctx, now, duration)
-	if !ok {
-		return
-	}
-	slog.InfoContext(ctx, "starting user email round", "round", lockKey)
+func (m *mailer) RunOnce(ctx context.Context) {
+	slog.InfoContext(ctx, "starting user email run")
 	users, err := m.userStorage.List(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to list users", "error", err.Error())
@@ -104,19 +84,6 @@ func (m *mailer) sendRound(ctx context.Context, duration time.Duration, now time
 	for _, user := range users {
 		m.sendEmail(ctx, user)
 	}
-}
-
-func (m *mailer) claimRound(ctx context.Context, now time.Time, duration time.Duration) (string, bool) {
-	lockKey := mailRoundLockPrefix + now.UTC().Truncate(duration).Format("20060102T150405Z")
-	if err := m.cache.Put(ctx, lockKey, now.UTC().Format(time.RFC3339), cache.IfNoneMatch()); err != nil {
-		if errors.Is(err, cache.ErrAlreadyExists) {
-			slog.InfoContext(ctx, "mail round already claimed by another replica", "round", lockKey)
-			return lockKey, false
-		}
-		slog.ErrorContext(ctx, "failed to claim mail round", "round", lockKey, "error", err.Error())
-		return lockKey, false
-	}
-	return lockKey, true
 }
 
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
@@ -138,40 +105,38 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 
 	p := recipes.DefaultParams(l, time.Now().Add(-6*time.Hour)) // how do we get the timezone of the user?
 	// p.UserID = user.ID
-	rio := recipes.IO(m.cache)
-	if _, err := rio.FromCache(ctx, p.Hash()); err == nil {
-		// already generated. Assume we sent for now (need better atomic tracking)
-		// must include user id in tracking.
-		slog.InfoContext(ctx, "already emailed", "user", user.ID)
-		return
-	}
-
 	for _, last := range user.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
 			continue
 		}
 		p.LastRecipes = append(p.LastRecipes, last.Title)
 	}
-	if err := rio.SaveParams(ctx, p); err != nil {
-		if errors.Is(err, recipes.ErrAlreadyExists) {
-			slog.InfoContext(ctx, "params already exist, another process likely generated", "user", user.ID)
+
+	paramsHash := p.Hash()
+	rio := recipes.IO(m.cache)
+	shoppingList, err := rio.FromCache(ctx, paramsHash)
+	if err != nil {
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to read shopping list from cache", "user", user.ID, "params_hash", paramsHash, "error", err)
 			return
 		}
 
-		slog.ErrorContext(ctx, "failed to save params", "error", err.Error())
-		return
-	}
+		if err := rio.SaveParams(ctx, p); err != nil {
+			if !errors.Is(err, recipes.ErrAlreadyExists) {
+				slog.ErrorContext(ctx, "failed to save params", "user", user.ID, "params_hash", paramsHash, "error", err)
+				return
+			}
+		}
 
-	shoppingList, err := m.generator.GenerateRecipes(ctx, p)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.Email)
-		return
-	}
-
-	// combine hee save recipes with html
-	if err := rio.SaveShoppingList(ctx, shoppingList, p.Hash()); err != nil {
-		slog.ErrorContext(ctx, "failed to save shopping list", "error", err.Error())
-		return
+		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.ID, "params_hash", paramsHash, "error", err)
+			return
+		}
+		if err := rio.SaveShoppingList(ctx, shoppingList, paramsHash); err != nil {
+			slog.ErrorContext(ctx, "failed to save shopping list", "user", user.ID, "params_hash", paramsHash, "error", err)
+			return
+		}
 	}
 
 	var buf bytes.Buffer
@@ -183,7 +148,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"
 
-	plainTextContent := "Check out your new recipes at https://careme.cooking/recipes?h=" + p.Hash()
+	plainTextContent := "Check out your new recipes at https://careme.cooking/recipes?h=" + paramsHash
 	for _, email := range user.Email {
 		to := mail.NewEmail("Example User", email) // todo email whole list
 		message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
@@ -195,7 +160,6 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 			slog.ErrorContext(ctx, "mail error", "error", err.Error(), "user", user.Email[0])
 		} else {
 			slog.InfoContext(ctx, "status", slog.Int("status", response.StatusCode), "body", response.Body, "headers", response.Headers)
-			// Todo shove something into cache so we don't resend.
 		}
 	}
 }
