@@ -518,7 +518,7 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStart bool) {
 	u := url.URL{Path: "/recipes"}
-	args := r.URL.Query()
+	args := url.Values{} // intentioanlly clear other args
 	args.Set(queryArgHash, hash)
 	if useStart {
 		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
