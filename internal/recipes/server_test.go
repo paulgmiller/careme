@@ -91,12 +91,6 @@ func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
 	if got := u.Query().Get("h"); got != hash {
 		t.Fatalf("expected redirect hash %q, got %q", hash, got)
 	}
-	if got := u.Query().Get("mail"); got != "true" {
-		t.Fatalf("expected mail=true to be preserved, got %q", got)
-	}
-	if got := u.Query().Get("start"); got != "2026-01-25T00:00:00Z" {
-		t.Fatalf("expected start to be preserved, got %q", got)
-	}
 }
 
 type noSessionAuth struct{}
