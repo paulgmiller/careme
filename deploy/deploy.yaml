@@ -58,6 +58,50 @@ spec:
         - name: recipes
           emptyDir: {}
 ---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: careme-mail
+  labels:
+    app: careme
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: careme
+            job: careme-mail
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          containers:
+            - name: careme-mail
+              image: ghcr.io/paulgmiller/careme:aabeb63
+              imagePullPolicy: IfNotPresent
+              args: ["-mail"]
+              envFrom:
+                - secretRef:
+                    name: careme-secrets3
+              env:
+                - name: CLARITY_PROJECT_ID
+                  value: "td2gxd3sq9"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+---
 apiVersion: v1
 kind: Service
 metadata:

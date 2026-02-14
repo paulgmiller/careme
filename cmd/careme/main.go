@@ -11,7 +11,6 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"time"
 
 	multi "github.com/samber/slog-multi"
 )
@@ -22,7 +21,7 @@ func main() {
 
 	//left for back compat does noting
 	flag.BoolVar(&serve, "serve", false, "dead we always serve")
-	flag.BoolVar(&mail, "mail", false, "Run mail sender loop")
+	flag.BoolVar(&mail, "mail", false, "Run one-shot mail sender and exit")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.Parse()
 
@@ -64,8 +63,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to create mailer: %v", err)
 		}
-		slog.InfoContext(ctx, "mail sender engaged")
-		go mailer.Iterate(ctx, 1*time.Hour)
+		slog.InfoContext(ctx, "mail sender engaged (one-shot)")
+		mailer.RunOnce(ctx)
+		return
 	}
 
 	if err := runServer(cfg, logcfg, addr); err != nil {
