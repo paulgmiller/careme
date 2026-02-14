@@ -102,27 +102,64 @@ func (fc *FileCache) Put(_ context.Context, key, value string, opts PutOptions) 
 	}
 
 	if opts.Condition == PutIfNoneMatch {
-		f, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
-		if err != nil {
-			if os.IsExist(err) {
-				return ErrAlreadyExists
-			}
-			return err
-		}
-		if _, err := f.WriteString(value); err != nil {
-			if closeErr := f.Close(); closeErr != nil {
-				return errors.Join(err, closeErr)
-			}
-			return err
-		}
-		if err := f.Close(); err != nil {
-			return err
-		}
-		return nil
+		return writeIfNoneMatchAtomic(dir, fullPath, value)
 	}
 
 	// TODO: IfMatch support (write only if etag matches).
-	return os.WriteFile(fullPath, []byte(value), 0644)
+	return writeAtomic(dir, fullPath, value)
+}
+
+func writeAtomic(dir, targetPath, value string) error {
+	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+
+	if _, err := tmpFile.WriteString(value); err != nil {
+		if closeErr := tmpFile.Close(); closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpPath, targetPath)
+}
+
+func writeIfNoneMatchAtomic(dir, targetPath, value string) error {
+	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+
+	if _, err := tmpFile.WriteString(value); err != nil {
+		if closeErr := tmpFile.Close(); closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Link(tmpPath, targetPath); err != nil {
+		if os.IsExist(err) {
+			return ErrAlreadyExists
+		}
+		return err
+	}
+
+	return nil
 }
 
 func (fc *FileCache) Delete(_ context.Context, key string) error {
