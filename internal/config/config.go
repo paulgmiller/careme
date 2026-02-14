@@ -2,15 +2,17 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 )
 
 type Config struct {
-	AI     AIConfig     `json:"ai"`
-	Kroger KrogerConfig `json:"kroger"`
-	Mocks  MockConfig   `json:"mocks"`
-	Clerk  ClerkConfig  `json:"clerk"`
+	AI      AIConfig      `json:"ai"`
+	Kroger  KrogerConfig  `json:"kroger"`
+	Walmart WalmartConfig `json:"walmart"`
+	Mocks   MockConfig    `json:"mocks"`
+	Clerk   ClerkConfig   `json:"clerk"`
 }
 
 type AIConfig struct {
@@ -32,6 +34,15 @@ type ClerkConfig struct {
 	PublishableKey string
 	Domain         string
 	Prod           bool
+}
+
+// Config defines the required Walmart affiliate credentials and client options.
+type WalmartConfig struct {
+	ConsumerID     string
+	KeyVersion     string
+	PrivateKeyPath string
+	BaseURL        string
+	HTTPClient     *http.Client
 }
 
 func (c *ClerkConfig) IsEnabled() bool {
@@ -73,6 +84,12 @@ func Load() (*Config, error) {
 			SecretKey:      os.Getenv("CLERK_SECRET_KEY"),
 			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
 			Domain:         os.Getenv("CLERK_DOMAIN"),
+		},
+		Walmart: WalmartConfig{
+			ConsumerID:     os.Getenv("WALMART_CONSUMER_ID"),
+			KeyVersion:     os.Getenv("WALMART_KEY_VERSION"),
+			PrivateKeyPath: os.Getenv("WALMART_PRIVATE_KEY_PATH"),
+			BaseURL:        os.Getenv("WALMART_BASE_URL"),
 		},
 	}
 	if strings.HasSuffix(config.Clerk.Domain, "careme.cooking") {

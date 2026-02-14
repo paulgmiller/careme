@@ -30,15 +30,6 @@ const (
 	DefaultBaseURL = "https://developer.api.walmart.com/api-proxy/service/affil/product/v2"
 )
 
-// Config defines the required Walmart affiliate credentials and client options.
-type Config struct {
-	ConsumerID     string
-	KeyVersion     string
-	PrivateKeyPath string
-	BaseURL        string
-	HTTPClient     *http.Client
-}
-
 // Client calls Walmart Affiliates APIs with signed headers.
 type Client struct {
 	consumerID string
