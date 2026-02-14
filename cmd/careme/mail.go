@@ -39,6 +39,8 @@ type mailer struct {
 	client      emailClient
 }
 
+const mailRoundLockPrefix = "mail/round/"
+
 // TODO share some of this with web.go? good for mocking?
 func NewMailer(cfg *config.Config) (*mailer, error) {
 	cache, err := cache.MakeCache()
@@ -74,37 +76,55 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 }
 
 func (m *mailer) Iterate(ctx context.Context, duration time.Duration) {
-	users, err := m.userStorage.List(ctx)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to list users", "error", err.Error())
-	} else {
-		// toss this in a channel and use same channel to requeue
-		for _, user := range users {
-			m.sendEmail(ctx, user)
-		}
-	}
+	m.sendRound(ctx, duration, time.Now())
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			slog.InfoContext(ctx, "starting user email round")
-			users, err := m.userStorage.List(ctx)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to list users", "error", err.Error())
-				continue // can we call back in 5 minutes?
-			}
-			// toss this shit in a channel and use same channel to requeue
-			for _, user := range users {
-				m.sendEmail(ctx, user)
-			}
+			m.sendRound(ctx, duration, time.Now())
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
+func (m *mailer) sendRound(ctx context.Context, duration time.Duration, now time.Time) {
+	lockKey, ok := m.claimRound(ctx, now, duration)
+	if !ok {
+		return
+	}
+	slog.InfoContext(ctx, "starting user email round", "round", lockKey)
+	users, err := m.userStorage.List(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to list users", "error", err.Error())
+		return
+	}
+
+	for _, user := range users {
+		m.sendEmail(ctx, user)
+	}
+}
+
+func (m *mailer) claimRound(ctx context.Context, now time.Time, duration time.Duration) (string, bool) {
+	lockKey := mailRoundLockPrefix + now.UTC().Truncate(duration).Format("20060102T150405Z")
+	if err := m.cache.Put(ctx, lockKey, now.UTC().Format(time.RFC3339), cache.IfNoneMatch()); err != nil {
+		if errors.Is(err, cache.ErrAlreadyExists) {
+			slog.InfoContext(ctx, "mail round already claimed by another replica", "round", lockKey)
+			return lockKey, false
+		}
+		slog.ErrorContext(ctx, "failed to claim mail round", "round", lockKey, "error", err.Error())
+		return lockKey, false
+	}
+	return lockKey, true
+}
+
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
+	if !user.MailOptIn {
+		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)
+		return
+	}
+
 	if user.FavoriteStore == "" {
 		slog.InfoContext(ctx, "no favorite store", "user", user.ID)
 		return

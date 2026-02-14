@@ -22,7 +22,7 @@ func main() {
 
 	//left for back compat does noting
 	flag.BoolVar(&serve, "serve", false, "dead we always serve")
-	flag.BoolVar(&mail, "mail", false, "Run mail sender loop")
+	flag.BoolVar(&mail, "mail", false, "Run mail sender loop (single active replica per interval)")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.Parse()
 
