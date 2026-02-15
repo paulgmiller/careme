@@ -11,14 +11,25 @@ type logger struct {
 	http.Handler
 }
 
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
+}
+
 func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	l.Handler.ServeHTTP(w, r)
+	lrw := &loggingResponseWriter{w, 0}
+	l.Handler.ServeHTTP(lrw, r)
 	if r.URL.Path == "/ready" {
 		return
 	}
 	// TODO log status code.
-	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "form", r.Form, "duration", time.Since(start))
+	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "form", r.Form, "duration", time.Since(start))
 }
 
 type recoverer struct {
