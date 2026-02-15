@@ -255,6 +255,11 @@ func timezoneNameForZip(zip string) (string, bool) {
 	}
 }
 
+func StoreToDate(ctx context.Context, now time.Time, l *locations.Location) time.Time {
+	tz := resolveStoreTimeLocation(ctx, l)
+	return defaultRecipeDate(now, tz)
+}
+
 func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
 	if storeLoc == nil {
 		storeLoc = time.UTC

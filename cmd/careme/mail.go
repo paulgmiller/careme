@@ -116,7 +116,9 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		return
 	}
 
-	p := recipes.DefaultParams(l, time.Now().Add(-6*time.Hour)) // how do we get the timezone of the user?
+	date := recipes.StoreToDate(ctx, time.Now(), l)
+
+	p := recipes.DefaultParams(l, date) 
 	// p.UserID = user.ID
 	rio := recipes.IO(m.cache)
 	if _, err := rio.FromCache(ctx, p.Hash()); err == nil {
