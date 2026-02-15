@@ -116,9 +116,12 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		return
 	}
 
-	date := recipes.StoreToDate(ctx, time.Now(), l)
-
-	p := recipes.DefaultParams(l, date) 
+	date, err := recipes.StoreToDate(ctx, time.Now(), l)
+	if err != nil {
+		slog.ErrorContext(ctx, "error getting location timezone", "location", user.FavoriteStore, "error", err.Error())
+		return
+	}
+	p := recipes.DefaultParams(l, date)
 	// p.UserID = user.ID
 	rio := recipes.IO(m.cache)
 	if _, err := rio.FromCache(ctx, p.Hash()); err == nil {

@@ -133,7 +133,10 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 		return nil, err
 	}
 
-	storeLoc := resolveStoreTimeLocation(ctx, l)
+	storeLoc, err := resolveStoreTimeLocation(ctx, l)
+	if err != nil {
+		return nil, err
+	}
 	dateStr := r.URL.Query().Get("date")
 	date := defaultRecipeDate(nowFn(), storeLoc)
 	if dateStr != "" {
@@ -219,21 +222,20 @@ func DefaultStaples() []filter {
 	}
 }
 
-func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) *time.Location {
+func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {
 	if l == nil {
-		return time.UTC
+		return nil, fmt.Errorf("nil location")
 	}
 	tzName, ok := timezoneNameForZip(l.ZipCode)
 	if !ok {
-		slog.WarnContext(ctx, "unable to infer timezone from zipcode; falling back to UTC", "location_id", l.ID, "zipcode", l.ZipCode)
-		return time.UTC
+		return nil, fmt.Errorf("unable to infer timezone from zipcode %s", l.ZipCode)
 	}
 	storeLoc, err := time.LoadLocation(tzName)
 	if err != nil {
-		slog.WarnContext(ctx, "invalid inferred timezone; falling back to UTC", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
-		return time.UTC
+		slog.ErrorContext(ctx, "invalid inferred timezone; falling back to UTC", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
+		return nil, err
 	}
-	return storeLoc
+	return storeLoc, nil
 }
 
 func timezoneNameForZip(zip string) (string, bool) {
@@ -255,15 +257,15 @@ func timezoneNameForZip(zip string) (string, bool) {
 	}
 }
 
-func StoreToDate(ctx context.Context, now time.Time, l *locations.Location) time.Time {
-	tz := resolveStoreTimeLocation(ctx, l)
-	return defaultRecipeDate(now, tz)
+func StoreToDate(ctx context.Context, now time.Time, l *locations.Location) (time.Time, error) {
+	tz, err := resolveStoreTimeLocation(ctx, l)
+	if err != nil {
+		return now, err
+	}
+	return defaultRecipeDate(now, tz), nil
 }
 
 func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
-	if storeLoc == nil {
-		storeLoc = time.UTC
-	}
 	localNow := now.In(storeLoc)
 	if localNow.Hour() < storeDayStartHour {
 		localNow = localNow.AddDate(0, 0, -1)
