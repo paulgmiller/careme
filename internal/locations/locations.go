@@ -84,10 +84,21 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 		return nil, fmt.Errorf("no data found for location ID %s", locationID)
 	}
 
+	data := resp.JSON200.Data
+	address := ""
+	state := ""
+	zipCode := ""
+	if data.Address != nil {
+		address = stringValue(data.Address.AddressLine1)
+		state = stringValue(data.Address.State)
+		zipCode = stringValue(data.Address.ZipCode)
+	}
 	loc := Location{
 		ID:      locationID,
-		Name:    *resp.JSON200.Data.Name,
-		Address: *resp.JSON200.Data.Address.AddressLine1,
+		Name:    stringValue(data.Name),
+		Address: address,
+		State:   state,
+		ZipCode: zipCode,
 	}
 	l.cacheLock.Lock()
 	defer l.cacheLock.Unlock()
@@ -100,6 +111,7 @@ type Location struct {
 	Name    string `json:"name"`
 	Address string `json:"address"`
 	State   string `json:"state"`
+	ZipCode string `json:"zip_code"`
 }
 
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
@@ -119,16 +131,32 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 	l.cacheLock.Lock()
 	defer l.cacheLock.Unlock()
 	for _, loc := range *resp.JSON200.Data {
+		address := ""
+		state := ""
+		zipCode := ""
+		if loc.Address != nil {
+			address = stringValue(loc.Address.AddressLine1)
+			state = stringValue(loc.Address.State)
+			zipCode = stringValue(loc.Address.ZipCode)
+		}
 		loc := Location{
-			ID:      *loc.LocationId,
-			Name:    *loc.Name,
-			Address: *loc.Address.AddressLine1,
-			State:   *loc.Address.State,
+			ID:      stringValue(loc.LocationId),
+			Name:    stringValue(loc.Name),
+			Address: address,
+			State:   state,
+			ZipCode: zipCode,
 		}
 		l.locationCache[loc.ID] = loc
 		locations = append(locations, loc)
 	}
 	return locations, nil
+}
+
+func stringValue(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 func (l *locationServer) Ready(ctx context.Context) error {

@@ -22,7 +22,10 @@ import (
 const (
 	legacyRecipeHashSeed      = "recipe"
 	legacyIngredientsHashSeed = "ingredients"
+	storeDayStartHour         = 9
 )
+
+var nowFn = time.Now
 
 type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
@@ -130,13 +133,15 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 		return nil, err
 	}
 
+	storeLoc := resolveStoreTimeLocation(ctx, l)
 	dateStr := r.URL.Query().Get("date")
-	if dateStr == "" {
-		dateStr = time.Now().Format("2006-01-02")
-	}
-	date, err := time.ParseInLocation("2006-01-02", dateStr, time.UTC)
-	if err != nil {
-		return nil, err
+	date := defaultRecipeDate(nowFn(), storeLoc)
+	if dateStr != "" {
+		parsedDate, err := time.ParseInLocation("2006-01-02", dateStr, storeLoc)
+		if err != nil {
+			return nil, err
+		}
+		date = parsedDate
 	}
 
 	p := DefaultParams(l, date)
@@ -212,4 +217,51 @@ func DefaultStaples() []filter {
 			Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
 		},
 	}
+}
+
+func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) *time.Location {
+	if l == nil {
+		return time.UTC
+	}
+	tzName, ok := timezoneNameForZip(l.ZipCode)
+	if !ok {
+		slog.WarnContext(ctx, "unable to infer timezone from zipcode; falling back to UTC", "location_id", l.ID, "zipcode", l.ZipCode)
+		return time.UTC
+	}
+	storeLoc, err := time.LoadLocation(tzName)
+	if err != nil {
+		slog.WarnContext(ctx, "invalid inferred timezone; falling back to UTC", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
+		return time.UTC
+	}
+	return storeLoc
+}
+
+func timezoneNameForZip(zip string) (string, bool) {
+	trimmed := strings.TrimSpace(zip)
+	if trimmed == "" {
+		return "", false
+	}
+	switch first := trimmed[0]; {
+	case first >= '0' && first <= '3':
+		return "America/New_York", true
+	case first >= '4' && first <= '7':
+		return "America/Chicago", true
+	case first == '8':
+		return "America/Denver", true
+	case first == '9':
+		return "America/Los_Angeles", true
+	default:
+		return "", false
+	}
+}
+
+func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
+	if storeLoc == nil {
+		storeLoc = time.UTC
+	}
+	localNow := now.In(storeLoc)
+	if localNow.Hour() < storeDayStartHour {
+		localNow = localNow.AddDate(0, 0, -1)
+	}
+	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
 }

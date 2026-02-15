@@ -20,12 +20,14 @@ var fakes = map[string]Location{
 		Name:    "Big Willys",
 		Address: "1 willy ave",
 		State:   "North Dakota",
+		ZipCode: "58102",
 	},
 	"5000": {
 		ID:      "5000",
 		Name:    "Piggly Wiggly",
 		Address: "20 somewhere st",
 		State:   "North Carolina",
+		ZipCode: "28104",
 	},
 }
 
