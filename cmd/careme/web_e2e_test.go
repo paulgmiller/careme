@@ -222,7 +222,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	m := &mailer{
 		cache: fc,
 		locServer: &fakeMailLocServer{
-			location: &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St"},
+			location: &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"},
 		},
 		client: &fakeMailClient{
 			response: &rest.Response{StatusCode: 202, Body: "accepted"},

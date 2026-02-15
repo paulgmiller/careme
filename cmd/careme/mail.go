@@ -118,7 +118,12 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		return
 	}
 
-	p := recipes.DefaultParams(l, time.Now().Add(-6*time.Hour)) // how do we get the timezone of the user?
+	date, err := recipes.StoreToDate(ctx, time.Now(), l)
+	if err != nil {
+		slog.ErrorContext(ctx, "error getting location timezone", "location", user.FavoriteStore, "error", err.Error())
+		return
+	}
+	p := recipes.DefaultParams(l, date)
 	// p.UserID = user.ID
 	for _, last := range user.LastRecipes {
 		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
