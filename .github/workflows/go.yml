@@ -1,5 +1,5 @@
 # .github/workflows/ghcr-publish-pr-gate.yml
-name: GHCR Publish & PR Gate
+name: Build and Publish 
 
 on:
   push:
