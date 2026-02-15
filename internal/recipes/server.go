@@ -150,7 +150,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.clerk.GetUserIDFromRequest(r)
 	if errors.Is(err, auth.ErrNoSession) {
-		w.Header().Set("HX-Redirect", "/")
+		w.Header().Set("HX-Redirect", "/sign-in")
 		http.Error(w, "must be logged in to ask a question", http.StatusUnauthorized)
 		return
 	}
