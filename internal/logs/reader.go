@@ -19,7 +19,7 @@ type Reader struct {
 }
 
 // NewReader creates a new log reader
-func NewReader(ctx context.Context, cfg *logsink.Config) (*Reader, error) {
+func NewReader(cfg *logsink.Config) (*Reader, error) {
 	if cfg.AccountName == "" || cfg.AccountKey == "" || cfg.Container == "" {
 		return nil, errors.New("AccountName, AccountKey, and Container are required")
 	}

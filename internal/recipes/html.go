@@ -111,12 +111,14 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
 		Hash     string
 		Recipes  []ai.Recipe
 		Domain   string
+		Style    seasons.Style
 	}{
 		Location: *p.Location,
 		Date:     p.Date.Format("2006-01-02"),
 		Hash:     p.Hash(),
 		Recipes:  l.Recipes,
 		Domain:   "https://careme.cooking",
+		Style:    seasons.GetCurrentStyle(),
 	}
 
 	return templates.Mail.Execute(writer, data)

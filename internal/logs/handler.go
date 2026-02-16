@@ -2,8 +2,9 @@
 package logs
 
 import (
+	"careme/internal/auth"
 	"careme/internal/logsink"
-	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,12 +14,13 @@ import (
 // Handler handles HTTP requests for log viewing
 type handler struct {
 	reader *Reader
+	auth   auth.AuthClient
 }
 
 // NewHandler creates   a new logs HTTP handler
 func NewHandler(cfg logsink.Config) (*handler, error) {
 	// Only create reader if Azure credentials are available
-	reader, err := NewReader(context.Background(), &cfg)
+	reader, err := NewReader(&cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create log reader: %w", err)
 	}
@@ -35,6 +37,11 @@ func (h *handler) Register(mux *http.ServeMux) {
 }
 
 func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.auth.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
@@ -68,6 +75,11 @@ func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 
 // handleLogsAPI serves the logs as JSON
 func (h *handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
+
+	if _, err := h.auth.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 
 	// Parse hours parameter
 	hoursStr := r.URL.Query().Get("hours")
