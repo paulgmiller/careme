@@ -54,7 +54,8 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(r.Context(), "failed to read sitemap urls", "error", err)
 		return
 	}
-	entries := make([]urlEntry, 0, len(hashes))
+	entries := make([]urlEntry, 0, len(hashes)+1)
+	entries = append(entries, urlEntry{Loc: domain + "/about"})
 
 	//this is going to get too  big.  at some point we need a real db to find latest
 	//or we track new entries and expire a lsit.

@@ -52,8 +52,13 @@ func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 
-	if len(parsed.URLs) != len(hashes) {
-		t.Fatalf("expected %d sitemap urls, got %d", len(hashes), len(parsed.URLs))
+	expectedCount := len(hashes) + 1 // recipe URLs + static about page
+	if len(parsed.URLs) != expectedCount {
+		t.Fatalf("expected %d sitemap urls, got %d", expectedCount, len(parsed.URLs))
+	}
+
+	if !containsSitemapURL(parsed.URLs, "https://careme.cooking/about") {
+		t.Fatalf("missing expected static URL %q in sitemap body: %s", "https://careme.cooking/about", rr.Body.String())
 	}
 
 	for _, hash := range hashes {
@@ -88,12 +93,15 @@ func TestHandleSitemapNormalizesLegacyShoppingListHashToCanonical(t *testing.T) 
 	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
-	if len(parsed.URLs) != 1 {
-		t.Fatalf("expected one URL, got %d", len(parsed.URLs))
+	if len(parsed.URLs) != 2 {
+		t.Fatalf("expected two URLs (about + recipe), got %d", len(parsed.URLs))
+	}
+	if !containsSitemapURL(parsed.URLs, "https://careme.cooking/about") {
+		t.Fatalf("missing expected static URL %q in sitemap body: %s", "https://careme.cooking/about", rr.Body.String())
 	}
 	wantURL := "https://careme.cooking/recipes?h=" + hash
-	if parsed.URLs[0].Loc != wantURL {
-		t.Fatalf("expected URL %q, got %q", wantURL, parsed.URLs[0].Loc)
+	if !containsSitemapURL(parsed.URLs, wantURL) {
+		t.Fatalf("missing expected URL %q in sitemap body: %s", wantURL, rr.Body.String())
 	}
 }
 
@@ -121,8 +129,11 @@ func TestHandleSitemap_IgnoresNonShoppingListKeys(t *testing.T) {
 	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
-	if len(parsed.URLs) != 0 {
-		t.Fatalf("expected no URLs from non-shoppinglist keys, got %d", len(parsed.URLs))
+	if len(parsed.URLs) != 1 {
+		t.Fatalf("expected one URL (about) with no shoppinglist keys, got %d", len(parsed.URLs))
+	}
+	if parsed.URLs[0].Loc != "https://careme.cooking/about" {
+		t.Fatalf("expected only URL %q, got %q", "https://careme.cooking/about", parsed.URLs[0].Loc)
 	}
 }
 

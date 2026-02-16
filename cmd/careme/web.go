@@ -73,6 +73,21 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		logsHandler.Register(mux)
 	}
 
+	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		data := struct {
+			ClarityScript template.HTML
+			Style         seasons.Style
+		}{
+			ClarityScript: templates.ClarityScript(),
+			Style:         seasons.GetCurrentStyle(),
+		}
+		if err := templates.About.Execute(w, data); err != nil {
+			slog.ErrorContext(ctx, "about template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var currentUser *utypes.User
