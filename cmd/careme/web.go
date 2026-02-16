@@ -75,24 +75,12 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		var currentUser *utypes.User
-		currentUser, userErr := userStorage.FromRequest(ctx, r, authClient)
-		if userErr != nil {
-			if !errors.Is(userErr, auth.ErrNoSession) {
-				slog.ErrorContext(ctx, "failed to get user from request", "error", userErr)
-				http.Error(w, "unable to load account", http.StatusInternalServerError)
-				return
-			}
-		}
-
 		data := struct {
-			ClarityScript  template.HTML
-			Style          seasons.Style
-			ServerSignedIn bool
+			ClarityScript template.HTML
+			Style         seasons.Style
 		}{
-			ClarityScript:  templates.ClarityScript(),
-			Style:          seasons.GetCurrentStyle(),
-			ServerSignedIn: currentUser != nil,
+			ClarityScript: templates.ClarityScript(),
+			Style:         seasons.GetCurrentStyle(),
 		}
 		if err := templates.About.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "about template execute error", "error", err)
