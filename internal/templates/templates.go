@@ -16,6 +16,7 @@ var Home,
 	User,
 	ShoppingList,
 	Recipe,
+	About,
 	Location,
 	Mail *template.Template
 
@@ -35,6 +36,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	User = ensure(tmpls, "user.html")
 	ShoppingList = ensure(tmpls, "shoppinglist.html")
 	Recipe = ensure(tmpls, "recipe.html")
+	About = ensure(tmpls, "about.html")
 	Location = ensure(tmpls, "locations.html")
 	Mail = ensure(tmpls, "mail.html")
 
