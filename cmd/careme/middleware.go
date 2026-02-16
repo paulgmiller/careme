@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	"github.com/clerk/clerk-sdk-go/v2"
 )
 
 type logger struct {
@@ -23,12 +25,19 @@ func (lrw *loggingResponseWriter) WriteHeader(code int) {
 
 func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	//should we use auth client?
+	user := ""
+	if claims, ok := clerk.SessionClaimsFromContext(r.Context()); ok {
+		user = claims.Subject
+	}
+
 	lrw := &loggingResponseWriter{w, http.StatusOK}
 	l.Handler.ServeHTTP(lrw, r)
 	if r.URL.Path == "/ready" {
 		return
 	}
-	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "form", r.Form, "duration", time.Since(start))
+
+	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "form", r.Form, "duration", time.Since(start))
 }
 
 type recoverer struct {
