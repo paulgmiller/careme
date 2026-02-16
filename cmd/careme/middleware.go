@@ -23,12 +23,11 @@ func (lrw *loggingResponseWriter) WriteHeader(code int) {
 
 func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	lrw := &loggingResponseWriter{w, 0}
+	lrw := &loggingResponseWriter{w, http.StatusOK}
 	l.Handler.ServeHTTP(lrw, r)
 	if r.URL.Path == "/ready" {
 		return
 	}
-	// TODO log status code.
 	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "form", r.Form, "duration", time.Since(start))
 }
 
