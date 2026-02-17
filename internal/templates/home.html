@@ -9,10 +9,15 @@
 
   {{.ClarityScript}}
 </head>
-<body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
-  <main class="px-4 py-10">
+<body class="relative min-h-screen overflow-x-hidden bg-gradient-to-b from-brand-50 via-white to-brand-50 antialiased">
+  <div class="pointer-events-none absolute inset-0">
+    <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('https://images.northbriton.net/AP1GczMBNFe2Ol-2vq1uZybQcd1y5P1vu4jqNbbtX4U0uvc_GSIlszulZjtIzGIxtgEm6hHPoPLOV8BqzDyMdSzSl4qCGyTlV2fSyyYnq_ipUEREpthJs6Uf'); opacity: 0.16;"></div>
+    <div class="absolute inset-0 bg-gradient-to-b from-white/80 via-white/70 to-brand-50/90"></div>
+  </div>
+
+  <main class="relative px-4 py-10">
     <section class="mx-auto w-full max-w-3xl">
-      <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
+      <div class="rounded-3xl border border-brand-100 bg-white/88 shadow-2xl backdrop-blur-sm">
         <!-- Header -->
         <div class="border-b border-brand-100 p-8">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -49,41 +54,54 @@
 
         <!-- Content -->
         <div class="p-8">
-          {{if .User}}
-          <!-- Signed-in state -->
-          <div class="space-y-6">
-
-            <div class="rounded-xl border border-brand-100 bg-white p-5">
-              <div class="mt-4 flex flex-wrap gap-3">
-                {{if .User.FavoriteStore}}
-                <a href="/recipes?location={{.User.FavoriteStore}}"
-                   class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Favorite store
-                </a>
-                {{end}}
-                <a href="/user"
-                    class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Past Recipes
-                </a>
+          <div class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-sm">
+            <div class="grid gap-6 md:grid-cols-2">
+              <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-5">
+                <h2 class="text-lg font-semibold text-brand-700">Find nearby stores</h2>
+                <p class="mt-1 text-sm text-gray-600">Use your ZIP code to discover available locations and ingredients.</p>
+                <form method="GET" action="/locations" class="mt-4 space-y-2">
+                  <label for="zip" class="block text-sm font-medium text-gray-700">
+                    Enter ZIP code:
+                  </label>
+                  <div class="flex flex-col gap-3">
+                    <input id="zip" name="zip" type="text" inputmode="numeric" pattern="\d{5}" required
+                          placeholder="e.g. 90210"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                    <button type="submit"
+                            class="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                      Find stores
+                    </button>
+                  </div>
+                </form>
               </div>
-              <form method="GET" action="/locations" class="mt-6 space-y-2">
-                <label for="zip" class="block text-sm font-medium text-gray-700">
-                  Enter ZIP code to pick a nearby store:
-                </label>
-                <div class="flex flex-col gap-3">
-                  <input id="zip" name="zip" type="text" inputmode="numeric" pattern="\d{5}" required
-                         placeholder="e.g. 90210"
-                         class="w-full max-w-xs rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-                  <button type="submit"
-                          class="inline-flex w-full max-w-xs items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Find stores
-                  </button>
+
+              <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-5">
+                <h2 class="text-lg font-semibold text-brand-700">Past recipes</h2>
+                <p class="mt-1 text-sm text-gray-600">Revisit prior meals, shopping lists, and favorite combinations.</p>
+                <div class="mt-4 flex flex-wrap gap-3">
+                  <a href="/user"
+                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    View past recipes
+                  </a>
+                  {{if .User}}
+                    {{if .User.FavoriteStore}}
+                    <a href="/recipes?location={{.User.FavoriteStore}}"
+                      class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                      Favorite store
+                    </a>
+                    {{end}}
+                  {{else}}
+                  <a href="/sign-in"
+                      class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Sign in to save history
+                  </a>
+                  {{end}}
                 </div>
-              </form>
+              </div>
             </div>
           </div>
 
-          {{else}}
+          {{if not .User}}
           <ol class="list-decimal list-inside space-y-1 text-gray-700">
             <li>Find your favorite grocery store based on location.</li>
             <li>Check the store&rsquo;s inventory for fresh meat and seasonal produce.</li>
@@ -105,6 +123,7 @@
                 Sign Up
               </a>
             </div>
+          </div>
           {{end}}
         </div>
       </div>
