@@ -23,15 +23,9 @@
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Careme</h1>
-              {{if not .User}}
-              <p class="mt-2 text-gray-600">
-                Plan meals from real store inventory.
-              </p>
-              {{else}}
               <p class="mt-2 text-gray-600">
                 Your personal chef and sommelier.
               </p>
-              {{end}}
             </div>
             {{if .User}}
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -57,16 +51,15 @@
         <!-- Content -->
         <div class="p-8">
           <div class="rounded-2xl border border-brand-100 bg-white/86 p-6 shadow-sm">
+            {{if .User}}
             <div class="grid gap-6 lg:grid-cols-3">
               <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-5">
                 <h2 class="text-lg font-semibold text-brand-700">Find a store</h2>
-                {{if .User}}
-                  {{if .User.FavoriteStore}}
-                  <a href="/recipes?location={{.User.FavoriteStore}}"
-                    class="mt-4 inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Favorite store
-                  </a>
-                  {{end}}
+                {{if .User.FavoriteStore}}
+                <a href="/recipes?location={{.User.FavoriteStore}}"
+                  class="mt-4 inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Favorite store
+                </a>
                 {{end}}
                 <form method="GET" action="/locations" class="mt-4 space-y-2">
                   <label for="zip" class="block text-sm font-medium text-gray-700">
@@ -105,26 +98,35 @@
                 </a>
               </div>
             </div>
-          </div>
+            {{else}}
+            <p class="text-gray-700 whitespace-pre-line">Careme will:
 
-          {{if not .User}}
-          <!-- Signed-out state -->
-          <div class="mt-6">
-            <p class="block text-sm font-medium text-gray-700 mb-3">
-              Sign in or create an account to continue:
-            </p>
-            <div class="flex flex-col gap-3 sm:flex-row">
-              <a href="/sign-in"
-                 class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                Sign In
-              </a>
-              <a href="/sign-up"
-                 class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                Sign Up
-              </a>
+Find your local grocery stores.
+Check the store's inventory for fresh meat and seasonal produce.
+Generate a weekly meal plan from a variety of cuisines and cooking styles.
+</p>
+            <!-- Signed-out state -->
+            <div class="mt-6">
+              <p class="block text-sm font-medium text-gray-700 mb-3">
+                Sign in or create an account to continue:
+              </p>
+              <div class="flex flex-col gap-3 sm:flex-row">
+                <a href="/sign-in"
+                   class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Sign In
+                </a>
+                <a href="/sign-up"
+                   class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Sign Up
+                </a>
+                <a href="/about"
+                   class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white/90 px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  About Careme
+                </a>
+              </div>
             </div>
+            {{end}}
           </div>
-          {{end}}
         </div>
       </div>
 
