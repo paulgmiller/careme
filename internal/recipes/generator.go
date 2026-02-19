@@ -134,6 +134,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		return cachedIngredients, nil
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
+		return nil, err
 	}
 
 	var wg sync.WaitGroup
@@ -214,6 +215,7 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 				Size:         item.Size,
 				PriceRegular: item.Price.Regular,
 				PriceSale:    item.Price.Promo,
+				Categories:   product.Categories,
 				// CountryOrigin: product.CountryOrigin,
 				// AisleNumber:   product.AisleLocations[0].Number,
 				// Favorite: item.Favorite,

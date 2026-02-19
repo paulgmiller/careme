@@ -216,8 +216,8 @@ func DefaultStaples() []filter {
 			Brands: []string{"Simple Truth"},
 		},
 		{
-			Term:   "produce vegetable",
-			Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
+			Term: "produce vegetable",
+			//Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
 		},
 	}
 }

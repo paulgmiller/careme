@@ -1,14 +1,14 @@
 package main
 
 import (
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
+	"careme/internal/recipes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"slices"
 	"strings"
@@ -49,12 +49,21 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	client, err := kroger.FromConfig(cfg)
+	cacheStore, err := cache.MakeCache()
 	if err != nil {
-		log.Fatalf("failed to create kroger client: %v", err)
+		log.Fatalf("failed to create cache: %v", err)
 	}
 
-	missing, err := checkProduceAvailability(ctx, client, locationID, produce)
+	generator, err := recipes.NewGenerator(cfg, cacheStore)
+	if err != nil {
+		log.Fatalf("failed to create recipe generator: %v", err)
+	}
+	g, ok := generator.(*recipes.Generator)
+	if !ok {
+		log.Fatalf("failed to cast generator to *recipes.Generator")
+	}
+
+	missing, err := checkProduceAvailability(ctx, g, locationID, produce)
 	if err != nil {
 		log.Fatalf("availability check failed: %v", err)
 	}
@@ -85,13 +94,16 @@ func parseProduceList(csv string) []string {
 	return produce
 }
 
-func checkProduceAvailability(ctx context.Context, client *kroger.ClientWithResponses, locationID string, produce []string) ([]string, error) {
+func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, error) {
+	filter := recipes.Filter("produce vegetable", nil, false)
+	ingredients, err := g.GetIngredients(ctx, locationID, filter, 0)
+	if err != nil {
+		return nil, err
+	}
+
 	missing := make([]string, 0)
 	for _, term := range produce {
-		available, sample, err := hasProduce(ctx, client, locationID, term)
-		if err != nil {
-			return nil, err
-		}
+		available, sample := hasProduce(ingredients, term)
 		if available {
 			fmt.Printf("✅ %s -> found: %s\n", term, sample)
 			continue
@@ -104,44 +116,28 @@ func checkProduceAvailability(ctx context.Context, client *kroger.ClientWithResp
 	return missing, nil
 }
 
-func hasProduce(ctx context.Context, client *kroger.ClientWithResponses, locationID, term string) (bool, string, error) {
-	limit := "10"
-	response, err := client.ProductSearchWithResponse(ctx, &kroger.ProductSearchParams{
-		FilterLocationId: &locationID,
-		FilterTerm:       &term,
-		FilterLimit:      &limit,
-	})
-	if err != nil {
-		return false, "", fmt.Errorf("search %q: %w", term, err)
-	}
-	if response.StatusCode() != http.StatusOK {
-		return false, "", fmt.Errorf("search %q: unexpected status %d", term, response.StatusCode())
-	}
-	if response.JSON200 == nil || response.JSON200.Data == nil {
-		return false, "", errors.New("empty search response")
-	}
-
+func hasProduce(ingredients []kroger.Ingredient, term string) (bool, string) {
 	needle := normalizeTerm(term)
-	for _, product := range *response.JSON200.Data {
-		if product.Description == nil {
+	for _, ingredient := range ingredients {
+		if ingredient.Description == nil {
 			continue
 		}
-		description := strings.TrimSpace(*product.Description)
+		description := strings.TrimSpace(*ingredient.Description)
 		if description == "" {
 			continue
 		}
 		haystack := normalizeTerm(description)
 		if strings.Contains(haystack, needle) {
-			return true, description, nil
+			return true, description
 		}
 	}
 
-	return false, "", nil
+	return false, ""
 }
 
 func normalizeTerm(s string) string {
 	s = strings.TrimSpace(strings.ToLower(s))
-	s = strings.ReplaceAll(s, "brussel sprouts", "brussels sprouts")
 	s = strings.Join(strings.Fields(s), " ")
+	s = strings.ReplaceAll(s, "brussel sprouts", "brussels sprouts")
 	return s
 }
