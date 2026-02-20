@@ -123,6 +123,13 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		slog.ErrorContext(ctx, "error getting location timezone", "location", user.FavoriteStore, "error", err.Error())
 		return
 	}
+
+	uday, _ := utypes.ParseWeekday(user.ShoppingDay)
+
+	if date.Weekday() != uday {
+		return
+	}
+
 	p := recipes.DefaultParams(l, date)
 	// p.UserID = user.ID
 	for _, last := range user.LastRecipes {

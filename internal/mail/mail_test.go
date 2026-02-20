@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -133,6 +134,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 		MailOptIn:     true,
 		Email:         []string{"u1@example.com"},
 		FavoriteStore: "123",
+		ShoppingDay:   time.Now().Weekday().String(),
 	})
 
 	var (
@@ -164,3 +166,5 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 		t.Fatalf("expected claim params hash to be set")
 	}
 }
+
+//TODO tests for optin and day of week?
