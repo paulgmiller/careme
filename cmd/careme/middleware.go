@@ -5,20 +5,39 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	"github.com/clerk/clerk-sdk-go/v2"
 )
 
 type logger struct {
 	http.Handler
 }
 
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
+}
+
 func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	l.Handler.ServeHTTP(w, r)
+	//should we use auth client?
+	user := ""
+	if claims, ok := clerk.SessionClaimsFromContext(r.Context()); ok {
+		user = claims.Subject
+	}
+
+	lrw := &loggingResponseWriter{w, http.StatusOK}
+	l.Handler.ServeHTTP(lrw, r)
 	if r.URL.Path == "/ready" {
 		return
 	}
-	// TODO log status code.
-	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "form", r.Form, "duration", time.Since(start))
+
+	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "form", r.Form, "duration", time.Since(start))
 }
 
 type recoverer struct {
