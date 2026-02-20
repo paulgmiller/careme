@@ -1,7 +1,7 @@
 // https://app.sendgrid.com/guide/integrate/langs/go
 // using SendGrid's Go Library
 // https://github.com/sendgrid/sendgrid-go
-package main
+package mail
 
 import (
 	"bytes"
