@@ -24,6 +24,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
@@ -141,6 +143,9 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	// Channel to listen for interrupt or terminate signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	slog.Info("serving metrics at: %s", ":9090")
+	go http.ListenAndServe(":9090", promhttp.Handler())
 
 	// Block until we receive a signal or server error
 	select {

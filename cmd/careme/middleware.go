@@ -5,6 +5,10 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	metrics "github.com/slok/go-http-metrics/metrics/prometheus"
+	"github.com/slok/go-http-metrics/middleware"
+	middlewarestd "github.com/slok/go-http-metrics/middleware/std"
 )
 
 type logger struct {
@@ -36,6 +40,10 @@ func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func WithMiddleware(h http.Handler) http.Handler {
+	mdlw := middleware.New(middleware.Config{
+		Recorder: metrics.NewRecorder(metrics.Config{}),
+	})
+	h = middlewarestd.Handler("", mdlw, h)
 	return &logger{
 		&recoverer{
 			h,
