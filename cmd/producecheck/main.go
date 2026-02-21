@@ -9,30 +9,155 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 	"slices"
 	"strings"
 )
 
-var defaultProduce = []string{
-	"carrot",
-	"broccoli",
-	"celery",
-	"kale",
-	"brussel sprouts",
+var fruit = []string{
 	"bananas",
 	"apples",
+	"pears",
+	"oranges",
+	"cherries",
+	"grapes",
+	"strawberries",
+	"blueberries",
+	"raspberries",
+	"blackberries",
+	"watermelon",
+	"cantaloupe",
+	"honeydew melon",
+	"kiwi",
+	"pineapple",
+	"mangoes",
+}
+
+var tubers = []string{
 	"onions",
 	"potatoes",
 }
+
+var vegetables = []string{
+	// Leafy greens & lettuces
+	"Romaine lettuce",
+	"Green leaf lettuce",
+	"Red leaf lettuce",
+	"Iceberg lettuce",
+	"Butterhead lettuce",
+	"Little gem lettuce",
+	"Spring mix",
+	"Baby spring mix",
+	"Arugula",
+	"Baby arugula",
+	"Spinach",
+	"Baby spinach",
+	"Kale",
+	"Curly kale",
+	"Lacinato kale",
+	"Rainbow chard",
+	"Bok choy",
+	"Baby bok choy",
+	"Napa cabbage",
+	"Green cabbage",
+	"Red cabbage",
+	"Radicchio",
+
+	// Brassicas
+	"Broccoli",
+	"Broccolini",
+	"Cauliflower",
+	"Brussels sprouts",
+
+	// Roots & tubers
+	"Carrots",
+	"Baby carrots",
+	"Rainbow carrots",
+	"Beets",
+	"Golden beets",
+	"Turnips",
+	"Rutabaga",
+	"Parsnips",
+	"Daikon radish",
+	"Radishes",
+	"Horseradish root",
+	"Celery root (celeriac)",
+	"Jicama",
+	"Yuca (cassava)",
+
+	// Alliums
+	"Green onions (scallions)",
+	"Leeks",
+	"Garlic",
+
+	// Stalks & stems
+	"Celery",
+	"Asparagus",
+	"Lemongrass",
+
+	// Fruiting vegetables
+	"Green bell peppers",
+	"Red bell peppers",
+	"Yellow bell peppers",
+	"Orange bell peppers",
+	"Mini sweet peppers",
+	"Poblano peppers",
+	"Jalapeño peppers",
+	"Serrano peppers",
+	"Anaheim peppers",
+	"Habanero peppers",
+	"Red chili peppers",
+	"Green chili peppers",
+	"Tomatillos",
+	"Zucchini",
+	"Yellow squash",
+	"Cucumbers",
+	"Mini cucumbers",
+	"Seedless cucumbers",
+	"Eggplant",
+	"Green beans",
+	"Sweet corn",
+
+	// Mushrooms
+	"White mushrooms",
+	"Baby bella (cremini) mushrooms",
+	"Portobello mushrooms",
+	"Shiitake mushrooms",
+	"Oyster mushrooms",
+	"King trumpet mushrooms",
+	"Sliced mushroom blend",
+
+	// Herbs
+	"Parsley",
+	"Italian parsley",
+	"Cilantro",
+	"Basil",
+	"Thyme",
+	"Sage",
+	"Rosemary",
+	"Tarragon",
+	"Dill",
+	"Chives",
+
+	// Sprouts & microgreens
+	"Alfalfa sprouts",
+	"Broccoli sprouts",
+	"Mixed sprouts",
+
+	// Other
+	"Aloe vera leaf",
+	"Bean sprouts",
+}
+
+var all = append(append(fruit, tubers...), vegetables...)
 
 func main() {
 	var locationID string
 	var produceCSV string
 
-	flag.StringVar(&locationID, "location", "", "Kroger location ID to validate")
-	flag.StringVar(&locationID, "l", "", "Kroger location ID to validate (short)")
-	flag.StringVar(&produceCSV, "produce", strings.Join(defaultProduce, ","), "Comma-separated produce list to check")
+	//local to bellevue Fred Meyer 70100023, factoria 70500822
+	flag.StringVar(&locationID, "location", "70500874", "Kroger location ID to validate")
+	flag.StringVar(&locationID, "l", "70500874", "Kroger location ID to validate (short)")
+	flag.StringVar(&produceCSV, "produce", strings.Join(all, ","), "Comma-separated produce list to check")
 	flag.Parse()
 
 	if strings.TrimSpace(locationID) == "" {
@@ -64,17 +189,16 @@ func main() {
 		log.Fatalf("failed to cast generator to *recipes.Generator")
 	}
 
-	missing, err := checkProduceAvailability(ctx, g, locationID, produce)
+	missing, results, err := checkProduceAvailability(ctx, g, locationID, produce)
 	if err != nil {
 		log.Fatalf("availability check failed: %v", err)
 	}
 
 	if len(missing) > 0 {
 		fmt.Printf("missing produce for location %s: %s\n", locationID, strings.Join(missing, ", "))
-		os.Exit(1)
 	}
 
-	fmt.Printf("all produce available for location %s: %s\n", locationID, strings.Join(produce, ", "))
+	fmt.Printf("Produce score  %f: %d/%d with %d ingredients\n", float64(len(produce)-len(missing))/float64(len(produce)), len(produce)-len(missing), len(produce), results)
 }
 
 func parseProduceList(csv string) []string {
@@ -102,11 +226,11 @@ type produceMatchStats struct {
 	Longest  string
 }
 
-func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, error) {
+func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, int, error) {
 	filter := recipes.Filter("produce vegatable", nil, false)
 	ingredients, err := g.GetIngredients(ctx, locationID, filter, 0)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	fmt.Printf("Looking through %d produce vegatable results\n", len(ingredients))
 
@@ -133,18 +257,23 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 		fmt.Println()
 		fmt.Println("match summary:")
 		for _, stats := range foundStats {
+			if len(stats.Matches) == 1 {
+				fmt.Printf("- %s (%d match): %s\n", stats.Term, len(stats.Matches), stats.Matches[0])
+				continue
+			}
+
 			fmt.Printf("- %s (%d matches)\n", stats.Term, len(stats.Matches))
 			fmt.Printf("  shortest: %s\n", stats.Shortest)
 			fmt.Printf("  longest: %s\n", stats.Longest)
-			fmt.Println("  descriptions:")
-			for _, description := range stats.Matches {
-				fmt.Printf("  - %s\n", description)
-			}
+			//fmt.Println("  descriptions:")
+			//for _, description := range stats.Matches {
+			//	fmt.Printf("  - %s\n", description)
+			//}
 		}
 	}
 
 	slices.Sort(missing)
-	return missing, nil
+	return missing, len(ingredients), nil
 }
 
 func hasProduce(ingredients []kroger.Ingredient, term string) []string {
@@ -190,6 +319,5 @@ func shortestAndLongest(matches []string) (string, string) {
 func normalizeTerm(s string) string {
 	s = strings.TrimSpace(strings.ToLower(s))
 	s = strings.Join(strings.Fields(s), " ")
-	s = strings.ReplaceAll(s, "brussel sprouts", "brussels sprouts")
 	return s
 }
