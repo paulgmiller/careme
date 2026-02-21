@@ -9,8 +9,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 )
 
 var fruit = []string{
@@ -227,12 +229,26 @@ type produceMatchStats struct {
 }
 
 func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, int, error) {
-	filter := recipes.Filter("produce vegatable", nil, false)
-	ingredients, err := g.GetIngredients(ctx, locationID, filter, 0)
-	if err != nil {
-		return nil, 0, err
+	var wg sync.WaitGroup
+	var lock sync.Mutex
+	var ingredients []kroger.Ingredient
+	wg.Add(len(recipes.Produce()))
+	for _, filter := range recipes.Produce() {
+		category := filter
+		go func() {
+			defer wg.Done()
+			cingredients, err := g.GetIngredients(ctx, locationID, category, 0)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", locationID, "error", err)
+				return
+			}
+			lock.Lock()
+			defer lock.Unlock()
+			ingredients = append(ingredients, cingredients...)
+			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", locationID)
+		}()
 	}
-	fmt.Printf("Looking through %d produce vegatable results\n", len(ingredients))
+	wg.Wait()
 
 	missing := make([]string, 0)
 	foundStats := make([]produceMatchStats, 0, len(produce))

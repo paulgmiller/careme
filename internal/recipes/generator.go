@@ -236,10 +236,11 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 	// slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location, "skip", skip)
 
 	// recursion is pretty dumb pagination
-	if len(*products.JSON200.Data) == limit && skip+limit < 2000 { // fence post error
-		fmt.Printf("paginating %d\n", skip)
+	// kroger limits us at 250 results.
+	if len(*products.JSON200.Data) == limit && skip < 250 { // fence post error
 		page, err := g.GetIngredients(ctx, location, f, skip+limit)
 		if err != nil {
+			slog.ErrorContext(ctx, "hit result %s ending pagination", err)
 			return ingredients, nil
 		}
 		ingredients = append(ingredients, page...)
