@@ -112,7 +112,7 @@ var vegetables = []string{
 	"Tomatillos",
 	"Zucchini",
 	"Yellow squash",
-	"Cucumbers",
+	"Cucumber",
 	"Mini cucumbers",
 	"Seedless cucumbers",
 	"Eggplant",
@@ -335,5 +335,6 @@ func shortestAndLongest(matches []string) (string, string) {
 func normalizeTerm(s string) string {
 	s = strings.TrimSpace(strings.ToLower(s))
 	s = strings.Join(strings.Fields(s), " ")
+	s = strings.ToLower(s)
 	return s
 }
