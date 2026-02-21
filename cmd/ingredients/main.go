@@ -46,7 +46,7 @@ func main() {
 	}
 
 	for _, i := range ings {
-		fmt.Printf("%s:$%s original ($%s)\n", toString(i.Description), toFloat(i.PriceSale), toFloat(i.PriceRegular))
+		fmt.Printf("%s - %s:(%s))\n", toString(i.Brand), toString(i.Description), *i.Categories)
 	}
 
 }

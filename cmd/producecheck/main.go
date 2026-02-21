@@ -15,10 +15,11 @@ import (
 )
 
 var defaultProduce = []string{
-	"carrots",
+	"carrot",
 	"broccoli",
+	"celery",
 	"kale",
-	"brussels sprouts",
+	"brussel sprouts",
 	"bananas",
 	"apples",
 	"onions",
@@ -94,30 +95,62 @@ func parseProduceList(csv string) []string {
 	return produce
 }
 
+type produceMatchStats struct {
+	Term     string
+	Matches  []string
+	Shortest string
+	Longest  string
+}
+
 func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, error) {
-	filter := recipes.Filter("produce vegetable", nil, false)
+	filter := recipes.Filter("produce vegatable", nil, false)
 	ingredients, err := g.GetIngredients(ctx, locationID, filter, 0)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("Looking through %d produce vegatable results\n", len(ingredients))
 
 	missing := make([]string, 0)
+	foundStats := make([]produceMatchStats, 0, len(produce))
 	for _, term := range produce {
-		available, sample := hasProduce(ingredients, term)
-		if available {
-			fmt.Printf("✅ %s -> found: %s\n", term, sample)
+		matches := hasProduce(ingredients, term)
+		if len(matches) > 0 {
+			shortest, longest := shortestAndLongest(matches)
+			foundStats = append(foundStats, produceMatchStats{
+				Term:     term,
+				Matches:  matches,
+				Shortest: shortest,
+				Longest:  longest,
+			})
+			fmt.Printf("✅ %s -> %d matches\n", term, len(matches))
 			continue
 		}
 		fmt.Printf("❌ %s -> no matching products found\n", term)
 		missing = append(missing, term)
 	}
 
+	if len(foundStats) > 0 {
+		fmt.Println()
+		fmt.Println("match summary:")
+		for _, stats := range foundStats {
+			fmt.Printf("- %s (%d matches)\n", stats.Term, len(stats.Matches))
+			fmt.Printf("  shortest: %s\n", stats.Shortest)
+			fmt.Printf("  longest: %s\n", stats.Longest)
+			fmt.Println("  descriptions:")
+			for _, description := range stats.Matches {
+				fmt.Printf("  - %s\n", description)
+			}
+		}
+	}
+
 	slices.Sort(missing)
 	return missing, nil
 }
 
-func hasProduce(ingredients []kroger.Ingredient, term string) (bool, string) {
+func hasProduce(ingredients []kroger.Ingredient, term string) []string {
 	needle := normalizeTerm(term)
+	seen := make(map[string]struct{})
+	matches := make([]string, 0)
 	for _, ingredient := range ingredients {
 		if ingredient.Description == nil {
 			continue
@@ -128,11 +161,30 @@ func hasProduce(ingredients []kroger.Ingredient, term string) (bool, string) {
 		}
 		haystack := normalizeTerm(description)
 		if strings.Contains(haystack, needle) {
-			return true, description
+			if _, ok := seen[description]; ok {
+				continue
+			}
+			seen[description] = struct{}{}
+			matches = append(matches, description)
 		}
 	}
 
-	return false, ""
+	slices.Sort(matches)
+	return matches
+}
+
+func shortestAndLongest(matches []string) (string, string) {
+	shortest := matches[0]
+	longest := matches[0]
+	for _, match := range matches[1:] {
+		if len(match) < len(shortest) {
+			shortest = match
+		}
+		if len(match) > len(longest) {
+			longest = match
+		}
+	}
+	return shortest, longest
 }
 
 func normalizeTerm(s string) string {
