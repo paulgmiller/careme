@@ -38,7 +38,7 @@ func TestParseWeekday(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseWeekday(tt.input)
+			got, err := ParseWeekday(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("parseWeekday(%q) expected error", tt.input)
