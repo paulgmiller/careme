@@ -158,11 +158,13 @@ var all = append(append(fruit, tubers...), vegetables...)
 func main() {
 	var locationID string
 	var produceCSV string
+	var singleFilterTerm string
 
 	//local to bellevue Fred Meyer 70100023, factoria 70500822
 	flag.StringVar(&locationID, "location", "70500874", "Kroger location ID to validate")
 	flag.StringVar(&locationID, "l", "70500874", "Kroger location ID to validate (short)")
 	flag.StringVar(&produceCSV, "produce", strings.Join(all, ","), "Comma-separated produce list to check")
+	flag.StringVar(&singleFilterTerm, "single-filter", "", "If set, fetch ingredients using only this Kroger filter term (e.g. 'produce')")
 	flag.Parse()
 
 	if strings.TrimSpace(locationID) == "" {
@@ -194,7 +196,7 @@ func main() {
 		log.Fatalf("failed to cast generator to *recipes.Generator")
 	}
 
-	missing, results, err := checkProduceAvailability(ctx, g, locationID, produce)
+	missing, results, err := checkProduceAvailability(ctx, g, locationID, produce, singleFilterTerm)
 	if err != nil {
 		log.Fatalf("availability check failed: %v", err)
 	}
@@ -231,7 +233,16 @@ type produceMatchStats struct {
 	Longest  string
 }
 
-func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, int, error) {
+func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string, singleFilterTerm string) ([]string, int, error) {
+	if strings.TrimSpace(singleFilterTerm) != "" {
+		filter := recipes.Filter(singleFilterTerm, []string{"*"}, false /*frozen*/)
+		ingredients, err := g.GetIngredients(ctx, locationID, filter, 0)
+		if err != nil {
+			return nil, 0, err
+		}
+		return evaluateProduceAvailability(produce, ingredients), len(ingredients), nil
+	}
+
 	var wg sync.WaitGroup
 	var lock sync.Mutex
 	var ingredients []kroger.Ingredient
@@ -253,6 +264,10 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 	}
 	wg.Wait()
 
+	return evaluateProduceAvailability(produce, ingredients), len(ingredients), nil
+}
+
+func evaluateProduceAvailability(produce []string, ingredients []kroger.Ingredient) []string {
 	missing := make([]string, 0)
 	foundStats := make([]produceMatchStats, 0, len(produce))
 	for _, term := range produce {
@@ -292,7 +307,7 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 	}
 
 	slices.Sort(missing)
-	return missing, len(ingredients), nil
+	return missing
 }
 
 func hasProduce(ingredients []kroger.Ingredient, term string) []string {

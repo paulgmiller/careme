@@ -13,6 +13,13 @@
   - `export GOCACHE=/tmp/go-build`
   - `export GOMODCACHE=/tmp/go-modcache`
   - Alternative persistent path inside repo: `export GOCACHE=$PWD/.cache/go-build && export GOMODCACHE=$PWD/.cache/go-modcache`
+- Codex helper wrapper (recommended for networked/dev commands): `scripts/codex-env.sh`
+  - It sources `/home/pmiller/careme/.envtest` and exports default `GOCACHE`/`GOMODCACHE` once per command invocation.
+  - Examples:
+    - `./scripts/codex-env.sh go test ./...`
+    - `./scripts/codex-env.sh go run ./cmd/producecheck -location 70100023`
+    - `./scripts/codex-env.sh go run ./cmd/ingredients -l 70100023 -i "produce"`
+  - Optional override for env file path: `ENVTEST_PATH=/path/to/.env ./scripts/codex-env.sh <command>`
 - `go fmt ./...` then `go vet ./...`: Baseline formatting and static checks.
 - `golangci-lint run  ./...`: For expanded go linters
 - `export ENABLE_MOCKS=1`: to test without kroger, openai credentials
@@ -33,6 +40,9 @@
 - Place tests alongside code in `*_test.go`; prefer table-driven cases and explicit fixtures over implicit globals.
 - Use `go test ./... -run TestName` for targeted debugging; keep deterministic by avoiding network calls and using fakes where possible.
 - When touching recipe generation or Kroger client code, add assertions that cover API shape changes and template output (see existing tests in `internal/recipes` and `internal/html`).
+- When changing the generator produce filter list (`internal/recipes/params.go` `Produce()`), also run:
+  - `./scripts/codex-env.sh go run ./cmd/producecheck -location 70500874`
+  - `./scripts/codex-env.sh go run ./cmd/ingredients -l 70500874 -i "produce"`
 
 ## Commit & Pull Request Guidelines
 - Reference an issue/PR number when applicable. Say why something was done rather than just what was done.
