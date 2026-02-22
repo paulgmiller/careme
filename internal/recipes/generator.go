@@ -122,11 +122,39 @@ func Filter(term string, brands []string, frozen bool) filter {
 	}
 }
 
+// GetIngredientsForFilters fetches and combines ingredients for the provided filters in parallel.
+// Errors from individual filters are logged and skipped so other filters can still contribute results.
+func (g *Generator) GetIngredientsForFilters(ctx context.Context, locationID string, filters ...filter) []kroger.Ingredient {
+	var wg sync.WaitGroup
+	var lock sync.Mutex
+	var ingredients []kroger.Ingredient
+
+	wg.Add(len(filters))
+	for _, category := range filters {
+		go func(category filter) {
+			defer wg.Done()
+			cingredients, err := g.GetIngredients(ctx, locationID, category, 0)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", locationID, "error", err)
+				return
+			}
+
+			lock.Lock()
+			ingredients = append(ingredients, cingredients...)
+			lock.Unlock()
+
+			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", locationID)
+		}(category)
+	}
+
+	wg.Wait()
+	return ingredients
+}
+
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
 func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
 	lochash := p.LocationHash()
-	var ingredients []kroger.Ingredient
 	rio := IO(g.cache)
 
 	if cachedIngredients, err := rio.IngredientsFromCache(ctx, lochash); err == nil {
@@ -137,25 +165,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		return nil, err
 	}
 
-	var wg sync.WaitGroup
-	var lock sync.Mutex
-	wg.Add(len(p.Staples))
-	for _, category := range p.Staples {
-		go func(category filter) {
-			defer wg.Done()
-			cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
-				return
-			}
-			lock.Lock()
-			defer lock.Unlock()
-			ingredients = append(ingredients, cingredients...)
-			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
-		}(category)
-	}
-
-	wg.Wait()
+	ingredients := g.GetIngredientsForFilters(ctx, p.Location.ID, p.Staples...)
 
 	mutable.Shuffle(ingredients)
 
