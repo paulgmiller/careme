@@ -28,7 +28,7 @@ type User struct {
 
 // need to take a look up to location cache?
 func (u User) Validate() error {
-	if _, err := parseWeekday(u.ShoppingDay); err != nil {
+	if _, err := ParseWeekday(u.ShoppingDay); err != nil {
 		return err
 	}
 	if len(u.Email) == 0 {
@@ -62,12 +62,12 @@ var daysOfWeek = [...]string{
 	time.Saturday.String(),
 }
 
-func parseWeekday(v string) (time.Weekday, error) {
+func ParseWeekday(v string) (time.Weekday, error) {
 	for i := range daysOfWeek {
 		if strings.EqualFold(daysOfWeek[i], v) {
 			return time.Weekday(i), nil
 		}
 	}
 
-	return time.Sunday, fmt.Errorf("invalid weekday '%s'", v)
+	return time.Saturday, fmt.Errorf("invalid weekday '%s'", v)
 }

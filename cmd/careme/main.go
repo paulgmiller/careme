@@ -3,6 +3,7 @@ package main
 import (
 	"careme/internal/config"
 	"careme/internal/logsink"
+	"careme/internal/mail"
 	"careme/internal/static"
 	"careme/internal/templates"
 	"context"
@@ -16,12 +17,12 @@ import (
 )
 
 func main() {
-	var serve, mail bool
+	var serve, mailer bool
 	var addr string
 
 	//left for back compat does noting
 	flag.BoolVar(&serve, "serve", false, "dead we always serve")
-	flag.BoolVar(&mail, "mail", false, "Run one-shot mail sender and exit")
+	flag.BoolVar(&mailer, "mail", false, "Run one-shot mail sender and exit")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.Parse()
 
@@ -58,8 +59,8 @@ func main() {
 		log.Fatalf("failed to initialize templates: %s", err)
 	}
 
-	if mail {
-		mailer, err := NewMailer(cfg)
+	if mailer {
+		mailer, err := mail.NewMailer(cfg)
 		if err != nil {
 			log.Fatalf("failed to create mailer: %v", err)
 		}
