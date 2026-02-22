@@ -126,7 +126,7 @@ func Filter(term string, brands []string, frozen bool) filter {
 // Errors from individual filters are logged and skipped so other filters can still contribute results.
 func (g *Generator) GetIngredientsForFilters(ctx context.Context, locationID string, filters ...filter) []kroger.Ingredient {
 	var wg sync.WaitGroup
-	var lock sync.Mutex
+	var lock sync.Mutex //channel instead?
 	var ingredients []kroger.Ingredient
 
 	wg.Add(len(filters))
@@ -162,7 +162,6 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		return cachedIngredients, nil
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
-		return nil, err
 	}
 
 	ingredients := g.GetIngredientsForFilters(ctx, p.Location.ID, p.Staples...)

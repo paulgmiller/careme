@@ -52,13 +52,6 @@ func main() {
 
 }
 
-func toFloat(f *float32) string {
-	if f == nil {
-		return "0"
-	}
-	return fmt.Sprintf("%.2f", *f)
-}
-
 func toString(s *string) string {
 	if s == nil {
 		return ""

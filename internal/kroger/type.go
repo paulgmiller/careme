@@ -10,7 +10,7 @@ type Ingredient struct {
 	Description         *string   `json:"description,omitempty"`
 	Favorite            *bool     `json:"favorite,omitempty"` //what does this mean?
 	InventoryStockLevel *string   `json:"stockLevel,omitempty"`
-	PriceSale           *float32  `json:"salePp.Carice,omitempty"`
+	PriceSale           *float32  `json:"salePrice,omitempty"`
 	PriceRegular        *float32  `json:"regularPrice,omitempty"`
 	Size                *string   `json:"size,omitempty"`
 	Categories          *[]string `json:"categories,omitempty"`
