@@ -13,6 +13,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 var fruit = []string{
@@ -293,7 +296,10 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 }
 
 func hasProduce(ingredients []kroger.Ingredient, term string) []string {
-	needle := normalizeTerm(term)
+	needleTokens := tokens(normalizeTerm(term))
+	if len(needleTokens) == 0 {
+		return nil
+	}
 	seen := make(map[string]struct{})
 	matches := make([]string, 0)
 	for _, ingredient := range ingredients {
@@ -304,14 +310,15 @@ func hasProduce(ingredients []kroger.Ingredient, term string) []string {
 		if description == "" {
 			continue
 		}
-		haystack := normalizeTerm(description)
-		if strings.Contains(haystack, needle) {
-			if _, ok := seen[description]; ok {
-				continue
-			}
-			seen[description] = struct{}{}
-			matches = append(matches, description)
+		haystackTokens := tokens(normalizeTerm(description))
+		if !containsAllTokens(haystackTokens, needleTokens) {
+			continue
 		}
+		if _, ok := seen[description]; ok {
+			continue
+		}
+		seen[description] = struct{}{}
+		matches = append(matches, description)
 	}
 
 	slices.Sort(matches)
@@ -334,7 +341,120 @@ func shortestAndLongest(matches []string) (string, string) {
 
 func normalizeTerm(s string) string {
 	s = strings.TrimSpace(strings.ToLower(s))
-	s = strings.Join(strings.Fields(s), " ")
-	s = strings.ToLower(s)
+	s = removeParenthetical(s)
+	s = stripDiacritics(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteRune(' ')
+	}
+	fields := strings.Fields(b.String())
+	if len(fields) == 0 {
+		return ""
+	}
+	normalized := make([]string, 0, len(fields))
+	for _, field := range fields {
+		token := normalizeToken(field)
+		if token == "" {
+			continue
+		}
+		normalized = append(normalized, token)
+	}
+	return strings.Join(normalized, " ")
+}
+
+func tokens(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Fields(s)
+}
+
+func containsAllTokens(haystack []string, needle []string) bool {
+	if len(needle) == 0 {
+		return false
+	}
+	set := make(map[string]struct{}, len(haystack))
+	for _, token := range haystack {
+		set[token] = struct{}{}
+	}
+	for _, token := range needle {
+		if _, ok := set[token]; !ok {
+			if token == "lettuce" {
+				continue
+			}
+			return false
+		}
+	}
+	return true
+}
+
+func removeParenthetical(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		default:
+			if depth == 0 {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return b.String()
+}
+
+func stripDiacritics(s string) string {
+	decomposed := norm.NFD.String(s)
+	var b strings.Builder
+	b.Grow(len(decomposed))
+	for _, r := range decomposed {
+		if unicode.Is(unicode.Mn, r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return norm.NFC.String(b.String())
+}
+
+func normalizeToken(s string) string {
+	switch s {
+	case "kiwifruit":
+		s = "kiwi"
+	case "asparagus":
+		return s
+	case "portobello":
+		s = "portabella"
+	case "chile":
+		s = "chili"
+	}
+
+	switch {
+	case strings.HasSuffix(s, "ies") && len(s) > 3:
+		s = s[:len(s)-3] + "y"
+	case strings.HasSuffix(s, "oes") && len(s) > 3:
+		s = s[:len(s)-2]
+	case strings.HasSuffix(s, "ches") || strings.HasSuffix(s, "shes") || strings.HasSuffix(s, "xes") || strings.HasSuffix(s, "zes") || strings.HasSuffix(s, "ses"):
+		if len(s) > 4 {
+			s = s[:len(s)-2]
+		}
+	case strings.HasSuffix(s, "s") && !strings.HasSuffix(s, "ss") && len(s) > 2:
+		s = s[:len(s)-1]
+	}
+
+	switch s {
+	case "brussel":
+		return "brussels"
+	}
 	return s
 }

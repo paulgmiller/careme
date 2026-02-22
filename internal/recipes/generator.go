@@ -240,7 +240,7 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 	if len(*products.JSON200.Data) == limit && skip < 250 { // fence post error
 		page, err := g.GetIngredients(ctx, location, f, skip+limit)
 		if err != nil {
-			slog.ErrorContext(ctx, "hit result %s ending pagination", err)
+			slog.ErrorContext(ctx, "ending pagination after page fetch error", "error", err, "term", f.Term, "location", location, "skip", skip+limit)
 			return ingredients, nil
 		}
 		ingredients = append(ingredients, page...)

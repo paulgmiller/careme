@@ -222,50 +222,80 @@ func DefaultStaples() []filter {
 func Produce() []filter {
 	return []filter{
 		{
-			//Produce score  0.532710: 57/107 with 294 ingredients
 			Term:   "produce",
-			Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "fresh produce",
+			Brands: []string{"*"},
 		},
 		{
 			Term:   "mushrooms produce",
-			Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
-		},
-		/*
-					miller@millerbase [03:13:24 PM] [~/careme/cmd/ingredients] [codex/add-acceptance-test-for-produce-availability *]
-			-> % go run . -l 70500874 -i "peppers produce"
-			2026/02/21 15:13:30 Using Azure Blob Storage for cache
-			Simple Truth Organic - Simple Truth Organic® Roma Tomatoes:([Produce Natural & Organic Produce]))
-			Simple Truth Organic - Simple Truth Organic® Tomato Medley Snacking Tomatoes:([Natural & Organic]))
-			Fresh Tomatoes - Fresh Organic On the Vine Tomatoes (4-5 Tomatoes per Bunch):([Natural & Organic Produce Produce]))
-			Simple Truth Organic - Simple Truth Organic® Fresh Grape Snacking Tomatoes:([Natural & Organic Produce Produce]))
-			pmiller@millerbase [03:13:31 PM] [~/careme/cmd/ingredients] [codex/add-acceptance-test-for-produce-availability *]
-			-> % go run . -l 70500874 -i "habenero produce"
-			2026/02/21 15:13:45 Using Azure Blob Storage for cache
-			 - Fresh Jalapeno Peppers:([Produce International]))
-			Maple Leaf - Maple Leaf Habenero Jack:([Deli]))
-			 - Fresh Orange Bell Pepper:([International Produce]))
-			Fresh Onions - Jumbo White Onions:([Produce]))
-			Fresh Tomatoes - Fresh Roma Tomato:([Produce]))
-			 - Pasilla Peppers:([International Produce]))
-			 - Fresh Tomatillo:([Produce International Produce]))
-			Fresh Tomatoes - Fresh Green Tomato:([Produce]))
-			 - Fresh Habanero Peppers:([International Produce]))
-			 - Fresh Anaheim Peppers:([International Produce]))
-			 - Fresh Hatch Peppers:([International Produce]))
-			 - Fresh Yellow Bell Pepper:([International Produce]))
-			 - Fresh Green Serrano Peppers:([Produce International]))
-			 - Fresh Poblano Peppers:([Produce International]))
-		*/
-		{
-			Term:   "habenero produce",
-			Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
+			Brands: []string{"*"},
 		},
 		{
-			Term: "bell peppers",
+			Term:   "red chili peppers",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "bell peppers",
+			Brands: []string{"*"},
 		},
 		{
 			Term:   "cucumber produce",
-			Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "seedless cucumbers",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "little gem produce",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "chives",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "bean sprouts",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "alfalfa sprouts",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "king trumpet mushrooms",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "eggplant",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "napa cabbage",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "tarragon",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "parsnip produce",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "mini sweet peppers",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "broccoli sprouts",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "green chili peppers",
+			Brands: []string{"*"},
 		},
 	}
 }
