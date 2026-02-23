@@ -229,73 +229,8 @@ func Produce() []filter {
 			Term:   "fresh produce",
 			Brands: []string{"*"},
 		},
-		{
-			Term:   "mushrooms produce",
-			Brands: []string{"*"},
-		},
-		{
-			Term: "fresh peppers",
-			//Brands: []string{"*"},
-		},
-		{
-			Term:   "cucumber produce",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "chives",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "eggplant",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "tarragon",
-			Brands: []string{"*"},
-		},
-
-		{
-			Term:   "green chili peppers",
-			Brands: []string{"*"},
-		},
 	}
 
-	/*single response not wortth query
-
-	{
-		Term:   "king trumpet mushrooms",
-		Brands: []string{"*"},
-	},
-
-		{
-			Term:   "napa cabbage",
-			Brands: []string{"*"},
-		},
-
-		{
-			Term:   "seedless cucumbers",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "parsnip produce",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "mini sweet peppers",
-			Brands: []string{"*"},
-		},
-	*/
-
-	/*why does sprouts nto get these?
-	{
-		Term:   "bean sprouts",
-		Brands: []string{"*"},
-	},
-	{
-		Term:   "alfalfa sprouts",
-		Brands: []string{"*"},
-	},
-	*/
 }
 
 func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {

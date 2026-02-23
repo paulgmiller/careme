@@ -11,6 +11,7 @@ import (
 	"log"
 	"slices"
 	"strings"
+	"sync"
 	"unicode"
 
 	"golang.org/x/text/unicode/norm"
@@ -224,11 +225,13 @@ func parseProduceList(csv string) []string {
 	return produce
 }
 
-type produceMatchStats struct {
-	Term     string
-	Matches  []string
-	Shortest string
-	Longest  string
+type produceFilterStats struct {
+	FilterTerm          string
+	IngredientMatches   int
+	ProduceTermsMatched int
+	ProduceMatches      int
+	UniqueOnlyMatches   int
+	matchedDescriptions []string
 }
 
 func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string, singleFilterTerm string) ([]string, int, error) {
@@ -238,27 +241,72 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 		if err != nil {
 			return nil, 0, err
 		}
+		matchedTerms, matchedProducts, matchedDescriptions := summarizeFilterMatchesDetailed(produce, ingredients)
+		stats := []produceFilterStats{
+			{
+				FilterTerm:          singleFilterTerm,
+				IngredientMatches:   len(ingredients),
+				ProduceTermsMatched: matchedTerms,
+				ProduceMatches:      matchedProducts,
+				matchedDescriptions: matchedDescriptions,
+			},
+		}
+		annotateUniqueOnlyMatches(stats)
+		printProduceFilterSummary(stats, len(produce))
 		return evaluateProduceAvailability(produce, ingredients), len(ingredients), nil
 	}
 
-	ingredients := g.GetIngredientsForFilters(ctx, locationID, recipes.Produce()...)
+	filters := recipes.Produce()
+	ingredients := make([]kroger.Ingredient, 0, len(filters)*50)
+	stats := make([]produceFilterStats, 0, len(filters))
+	type filterResult struct {
+		filter      string
+		ingredients []kroger.Ingredient
+		err         error
+	}
+	results := make([]filterResult, len(filters))
+	var wg sync.WaitGroup
+	wg.Add(len(filters))
+	for i, filter := range filters {
+		i, filter := i, filter
+		go func() {
+			defer wg.Done()
+			filterIngredients, err := g.GetIngredients(ctx, locationID, filter, 0)
+			results[i] = filterResult{
+				filter:      filter.Term,
+				ingredients: filterIngredients,
+				err:         err,
+			}
+		}()
+	}
+	wg.Wait()
+
+	for _, result := range results {
+		if result.err != nil {
+			log.Printf("warning: failed to get ingredients for filter %q at location %s: %v", result.filter, locationID, result.err)
+			continue
+		}
+		matchedTerms, matchedProducts, matchedDescriptions := summarizeFilterMatchesDetailed(produce, result.ingredients)
+		stats = append(stats, produceFilterStats{
+			FilterTerm:          result.filter,
+			IngredientMatches:   len(result.ingredients),
+			ProduceTermsMatched: matchedTerms,
+			ProduceMatches:      matchedProducts,
+			matchedDescriptions: matchedDescriptions,
+		})
+		ingredients = append(ingredients, result.ingredients...)
+	}
+	annotateUniqueOnlyMatches(stats)
+	printProduceFilterSummary(stats, len(produce))
 
 	return evaluateProduceAvailability(produce, ingredients), len(ingredients), nil
 }
 
 func evaluateProduceAvailability(produce []string, ingredients []kroger.Ingredient) []string {
 	missing := make([]string, 0)
-	foundStats := make([]produceMatchStats, 0, len(produce))
 	for _, term := range produce {
 		matches := hasProduce(ingredients, term)
 		if len(matches) > 0 {
-			shortest, longest := shortestAndLongest(matches)
-			foundStats = append(foundStats, produceMatchStats{
-				Term:     term,
-				Matches:  matches,
-				Shortest: shortest,
-				Longest:  longest,
-			})
 			fmt.Printf("✅ %s -> %d matches\n", term, len(matches))
 			continue
 		}
@@ -266,28 +314,76 @@ func evaluateProduceAvailability(produce []string, ingredients []kroger.Ingredie
 		missing = append(missing, term)
 	}
 
-	/*
-		if len(foundStats) > 0 {
-			fmt.Println()
-			fmt.Println("match summary:")
-			for _, stats := range foundStats {
-				if len(stats.Matches) == 1 {
-					fmt.Printf("- %s (%d match): %s\n", stats.Term, len(stats.Matches), stats.Matches[0])
-					continue
-				}
-
-				fmt.Printf("- %s (%d matches)\n", stats.Term, len(stats.Matches))
-				fmt.Printf("  shortest: %s\n", stats.Shortest)
-				fmt.Printf("  longest: %s\n", stats.Longest)
-				//fmt.Println("  descriptions:")
-				//for _, description := range stats.Matches {
-				//	fmt.Printf("  - %s\n", description)
-				//}
-			}
-		}*/
-
 	slices.Sort(missing)
 	return missing
+}
+
+func summarizeFilterMatches(produce []string, ingredients []kroger.Ingredient) (int, int) {
+	matchedTerms, matchedProducts, _ := summarizeFilterMatchesDetailed(produce, ingredients)
+	return matchedTerms, matchedProducts
+}
+
+func summarizeFilterMatchesDetailed(produce []string, ingredients []kroger.Ingredient) (int, int, []string) {
+	matchedTerms := 0
+	matchedProducts := 0
+	descriptions := make(map[string]struct{})
+	for _, term := range produce {
+		matches := hasProduce(ingredients, term)
+		if len(matches) == 0 {
+			continue
+		}
+		matchedTerms++
+		matchedProducts += len(matches)
+		for _, description := range matches {
+			descriptions[description] = struct{}{}
+		}
+	}
+	matchedDescriptions := make([]string, 0, len(descriptions))
+	for description := range descriptions {
+		matchedDescriptions = append(matchedDescriptions, description)
+	}
+	slices.Sort(matchedDescriptions)
+	return matchedTerms, matchedProducts, matchedDescriptions
+}
+
+func annotateUniqueOnlyMatches(stats []produceFilterStats) {
+	descriptionCount := make(map[string]int)
+	for _, stat := range stats {
+		for _, description := range stat.matchedDescriptions {
+			descriptionCount[description]++
+		}
+	}
+
+	for i := range stats {
+		uniqueOnly := 0
+		for _, description := range stats[i].matchedDescriptions {
+			if descriptionCount[description] == 1 {
+				uniqueOnly++
+			}
+		}
+		stats[i].UniqueOnlyMatches = uniqueOnly
+	}
+}
+
+func printProduceFilterSummary(stats []produceFilterStats, totalProduceTerms int) {
+	if len(stats) == 0 {
+		fmt.Println("produce filter summary: no filters returned results")
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("produce filter summary:")
+	for _, stat := range stats {
+		fmt.Printf("- %s -> %d ingredients, %d/%d produce terms, %d matches, %d unique-only products\n",
+			stat.FilterTerm,
+			stat.IngredientMatches,
+			stat.ProduceTermsMatched,
+			totalProduceTerms,
+			stat.ProduceMatches,
+			stat.UniqueOnlyMatches,
+		)
+	}
+	fmt.Println()
 }
 
 func hasProduce(ingredients []kroger.Ingredient, term string) []string {
@@ -318,20 +414,6 @@ func hasProduce(ingredients []kroger.Ingredient, term string) []string {
 
 	slices.Sort(matches)
 	return matches
-}
-
-func shortestAndLongest(matches []string) (string, string) {
-	shortest := matches[0]
-	longest := matches[0]
-	for _, match := range matches[1:] {
-		if len(match) < len(shortest) {
-			shortest = match
-		}
-		if len(match) > len(longest) {
-			longest = match
-		}
-	}
-	return shortest, longest
 }
 
 func normalizeTerm(s string) string {

@@ -81,6 +81,63 @@ func TestHasProduce_UsesTokenMatching(t *testing.T) {
 	}
 }
 
+func TestSummarizeFilterMatches(t *testing.T) {
+	descriptions := []*string{
+		strPtr("Fresh Seedless Mini Cucumbers"),
+		strPtr("Fresh Mini Cucumbers"),
+		strPtr("Fresh Jalapeno Peppers"),
+		strPtr("Simple Truth Organic® Kiwifruit"),
+	}
+	ingredients := make([]kroger.Ingredient, 0, len(descriptions))
+	for _, d := range descriptions {
+		ingredients = append(ingredients, kroger.Ingredient{Description: d})
+	}
+
+	produce := []string{
+		"seedless cucumbers",
+		"jalapeño peppers",
+		"kiwi",
+		"dill",
+	}
+
+	matchedTerms, matchedProducts := summarizeFilterMatches(produce, ingredients)
+	if matchedTerms != 3 {
+		t.Fatalf("summarizeFilterMatches() matchedTerms = %d, want %d", matchedTerms, 3)
+	}
+	if matchedProducts != 3 {
+		t.Fatalf("summarizeFilterMatches() matchedProducts = %d, want %d", matchedProducts, 3)
+	}
+}
+
+func TestAnnotateUniqueOnlyMatches(t *testing.T) {
+	stats := []produceFilterStats{
+		{
+			FilterTerm:          "fresh produce",
+			matchedDescriptions: []string{"A", "B", "C"},
+		},
+		{
+			FilterTerm:          "mushrooms produce",
+			matchedDescriptions: []string{"B", "D"},
+		},
+		{
+			FilterTerm:          "fresh peppers",
+			matchedDescriptions: []string{"E"},
+		},
+	}
+
+	annotateUniqueOnlyMatches(stats)
+
+	if stats[0].UniqueOnlyMatches != 2 {
+		t.Fatalf("stats[0].UniqueOnlyMatches = %d, want %d", stats[0].UniqueOnlyMatches, 2)
+	}
+	if stats[1].UniqueOnlyMatches != 1 {
+		t.Fatalf("stats[1].UniqueOnlyMatches = %d, want %d", stats[1].UniqueOnlyMatches, 1)
+	}
+	if stats[2].UniqueOnlyMatches != 1 {
+		t.Fatalf("stats[2].UniqueOnlyMatches = %d, want %d", stats[2].UniqueOnlyMatches, 1)
+	}
+}
+
 func strPtr(s string) *string {
 	return &s
 }
