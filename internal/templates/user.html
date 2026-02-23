@@ -26,7 +26,19 @@
           {{end}}
         </div>
 
-        <div class="space-y-12 px-8 py-8">
+        <div class="space-y-8 px-8 py-8">
+          <nav aria-label="User profile tabs" class="flex w-full gap-2 rounded-xl bg-brand-50 p-1">
+            <a href="/user?tab=past"
+               class="inline-flex flex-1 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold transition {{if eq .ActiveTab "past"}}bg-white text-brand-700 shadow-sm{{else}}text-brand-600 hover:bg-white/70{{end}}">
+              Past recipes
+            </a>
+            <a href="/user?tab=customize"
+               class="inline-flex flex-1 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold transition {{if ne .ActiveTab "past"}}bg-white text-brand-700 shadow-sm{{else}}text-brand-600 hover:bg-white/70{{end}}">
+              Customize
+            </a>
+          </nav>
+
+          {{if ne .ActiveTab "past"}}
           <section class="space-y-4">
             <h2 class="text-lg font-semibold text-brand-700">Account Information</h2>
             <div class="grid gap-3 sm:grid-cols-2">
@@ -103,7 +115,9 @@
               </button>
             </form>
           </section>
+          {{end}}
 
+          {{if eq .ActiveTab "past"}}
           <section class="space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <h2 class="text-lg font-semibold text-brand-700">Past Recipes</h2>
@@ -147,6 +161,7 @@
             <p class="text-sm text-gray-500">No recipes yet—start by saving one from your recommendations.</p>
             {{end}}
           </section>
+          {{end}}
         </div>
       </div>
 

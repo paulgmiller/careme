@@ -69,7 +69,7 @@ func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 	for _, existing := range currentUser.LastRecipes {
 		if strings.EqualFold(existing.Title, recipeTitle) {
 			slog.InfoContext(ctx, "duplicate previous recipe", "title", recipeTitle)
-			http.Redirect(w, r, "/user", http.StatusSeeOther)
+			http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
 			return
 		}
 	}
@@ -85,7 +85,7 @@ func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/user", http.StatusSeeOther)
+	http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
 }
 
 func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +94,10 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	activeTab := "customize"
+	if r.URL.Query().Get("tab") == "past" {
+		activeTab = "past"
+	}
 	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
@@ -139,6 +143,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		success = true
+		activeTab = "customize"
 	}
 
 	// Fetch location name if favorite store is set
@@ -161,6 +166,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		User              *utypes.User
 		Success           bool
 		FavoriteStoreName string
+		ActiveTab         string
 		Style             seasons.Style
 		ServerSignedIn    bool
 	}{
@@ -168,6 +174,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		User:              currentUser,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
+		ActiveTab:         activeTab,
 		Style:             seasons.GetCurrentStyle(),
 		ServerSignedIn:    true,
 	}
