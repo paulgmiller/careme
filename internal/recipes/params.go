@@ -218,7 +218,6 @@ func DefaultStaples() []filter {
 	}...)
 }
 
-// This is dramatically overfit to my qfc
 func Produce() []filter {
 	return []filter{
 		{
