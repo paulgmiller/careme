@@ -266,24 +266,25 @@ func evaluateProduceAvailability(produce []string, ingredients []kroger.Ingredie
 		missing = append(missing, term)
 	}
 
-	if len(foundStats) > 0 {
-		fmt.Println()
-		fmt.Println("match summary:")
-		for _, stats := range foundStats {
-			if len(stats.Matches) == 1 {
-				fmt.Printf("- %s (%d match): %s\n", stats.Term, len(stats.Matches), stats.Matches[0])
-				continue
-			}
+	/*
+		if len(foundStats) > 0 {
+			fmt.Println()
+			fmt.Println("match summary:")
+			for _, stats := range foundStats {
+				if len(stats.Matches) == 1 {
+					fmt.Printf("- %s (%d match): %s\n", stats.Term, len(stats.Matches), stats.Matches[0])
+					continue
+				}
 
-			fmt.Printf("- %s (%d matches)\n", stats.Term, len(stats.Matches))
-			fmt.Printf("  shortest: %s\n", stats.Shortest)
-			fmt.Printf("  longest: %s\n", stats.Longest)
-			//fmt.Println("  descriptions:")
-			//for _, description := range stats.Matches {
-			//	fmt.Printf("  - %s\n", description)
-			//}
-		}
-	}
+				fmt.Printf("- %s (%d matches)\n", stats.Term, len(stats.Matches))
+				fmt.Printf("  shortest: %s\n", stats.Shortest)
+				fmt.Printf("  longest: %s\n", stats.Longest)
+				//fmt.Println("  descriptions:")
+				//for _, description := range stats.Matches {
+				//	fmt.Printf("  - %s\n", description)
+				//}
+			}
+		}*/
 
 	slices.Sort(missing)
 	return missing

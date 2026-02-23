@@ -234,23 +234,11 @@ func Produce() []filter {
 			Brands: []string{"*"},
 		},
 		{
-			Term:   "red chili peppers",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "bell peppers",
-			Brands: []string{"*"},
+			Term: "fresh peppers",
+			//Brands: []string{"*"},
 		},
 		{
 			Term:   "cucumber produce",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "seedless cucumbers",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "little gem produce",
 			Brands: []string{"*"},
 		},
 		{
@@ -258,23 +246,7 @@ func Produce() []filter {
 			Brands: []string{"*"},
 		},
 		{
-			Term:   "bean sprouts",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "alfalfa sprouts",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "king trumpet mushrooms",
-			Brands: []string{"*"},
-		},
-		{
 			Term:   "eggplant",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "napa cabbage",
 			Brands: []string{"*"},
 		},
 		{
@@ -289,15 +261,41 @@ func Produce() []filter {
 			Term:   "mini sweet peppers",
 			Brands: []string{"*"},
 		},
-		{
-			Term:   "broccoli sprouts",
-			Brands: []string{"*"},
-		},
+
 		{
 			Term:   "green chili peppers",
 			Brands: []string{"*"},
 		},
 	}
+
+	/*single response not wortth query
+
+	{
+		Term:   "king trumpet mushrooms",
+		Brands: []string{"*"},
+	},
+
+		{
+			Term:   "napa cabbage",
+			Brands: []string{"*"},
+		},
+
+		{
+			Term:   "seedless cucumbers",
+			Brands: []string{"*"},
+		},
+	*/
+
+	/*why does sprouts nto get these?
+	{
+		Term:   "bean sprouts",
+		Brands: []string{"*"},
+	},
+	{
+		Term:   "alfalfa sprouts",
+		Brands: []string{"*"},
+	},
+	*/
 }
 
 func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {
