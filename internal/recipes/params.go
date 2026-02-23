@@ -222,7 +222,7 @@ func DefaultStaples() []filter {
 func Produce() []filter {
 	return []filter{
 		{
-			Term:   "produce",
+			Term:   "fresh vegatable",
 			Brands: []string{"*"},
 		},
 		{
@@ -253,14 +253,6 @@ func Produce() []filter {
 			Term:   "tarragon",
 			Brands: []string{"*"},
 		},
-		{
-			Term:   "parsnip produce",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "mini sweet peppers",
-			Brands: []string{"*"},
-		},
 
 		{
 			Term:   "green chili peppers",
@@ -282,6 +274,14 @@ func Produce() []filter {
 
 		{
 			Term:   "seedless cucumbers",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "parsnip produce",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "mini sweet peppers",
 			Brands: []string{"*"},
 		},
 	*/
