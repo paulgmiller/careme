@@ -32,7 +32,9 @@ type generatorParams struct {
 	Date     time.Time           `json:"date,omitempty"`
 	Staples  []filter            `json:"staples,omitempty"`
 	// People       int
+	//per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
+	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
 	LastRecipes  []string `json:"last_recipes,omitempty"`
 	// UserID         string      `json:"user_id,omitempty"`
 	ConversationID string      `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
@@ -61,9 +63,10 @@ func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	bytes := lo.Must(json.Marshal(g.Staples))
+	bytes := lo.Must(json.Marshal(g.Staples)) //should we remove this so this is stable when we change staples?
 	lo.Must(fnv.Write(bytes))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
+	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
 		lo.Must(io.WriteString(fnv, "saved"+saved.ComputeHash()))
 	}

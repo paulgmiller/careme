@@ -24,6 +24,7 @@ type User struct {
 	FavoriteStore string    `json:"favorite_store,omitempty"`
 	ShoppingDay   string    `json:"shopping_day,omitempty"`
 	MailOptIn     bool      `json:"mail_opt_in,omitempty"`
+	Directive     string    `json:"directive,omitempty"`
 }
 
 // need to take a look up to location cache?

@@ -90,7 +90,10 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
-	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+
+	instructions := mergeInstructions(p.Directive, p.Instructions)
+
+	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
@@ -103,6 +106,19 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return shoppingList, nil
+}
+
+func mergeInstructions(directive string, instructions string) string {
+	directive = strings.TrimSpace(directive)
+	instructions = strings.TrimSpace(instructions)
+
+	if directive == "" {
+		return instructions
+	}
+	if instructions == "" {
+		return directive
+	}
+	return directive + "\n\n" + instructions
 }
 
 func (g *Generator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {

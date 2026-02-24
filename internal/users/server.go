@@ -135,6 +135,10 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		if shoppingDay := strings.TrimSpace(r.FormValue("shopping_day")); shoppingDay != "" {
 			currentUser.ShoppingDay = shoppingDay
 		}
+		if r.Form.Has("directive") {
+			generationPrompt := strings.TrimSpace(r.FormValue("directive"))
+			currentUser.Directive = generationPrompt
+		}
 		currentUser.MailOptIn = r.FormValue("mail_opt_in") == "1"
 
 		if err := s.storage.Update(currentUser); err != nil {
