@@ -190,7 +190,7 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 }
 
 func DefaultStaples() []filter {
-	return []filter{
+	return append(Produce(), []filter{
 		{
 			Term:   "beef",
 			Brands: []string{"Simple Truth", "Kroger"},
@@ -215,11 +215,21 @@ func DefaultStaples() []filter {
 			Term:   "lamb",
 			Brands: []string{"Simple Truth"},
 		},
+	}...)
+}
+
+func Produce() []filter {
+	return []filter{
 		{
-			Term:   "produce vegetable",
-			Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
+			Term:   "fresh vegatable",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "fresh produce",
+			Brands: []string{"*"},
 		},
 	}
+
 }
 
 func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {

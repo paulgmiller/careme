@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/samber/lo/mutable"
 )
 
@@ -150,7 +151,8 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 			lock.Lock()
 			defer lock.Unlock()
 			ingredients = append(ingredients, cingredients...)
-			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
+			ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toStr(i.Description) })
+			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID, "runningtotal", len(ingredients))
 		}(category)
 	}
 
@@ -167,13 +169,13 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 
 // move to krogrer client as everyone will be differnt here?
 func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]kroger.Ingredient, error) {
-	limit := 25
+	limit := 50
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
 	// brand := "empty" doesn't work have to check for nil
 	// fulfillment := "ais" drmatically shortens?
 	// wrapped this in a retry and it did nothng
-	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
+	products, err := g.krogerClient.ProductSearchWithResponse(ctx, &kroger.ProductSearchParams{
 		FilterLocationId: &location,
 		FilterTerm:       &f.Term,
 		FilterLimit:      &limitStr,
@@ -234,8 +236,8 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 	// slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location, "skip", skip)
 
 	// recursion is pretty dumb pagination
-	// 500's seem gone.
-	if len(*products.JSON200.Data) == limit && skip+limit < 100 { // fence post error
+	// kroger limites us to 250
+	if len(*products.JSON200.Data) == limit && skip < 250 { // fence post error
 		page, err := g.GetIngredients(ctx, location, f, skip+limit)
 		if err != nil {
 			return ingredients, nil
