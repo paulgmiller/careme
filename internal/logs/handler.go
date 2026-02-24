@@ -8,27 +8,27 @@ import (
 	"strconv"
 )
 
-type Handler struct {
+type handler struct {
 	reader *Reader
 }
 
-func NewHandler(cfg logsink.Config) (*Handler, error) {
+func NewHandler(cfg logsink.Config) (*handler, error) {
 	reader, err := NewReader(&cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create log reader: %w", err)
 	}
 
-	return &Handler{
+	return &handler{
 		reader: reader,
 	}, nil
 }
 
-func (h *Handler) Register(mux *http.ServeMux) {
+func (h *handler) Register(mux *http.ServeMux) {
 	mux.Handle("/logs", http.HandlerFunc(h.handleLogsPage))
 	mux.Handle("/api/logs", http.HandlerFunc(h.handleLogsAPI))
 }
 
-func (h *Handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
@@ -44,7 +44,7 @@ func (h *Handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 <meta charset="utf-8" />
 <title>Logs</title>
 <script>
-  const api = new URL("api/logs", location.href);
+  const api = new URL("admin/api/logs", location.href);
   const qs = new URLSearchParams(location.search);
   for (const k of ["hours"]) if (qs.has(k)) api.searchParams.set(k, qs.get(k));
 
@@ -60,7 +60,7 @@ func (h *Handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
 	hoursStr := r.URL.Query().Get("hours")
 	hours := 24
 	if hoursStr != "" {
