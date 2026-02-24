@@ -60,58 +60,58 @@ func GetColorScheme(season Season) ColorScheme {
 	case Fall:
 		// Orange colors - leaf falling orange
 		return ColorScheme{
-			C50:  "oklch(98.0% 0.016 73.7)",
-			C100: "oklch(95.4% 0.038 75.2)",
-			C200: "oklch(90.1% 0.076 70.7)",
-			C300: "oklch(83.7% 0.128 66.3)",
-			C400: "oklch(75.0% 0.183 55.9)",
-			C500: "oklch(70.5% 0.213 47.6)",
-			C600: "oklch(64.6% 0.222 41.1)",
-			C700: "oklch(55.3% 0.195 38.4)",
-			C800: "oklch(47.0% 0.157 37.3)",
-			C900: "oklch(40.8% 0.123 38.2)",
+			C50:  "#fff7ed",
+			C100: "#ffedd5",
+			C200: "#fed7aa",
+			C300: "#fdba74",
+			C400: "#fb923c",
+			C500: "#f97316",
+			C600: "#ea580c",
+			C700: "#c2410c",
+			C800: "#9a3412",
+			C900: "#7c2d12",
 		}
 	case Winter:
 		// Blue/white colors - snow/ice white
 		return ColorScheme{
-			C50:  "oklch(97.7% 0.013 236.6)",
-			C100: "oklch(95.1% 0.026 236.8)",
-			C200: "oklch(90.1% 0.058 230.9)",
-			C300: "oklch(82.8% 0.111 230.3)",
-			C400: "oklch(74.6% 0.160 232.7)",
-			C500: "oklch(68.5% 0.169 237.3)",
-			C600: "oklch(58.8% 0.158 242.0)",
-			C700: "oklch(50.0% 0.134 242.7)",
-			C800: "oklch(44.3% 0.110 240.8)",
-			C900: "oklch(39.1% 0.090 240.9)",
+			C50:  "#f0f9ff",
+			C100: "#e0f2fe",
+			C200: "#bae6fd",
+			C300: "#7dd3fc",
+			C400: "#38bdf8",
+			C500: "#0ea5e9",
+			C600: "#0284c7",
+			C700: "#0369a1",
+			C800: "#075985",
+			C900: "#0c4a6e",
 		}
 	case Spring:
 		// Green colors - growing plant green
 		return ColorScheme{
-			C50:  "oklch(98.2% 0.018 155.8)",
-			C100: "oklch(96.2% 0.044 156.7)",
-			C200: "oklch(92.5% 0.084 156.0)",
-			C300: "oklch(87.1% 0.150 154.4)",
-			C400: "oklch(79.2% 0.209 151.7)",
-			C500: "oklch(72.3% 0.219 149.6)",
-			C600: "oklch(62.7% 0.194 149.2)",
-			C700: "oklch(52.7% 0.154 150.1)",
-			C800: "oklch(44.8% 0.119 151.3)",
-			C900: "oklch(39.3% 0.095 152.5)",
+			C50:  "#f0fdf4",
+			C100: "#dcfce7",
+			C200: "#bbf7d0",
+			C300: "#86efac",
+			C400: "#4ade80",
+			C500: "#22c55e",
+			C600: "#16a34a",
+			C700: "#15803d",
+			C800: "#166534",
+			C900: "#14532d",
 		}
 	case Summer:
 		// Yellow/golden colors - sunshine and ripe fruits
 		return ColorScheme{
-			C50:  "oklch(98.7% 0.026 102.2)",
-			C100: "oklch(97.3% 0.071 103.2)",
-			C200: "oklch(94.5% 0.129 101.5)",
-			C300: "oklch(90.5% 0.182 98.1)",
-			C400: "oklch(85.2% 0.199 91.9)",
-			C500: "oklch(79.5% 0.184 86.0)",
-			C600: "oklch(68.1% 0.162 75.8)",
-			C700: "oklch(55.4% 0.135 66.4)",
-			C800: "oklch(47.6% 0.114 61.9)",
-			C900: "oklch(42.1% 0.095 57.7)",
+			C50:  "#fefce8",
+			C100: "#fef9c3",
+			C200: "#fef08a",
+			C300: "#fde047",
+			C400: "#facc15",
+			C500: "#eab308",
+			C600: "#ca8a04",
+			C700: "#a16207",
+			C800: "#854d0e",
+			C900: "#713f12",
 		}
 	default:
 		// Default to fall colors

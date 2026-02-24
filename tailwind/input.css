@@ -14,29 +14,52 @@
   --color-brand-800: var(--brand-800);
   --color-brand-900: var(--brand-900);
 
-  --color-ink-500: oklch(55.0% 0.032 248);
-  --color-ink-600: oklch(46.0% 0.034 248);
-  --color-ink-700: oklch(38.5% 0.035 250);
-  --color-ink-900: oklch(24.0% 0.033 254);
+  --color-ink-500: #64748b;
+  --color-ink-600: #475569;
+  --color-ink-700: #334155;
+  --color-ink-900: #0f172a;
 
-  --color-action-green-50: oklch(97.6% 0.020 154);
-  --color-action-green-100: oklch(94.5% 0.042 154);
-  --color-action-green-300: oklch(82.8% 0.111 154);
-  --color-action-green-500: oklch(68.5% 0.169 154);
-  --color-action-green-600: oklch(58.8% 0.158 154);
-  --color-action-green-700: oklch(50.0% 0.134 154);
+  --color-action-green-50: #ecfdf5;
+  --color-action-green-100: #d1fae5;
+  --color-action-green-300: #6ee7b7;
+  --color-action-green-500: #10b981;
+  --color-action-green-600: #059669;
+  --color-action-green-700: #047857;
 
-  --color-action-red-50: oklch(97.6% 0.020 28);
-  --color-action-red-100: oklch(94.5% 0.042 28);
-  --color-action-red-300: oklch(82.8% 0.111 28);
-  --color-action-red-500: oklch(68.5% 0.169 28);
-  --color-action-red-600: oklch(58.8% 0.158 28);
-  --color-action-red-700: oklch(50.0% 0.134 28);
+  --color-action-red-50: #fef2f2;
+  --color-action-red-100: #fee2e2;
+  --color-action-red-300: #fca5a5;
+  --color-action-red-500: #ef4444;
+  --color-action-red-600: #dc2626;
+  --color-action-red-700: #b91c1c;
 }
 
 @layer base {
   p {
     text-wrap: pretty;
+  }
+}
+
+@supports (color: oklch(62% 0.12 220)) {
+  :root {
+    --color-ink-500: oklch(55.0% 0.032 248);
+    --color-ink-600: oklch(46.0% 0.034 248);
+    --color-ink-700: oklch(38.5% 0.035 250);
+    --color-ink-900: oklch(24.0% 0.033 254);
+
+    --color-action-green-50: oklch(97.6% 0.020 154);
+    --color-action-green-100: oklch(94.5% 0.042 154);
+    --color-action-green-300: oklch(82.8% 0.111 154);
+    --color-action-green-500: oklch(68.5% 0.169 154);
+    --color-action-green-600: oklch(58.8% 0.158 154);
+    --color-action-green-700: oklch(50.0% 0.134 154);
+
+    --color-action-red-50: oklch(97.6% 0.020 28);
+    --color-action-red-100: oklch(94.5% 0.042 28);
+    --color-action-red-300: oklch(82.8% 0.111 28);
+    --color-action-red-500: oklch(68.5% 0.169 28);
+    --color-action-red-600: oklch(58.8% 0.158 28);
+    --color-action-red-700: oklch(50.0% 0.134 28);
   }
 }
 
