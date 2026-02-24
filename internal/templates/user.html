@@ -40,24 +40,6 @@
 
           {{if ne .ActiveTab "past"}}
           <section class="space-y-4">
-            <h2 class="text-lg font-semibold text-brand-700">Account Information</h2>
-            <div class="grid gap-3 sm:grid-cols-2">
-              <div>
-                <h3 class="text-sm font-medium text-gray-600">Email Addresses</h3>
-                <ul class="mt-2 space-y-1 text-sm text-gray-700">
-                  {{range .User.Email}}
-                  <li class="rounded-lg bg-brand-50 px-3 py-2 text-brand-700">{{.}}</li>
-                  {{end}}
-                </ul>
-              </div>
-              <div>
-                <h3 class="text-sm font-medium text-gray-600">Member Since</h3>
-                <p class="mt-2 text-sm text-gray-700">{{.User.CreatedAt.Format "January 2, 2006"}}</p>
-              </div>
-            </div>
-          </section>
-
-          <section class="space-y-4">
             <h2 class="text-lg font-semibold text-brand-700">Preferences</h2>
             <form method="POST" action="/user" class="space-y-6">
               <div class="space-y-2">
@@ -95,8 +77,7 @@
                 </select>
               </div>
 
-              <div class="space-y-2">
-                <label for="mail_opt_in" class="text-sm font-medium text-gray-700">Recipe emails</label>
+              <div>
                 <label class="inline-flex items-center gap-2 text-sm text-gray-700">
                   <input id="mail_opt_in"
                          name="mail_opt_in"
@@ -104,9 +85,8 @@
                          value="1"
                          {{if .User.MailOptIn}}checked{{end}}
                          class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-400" />
-                  Send me recipe emails
+                  Email me recipes on my shopping day
                 </label>
-                <p class="text-xs text-gray-500">Turn this on to receive recipe emails from your saved store preferences.</p>
               </div>
 
               <div class="space-y-2">
@@ -130,6 +110,24 @@
                 Save Preferences
               </button>
             </form>
+          </section>
+
+          <section class="space-y-4">
+            <h2 class="text-lg font-semibold text-brand-700">Account Information</h2>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <h3 class="text-sm font-medium text-gray-600">Email Addresses</h3>
+                <ul class="mt-2 space-y-1 text-sm text-gray-700">
+                  {{range .User.Email}}
+                  <li class="rounded-lg bg-brand-50 px-3 py-2 text-brand-700">{{.}}</li>
+                  {{end}}
+                </ul>
+              </div>
+              <div>
+                <h3 class="text-sm font-medium text-gray-600">Member Since</h3>
+                <p class="mt-2 text-sm text-gray-700">{{.User.CreatedAt.Format "January 2, 2006"}}</p>
+              </div>
+            </div>
           </section>
           {{end}}
 
