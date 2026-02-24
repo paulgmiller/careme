@@ -32,6 +32,8 @@ spec:
           env:
             - name: CLARITY_PROJECT_ID
               value: "td2gxd3sq9"
+            - name: ADMIN_EMAILS
+              value: "paul.miller@gmail.com"
           volumeMounts:
             - name: recipes
               mountPath: /recipes

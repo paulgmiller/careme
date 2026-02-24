@@ -1,11 +1,11 @@
 package main
 
 import (
+	"careme/internal/admin"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
-	"careme/internal/logs"
 	"careme/internal/logsink"
 	"careme/internal/recipes"
 	"careme/internal/seasons"
@@ -36,6 +36,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	if err != nil {
 		return fmt.Errorf("failed to create auth client: %w", err)
 	}
+	adminMiddleware := admin.NewMiddleware(cfg, authClient)
 
 	mux := http.NewServeMux()
 	authClient.Register(mux)
@@ -66,11 +67,11 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	recipeHandler.Register(mux)
 
 	if logsinkCfg.Enabled() {
-		logsHandler, err := logs.NewHandler(logsinkCfg)
+		logsHandler, err := admin.NewLogsHandler(logsinkCfg)
 		if err != nil {
 			return fmt.Errorf("failed to create logs handler: %w", err)
 		}
-		logsHandler.Register(mux)
+		logsHandler.Register(mux, adminMiddleware)
 	}
 
 	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
