@@ -313,9 +313,6 @@ func containsAllTokens(haystack []string, needle []string) bool {
 	}
 	for _, token := range needle {
 		if _, ok := set[token]; !ok {
-			if token == "lettuce" {
-				continue
-			}
 			return false
 		}
 	}
