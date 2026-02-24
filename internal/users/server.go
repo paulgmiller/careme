@@ -135,7 +135,8 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		if shoppingDay := strings.TrimSpace(r.FormValue("shopping_day")); shoppingDay != "" {
 			currentUser.ShoppingDay = shoppingDay
 		}
-		if generationPrompt := strings.TrimSpace(r.FormValue("generation_prompt")); generationPrompt != "" || r.Form.Has("generation_prompt") {
+		if r.Form.Has("generation_prompt") {
+			generationPrompt := strings.TrimSpace(r.FormValue("generation_prompt"))
 			currentUser.GenerationPrompt = generationPrompt
 		}
 		currentUser.MailOptIn = r.FormValue("mail_opt_in") == "1"
