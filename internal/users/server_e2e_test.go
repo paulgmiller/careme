@@ -11,13 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
-)
-
-var (
-	initTemplatesOnce sync.Once
-	initTemplatesErr  error
 )
 
 func TestMain(m *testing.M) {
