@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strings"
 )
 
 func main() {
@@ -46,16 +47,16 @@ func main() {
 	}
 
 	for _, i := range ings {
-		fmt.Printf("%s:$%s original ($%s)\n", toString(i.Description), toFloat(i.PriceSale), toFloat(i.PriceRegular))
+		fmt.Printf("%s - %s:(%s))\n", toString(i.Brand), toString(i.Description), strings.Join(toSlice(i.Categories), ","))
 	}
 
 }
 
-func toFloat(f *float32) string {
-	if f == nil {
-		return "0"
+func toSlice(s *[]string) []string {
+	if s == nil {
+		return nil
 	}
-	return fmt.Sprintf("%.2f", *f)
+	return *s
 }
 
 func toString(s *string) string {
