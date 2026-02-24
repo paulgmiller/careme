@@ -67,6 +67,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	recipeHandler.Register(mux)
 
 	adminMux := http.NewServeMux()
+	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	mux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 
 	if logsinkCfg.Enabled() {
