@@ -12,6 +12,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/recipes"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 
@@ -83,16 +84,26 @@ func (f *fakeMailClient) Send(_ *sgmail.SGMailV3) (*rest.Response, error) {
 	return f.response, f.err
 }
 
+func shoppingDayForStore(t *testing.T, location *locations.Location) string {
+	t.Helper()
+	date, err := recipes.StoreToDate(context.Background(), time.Now(), location)
+	if err != nil {
+		t.Fatalf("failed to resolve store date: %v", err)
+	}
+	return date.Weekday().String()
+}
+
 func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T) {
 	if err := templates.Init(&config.Config{}, "/assets/tailwind.css"); err != nil {
 		t.Fatalf("failed to initialize templates: %v", err)
 	}
 
 	fc := newFakeMailCache(t)
+	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
 	m := &mailer{
 		cache: fc,
 		locServer: &fakeMailLocServer{
-			location: &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St"},
+			location: location,
 		},
 		client: &fakeMailClient{
 			response: &rest.Response{StatusCode: 500, Body: "sendgrid internal error"},
@@ -104,6 +115,7 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 		MailOptIn:     true,
 		Email:         []string{"u1@example.com"},
 		FavoriteStore: "123",
+		ShoppingDay:   shoppingDayForStore(t, location),
 	})
 
 	for key := range fc.data {
@@ -119,10 +131,11 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	}
 
 	fc := newFakeMailCache(t)
+	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
 	m := &mailer{
 		cache: fc,
 		locServer: &fakeMailLocServer{
-			location: &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"},
+			location: location,
 		},
 		client: &fakeMailClient{
 			response: &rest.Response{StatusCode: 202, Body: "accepted"},
@@ -134,7 +147,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 		MailOptIn:     true,
 		Email:         []string{"u1@example.com"},
 		FavoriteStore: "123",
-		ShoppingDay:   time.Now().Weekday().String(),
+		ShoppingDay:   shoppingDayForStore(t, location),
 	})
 
 	var (
