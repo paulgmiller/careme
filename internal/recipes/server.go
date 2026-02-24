@@ -377,6 +377,20 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// what do we do with this?
 	// p.UserID = currentUser.ID
 
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
+	if err != nil {
+		if !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		slog.InfoContext(ctx, "failed got no sesion from request", "error", err, "url", r.URL.String())
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	p.Instructions = mergeInstructions(currentUser.GenerationPrompt, p.Instructions)
+
 	//if params are already saved redirect and assume someone kicks off genration
 
 	if err := s.SaveParams(ctx, p); err != nil {
@@ -391,18 +405,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash := p.Hash()
-
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
-	if err != nil {
-		if !errors.Is(err, auth.ErrNoSession) {
-			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}
-		slog.InfoContext(ctx, "failed got no sesion from request", "error", err, "url", r.URL.String())
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
 
 	// Handle finalize - save recipes to user profile and display filtered list
 	if r.URL.Query().Get("finalize") == "true" {
@@ -540,6 +542,19 @@ func parseFeedbackBool(value string) (bool, error) {
 	default:
 		return false, fmt.Errorf("invalid boolean: %q", value)
 	}
+}
+
+func mergeInstructions(profileInstructions string, requestInstructions string) string {
+	profileInstructions = strings.TrimSpace(profileInstructions)
+	requestInstructions = strings.TrimSpace(requestInstructions)
+
+	if profileInstructions == "" {
+		return requestInstructions
+	}
+	if requestInstructions == "" {
+		return profileInstructions
+	}
+	return profileInstructions + "\n\n" + requestInstructions
 }
 
 func (s *server) Wait() {

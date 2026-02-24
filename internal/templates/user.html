@@ -109,6 +109,22 @@
                 <p class="text-xs text-gray-500">Turn this on to receive recipe emails from your saved store preferences.</p>
               </div>
 
+              <div class="space-y-2">
+                <label for="generation_prompt" class="text-sm font-medium text-gray-700">Prompt override</label>
+                <textarea id="generation_prompt"
+                          name="generation_prompt"
+                          rows="8"
+                          placeholder="Example: Generate 5 recipes for 4 people, avoid shellfish, prioritize high-protein meals, and keep prep under 30 minutes."
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400">{{.User.GenerationPrompt}}</textarea>
+                <p class="text-xs text-gray-500">This is injected directly into recipe generation. Keep it free form and edit anytime.</p>
+                <ul class="list-disc space-y-1 pl-5 text-xs text-gray-500">
+                  <li>Override defaults: "Generate 5 recipes for 4 people."</li>
+                  <li>Diet focus: "Low-carb, high-protein, no pork or shellfish."</li>
+                  <li>Style: "One vegetarian meal and one soup each week."</li>
+                  <li>Time/equipment: "Weeknight meals under 30 minutes, no slow cooker."</li>
+                </ul>
+              </div>
+
               <button type="submit"
                       class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                 Save Preferences

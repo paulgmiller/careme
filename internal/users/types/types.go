@@ -17,13 +17,14 @@ type Recipe struct {
 }
 
 type User struct {
-	ID            string    `json:"id"`
-	Email         []string  `json:"email"`
-	CreatedAt     time.Time `json:"created_at"`
-	LastRecipes   []Recipe  `json:"last_recipes,omitempty"`
-	FavoriteStore string    `json:"favorite_store,omitempty"`
-	ShoppingDay   string    `json:"shopping_day,omitempty"`
-	MailOptIn     bool      `json:"mail_opt_in,omitempty"`
+	ID               string    `json:"id"`
+	Email            []string  `json:"email"`
+	CreatedAt        time.Time `json:"created_at"`
+	LastRecipes      []Recipe  `json:"last_recipes,omitempty"`
+	FavoriteStore    string    `json:"favorite_store,omitempty"`
+	ShoppingDay      string    `json:"shopping_day,omitempty"`
+	MailOptIn        bool      `json:"mail_opt_in,omitempty"`
+	GenerationPrompt string    `json:"generation_prompt,omitempty"`
 }
 
 // need to take a look up to location cache?
