@@ -123,36 +123,11 @@ func Filter(term string, brands []string, frozen bool) filter {
 	}
 }
 
-// GetIngredientsForFilters fetches and combines ingredients for the provided filters in parallel.
-// Errors from individual filters are logged and skipped so other filters can still contribute results.
-func (g *Generator) GetIngredientsForFilters(ctx context.Context, locationID string, filters ...filter) []kroger.Ingredient {
-	var wg sync.WaitGroup
-	var ingredients = make([][]kroger.Ingredient, len(filters))
-
-	wg.Add(len(filters))
-	for i, category := range filters {
-		go func(category filter) {
-			defer wg.Done()
-			cingredients, err := g.GetIngredients(ctx, locationID, category, 0)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", locationID, "error", err)
-				return
-			}
-
-			ingredients[i] = cingredients
-
-			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", locationID)
-		}(category)
-	}
-
-	wg.Wait()
-	return lo.UniqBy(lo.Flatten(ingredients), func(i kroger.Ingredient) string { return toStr(i.Description) })
-}
-
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
 func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
 	lochash := p.LocationHash()
+	var ingredients []kroger.Ingredient
 	rio := IO(g.cache)
 
 	if cachedIngredients, err := rio.IngredientsFromCache(ctx, lochash); err == nil {
@@ -162,7 +137,26 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
-	ingredients := g.GetIngredientsForFilters(ctx, p.Location.ID, p.Staples...)
+	var wg sync.WaitGroup
+	var lock sync.Mutex
+	wg.Add(len(p.Staples))
+	for _, category := range p.Staples {
+		go func(category filter) {
+			defer wg.Done()
+			cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
+				return
+			}
+			lock.Lock()
+			defer lock.Unlock()
+			ingredients = append(ingredients, cingredients...)
+			ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toStr(i.Description) })
+			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID, "runningtotal", len(ingredients))
+		}(category)
+	}
+
+	wg.Wait()
 
 	mutable.Shuffle(ingredients)
 
@@ -175,13 +169,13 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 
 // move to krogrer client as everyone will be differnt here?
 func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]kroger.Ingredient, error) {
-	limit := 50
+	limit := 25
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
 	// brand := "empty" doesn't work have to check for nil
 	// fulfillment := "ais" drmatically shortens?
 	// wrapped this in a retry and it did nothng
-	products, err := g.krogerClient.ProductSearchWithResponse(ctx, &kroger.ProductSearchParams{
+	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
 		FilterLocationId: &location,
 		FilterTerm:       &f.Term,
 		FilterLimit:      &limitStr,
@@ -222,7 +216,6 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 				Size:         item.Size,
 				PriceRegular: item.Price.Regular,
 				PriceSale:    item.Price.Promo,
-				Categories:   product.Categories,
 				// CountryOrigin: product.CountryOrigin,
 				// AisleNumber:   product.AisleLocations[0].Number,
 				// Favorite: item.Favorite,
@@ -243,11 +236,10 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 	// slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location, "skip", skip)
 
 	// recursion is pretty dumb pagination
-	// kroger limits us at 250 results.
-	if len(*products.JSON200.Data) == limit && skip < 250 { // fence post error
+	// 500's seem gone.
+	if len(*products.JSON200.Data) == limit && skip+limit < 100 { // fence post error
 		page, err := g.GetIngredients(ctx, location, f, skip+limit)
 		if err != nil {
-			slog.ErrorContext(ctx, "ending pagination after page fetch error", "error", err, "term", f.Term, "location", location, "skip", skip+limit)
 			return ingredients, nil
 		}
 		ingredients = append(ingredients, page...)

@@ -47,9 +47,16 @@ func main() {
 	}
 
 	for _, i := range ings {
-		fmt.Printf("%s - %s:(%s))\n", toString(i.Brand), toString(i.Description), strings.Join(*i.Categories, ","))
+		fmt.Printf("%s - %s:(%s))\n", toString(i.Brand), toString(i.Description), strings.Join(toSlice(i.Categories), ","))
 	}
 
+}
+
+func toSlice(s *[]string) []string {
+	if s == nil {
+		return nil
+	}
+	return *s
 }
 
 func toString(s *string) string {
