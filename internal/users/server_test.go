@@ -119,7 +119,7 @@ func TestHandleUser_BlanksFavoriteStoreInHTMLWhenLocationLookupFails(t *testing.
 	storage := NewStorage(cacheStore)
 	s := &server{
 		storage:   storage,
-		userTmpl:  template.Must(template.New("user").Parse("favorite={{.User.FavoriteStore}} name={{.FavoriteStoreName}}")),
+		userTmpl:  template.Must(template.New("user").Parse("input={{.FavoriteStoreInputValue}} raw={{.User.FavoriteStore}} failed={{.FavoriteStoreLookupFailed}}")),
 		locGetter: failingLocationGetter{},
 		clerk:     testAuthClient{},
 	}
@@ -143,11 +143,14 @@ func TestHandleUser_BlanksFavoriteStoreInHTMLWhenLocationLookupFails(t *testing.
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	body := rr.Body.String()
-	if strings.Contains(body, "70500874") {
-		t.Fatalf("expected favorite store to be blanked in template output, got %q", body)
+	if !strings.Contains(body, "input=") || strings.Contains(body, "input=70500874") {
+		t.Fatalf("expected favorite store input value to be blank in template output, got %q", body)
 	}
-	if !strings.Contains(body, "favorite= name=") {
-		t.Fatalf("expected favorite and favorite name to be blank in output, got %q", body)
+	if !strings.Contains(body, "raw=70500874") {
+		t.Fatalf("expected persisted favorite store to still be present in template data, got %q", body)
+	}
+	if !strings.Contains(body, "failed=true") {
+		t.Fatalf("expected lookup failure flag to be true, got %q", body)
 	}
 
 	user, err := storage.GetByID("user-1")

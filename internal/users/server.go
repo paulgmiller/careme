@@ -155,11 +155,14 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch location name if favorite store is set
 	var favoriteStoreName string
+	favoriteStoreInputValue := userForTemplate.FavoriteStore
+	favoriteStoreLookupFailed := false
 	if userForTemplate.FavoriteStore != "" && s.locGetter != nil {
 		loc, err := s.locGetter.GetLocationByID(ctx, userForTemplate.FavoriteStore)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to get location name for favorite store", "location_id", userForTemplate.FavoriteStore, "error", err)
-			userForTemplate.FavoriteStore = ""
+			favoriteStoreInputValue = ""
+			favoriteStoreLookupFailed = true
 		} else {
 			favoriteStoreName = loc.Name
 		}
@@ -169,21 +172,25 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		userForTemplate.LastRecipes = userForTemplate.LastRecipes[0:14]
 	}
 	data := struct {
-		ClarityScript     template.HTML
-		User              *utypes.User
-		Success           bool
-		FavoriteStoreName string
-		ActiveTab         string
-		Style             seasons.Style
-		ServerSignedIn    bool
+		ClarityScript             template.HTML
+		User                      *utypes.User
+		Success                   bool
+		FavoriteStoreName         string
+		FavoriteStoreInputValue   string
+		FavoriteStoreLookupFailed bool
+		ActiveTab                 string
+		Style                     seasons.Style
+		ServerSignedIn            bool
 	}{
-		ClarityScript:     templates.ClarityScript(),
-		User:              userForTemplate,
-		Success:           success,
-		FavoriteStoreName: favoriteStoreName,
-		ActiveTab:         activeTab,
-		Style:             seasons.GetCurrentStyle(),
-		ServerSignedIn:    true,
+		ClarityScript:             templates.ClarityScript(),
+		User:                      userForTemplate,
+		Success:                   success,
+		FavoriteStoreName:         favoriteStoreName,
+		FavoriteStoreInputValue:   favoriteStoreInputValue,
+		FavoriteStoreLookupFailed: favoriteStoreLookupFailed,
+		ActiveTab:                 activeTab,
+		Style:                     seasons.GetCurrentStyle(),
+		ServerSignedIn:            true,
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)

@@ -52,11 +52,14 @@
                 <p class="text-xs text-gray-500">To change your favorite store, visit the <a href="/" class="text-brand-600 hover:underline">home page</a> and search for locations.</p>
                 {{else}}
                 <input id="favorite_store"
-                       name="favorite_store"
+                       name="{{if .FavoriteStoreLookupFailed}}favorite_store_display{{else}}favorite_store{{end}}"
                        type="text"
-                       value="{{.User.FavoriteStore}}"
+                       value="{{.FavoriteStoreInputValue}}"
                        placeholder="Store ID"
                        class="w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                {{if .FavoriteStoreLookupFailed}}
+                <input type="hidden" name="favorite_store" value="{{.User.FavoriteStore}}" />
+                {{end}}
                 <p class="text-xs text-gray-500">Set your favorite store from the <a href="/" class="text-brand-600 hover:underline">home page</a> by searching for locations.</p>
                 {{end}}
               </div>
