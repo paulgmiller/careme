@@ -389,8 +389,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.Instructions = mergeInstructions(currentUser.Directive, p.Instructions)
-
 	//if params are already saved redirect and assume someone kicks off genration
 
 	if err := s.SaveParams(ctx, p); err != nil {
@@ -542,19 +540,6 @@ func parseFeedbackBool(value string) (bool, error) {
 	default:
 		return false, fmt.Errorf("invalid boolean: %q", value)
 	}
-}
-
-func mergeInstructions(profileInstructions string, requestInstructions string) string {
-	profileInstructions = strings.TrimSpace(profileInstructions)
-	requestInstructions = strings.TrimSpace(requestInstructions)
-
-	if profileInstructions == "" {
-		return requestInstructions
-	}
-	if requestInstructions == "" {
-		return profileInstructions
-	}
-	return profileInstructions + "\n\n" + requestInstructions
 }
 
 func (s *server) Wait() {
