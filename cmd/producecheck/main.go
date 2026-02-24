@@ -138,12 +138,19 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 		})
 		ingredients = append(ingredients, result.ingredients...)
 	}
-	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return *i.Description })
+	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toString(i.Description) })
 
 	annotateUniqueOnlyMatches(stats)
 	printProduceFilterSummary(stats, len(produce))
 
 	return evaluateProduceAvailability(produce, ingredients), len(ingredients), nil
+}
+
+func toString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func evaluateProduceAvailability(produce []string, ingredients []kroger.Ingredient) []string {
@@ -350,16 +357,6 @@ func stripDiacritics(s string) string {
 }
 
 func normalizeToken(s string) string {
-	switch s {
-	case "kiwifruit":
-		s = "kiwi"
-	case "asparagus":
-		return s
-	case "portobello":
-		s = "portabella"
-	case "chile":
-		s = "chili"
-	}
 
 	switch {
 	case strings.HasSuffix(s, "ies") && len(s) > 3:
@@ -372,6 +369,17 @@ func normalizeToken(s string) string {
 		}
 	case strings.HasSuffix(s, "s") && !strings.HasSuffix(s, "ss") && len(s) > 2:
 		s = s[:len(s)-1]
+	}
+
+	switch s {
+	case "kiwifruit":
+		s = "kiwi"
+	case "asparagus":
+		return s
+	case "portobello":
+		s = "portabella"
+	case "chile":
+		s = "chili"
 	}
 
 	switch s {
