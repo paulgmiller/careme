@@ -11,6 +11,8 @@ if ! command -v envsubst >/dev/null 2>&1; then
   exit 1
 fi
 
+git fetch
+
 if ! command -v kubectl >/dev/null 2>&1; then
   echo "error: kubectl is required but not found in PATH" >&2
   exit 1
