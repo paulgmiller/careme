@@ -1,6 +1,7 @@
 package users
 
 import (
+	utypes "careme/internal/users/types"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -9,9 +10,9 @@ import (
 )
 
 type adminUserView struct {
-	ID      string
-	Emails  []string
-	Recipes []string
+	ID               string
+	Emails           []string
+	SavedRecipeCount int
 }
 
 var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doctype html>
@@ -29,7 +30,7 @@ var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doct
       <tr>
         <th>User ID</th>
         <th>Emails</th>
-        <th>Saved Recipes</th>
+        <th>Saved Recipe Count</th>
       </tr>
     </thead>
     <tbody>
@@ -48,15 +49,7 @@ var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doct
           {{end}}
         </td>
         <td>
-          {{if .Recipes}}
-          <ul>
-            {{range .Recipes}}
-            <li>{{.}}</li>
-            {{end}}
-          </ul>
-          {{else}}
-          none
-          {{end}}
+          {{.SavedRecipeCount}}
         </td>
       </tr>
       {{end}}
@@ -78,22 +71,17 @@ func AdminUsersPage(storage *Storage) http.Handler {
 			http.Error(w, "unable to load users", http.StatusInternalServerError)
 			return
 		}
+		if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("format")), "emails") {
+			renderAdminEmailsText(w, list)
+			return
+		}
 
 		views := make([]adminUserView, 0, len(list))
 		for _, user := range list {
-			recipeTitles := make([]string, 0, len(user.LastRecipes))
-			for _, recipe := range user.LastRecipes {
-				title := strings.TrimSpace(recipe.Title)
-				if title == "" {
-					continue
-				}
-				recipeTitles = append(recipeTitles, title)
-			}
-
 			views = append(views, adminUserView{
-				ID:      user.ID,
-				Emails:  append([]string(nil), user.Email...),
-				Recipes: recipeTitles,
+				ID:               user.ID,
+				Emails:           append([]string(nil), user.Email...),
+				SavedRecipeCount: len(user.LastRecipes),
 			})
 		}
 
@@ -123,4 +111,29 @@ func primaryAdminEmail(v adminUserView) string {
 		return ""
 	}
 	return strings.ToLower(strings.TrimSpace(v.Emails[0]))
+}
+
+func renderAdminEmailsText(w http.ResponseWriter, users []utypes.User) {
+	unique := make(map[string]struct{})
+	for _, user := range users {
+		for _, email := range user.Email {
+			normalized := strings.ToLower(strings.TrimSpace(email))
+			if normalized == "" {
+				continue
+			}
+			unique[normalized] = struct{}{}
+		}
+	}
+
+	emails := make([]string, 0, len(unique))
+	for email := range unique {
+		emails = append(emails, email)
+	}
+	sort.Strings(emails)
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	for _, email := range emails {
+		_, _ = w.Write([]byte(email + "\n"))
+	}
 }
