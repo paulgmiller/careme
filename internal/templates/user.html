@@ -90,7 +90,7 @@
               </div>
 
               <div class="space-y-2">
-                <label for="generation_prompt" class="text-sm font-medium text-gray-700">Prompt override</label>
+                <label for="generation_prompt" class="text-sm font-medium text-gray-700">Chef’s directive</label>
                 <textarea id="generation_prompt"
                           name="generation_prompt"
                           rows="8"
@@ -133,7 +133,7 @@
 
           {{if eq .ActiveTab "past"}}
           <section class="space-y-4">
-            
+
             <form method="POST" action="/user/recipes" class="space-y-4 rounded-xl border border-brand-100 bg-brand-50/60 p-5">
               <div class="space-y-2">
                 <label for="previous_recipe" class="text-sm font-medium text-gray-700">Add something you cooked to avoid repeats</label>
