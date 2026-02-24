@@ -44,7 +44,7 @@ func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 <meta charset="utf-8" />
 <title>Logs</title>
 <script>
-  const api = new URL("/admin/api/logs", location.orgin);
+  const api = new URL("/admin/api/logs", location.origin);
   const qs = new URLSearchParams(location.search);
   for (const k of ["hours"]) if (qs.has(k)) api.searchParams.set(k, qs.get(k));
 
