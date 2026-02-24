@@ -45,18 +45,31 @@
             <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
 
             <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
-              <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
-                <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
-                <input id="instructions"
-                       type="text"
-                       name="instructions"
-                       value="{{.Instructions}}"
-                       placeholder="e.g. make it vegetarian"
-                       class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-                <button type="submit"
-                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Try again, chef
-                </button>
+              <div class="friendly-card-soft border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px]">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
+                  <input id="instructions"
+                        type="text"
+                        name="instructions"
+                        value="{{.Instructions}}"
+                        placeholder="e.g. make it vegetarian"
+                        class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                  <button type="submit"
+                          class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Try again, chef
+                  </button>
+                </div>
+                <div class="mt-3 flex flex-wrap items-center gap-3 sm:justify-end">
+                  <button type="submit" name="finalize" value="true" id="finalizeButton"
+                          class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
+                    Finalize
+                  </button>
+                  <button type="button"
+                          onclick="shareRecipes()"
+                          class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
+                    Share Recipes
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -151,17 +164,6 @@
           </div>
           </form>
 
-          <div class="mt-10 flex flex-wrap items-center gap-4">
-            <button type="submit" form="regenerateForm" name="finalize" value="true" id="finalizeButton"
-                    class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
-              Finalize
-            </button>
-            <button type="button"
-                    onclick="shareRecipes()"
-                    class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
-              Share Recipes
-            </button>
-          </div>
         </div>
       </div>
 
