@@ -23,9 +23,10 @@ func NewHandler(cfg logsink.Config) (*handler, error) {
 	}, nil
 }
 
+// Register registers the log handler routes
 func (h *handler) Register(mux *http.ServeMux) {
-	mux.Handle("/logs", http.HandlerFunc(h.handleLogsPage))
-	mux.Handle("/api/logs", http.HandlerFunc(h.handleLogsAPI))
+	mux.HandleFunc("/logs", h.handleLogsPage)
+	mux.HandleFunc("/api/logs", h.handleLogsAPI)
 }
 
 func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
