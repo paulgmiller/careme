@@ -150,20 +150,23 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		activeTab = "customize"
 	}
 
+	userCopy := *currentUser
+	userForTemplate := &userCopy
+
 	// Fetch location name if favorite store is set
 	var favoriteStoreName string
-	if currentUser.FavoriteStore != "" && s.locGetter != nil {
-		loc, err := s.locGetter.GetLocationByID(ctx, currentUser.FavoriteStore)
+	if userForTemplate.FavoriteStore != "" && s.locGetter != nil {
+		loc, err := s.locGetter.GetLocationByID(ctx, userForTemplate.FavoriteStore)
 		if err != nil {
-			slog.WarnContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", err)
-			favoriteStoreName = currentUser.FavoriteStore // fallback to ID
+			slog.ErrorContext(ctx, "failed to get location name for favorite store", "location_id", userForTemplate.FavoriteStore, "error", err)
+			userForTemplate.FavoriteStore = ""
 		} else {
 			favoriteStoreName = loc.Name
 		}
 	}
 	// TODO paginate and search on page instead.
-	if len(currentUser.LastRecipes) > 14 {
-		currentUser.LastRecipes = currentUser.LastRecipes[0:14]
+	if len(userForTemplate.LastRecipes) > 14 {
+		userForTemplate.LastRecipes = userForTemplate.LastRecipes[0:14]
 	}
 	data := struct {
 		ClarityScript     template.HTML
@@ -175,7 +178,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		ServerSignedIn    bool
 	}{
 		ClarityScript:     templates.ClarityScript(),
-		User:              currentUser,
+		User:              userForTemplate,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
 		ActiveTab:         activeTab,

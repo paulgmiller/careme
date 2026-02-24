@@ -90,8 +90,6 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		var currentUser *utypes.User
-		var favoriteStoreName string
 		currentUser, err := userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
 			if !errors.Is(err, auth.ErrNoSession) {
@@ -103,11 +101,14 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			// just have two different templates?
 
 		}
+
+		var favoriteStoreName string
 		if currentUser != nil && currentUser.FavoriteStore != "" {
 			loc, locErr := locationStorage.GetLocationByID(ctx, currentUser.FavoriteStore)
 			if locErr != nil {
-				slog.WarnContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", locErr)
-				favoriteStoreName = currentUser.FavoriteStore
+				slog.ErrorContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", locErr)
+				//mutation intentionally not saved bac.
+				currentUser.FavoriteStore = ""
 			} else {
 				favoriteStoreName = loc.Name
 			}
