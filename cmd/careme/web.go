@@ -37,12 +37,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	if err != nil {
 		return fmt.Errorf("failed to create auth client: %w", err)
 	}
-	adminMiddleware := admin.NewMiddleware(cfg, authClient)
 
 	mux := http.NewServeMux()
 	authClient.Register(mux)
 	static.Register(mux)
-	adminMux := http.NewServeMux()
 
 	userStorage := users.NewStorage(cache)
 
@@ -67,7 +65,9 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(mux)
-	mux.Handle("/admin/", adminMiddleware.Wrap(http.StripPrefix("/admin", adminMux)))
+
+	adminMux := http.NewServeMux()
+	mux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 
 	if logsinkCfg.Enabled() {
 		logsHandler, err := logs.NewHandler(logsinkCfg)

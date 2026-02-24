@@ -40,7 +40,7 @@ func (s stubAuthClient) Register(_ *http.ServeMux) {}
 func TestMiddlewareWrapRejectsNoSession(t *testing.T) {
 	t.Parallel()
 
-	m := NewMiddleware(&config.Config{
+	m := New(&config.Config{
 		Admin: config.AdminConfig{
 			Emails: []string{"admin@example.com"},
 		},
@@ -52,7 +52,7 @@ func TestMiddlewareWrapRejectsNoSession(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	m.Wrap(next).ServeHTTP(rr, req)
+	m.Enforce(next).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rr.Code)
@@ -62,7 +62,7 @@ func TestMiddlewareWrapRejectsNoSession(t *testing.T) {
 func TestMiddlewareWrapRejectsNonAdmin(t *testing.T) {
 	t.Parallel()
 
-	m := NewMiddleware(&config.Config{
+	m := New(&config.Config{
 		Admin: config.AdminConfig{
 			Emails: []string{"admin@example.com"},
 		},
@@ -77,7 +77,7 @@ func TestMiddlewareWrapRejectsNonAdmin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	m.Wrap(next).ServeHTTP(rr, req)
+	m.Enforce(next).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rr.Code)
@@ -87,7 +87,7 @@ func TestMiddlewareWrapRejectsNonAdmin(t *testing.T) {
 func TestMiddlewareWrapAllowsAdmin(t *testing.T) {
 	t.Parallel()
 
-	m := NewMiddleware(&config.Config{
+	m := New(&config.Config{
 		Admin: config.AdminConfig{
 			Emails: []string{"admin@example.com"},
 		},
@@ -102,7 +102,7 @@ func TestMiddlewareWrapAllowsAdmin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	m.Wrap(next).ServeHTTP(rr, req)
+	m.Enforce(next).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected status %d, got %d", http.StatusNoContent, rr.Code)
@@ -112,7 +112,7 @@ func TestMiddlewareWrapAllowsAdmin(t *testing.T) {
 func TestMiddlewareWrapRejectsEmailLookupFailure(t *testing.T) {
 	t.Parallel()
 
-	m := NewMiddleware(&config.Config{
+	m := New(&config.Config{
 		Admin: config.AdminConfig{
 			Emails: []string{"admin@example.com"},
 		},
@@ -127,7 +127,7 @@ func TestMiddlewareWrapRejectsEmailLookupFailure(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	m.Wrap(next).ServeHTTP(rr, req)
+	m.Enforce(next).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rr.Code)
@@ -137,7 +137,7 @@ func TestMiddlewareWrapRejectsEmailLookupFailure(t *testing.T) {
 func TestMiddlewareWrapAllowsAnyLoggedInUserWhenNoAdminsConfigured(t *testing.T) {
 	t.Parallel()
 
-	m := NewMiddleware(&config.Config{}, stubAuthClient{
+	m := New(&config.Config{}, stubAuthClient{
 		userID: "user_123",
 		email:  "user@example.com",
 	})
@@ -148,7 +148,7 @@ func TestMiddlewareWrapAllowsAnyLoggedInUserWhenNoAdminsConfigured(t *testing.T)
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	m.Wrap(next).ServeHTTP(rr, req)
+	m.Enforce(next).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected status %d, got %d", http.StatusNoContent, rr.Code)

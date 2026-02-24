@@ -9,12 +9,12 @@ import (
 	"strings"
 )
 
-type Middleware struct {
+type middleware struct {
 	auth   auth.AuthClient
 	admins map[string]struct{}
 }
 
-func NewMiddleware(cfg *config.Config, authClient auth.AuthClient) *Middleware {
+func New(cfg *config.Config, authClient auth.AuthClient) *middleware {
 	admins := make(map[string]struct{}, len(cfg.Admin.Emails))
 	for _, email := range cfg.Admin.Emails {
 		normalized := normalizeEmail(email)
@@ -24,13 +24,13 @@ func NewMiddleware(cfg *config.Config, authClient auth.AuthClient) *Middleware {
 		admins[normalized] = struct{}{}
 	}
 
-	return &Middleware{
+	return &middleware{
 		auth:   authClient,
 		admins: admins,
 	}
 }
 
-func (m *Middleware) Wrap(next http.Handler) http.Handler {
+func (m *middleware) Enforce(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID, err := m.auth.GetUserIDFromRequest(r)
 		if err != nil {
@@ -48,7 +48,7 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 			return
 		}
 
-		if !m.IsAdmin(email) {
+		if !m.isAdmin(email) {
 			http.NotFound(w, r)
 			return
 		}
@@ -57,7 +57,7 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 	})
 }
 
-func (m *Middleware) IsAdmin(email string) bool {
+func (m *middleware) isAdmin(email string) bool {
 	if len(m.admins) == 0 {
 		return true
 	}
