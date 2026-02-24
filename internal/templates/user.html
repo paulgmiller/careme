@@ -90,12 +90,12 @@
               </div>
 
               <div class="space-y-2">
-                <label for="generation_prompt" class="text-sm font-medium text-gray-700">Chef’s directive</label>
-                <textarea id="generation_prompt"
-                          name="generation_prompt"
+                <label for="directive" class="text-sm font-medium text-gray-700">Chef’s directive</label>
+                <textarea id="directive"
+                          name="directive"
                           rows="8"
                           placeholder="Example: Generate 5 recipes for 4 people, avoid shellfish, prioritize high-protein meals, and keep prep under 30 minutes."
-                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400">{{.User.GenerationPrompt}}</textarea>
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400">{{.User.Directive}}</textarea>
                 <p class="text-xs text-gray-500">This is injected directly into recipe generation. Keep it free form and edit anytime.</p>
                 <ul class="list-disc space-y-1 pl-5 text-xs text-gray-500">
                   <li>Override defaults: "Generate 5 recipes for 4 people."</li>

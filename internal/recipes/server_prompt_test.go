@@ -66,11 +66,11 @@ func TestHandleRecipes_MergesProfilePromptIntoSavedParams(t *testing.T) {
 	storage := users.NewStorage(cacheStore)
 
 	user := &utypes.User{
-		ID:               "mock-clerk-user-id",
-		Email:            []string{"you@careme.cooking"},
-		CreatedAt:        time.Now(),
-		ShoppingDay:      "Saturday",
-		GenerationPrompt: "Always include one vegetarian meal.",
+		ID:          "mock-clerk-user-id",
+		Email:       []string{"you@careme.cooking"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		Directive:   "Always include one vegetarian meal.",
 	}
 	if err := storage.Update(user); err != nil {
 		t.Fatalf("failed to seed user: %v", err)

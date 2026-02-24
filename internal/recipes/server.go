@@ -389,7 +389,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.Instructions = mergeInstructions(currentUser.GenerationPrompt, p.Instructions)
+	p.Instructions = mergeInstructions(currentUser.Directive, p.Instructions)
 
 	//if params are already saved redirect and assume someone kicks off genration
 

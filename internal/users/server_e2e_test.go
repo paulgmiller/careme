@@ -43,15 +43,15 @@ func TestUserPageUpdate_E2E(t *testing.T) {
 	if getResp.Code != http.StatusOK {
 		t.Fatalf("expected status %d for GET /user, got %d", http.StatusOK, getResp.Code)
 	}
-	if body := getResp.Body.String(); !strings.Contains(body, `name="generation_prompt"`) {
+	if body := getResp.Body.String(); !strings.Contains(body, `name="directive"`) {
 		t.Fatalf("expected generation prompt field on user page, got body: %s", body)
 	}
 
 	form := url.Values{
-		"favorite_store":    {"70500874"},
-		"shopping_day":      {"Monday"},
-		"mail_opt_in":       {"1"},
-		"generation_prompt": {"Generate 4 recipes. No shellfish."},
+		"favorite_store": {"70500874"},
+		"shopping_day":   {"Monday"},
+		"mail_opt_in":    {"1"},
+		"directive":      {"Generate 4 recipes. No shellfish."},
 	}
 	postReq := httptest.NewRequest(http.MethodPost, "/user", strings.NewReader(form.Encode()))
 	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -82,7 +82,7 @@ func TestUserPageUpdate_E2E(t *testing.T) {
 	if !user.MailOptIn {
 		t.Fatal("expected mail_opt_in to be true")
 	}
-	if got, want := user.GenerationPrompt, "Generate 4 recipes. No shellfish."; got != want {
-		t.Fatalf("expected generation_prompt %q, got %q", want, got)
+	if got, want := user.Directive, "Generate 4 recipes. No shellfish."; got != want {
+		t.Fatalf("expected directive %q, got %q", want, got)
 	}
 }

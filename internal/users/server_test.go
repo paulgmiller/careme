@@ -30,7 +30,7 @@ func (t testAuthClient) WithAuthHTTP(handler http.Handler) http.Handler {
 
 func (t testAuthClient) Register(_ *http.ServeMux) {}
 
-func TestHandleUser_SavesGenerationPrompt(t *testing.T) {
+func TestHandleUser_SavesDirective(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
@@ -41,7 +41,7 @@ func TestHandleUser_SavesGenerationPrompt(t *testing.T) {
 	}
 
 	form := url.Values{
-		"generation_prompt": {"Generate 5 recipes for 4 people."},
+		"directive": {"Generate 5 recipes for 4 people."},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/user", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -57,12 +57,12 @@ func TestHandleUser_SavesGenerationPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected user to be stored, got error %v", err)
 	}
-	if got, want := user.GenerationPrompt, "Generate 5 recipes for 4 people."; got != want {
-		t.Fatalf("expected generation prompt %q, got %q", want, got)
+	if got, want := user.Directive, "Generate 5 recipes for 4 people."; got != want {
+		t.Fatalf("expected directive %q, got %q", want, got)
 	}
 }
 
-func TestHandleUser_ClearsGenerationPrompt(t *testing.T) {
+func TestHandleUser_ClearsDirective(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
@@ -73,18 +73,18 @@ func TestHandleUser_ClearsGenerationPrompt(t *testing.T) {
 	}
 
 	existing := &utypes.User{
-		ID:               "user-1",
-		Email:            []string{"user@example.com"},
-		CreatedAt:        time.Now(),
-		ShoppingDay:      "Saturday",
-		GenerationPrompt: "Old prompt",
+		ID:          "user-1",
+		Email:       []string{"user@example.com"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		Directive:   "Old prompt",
 	}
 	if err := storage.Update(existing); err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}
 
 	form := url.Values{
-		"generation_prompt": {""},
+		"directive": {""},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/user", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -100,7 +100,7 @@ func TestHandleUser_ClearsGenerationPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected user to be stored, got error %v", err)
 	}
-	if user.GenerationPrompt != "" {
-		t.Fatalf("expected generation prompt to be cleared, got %q", user.GenerationPrompt)
+	if user.Directive != "" {
+		t.Fatalf("expected generation prompt to be cleared, got %q", user.Directive)
 	}
 }
