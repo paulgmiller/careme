@@ -27,6 +27,7 @@
 - Exported identifiers in `CamelCase`; package-private helpers in `lowerCamel`. Template names mirror file names in `internal/templates`.
 - Prefer standard library first; add dependencies sparingly and record rationale in PR description if new.
 - Prefer simple html to javascript frameworks
+- For UI copy, prefer plain culinary language over technical terms (example: use "Try again, chef" instead of "Regenerate", and "make it vegetarian" instead of "prefer vegetarian").
 
 ## Testing Guidelines
 - Always run tests after making code changes. Default to `go test ./...`; use a narrower `go test ./... -run TestName` only when appropriate for quick iteration. If you cannot run tests, explicitly say why.

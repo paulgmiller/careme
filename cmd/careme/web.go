@@ -90,7 +90,6 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		var currentUser *utypes.User
 		currentUser, err := userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
 			if !errors.Is(err, auth.ErrNoSession) {
@@ -102,16 +101,30 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			// just have two different templates?
 
 		}
+
+		var favoriteStoreName string
+		if currentUser != nil && currentUser.FavoriteStore != "" {
+			loc, locErr := locationStorage.GetLocationByID(ctx, currentUser.FavoriteStore)
+			if locErr != nil {
+				slog.ErrorContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", locErr)
+				//mutation intentionally not saved bac.
+				currentUser.FavoriteStore = ""
+			} else {
+				favoriteStoreName = loc.Name
+			}
+		}
 		data := struct {
-			ClarityScript  template.HTML
-			User           *utypes.User
-			Style          seasons.Style
-			ServerSignedIn bool
+			ClarityScript     template.HTML
+			User              *utypes.User
+			FavoriteStoreName string
+			Style             seasons.Style
+			ServerSignedIn    bool
 		}{
-			ClarityScript:  templates.ClarityScript(),
-			User:           currentUser,
-			Style:          seasons.GetCurrentStyle(),
-			ServerSignedIn: currentUser != nil,
+			ClarityScript:     templates.ClarityScript(),
+			User:              currentUser,
+			FavoriteStoreName: favoriteStoreName,
+			Style:             seasons.GetCurrentStyle(),
+			ServerSignedIn:    currentUser != nil,
 		}
 		if err := templates.Home.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
