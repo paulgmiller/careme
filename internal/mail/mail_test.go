@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,13 @@ import (
 	"github.com/sendgrid/rest"
 	sgmail "github.com/sendgrid/sendgrid-go/helpers/mail"
 )
+
+func TestMain(m *testing.M) {
+	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+		panic(err)
+	}
+	os.Exit(m.Run())
+}
 
 type fakeMailCache struct {
 	shoppingListJSON string
@@ -94,9 +102,6 @@ func shoppingDayForStore(t *testing.T, location *locations.Location) string {
 }
 
 func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T) {
-	if err := templates.Init(&config.Config{}, "/assets/tailwind.css"); err != nil {
-		t.Fatalf("failed to initialize templates: %v", err)
-	}
 
 	fc := newFakeMailCache(t)
 	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
@@ -126,9 +131,6 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 }
 
 func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
-	if err := templates.Init(&config.Config{}, "/assets/tailwind.css"); err != nil {
-		t.Fatalf("failed to initialize templates: %v", err)
-	}
 
 	fc := newFakeMailCache(t)
 	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
@@ -179,5 +181,3 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 		t.Fatalf("expected claim params hash to be set")
 	}
 }
-
-//TODO tests for optin and day of week?

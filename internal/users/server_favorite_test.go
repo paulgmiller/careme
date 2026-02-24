@@ -12,26 +12,10 @@ import (
 	"testing"
 )
 
-type fakeAuthClient struct{}
-
-func (f fakeAuthClient) GetUserEmail(_ context.Context, _ string) (string, error) {
-	return "user@example.com", nil
-}
-
-func (f fakeAuthClient) GetUserIDFromRequest(_ *http.Request) (string, error) {
-	return "user-1", nil
-}
-
-func (f fakeAuthClient) WithAuthHTTP(handler http.Handler) http.Handler {
-	return handler
-}
-
-func (f fakeAuthClient) Register(_ *http.ServeMux) {}
-
 type noSessionAuth struct{}
 
 func (n noSessionAuth) GetUserEmail(_ context.Context, _ string) (string, error) {
-	return "", nil
+	return "", auth.ErrNoSession
 }
 
 func (n noSessionAuth) GetUserIDFromRequest(_ *http.Request) (string, error) {
@@ -55,7 +39,7 @@ func newFavoriteTestServer(t *testing.T, clerk auth.AuthClient) *server {
 
 func TestHandleFavoriteHTMXRefreshesPage(t *testing.T) {
 	t.Parallel()
-	s := newFavoriteTestServer(t, fakeAuthClient{})
+	s := newFavoriteTestServer(t, auth.DefaultMock())
 
 	form := url.Values{
 		"favorite_store": {"222"},
@@ -74,7 +58,7 @@ func TestHandleFavoriteHTMXRefreshesPage(t *testing.T) {
 		t.Fatalf("expected HX-Refresh true, got %q", got)
 	}
 
-	user, err := s.storage.GetByID("user-1")
+	user, err := s.storage.GetByID("mock-clerk-user-id")
 	if err != nil {
 		t.Fatalf("expected user to be stored, got error %v", err)
 	}
@@ -85,7 +69,7 @@ func TestHandleFavoriteHTMXRefreshesPage(t *testing.T) {
 
 func TestHandleFavoriteRejectsNonHTMXRequest(t *testing.T) {
 	t.Parallel()
-	s := newFavoriteTestServer(t, fakeAuthClient{})
+	s := newFavoriteTestServer(t, auth.DefaultMock())
 
 	form := url.Values{
 		"favorite_store": {"444"},

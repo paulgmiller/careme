@@ -1,12 +1,14 @@
 package users
 
 import (
+	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/templates"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -18,23 +20,19 @@ var (
 	initTemplatesErr  error
 )
 
-func initUserTemplates(t *testing.T) {
-	t.Helper()
-	initTemplatesOnce.Do(func() {
-		initTemplatesErr = templates.Init(&config.Config{}, "/static/tailwind.css")
-	})
-	if initTemplatesErr != nil {
-		t.Fatalf("failed to initialize templates: %v", initTemplatesErr)
+func TestMain(m *testing.M) {
+	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+		panic(err)
 	}
+	os.Exit(m.Run())
 }
 
 func TestUserPageUpdate_E2E(t *testing.T) {
-	initUserTemplates(t)
 
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
 
-	srv := NewHandler(storage, nil, fakeAuthClient{})
+	srv := NewHandler(storage, nil, auth.DefaultMock())
 	mux := http.NewServeMux()
 	srv.Register(mux)
 
@@ -71,7 +69,7 @@ func TestUserPageUpdate_E2E(t *testing.T) {
 		t.Fatalf("expected prompt text in rendered page, got body: %s", postBody)
 	}
 
-	user, err := storage.GetByID("user-1")
+	user, err := storage.GetByID("mock-clerk-user-id")
 	if err != nil {
 		t.Fatalf("expected saved user, got error: %v", err)
 	}
