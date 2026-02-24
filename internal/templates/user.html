@@ -17,7 +17,7 @@
           <a href="/" class="inline-flex items-center text-sm font-medium text-brand-600 underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
             ← Back to Home
           </a>
-          <h1 class="mt-4 text-4xl font-extrabold tracking-tight text-brand-700">User Profile</h1>
+          <h1 class="mt-4 text-4xl font-extrabold tracking-tight text-brand-700">Your Kitchen</h1>
           <p class="mt-2 text-sm text-gray-600">Manage your account details, grocery preferences, email preferences, and saved recipes.</p>
           {{if .Success}}
           <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -119,22 +119,15 @@
 
           {{if eq .ActiveTab "past"}}
           <section class="space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <h2 class="text-lg font-semibold text-brand-700">Past Recipes</h2>
-              {{if .User.LastRecipes}}
-              <span class="text-xs uppercase tracking-wide text-gray-400">Recent history</span>
-              {{end}}
-            </div>
-
+            
             <form method="POST" action="/user/recipes" class="space-y-4 rounded-xl border border-brand-100 bg-brand-50/60 p-5">
               <div class="space-y-2">
-                <label for="previous_recipe" class="text-sm font-medium text-gray-700">Add a previous recipe</label>
+                <label for="previous_recipe" class="text-sm font-medium text-gray-700">Add something you cooked to avoid repeats</label>
                 <input id="previous_recipe"
                        name="recipe"
                        type="text"
                        placeholder="Enter recipe name"
                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-                <p class="text-xs text-gray-500">Add recipes you love to personalize future recommendations.</p>
               </div>
               <button type="submit"
                       class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -143,6 +136,7 @@
             </form>
 
             {{if .User.LastRecipes}}
+            <span class="text-xs uppercase tracking-wide text-gray-400">Recent history</span>
             <ul class="divide-y divide-brand-100 rounded-xl border border-brand-100 bg-white/60">
               {{range .User.LastRecipes}}
               <li class="px-5 py-4 text-sm text-gray-700">
