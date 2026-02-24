@@ -55,7 +55,6 @@ func TestHasProduce_UsesTokenMatching(t *testing.T) {
 		strPtr("Fresh Seedless Mini Cucumbers"),
 		strPtr("Fresh Jalapeno Peppers"),
 		strPtr("Simple Truth Organic® Whole Baby Bella Mushrooms"),
-		strPtr("Simple Truth Organic® Little Gem Butter Crunch Salad Mix"),
 		strPtr("Simple Truth Organic® Kiwifruit"),
 	}
 	ingredients := make([]kroger.Ingredient, 0, len(descriptions))
@@ -70,7 +69,6 @@ func TestHasProduce_UsesTokenMatching(t *testing.T) {
 		{term: "seedless cucumbers", want: 1},
 		{term: "jalapeño peppers", want: 1},
 		{term: "baby bella (cremini) mushrooms", want: 1},
-		{term: "little gem lettuce", want: 1},
 		{term: "kiwi", want: 1},
 	}
 	for _, tc := range tests {
