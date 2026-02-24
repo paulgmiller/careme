@@ -232,6 +232,15 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 				Size:         item.Size,
 				PriceRegular: item.Price.Regular,
 				PriceSale:    item.Price.Promo,
+				Categories:   product.Categories,
+				/*"taxonomies": [
+				{
+				"department": {},
+				"commodity": {},
+				"subCommodity": {}
+				}
+				],*/
+				//Taxonomy:  product.,
 				// CountryOrigin: product.CountryOrigin,
 				// AisleNumber:   product.AisleLocations[0].Number,
 				// Favorite: item.Favorite,
