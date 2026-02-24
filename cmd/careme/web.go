@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/admin"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -65,12 +66,15 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(mux)
 
+	adminMux := http.NewServeMux()
+	mux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
+
 	if logsinkCfg.Enabled() {
 		logsHandler, err := logs.NewHandler(logsinkCfg)
 		if err != nil {
 			return fmt.Errorf("failed to create logs handler: %w", err)
 		}
-		logsHandler.Register(mux)
+		logsHandler.Register(adminMux)
 	}
 
 	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {

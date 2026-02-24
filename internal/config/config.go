@@ -11,6 +11,7 @@ type Config struct {
 	Kroger KrogerConfig `json:"kroger"`
 	Mocks  MockConfig   `json:"mocks"`
 	Clerk  ClerkConfig  `json:"clerk"`
+	Admin  AdminConfig  `json:"admin"`
 }
 
 type AIConfig struct {
@@ -32,6 +33,10 @@ type ClerkConfig struct {
 	PublishableKey string
 	Domain         string
 	Prod           bool
+}
+
+type AdminConfig struct {
+	Emails []string `json:"emails"`
 }
 
 func (c *ClerkConfig) IsEnabled() bool {
@@ -75,6 +80,9 @@ func Load() (*Config, error) {
 			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
 			Domain:         os.Getenv("CLERK_DOMAIN"),
 		},
+		Admin: AdminConfig{
+			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+		},
 	}
 	if strings.HasSuffix(config.Clerk.Domain, "careme.cooking") {
 		config.Clerk.Prod = true
@@ -98,4 +106,27 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("AI API  key must be set")
 	}
 	return nil
+}
+
+func parseAdminEmails(value string) []string {
+	if value == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	emails := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		email := strings.ToLower(strings.TrimSpace(part))
+		if email == "" {
+			continue
+		}
+		if _, ok := seen[email]; ok {
+			continue
+		}
+		seen[email] = struct{}{}
+		emails = append(emails, email)
+	}
+
+	return emails
 }

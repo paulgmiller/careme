@@ -1,25 +1,18 @@
-// TODO merge with log sink
 package logs
 
 import (
-	"careme/internal/auth"
 	"careme/internal/logsink"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 )
 
-// Handler handles HTTP requests for log viewing
 type handler struct {
 	reader *Reader
-	auth   auth.AuthClient
 }
 
-// NewHandler creates   a new logs HTTP handler
 func NewHandler(cfg logsink.Config) (*handler, error) {
-	// Only create reader if Azure credentials are available
 	reader, err := NewReader(&cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create log reader: %w", err)
@@ -37,11 +30,6 @@ func (h *handler) Register(mux *http.ServeMux) {
 }
 
 func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.auth.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
@@ -57,7 +45,7 @@ func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 <meta charset="utf-8" />
 <title>Logs</title>
 <script>
-  const api = new URL("/api/logs", location.origin);
+  const api = new URL("/admin/api/logs", location.origin);
   const qs = new URLSearchParams(location.search);
   for (const k of ["hours"]) if (qs.has(k)) api.searchParams.set(k, qs.get(k));
 
@@ -73,25 +61,15 @@ func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleLogsAPI serves the logs as JSON
 func (h *handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
-
-	if _, err := h.auth.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	// Parse hours parameter
 	hoursStr := r.URL.Query().Get("hours")
-	hours := 24 // default
+	hours := 24
 	if hoursStr != "" {
-		if h, err := strconv.Atoi(hoursStr); err == nil && h > 0 {
-			hours = h
+		if parsedHours, err := strconv.Atoi(hoursStr); err == nil && parsedHours > 0 {
+			hours = parsedHours
 		}
 	}
 
-	// Get logs
-	// Return as JSON // kinda?
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	err := h.reader.GetLogs(r.Context(), hours, w)
@@ -100,5 +78,4 @@ func (h *handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to retrieve logs: %v", err), http.StatusInternalServerError)
 		return
 	}
-
 }
