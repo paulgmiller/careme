@@ -1,0 +1,82 @@
+package users
+
+import (
+	"careme/internal/cache"
+	utypes "careme/internal/users/types"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestAdminUsersPageRendersEmailsAndRecipes(t *testing.T) {
+	t.Parallel()
+
+	fc := cache.NewFileCache(t.TempDir())
+	storage := NewStorage(fc)
+	now := time.Now()
+
+	if err := storage.Update(&utypes.User{
+		ID:          "user_1",
+		Email:       []string{"alice@example.com"},
+		ShoppingDay: time.Monday.String(),
+		LastRecipes: []utypes.Recipe{
+			{Title: "Tomato Soup", CreatedAt: now},
+			{Title: "Veggie Tacos", CreatedAt: now.Add(-1 * time.Hour)},
+		},
+	}); err != nil {
+		t.Fatalf("update user_1: %v", err)
+	}
+
+	if err := storage.Update(&utypes.User{
+		ID:          "user_2",
+		Email:       []string{"bob@example.com", "bobby@example.com"},
+		ShoppingDay: time.Tuesday.String(),
+	}); err != nil {
+		t.Fatalf("update user_2: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	rr := httptest.NewRecorder()
+
+	AdminUsersPage(storage).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("content-type = %q, want text/html", got)
+	}
+
+	body := rr.Body.String()
+	for _, want := range []string{
+		"alice@example.com",
+		"bob@example.com",
+		"bobby@example.com",
+		"Tomato Soup",
+		"Veggie Tacos",
+		"none",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("response body missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestAdminUsersPageMethodNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	fc := cache.NewFileCache(t.TempDir())
+	storage := NewStorage(fc)
+
+	req := httptest.NewRequest(http.MethodPost, "/users", nil)
+	rr := httptest.NewRecorder()
+
+	AdminUsersPage(storage).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusMethodNotAllowed)
+	}
+}
