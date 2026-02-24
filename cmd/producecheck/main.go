@@ -14,6 +14,7 @@ import (
 	"sync"
 	"unicode"
 
+	"github.com/samber/lo"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -98,8 +99,6 @@ type produceFilterStats struct {
 func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, int, error) {
 
 	filters := recipes.Produce()
-	ingredients := make([]kroger.Ingredient, 0, len(filters)*50)
-	stats := make([]produceFilterStats, 0, len(filters))
 	type filterResult struct {
 		filter      string
 		ingredients []kroger.Ingredient
@@ -122,7 +121,8 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 		}()
 	}
 	wg.Wait()
-
+	ingredients := make([]kroger.Ingredient, 0, 300)
+	stats := make([]produceFilterStats, 0, len(filters))
 	for _, result := range results {
 		if result.err != nil {
 			log.Printf("warning: failed to get ingredients for filter %q at location %s: %v", result.filter, locationID, result.err)
@@ -138,6 +138,8 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 		})
 		ingredients = append(ingredients, result.ingredients...)
 	}
+	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return *i.Description })
+
 	annotateUniqueOnlyMatches(stats)
 	printProduceFilterSummary(stats, len(produce))
 
@@ -188,6 +190,7 @@ func summarizeFilterMatchesDetailed(produce []string, ingredients []kroger.Ingre
 	return matchedTerms, matchedProducts, matchedDescriptions
 }
 
+// see what filters return results NOT seen elsewhere then update UniqueOnlyMatches
 func annotateUniqueOnlyMatches(stats []produceFilterStats) {
 	descriptionCount := make(map[string]int)
 	for _, stat := range stats {

@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/samber/lo/mutable"
 )
 
@@ -126,11 +127,10 @@ func Filter(term string, brands []string, frozen bool) filter {
 // Errors from individual filters are logged and skipped so other filters can still contribute results.
 func (g *Generator) GetIngredientsForFilters(ctx context.Context, locationID string, filters ...filter) []kroger.Ingredient {
 	var wg sync.WaitGroup
-	var lock sync.Mutex //channel instead?
-	var ingredients []kroger.Ingredient
+	var ingredients = make([][]kroger.Ingredient, len(filters))
 
 	wg.Add(len(filters))
-	for _, category := range filters {
+	for i, category := range filters {
 		go func(category filter) {
 			defer wg.Done()
 			cingredients, err := g.GetIngredients(ctx, locationID, category, 0)
@@ -139,16 +139,14 @@ func (g *Generator) GetIngredientsForFilters(ctx context.Context, locationID str
 				return
 			}
 
-			lock.Lock()
-			ingredients = append(ingredients, cingredients...)
-			lock.Unlock()
+			ingredients[i] = cingredients
 
 			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", locationID)
 		}(category)
 	}
 
 	wg.Wait()
-	return ingredients
+	return lo.UniqBy(lo.Flatten(ingredients), func(i kroger.Ingredient) string { return toStr(i.Description) })
 }
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
