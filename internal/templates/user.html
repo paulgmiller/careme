@@ -149,6 +149,32 @@
               </button>
             </form>
 
+            <form method="GET" action="/user" class="space-y-2 rounded-xl border border-brand-100 bg-white/80 p-4">
+              <input type="hidden" name="tab" value="past" />
+              <label for="recipe_search" class="text-sm font-medium text-gray-700">Search past recipes</label>
+              <div class="flex flex-col gap-2 sm:flex-row">
+                <input id="recipe_search"
+                       name="q"
+                       type="search"
+                       value="{{.RecipeSearch}}"
+                       placeholder="Search by recipe name"
+                       class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                <div class="flex gap-2">
+                  <button type="submit"
+                          class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Search
+                  </button>
+                  {{if .RecipeSearch}}
+                  <a href="/user?tab=past"
+                     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Clear
+                  </a>
+                  {{end}}
+                </div>
+              </div>
+              <p class="text-xs text-gray-500">Showing up to 50 recipes{{if .RecipeSearch}} matching "{{.RecipeSearch}}"{{end}}.</p>
+            </form>
+
             {{if .User.LastRecipes}}
             <span class="text-xs uppercase tracking-wide text-gray-400">Recent history</span>
             <ul class="divide-y divide-brand-100 rounded-xl border border-brand-100 bg-white/60">
@@ -165,6 +191,8 @@
               </li>
               {{end}}
             </ul>
+            {{else if .RecipeSearch}}
+            <p class="text-sm text-gray-500">No recipes match "{{.RecipeSearch}}".</p>
             {{else}}
             <p class="text-sm text-gray-500">No recipes yet—start by saving one from your recommendations.</p>
             {{end}}
