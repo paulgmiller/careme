@@ -26,6 +26,8 @@ type server struct {
 	clerk     auth.AuthClient // make an interface
 }
 
+const maxDisplayedPastRecipes = 50
+
 // NewHandler returns an http.Handler that serves the user related routes under /user.
 func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient) *server {
 	return &server{
@@ -98,6 +100,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("tab") == "past" {
 		activeTab = "past"
 	}
+	recipeSearch := strings.TrimSpace(r.URL.Query().Get("q"))
 	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
@@ -164,9 +167,8 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			favoriteStoreName = loc.Name
 		}
 	}
-	// TODO paginate and search on page instead.
-	if len(userForTemplate.LastRecipes) > 14 {
-		userForTemplate.LastRecipes = userForTemplate.LastRecipes[0:14]
+	if activeTab == "past" {
+		userForTemplate.LastRecipes = filterPastRecipes(userForTemplate.LastRecipes, recipeSearch, maxDisplayedPastRecipes)
 	}
 	data := struct {
 		ClarityScript     template.HTML
@@ -174,6 +176,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Success           bool
 		FavoriteStoreName string
 		ActiveTab         string
+		RecipeSearch      string
 		Style             seasons.Style
 		ServerSignedIn    bool
 	}{
@@ -182,6 +185,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
 		ActiveTab:         activeTab,
+		RecipeSearch:      recipeSearch,
 		Style:             seasons.GetCurrentStyle(),
 		ServerSignedIn:    true,
 	}
@@ -242,4 +246,30 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 
 func isHTMXRequest(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
+}
+
+func filterPastRecipes(recipes []utypes.Recipe, query string, max int) []utypes.Recipe {
+	if max <= 0 || len(recipes) == 0 {
+		return nil
+	}
+
+	if query == "" {
+		if len(recipes) > max {
+			return recipes[:max]
+		}
+		return recipes
+	}
+
+	filtered := make([]utypes.Recipe, 0, len(recipes))
+	lowerQuery := strings.ToLower(query)
+	for _, recipe := range recipes {
+		if strings.Contains(strings.ToLower(recipe.Title), lowerQuery) {
+			filtered = append(filtered, recipe)
+		}
+	}
+
+	if len(filtered) > max {
+		return filtered[:max]
+	}
+	return filtered
 }
