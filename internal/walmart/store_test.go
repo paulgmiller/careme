@@ -57,3 +57,12 @@ func TestCoordinates_UnmarshalJSON_RequiresLonLatPair(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestStoreToLocation_UsesWalmartPrefixWithUnderscore(t *testing.T) {
+	t.Parallel()
+
+	location := storeToLocation(Store{No: 3098, Name: "Test", StreetAddress: "123 Main", StateProvCode: "WA", Zip: "98007"})
+	if location.ID != "walmart_3098" {
+		t.Fatalf("unexpected location ID: %q", location.ID)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
+	"careme/internal/walmart"
 	"context"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ type userLookup interface {
 type locationStorage struct {
 	locationCache map[string]Location
 	cacheLock     sync.Mutex // to protect locationMap
-	client        locationGetter
+	client        []locationBackend
 }
 
 type locationServer struct {
@@ -37,6 +38,11 @@ type locationGetter interface {
 	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
 }
 
+type locationBackend interface {
+	locationGetter
+	IsID(locationID string) bool
+}
+
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
 
@@ -46,14 +52,18 @@ func New(cfg *config.Config) (locationGetter, error) {
 	}
 
 	//pass these in?
-	client, err := kroger.FromConfig(cfg)
+	kclient, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
+	}
+	wclient, err := walmart.NewClient(cfg.Walmart)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Walmart client: %w", err)
 	}
 	return &locationStorage{
 		locationCache: make(map[string]Location),
 		cacheLock:     sync.Mutex{},
-		client:        client,
+		client:        []locationBackend{kclient, wclient},
 	}, nil
 
 }
@@ -74,27 +84,41 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 	}
 	l.cacheLock.Unlock()
 
-	loc, err := l.client.GetLocationByID(ctx, locationID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get location details for ID %s: %w", locationID, err)
+	for _, backend := range l.client {
+		if !backend.IsID(locationID) {
+			continue
+		}
+
+		loc, err := backend.GetLocationByID(ctx, locationID)
+		if err != nil {
+			return nil, err
+		}
+
+		l.cacheLock.Lock()
+		l.locationCache[locationID] = *loc
+		l.cacheLock.Unlock()
+		return loc, nil
 	}
-	l.cacheLock.Lock()
-	defer l.cacheLock.Unlock()
-	l.locationCache[locationID] = *loc
-	return loc, nil
+	return nil, fmt.Errorf("location ID %s not supported by any backend", locationID)
 }
 
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
-	locations, err := l.client.GetLocationsByZip(ctx, zipcode)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get location list for zip %s: %w", zipcode, err)
+	var allLocations []Location
+	for _, backend := range l.client {
+		locations, err := backend.GetLocationsByZip(ctx, zipcode)
+		if err != nil {
+			slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "zip", zipcode)
+			continue
+		}
+		allLocations = append(allLocations, locations...)
 	}
+
 	l.cacheLock.Lock()
 	defer l.cacheLock.Unlock()
-	for _, loc := range locations {
+	for _, loc := range allLocations {
 		l.locationCache[loc.ID] = loc
 	}
-	return locations, nil
+	return allLocations, nil
 }
 
 func (l *locationServer) Ready(ctx context.Context) error {

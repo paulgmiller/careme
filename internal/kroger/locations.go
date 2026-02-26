@@ -6,6 +6,18 @@ import (
 	"fmt"
 )
 
+func (c *ClientWithResponses) IsID(locationID string) bool {
+	if locationID == "" {
+		return false
+	}
+	for i := 0; i < len(locationID); i++ {
+		if locationID[i] < '0' || locationID[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func (c *ClientWithResponses) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	resp, err := c.LocationDetailsWithResponse(ctx, locationID)
 	if err != nil {

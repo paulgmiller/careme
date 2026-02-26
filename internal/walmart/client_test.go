@@ -197,6 +197,29 @@ func TestGetLocationByID_NotSupported(t *testing.T) {
 	}
 }
 
+func TestClientIsID(t *testing.T) {
+	t.Parallel()
+
+	client := &Client{}
+	tests := []struct {
+		id   string
+		want bool
+	}{
+		{id: "walmart_1", want: true},
+		{id: "walmart_12345", want: true},
+		{id: "walmart_", want: false},
+		{id: "walmart-1", want: false},
+		{id: "12345", want: false},
+		{id: "walmart_12x", want: false},
+	}
+
+	for _, tc := range tests {
+		if got := client.IsID(tc.id); got != tc.want {
+			t.Fatalf("IsID(%q) = %v, want %v", tc.id, got, tc.want)
+		}
+	}
+}
+
 func writePKCS1Key(t *testing.T, key *rsa.PrivateKey) string {
 	t.Helper()
 

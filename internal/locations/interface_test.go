@@ -6,6 +6,6 @@ import (
 )
 
 var (
-	_ locationGetter = (*kroger.ClientWithResponses)(nil)
-	_ locationGetter = (*walmart.Client)(nil)
+	_ locationBackend = (*kroger.ClientWithResponses)(nil)
+	_ locationBackend = (*walmart.Client)(nil)
 )

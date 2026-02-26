@@ -153,9 +153,13 @@ func (f *fakeLocationClient) GetLocationByID(_ context.Context, locationID strin
 	return nil, fmt.Errorf("no data found for location ID %s", locationID)
 }
 
-func newTestLocationServer(client locationGetter) *locationStorage {
+func (f *fakeLocationClient) IsID(locationID string) bool {
+	return locationID != ""
+}
+
+func newTestLocationServer(client locationBackend) *locationStorage {
 	return &locationStorage{
 		locationCache: make(map[string]Location),
-		client:        client,
+		client:        []locationBackend{client},
 	}
 }
