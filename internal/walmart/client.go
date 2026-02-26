@@ -8,17 +8,14 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -51,17 +48,18 @@ type StoresQuery struct {
 
 // NewClient creates a Walmart affiliates client.
 func NewClient(cfg config.WalmartConfig) (*Client, error) {
+	fmt.Printf("creating Walmart client with config: consumerID=%s, keyVersion=%s, baseURL=%s\n", cfg.ConsumerID, cfg.KeyVersion, cfg.BaseURL)
 	if strings.TrimSpace(cfg.ConsumerID) == "" {
 		return nil, errors.New("consumer ID is required")
 	}
 	if strings.TrimSpace(cfg.KeyVersion) == "" {
 		cfg.KeyVersion = "1"
 	}
-	if strings.TrimSpace(cfg.PrivateKeyPath) == "" {
-		return nil, errors.New("private key path is required")
+	if strings.TrimSpace(cfg.PrivateKey) == "" {
+		return nil, errors.New("private key  is required")
 	}
 
-	privateKey, err := LoadRSAPrivateKey(cfg.PrivateKeyPath)
+	privateKey, err := parseOpenSSHKeyFromEnv(cfg.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("load private key: %w", err)
 	}
@@ -153,7 +151,7 @@ func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) 
 	}
 	storesURL.RawQuery = params.Encode()
 
-	slog.InfoContext(ctx, "searching Walmart stores", "url", storesURL.String())
+	//slog.InfoContext(ctx, "searching Walmart stores", "url", storesURL.String())
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, storesURL.String(), nil)
 	if err != nil {
@@ -179,9 +177,8 @@ func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) 
 		return nil, fmt.Errorf("read stores response: %w", err)
 	}
 
-	slog.InfoContext(ctx, "received Walmart stores response", "status", resp.StatusCode)
-
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		slog.ErrorContext(ctx, "received Walmart stores response", "status", resp.StatusCode)
 		return nil, fmt.Errorf("stores request failed: status %d", resp.StatusCode) //, strings.TrimSpace(string(body)))
 	}
 
@@ -248,67 +245,18 @@ func randomCorrelationID() string {
 	return fmt.Sprintf("%x", b[:])
 }
 
-// LoadRSAPrivateKey loads a PEM (PKCS1/PKCS8) or OpenSSH private key file.
-func LoadRSAPrivateKey(path string) (*rsa.PrivateKey, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read key file: %w", err)
-	}
-
-	if k, err := parsePEMPrivateKey(content); err == nil {
-		return k, nil
-	}
-
-	rawKey, err := ssh.ParseRawPrivateKey(content)
-	if err == nil {
-		rsaKey, ok := rawKey.(*rsa.PrivateKey)
-		if !ok {
-			return nil, fmt.Errorf("private key is %T, expected *rsa.PrivateKey", rawKey)
-		}
-		return rsaKey, nil
-	}
-
-	// Some Walmart examples provide private key as raw base64 PKCS#8 content.
-	rsaKey, err := parseBase64PKCS8PrivateKey(content)
-	if err == nil {
-		return rsaKey, nil
-	}
-
-	return nil, fmt.Errorf("parse private key: %w", err)
-}
-
-func parseBase64PKCS8PrivateKey(content []byte) (*rsa.PrivateKey, error) {
-	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(content)))
+func parseOpenSSHKeyFromEnv(b64 string) (*rsa.PrivateKey, error) {
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64))
 	if err != nil {
 		return nil, fmt.Errorf("decode base64 key: %w", err)
 	}
-	parsed, err := x509.ParsePKCS8PrivateKey(decoded)
+	key, err := ssh.ParseRawPrivateKey(raw)
 	if err != nil {
-		return nil, fmt.Errorf("parse PKCS#8 key: %w", err)
+		return nil, fmt.Errorf("parse OpenSSH key: %w", err)
 	}
-	rsaKey, ok := parsed.(*rsa.PrivateKey)
+	rsaKey, ok := key.(*rsa.PrivateKey)
 	if !ok {
-		return nil, fmt.Errorf("private key is %T, expected *rsa.PrivateKey", parsed)
+		return nil, fmt.Errorf("private key is %T, expected *rsa.PrivateKey", key)
 	}
 	return rsaKey, nil
-}
-
-func parsePEMPrivateKey(content []byte) (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode(content)
-	if block == nil {
-		return nil, errors.New("not PEM encoded")
-	}
-
-	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
-		return key, nil
-	}
-	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse PEM key: %w", err)
-	}
-	key, ok := parsed.(*rsa.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("private key is %T, expected *rsa.PrivateKey", parsed)
-	}
-	return key, nil
 }

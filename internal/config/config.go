@@ -37,21 +37,25 @@ type ClerkConfig struct {
 	Prod           bool
 }
 
+func (c *ClerkConfig) IsEnabled() bool {
+	return c.SecretKey != "" && c.Domain != "" && c.PublishableKey != ""
+}
+
 type AdminConfig struct {
 	Emails []string `json:"emails"`
 }
 
 // Config defines the required Walmart affiliate credentials and client options.
 type WalmartConfig struct {
-	ConsumerID     string
-	KeyVersion     string
-	PrivateKeyPath string
-	BaseURL        string
-	HTTPClient     *http.Client
+	ConsumerID string
+	KeyVersion string
+	PrivateKey string //base 64 the ssh key you give to Walmart (eg bas64 -w0 keys/walmart_prod)
+	BaseURL    string
+	HTTPClient *http.Client
 }
 
-func (c *ClerkConfig) IsEnabled() bool {
-	return c.SecretKey != "" && c.Domain != "" && c.PublishableKey != ""
+func (c *WalmartConfig) IsEnabled() bool {
+	return c.ConsumerID != "" && c.PrivateKey != ""
 }
 
 var locahostredirect = "?redirect_url=http://localhost:8080/auth/establish"
@@ -95,10 +99,10 @@ func Load() (*Config, error) {
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
 		},
 		Walmart: WalmartConfig{
-			ConsumerID:     os.Getenv("WALMART_CONSUMER_ID"),
-			KeyVersion:     os.Getenv("WALMART_KEY_VERSION"),
-			PrivateKeyPath: os.Getenv("WALMART_PRIVATE_KEY_PATH"),
-			BaseURL:        os.Getenv("WALMART_BASE_URL"),
+			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),
+			KeyVersion: os.Getenv("WALMART_KEY_VERSION"),
+			PrivateKey: os.Getenv("WALMART_PRIVATE_KEY"),
+			BaseURL:    os.Getenv("WALMART_BASE_URL"),
 		},
 	}
 	if strings.HasSuffix(config.Clerk.Domain, "careme.cooking") {

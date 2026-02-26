@@ -1,7 +1,6 @@
 package walmart
 
 import (
-	"bytes"
 	"careme/internal/config"
 	"context"
 	"crypto"
@@ -14,8 +13,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -40,10 +37,7 @@ func TestCanonicalize_SortsAndFormatsLikeJavaExample(t *testing.T) {
 func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
 	t.Parallel()
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate RSA key: %v", err)
-	}
+	privateKey, encodedKey := newBase64RSAPrivateKey(t)
 
 	var capturedReq *http.Request
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -52,13 +46,12 @@ func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	keyPath := writePKCS1Key(t, privateKey)
 	client, err := NewClient(config.WalmartConfig{
-		ConsumerID:     "consumer-id-123",
-		KeyVersion:     "1",
-		PrivateKeyPath: keyPath,
-		BaseURL:        server.URL,
-		HTTPClient:     server.Client(),
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
 	})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
@@ -118,43 +111,36 @@ func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
 	}
 }
 
-func TestLoadRSAPrivateKey_FromPKCS1PEM(t *testing.T) {
+func TestParseOpenSSHKeyFromEnv_FromBase64PEM(t *testing.T) {
 	t.Parallel()
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate RSA key: %v", err)
-	}
-	keyPath := writePKCS1Key(t, privateKey)
+	privateKey, encodedKey := newBase64RSAPrivateKey(t)
 
-	loaded, err := LoadRSAPrivateKey(keyPath)
+	parsed, err := parseOpenSSHKeyFromEnv(encodedKey)
 	if err != nil {
-		t.Fatalf("load key: %v", err)
+		t.Fatalf("parse key: %v", err)
 	}
-	if loaded.N.Cmp(privateKey.N) != 0 {
-		t.Fatal("loaded key does not match generated key")
+	if parsed.N.Cmp(privateKey.N) != 0 {
+		t.Fatal("parsed key does not match generated key")
 	}
 }
 
 func TestSearchStoresByZIP_StatusError(t *testing.T) {
 	t.Parallel()
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate RSA key: %v", err)
-	}
+	_, encodedKey := newBase64RSAPrivateKey(t)
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)
 	}))
 	t.Cleanup(server.Close)
 
-	keyPath := writePKCS1Key(t, privateKey)
 	client, err := NewClient(config.WalmartConfig{
-		ConsumerID:     "consumer-id-123",
-		KeyVersion:     "1",
-		PrivateKeyPath: keyPath,
-		BaseURL:        server.URL,
-		HTTPClient:     server.Client(),
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
 	})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
@@ -172,17 +158,13 @@ func TestSearchStoresByZIP_StatusError(t *testing.T) {
 func TestGetLocationByID_NotSupported(t *testing.T) {
 	t.Parallel()
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate RSA key: %v", err)
-	}
-	keyPath := writePKCS1Key(t, privateKey)
+	_, encodedKey := newBase64RSAPrivateKey(t)
 
 	client, err := NewClient(config.WalmartConfig{
-		ConsumerID:     "consumer-id-123",
-		KeyVersion:     "1",
-		PrivateKeyPath: keyPath,
-		BaseURL:        "https://example.com",
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    "https://example.com",
 	})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
@@ -220,23 +202,18 @@ func TestClientIsID(t *testing.T) {
 	}
 }
 
-func writePKCS1Key(t *testing.T, key *rsa.PrivateKey) string {
+func newBase64RSAPrivateKey(t *testing.T) (*rsa.PrivateKey, string) {
 	t.Helper()
 
-	// Use PKCS8 encoding for portability with current Go versions.
-	der, err := x509.MarshalPKCS8PrivateKey(key)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		t.Fatalf("marshal key: %v", err)
-	}
-	var buf bytes.Buffer
-	if err := pem.Encode(&buf, &pem.Block{Type: "PRIVATE KEY", Bytes: der}); err != nil {
-		t.Fatalf("encode key: %v", err)
+		t.Fatalf("generate RSA key: %v", err)
 	}
 
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "key.pem")
-	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
-		t.Fatalf("write key file: %v", err)
-	}
-	return path
+	pemBytes := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
+	encoded := base64.StdEncoding.EncodeToString(pemBytes)
+	return privateKey, encoded
 }

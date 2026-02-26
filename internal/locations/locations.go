@@ -52,18 +52,24 @@ func New(cfg *config.Config) (locationGetter, error) {
 	}
 
 	//pass these in?
+	var backends []locationBackend
 	kclient, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
 	}
-	wclient, err := walmart.NewClient(cfg.Walmart)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Walmart client: %w", err)
+	backends = append(backends, kclient)
+
+	if cfg.Walmart.IsEnabled() {
+		wclient, err := walmart.NewClient(cfg.Walmart)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Walmart client: %w", err)
+		}
+		backends = append(backends, wclient)
 	}
 	return &locationStorage{
 		locationCache: make(map[string]Location),
 		cacheLock:     sync.Mutex{},
-		client:        []locationBackend{kclient, wclient},
+		client:        backends,
 	}, nil
 
 }

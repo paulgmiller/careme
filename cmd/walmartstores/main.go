@@ -18,16 +18,16 @@ func main() {
 		zip        = flag.String("zip", "98005", "ZIP code to query")
 		keyVersion = flag.String("key-version", envOrDefault("WALMART_KEY_VERSION", "1"), "Walmart key version header")
 		baseURL    = flag.String("base-url", walmart.DefaultBaseURL, "Walmart affiliates API base URL")
-		privateKey = flag.String("private-key", "", "path to Walmart private key")
+		privateKey = flag.String("private-key", envOrDefault("WALMART_PRIVATE_KEY", ""), "path to Walmart private key")
 		consumerID = flag.String("consumer-id", envOrDefault("WALMART_CONSUMER_ID", defaultConsumerID), "Walmart consumer ID")
 	)
 	flag.Parse()
 
 	client, err := walmart.NewClient(config.WalmartConfig{
-		ConsumerID:     *consumerID,
-		KeyVersion:     *keyVersion,
-		PrivateKeyPath: *privateKey,
-		BaseURL:        *baseURL,
+		ConsumerID: *consumerID,
+		KeyVersion: *keyVersion,
+		PrivateKey: *privateKey,
+		BaseURL:    *baseURL,
 	})
 	if err != nil {
 		exitErr(fmt.Errorf("create Walmart client: %w", err))

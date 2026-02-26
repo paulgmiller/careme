@@ -3,13 +3,13 @@ package main
 import (
 	"careme/internal/config"
 	"careme/internal/kroger"
+	"careme/internal/locations"
 	"context"
 	"encoding/csv"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -47,20 +47,24 @@ func main() {
 		log.Fatalf("no valid zip codes found in %s", inputPath)
 	}
 
-	client, err := newLocationClientFromEnv()
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to initialize Kroger client: %v", err)
+		log.Fatalf("failed to load configuration: %v", err)
 	}
 
+	client, err := locations.New(cfg) // warm up location client
+	if err != nil {
+		log.Fatalf("failed to create location storage: %v", err)
+	}
 	results := make([]zipStoreCount, 0, len(metroZipCodes))
 	for _, metroZipCode := range metroZipCodes {
-		ctx, cancel := context.WithTimeout(context.Background(), durationFromSeconds(timeoutSeconds))
-		count, err := countLocationsByZip(ctx, client, metroZipCode.Zip)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		stores, err := client.GetLocationsByZip(ctx, metroZipCode.Zip)
 		cancel()
 		if err != nil {
 			log.Fatalf("failed to query locations for zip %s: %v", metroZipCode.Zip, err)
 		}
-		results = append(results, zipStoreCount{Metro: metroZipCode.Metro, Zip: metroZipCode.Zip, Count: count})
+		results = append(results, zipStoreCount{Metro: metroZipCode.Metro, Zip: metroZipCode.Zip, Count: len(stores)})
 	}
 
 	sort.Slice(results, func(i, j int) bool {
@@ -148,49 +152,4 @@ func isAllDigits(value string) bool {
 		}
 	}
 	return true
-}
-
-func newLocationClientFromEnv() (locationClient, error) {
-	clientID := strings.TrimSpace(os.Getenv("KROGER_CLIENT_ID"))
-	clientSecret := strings.TrimSpace(os.Getenv("KROGER_CLIENT_SECRET"))
-	if clientID == "" || clientSecret == "" {
-		return nil, errors.New("KROGER_CLIENT_ID and KROGER_CLIENT_SECRET must be set")
-	}
-
-	cfg := &config.Config{
-		Kroger: config.KrogerConfig{
-			ClientID:     clientID,
-			ClientSecret: clientSecret,
-		},
-	}
-
-	client, err := kroger.FromConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return client, nil
-}
-
-func countLocationsByZip(ctx context.Context, client locationClient, zipCode string) (int, error) {
-	params := &kroger.LocationListParams{
-		FilterZipCodeNear: &zipCode,
-	}
-	resp, err := client.LocationListWithResponse(ctx, params)
-	if err != nil {
-		return 0, err
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return 0, fmt.Errorf("status %d: %s", resp.StatusCode(), resp.Status())
-	}
-	if resp.JSON200 == nil || resp.JSON200.Data == nil {
-		return 0, nil
-	}
-	return len(*resp.JSON200.Data), nil
-}
-
-func durationFromSeconds(seconds int) time.Duration {
-	if seconds <= 0 {
-		return 20 * time.Second
-	}
-	return time.Duration(seconds) * time.Second
 }
