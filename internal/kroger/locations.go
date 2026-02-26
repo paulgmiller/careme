@@ -36,6 +36,12 @@ func (c *ClientWithResponses) GetLocationByID(ctx context.Context, locationID st
 		state = stringValue(data.Address.State)
 		zipCode = stringValue(data.Address.ZipCode)
 	}
+	var lat *float64
+	var lon *float64
+	if data.Geolocation != nil {
+		lat = float32PtrToFloat64Ptr(data.Geolocation.Latitude)
+		lon = float32PtrToFloat64Ptr(data.Geolocation.Longitude)
+	}
 
 	return &locationtypes.Location{
 		ID:      locationID,
@@ -43,6 +49,8 @@ func (c *ClientWithResponses) GetLocationByID(ctx context.Context, locationID st
 		Address: address,
 		State:   state,
 		ZipCode: zipCode,
+		Lat:     lat,
+		Lon:     lon,
 	}, nil
 }
 
@@ -68,6 +76,12 @@ func (c *ClientWithResponses) GetLocationsByZip(ctx context.Context, zipcode str
 			state = stringValue(locationData.Address.State)
 			zipCode = stringValue(locationData.Address.ZipCode)
 		}
+		var lat *float64
+		var lon *float64
+		if locationData.Geolocation != nil {
+			lat = float32PtrToFloat64Ptr(locationData.Geolocation.Latitude)
+			lon = float32PtrToFloat64Ptr(locationData.Geolocation.Longitude)
+		}
 
 		locations = append(locations, locationtypes.Location{
 			ID:      stringValue(locationData.LocationId),
@@ -75,6 +89,8 @@ func (c *ClientWithResponses) GetLocationsByZip(ctx context.Context, zipcode str
 			Address: address,
 			State:   state,
 			ZipCode: zipCode,
+			Lat:     lat,
+			Lon:     lon,
 		})
 	}
 	return locations, nil
@@ -85,4 +101,12 @@ func stringValue(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+func float32PtrToFloat64Ptr(p *float32) *float64 {
+	if p == nil {
+		return nil
+	}
+	v := float64(*p)
+	return &v
 }

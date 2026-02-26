@@ -43,11 +43,15 @@ func (c *Client) GetLocationsByZip(ctx context.Context, zipcode string) ([]locat
 }
 
 func storeToLocation(store Store) locationtypes.Location {
+	lat := store.Coordinates.Latitude
+	lon := store.Coordinates.Longitude
 	return locationtypes.Location{
 		ID:      "walmart_" + strconv.Itoa(store.No),
 		Name:    store.Name,
 		Address: store.StreetAddress,
 		State:   store.StateProvCode,
 		ZipCode: store.Zip,
+		Lat:     &lat,
+		Lon:     &lon,
 	}
 }

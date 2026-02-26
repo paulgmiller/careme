@@ -23,3 +23,17 @@ func TestClientWithResponsesIsID(t *testing.T) {
 		}
 	}
 }
+
+func TestFloat32PtrToFloat64Ptr(t *testing.T) {
+	t.Parallel()
+
+	if got := float32PtrToFloat64Ptr(nil); got != nil {
+		t.Fatalf("expected nil, got %v", got)
+	}
+
+	v := float32(47.5)
+	got := float32PtrToFloat64Ptr(&v)
+	if got == nil || *got != 47.5 {
+		t.Fatalf("unexpected conversion: %v", got)
+	}
+}
