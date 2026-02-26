@@ -146,7 +146,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 
 		distance := locationDistanceTo(requestedCentroid, loc, l.zipCentroids)
 		if distance > maxLocationDistanceMiles {
-			slog.WarnContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", maxLocationDistanceMiles)
+			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", maxLocationDistanceMiles)
 			continue
 		}
 		filtered = append(filtered, loc)
