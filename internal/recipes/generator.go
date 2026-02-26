@@ -23,8 +23,8 @@ import (
 )
 
 type aiClient interface {
-	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
-	Regenerate(ctx context.Context, newinstruction string, conversationID string) (*ai.ShoppingList, error)
+	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	Ready(ctx context.Context) error
 }
@@ -60,13 +60,13 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
 		// these should both always be true. Warn if not because its a caching bug?
-		instructions := p.Instructions
+		instructions := []string{p.Instructions}
 		var dismissedTitles []string
 		for _, dismissed := range p.Dismissed {
 			dismissedTitles = append(dismissedTitles, dismissed.Title)
 		}
 		if len(p.Dismissed) > 0 {
-			instructions += " Did not like " + strings.Join(dismissedTitles, "; ")
+			instructions = append(instructions, "Did not like "+strings.Join(dismissedTitles, "; "))
 		}
 		// TODO pipe through dismissed and saved so we dont mess with instructions. Also format dismissed titles with toon?
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
@@ -91,7 +91,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
 
-	instructions := mergeInstructions(p.Directive, p.Instructions)
+	instructions := []string{p.Directive, p.Instructions}
 
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
@@ -106,19 +106,6 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return shoppingList, nil
-}
-
-func mergeInstructions(directive string, instructions string) string {
-	directive = strings.TrimSpace(directive)
-	instructions = strings.TrimSpace(instructions)
-
-	if directive == "" {
-		return instructions
-	}
-	if instructions == "" {
-		return directive
-	}
-	return directive + "\n\n" + instructions
 }
 
 func (g *Generator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
