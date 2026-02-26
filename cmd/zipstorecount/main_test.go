@@ -9,7 +9,7 @@ func TestExtractZipCodes_UsesSecondColumn(t *testing.T) {
 	records := [][]string{
 		{"Seattle", "98032", "ignore"},
 		{"Boston", "02169-1234", "ignore"},
-		{"Duplicate", "98032", "ignore"},
+		{"Duplicate Metro", "98032", "ignore"},
 		{"Bad", "not-a-zip", "ignore"},
 	}
 
@@ -18,9 +18,12 @@ func TestExtractZipCodes_UsesSecondColumn(t *testing.T) {
 		t.Fatalf("extractZipCodes returned error: %v", err)
 	}
 
-	want := []string{"98032", "02169"}
+	want := []metroZipCode{
+		{Metro: "Seattle", Zip: "98032"},
+		{Metro: "Boston", Zip: "02169"},
+	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected zip codes: got=%v want=%v", got, want)
+		t.Fatalf("unexpected metro+zip codes: got=%v want=%v", got, want)
 	}
 }
 
@@ -37,9 +40,12 @@ func TestExtractZipCodes_SkipsRowsMissingSecondColumn(t *testing.T) {
 		t.Fatalf("extractZipCodes returned error: %v", err)
 	}
 
-	want := []string{"98032", "02169"}
+	want := []metroZipCode{
+		{Metro: "Seattle", Zip: "98032"},
+		{Metro: "Boston", Zip: "02169"},
+	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected zip codes: got=%v want=%v", got, want)
+		t.Fatalf("unexpected metro+zip codes: got=%v want=%v", got, want)
 	}
 }
 

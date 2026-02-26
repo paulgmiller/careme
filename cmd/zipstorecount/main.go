@@ -14,8 +14,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/samber/lo"
 )
 
 type locationClient interface {
@@ -23,8 +21,14 @@ type locationClient interface {
 }
 
 type zipStoreCount struct {
+	Metro string
 	Zip   string
 	Count int
+}
+
+type metroZipCode struct {
+	Metro string
+	Zip   string
 }
 
 func main() {
@@ -35,11 +39,11 @@ func main() {
 	flag.IntVar(&timeoutSeconds, "timeout", 20, "HTTP timeout in seconds for each zip query")
 	flag.Parse()
 
-	zipCodes, err := readZipCodes(inputPath)
+	metroZipCodes, err := readZipCodes(inputPath)
 	if err != nil {
 		log.Fatalf("failed to read zip codes: %v", err)
 	}
-	if len(zipCodes) == 0 {
+	if len(metroZipCodes) == 0 {
 		log.Fatalf("no valid zip codes found in %s", inputPath)
 	}
 
@@ -48,15 +52,15 @@ func main() {
 		log.Fatalf("failed to initialize Kroger client: %v", err)
 	}
 
-	results := make([]zipStoreCount, 0, len(zipCodes))
-	for _, zipCode := range zipCodes {
+	results := make([]zipStoreCount, 0, len(metroZipCodes))
+	for _, metroZipCode := range metroZipCodes {
 		ctx, cancel := context.WithTimeout(context.Background(), durationFromSeconds(timeoutSeconds))
-		count, err := countLocationsByZip(ctx, client, zipCode)
+		count, err := countLocationsByZip(ctx, client, metroZipCode.Zip)
 		cancel()
 		if err != nil {
-			log.Fatalf("failed to query locations for zip %s: %v", zipCode, err)
+			log.Fatalf("failed to query locations for zip %s: %v", metroZipCode.Zip, err)
 		}
-		results = append(results, zipStoreCount{Zip: zipCode, Count: count})
+		results = append(results, zipStoreCount{Metro: metroZipCode.Metro, Zip: metroZipCode.Zip, Count: count})
 	}
 
 	sort.Slice(results, func(i, j int) bool {
@@ -66,13 +70,13 @@ func main() {
 		return results[i].Count < results[j].Count
 	})
 
-	fmt.Println("zip_code,store_count")
+	fmt.Println("metro_name,zip_code,store_count")
 	for _, result := range results {
-		fmt.Printf("%s,%d\n", result.Zip, result.Count)
+		fmt.Printf("%s,%s,%d\n", result.Metro, result.Zip, result.Count)
 	}
 }
 
-func readZipCodes(path string) ([]string, error) {
+func readZipCodes(path string) ([]metroZipCode, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open input file: %w", err)
@@ -92,24 +96,58 @@ func readZipCodes(path string) ([]string, error) {
 	return extractZipCodes(records)
 }
 
-// assume zip code is in second column and ignore header row if present. Normalize zip codes to 5 digits and ignore invalid entries. Remove duplicates.
-func extractZipCodes(records [][]string) ([]string, error) {
+// assume metro is in the first column and zip code is in the second column.
+// Ignore header row if present. Normalize zip codes to 5 digits and ignore invalid entries.
+// Remove duplicate zip codes and keep the first metro seen for each zip.
+func extractZipCodes(records [][]string) ([]metroZipCode, error) {
 	if len(records) == 0 {
 		return nil, errors.New("empty input file")
 	}
 
-	zipCodes := make([]string, 0, len(records))
+	zipCodes := make([]metroZipCode, 0, len(records))
+	seen := make(map[string]struct{}, len(records))
 
 	for _, row := range records {
 		if len(row) < 2 {
 			continue
 		}
 
-		zipCode := strings.TrimSpace(row[1])
-		zipCodes = append(zipCodes, zipCode)
+		metroName := strings.TrimSpace(row[0])
+		zipCode, ok := normalizeZipCode(row[1])
+		if !ok {
+			continue
+		}
+
+		if _, exists := seen[zipCode]; exists {
+			continue
+		}
+		seen[zipCode] = struct{}{}
+		zipCodes = append(zipCodes, metroZipCode{Metro: metroName, Zip: zipCode})
 	}
 
-	return lo.Uniq(zipCodes), nil
+	return zipCodes, nil
+}
+
+func normalizeZipCode(raw string) (string, bool) {
+	zipCode := strings.TrimSpace(raw)
+
+	if len(zipCode) == 5 && isAllDigits(zipCode) {
+		return zipCode, true
+	}
+	if len(zipCode) == 10 && zipCode[5] == '-' && isAllDigits(zipCode[:5]) && isAllDigits(zipCode[6:]) {
+		return zipCode[:5], true
+	}
+
+	return "", false
+}
+
+func isAllDigits(value string) bool {
+	for i := range value {
+		if value[i] < '0' || value[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func newLocationClientFromEnv() (locationClient, error) {
