@@ -104,7 +104,9 @@ func (c *Client) Taxonomy(ctx context.Context) (json.RawMessage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("request taxonomy: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
 	if err != nil {
@@ -167,10 +169,15 @@ func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) 
 	if err != nil {
 		return nil, fmt.Errorf("request stores: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	var buf bytes.Buffer
-	io.Copy(&buf, resp.Body) // ensure body is fully read for connection reuse
+	_, err = io.Copy(&buf, resp.Body) // ensure body is fully read for connection reuse
+	if err != nil {
+		return nil, fmt.Errorf("read stores response: %w", err)
+	}
 
 	slog.InfoContext(ctx, "received Walmart stores response", "status", resp.StatusCode)
 
