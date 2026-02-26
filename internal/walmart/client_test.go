@@ -169,6 +169,34 @@ func TestSearchStoresByZIP_StatusError(t *testing.T) {
 	}
 }
 
+func TestGetLocationByID_NotSupported(t *testing.T) {
+	t.Parallel()
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	keyPath := writePKCS1Key(t, privateKey)
+
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID:     "consumer-id-123",
+		KeyVersion:     "1",
+		PrivateKeyPath: keyPath,
+		BaseURL:        "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	_, err = client.GetLocationByID(context.Background(), "999")
+	if err == nil {
+		t.Fatal("expected not-supported error")
+	}
+	if !strings.Contains(err.Error(), "not supported yet") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func writePKCS1Key(t *testing.T, key *rsa.PrivateKey) string {
 	t.Helper()
 

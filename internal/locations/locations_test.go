@@ -3,17 +3,17 @@ package locations
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"strings"
 	"testing"
-
-	"careme/internal/kroger"
 )
 
 func TestGetLocationByIDUsesCache(t *testing.T) {
-	client := newFakeKrogerClient()
-	client.setDetailResponse("12345", http.StatusOK, `{"data":{"name":"Friendly Market","address":{"addressLine1":"123 Main St","zipCode":"10001"}}}`)
+	client := newFakeLocationClient()
+	client.setDetailResponse("12345", Location{
+		ID:      "12345",
+		Name:    "Friendly Market",
+		Address: "123 Main St",
+		ZipCode: "10001",
+	})
 
 	server := newTestLocationServer(client)
 
@@ -43,8 +43,23 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 }
 
 func TestGetLocationsByZipCachesLocations(t *testing.T) {
-	client := newFakeKrogerClient()
-	client.setListResponse("30301", http.StatusOK, `{"data":[{"locationId":"111","name":"Store 111","address":{"addressLine1":"1 North Ave","state":"GA","zipCode":"30301"}},{"locationId":"222","name":"Store 222","address":{"addressLine1":"2 South St","state":"GA","zipCode":"60601"}}]}`)
+	client := newFakeLocationClient()
+	client.setListResponse("30301", []Location{
+		{
+			ID:      "111",
+			Name:    "Store 111",
+			Address: "1 North Ave",
+			State:   "GA",
+			ZipCode: "30301",
+		},
+		{
+			ID:      "222",
+			Name:    "Store 222",
+			Address: "2 South St",
+			State:   "GA",
+			ZipCode: "60601",
+		},
+	})
 
 	server := newTestLocationServer(client)
 
@@ -79,8 +94,7 @@ func TestGetLocationsByZipCachesLocations(t *testing.T) {
 }
 
 func TestGetLocationByIDReturnsErrorWhenNoData(t *testing.T) {
-	client := newFakeKrogerClient()
-	client.setDetailResponse("999", http.StatusOK, `{"data":null}`)
+	client := newFakeLocationClient()
 
 	server := newTestLocationServer(client)
 
@@ -97,84 +111,49 @@ func TestGetLocationByIDReturnsErrorWhenNoData(t *testing.T) {
 	}
 }
 
-type fakeKrogerClient struct {
-	details map[string]fakeHTTPPayload
-	lists   map[string]fakeHTTPPayload
+type fakeLocationClient struct {
+	details map[string]Location
+	lists   map[string][]Location
+	err     error
 }
 
-type fakeHTTPPayload struct {
-	status int
-	body   string
-	err    error
-}
-
-func newFakeKrogerClient() *fakeKrogerClient {
-	return &fakeKrogerClient{
-		details: make(map[string]fakeHTTPPayload),
-		lists:   make(map[string]fakeHTTPPayload),
+func newFakeLocationClient() *fakeLocationClient {
+	return &fakeLocationClient{
+		details: make(map[string]Location),
+		lists:   make(map[string][]Location),
 	}
 }
 
-func (f *fakeKrogerClient) setDetailResponse(locationID string, status int, body string) {
-	f.details[locationID] = fakeHTTPPayload{status: status, body: body}
+func (f *fakeLocationClient) setDetailResponse(locationID string, location Location) {
+	f.details[locationID] = location
 }
 
-func (f *fakeKrogerClient) setListResponse(zip string, status int, body string) {
-	f.lists[zip] = fakeHTTPPayload{status: status, body: body}
+func (f *fakeLocationClient) setListResponse(zip string, locations []Location) {
+	f.lists[zip] = locations
 }
 
-func (f *fakeKrogerClient) LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error) {
-	zip := ""
-	if params != nil && params.FilterZipCodeNear != nil {
-		zip = *params.FilterZipCodeNear
+func (f *fakeLocationClient) GetLocationsByZip(_ context.Context, zipcode string) ([]Location, error) {
+	if f.err != nil {
+		return nil, f.err
 	}
-
-	payload, ok := f.lists[zip]
-
-	if !ok {
-		payload = fakeHTTPPayload{status: http.StatusOK, body: `{"data":[]}`}
+	if locations, ok := f.lists[zipcode]; ok {
+		return locations, nil
 	}
-	if payload.err != nil {
-		return nil, payload.err
-	}
-
-	resp := newJSONResponse(payload.status, payload.body)
-	parsed, err := kroger.ParseLocationListResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-	return parsed, nil
+	return nil, nil
 }
 
-func (f *fakeKrogerClient) LocationDetailsWithResponse(ctx context.Context, locationID string, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationDetailsResponse, error) {
-	payload, ok := f.details[locationID]
-
-	if !ok {
-		payload = fakeHTTPPayload{status: http.StatusOK, body: `{"data":null}`}
+func (f *fakeLocationClient) GetLocationByID(_ context.Context, locationID string) (*Location, error) {
+	if f.err != nil {
+		return nil, f.err
 	}
-	if payload.err != nil {
-		return nil, payload.err
+	if location, ok := f.details[locationID]; ok {
+		locationCopy := location
+		return &locationCopy, nil
 	}
-
-	resp := newJSONResponse(payload.status, payload.body)
-	parsed, err := kroger.ParseLocationDetailsResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-	return parsed, nil
+	return nil, fmt.Errorf("no data found for location ID %s", locationID)
 }
 
-func newJSONResponse(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode:    status,
-		Status:        fmt.Sprintf("%d %s", status, http.StatusText(status)),
-		Header:        http.Header{"Content-Type": []string{"application/json"}},
-		Body:          io.NopCloser(strings.NewReader(body)),
-		ContentLength: int64(len(body)),
-	}
-}
-
-func newTestLocationServer(client krogerClient) *locationStorage {
+func newTestLocationServer(client locationGetter) *locationStorage {
 	return &locationStorage{
 		locationCache: make(map[string]Location),
 		client:        client,

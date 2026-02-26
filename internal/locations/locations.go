@@ -4,6 +4,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/config"
 	"careme/internal/kroger"
+	locationtypes "careme/internal/locations/types"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -16,12 +17,6 @@ import (
 	"sync"
 )
 
-type krogerClient interface {
-	LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error)
-	// LocationDetailsWithResponse request
-	LocationDetailsWithResponse(ctx context.Context, locationId string, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationDetailsResponse, error)
-}
-
 type userLookup interface {
 	FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error)
 }
@@ -29,7 +24,7 @@ type userLookup interface {
 type locationStorage struct {
 	locationCache map[string]Location
 	cacheLock     sync.Mutex // to protect locationMap
-	client        krogerClient
+	client        locationGetter
 }
 
 type locationServer struct {
@@ -42,11 +37,15 @@ type locationGetter interface {
 	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
 }
 
+// Location is kept as an alias for compatibility with existing imports.
+type Location = locationtypes.Location
+
 func New(cfg *config.Config) (locationGetter, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
 
+	//pass these in?
 	client, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
@@ -75,88 +74,27 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 	}
 	l.cacheLock.Unlock()
 
-	resp, err := l.client.LocationDetailsWithResponse(ctx, locationID)
+	loc, err := l.client.GetLocationByID(ctx, locationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get location details for ID %s: %w", locationID, err)
 	}
-
-	if resp.JSON200 == nil || resp.JSON200.Data == nil {
-		return nil, fmt.Errorf("no data found for location ID %s", locationID)
-	}
-
-	data := resp.JSON200.Data
-	address := ""
-	state := ""
-	zipCode := ""
-	if data.Address != nil {
-		address = stringValue(data.Address.AddressLine1)
-		state = stringValue(data.Address.State)
-		zipCode = stringValue(data.Address.ZipCode)
-	}
-	loc := Location{
-		ID:      locationID,
-		Name:    stringValue(data.Name),
-		Address: address,
-		State:   state,
-		ZipCode: zipCode,
-	}
 	l.cacheLock.Lock()
 	defer l.cacheLock.Unlock()
-	l.locationCache[locationID] = loc
-	return &loc, nil
-}
-
-type Location struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Address string `json:"address"`
-	State   string `json:"state"`
-	ZipCode string `json:"zip_code"`
+	l.locationCache[locationID] = *loc
+	return loc, nil
 }
 
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
-	locparams := &kroger.LocationListParams{
-		FilterZipCodeNear: &zipcode,
-	}
-	resp, err := l.client.LocationListWithResponse(ctx, locparams)
+	locations, err := l.client.GetLocationsByZip(ctx, zipcode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get location list for zip %s: %w", zipcode, err)
 	}
-	if resp.JSON200 == nil || len(*resp.JSON200.Data) == 0 {
-		fmt.Printf("No locations found for zip code %s\n", zipcode)
-		return nil, nil
-	}
-
-	var locations []Location
 	l.cacheLock.Lock()
 	defer l.cacheLock.Unlock()
-	for _, loc := range *resp.JSON200.Data {
-		address := ""
-		state := ""
-		zipCode := ""
-		if loc.Address != nil {
-			address = stringValue(loc.Address.AddressLine1)
-			state = stringValue(loc.Address.State)
-			zipCode = stringValue(loc.Address.ZipCode)
-		}
-		loc := Location{
-			ID:      stringValue(loc.LocationId),
-			Name:    stringValue(loc.Name),
-			Address: address,
-			State:   state,
-			ZipCode: zipCode,
-		}
+	for _, loc := range locations {
 		l.locationCache[loc.ID] = loc
-		locations = append(locations, loc)
 	}
 	return locations, nil
-}
-
-func stringValue(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
 }
 
 func (l *locationServer) Ready(ctx context.Context) error {
