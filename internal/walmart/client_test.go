@@ -2,6 +2,7 @@ package walmart
 
 import (
 	"bytes"
+	"careme/internal/config"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -9,7 +10,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"net/http"
@@ -48,12 +48,12 @@ func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
 	var capturedReq *http.Request
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedReq = r
-		_, _ = w.Write([]byte(`{"results":[{"id":"1","name":"Store 1"}]}`))
+		_, _ = w.Write([]byte(`{"results":[{"no":1,"name":"Store 1"}]}`))
 	}))
 	t.Cleanup(server.Close)
 
 	keyPath := writePKCS1Key(t, privateKey)
-	client, err := NewClient(Config{
+	client, err := NewClient(config.WalmartConfig{
 		ConsumerID:     "consumer-id-123",
 		KeyVersion:     "1",
 		PrivateKeyPath: keyPath,
@@ -64,12 +64,16 @@ func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	body, err := client.SearchStoresByZIP(context.Background(), "98005")
+	stores, err := client.SearchStoresByZIP(context.Background(), "98005")
 	if err != nil {
 		t.Fatalf("search stores by zip: %v", err)
 	}
-	if !json.Valid(body) {
-		t.Fatalf("expected valid JSON, got: %s", string(body))
+
+	if stores == nil || len(stores) != 1 {
+		t.Fatalf("unexpected stores result: %+v", stores)
+	}
+	if stores[0].Name != "Store 1" {
+		t.Fatalf("unexpected store name: %q", stores[0].Name)
 	}
 
 	if capturedReq == nil {
@@ -114,92 +118,6 @@ func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
 	}
 }
 
-func TestSearchStores_UsesZipOnly(t *testing.T) {
-	t.Parallel()
-
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate RSA key: %v", err)
-	}
-
-	var capturedReq *http.Request
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedReq = r
-		_, _ = w.Write([]byte(`[{"id":"1","name":"Store 1"}]`))
-	}))
-	t.Cleanup(server.Close)
-
-	keyPath := writePKCS1Key(t, privateKey)
-	client, err := NewClient(Config{
-		ConsumerID:     "consumer-id-123",
-		KeyVersion:     "1",
-		PrivateKeyPath: keyPath,
-		BaseURL:        server.URL,
-		HTTPClient:     server.Client(),
-	})
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
-
-	body, err := client.SearchStores(context.Background(), StoresQuery{
-		Lat:  "47.610149", // ignored in ZIP-only mode
-		Lon:  "-122.201515",
-		Zip:  "98005",
-		City: "Bellevue",
-	})
-	if err != nil {
-		t.Fatalf("search stores: %v", err)
-	}
-	if !json.Valid(body) {
-		t.Fatalf("expected valid JSON, got: %s", string(body))
-	}
-
-	if capturedReq == nil {
-		t.Fatal("expected request to be captured")
-	}
-	q := capturedReq.URL.Query()
-	if got := q.Get("zip"); got != "98005" {
-		t.Fatalf("unexpected zip query value: %q", got)
-	}
-	if got := q.Get("lat"); got != "" {
-		t.Fatalf("unexpected lat query value: %q", got)
-	}
-	if got := q.Get("lon"); got != "" {
-		t.Fatalf("unexpected lon query value: %q", got)
-	}
-	if got := q.Get("city"); got != "" {
-		t.Fatalf("unexpected city query value: %q", got)
-	}
-}
-
-func TestStoresBaseURLForZIP_ConvertsProductV2Path(t *testing.T) {
-	t.Parallel()
-
-	got := storesBaseURLForZIP("https://developer.api.walmart.com/api-proxy/service/affil/product/v2")
-	want := "https://developer.api.walmart.com/api-proxy/service/affil/v2"
-	if got != want {
-		t.Fatalf("unexpected ZIP base URL conversion: got %q want %q", got, want)
-	}
-
-	same := storesBaseURLForZIP("http://127.0.0.1:8080")
-	if same != "http://127.0.0.1:8080" {
-		t.Fatalf("unexpected non-matching URL conversion: %q", same)
-	}
-}
-
-func TestSearchStores_MissingZipReturnsError(t *testing.T) {
-	t.Parallel()
-
-	client := &Client{}
-	_, err := client.SearchStores(context.Background(), StoresQuery{})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "zip code is required") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestLoadRSAPrivateKey_FromPKCS1PEM(t *testing.T) {
 	t.Parallel()
 
@@ -231,7 +149,7 @@ func TestSearchStoresByZIP_StatusError(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	keyPath := writePKCS1Key(t, privateKey)
-	client, err := NewClient(Config{
+	client, err := NewClient(config.WalmartConfig{
 		ConsumerID:     "consumer-id-123",
 		KeyVersion:     "1",
 		PrivateKeyPath: keyPath,

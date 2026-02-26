@@ -7,14 +7,12 @@ import (
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
-	"careme/internal/walmart"
 	"context"
 	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"sync"
 )
 
@@ -22,11 +20,6 @@ type krogerClient interface {
 	LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error)
 	// LocationDetailsWithResponse request
 	LocationDetailsWithResponse(ctx context.Context, locationId string, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationDetailsResponse, error)
-}
-
-// force this and kroger into a unform ai?
-type walmartClient interface {
-	SearchStoresByZIP(ctx context.Context, zip string) ([]walmart.Store, error)
 }
 
 type userLookup interface {
@@ -37,7 +30,6 @@ type locationStorage struct {
 	locationCache map[string]Location
 	cacheLock     sync.Mutex // to protect locationMap
 	client        krogerClient
-	walmartClient walmartClient
 }
 
 type locationServer struct {
@@ -59,11 +51,6 @@ func New(cfg *config.Config) (locationGetter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
 	}
-	walmartClient, err := walmart.NewClient(cfg.Walmart)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Walmart client: %w", err)
-	}
-
 	return &locationStorage{
 		locationCache: make(map[string]Location),
 		cacheLock:     sync.Mutex{},
@@ -140,26 +127,9 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		return nil, nil
 	}
 
-	walmartLocs, err := l.walmartClient.SearchStoresByZIP(ctx, zipcode)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to get Walmart locations for zip", "zip", zipcode, "error", err)
-		return nil, err
-	}
+	var locations []Location
 	l.cacheLock.Lock()
 	defer l.cacheLock.Unlock()
-
-	for _, wloc := range walmartLocs {
-		loc := Location{
-			ID:      "walmart-" + strconv.Itoa(wloc.No),
-			Name:    wloc.Name,
-			Address: wloc.StreetAddress,
-			State:   wloc.City, // walmart api does not return state but city is better than nothing
-		}
-		l.locationCache[loc.ID] = loc
-
-	}
-
-	var locations []Location
 	for _, loc := range *resp.JSON200.Data {
 		address := ""
 		state := ""
