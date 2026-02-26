@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/admin"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -9,11 +10,12 @@ import (
 	"careme/internal/logsink"
 	"careme/internal/recipes"
 	"careme/internal/seasons"
+	"careme/internal/sitemap"
+	"careme/internal/static"
 	"careme/internal/templates"
 	"careme/internal/users"
+	utypes "careme/internal/users/types"
 	"context"
-	"crypto/sha256"
-	_ "embed"
 	"errors"
 	"fmt"
 	"html/template"
@@ -25,22 +27,20 @@ import (
 	"time"
 )
 
-//go:embed favicon.png
-var favicon []byte
-
-//go:embed static/tailwind.css
-var tailwindCSS []byte
-
 func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
 	cache, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
 
-	authClient, err := auth.NewClient(cfg.Clerk.SecretKey)
+	authClient, err := auth.NewFromConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to create clerk client: %w", err)
+		return fmt.Errorf("failed to create auth client: %w", err)
 	}
+
+	mux := http.NewServeMux()
+	authClient.Register(mux)
+	static.Register(mux)
 
 	userStorage := users.NewStorage(cache)
 
@@ -48,70 +48,88 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
-	tailwindETag := fmt.Sprintf(`"%x"`, sha256.Sum256(tailwindCSS))
-	mux := http.NewServeMux()
-	mux.HandleFunc("/static/tailwind.css", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("If-None-Match") == tailwindETag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=0, no-cache")
-		w.Header().Set("ETag", tailwindETag)
-		if _, err := w.Write(tailwindCSS); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
-		}
-	})
 
-	locationserver, err := locations.New(context.TODO(), cfg)
+	locationStorage, err := locations.New(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
-	locations.Register(locationserver, mux)
 
-	userHandler := users.NewHandler(userStorage, locationserver, authClient)
+	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
 	userHandler.Register(mux)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationserver, cache, authClient)
+	locationServer := locations.NewServer(locationStorage, userStorage)
+	locationServer.Register(mux, authClient)
+
+	sitemapHandler := sitemap.New(cache)
+	sitemapHandler.Register(mux)
+
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(mux)
+
+	adminMux := http.NewServeMux()
+	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
+	mux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 
 	if logsinkCfg.Enabled() {
 		logsHandler, err := logs.NewHandler(logsinkCfg)
 		if err != nil {
 			return fmt.Errorf("failed to create logs handler: %w", err)
 		}
-		logsHandler.Register(mux)
+		logsHandler.Register(adminMux)
 	}
+
+	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		data := struct {
+			ClarityScript template.HTML
+			Style         seasons.Style
+		}{
+			ClarityScript: templates.ClarityScript(),
+			Style:         seasons.GetCurrentStyle(),
+		}
+		if err := templates.About.Execute(w, data); err != nil {
+			slog.ErrorContext(ctx, "about template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		var currentUser *users.User
-		clerkUserID, err := authClient.GetUserIDFromRequest(r)
+		currentUser, err := userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
 			if !errors.Is(err, auth.ErrNoSession) {
-				slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
 			//no user is fine we'll just pass nil currentUser to template
 			// just have two different templates?
 
-		} else {
-			currentUser, err = userStorage.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-				http.Error(w, "unable to load account", http.StatusInternalServerError)
-				return
+		}
+
+		var favoriteStoreName string
+		if currentUser != nil && currentUser.FavoriteStore != "" {
+			loc, locErr := locationStorage.GetLocationByID(ctx, currentUser.FavoriteStore)
+			if locErr != nil {
+				slog.ErrorContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", locErr)
+				//mutation intentionally not saved bac.
+				currentUser.FavoriteStore = ""
+			} else {
+				favoriteStoreName = loc.Name
 			}
 		}
 		data := struct {
-			ClarityScript template.HTML
-			User          *users.User
-			Style         seasons.Style
+			ClarityScript     template.HTML
+			User              *utypes.User
+			FavoriteStoreName string
+			Style             seasons.Style
+			ServerSignedIn    bool
 		}{
-			ClarityScript: templates.ClarityScript(),
-			User:          currentUser,
-			Style:         seasons.GetCurrentStyle(),
+			ClarityScript:     templates.ClarityScript(),
+			User:              currentUser,
+			FavoriteStoreName: favoriteStoreName,
+			Style:             seasons.GetCurrentStyle(),
+			ServerSignedIn:    currentUser != nil,
 		}
 		if err := templates.Home.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "home template execute error", "error", err)
@@ -119,49 +137,10 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 	})
 
-	//TODO move signin/up/auth/establish/logout to auth package
-	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, cfg.Clerk.Signin(), http.StatusSeeOther)
-	})
-	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, cfg.Clerk.Signup(), http.StatusSeeOther)
-	})
-	mux.HandleFunc("/auth/establish", func(w http.ResponseWriter, r *http.Request) {
-		if cfg.Clerk.PublishableKey == "" {
-			http.Error(w, "clerk publishable key missing", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		data := struct {
-			PublishableKey string
-		}{
-			PublishableKey: cfg.Clerk.PublishableKey,
-		}
-		if err := templates.AuthEstablish.Execute(w, data); err != nil {
-			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)
-			http.Error(w, "template error", http.StatusInternalServerError)
-		}
-	})
-
-	mux.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		authClient.Logout(w, r)
-	})
-
 	ro := &readyOnce{}
-	ro.Add(generator.Ready)
-	ro.Add(func(ctx context.Context) error {
-		return locations.Ready(ctx, locationserver)
-	})
+	ro.Add(generator, locationServer)
 
 	mux.Handle("/ready", ro)
-
-	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png") // <= without this, many UAs ignore it
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		if _, err := w.Write(favicon); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write favicon", "error", err)
-		}
-	})
 
 	server := &http.Server{
 		Addr:    addr,

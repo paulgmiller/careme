@@ -13,6 +13,7 @@ type Config struct {
 	Walmart WalmartConfig `json:"walmart"`
 	Mocks   MockConfig    `json:"mocks"`
 	Clerk   ClerkConfig   `json:"clerk"`
+	Admin   AdminConfig   `json:"admin"`
 }
 
 type AIConfig struct {
@@ -36,6 +37,10 @@ type ClerkConfig struct {
 	Prod           bool
 }
 
+type AdminConfig struct {
+	Emails []string `json:"emails"`
+}
+
 // Config defines the required Walmart affiliate credentials and client options.
 type WalmartConfig struct {
 	ConsumerID     string
@@ -51,6 +56,7 @@ func (c *ClerkConfig) IsEnabled() bool {
 
 var locahostredirect = "?redirect_url=http://localhost:8080/auth/establish"
 
+// move to auth pacakage?
 func (c *ClerkConfig) Signin() string {
 	url := fmt.Sprintf("https://%s/sign-in", c.Domain)
 	if !c.Prod {
@@ -85,6 +91,9 @@ func Load() (*Config, error) {
 			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
 			Domain:         os.Getenv("CLERK_DOMAIN"),
 		},
+		Admin: AdminConfig{
+			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+		},
 		Walmart: WalmartConfig{
 			ConsumerID:     os.Getenv("WALMART_CONSUMER_ID"),
 			KeyVersion:     os.Getenv("WALMART_KEY_VERSION"),
@@ -114,4 +123,27 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("AI API  key must be set")
 	}
 	return nil
+}
+
+func parseAdminEmails(value string) []string {
+	if value == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	emails := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		email := strings.ToLower(strings.TrimSpace(part))
+		if email == "" {
+			continue
+		}
+		if _, ok := seen[email]; ok {
+			continue
+		}
+		seen[email] = struct{}{}
+		emails = append(emails, email)
+	}
+
+	return emails
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +16,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/templates"
 	"careme/internal/users"
 
 	"golang.org/x/net/html"
@@ -66,10 +66,47 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	if recipeHashes[0] != savedHash {
 		t.Fatalf("expected finalized recipe to be %s, got %s", savedHash, recipeHashes[0])
 	}
+	savedTitle := extractRecipeTitleForHash(t, finalizedBody, savedHash)
 	for _, dismissed := range dismissedHashes {
 		if recipeHashes[0] == dismissed {
 			t.Fatalf("finalized recipe %s was in dismissed list", dismissed)
 		}
+	}
+
+	// Step 6: ask a question on the finalized single recipe page.
+	question := "Can I use skirt steak instead?"
+	questionURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/question"
+	questionBody := mustPostFormBodyHTMX(t, client, questionURL, url.Values{
+		"conversation_id": {conversationID},
+		"question":        {question},
+		"recipe_title":    {savedTitle},
+	})
+	if !strings.Contains(questionBody, question) {
+		t.Fatalf("expected question thread to include question %q", question)
+	}
+	expectedPrompt := "Regarding " + savedTitle + ": " + question
+	if !strings.Contains(questionBody, "Mock answer: "+expectedPrompt) {
+		t.Fatalf("expected question thread to include mock answer for %q", expectedPrompt)
+	}
+
+	// Step 7: submit cooked feedback and ensure it persists on the recipe page.
+	feedbackURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/feedback"
+	feedbackComment := "Turned out great. Next time add more lime."
+	feedbackBody := mustPostFormBodyHTMX(t, client, feedbackURL, url.Values{
+		"cooked":   {"true"},
+		"stars":    {"4"},
+		"feedback": {feedbackComment},
+	})
+	if !strings.Contains(feedbackBody, "Saved") {
+		t.Fatalf("expected feedback response to include saved confirmation, got: %s", feedbackBody)
+	}
+
+	recipeBody := mustGetBody(t, client, srv.URL+"/recipe/"+url.PathEscape(savedHash))
+	if !strings.Contains(recipeBody, feedbackComment) {
+		t.Fatalf("expected recipe page to contain saved feedback comment %q", feedbackComment)
+	}
+	if !strings.Contains(recipeBody, `data-initial-stars="4"`) {
+		t.Fatalf("expected recipe page to persist stars value, got body: %s", recipeBody)
 	}
 
 	//TODO step 6 make sure recipes are saved to user page?
@@ -78,9 +115,13 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	ctx := t.Context()
 
 	cfg := &config.Config{Mocks: config.MockConfig{Enable: true}}
+	err := templates.Init(cfg, "dummyhash") //initialize templates so they don't hit the file system during tests
+	if err != nil {
+		t.Fatalf("failed to create templates %v", err)
+	}
+
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
@@ -89,7 +130,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("failed to create generator: %v", err)
 	}
-	locationServer, err := locations.New(ctx, cfg)
+	locationStorage, err := locations.New(cfg)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}
@@ -97,15 +138,13 @@ func newTestServer(t *testing.T) *httptest.Server {
 	mockAuth := auth.Mock(cfg)
 
 	mux := http.NewServeMux()
-	locations.Register(locationServer, mux)
-	users.NewHandler(userStorage, locationServer, mockAuth).Register(mux)
-	recipes.NewHandler(cfg, userStorage, generator, locationServer, cacheStore, mockAuth).Register(mux)
+	locationServer := locations.NewServer(locationStorage, userStorage)
+	locationServer.Register(mux, mockAuth)
+	users.NewHandler(userStorage, locationStorage, mockAuth).Register(mux)
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(mux)
 
 	ro := &readyOnce{}
-	ro.Add(generator.Ready)
-	ro.Add(func(ctx context.Context) error {
-		return locations.Ready(ctx, locationServer)
-	})
+	ro.Add(generator, locationServer)
 
 	mux.Handle("/ready", ro)
 
@@ -140,6 +179,30 @@ func mustGetBody(t *testing.T, client *http.Client, url string) string {
 	body := readAll(t, resp.Body)
 	requireValidHTML(t, url, resp.Header.Get("Content-Type"), body)
 	return body
+}
+
+func mustPostFormBodyHTMX(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		t.Fatalf("POST %s failed to build request: %v", targetURL, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s failed: %v", targetURL, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body := readAll(t, resp.Body)
+		t.Fatalf("POST %s expected 200, got %d: %s", targetURL, resp.StatusCode, body)
+	}
+	return readAll(t, resp.Body)
 }
 
 func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectSpinner bool) (string, string) {
@@ -221,6 +284,16 @@ func extractRecipeHashes(t *testing.T, body string) []string {
 		hashes = append(hashes, match[1])
 	}
 	return hashes
+}
+
+func extractRecipeTitleForHash(t *testing.T, body, hash string) string {
+	t.Helper()
+	re := regexp.MustCompile(`<a href="/recipe/` + regexp.QuoteMeta(hash) + `"[^>]*>\s*([^<]+)\s*</a>`)
+	match := re.FindStringSubmatch(body)
+	if len(match) < 2 {
+		t.Fatalf("expected finalized page to include title link for hash %q", hash)
+	}
+	return strings.TrimSpace(match[1])
 }
 
 func buildRecipesURL(base, location, date, conversationID, savedHash string, dismissedHashes []string, finalize bool) string {

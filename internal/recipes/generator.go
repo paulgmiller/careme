@@ -8,6 +8,7 @@ import (
 	"careme/internal/locations"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,12 +18,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/samber/lo/mutable"
 )
 
 type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 	Regenerate(ctx context.Context, newinstruction string, conversationID string) (*ai.ShoppingList, error)
+	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	Ready(ctx context.Context) error
 }
 
@@ -87,7 +90,10 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
-	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, p.Instructions, p.Date, p.LastRecipes)
+
+	instructions := mergeInstructions(p.Directive, p.Instructions)
+
+	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
@@ -100,6 +106,23 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return shoppingList, nil
+}
+
+func mergeInstructions(directive string, instructions string) string {
+	directive = strings.TrimSpace(directive)
+	instructions = strings.TrimSpace(instructions)
+
+	if directive == "" {
+		return instructions
+	}
+	if instructions == "" {
+		return directive
+	}
+	return directive + "\n\n" + instructions
+}
+
+func (g *Generator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+	return g.aiClient.AskQuestion(ctx, question, conversationID)
 }
 
 type filter struct {
@@ -121,18 +144,12 @@ func Filter(term string, brands []string, frozen bool) filter {
 func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
 	lochash := p.LocationHash()
 	var ingredients []kroger.Ingredient
+	rio := IO(g.cache)
 
-	if ingredientblob, err := g.cache.Get(ctx, lochash); err == nil {
-		defer func() {
-			if err := ingredientblob.Close(); err != nil {
-				slog.ErrorContext(ctx, "failed to close cached ingredients reader", "location", p.String(), "error", err)
-			}
-		}()
-		jsonReader := json.NewDecoder(ingredientblob)
-		if err := jsonReader.Decode(&ingredients); err == nil {
-			slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(ingredients))
-			return ingredients, nil
-		}
+	if cachedIngredients, err := rio.IngredientsFromCache(ctx, lochash); err == nil {
+		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
+		return cachedIngredients, nil
+	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
@@ -150,7 +167,8 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 			lock.Lock()
 			defer lock.Unlock()
 			ingredients = append(ingredients, cingredients...)
-			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID)
+			ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toStr(i.Description) })
+			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID, "runningtotal", len(ingredients))
 		}(category)
 	}
 
@@ -158,12 +176,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 
 	mutable.Shuffle(ingredients)
 
-	allingredientsJSON, err := json.Marshal(ingredients)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to marshal ingredients", "location", p.String(), "error", err)
-		return nil, err
-	}
-	if err := g.cache.Put(ctx, p.LocationHash(), string(allingredientsJSON), cache.Unconditional()); err != nil {
+	if err := rio.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
@@ -172,13 +185,13 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 
 // move to krogrer client as everyone will be differnt here?
 func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]kroger.Ingredient, error) {
-	limit := 25
+	limit := 50
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
 	// brand := "empty" doesn't work have to check for nil
 	// fulfillment := "ais" drmatically shortens?
 	// wrapped this in a retry and it did nothng
-	products, err := g.krogerClient.ProductSearchWithResponse(context.TODO(), &kroger.ProductSearchParams{
+	products, err := g.krogerClient.ProductSearchWithResponse(ctx, &kroger.ProductSearchParams{
 		FilterLocationId: &location,
 		FilterTerm:       &f.Term,
 		FilterLimit:      &limitStr,
@@ -219,6 +232,15 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 				Size:         item.Size,
 				PriceRegular: item.Price.Regular,
 				PriceSale:    item.Price.Promo,
+				Categories:   product.Categories,
+				/*"taxonomies": [
+				{
+				"department": {},
+				"commodity": {},
+				"subCommodity": {}
+				}
+				],*/
+				//Taxonomy:  product.,
 				// CountryOrigin: product.CountryOrigin,
 				// AisleNumber:   product.AisleLocations[0].Number,
 				// Favorite: item.Favorite,
@@ -239,8 +261,8 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 	// slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location, "skip", skip)
 
 	// recursion is pretty dumb pagination
-	// 500's seem gone.
-	if len(*products.JSON200.Data) == limit && skip+limit < 100 { // fence post error
+	// kroger limites us to 250
+	if len(*products.JSON200.Data) == limit && skip < 250 { // fence post error
 		page, err := g.GetIngredients(ctx, location, f, skip+limit)
 		if err != nil {
 			return ingredients, nil

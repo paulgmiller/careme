@@ -1,0 +1,644 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "databaseAccounts_caremedb_name": {
+      "type": "String"
+    },
+    "storageAccounts_caremecache_name": {
+      "type": "String"
+    },
+    "storageAccounts_caremetest_name": {
+      "type": "String"
+    },
+    "virtualNetworks_zebu_vnet_externalid": {
+      "type": "String"
+    }
+  },
+  "resources": [
+    {
+      "apiVersion": "2025-05-01-preview",
+      "identity": {
+        "type": "None"
+      },
+      "kind": "GlobalDocumentDB",
+      "location": "West US 3",
+      "name": "[parameters('databaseAccounts_caremedb_name')]",
+      "properties": {
+        "analyticalStorageConfiguration": {
+          "schemaType": "WellDefined"
+        },
+        "backupPolicy": {
+          "periodicModeProperties": {
+            "backupIntervalInMinutes": 240,
+            "backupRetentionIntervalInHours": 8,
+            "backupStorageRedundancy": "Geo"
+          },
+          "type": "Periodic"
+        },
+        "capabilities": [],
+        "capacity": {
+          "totalThroughputLimit": 4000
+        },
+        "capacityMode": "Serverless",
+        "consistencyPolicy": {
+          "defaultConsistencyLevel": "Session",
+          "maxIntervalInSeconds": 5,
+          "maxStalenessPrefix": 100
+        },
+        "cors": [],
+        "databaseAccountOfferType": "Standard",
+        "defaultIdentity": "FirstPartyIdentity",
+        "defaultPriorityLevel": "High",
+        "diagnosticLogSettings": {
+          "enableFullTextQuery": "None"
+        },
+        "disableKeyBasedMetadataWriteAccess": false,
+        "disableLocalAuth": false,
+        "enableAnalyticalStorage": false,
+        "enableAutomaticFailover": true,
+        "enableBurstCapacity": false,
+        "enableFreeTier": false,
+        "enableMaterializedViews": false,
+        "enableMultipleWriteLocations": false,
+        "enablePartitionMerge": false,
+        "enablePerRegionPerPartitionAutoscale": false,
+        "enablePriorityBasedExecution": false,
+        "ipRules": [],
+        "isVirtualNetworkFilterEnabled": false,
+        "locations": [
+          {
+            "failoverPriority": 0,
+            "isZoneRedundant": false,
+            "locationName": "West US 3"
+          }
+        ],
+        "minimalTlsVersion": "Tls12",
+        "networkAclBypass": "None",
+        "networkAclBypassResourceIds": [],
+        "publicNetworkAccess": "Enabled",
+        "virtualNetworkRules": []
+      },
+      "tags": {
+        "defaultExperience": "Core (SQL)",
+        "hidden-cosmos-mmspecial": "",
+        "hidden-workload-type": "Learning"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "kind": "StorageV2",
+      "location": "westus3",
+      "name": "[parameters('storageAccounts_caremecache_name')]",
+      "properties": {
+        "accessTier": "Hot",
+        "allowBlobPublicAccess": false,
+        "allowCrossTenantReplication": false,
+        "allowSharedKeyAccess": true,
+        "defaultToOAuthAuthentication": false,
+        "dnsEndpointType": "Standard",
+        "encryption": {
+          "keySource": "Microsoft.Storage",
+          "requireInfrastructureEncryption": false,
+          "services": {
+            "blob": {
+              "enabled": true,
+              "keyType": "Account"
+            },
+            "file": {
+              "enabled": true,
+              "keyType": "Account"
+            }
+          }
+        },
+        "largeFileSharesState": "Enabled",
+        "minimumTlsVersion": "TLS1_2",
+        "networkAcls": {
+          "bypass": "Logging, Metrics, AzureServices",
+          "defaultAction": "Allow",
+          "ipRules": [],
+          "resourceAccessRules": [],
+          "virtualNetworkRules": [
+            {
+              "action": "Allow",
+              "id": "[concat(parameters('virtualNetworks_zebu_vnet_externalid'), '/subnets/default')]",
+              "state": "Succeeded"
+            }
+          ]
+        },
+        "publicNetworkAccess": "Enabled",
+        "supportsHttpsTrafficOnly": true
+      },
+      "sku": {
+        "name": "Standard_RAGRS",
+        "tier": "Standard"
+      },
+      "type": "Microsoft.Storage/storageAccounts"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "kind": "StorageV2",
+      "location": "westus2",
+      "name": "[parameters('storageAccounts_caremetest_name')]",
+      "properties": {
+        "accessTier": "Hot",
+        "allowBlobPublicAccess": false,
+        "allowCrossTenantReplication": false,
+        "allowSharedKeyAccess": true,
+        "defaultToOAuthAuthentication": false,
+        "dnsEndpointType": "Standard",
+        "encryption": {
+          "keySource": "Microsoft.Storage",
+          "requireInfrastructureEncryption": false,
+          "services": {
+            "blob": {
+              "enabled": true,
+              "keyType": "Account"
+            },
+            "file": {
+              "enabled": true,
+              "keyType": "Account"
+            }
+          }
+        },
+        "largeFileSharesState": "Enabled",
+        "minimumTlsVersion": "TLS1_2",
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "defaultAction": "Allow",
+          "ipRules": [],
+          "virtualNetworkRules": []
+        },
+        "publicNetworkAccess": "Enabled",
+        "supportsHttpsTrafficOnly": true
+      },
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard"
+      },
+      "type": "Microsoft.Storage/storageAccounts"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000003')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/throughputSettings/read",
+              "Microsoft.DocumentDB/databaseAccounts/cassandra/containers/executeQuery",
+              "Microsoft.DocumentDB/databaseAccounts/cassandra/containers/readChangeFeed",
+              "Microsoft.DocumentDB/databaseAccounts/cassandra/containers/entities/read"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Cassandra Built-in Data Reader",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/cassandraRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000004')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/throughputSettings/read",
+              "Microsoft.DocumentDB/databaseAccounts/throughputSettings/write",
+              "Microsoft.DocumentDB/databaseAccounts/cassandra/*",
+              "Microsoft.DocumentDB/databaseAccounts/cassandra/write",
+              "Microsoft.DocumentDB/databaseAccounts/cassandra/delete",
+              "Microsoft.DocumentDB/databaseAccounts/cassandra/containers/*",
+              "Microsoft.DocumentDB/databaseAccounts/cassandra/containers/entities/*"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Cassandra Built-in Data Contributor",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/cassandraRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000003')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/throughputSettings/read",
+              "Microsoft.DocumentDB/databaseAccounts/gremlin/containers/executeQuery",
+              "Microsoft.DocumentDB/databaseAccounts/gremlin/containers/readChangeFeed",
+              "Microsoft.DocumentDB/databaseAccounts/gremlin/containers/entities/read"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Gremlin Built-in Data Reader",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/gremlinRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000004')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/throughputSettings/read",
+              "Microsoft.DocumentDB/databaseAccounts/throughputSettings/write",
+              "Microsoft.DocumentDB/databaseAccounts/gremlin/*",
+              "Microsoft.DocumentDB/databaseAccounts/gremlin/write",
+              "Microsoft.DocumentDB/databaseAccounts/gremlin/delete",
+              "Microsoft.DocumentDB/databaseAccounts/gremlin/containers/*",
+              "Microsoft.DocumentDB/databaseAccounts/gremlin/containers/entities/*"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Gremlin Built-in Data Contributor",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/gremlinRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000003')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/throughputSettings/read",
+              "Microsoft.DocumentDB/databaseAccounts/mongoMI/containers/executeQuery",
+              "Microsoft.DocumentDB/databaseAccounts/mongoMI/containers/readChangeFeed",
+              "Microsoft.DocumentDB/databaseAccounts/mongoMI/containers/entities/read"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Mongo Built-in Data Reader",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/mongoMIRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000004')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/throughputSettings/read",
+              "Microsoft.DocumentDB/databaseAccounts/throughputSettings/write",
+              "Microsoft.DocumentDB/databaseAccounts/mongoMI/*",
+              "Microsoft.DocumentDB/databaseAccounts/mongoMI/write",
+              "Microsoft.DocumentDB/databaseAccounts/mongoMI/delete",
+              "Microsoft.DocumentDB/databaseAccounts/mongoMI/containers/*",
+              "Microsoft.DocumentDB/databaseAccounts/mongoMI/containers/entities/*"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Mongo Built-in Data Contributor",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/mongoMIRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000001')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/executeQuery",
+              "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/readChangeFeed",
+              "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/read"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Built-in Data Reader",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000002')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/*",
+              "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/*"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Built-in Data Contributor",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000001')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/tables/containers/executeQuery",
+              "Microsoft.DocumentDB/databaseAccounts/tables/containers/readChangeFeed",
+              "Microsoft.DocumentDB/databaseAccounts/tables/containers/entities/read"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Built-in Data Reader",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/tableRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-05-01-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+      ],
+      "name": "[concat(parameters('databaseAccounts_caremedb_name'), '/00000000-0000-0000-0000-000000000002')]",
+      "properties": {
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_caremedb_name'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/readMetadata",
+              "Microsoft.DocumentDB/databaseAccounts/tables/*",
+              "Microsoft.DocumentDB/databaseAccounts/tables/containers/*",
+              "Microsoft.DocumentDB/databaseAccounts/tables/containers/entities/*"
+            ],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Cosmos DB Built-in Data Contributor",
+        "type": "BuiltInRole"
+      },
+      "type": "Microsoft.DocumentDB/databaseAccounts/tableRoleDefinitions"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremecache_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremecache_name'), '/default')]",
+      "properties": {
+        "containerDeleteRetentionPolicy": {
+          "days": 7,
+          "enabled": true
+        },
+        "cors": {
+          "corsRules": []
+        },
+        "deleteRetentionPolicy": {
+          "allowPermanentDelete": false,
+          "days": 7,
+          "enabled": true
+        }
+      },
+      "sku": {
+        "name": "Standard_RAGRS",
+        "tier": "Standard"
+      },
+      "type": "Microsoft.Storage/storageAccounts/blobServices"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremetest_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremetest_name'), '/default')]",
+      "properties": {
+        "containerDeleteRetentionPolicy": {
+          "days": 7,
+          "enabled": true
+        },
+        "cors": {
+          "corsRules": []
+        },
+        "deleteRetentionPolicy": {
+          "allowPermanentDelete": false,
+          "days": 7,
+          "enabled": true
+        }
+      },
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard"
+      },
+      "type": "Microsoft.Storage/storageAccounts/blobServices"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremecache_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremecache_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        },
+        "protocolSettings": {
+          "smb": {}
+        },
+        "shareDeleteRetentionPolicy": {
+          "days": 7,
+          "enabled": true
+        }
+      },
+      "sku": {
+        "name": "Standard_RAGRS",
+        "tier": "Standard"
+      },
+      "type": "Microsoft.Storage/storageAccounts/fileServices"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremetest_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremetest_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        },
+        "protocolSettings": {
+          "smb": {}
+        },
+        "shareDeleteRetentionPolicy": {
+          "days": 7,
+          "enabled": true
+        }
+      },
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard"
+      },
+      "type": "Microsoft.Storage/storageAccounts/fileServices"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremecache_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremecache_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        }
+      },
+      "type": "Microsoft.Storage/storageAccounts/queueServices"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremetest_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremetest_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        }
+      },
+      "type": "Microsoft.Storage/storageAccounts/queueServices"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremecache_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremecache_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        }
+      },
+      "type": "Microsoft.Storage/storageAccounts/tableServices"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremetest_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremetest_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        }
+      },
+      "type": "Microsoft.Storage/storageAccounts/tableServices"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_caremecache_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremecache_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremecache_name'), '/default/logs')]",
+      "properties": {
+        "defaultEncryptionScope": "$account-encryption-key",
+        "denyEncryptionScopeOverride": false,
+        "immutableStorageWithVersioning": {
+          "enabled": false
+        },
+        "publicAccess": "None"
+      },
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers"
+    },
+    {
+      "apiVersion": "2025-01-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_caremecache_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_caremecache_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_caremecache_name'), '/default/recipes')]",
+      "properties": {
+        "defaultEncryptionScope": "$account-encryption-key",
+        "denyEncryptionScopeOverride": false,
+        "immutableStorageWithVersioning": {
+          "enabled": false
+        },
+        "publicAccess": "None"
+      },
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers"
+    }
+  ],
+  "variables": {}
+}

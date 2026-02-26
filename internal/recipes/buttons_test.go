@@ -40,7 +40,7 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, multiRecipeList, w)
+	FormatShoppingListHTML(p, multiRecipeList, true, w)
 	html := w.Body.String()
 
 	// Verify HTML is valid
@@ -70,9 +70,9 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 		t.Error("HTML should contain Details button text")
 	}
 
-	// Check that "Regenerate" button exists
-	if !strings.Contains(html, `Regenerate`) {
-		t.Error("HTML should contain Regenerate button")
+	// Check that "Try again, chef" button exists
+	if !strings.Contains(html, `Try again, chef`) {
+		t.Error("HTML should contain Try again, chef button")
 	}
 
 	// Check that "Finalize" button exists

@@ -1,8 +1,8 @@
 package recipes
 
 import (
+	"bytes"
 	"careme/internal/ai"
-	"careme/internal/cache"
 	"careme/internal/locations"
 	"context"
 	"encoding/base64"
@@ -19,12 +19,22 @@ import (
 	"github.com/samber/lo"
 )
 
+const (
+	legacyRecipeHashSeed      = "recipe"
+	legacyIngredientsHashSeed = "ingredients"
+	storeDayStartHour         = 9
+)
+
+var nowFn = time.Now
+
 type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
 	Date     time.Time           `json:"date,omitempty"`
 	Staples  []filter            `json:"staples,omitempty"`
 	// People       int
+	//per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
+	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
 	LastRecipes  []string `json:"last_recipes,omitempty"`
 	// UserID         string      `json:"user_id,omitempty"`
 	ConversationID string      `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
@@ -53,18 +63,17 @@ func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	bytes := lo.Must(json.Marshal(g.Staples))
+	bytes := lo.Must(json.Marshal(g.Staples)) //should we remove this so this is stable when we change staples?
 	lo.Must(fnv.Write(bytes))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
+	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
 		lo.Must(io.WriteString(fnv, "saved"+saved.ComputeHash()))
 	}
 	for _, dismissed := range g.Dismissed {
 		lo.Must(io.WriteString(fnv, "dismissed"+dismissed.ComputeHash()))
 	}
-	// this is actually a list not a recipe and isn't necessary. TODO figure out how to remove
-	// could fix without breaking by doing two lookups?
-	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("recipe")))
+	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 // so far just excludes instructions. Can exclude people and other things
@@ -74,27 +83,46 @@ func (g *generatorParams) LocationHash() string {
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
 	bytes := lo.Must(json.Marshal(g.Staples)) // excited fro this to break in some weird way
 	lo.Must(fnv.Write(bytes))
-	// see comment above this suffix is unceessary but keeps old hashes working
-	return base64.URLEncoding.EncodeToString(fnv.Sum([]byte("ingredients")))
+	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-// loadParamsFromHash loads generator params from cache using the hash
-func loadParamsFromHash(ctx context.Context, hash string, c cache.Cache) (*generatorParams, error) {
-	paramsReader, err := c.Get(ctx, hash+".params")
-	if err != nil {
-		return nil, fmt.Errorf("params not found for hash %s: %w", hash, err)
-	}
-	defer func() {
-		if err := paramsReader.Close(); err != nil {
-			slog.ErrorContext(ctx, "failed to close params reader", "hash", hash, "error", err)
-		}
-	}()
+func normalizeLegacyRecipeHash(hash string) (string, bool) {
+	return legacyHashToCurrent(hash, legacyRecipeHashSeed)
+}
 
-	var params generatorParams
-	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
-		return nil, fmt.Errorf("failed to decode params: %w", err)
+func legacyRecipeHash(hash string) (string, bool) {
+	return currentHashToLegacy(hash, legacyRecipeHashSeed)
+}
+
+func legacyLocationHash(hash string) (string, bool) {
+	return currentHashToLegacy(hash, legacyIngredientsHashSeed)
+}
+
+func legacyHashToCurrent(hash string, seed string) (string, bool) {
+	decoded, err := base64.URLEncoding.DecodeString(hash)
+	if err != nil {
+		return "", false
 	}
-	return &params, nil
+	seedBytes := []byte(seed)
+	if !bytes.HasPrefix(decoded, seedBytes) || len(decoded) == len(seedBytes) {
+		return "", false
+	}
+	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
+}
+
+func currentHashToLegacy(hash string, seed string) (string, bool) {
+	decoded, err := base64.RawURLEncoding.DecodeString(hash)
+	if err != nil || len(decoded) == 0 {
+		return "", false
+	}
+	seedBytes := []byte(seed)
+	if bytes.HasPrefix(decoded, seedBytes) {
+		return hash, false
+	}
+	legacyDecoded := make([]byte, 0, len(seedBytes)+len(decoded))
+	legacyDecoded = append(legacyDecoded, seedBytes...)
+	legacyDecoded = append(legacyDecoded, decoded...)
+	return base64.URLEncoding.EncodeToString(legacyDecoded), true
 }
 
 func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generatorParams, error) {
@@ -108,13 +136,18 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 		return nil, err
 	}
 
-	dateStr := r.URL.Query().Get("date")
-	if dateStr == "" {
-		dateStr = time.Now().Format("2006-01-02")
-	}
-	date, err := time.ParseInLocation("2006-01-02", dateStr, time.UTC)
+	storeLoc, err := resolveStoreTimeLocation(ctx, l)
 	if err != nil {
 		return nil, err
+	}
+	dateStr := r.URL.Query().Get("date")
+	date := defaultRecipeDate(nowFn(), storeLoc)
+	if dateStr != "" {
+		parsedDate, err := time.ParseInLocation("2006-01-02", dateStr, storeLoc)
+		if err != nil {
+			return nil, err
+		}
+		date = parsedDate
 	}
 
 	p := DefaultParams(l, date)
@@ -160,7 +193,7 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 }
 
 func DefaultStaples() []filter {
-	return []filter{
+	return append(Produce(), []filter{
 		{
 			Term:   "beef",
 			Brands: []string{"Simple Truth", "Kroger"},
@@ -185,9 +218,70 @@ func DefaultStaples() []filter {
 			Term:   "lamb",
 			Brands: []string{"Simple Truth"},
 		},
+	}...)
+}
+
+func Produce() []filter {
+	return []filter{
 		{
-			Term:   "produce vegetable",
-			Brands: []string{"*"}, // ther's alot of fresh * and kroger here. cut this down after 500 sadness
+			Term:   "fresh vegatable",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "fresh produce",
+			Brands: []string{"*"},
 		},
 	}
+
+}
+
+func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {
+	if l == nil {
+		return nil, fmt.Errorf("nil location")
+	}
+	tzName, ok := timezoneNameForZip(l.ZipCode)
+	if !ok {
+		return nil, fmt.Errorf("unable to infer timezone from zipcode %s", l.ZipCode)
+	}
+	storeLoc, err := time.LoadLocation(tzName)
+	if err != nil {
+		slog.ErrorContext(ctx, "invalid inferred timezone; falling back to UTC", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
+		return nil, err
+	}
+	return storeLoc, nil
+}
+
+func timezoneNameForZip(zip string) (string, bool) {
+	trimmed := strings.TrimSpace(zip)
+	if trimmed == "" {
+		return "", false
+	}
+	switch first := trimmed[0]; {
+	case first >= '0' && first <= '3':
+		return "America/New_York", true
+	case first >= '4' && first <= '7':
+		return "America/Chicago", true
+	case first == '8':
+		return "America/Denver", true
+	case first == '9':
+		return "America/Los_Angeles", true
+	default:
+		return "", false
+	}
+}
+
+func StoreToDate(ctx context.Context, now time.Time, l *locations.Location) (time.Time, error) {
+	tz, err := resolveStoreTimeLocation(ctx, l)
+	if err != nil {
+		return now, err
+	}
+	return defaultRecipeDate(now, tz), nil
+}
+
+func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
+	localNow := now.In(storeLoc)
+	if localNow.Hour() < storeDayStartHour {
+		localNow = localNow.AddDate(0, 0, -1)
+	}
+	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
 }

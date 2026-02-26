@@ -24,17 +24,17 @@
 
   {{.ClarityScript}}
 </head>
-<body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
+<body class="min-h-screen bg-gradient-to-b from-brand-50 to-white text-ink-700 antialiased">
   <main class="px-4 py-10">
     <section class="mx-auto w-full max-w-5xl space-y-8">
-      <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
+      <div class="friendly-card border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 p-8">
           <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">
             <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme Recipes</a>
           </h1>
-          <p class="mt-2 text-gray-600">
+          <p class="mt-2 text-ink-600">
             Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
-            <span class="text-sm text-gray-500">({{.Location.Address}})</span>
+            <span class="text-sm text-ink-500">({{.Location.Address}})</span>
           </p>
         </div>
 
@@ -44,18 +44,20 @@
             <input type="hidden" name="date" value="{{.Date}}" />
             <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
 
-            <div class="flex flex-col gap-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:flex-row sm:items-center">
-              <label for="instructions" class="text-sm font-medium text-gray-700 sm:w-48">Extra instructions</label>
-              <input id="instructions"
-                     type="text"
-                     name="instructions"
-                     value="{{.Instructions}}"
-                     placeholder="e.g. prefer vegetarian"
-                     class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-              <button type="submit"
-                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                Regenerate
-              </button>
+            <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
+              <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
+                <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
+                <input id="instructions"
+                       type="text"
+                       name="instructions"
+                       value="{{.Instructions}}"
+                       placeholder="e.g. make it vegetarian"
+                       class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                <button type="submit"
+                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Try again, chef
+                </button>
+              </div>
             </div>
 
             <div class="mt-8 space-y-8">
@@ -66,15 +68,15 @@
                     <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                       {{.Title}}
                     </a>
-                    <p class="mt-1 text-sm text-gray-500">{{.Description}}</p>
+                    <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-3">
                     <input type="radio" {{if .Saved}}checked{{end}} name="recipe-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" onchange="document.getElementById('saved-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('dismissed-{{.ComputeHash}}').value = ''; setRecipeDetailsVisible('{{.ComputeHash}}', false); updateFinalizeButton();" />
-                    <label for="save-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-emerald-500 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 cursor-pointer transition hover:bg-emerald-100 peer-checked/save:bg-emerald-600 peer-checked/save:text-white peer-checked/save:border-emerald-700">
+                    <label for="save-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
                       Save
                     </label>
                     <input type="radio" name="recipe-{{.ComputeHash}}" value="dismiss" id="dismiss-{{.ComputeHash}}" class="peer/dismiss hidden" onchange="document.getElementById('dismissed-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('saved-{{.ComputeHash}}').value = ''; setRecipeDetailsVisible('{{.ComputeHash}}', false); updateFinalizeButton();" />
-                    <label for="dismiss-{{.ComputeHash}}" class="inline-flex items-center justify-center rounded-lg border-2 border-red-500 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 cursor-pointer transition hover:bg-red-100 peer-checked/dismiss:bg-red-600 peer-checked/dismiss:text-white peer-checked/dismiss:border-red-700">
+                    <label for="dismiss-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
                       Dismiss
                     </label>
                     <button type="button"
@@ -93,20 +95,20 @@
               <section id="details-{{.ComputeHash}}" class="space-y-6 {{if .Saved}}hidden{{end}}">
                 <div class="grid gap-6 md:grid-cols-2">
                   <div>
-                    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Ingredients</h3>
-                    <ul class="mt-3 space-y-2 text-gray-700">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Ingredients</h3>
+                    <ul class="mt-3 space-y-2 text-ink-700">
                       {{range .Ingredients}}
                       <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
                         <span class="font-medium text-brand-700">{{.Name}}</span>
-                        <span class="text-gray-600">{{.Quantity}}</span>
-                        <span class="text-gray-500">{{.Price}}</span>
+                        <span class="text-ink-600">{{.Quantity}}</span>
+                        <span class="text-ink-500">{{.Price}}</span>
                       </li>
                       {{end}}
                     </ul>
                   </div>
                   <div>
-                    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
-                    <ol class="mt-3 list-decimal space-y-2 pl-5 text-gray-700">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Instructions</h3>
+                    <ol class="mt-3 list-decimal space-y-2 pl-5 text-ink-700">
                       {{range .Instructions}}
                       <li>{{.}}</li>
                       {{end}}
@@ -114,7 +116,7 @@
                   </div>
                 </div>
 
-                <div class="space-y-2 text-sm text-gray-600">
+                <div class="space-y-2 text-sm text-ink-600">
                   <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
                   <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
                 </div>
@@ -135,11 +137,11 @@
                 </button>
               </div>
               <div id="shoppingListPanel" class="mt-4 hidden">
-                <ul class="space-y-2 text-gray-700">
+                <ul class="space-y-2 text-ink-700">
                   {{range .ShoppingList}}
                   <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
                     <span class="font-medium text-brand-700">{{.Name}}</span>
-                    <span class="text-gray-600">{{.Quantity}}</span>
+                    <span class="text-ink-600">{{.Quantity}}</span>
                   </li>
                   {{end}}
                 </ul>
@@ -151,20 +153,19 @@
 
           <div class="mt-10 flex flex-wrap items-center gap-4">
             <button type="submit" form="regenerateForm" name="finalize" value="true" id="finalizeButton"
-                    class="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2">
+                    class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
               Finalize
             </button>
             <button type="button"
                     onclick="shareRecipes()"
-                    class="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2">
+                    class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
               Share Recipes
             </button>
-            <span id="shareFeedback" class="hidden text-sm font-medium text-emerald-600">Link copied!</span>
           </div>
         </div>
       </div>
 
-      <p class="text-center text-sm text-gray-500">Generated by Careme.</p>
+      <p class="text-center text-sm text-ink-500">Generated by Careme.</p>
     </section>
   </main>
 
@@ -184,19 +185,15 @@
     // Initialize button state on page load
     document.addEventListener('DOMContentLoaded', updateFinalizeButton);
 
-    function shareRecipes() {
-      const hash = "{{.Hash}}";
-      const shareUrl = window.location.origin + "/recipes?h=" + encodeURIComponent(hash);
-
-      navigator.clipboard.writeText(shareUrl).then(function () {
-        const feedback = document.getElementById('shareFeedback');
-        feedback.classList.remove('hidden');
-        setTimeout(function () {
-          feedback.classList.add('hidden');
-        }, 2000);
-      }).catch(function (err) {
-        alert('Failed to copy link: ' + err);
-      });
+    async function shareRecipes() {
+      try {
+        await navigator.share({title: document.title, url: window.location.href});
+      } catch (err) {
+        if (err && err.name === 'AbortError') {
+          return;
+        }
+        window.prompt('Copy this link:', window.location.href);
+      }
     }
 
     function toggleRecipeDetails(hash) {

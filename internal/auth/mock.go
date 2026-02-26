@@ -17,11 +17,17 @@ var _ AuthClient = (*mockClient)(nil)
 func Mock(cfg *config.Config) AuthClient {
 	email := cfg.Mocks.Email
 	if email == "" {
-		email = "you@careme.cooking"
+		return DefaultMock()
 	}
 
 	return &mockClient{
 		email: email,
+	}
+}
+
+func DefaultMock() AuthClient {
+	return &mockClient{
+		email: "you@careme.cooking",
 	}
 }
 
@@ -31,4 +37,16 @@ func (c *mockClient) GetUserEmail(ctx context.Context, clerkUserID string) (stri
 
 func (c *mockClient) GetUserIDFromRequest(r *http.Request) (string, error) {
 	return "mock-clerk-user-id", nil
+}
+
+func (c *mockClient) WithAuthHTTP(handler http.Handler) http.Handler {
+	return handler
+}
+
+func (c *mockClient) logout(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "not implemented in mock auth client", http.StatusNotImplemented)
+}
+
+func (c *mockClient) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/logout", c.logout)
 }

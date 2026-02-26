@@ -13,7 +13,7 @@ import (
 
 func TestGetLocationByIDUsesCache(t *testing.T) {
 	client := newFakeKrogerClient()
-	client.setDetailResponse("12345", http.StatusOK, `{"data":{"name":"Friendly Market","address":{"addressLine1":"123 Main St"}}}`)
+	client.setDetailResponse("12345", http.StatusOK, `{"data":{"name":"Friendly Market","address":{"addressLine1":"123 Main St","zipCode":"10001"}}}`)
 
 	server := newTestLocationServer(client)
 
@@ -24,6 +24,9 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 	}
 	if got.Name != "Friendly Market" || got.Address != "123 Main St" {
 		t.Fatalf("unexpected location returned: %+v", got)
+	}
+	if got.ZipCode != "10001" {
+		t.Fatalf("unexpected zip code: %q", got.ZipCode)
 	}
 
 	_, err = server.GetLocationByID(ctx, "12345")
@@ -41,7 +44,7 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 
 func TestGetLocationsByZipCachesLocations(t *testing.T) {
 	client := newFakeKrogerClient()
-	client.setListResponse("30301", http.StatusOK, `{"data":[{"locationId":"111","name":"Store 111","address":{"addressLine1":"1 North Ave","state":"GA"}},{"locationId":"222","name":"Store 222","address":{"addressLine1":"2 South St","state":"GA"}}]}`)
+	client.setListResponse("30301", http.StatusOK, `{"data":[{"locationId":"111","name":"Store 111","address":{"addressLine1":"1 North Ave","state":"GA","zipCode":"30301"}},{"locationId":"222","name":"Store 222","address":{"addressLine1":"2 South St","state":"GA","zipCode":"60601"}}]}`)
 
 	server := newTestLocationServer(client)
 
@@ -56,8 +59,14 @@ func TestGetLocationsByZipCachesLocations(t *testing.T) {
 	if locs[0].ID != "111" || locs[0].State != "GA" {
 		t.Fatalf("unexpected first location: %+v", locs[0])
 	}
+	if locs[0].ZipCode != "30301" {
+		t.Fatalf("unexpected first location zip code: %+v", locs[0])
+	}
 	if locs[1].ID != "222" || locs[1].Address != "2 South St" {
 		t.Fatalf("unexpected second location: %+v", locs[1])
+	}
+	if locs[1].ZipCode != "60601" {
+		t.Fatalf("unexpected second location zip code: %+v", locs[1])
 	}
 
 	server.cacheLock.Lock()
@@ -165,8 +174,8 @@ func newJSONResponse(status int, body string) *http.Response {
 	}
 }
 
-func newTestLocationServer(client krogerClient) *locationServer {
-	return &locationServer{
+func newTestLocationServer(client krogerClient) *locationStorage {
+	return &locationStorage{
 		locationCache: make(map[string]Location),
 		client:        client,
 	}

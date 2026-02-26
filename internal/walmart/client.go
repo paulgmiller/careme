@@ -2,6 +2,7 @@ package walmart
 
 import (
 	"bytes"
+	"careme/internal/config"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -49,7 +50,7 @@ type StoresQuery struct {
 }
 
 // NewClient creates a Walmart affiliates client.
-func NewClient(cfg Config) (*Client, error) {
+func NewClient(cfg config.WalmartConfig) (*Client, error) {
 	if strings.TrimSpace(cfg.ConsumerID) == "" {
 		return nil, errors.New("consumer ID is required")
 	}

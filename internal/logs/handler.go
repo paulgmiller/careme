@@ -1,30 +1,34 @@
-// TODO merge with log sink
 package logs
 
 import (
 	"careme/internal/logsink"
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strconv"
 )
 
-// Handler handles HTTP requests for log viewing
 type handler struct {
-	reader *Reader
+	reader    *Reader
+	datasette http.Handler
 }
 
-// NewHandler creates   a new logs HTTP handler
 func NewHandler(cfg logsink.Config) (*handler, error) {
-	// Only create reader if Azure credentials are available
-	reader, err := NewReader(context.Background(), &cfg)
+	reader, err := NewReader(&cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create log reader: %w", err)
 	}
 
+	datasetteProxy, err := newDatasetteProxy()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create datasette proxy: %w", err)
+	}
+
 	return &handler{
-		reader: reader,
+		reader:    reader,
+		datasette: datasetteProxy,
 	}, nil
 }
 
@@ -32,6 +36,7 @@ func NewHandler(cfg logsink.Config) (*handler, error) {
 func (h *handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/logs", h.handleLogsPage)
 	mux.HandleFunc("/api/logs", h.handleLogsAPI)
+	mux.Handle("/datasette/", http.StripPrefix("/datasette", h.datasette))
 }
 
 func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
@@ -46,40 +51,35 @@ func (h *handler) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 			"frame-ancestors 'none'; "+
 			"upgrade-insecure-requests;")
 
-	_, err := w.Write([]byte(`<!doctype html>
+	page := `<!doctype html>
 <meta charset="utf-8" />
 <title>Logs</title>
 <script>
-  const api = new URL("/api/logs", location.origin);
+  const api = new URL("/admin/api/logs", location.origin);
   const qs = new URLSearchParams(location.search);
   for (const k of ["hours"]) if (qs.has(k)) api.searchParams.set(k, qs.get(k));
 
-  const lite = new URL("https://lite.datasette.io/");
+  const lite = new URL("/admin/datasette/", location.origin);
   lite.searchParams.set("json", api.toString());
-  // Optional: turn off analytics
-  // lite.searchParams.set("analytics", "off");
 
   location.replace(lite.toString());
-</script>`))
+</script>`
+
+	_, err := w.Write([]byte(page))
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to write logs page", "error", err)
 	}
 }
 
-// handleLogsAPI serves the logs as JSON
 func (h *handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
-
-	// Parse hours parameter
 	hoursStr := r.URL.Query().Get("hours")
-	hours := 24 // default
+	hours := 24
 	if hoursStr != "" {
-		if h, err := strconv.Atoi(hoursStr); err == nil && h > 0 {
-			hours = h
+		if parsedHours, err := strconv.Atoi(hoursStr); err == nil && parsedHours > 0 {
+			hours = parsedHours
 		}
 	}
 
-	// Get logs
-	// Return as JSON // kinda?
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	err := h.reader.GetLogs(r.Context(), hours, w)
@@ -88,5 +88,30 @@ func (h *handler) handleLogsAPI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to retrieve logs: %v", err), http.StatusInternalServerError)
 		return
 	}
+}
 
+func newDatasetteProxy() (http.Handler, error) {
+	target, err := url.Parse("https://lite.datasette.io")
+	if err != nil {
+		return nil, err
+	}
+
+	proxy := newSingleHostProxy(target)
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		slog.ErrorContext(r.Context(), "datasette proxy request failed", "error", err)
+		http.Error(w, "Datasette is unavailable", http.StatusBadGateway)
+	}
+
+	return proxy, nil
+}
+
+func newSingleHostProxy(target *url.URL) *httputil.ReverseProxy {
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		// Ensure upstream host routing matches the target domain.
+		req.Host = target.Host
+	}
+	return proxy
 }

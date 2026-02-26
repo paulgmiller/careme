@@ -1,80 +1,19 @@
 package users
 
 import (
+	"careme/internal/auth"
 	"careme/internal/cache"
+	utypes "careme/internal/users/types"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"net/mail"
-	"slices"
-	"strconv"
+	"net/http"
 	"strings"
 	"time"
 )
-
-var daysOfWeek = [...]string{
-	time.Sunday.String(),
-	time.Monday.String(),
-	time.Tuesday.String(),
-	time.Wednesday.String(),
-	time.Thursday.String(),
-	time.Friday.String(),
-	time.Saturday.String(),
-}
-
-func parseWeekday(v string) (time.Weekday, error) {
-	for i := range daysOfWeek {
-		if strings.EqualFold(daysOfWeek[i], v) {
-			return time.Weekday(i), nil
-		}
-	}
-
-	return time.Sunday, fmt.Errorf("invalid weekday '%s'", v)
-}
-
-type Recipe struct {
-	Title     string    `json:"id"`
-	Hash      string    `json:"hash"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-type User struct {
-	ID            string    `json:"id"`
-	Email         []string  `json:"email"`
-	CreatedAt     time.Time `json:"created_at"`
-	LastRecipes   []Recipe  `json:"last_recipes,omitempty"`
-	FavoriteStore string    `json:"favorite_store,omitempty"`
-	ShoppingDay   string    `json:"shopping_day,omitempty"`
-}
-
-// need to take a look up to location cache?
-func (u *User) Validate() error {
-	if _, err := parseWeekday(u.ShoppingDay); err != nil {
-		return err
-	}
-	if len(u.Email) == 0 {
-		return errors.New("at least one email is required")
-	}
-	for _, e := range u.Email {
-		if _, err := mail.ParseAddress(e); err != nil {
-			return errors.New("invalid email address: " + e)
-		}
-	}
-	if u.FavoriteStore != "" {
-		if _, err := strconv.Atoi(u.FavoriteStore); err != nil {
-			return fmt.Errorf("invalid favorite store id %s: %w", u.FavoriteStore, err)
-		}
-	}
-	// trim out recipes older than 2 months? store them in seperate file?
-	slices.SortFunc(u.LastRecipes, func(a, b Recipe) int {
-		return b.CreatedAt.Compare(a.CreatedAt)
-	})
-
-	return nil
-}
 
 type Storage struct {
 	cache cache.ListCache
@@ -93,14 +32,13 @@ func NewStorage(c cache.ListCache) *Storage {
 }
 
 // obviously needs to be better
-func (s *Storage) List(ctx context.Context) ([]User, error) {
+func (s *Storage) List(ctx context.Context) ([]utypes.User, error) {
 	userids, err := s.cache.List(ctx, userPrefix, "")
 	if err != nil {
 		return nil, err
 	}
-	var users []User
+	var users []utypes.User
 	for _, id := range userids {
-		slog.InfoContext(ctx, "loading user", "id", id)
 		user, err := s.GetByID(id)
 		if err != nil {
 			return nil, err
@@ -110,7 +48,7 @@ func (s *Storage) List(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
-func (s *Storage) GetByID(id string) (*User, error) {
+func (s *Storage) GetByID(id string) (*utypes.User, error) {
 	userBytes, err := s.cache.Get(context.TODO(), userPrefix+id)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -125,14 +63,14 @@ func (s *Storage) GetByID(id string) (*User, error) {
 	}()
 	decoder := json.NewDecoder(userBytes)
 
-	var user User
+	var user utypes.User
 	if err := decoder.Decode(&user); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user: %w", err)
 	}
 	return &user, nil
 }
 
-func (s *Storage) GetByEmail(email string) (*User, error) {
+func (s *Storage) GetByEmail(email string) (*utypes.User, error) {
 	normalized := normalizeEmail(email)
 	id, err := s.cache.Get(context.TODO(), emailPrefix+normalized)
 	if err != nil {
@@ -157,8 +95,16 @@ type emailFetcher interface {
 	GetUserEmail(ctx context.Context, userID string) (string, error)
 }
 
+func (s *Storage) FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error) {
+	clerkUserID, err := authClient.GetUserIDFromRequest(r)
+	if err != nil {
+		return nil, err
+	}
+	return s.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
+}
+
 // interface for clerk client
-func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*User, error) {
+func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*utypes.User, error) {
 	user, err := s.GetByID(clerkUserID)
 	if err == nil {
 		return user, nil
@@ -173,7 +119,7 @@ func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string,
 		return nil, fmt.Errorf("failed to fetch user email from clerk: %w", err)
 	}
 
-	newUser := User{
+	newUser := utypes.User{
 		ID:          clerkUserID, //do we need this o be independent for housholds?
 		Email:       []string{normalizeEmail(primaryEmail)},
 		CreatedAt:   time.Now(),
@@ -189,7 +135,7 @@ func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string,
 	return &newUser, nil
 }
 
-func (s *Storage) Update(user *User) error {
+func (s *Storage) Update(user *utypes.User) error {
 	if err := user.Validate(); err != nil {
 		return fmt.Errorf("invalid user: %w", err)
 	}
@@ -205,6 +151,6 @@ func (s *Storage) Update(user *User) error {
 }
 
 func normalizeEmail(email string) string {
-	// remove . from before @?
+	// remove . from before @? or +<suffix?
 	return strings.TrimSpace(strings.ToLower(email))
 }

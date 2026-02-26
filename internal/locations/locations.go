@@ -1,12 +1,15 @@
 package locations
 
 import (
+	"careme/internal/auth"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/seasons"
 	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 	"careme/internal/walmart"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -26,11 +29,20 @@ type walmartClient interface {
 	SearchStoresByZIP(ctx context.Context, zip string) ([]walmart.Store, error)
 }
 
-type locationServer struct {
+type userLookup interface {
+	FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error)
+}
+
+type locationStorage struct {
 	locationCache map[string]Location
 	cacheLock     sync.Mutex // to protect locationMap
 	client        krogerClient
 	walmartClient walmartClient
+}
+
+type locationServer struct {
+	storage     locationGetter
+	userStorage userLookup
 }
 
 type locationGetter interface {
@@ -38,7 +50,7 @@ type locationGetter interface {
 	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
 }
 
-func New(ctx context.Context, cfg *config.Config) (locationGetter, error) {
+func New(cfg *config.Config) (locationGetter, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -52,14 +64,22 @@ func New(ctx context.Context, cfg *config.Config) (locationGetter, error) {
 		return nil, fmt.Errorf("failed to create Walmart client: %w", err)
 	}
 
-	return &locationServer{
+	return &locationStorage{
 		locationCache: make(map[string]Location),
 		cacheLock:     sync.Mutex{},
 		client:        client,
 	}, nil
+
 }
 
-func (l *locationServer) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
+func NewServer(storage locationGetter, userStorage userLookup) *locationServer {
+	return &locationServer{
+		storage:     storage,
+		userStorage: userStorage,
+	}
+}
+
+func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	l.cacheLock.Lock()
 
 	if loc, exists := l.locationCache[locationID]; exists {
@@ -77,10 +97,21 @@ func (l *locationServer) GetLocationByID(ctx context.Context, locationID string)
 		return nil, fmt.Errorf("no data found for location ID %s", locationID)
 	}
 
+	data := resp.JSON200.Data
+	address := ""
+	state := ""
+	zipCode := ""
+	if data.Address != nil {
+		address = stringValue(data.Address.AddressLine1)
+		state = stringValue(data.Address.State)
+		zipCode = stringValue(data.Address.ZipCode)
+	}
 	loc := Location{
 		ID:      locationID,
-		Name:    *resp.JSON200.Data.Name,
-		Address: *resp.JSON200.Data.Address.AddressLine1,
+		Name:    stringValue(data.Name),
+		Address: address,
+		State:   state,
+		ZipCode: zipCode,
 	}
 	l.cacheLock.Lock()
 	defer l.cacheLock.Unlock()
@@ -93,9 +124,10 @@ type Location struct {
 	Name    string `json:"name"`
 	Address string `json:"address"`
 	State   string `json:"state"`
+	ZipCode string `json:"zip_code"`
 }
 
-func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
+func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
 	locparams := &kroger.LocationListParams{
 		FilterZipCodeNear: &zipcode,
 	}
@@ -129,11 +161,20 @@ func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) 
 
 	var locations []Location
 	for _, loc := range *resp.JSON200.Data {
+		address := ""
+		state := ""
+		zipCode := ""
+		if loc.Address != nil {
+			address = stringValue(loc.Address.AddressLine1)
+			state = stringValue(loc.Address.State)
+			zipCode = stringValue(loc.Address.ZipCode)
+		}
 		loc := Location{
-			ID:      *loc.LocationId,
-			Name:    *loc.Name,
-			Address: *loc.Address.AddressLine1,
-			State:   *loc.Address.State,
+			ID:      stringValue(loc.LocationId),
+			Name:    stringValue(loc.Name),
+			Address: address,
+			State:   state,
+			ZipCode: zipCode,
 		}
 		l.locationCache[loc.ID] = loc
 		locations = append(locations, loc)
@@ -141,50 +182,67 @@ func (l *locationServer) GetLocationsByZip(ctx context.Context, zipcode string) 
 	return locations, nil
 }
 
-func Ready(ctx context.Context, l locationGetter) error {
-	_, err := l.GetLocationsByZip(ctx, "98005") //magic number is my zip code :)
+func stringValue(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func (l *locationServer) Ready(ctx context.Context) error {
+	_, err := l.storage.GetLocationsByZip(ctx, "98005") //magic number is my zip code :)
 	return err
 }
 
-func Register(l locationGetter, mux *http.ServeMux) {
+func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		/*_, err := users.FromRequest(r, userStorage)
+		currentUser, err := l.userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
-			if errors.Is(err, users.ErrNotFound) {
-				users.ClearCookie(w)
-				http.Redirect(w, r, "/", http.StatusSeeOther)
+			if !errors.Is(err, auth.ErrNoSession) {
+				http.Error(w, "unable to load account", http.StatusInternalServerError)
+				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
 				return
 			}
-			slog.ErrorContext(ctx, "failed to load user for locations", "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}*/
+		}
+
 		zip := r.URL.Query().Get("zip")
 		if zip == "" {
 			slog.InfoContext(ctx, "no zip code provided to /locations")
 			http.Error(w, "provide a zip code with ?zip=12345", http.StatusBadRequest)
 			return
 		}
-		locs, err := l.GetLocationsByZip(ctx, zip)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to get locations for zip", "zip", zip, "error", err)
-			http.Error(w, "could not get locations", http.StatusInternalServerError)
-			return
+		var favoriteStore string
+		if currentUser != nil {
+			favoriteStore = currentUser.FavoriteStore
 		}
-		data := struct {
-			Locations     []Location
-			Zip           string
-			ClarityScript template.HTML
-			Style         seasons.Style
-		}{
-			Locations:     locs,
-			Zip:           zip,
-			ClarityScript: templates.ClarityScript(),
-			Style:         seasons.GetCurrentStyle(),
-		}
-		if err := templates.Location.Execute(w, data); err != nil {
+		if err := l.renderLocationsPage(w, ctx, zip, favoriteStore, currentUser != nil); err != nil {
+			slog.ErrorContext(ctx, "failed to render locations page", "zip", zip, "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
+}
+
+func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, zip string, favoriteStore string, serverSignedIn bool) error {
+	locs, err := l.storage.GetLocationsByZip(ctx, zip)
+	if err != nil {
+		return fmt.Errorf("failed to get locations for zip %s: %w", zip, err)
+	}
+
+	data := struct {
+		Locations      []Location
+		Zip            string
+		FavoriteStore  string
+		ClarityScript  template.HTML
+		Style          seasons.Style
+		ServerSignedIn bool
+	}{
+		Locations:      locs,
+		Zip:            zip,
+		FavoriteStore:  favoriteStore,
+		ClarityScript:  templates.ClarityScript(),
+		Style:          seasons.GetCurrentStyle(),
+		ServerSignedIn: serverSignedIn,
+	}
+	return templates.Location.Execute(w, data)
 }

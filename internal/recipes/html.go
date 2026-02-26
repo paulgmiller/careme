@@ -8,11 +8,12 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 )
 
 // FormatShoppingListHTML renders the multi-recipe shopping list view.
-func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, writer http.ResponseWriter) {
+func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
 	// TODO just put params into shopping list and pass that up?
 	data := struct {
 		Location       locations.Location
@@ -24,6 +25,7 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, writer http.R
 		ShoppingList   []ai.Ingredient
 		ConversationID string
 		Style          seasons.Style
+		ServerSignedIn bool
 	}{
 		Location:       *p.Location,
 		Date:           p.Date.Format("2006-01-02"),
@@ -34,6 +36,7 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, writer http.R
 		ShoppingList:   shoppingListForDisplay(l.Recipes),
 		ConversationID: l.ConversationID,
 		Style:          seasons.GetCurrentStyle(),
+		ServerSignedIn: signedIn,
 	}
 
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
@@ -42,25 +45,59 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, writer http.R
 }
 
 // FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, writer http.ResponseWriter) {
+func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, writer http.ResponseWriter) {
+	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
 	data := struct {
-		Location      locations.Location
-		Date          string
-		ClarityScript template.HTML
-		Recipe        ai.Recipe
-		OriginHash    string
-		Style         seasons.Style
+		Location       locations.Location
+		Date           string
+		ClarityScript  template.HTML
+		Recipe         ai.Recipe
+		OriginHash     string
+		ConversationID string
+		Thread         []RecipeThreadEntry
+		Feedback       RecipeFeedback
+		RecipeHash     string
+		Style          seasons.Style
+		ServerSignedIn bool
 	}{
-		Location:      *p.Location,
-		Date:          p.Date.Format("2006-01-02"),
-		ClarityScript: templates.ClarityScript(),
-		Recipe:        recipe,
-		OriginHash:    recipe.OriginHash,
-		Style:         seasons.GetCurrentStyle(),
+		Location:       *p.Location,
+		Date:           p.Date.Format("2006-01-02"),
+		ClarityScript:  templates.ClarityScript(),
+		Recipe:         recipe,
+		OriginHash:     recipe.OriginHash,
+		ConversationID: p.ConversationID,
+		Thread:         thread,
+		Feedback:       feedback,
+		RecipeHash:     recipe.ComputeHash(),
+		Style:          seasons.GetCurrentStyle(),
+		ServerSignedIn: signedIn,
 	}
 
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer http.ResponseWriter) {
+	//memory waste because we alwways resort?
+	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
+	data := struct {
+		ConversationID string
+		Thread         []RecipeThreadEntry
+		ServerSignedIn bool
+	}{
+		ConversationID: conversationID,
+		Thread:         thread,
+		ServerSignedIn: signedIn,
+	}
+
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
+		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -74,12 +111,14 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
 		Hash     string
 		Recipes  []ai.Recipe
 		Domain   string
+		Style    seasons.Style
 	}{
 		Location: *p.Location,
 		Date:     p.Date.Format("2006-01-02"),
 		Hash:     p.Hash(),
 		Recipes:  l.Recipes,
 		Domain:   "https://careme.cooking",
+		Style:    seasons.GetCurrentStyle(),
 	}
 
 	return templates.Mail.Execute(writer, data)

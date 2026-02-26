@@ -8,32 +8,31 @@ Careme is your personal chef and sommilier. It will
 ## Configuration
 
 The application is configured via environment variables:
-
+### Mandatory 
 - `KROGER_CLIENT_ID` - Kroger API client ID (required)
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI or Anthropic API key (required)
+### Optional 
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
+
+if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
 
 ## Development
-
-### Node/Tailwind
-
-Tailwind output is pinned to Node `20.11.1` and npm `10.5.0` (see `.node-version`/`.nvmrc` and `tailwind/package.json` engines).
-
-If you use nvm:
-
-```
-nvm install 20.11.1
-nvm use
-```
-
-Then regenerate CSS:
-
+See agents.md for some more but 
+go test ./... on any go change 
+and 
 ```
 bash tailwind/generate.sh
 ```
+if you change input css or any *.html
+
+## Frontend Approach
+- Prefer server-rendered HTML and HTMX for interactive behavior.
+- Avoid SPA-style architecture for routine page interactions.
+- Keep custom JavaScript minimal and focused on browser-only APIs.
+- Migration plan: [docs/htmx-migration-plan.md](docs/htmx-migration-plan.md)
 
 ## Live site
 

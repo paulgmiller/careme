@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/config"
 	"careme/internal/walmart"
 	"context"
 	"flag"
@@ -22,7 +23,7 @@ func main() {
 	)
 	flag.Parse()
 
-	client, err := walmart.NewClient(walmart.Config{
+	client, err := walmart.NewClient(config.WalmartConfig{
 		ConsumerID:     *consumerID,
 		KeyVersion:     *keyVersion,
 		PrivateKeyPath: *privateKey,

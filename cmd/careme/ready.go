@@ -8,7 +8,7 @@ import (
 
 type readyOnce struct {
 	done   bool
-	checks []func(context.Context) error
+	checks []Readyable
 }
 
 func (r *readyOnce) Ready(ctx context.Context) error {
@@ -16,7 +16,7 @@ func (r *readyOnce) Ready(ctx context.Context) error {
 		return nil
 	}
 	for _, check := range r.checks {
-		if err := check(ctx); err != nil {
+		if err := check.Ready(ctx); err != nil {
 			return err
 		}
 	}
@@ -25,8 +25,12 @@ func (r *readyOnce) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (r *readyOnce) Add(f func(context.Context) error) {
-	r.checks = append(r.checks, f)
+type Readyable interface {
+	Ready(context.Context) error
+}
+
+func (r *readyOnce) Add(f ...Readyable) {
+	r.checks = append(r.checks, f...)
 }
 
 func (r *readyOnce) ServeHTTP(w http.ResponseWriter, req *http.Request) {
