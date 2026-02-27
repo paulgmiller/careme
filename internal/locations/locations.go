@@ -122,19 +122,35 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
 	requestedCentroid, hasRequestedCentroid := zipCentroidByZIP(zipcode, l.zipCentroids)
 	if !hasRequestedCentroid {
-		slog.WarnContext(ctx, "requested zip has no centroid; skipping distance filter and sort", "zip", zipcode)
+		slog.ErrorContext(ctx, "requested zip has no centroid; skipping distance filter and sort", "zip", zipcode)
 		return nil, fmt.Errorf("invalid zip code %s. Can't find lat long", zipcode)
 	}
 
-	var allLocations []Location
-	//Todo parallize.
+	results := make(chan []Location, len(l.client))
+	errors := make(chan error, len(l.client))
+	var wg sync.WaitGroup
 	for _, backend := range l.client {
-		locations, err := backend.GetLocationsByZip(ctx, zipcode)
-		if err != nil {
-			slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "zip", zipcode)
-			continue
-		}
-		allLocations = append(allLocations, locations...)
+		wg.Add(1)
+		go func(backend locationBackend) {
+			defer wg.Done()
+			locations, err := backend.GetLocationsByZip(ctx, zipcode)
+			if err != nil {
+				slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "zip", zipcode)
+				errors <- err
+				return
+			}
+			results <- locations
+		}(backend)
+	}
+	wg.Wait()
+	close(results)
+	close(errors)
+	if len(errors) == len(l.client) {
+		return nil, fmt.Errorf("all backends failed to get locations for zip %s", zipcode)
+	}
+	var allLocations []Location
+	for result := range results {
+		allLocations = append(allLocations, result...)
 	}
 
 	filtered := make([]Location, 0, len(allLocations))

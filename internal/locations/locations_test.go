@@ -183,6 +183,40 @@ func TestGetLocationByIDReturnsErrorWhenNoData(t *testing.T) {
 	}
 }
 
+func TestGetLocationsByZipReturnsErrorWhenAllBackendsFail(t *testing.T) {
+	failA := newFakeLocationClient()
+	failA.err = fmt.Errorf("backend A down")
+	failB := newFakeLocationClient()
+	failB.err = fmt.Errorf("backend B down")
+
+	server := newTestLocationServerWithBackends([]locationBackend{failA, failB})
+	_, err := server.GetLocationsByZip(context.Background(), "00601")
+	if err == nil {
+		t.Fatalf("expected error when all backends fail")
+	}
+}
+
+func TestGetLocationsByZipSucceedsWhenAtLeastOneBackendSucceeds(t *testing.T) {
+	fail := newFakeLocationClient()
+	fail.err = fmt.Errorf("backend down")
+
+	success := newFakeLocationClient()
+	lat := 18.18060
+	lon := -66.74990
+	success.setListResponse("00601", []Location{
+		{ID: "ok", Name: "OK", ZipCode: "00601", Lat: &lat, Lon: &lon},
+	})
+
+	server := newTestLocationServerWithBackends([]locationBackend{fail, success})
+	locs, err := server.GetLocationsByZip(context.Background(), "00601")
+	if err != nil {
+		t.Fatalf("did not expect error when one backend succeeds: %v", err)
+	}
+	if len(locs) != 1 || locs[0].ID != "ok" {
+		t.Fatalf("unexpected locations: %+v", locs)
+	}
+}
+
 type fakeLocationClient struct {
 	details map[string]Location
 	lists   map[string][]Location
@@ -230,13 +264,17 @@ func (f *fakeLocationClient) IsID(locationID string) bool {
 }
 
 func newTestLocationServer(client locationBackend) *locationStorage {
+	return newTestLocationServerWithBackends([]locationBackend{client})
+}
+
+func newTestLocationServerWithBackends(backends []locationBackend) *locationStorage {
 	zipCentroids, err := loadEmbeddedZipCentroids()
 	if err != nil {
 		panic(err)
 	}
 	return &locationStorage{
 		locationCache: make(map[string]Location),
-		client:        []locationBackend{client},
+		client:        backends,
 		zipCentroids:  zipCentroids,
 	}
 }
