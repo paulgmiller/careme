@@ -2,6 +2,7 @@ package locations
 
 import (
 	"careme/internal/auth"
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	locationtypes "careme/internal/locations/types"
@@ -10,14 +11,17 @@ import (
 	utypes "careme/internal/users/types"
 	"careme/internal/walmart"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
 	"math"
 	"net/http"
 	"sort"
 	"sync"
+	"time"
 )
 
 type userLookup interface {
@@ -25,14 +29,14 @@ type userLookup interface {
 }
 
 type locationStorage struct {
-	locationCache map[string]Location
-	cacheLock     sync.Mutex // to protect locationMap
-	client        []locationBackend
-	zipCentroids  map[string]ZipCentroid
+	client       []locationBackend
+	zipCentroids map[string]ZipCentroid
+	cache        cache.Cache
 }
 
 // bad for rural areas if zip code is huge?
 const maxLocationDistanceMiles = 20.0
+const locationCachePrefix = "location/"
 
 type locationServer struct {
 	storage     locationGetter
@@ -52,7 +56,10 @@ type locationBackend interface {
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
 
-func New(cfg *config.Config) (locationGetter, error) {
+func New(cfg *config.Config, c cache.Cache) (locationGetter, error) {
+	if c == nil {
+		return nil, fmt.Errorf("cache is required")
+	}
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -77,10 +84,9 @@ func New(cfg *config.Config) (locationGetter, error) {
 		return nil, fmt.Errorf("failed to load zip centroids: %w", err)
 	}
 	return &locationStorage{
-		locationCache: make(map[string]Location),
-		cacheLock:     sync.Mutex{},
-		client:        backends,
-		zipCentroids:  zipCentroids,
+		client:       backends,
+		zipCentroids: zipCentroids,
+		cache:        c,
 	}, nil
 
 }
@@ -93,13 +99,9 @@ func NewServer(storage locationGetter, userStorage userLookup) *locationServer {
 }
 
 func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
-	l.cacheLock.Lock()
-
-	if loc, exists := l.locationCache[locationID]; exists {
-		l.cacheLock.Unlock()
-		return &loc, nil
+	if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
+		return &cachedLoc, nil
 	}
-	l.cacheLock.Unlock()
 
 	for _, backend := range l.client {
 		if !backend.IsID(locationID) {
@@ -111,9 +113,11 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 			return nil, err
 		}
 
-		l.cacheLock.Lock()
-		l.locationCache[locationID] = *loc
-		l.cacheLock.Unlock()
+		go func() {
+			if err := l.storeLocationIfMissing(*loc); err != nil {
+				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
+			}
+		}()
 		return loc, nil
 	}
 	return nil, fmt.Errorf("location ID %s not supported by any backend", locationID)
@@ -170,12 +174,61 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 	allLocations = filtered
 	sortLocationsByDistanceFromCentroid(allLocations, requestedCentroid, l.zipCentroids)
 
-	l.cacheLock.Lock()
-	defer l.cacheLock.Unlock()
 	for _, loc := range allLocations {
-		l.locationCache[loc.ID] = loc
+		go func(loc Location) {
+			if err := l.storeLocationIfMissing(loc); err != nil {
+				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
+			}
+		}(loc)
 	}
 	return allLocations, nil
+}
+
+func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID string) (Location, bool) {
+	blob, err := l.cache.Get(ctx, locationCachePrefix+locationID)
+	if err != nil {
+		return Location{}, false
+	}
+	defer func() {
+		_ = blob.Close()
+	}()
+
+	raw, err := io.ReadAll(blob)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to read cached location blob", "location_id", locationID, "error", err)
+		return Location{}, false
+	}
+	var loc Location
+	if err := json.Unmarshal(raw, &loc); err != nil {
+		slog.WarnContext(ctx, "failed to parse cached location blob", "location_id", locationID, "error", err)
+		return Location{}, false
+	}
+	return loc, true
+}
+
+func (l *locationStorage) storeLocationIfMissing(loc Location) error {
+	//itentionally giving its own context so its not canceled
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	loc.CachedAt = time.Now().UTC()
+	id := locationCachePrefix + loc.ID
+	found, err := l.cache.Exists(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to check location cache: %w", err)
+	}
+	if found {
+		return nil
+	}
+
+	locationJSON, err := json.Marshal(loc)
+	if err != nil {
+		return fmt.Errorf("failed to marshal location for cache: %w", err)
+	}
+	//TODO clean out old ones?
+	if err := l.cache.Put(ctx, id, string(locationJSON), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
+		return err
+	}
+	return nil
 }
 
 func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid ZipCentroid, zipCentroids map[string]ZipCentroid) {

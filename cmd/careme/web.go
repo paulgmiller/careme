@@ -49,7 +49,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-	locationStorage, err := locations.New(cfg)
+	locationStorage, err := locations.New(cfg, cache)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
