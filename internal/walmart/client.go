@@ -48,7 +48,6 @@ type StoresQuery struct {
 
 // NewClient creates a Walmart affiliates client.
 func NewClient(cfg config.WalmartConfig) (*Client, error) {
-	fmt.Printf("creating Walmart client with config: consumerID=%s, keyVersion=%s, baseURL=%s\n", cfg.ConsumerID, cfg.KeyVersion, cfg.BaseURL)
 	if strings.TrimSpace(cfg.ConsumerID) == "" {
 		return nil, errors.New("consumer ID is required")
 	}
