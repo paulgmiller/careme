@@ -62,12 +62,23 @@ func main() {
 		//"Unbranded",         //27
 		"PRODUCE UNBRANDED", //31
 	}
+
+	var meatBrands = []string{
+		"NOBRAND",           // 12
+		"Unbranded",         // 27
+		"Walmart Seafood",   // 13
+		"Fresh Pork",        // 20
+		"Fresh Beef",        // 17
+		"Foster Farms",      // 17
+		"WHOLE MUSCLE BEEF", // 16
+		"",                  // 16
+	}
 	//pulled this out of taxonomy
 	var categoryMap = map[string]struct {
 		categoryID string
 		brands     []string
 	}{
-		"meat":    {categoryID: "976759_9569500", brands: []string{}},
+		"meat":    {categoryID: "976759_9569500", brands: meatBrands},
 		"produce": {categoryID: "976759_976793", brands: produceBrands},
 	}
 
@@ -90,7 +101,7 @@ func main() {
 	})
 	fmt.Printf("Found %d unique brands in category\n", len(brands))
 	for i, brand := range brands {
-		if len(brand) < 20 {
+		if len(brand) < 10 {
 			continue
 		}
 		fmt.Printf("%s :%d\n", i, len(brand))
