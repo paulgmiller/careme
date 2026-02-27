@@ -111,6 +111,139 @@ func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
 	}
 }
 
+func TestTaxonomy_DeserializesResponse(t *testing.T) {
+	t.Parallel()
+
+	_, encodedKey := newBase64RSAPrivateKey(t)
+
+	var capturedReq *http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedReq = r
+		_, _ = w.Write([]byte(`{
+			"categories": [
+				{
+					"id": "1334134",
+					"name": "Arts Crafts & Sewing",
+					"path": "Arts Crafts & Sewing",
+					"children": [
+						{
+							"id": "1334134_5899871",
+							"name": "Art Supplies",
+							"path": "Arts Crafts & Sewing/Art Supplies",
+							"children": [
+								{
+									"id": "1334134_5899871_4519281",
+									"name": "Aprons",
+									"path": "Arts Crafts & Sewing/Art Supplies/Aprons"
+								}
+							]
+						}
+					]
+				}
+			]
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	taxonomy, err := client.Taxonomy(context.Background())
+	if err != nil {
+		t.Fatalf("taxonomy: %v", err)
+	}
+
+	if capturedReq == nil {
+		t.Fatal("expected request to be captured")
+	}
+	if capturedReq.URL.Path != "/taxonomy" {
+		t.Fatalf("unexpected path: %s", capturedReq.URL.Path)
+	}
+
+	if len(taxonomy.Categories) != 1 {
+		t.Fatalf("unexpected categories count: %d", len(taxonomy.Categories))
+	}
+	root := taxonomy.Categories[0]
+	if root.ID != "1334134" {
+		t.Fatalf("unexpected root id: %s", root.ID)
+	}
+	if len(root.Children) != 1 {
+		t.Fatalf("unexpected child count: %d", len(root.Children))
+	}
+	leaf := root.Children[0].Children[0]
+	if leaf.Name != "Aprons" {
+		t.Fatalf("unexpected leaf name: %s", leaf.Name)
+	}
+}
+
+func TestTaxonomy_StatusError(t *testing.T) {
+	t.Parallel()
+
+	_, encodedKey := newBase64RSAPrivateKey(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusUnauthorized)
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	_, err = client.Taxonomy(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "status 401") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestTaxonomy_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	_, encodedKey := newBase64RSAPrivateKey(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("{not-json"))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	_, err = client.Taxonomy(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "parse taxonomy response") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestParseOpenSSHKeyFromEnv_FromBase64PEM(t *testing.T) {
 	t.Parallel()
 

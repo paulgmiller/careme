@@ -84,7 +84,7 @@ func NewClient(cfg config.WalmartConfig) (*Client, error) {
 
 // docshttps://walmart.io/docs/affiliates/v1/taxonomy
 // example https://developer.api.walmart.com/api-proxy/service/affil/product/v2/taxonomy
-func (c *Client) Taxonomy(ctx context.Context) (json.RawMessage, error) {
+func (c *Client) Taxonomy(ctx context.Context) (*Taxonomy, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/taxonomy", nil)
 	if err != nil {
 		return nil, fmt.Errorf("build taxonomy request: %w", err)
@@ -105,18 +105,16 @@ func (c *Client) Taxonomy(ctx context.Context) (json.RawMessage, error) {
 		_ = resp.Body.Close()
 	}()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
-	if err != nil {
-		return nil, fmt.Errorf("read taxonomy response: %w", err)
-	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("taxonomy request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	if !json.Valid(body) {
-		return nil, fmt.Errorf("taxonomy request succeeded but response was not valid JSON: %s", strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("taxonomy request failed: status %d", resp.StatusCode)
 	}
 
-	return body, nil
+	taxonomy, err := ParseTaxonomy(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse taxonomy response: %w", err)
+	}
+
+	return taxonomy, nil
 }
 
 // docs https://walmart.io/docs/affiliates/v1/stores
