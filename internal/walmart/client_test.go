@@ -278,7 +278,7 @@ func TestSearchCatalogByCategory_SetsHeadersAndQuery(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	catalog, err := client.SearchCatalogByCategory(context.Background(), "976759")
+	catalog, err := client.SearchCatalogByCategory(context.Background(), "976759", nil)
 	if err != nil {
 		t.Fatalf("search catalog by category: %v", err)
 	}
@@ -296,7 +296,7 @@ func TestSearchCatalogByCategory_SetsHeadersAndQuery(t *testing.T) {
 	if capturedReq == nil {
 		t.Fatal("expected request to be captured")
 	}
-	if capturedReq.URL.Path != "/items" {
+	if capturedReq.URL.Path != "/paginated/items" {
 		t.Fatalf("unexpected path: %s", capturedReq.URL.Path)
 	}
 	if got := capturedReq.URL.Query().Get("category"); got != "976759" {
@@ -380,7 +380,7 @@ func TestSearchCatalogByCategory_FollowsNextPage(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	catalog, err := client.SearchCatalogByCategory(context.Background(), "3944")
+	catalog, err := client.SearchCatalogByCategory(context.Background(), "3944", nil)
 	if err != nil {
 		t.Fatalf("search catalog by category: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestSearchCatalogByCategory_FollowsNextPage(t *testing.T) {
 		t.Fatalf("unexpected request count: %d", len(requests))
 	}
 
-	if requests[0].URL.Path != "/items" {
+	if requests[0].URL.Path != "/paginated/items" {
 		t.Fatalf("unexpected first path: %s", requests[0].URL.Path)
 	}
 	if got := requests[0].URL.Query().Get("category"); got != "3944" {
@@ -491,7 +491,7 @@ func TestSearchCatalogByCategory_StatusError(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	_, err = client.SearchCatalogByCategory(context.Background(), "976759")
+	_, err = client.SearchCatalogByCategory(context.Background(), "976759", nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -521,7 +521,7 @@ func TestSearchCatalogByCategory_InvalidJSON(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	_, err = client.SearchCatalogByCategory(context.Background(), "976759")
+	_, err = client.SearchCatalogByCategory(context.Background(), "976759", nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -545,7 +545,7 @@ func TestSearchCatalogByCategory_CategoryRequired(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	_, err = client.SearchCatalogByCategory(context.Background(), "   ")
+	_, err = client.SearchCatalogByCategory(context.Background(), "   ", nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}

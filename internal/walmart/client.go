@@ -143,7 +143,7 @@ func (c *Client) SearchStoresByZIP(ctx context.Context, zip string) ([]Store, er
 }
 
 // docs https://walmart.io/docs/affiliates/v1/catalog-product
-// example https://developer.api.walmart.com/api-proxy/service/affil/product/v2/items?category=976759
+// example https://developer.api.walmart.com/api-proxy/service/affil/product/v2/paginated/items?category=976759
 // SearchCatalogByCategory returns typed catalog products for the provided Walmart category ID.
 // It follows Walmart nextPage links and aggregates all pages.
 func (c *Client) SearchCatalogByCategory(ctx context.Context, category string, brands []string) (*CatalogProducts, error) {
@@ -275,7 +275,6 @@ func (c *Client) searchCatalogWithParams(ctx context.Context, params url.Values)
 		return nil, fmt.Errorf("parse catalog URL: %w", err)
 	}
 	catalogURL.RawQuery = params.Encode()
-	fmt.Println(catalogURL.String())
 	return c.searchCatalogByURL(ctx, catalogURL)
 }
 
