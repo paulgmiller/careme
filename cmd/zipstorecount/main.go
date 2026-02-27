@@ -13,6 +13,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -54,17 +55,29 @@ func main() {
 
 	client, err := locations.New(cfg) // warm up location client
 	if err != nil {
-		log.Fatalf("failed to create location storage: %v", err)
+		log.Fatalf("failed to create location stor	age: %v", err)
 	}
+	wg := sync.WaitGroup{}
+	resultsChan := make(chan zipStoreCount, len(metroZipCodes))
+	for _, code := range metroZipCodes {
+		wg.Add(1)
+		go func(mzc metroZipCode) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			stores, err := client.GetLocationsByZip(ctx, mzc.Zip)
+			cancel()
+			if err != nil {
+				log.Fatalf("failed to query locations for zip %s: %v", mzc.Zip, err)
+			}
+			resultsChan <- zipStoreCount{Metro: mzc.Metro, Zip: mzc.Zip, Count: len(stores)}
+		}(code)
+	}
+	wg.Wait()
+	close(resultsChan)
+
 	results := make([]zipStoreCount, 0, len(metroZipCodes))
-	for _, metroZipCode := range metroZipCodes {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		stores, err := client.GetLocationsByZip(ctx, metroZipCode.Zip)
-		cancel()
-		if err != nil {
-			log.Fatalf("failed to query locations for zip %s: %v", metroZipCode.Zip, err)
-		}
-		results = append(results, zipStoreCount{Metro: metroZipCode.Metro, Zip: metroZipCode.Zip, Count: len(stores)})
+	for result := range resultsChan {
+		results = append(results, result)
 	}
 
 	sort.Slice(results, func(i, j int) bool {
