@@ -2,7 +2,6 @@ package main
 
 import (
 	"careme/internal/config"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
 	"encoding/csv"
@@ -16,10 +15,6 @@ import (
 	"sync"
 	"time"
 )
-
-type locationClient interface {
-	LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error)
-}
 
 type zipStoreCount struct {
 	Metro string
