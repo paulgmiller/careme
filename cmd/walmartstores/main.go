@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
+
+	"github.com/samber/lo"
 )
 
 const defaultConsumerID = "52dae855-d02f-488b-b179-1df6700d7dcf"
@@ -37,7 +40,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	slog.Info("taxonomy request")
+	/*slog.Info("taxonomy request")
 	taxonomy, err := client.Taxonomy(ctx)
 	if err != nil {
 		exitErr(fmt.Errorf("request taxonomy: %w", err))
@@ -45,14 +48,33 @@ func main() {
 	}
 	for _, category := range taxonomy.Categories {
 		fmt.Printf("Category: %s: %s\n", category.Name, category.ID)
-		if category.Name == *categoryName {
+		if strings.EqualFold(category.Name, *categoryName) {
 			for _, sub := range category.Children {
 				fmt.Printf("  Subcategory: %s: %s\n", sub.Name, sub.ID)
 			}
 		}
+	}*/
+
+	//pulled this out of taxonomy
+	var categoryMap = map[string]string{
+		"meat":    "976759_9569500",
+		"produce": "976759_976793",
+	}
+	categoryNumber, ok := categoryMap[strings.ToLower(*categoryName)]
+	if !ok {
+		exitErr(fmt.Errorf("unknown category: %s speficy %s", *categoryName, strings.Join(lo.Keys(categoryMap), ", ")))
 	}
 
-	if *zip == "" {
+	stuff, err := client.SearchCatalogByCategory(ctx, categoryNumber)
+	if err != nil {
+		exitErr(err)
+	}
+	fmt.Printf("Found %d items in category\n", len(stuff.Items))
+	for _, item := range stuff.Items {
+		fmt.Printf("Item: %s: %s\n", item.Name, item.ItemID)
+	}
+
+	if *zip != "" {
 		slog.Info("querying Walmart stores", "zip", *zip)
 		stores, err := client.SearchStoresByZIP(ctx, *zip)
 		if err != nil {

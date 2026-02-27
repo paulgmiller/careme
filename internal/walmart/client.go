@@ -141,6 +141,30 @@ func (c *Client) SearchStoresByZIP(ctx context.Context, zip string) ([]Store, er
 	return stores, nil
 }
 
+// docs https://walmart.io/docs/affiliates/v1/catalog-product
+// example https://developer.api.walmart.com/api-proxy/service/affil/product/v2/items?category=976759
+// SearchCatalogByCategory returns typed catalog products for the provided Walmart category ID.
+func (c *Client) SearchCatalogByCategory(ctx context.Context, category string) (*CatalogProducts, error) {
+	category = strings.TrimSpace(category)
+	if category == "" {
+		return nil, errors.New("category is required")
+	}
+
+	params := url.Values{}
+	params.Set("category", category)
+	raw, err := c.searchCatalogWithParams(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	catalog, err := ParseCatalogProducts(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse catalog response: %w", err)
+	}
+
+	return catalog, nil
+}
+
 func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) (json.RawMessage, error) {
 	storesURL, err := url.Parse(c.baseURL + "/stores")
 	if err != nil {
@@ -177,6 +201,45 @@ func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		slog.ErrorContext(ctx, "received Walmart stores response", "status", resp.StatusCode)
 		return nil, fmt.Errorf("stores request failed: status %d", resp.StatusCode) //, strings.TrimSpace(string(body)))
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (c *Client) searchCatalogWithParams(ctx context.Context, params url.Values) (json.RawMessage, error) {
+	catalogURL, err := url.Parse(c.baseURL + "/paginated/items")
+	if err != nil {
+		return nil, fmt.Errorf("parse catalog URL: %w", err)
+	}
+	catalogURL.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, catalogURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build catalog request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if err := c.applyAuthHeaders(req); err != nil {
+		return nil, fmt.Errorf("apply walmart auth headers: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request catalog: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, resp.Body) // ensure body is fully read for connection reuse
+	if err != nil {
+		return nil, fmt.Errorf("read catalog response: %w", err)
+	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		slog.ErrorContext(ctx, "received Walmart catalog response", "status", resp.StatusCode)
+		return nil, fmt.Errorf("catalog request failed: status %d", resp.StatusCode)
 	}
 
 	return buf.Bytes(), nil

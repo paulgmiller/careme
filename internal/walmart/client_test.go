@@ -244,6 +244,97 @@ func TestTaxonomy_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestSearchCatalogByCategory_SetsHeadersAndQuery(t *testing.T) {
+	t.Parallel()
+
+	privateKey, encodedKey := newBase64RSAPrivateKey(t)
+
+	var capturedReq *http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedReq = r
+		_, _ = w.Write([]byte(`{
+			"items": [
+				{
+					"itemId": 1234,
+					"name": "Test Product",
+					"categoryNode": "976759"
+				}
+			],
+			"totalResults": 1,
+			"start": 1,
+			"numItems": 1
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	catalog, err := client.SearchCatalogByCategory(context.Background(), "976759")
+	if err != nil {
+		t.Fatalf("search catalog by category: %v", err)
+	}
+
+	if catalog == nil || len(catalog.Items) != 1 {
+		t.Fatalf("unexpected catalog result: %+v", catalog)
+	}
+	if catalog.Items[0].Name != "Test Product" {
+		t.Fatalf("unexpected product name: %q", catalog.Items[0].Name)
+	}
+	if catalog.TotalResults != 1 {
+		t.Fatalf("unexpected total results: %d", catalog.TotalResults)
+	}
+
+	if capturedReq == nil {
+		t.Fatal("expected request to be captured")
+	}
+	if capturedReq.URL.Path != "/items" {
+		t.Fatalf("unexpected path: %s", capturedReq.URL.Path)
+	}
+	if got := capturedReq.URL.Query().Get("category"); got != "976759" {
+		t.Fatalf("unexpected category query value: %q", got)
+	}
+
+	consumerID := capturedReq.Header.Get("WM_CONSUMER.ID")
+	if consumerID != "consumer-id-123" {
+		t.Fatalf("unexpected WM_CONSUMER.ID: %q", consumerID)
+	}
+	timestamp := capturedReq.Header.Get("WM_CONSUMER.INTIMESTAMP")
+	if timestamp == "" {
+		t.Fatal("missing WM_CONSUMER.INTIMESTAMP")
+	}
+	keyVersion := capturedReq.Header.Get("WM_SEC.KEY_VERSION")
+	if keyVersion != "1" {
+		t.Fatalf("unexpected WM_SEC.KEY_VERSION: %q", keyVersion)
+	}
+	if capturedReq.Header.Get("WM_QOS.CORRELATION_ID") == "" {
+		t.Fatal("missing WM_QOS.CORRELATION_ID")
+	}
+
+	rawSigHeader := capturedReq.Header.Get("WM_SEC.AUTH_SIGNATURE")
+	if rawSigHeader == "" {
+		t.Fatal("missing WM_SEC.AUTH_SIGNATURE")
+	}
+	signature, err := base64.StdEncoding.DecodeString(rawSigHeader)
+	if err != nil {
+		t.Fatalf("decode signature: %v", err)
+	}
+
+	payload := fmt.Sprintf("%s\n%s\n%s\n", consumerID, timestamp, keyVersion)
+	digest := sha256.Sum256([]byte(payload))
+	if err := rsa.VerifyPKCS1v15(&privateKey.PublicKey, crypto.SHA256, digest[:], signature); err != nil {
+		t.Fatalf("signature verification failed: %v", err)
+	}
+}
+
 func TestParseOpenSSHKeyFromEnv_FromBase64PEM(t *testing.T) {
 	t.Parallel()
 
@@ -284,6 +375,90 @@ func TestSearchStoresByZIP_StatusError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	if !strings.Contains(err.Error(), "status 401") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSearchCatalogByCategory_StatusError(t *testing.T) {
+	t.Parallel()
+
+	_, encodedKey := newBase64RSAPrivateKey(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusUnauthorized)
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	_, err = client.SearchCatalogByCategory(context.Background(), "976759")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "status 401") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSearchCatalogByCategory_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	_, encodedKey := newBase64RSAPrivateKey(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("{not-json"))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	_, err = client.SearchCatalogByCategory(context.Background(), "976759")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "parse catalog response") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSearchCatalogByCategory_CategoryRequired(t *testing.T) {
+	t.Parallel()
+
+	_, encodedKey := newBase64RSAPrivateKey(t)
+
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	_, err = client.SearchCatalogByCategory(context.Background(), "   ")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "category is required") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
