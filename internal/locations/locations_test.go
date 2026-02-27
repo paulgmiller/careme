@@ -33,7 +33,7 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 	if got.ZipCode != "10001" {
 		t.Fatalf("unexpected zip code: %q", got.ZipCode)
 	}
-
+	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
 	// Remove backend value to prove the second read comes from persistent cache.
 	delete(client.details, "12345")
 	_, err = server.GetLocationByID(ctx, "12345")

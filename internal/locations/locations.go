@@ -113,9 +113,11 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 			return nil, err
 		}
 
-		if err := l.storeLocationIfMissing(ctx, *loc); err != nil {
-			slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
-		}
+		go func() {
+			if err := l.storeLocationIfMissing(*loc); err != nil {
+				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
+			}
+		}()
 		return loc, nil
 	}
 	return nil, fmt.Errorf("location ID %s not supported by any backend", locationID)
@@ -174,10 +176,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 
 	for _, loc := range allLocations {
 		go func(loc Location) {
-			//itentionally giving its own
-			storeCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-			defer cancel()
-			if err := l.storeLocationIfMissing(storeCtx, loc); err != nil {
+			if err := l.storeLocationIfMissing(loc); err != nil {
 				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
 			}
 		}(loc)
@@ -207,13 +206,15 @@ func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID str
 	return loc, true
 }
 
-func (l *locationStorage) storeLocationIfMissing(ctx context.Context, loc Location) error {
+func (l *locationStorage) storeLocationIfMissing(loc Location) error {
+	//itentionally giving its own context so its not canceled
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 	loc.CachedAt = time.Now().UTC()
 	id := locationCachePrefix + loc.ID
 	found, err := l.cache.Exists(ctx, id)
 	if err != nil {
-		slog.WarnContext(ctx, "failed to check if location exists in cache", "location_id", loc.ID, "error", err)
-		return err
+		return fmt.Errorf("failed to check location cache: %w", err)
 	}
 	if found {
 		return nil
@@ -221,8 +222,7 @@ func (l *locationStorage) storeLocationIfMissing(ctx context.Context, loc Locati
 
 	locationJSON, err := json.Marshal(loc)
 	if err != nil {
-		slog.WarnContext(ctx, "failed to marshal location for cache", "location_id", loc.ID, "error", err)
-		return err
+		return fmt.Errorf("failed to marshal location for cache: %w", err)
 	}
 	//TODO clean out old ones?
 	if err := l.cache.Put(ctx, id, string(locationJSON), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
