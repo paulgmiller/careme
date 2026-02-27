@@ -6,14 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 	"testing"
 	"time"
 )
 
 func TestGetLocationByIDUsesCache(t *testing.T) {
 	client := newFakeLocationClient()
-	fc := newFakeCache()
+	fc := cachepkg.NewInMemoryCache()
 	client.setDetailResponse("12345", Location{
 		ID:      "12345",
 		Name:    "Friendly Market",
@@ -41,14 +40,12 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLocationByID second call returned error: %v", err)
 	}
-	if _, ok := fc.data[locationCachePrefix+"12345"]; !ok {
-		t.Fatalf("expected location persisted to cache")
-	}
+	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
 }
 
 func TestGetLocationsByZipCachesLocations(t *testing.T) {
 	client := newFakeLocationClient()
-	fc := newFakeCache()
+	fc := cachepkg.NewInMemoryCache()
 	lat1 := 18.18060
 	lon1 := -66.74990
 	lat2 := 18.22000
@@ -97,11 +94,8 @@ func TestGetLocationsByZipCachesLocations(t *testing.T) {
 		t.Fatalf("unexpected second location zip code: %+v", locs[1])
 	}
 
-	_, okFirst := fc.data[locationCachePrefix+"111"]
-	_, okSecond := fc.data[locationCachePrefix+"222"]
-	if !okFirst || !okSecond {
-		t.Fatalf("expected both locations persisted to cache")
-	}
+	requireEventuallyCached(t, fc, locationCachePrefix+"111")
+	requireEventuallyCached(t, fc, locationCachePrefix+"222")
 }
 
 func TestGetLocationsByZipSortsByCentroidDistance(t *testing.T) {
@@ -181,7 +175,7 @@ func TestGetLocationByIDReturnsErrorWhenNoData(t *testing.T) {
 
 func TestGetLocationByIDLoadsFromPersistentCache(t *testing.T) {
 	client := newFakeLocationClient()
-	fc := newFakeCache()
+	fc := cachepkg.NewInMemoryCache()
 	cachedAt := mustParseTime(t, "2026-01-01T00:00:00Z")
 	preloaded := Location{
 		ID:       "12345",
@@ -190,7 +184,7 @@ func TestGetLocationByIDLoadsFromPersistentCache(t *testing.T) {
 		ZipCode:  "00601",
 		CachedAt: cachedAt,
 	}
-	fc.mustPutJSON(t, locationCachePrefix+"12345", preloaded)
+	mustPutJSONInCache(t, fc, locationCachePrefix+"12345", preloaded)
 
 	server := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	got, err := server.GetLocationByID(context.Background(), "12345")
@@ -210,7 +204,7 @@ func TestGetLocationsByZipStoresToPersistentCacheIfMissing(t *testing.T) {
 		{ID: "111", Name: "Store 111", ZipCode: "00601", Lat: &lat, Lon: &lon},
 	})
 
-	fc := newFakeCache()
+	fc := cachepkg.NewInMemoryCache()
 	server := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	locs, err := server.GetLocationsByZip(context.Background(), "00601")
 	if err != nil {
@@ -220,10 +214,7 @@ func TestGetLocationsByZipStoresToPersistentCacheIfMissing(t *testing.T) {
 		t.Fatalf("expected 1 location, got %d", len(locs))
 	}
 
-	storedRaw, ok := fc.data[locationCachePrefix+"111"]
-	if !ok {
-		t.Fatalf("expected location persisted to cache")
-	}
+	storedRaw := requireEventuallyCached(t, fc, locationCachePrefix+"111")
 	var stored Location
 	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil {
 		t.Fatalf("failed to decode stored location: %v", err)
@@ -318,7 +309,7 @@ func newTestLocationServer(client locationBackend) *locationStorage {
 }
 
 func newTestLocationServerWithBackends(backends []locationBackend) *locationStorage {
-	return newTestLocationServerWithBackendsAndCache(backends, newFakeCache())
+	return newTestLocationServerWithBackendsAndCache(backends, cachepkg.NewInMemoryCache())
 }
 
 func newTestLocationServerWithBackendsAndCache(backends []locationBackend, c cachepkg.Cache) *locationStorage {
@@ -333,44 +324,39 @@ func newTestLocationServerWithBackendsAndCache(backends []locationBackend, c cac
 	}
 }
 
-type fakeCache struct {
-	data map[string]string
-}
-
-func newFakeCache() *fakeCache {
-	return &fakeCache{data: make(map[string]string)}
-}
-
-func (f *fakeCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
-	value, ok := f.data[key]
-	if !ok {
-		return nil, cachepkg.ErrNotFound
-	}
-	return io.NopCloser(strings.NewReader(value)), nil
-}
-
-func (f *fakeCache) Exists(_ context.Context, key string) (bool, error) {
-	_, ok := f.data[key]
-	return ok, nil
-}
-
-func (f *fakeCache) Put(_ context.Context, key, value string, opts cachepkg.PutOptions) error {
-	if opts.Condition == cachepkg.PutIfNoneMatch {
-		if _, exists := f.data[key]; exists {
-			return cachepkg.ErrAlreadyExists
-		}
-	}
-	f.data[key] = value
-	return nil
-}
-
-func (f *fakeCache) mustPutJSON(t *testing.T, key string, value any) {
+func mustPutJSONInCache(t *testing.T, c cachepkg.Cache, key string, value any) {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
 		t.Fatalf("failed to marshal test cache value: %v", err)
 	}
-	f.data[key] = string(raw)
+	if err := c.Put(context.Background(), key, string(raw), cachepkg.Unconditional()); err != nil {
+		t.Fatalf("failed to preload cache key %q: %v", key, err)
+	}
+}
+
+func requireEventuallyCached(t *testing.T, c cachepkg.Cache, key string) string {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		raw, err := c.Get(context.Background(), key)
+		if err == nil {
+			defer func() {
+				_ = raw.Close()
+			}()
+			body, readErr := io.ReadAll(raw)
+			if readErr != nil {
+				t.Fatalf("failed to read cached value for key %q: %v", key, readErr)
+			}
+			return string(body)
+		}
+		if err != cachepkg.ErrNotFound {
+			t.Fatalf("failed checking cache for key %q: %v", key, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("expected cache entry %q to be persisted within timeout", key)
+	return ""
 }
 
 func mustParseTime(t *testing.T, value string) time.Time {
