@@ -172,7 +172,10 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 
 	for _, loc := range allLocations {
 		go func(loc Location) {
-			if err := l.storeLocationIfMissing(ctx, loc); err != nil {
+			//itentionally giving its own
+			storeCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			defer cancel()
+			if err := l.storeLocationIfMissing(storeCtx, loc); err != nil {
 				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
 			}
 		}(loc)
@@ -223,6 +226,7 @@ func (l *locationStorage) storeLocationIfMissing(ctx context.Context, loc Locati
 	if err := l.cache.Put(ctx, id, string(locationJSON), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
 		return err
 	}
+	return nil
 }
 
 func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid ZipCentroid, zipCentroids map[string]ZipCentroid) {
