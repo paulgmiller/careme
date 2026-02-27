@@ -57,3 +57,28 @@ func TestCoordinates_UnmarshalJSON_RequiresLonLatPair(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestStoreToLocation_UsesWalmartPrefixWithUnderscore(t *testing.T) {
+	t.Parallel()
+
+	location := storeToLocation(Store{
+		No:            3098,
+		Name:          "Test",
+		StreetAddress: "123 Main",
+		StateProvCode: "WA",
+		Zip:           "98007",
+		Coordinates: Coordinates{
+			Longitude: -122.139487,
+			Latitude:  47.609036,
+		},
+	})
+	if location.ID != "walmart_3098" {
+		t.Fatalf("unexpected location ID: %q", location.ID)
+	}
+	if location.Lat == nil || *location.Lat != 47.609036 {
+		t.Fatalf("unexpected location latitude: %v", location.Lat)
+	}
+	if location.Lon == nil || *location.Lon != -122.139487 {
+		t.Fatalf("unexpected location longitude: %v", location.Lon)
+	}
+}

@@ -3,17 +3,17 @@ package locations
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"strings"
 	"testing"
-
-	"careme/internal/kroger"
 )
 
 func TestGetLocationByIDUsesCache(t *testing.T) {
-	client := newFakeKrogerClient()
-	client.setDetailResponse("12345", http.StatusOK, `{"data":{"name":"Friendly Market","address":{"addressLine1":"123 Main St","zipCode":"10001"}}}`)
+	client := newFakeLocationClient()
+	client.setDetailResponse("12345", Location{
+		ID:      "12345",
+		Name:    "Friendly Market",
+		Address: "123 Main St",
+		ZipCode: "10001",
+	})
 
 	server := newTestLocationServer(client)
 
@@ -43,13 +43,36 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 }
 
 func TestGetLocationsByZipCachesLocations(t *testing.T) {
-	client := newFakeKrogerClient()
-	client.setListResponse("30301", http.StatusOK, `{"data":[{"locationId":"111","name":"Store 111","address":{"addressLine1":"1 North Ave","state":"GA","zipCode":"30301"}},{"locationId":"222","name":"Store 222","address":{"addressLine1":"2 South St","state":"GA","zipCode":"60601"}}]}`)
+	client := newFakeLocationClient()
+	lat1 := 18.18060
+	lon1 := -66.74990
+	lat2 := 18.22000
+	lon2 := -66.78000
+	client.setListResponse("00601", []Location{
+		{
+			ID:      "111",
+			Name:    "Store 111",
+			Address: "1 North Ave",
+			State:   "GA",
+			ZipCode: "00601",
+			Lat:     &lat1,
+			Lon:     &lon1,
+		},
+		{
+			ID:      "222",
+			Name:    "Store 222",
+			Address: "2 South St",
+			State:   "GA",
+			ZipCode: "00602",
+			Lat:     &lat2,
+			Lon:     &lon2,
+		},
+	})
 
 	server := newTestLocationServer(client)
 
 	ctx := context.Background()
-	locs, err := server.GetLocationsByZip(ctx, "30301")
+	locs, err := server.GetLocationsByZip(ctx, "00601")
 	if err != nil {
 		t.Fatalf("GetLocationsByZip returned error: %v", err)
 	}
@@ -59,13 +82,13 @@ func TestGetLocationsByZipCachesLocations(t *testing.T) {
 	if locs[0].ID != "111" || locs[0].State != "GA" {
 		t.Fatalf("unexpected first location: %+v", locs[0])
 	}
-	if locs[0].ZipCode != "30301" {
+	if locs[0].ZipCode != "00601" {
 		t.Fatalf("unexpected first location zip code: %+v", locs[0])
 	}
 	if locs[1].ID != "222" || locs[1].Address != "2 South St" {
 		t.Fatalf("unexpected second location: %+v", locs[1])
 	}
-	if locs[1].ZipCode != "60601" {
+	if locs[1].ZipCode != "00602" {
 		t.Fatalf("unexpected second location zip code: %+v", locs[1])
 	}
 
@@ -78,9 +101,72 @@ func TestGetLocationsByZipCachesLocations(t *testing.T) {
 	}
 }
 
+func TestGetLocationsByZipSortsByCentroidDistance(t *testing.T) {
+	client := newFakeLocationClient()
+	nearLat := 18.18060
+	nearLon := -66.74990
+	midLat := 18.30000
+	midLon := -66.90000
+	farLat := 47.60970
+	farLon := -122.33310
+	client.setListResponse("00601", []Location{
+		{ID: "far", Name: "Far", ZipCode: "98004", Lat: &farLat, Lon: &farLon},
+		{ID: "mid", Name: "Mid", ZipCode: "00602", Lat: &midLat, Lon: &midLon},
+		{ID: "near", Name: "Near", ZipCode: "00601", Lat: &nearLat, Lon: &nearLon},
+	})
+
+	server := newTestLocationServer(client)
+	locs, err := server.GetLocationsByZip(context.Background(), "00601")
+	if err != nil {
+		t.Fatalf("GetLocationsByZip returned error: %v", err)
+	}
+	if len(locs) != 2 {
+		t.Fatalf("expected 2 locations after distance filter, got %d", len(locs))
+	}
+	if got, want := []string{locs[0].ID, locs[1].ID}, []string{"near", "mid"}; got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("unexpected sorted order: got %v want %v", got, want)
+	}
+}
+
+func TestGetLocationsByZipSortsUsingLocationZipCentroidFallback(t *testing.T) {
+	client := newFakeLocationClient()
+	farLat := 47.60970
+	farLon := -122.33310
+	client.setListResponse("00601", []Location{
+		{ID: "far", Name: "Far", ZipCode: "98004", Lat: &farLat, Lon: &farLon},
+		{ID: "near-by-zip", Name: "Near By Zip", ZipCode: "00601"},
+		{ID: "unknown", Name: "Unknown", ZipCode: "zip-unknown"},
+	})
+
+	server := newTestLocationServer(client)
+	locs, err := server.GetLocationsByZip(context.Background(), "00601")
+	if err != nil {
+		t.Fatalf("GetLocationsByZip returned error: %v", err)
+	}
+	if len(locs) != 1 {
+		t.Fatalf("expected 1 location after filtering, got %d", len(locs))
+	}
+	if got, want := []string{locs[0].ID}, []string{"near-by-zip"}; got[0] != want[0] {
+		t.Fatalf("unexpected sorted order: got %v want %v", got, want)
+	}
+}
+
+func TestGetLocationsByZipLeavesOrderWhenQueryZipCentroidUnknown(t *testing.T) {
+	client := newFakeLocationClient()
+	client.setListResponse("not-a-zip", []Location{
+		{ID: "first", Name: "First", ZipCode: "00602"},
+		{ID: "second", Name: "Second", ZipCode: "00601"},
+	})
+
+	server := newTestLocationServer(client)
+	_, err := server.GetLocationsByZip(context.Background(), "not-a-zip")
+	if err == nil {
+		t.Fatalf("GetLocationsByZip should have errored")
+	}
+}
+
 func TestGetLocationByIDReturnsErrorWhenNoData(t *testing.T) {
-	client := newFakeKrogerClient()
-	client.setDetailResponse("999", http.StatusOK, `{"data":null}`)
+	client := newFakeLocationClient()
 
 	server := newTestLocationServer(client)
 
@@ -97,86 +183,98 @@ func TestGetLocationByIDReturnsErrorWhenNoData(t *testing.T) {
 	}
 }
 
-type fakeKrogerClient struct {
-	details map[string]fakeHTTPPayload
-	lists   map[string]fakeHTTPPayload
-}
+func TestGetLocationsByZipReturnsErrorWhenAllBackendsFail(t *testing.T) {
+	failA := newFakeLocationClient()
+	failA.err = fmt.Errorf("backend A down")
+	failB := newFakeLocationClient()
+	failB.err = fmt.Errorf("backend B down")
 
-type fakeHTTPPayload struct {
-	status int
-	body   string
-	err    error
-}
-
-func newFakeKrogerClient() *fakeKrogerClient {
-	return &fakeKrogerClient{
-		details: make(map[string]fakeHTTPPayload),
-		lists:   make(map[string]fakeHTTPPayload),
+	server := newTestLocationServerWithBackends([]locationBackend{failA, failB})
+	_, err := server.GetLocationsByZip(context.Background(), "00601")
+	if err == nil {
+		t.Fatalf("expected error when all backends fail")
 	}
 }
 
-func (f *fakeKrogerClient) setDetailResponse(locationID string, status int, body string) {
-	f.details[locationID] = fakeHTTPPayload{status: status, body: body}
-}
+func TestGetLocationsByZipSucceedsWhenAtLeastOneBackendSucceeds(t *testing.T) {
+	fail := newFakeLocationClient()
+	fail.err = fmt.Errorf("backend down")
 
-func (f *fakeKrogerClient) setListResponse(zip string, status int, body string) {
-	f.lists[zip] = fakeHTTPPayload{status: status, body: body}
-}
+	success := newFakeLocationClient()
+	lat := 18.18060
+	lon := -66.74990
+	success.setListResponse("00601", []Location{
+		{ID: "ok", Name: "OK", ZipCode: "00601", Lat: &lat, Lon: &lon},
+	})
 
-func (f *fakeKrogerClient) LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error) {
-	zip := ""
-	if params != nil && params.FilterZipCodeNear != nil {
-		zip = *params.FilterZipCodeNear
-	}
-
-	payload, ok := f.lists[zip]
-
-	if !ok {
-		payload = fakeHTTPPayload{status: http.StatusOK, body: `{"data":[]}`}
-	}
-	if payload.err != nil {
-		return nil, payload.err
-	}
-
-	resp := newJSONResponse(payload.status, payload.body)
-	parsed, err := kroger.ParseLocationListResponse(resp)
+	server := newTestLocationServerWithBackends([]locationBackend{fail, success})
+	locs, err := server.GetLocationsByZip(context.Background(), "00601")
 	if err != nil {
-		return nil, err
+		t.Fatalf("did not expect error when one backend succeeds: %v", err)
 	}
-	return parsed, nil
+	if len(locs) != 1 || locs[0].ID != "ok" {
+		t.Fatalf("unexpected locations: %+v", locs)
+	}
 }
 
-func (f *fakeKrogerClient) LocationDetailsWithResponse(ctx context.Context, locationID string, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationDetailsResponse, error) {
-	payload, ok := f.details[locationID]
+type fakeLocationClient struct {
+	details map[string]Location
+	lists   map[string][]Location
+	err     error
+}
 
-	if !ok {
-		payload = fakeHTTPPayload{status: http.StatusOK, body: `{"data":null}`}
+func newFakeLocationClient() *fakeLocationClient {
+	return &fakeLocationClient{
+		details: make(map[string]Location),
+		lists:   make(map[string][]Location),
 	}
-	if payload.err != nil {
-		return nil, payload.err
-	}
+}
 
-	resp := newJSONResponse(payload.status, payload.body)
-	parsed, err := kroger.ParseLocationDetailsResponse(resp)
+func (f *fakeLocationClient) setDetailResponse(locationID string, location Location) {
+	f.details[locationID] = location
+}
+
+func (f *fakeLocationClient) setListResponse(zip string, locations []Location) {
+	f.lists[zip] = locations
+}
+
+func (f *fakeLocationClient) GetLocationsByZip(_ context.Context, zipcode string) ([]Location, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if locations, ok := f.lists[zipcode]; ok {
+		return locations, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeLocationClient) GetLocationByID(_ context.Context, locationID string) (*Location, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if location, ok := f.details[locationID]; ok {
+		locationCopy := location
+		return &locationCopy, nil
+	}
+	return nil, fmt.Errorf("no data found for location ID %s", locationID)
+}
+
+func (f *fakeLocationClient) IsID(locationID string) bool {
+	return locationID != ""
+}
+
+func newTestLocationServer(client locationBackend) *locationStorage {
+	return newTestLocationServerWithBackends([]locationBackend{client})
+}
+
+func newTestLocationServerWithBackends(backends []locationBackend) *locationStorage {
+	zipCentroids, err := loadEmbeddedZipCentroids()
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	return parsed, nil
-}
-
-func newJSONResponse(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode:    status,
-		Status:        fmt.Sprintf("%d %s", status, http.StatusText(status)),
-		Header:        http.Header{"Content-Type": []string{"application/json"}},
-		Body:          io.NopCloser(strings.NewReader(body)),
-		ContentLength: int64(len(body)),
-	}
-}
-
-func newTestLocationServer(client krogerClient) *locationStorage {
 	return &locationStorage{
 		locationCache: make(map[string]Location),
-		client:        client,
+		client:        backends,
+		zipCentroids:  zipCentroids,
 	}
 }
