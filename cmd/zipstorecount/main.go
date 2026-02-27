@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
 	"context"
@@ -48,9 +49,14 @@ func main() {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 
-	client, err := locations.New(cfg) // warm up location client
+	cacheStore, err := cache.MakeCache()
 	if err != nil {
-		log.Fatalf("failed to create location stor	age: %v", err)
+		log.Fatalf("failed to create cache: %v", err)
+	}
+
+	client, err := locations.New(cfg, cacheStore)
+	if err != nil {
+		log.Fatalf("failed to create location storage: %v", err)
 	}
 	wg := sync.WaitGroup{}
 	resultsChan := make(chan zipStoreCount, len(metroZipCodes))
