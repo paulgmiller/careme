@@ -71,7 +71,7 @@ func main() {
 	}
 	fmt.Printf("Found %d items in category\n", len(stuff.Items))
 	for _, item := range stuff.Items {
-		fmt.Printf("Item: %s: %s\n", item.Name, item.ItemID)
+		fmt.Printf("Item: %s: %d, Brand: %s\n", item.Name, item.ItemID, item.BrandName)
 	}
 
 	if *zip != "" {

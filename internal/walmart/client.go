@@ -152,6 +152,7 @@ func (c *Client) SearchCatalogByCategory(ctx context.Context, category string) (
 
 	params := url.Values{}
 	params.Set("category", category)
+	params.Set("count", "400") //booom big boy!
 	raw, err := c.searchCatalogWithParams(ctx, params)
 	if err != nil {
 		return nil, err
@@ -161,6 +162,8 @@ func (c *Client) SearchCatalogByCategory(ctx context.Context, category string) (
 	if err != nil {
 		return nil, fmt.Errorf("parse catalog response: %w", err)
 	}
+	//do we parse remaining hits out of here or just replace it wholsale?
+	//catalog.NextPage
 
 	return catalog, nil
 }
@@ -231,6 +234,7 @@ func (c *Client) searchCatalogWithParams(ctx context.Context, params url.Values)
 		_ = resp.Body.Close()
 	}()
 
+	//don't copyt the whole thing stream it you moron
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, resp.Body) // ensure body is fully read for connection reuse
 	if err != nil {
