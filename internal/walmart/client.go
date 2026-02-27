@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -144,7 +145,8 @@ func (c *Client) SearchStoresByZIP(ctx context.Context, zip string) ([]Store, er
 // docs https://walmart.io/docs/affiliates/v1/catalog-product
 // example https://developer.api.walmart.com/api-proxy/service/affil/product/v2/items?category=976759
 // SearchCatalogByCategory returns typed catalog products for the provided Walmart category ID.
-func (c *Client) SearchCatalogByCategory(ctx context.Context, category string) (*CatalogProducts, error) {
+// It follows Walmart nextPage links and aggregates all pages.
+func (c *Client) SearchCatalogByCategory(ctx context.Context, category string, brands []string) (*CatalogProducts, error) {
 	category = strings.TrimSpace(category)
 	if category == "" {
 		return nil, errors.New("category is required")
@@ -152,7 +154,14 @@ func (c *Client) SearchCatalogByCategory(ctx context.Context, category string) (
 
 	params := url.Values{}
 	params.Set("category", category)
-	params.Set("count", "400") //booom big boy!
+	params.Set("count", "400")
+	params.Set("soldByWmt", "true")
+	//params.Set("fulfilledByWalmart", "true")
+	//params.Set("available", "true") kills everything
+	/* this would e neat but I seem to get a 444 when I pass a single brand and no filtering when I pass multiple brands?
+	for _, brand := range brands {
+		params.Add("brand", brand)
+	}*/
 	raw, err := c.searchCatalogWithParams(ctx, params)
 	if err != nil {
 		return nil, err
@@ -162,10 +171,61 @@ func (c *Client) SearchCatalogByCategory(ctx context.Context, category string) (
 	if err != nil {
 		return nil, fmt.Errorf("parse catalog response: %w", err)
 	}
-	//do we parse remaining hits out of here or just replace it wholsale?
-	//catalog.NextPage
 
-	return catalog, nil
+	out := &CatalogProducts{
+		Items:        append([]CatalogProduct(nil), catalog.Items...),
+		TotalResults: catalog.TotalResults,
+		Start:        catalog.Start,
+		NumItems:     catalog.NumItems,
+		NextPage:     catalog.NextPage,
+	}
+
+	seenNextPages := map[string]struct{}{}
+	for {
+		nextPage := strings.TrimSpace(out.NextPage)
+		if nextPage == "" {
+			break
+		}
+		if _, exists := seenNextPages[nextPage]; exists {
+			return nil, fmt.Errorf("catalog pagination loop detected for nextPage %q", nextPage)
+		}
+		seenNextPages[nextPage] = struct{}{}
+
+		raw, err = c.searchCatalogWithNextPage(ctx, nextPage)
+		if err != nil {
+			return nil, err
+		}
+
+		page, err := ParseCatalogProducts(raw)
+		if err != nil {
+			return nil, fmt.Errorf("parse catalog nextPage response: %w", err)
+		}
+
+		out.Items = append(out.Items, page.Items...)
+		out.NextPage = page.NextPage
+		if out.TotalResults == 0 {
+			out.TotalResults = page.TotalResults
+		}
+	}
+
+	out.NumItems = len(out.Items)
+	if out.TotalResults == 0 {
+		out.TotalResults = len(out.Items)
+	}
+	out.NextPage = ""
+	out.Items = lo.Filter(out.Items, func(item CatalogProduct, _ int) bool {
+		if len(brands) == 0 {
+			return true
+		}
+		for _, brand := range brands {
+			if strings.EqualFold(item.BrandName, brand) {
+				return true
+			}
+		}
+		return false
+	})
+
+	return out, nil
 }
 
 func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) (json.RawMessage, error) {
@@ -215,6 +275,36 @@ func (c *Client) searchCatalogWithParams(ctx context.Context, params url.Values)
 		return nil, fmt.Errorf("parse catalog URL: %w", err)
 	}
 	catalogURL.RawQuery = params.Encode()
+	fmt.Println(catalogURL.String())
+	return c.searchCatalogByURL(ctx, catalogURL)
+}
+
+func (c *Client) searchCatalogWithNextPage(ctx context.Context, nextPage string) (json.RawMessage, error) {
+	nextPage = strings.TrimSpace(nextPage)
+	if nextPage == "" {
+		return nil, errors.New("next page is required")
+	}
+
+	baseURL, err := url.Parse(c.baseURL + "/")
+	if err != nil {
+		return nil, fmt.Errorf("parse base URL: %w", err)
+	}
+
+	nextURL, err := url.Parse(nextPage)
+	if err != nil {
+		return nil, fmt.Errorf("parse next page URL: %w", err)
+	}
+	if !nextURL.IsAbs() {
+		nextURL = baseURL.ResolveReference(nextURL)
+	}
+
+	return c.searchCatalogByURL(ctx, nextURL)
+}
+
+func (c *Client) searchCatalogByURL(ctx context.Context, catalogURL *url.URL) (json.RawMessage, error) {
+	if catalogURL == nil {
+		return nil, errors.New("catalog URL is required")
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, catalogURL.String(), nil)
 	if err != nil {
@@ -234,7 +324,6 @@ func (c *Client) searchCatalogWithParams(ctx context.Context, params url.Values)
 		_ = resp.Body.Close()
 	}()
 
-	//don't copyt the whole thing stream it you moron
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, resp.Body) // ensure body is fully read for connection reuse
 	if err != nil {

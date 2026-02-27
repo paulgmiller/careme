@@ -55,23 +55,45 @@ func main() {
 		}
 	}*/
 
-	//pulled this out of taxonomy
-	var categoryMap = map[string]string{
-		"meat":    "976759_9569500",
-		"produce": "976759_976793",
+	var produceBrands = []string{
+		//"Freshness Guaranteed", //182
+		"Fresh Produce", //10
+		"Marketside",    //57
+		//"Unbranded",         //27
+		"PRODUCE UNBRANDED", //31
 	}
-	categoryNumber, ok := categoryMap[strings.ToLower(*categoryName)]
+	//pulled this out of taxonomy
+	var categoryMap = map[string]struct {
+		categoryID string
+		brands     []string
+	}{
+		"meat":    {categoryID: "976759_9569500", brands: []string{}},
+		"produce": {categoryID: "976759_976793", brands: produceBrands},
+	}
+
+	cat, ok := categoryMap[strings.ToLower(*categoryName)]
 	if !ok {
 		exitErr(fmt.Errorf("unknown category: %s speficy %s", *categoryName, strings.Join(lo.Keys(categoryMap), ", ")))
 	}
 
-	stuff, err := client.SearchCatalogByCategory(ctx, categoryNumber)
+	stuff, err := client.SearchCatalogByCategory(ctx, cat.categoryID, cat.brands)
 	if err != nil {
 		exitErr(err)
 	}
 	fmt.Printf("Found %d items in category\n", len(stuff.Items))
 	for _, item := range stuff.Items {
 		fmt.Printf("Item: %s: %d, Brand: %s\n", item.Name, item.ItemID, item.BrandName)
+	}
+	fmt.Printf("total items %d\n", stuff.NumItems)
+	brands := lo.GroupBy(stuff.Items, func(i walmart.CatalogProduct) string {
+		return i.BrandName
+	})
+	fmt.Printf("Found %d unique brands in category\n", len(brands))
+	for i, brand := range brands {
+		if len(brand) < 20 {
+			continue
+		}
+		fmt.Printf("%s :%d\n", i, len(brand))
 	}
 
 	if *zip != "" {

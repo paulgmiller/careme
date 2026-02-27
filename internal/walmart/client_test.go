@@ -302,6 +302,9 @@ func TestSearchCatalogByCategory_SetsHeadersAndQuery(t *testing.T) {
 	if got := capturedReq.URL.Query().Get("category"); got != "976759" {
 		t.Fatalf("unexpected category query value: %q", got)
 	}
+	if got := capturedReq.URL.Query().Get("count"); got != "400" {
+		t.Fatalf("unexpected count query value: %q", got)
+	}
 
 	consumerID := capturedReq.Header.Get("WM_CONSUMER.ID")
 	if consumerID != "consumer-id-123" {
@@ -332,6 +335,94 @@ func TestSearchCatalogByCategory_SetsHeadersAndQuery(t *testing.T) {
 	digest := sha256.Sum256([]byte(payload))
 	if err := rsa.VerifyPKCS1v15(&privateKey.PublicKey, crypto.SHA256, digest[:], signature); err != nil {
 		t.Fatalf("signature verification failed: %v", err)
+	}
+}
+
+func TestSearchCatalogByCategory_FollowsNextPage(t *testing.T) {
+	t.Parallel()
+
+	_, encodedKey := newBase64RSAPrivateKey(t)
+
+	var requests []*http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r)
+
+		switch len(requests) {
+		case 1:
+			_, _ = w.Write([]byte(`{
+				"items": [{"itemId": 1, "name": "Page 1 Item"}],
+				"totalResults": 2,
+				"start": 1,
+				"numItems": 1,
+				"nextPage": "/api-proxy/service/affil/product/v2/paginated/items?category=3944&count=400&remainingHits=1"
+			}`))
+		case 2:
+			_, _ = w.Write([]byte(`{
+				"items": [{"itemId": 2, "name": "Page 2 Item"}],
+				"totalResults": 2,
+				"start": 2,
+				"numItems": 1
+			}`))
+		default:
+			t.Fatalf("unexpected extra request: %d", len(requests))
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	catalog, err := client.SearchCatalogByCategory(context.Background(), "3944")
+	if err != nil {
+		t.Fatalf("search catalog by category: %v", err)
+	}
+
+	if len(requests) != 2 {
+		t.Fatalf("unexpected request count: %d", len(requests))
+	}
+
+	if requests[0].URL.Path != "/items" {
+		t.Fatalf("unexpected first path: %s", requests[0].URL.Path)
+	}
+	if got := requests[0].URL.Query().Get("category"); got != "3944" {
+		t.Fatalf("unexpected first category query value: %q", got)
+	}
+	if got := requests[0].URL.Query().Get("count"); got != "400" {
+		t.Fatalf("unexpected first count query value: %q", got)
+	}
+
+	if requests[1].URL.Path != "/api-proxy/service/affil/product/v2/paginated/items" {
+		t.Fatalf("unexpected second path: %s", requests[1].URL.Path)
+	}
+	if got := requests[1].URL.Query().Get("remainingHits"); got != "1" {
+		t.Fatalf("unexpected second remainingHits query value: %q", got)
+	}
+
+	if catalog == nil {
+		t.Fatal("expected catalog")
+	}
+	if len(catalog.Items) != 2 {
+		t.Fatalf("unexpected aggregated item count: %d", len(catalog.Items))
+	}
+	if catalog.Items[0].Name != "Page 1 Item" || catalog.Items[1].Name != "Page 2 Item" {
+		t.Fatalf("unexpected aggregated items: %+v", catalog.Items)
+	}
+	if catalog.TotalResults != 2 {
+		t.Fatalf("unexpected total results: %d", catalog.TotalResults)
+	}
+	if catalog.NumItems != 2 {
+		t.Fatalf("unexpected numItems: %d", catalog.NumItems)
+	}
+	if catalog.NextPage != "" {
+		t.Fatalf("expected empty nextPage, got %q", catalog.NextPage)
 	}
 }
 
