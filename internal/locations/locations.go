@@ -113,7 +113,9 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 			return nil, err
 		}
 
-		l.storeLocationIfMissing(ctx, *loc)
+		if err := l.storeLocationIfMissing(ctx, *loc); err != nil {
+			slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
+		}
 		return loc, nil
 	}
 	return nil, fmt.Errorf("location ID %s not supported by any backend", locationID)
