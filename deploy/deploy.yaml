@@ -32,6 +32,8 @@ spec:
           env:
             - name: CLARITY_PROJECT_ID
               value: "td2gxd3sq9"
+            - name: GOOGLE_TAG_ID
+              value: "AW-17902827663"
             - name: ADMIN_EMAILS
               value: "paul.miller@gmail.com"
           volumeMounts:
@@ -93,9 +95,6 @@ spec:
               envFrom:
                 - secretRef:
                     name: careme-secrets3
-              env:
-                - name: CLARITY_PROJECT_ID
-                  value: "td2gxd3sq9"
               resources:
                 requests:
                   cpu: 50m
