@@ -81,11 +81,13 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		data := struct {
-			ClarityScript template.HTML
-			Style         seasons.Style
+			ClarityScript   template.HTML
+			GoogleTagScript template.HTML
+			Style           seasons.Style
 		}{
-			ClarityScript: templates.ClarityScript(),
-			Style:         seasons.GetCurrentStyle(),
+			ClarityScript:   templates.ClarityScript(),
+			GoogleTagScript: templates.GoogleTagScript(),
+			Style:           seasons.GetCurrentStyle(),
 		}
 		if err := templates.About.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "about template execute error", "error", err)
@@ -120,12 +122,14 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 		data := struct {
 			ClarityScript     template.HTML
+			GoogleTagScript   template.HTML
 			User              *utypes.User
 			FavoriteStoreName string
 			Style             seasons.Style
 			ServerSignedIn    bool
 		}{
 			ClarityScript:     templates.ClarityScript(),
+			GoogleTagScript:   templates.GoogleTagScript(),
 			User:              currentUser,
 			FavoriteStoreName: favoriteStoreName,
 			Style:             seasons.GetCurrentStyle(),

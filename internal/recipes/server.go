@@ -502,10 +502,12 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	spinnerData := struct {
 		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
 		Style           seasons.Style
 		RefreshInterval string // seconds
 	}{
 		ClarityScript:   templates.ClarityScript(),
+		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
 		RefreshInterval: "10", // seconds
 	}

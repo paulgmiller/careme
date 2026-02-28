@@ -318,19 +318,21 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	}
 
 	data := struct {
-		Locations      []Location
-		Zip            string
-		FavoriteStore  string
-		ClarityScript  template.HTML
-		Style          seasons.Style
-		ServerSignedIn bool
+		Locations       []Location
+		Zip             string
+		FavoriteStore   string
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
 	}{
-		Locations:      locs,
-		Zip:            zip,
-		FavoriteStore:  favoriteStore,
-		ClarityScript:  templates.ClarityScript(),
-		Style:          seasons.GetCurrentStyle(),
-		ServerSignedIn: serverSignedIn,
+		Locations:       locs,
+		Zip:             zip,
+		FavoriteStore:   favoriteStore,
+		ClarityScript:   templates.ClarityScript(),
+		GoogleTagScript: templates.GoogleTagScript(),
+		Style:           seasons.GetCurrentStyle(),
+		ServerSignedIn:  serverSignedIn,
 	}
 	return templates.Location.Execute(w, data)
 }

@@ -46,17 +46,19 @@ func (m mock) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location
 func (m mock) Register(mux *http.ServeMux, _ auth.AuthClient) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		data := struct {
-			Locations     []Location
-			Zip           string
-			FavoriteStore string
-			ClarityScript template.HTML
-			Style         seasons.Style
+			Locations       []Location
+			Zip             string
+			FavoriteStore   string
+			ClarityScript   template.HTML
+			GoogleTagScript template.HTML
+			Style           seasons.Style
 		}{
-			Locations:     lo.Values(fakes),
-			Zip:           r.URL.Query().Get("zip"),
-			FavoriteStore: "",
-			ClarityScript: templates.ClarityScript(),
-			Style:         seasons.GetCurrentStyle(),
+			Locations:       lo.Values(fakes),
+			Zip:             r.URL.Query().Get("zip"),
+			FavoriteStore:   "",
+			ClarityScript:   templates.ClarityScript(),
+			GoogleTagScript: templates.GoogleTagScript(),
+			Style:           seasons.GetCurrentStyle(),
 		}
 		if err := templates.Location.Execute(w, data); err != nil {
 			http.Error(w, "template error", http.StatusInternalServerError)
