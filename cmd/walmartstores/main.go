@@ -87,6 +87,7 @@ func main() {
 	}{
 		"meat":    {categoryID: "976759_9569500", brands: []string{}},
 		"produce": {categoryID: "976759_976793", brands: produceBrands},
+		"alcohol": {categoryID: "976759_2975985", brands: []string{}},
 	}
 
 	var failures int
