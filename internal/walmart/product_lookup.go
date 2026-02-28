@@ -53,26 +53,24 @@ type ProductLookupProduct struct {
 
 // ProductLookup queries Walmart items by item IDs scoped to a store.
 // docs: https://walmart.io/docs/affiliates/v1/product-lookup
-func (c *Client) ProductLookup(ctx context.Context, produceIDs []string, storeID string) (*ProductLookupResults, error) {
-	return c.productLookupWithLocation(ctx, produceIDs, storeID, "")
+
+// ProductLookupCatalogItem resolves a catalog row in a store, retrying alternate IDs when Walmart rejects one.
+// Retry order: itemId -> parentItemId -> upc.
+// If all candidates are rejected with 400, it returns an empty result instead of an error.
+func (c *Client) ProductLookupCatalogItem(ctx context.Context, items []CatalogProduct, storeID string) (*ProductLookupResults, error) {
+	return c.productLookupCatalogItemWithLocation(ctx, items, storeID, "")
 }
 
-// ProductLookupByZIP queries Walmart items by item IDs scoped to a ZIP code.
-func (c *Client) ProductLookupByZIP(ctx context.Context, produceIDs []string, zip string) (*ProductLookupResults, error) {
-	return c.productLookupWithLocation(ctx, produceIDs, "", zip)
-}
-
-func (c *Client) productLookupWithLocation(ctx context.Context, produceIDs []string, storeID, zip string) (*ProductLookupResults, error) {
-	normalizedIDs := normalizeProduceIDs(produceIDs)
-	if len(normalizedIDs) == 0 {
-		return nil, errors.New("at least one produce ID is required")
-	}
-
+func (c *Client) productLookupCatalogItemWithLocation(ctx context.Context, items []CatalogProduct, storeID, zip string) (*ProductLookupResults, error) {
 	storeID = strings.TrimSpace(storeID)
 	zip = strings.TrimSpace(zip)
 
 	params := url.Values{}
-	params.Set("ids", strings.Join(normalizedIDs, ","))
+	var itemIDs []string
+	for _, item := range items {
+		itemIDs = append(itemIDs, fmt.Sprintf("%d", item.ItemID))
+	}
+	params.Set("ids", strings.Join(itemIDs, ","))
 	switch {
 	case storeID != "":
 		params.Set("storeId", storeID)
@@ -103,96 +101,6 @@ func (c *Client) productLookupWithLocation(ctx context.Context, produceIDs []str
 	}
 
 	return results, nil
-}
-
-// ProductLookupCatalogItem resolves a catalog row in a store, retrying alternate IDs when Walmart rejects one.
-// Retry order: itemId -> parentItemId -> upc.
-// If all candidates are rejected with 400, it returns an empty result instead of an error.
-func (c *Client) ProductLookupCatalogItem(ctx context.Context, item CatalogProduct, storeID string) (*ProductLookupResults, error) {
-	return c.productLookupCatalogItemWithLocation(ctx, item, storeID, "")
-}
-
-// ProductLookupCatalogItemByZIP resolves a catalog row for a ZIP code, retrying alternate IDs when Walmart rejects one.
-func (c *Client) ProductLookupCatalogItemByZIP(ctx context.Context, item CatalogProduct, zip string) (*ProductLookupResults, error) {
-	return c.productLookupCatalogItemWithLocation(ctx, item, "", zip)
-}
-
-func (c *Client) productLookupCatalogItemWithLocation(ctx context.Context, item CatalogProduct, storeID, zip string) (*ProductLookupResults, error) {
-	type candidate struct {
-		kind string
-		id   string
-	}
-
-	candidates := make([]candidate, 0, 3)
-	if item.ItemID > 0 {
-		candidates = append(candidates, candidate{
-			kind: "itemId",
-			id:   fmt.Sprintf("%d", item.ItemID),
-		})
-	}
-	if item.ParentItemID > 0 && item.ParentItemID != item.ItemID {
-		candidates = append(candidates, candidate{
-			kind: "parentItemId",
-			id:   fmt.Sprintf("%d", item.ParentItemID),
-		})
-	}
-	if upc := strings.TrimSpace(item.UPC); upc != "" {
-		candidates = append(candidates, candidate{
-			kind: "upc",
-			id:   upc,
-		})
-	}
-
-	if len(candidates) == 0 {
-		return &ProductLookupResults{
-			Items:        []ProductLookupProduct{},
-			TotalResults: 0,
-			NumItems:     0,
-		}, nil
-	}
-
-	for _, cand := range candidates {
-		results, err := c.productLookupWithLocation(ctx, []string{cand.id}, storeID, zip)
-		if err == nil {
-			if len(results.Items) == 0 {
-				// Candidate resolved to no product; try alternate identifiers.
-				continue
-			}
-			return results, nil
-		}
-
-		var statusErr *StatusError
-		if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusBadRequest {
-			slog.WarnContext(ctx, "walmart product lookup candidate rejected",
-				"catalogItemID", item.ItemID,
-				"candidateType", cand.kind,
-				"candidateID", cand.id,
-				"status", statusErr.StatusCode,
-				"responseBody", statusErr.Body,
-			)
-			continue
-		}
-
-		return nil, err
-	}
-
-	return &ProductLookupResults{
-		Items:        []ProductLookupProduct{},
-		TotalResults: 0,
-		NumItems:     0,
-	}, nil
-}
-
-func normalizeProduceIDs(ids []string) []string {
-	normalized := make([]string, 0, len(ids))
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		normalized = append(normalized, id)
-	}
-	return normalized
 }
 
 // ParseProductLookupResults unmarshals product lookup payloads from wrapped, array, or single-object shapes.
