@@ -38,6 +38,8 @@ spec:
               value: "xDzACMu074AcEI_x3dhC"
             - name: ADMIN_EMAILS
               value: "paul.miller@gmail.com"
+            - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+              value: "InstrumentationKey=a532fcc7-5098-4f44-8dde-ff2f32d6a59b;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=fdc94780-6135-4a29-980e-ab114a402e58"
           volumeMounts:
             - name: recipes
               mountPath: /recipes
@@ -97,6 +99,9 @@ spec:
               envFrom:
                 - secretRef:
                     name: careme-secrets3
+              env:
+                - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+                  value: "InstrumentationKey=a532fcc7-5098-4f44-8dde-ff2f32d6a59b;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=fdc94780-6135-4a29-980e-ab114a402e58"
               resources:
                 requests:
                   cpu: 50m

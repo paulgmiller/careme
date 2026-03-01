@@ -9,12 +9,24 @@ import (
 	"context"
 	_ "embed"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"os"
 
+	"github.com/openclosed-dev/slogan/appinsights"
 	multi "github.com/samber/slog-multi"
 )
+
+const appInsightsConnectionStringEnv = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+
+type closerFn func()
+
+func (f closerFn) Close() error {
+	f()
+	return nil
+}
 
 func main() {
 	var serve, mailer bool
@@ -39,20 +51,11 @@ func main() {
 	}
 
 	logcfg := logsink.ConfigFromEnv("logs")
-	if logcfg.Enabled() {
-		handler, closer, err := logsink.NewJson(ctx, logcfg)
-		if err != nil {
-			log.Fatalf("failed to create logsink: %v", err)
-		}
-		defer func() {
-			if err := closer.Close(); err != nil {
-				slog.Error("failed to close logsink", "error", err)
-			}
-		}()
-		slog.SetDefault(slog.New(multi.Fanout(handler, slog.NewTextHandler(os.Stdout, nil))))
-		// log.SetOutput(os.Stdout) // https://github.com/golang/go/issues/61892
-
+	logClosers, err := configureLogger(ctx, logcfg)
+	if err != nil {
+		log.Fatalf("failed to configure logging: %v", err)
 	}
+	defer closeAll(logClosers)
 
 	static.Init()
 	if err := templates.Init(cfg, static.TailwindAssetPath); err != nil {
@@ -71,5 +74,44 @@ func main() {
 
 	if err := runServer(cfg, logcfg, addr); err != nil {
 		log.Fatalf("server error: %v", err)
+	}
+}
+
+func configureLogger(ctx context.Context, logcfg logsink.Config) ([]io.Closer, error) {
+	handlers := make([]slog.Handler, 0, 3)
+	closers := make([]io.Closer, 0, 2)
+
+	if logcfg.Enabled() {
+		handler, closer, err := logsink.NewJson(ctx, logcfg)
+		if err != nil {
+			return nil, fmt.Errorf("create logsink: %w", err)
+		}
+		handlers = append(handlers, handler)
+		closers = append(closers, closer)
+	}
+
+	if connectionString := os.Getenv(appInsightsConnectionStringEnv); connectionString != "" {
+		handler, err := appinsights.NewHandler(connectionString, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create app insights handler: %w", err)
+		}
+		handlers = append(handlers, handler)
+		closers = append(closers, closerFn(handler.Close))
+	}
+
+	if len(handlers) == 0 {
+		return closers, nil
+	}
+
+	handlers = append(handlers, slog.NewTextHandler(os.Stdout, nil))
+	slog.SetDefault(slog.New(multi.Fanout(handlers...)))
+	return closers, nil
+}
+
+func closeAll(closers []io.Closer) {
+	for i := len(closers) - 1; i >= 0; i-- {
+		if err := closers[i].Close(); err != nil {
+			slog.Error("failed to close logger", "error", err)
+		}
 	}
 }
