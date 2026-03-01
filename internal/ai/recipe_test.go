@@ -6,8 +6,10 @@ import (
 
 func TestRecipeComputeHash(t *testing.T) {
 	recipe := Recipe{
-		Title:       "Test Recipe",
-		Description: "A delicious test recipe",
+		Title:        "Test Recipe",
+		Description:  "A delicious test recipe",
+		CookTime:     "35 minutes",
+		CostEstimate: "$18-24",
 		Ingredients: []Ingredient{
 			{Name: "Ingredient 1", Quantity: "1 cup", Price: "2.99"},
 			{Name: "Ingredient 2", Quantity: "2 tbsp", Price: "0.99"},
@@ -21,7 +23,7 @@ func TestRecipeComputeHash(t *testing.T) {
 	if hash1 == "" {
 		t.Fatal("hash should not be empty")
 	}
-	if hash1 != "1YjiZBQUCmlXuNTAK9m6fA==" {
+	if hash1 != "YK2TFI6O3tGLPAxPjqMPEw==" {
 		t.Fatalf("Hash changed by json marshalling: %s", hash1)
 	}
 

@@ -36,8 +36,10 @@ func TestMain(m *testing.M) {
 var list = ai.ShoppingList{
 	Recipes: []ai.Recipe{
 		{
-			Title:       "Test Recipe",
-			Description: "A simple quail recipe",
+			Title:        "Test Recipe",
+			Description:  "A simple quail recipe",
+			CookTime:     "35 minutes",
+			CostEstimate: "$18-24",
 			Ingredients: []ai.Ingredient{
 				{Name: "quail", Quantity: "1 cup", Price: "2.00"},
 				{Name: "kohlrabi", Quantity: "2 tbsp", Price: "1.50"},
@@ -62,6 +64,12 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 		t.Error("Want ok statuscode")
 	}
 	isValidHTML(t, html)
+	if !strings.Contains(html, "Cook time:") {
+		t.Error("shopping list HTML should contain cook time")
+	}
+	if !strings.Contains(html, "Estimated cost:") {
+		t.Error("shopping list HTML should contain estimated cost")
+	}
 }
 
 func TestFormatMail_ValidHTML(t *testing.T) {
@@ -185,6 +193,12 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	}
 	if !strings.Contains(html, `id="question-thread"`) {
 		t.Error("recipe HTML should contain question thread container")
+	}
+	if !strings.Contains(html, "Cook time:") {
+		t.Error("recipe HTML should contain cook time")
+	}
+	if !strings.Contains(html, "Estimated cost:") {
+		t.Error("recipe HTML should contain estimated cost")
 	}
 	if !strings.Contains(html, `id="question-error"`) {
 		t.Error("recipe HTML should contain question error surface")
