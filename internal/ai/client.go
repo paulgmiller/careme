@@ -148,17 +148,18 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversationID string) (*ShoppingList, error) {
+func (c *Client) Regenerate(ctx context.Context, instructions []string, conversationID string) (*ShoppingList, error) {
 	if conversationID == "" {
 		return nil, fmt.Errorf("conversation ID is required for regeneration")
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	messages := cleanInstuctions(instructions)
 
 	params := responses.ResponseNewParams{
 		Model: c.model,
 		//only new input
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newInstruction)},
+			OfInputItemList: messages,
 		},
 		Store: openai.Bool(true),
 		Conversation: responses.ResponseNewParamsConversationUnion{
@@ -207,7 +208,7 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 }
 
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
-func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -248,7 +249,7 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
+func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	//constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
@@ -279,9 +280,8 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	}
 
 	// Additional user instructions (if any)
-	if instructions != "" {
-		messages = append(messages, user(instructions))
-	}
+
+	messages = append(messages, cleanInstuctions(instructions)...)
 
 	return messages, nil
 }
@@ -293,4 +293,16 @@ func (c *Client) Ready(ctx context.Context) error {
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	_, err := client.Models.List(ctx)
 	return err
+}
+
+func cleanInstuctions(instructions []string) []responses.ResponseInputItemUnionParam {
+	var responses []responses.ResponseInputItemUnionParam
+	for _, i := range instructions {
+		i = strings.TrimSpace(i)
+		if i == "" {
+			continue
+		}
+		responses = append(responses, user(i))
+	}
+	return responses
 }
