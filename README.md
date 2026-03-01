@@ -15,6 +15,7 @@ The application is configured via environment variables:
 ### Optional 
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `GOOGLE_TAG_ID` - Google Ads/gtag ID for web analytics (optional)
+- `GOOGLE_CONVERSION_LABEL` - Google Ads conversion label used on `/auth/establish?signup=true` (optional)
 - `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
 
 if you're

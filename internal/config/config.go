@@ -58,13 +58,14 @@ func (c *WalmartConfig) IsEnabled() bool {
 	return c.ConsumerID != "" && c.PrivateKey != ""
 }
 
-var locahostredirect = "?redirect_url=http://localhost:8080/auth/establish"
+var localhostSigninRedirect = "?redirect_url=http://localhost:8080/auth/establish"
+var localhostSignupRedirect = "?redirect_url=http://localhost:8080/auth/establish?signup=true"
 
 // move to auth pacakage?
 func (c *ClerkConfig) Signin() string {
 	url := fmt.Sprintf("https://%s/sign-in", c.Domain)
 	if !c.Prod {
-		url += locahostredirect
+		url += localhostSigninRedirect
 	}
 	return url
 }
@@ -72,7 +73,7 @@ func (c *ClerkConfig) Signin() string {
 func (c *ClerkConfig) Signup() string {
 	url := fmt.Sprintf("https://%s/sign-up", c.Domain)
 	if !c.Prod {
-		url += locahostredirect
+		url += localhostSignupRedirect
 	}
 	return url
 }
