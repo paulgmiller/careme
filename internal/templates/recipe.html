@@ -51,6 +51,39 @@
               {{end}}
             </header>
 
+            <section class="space-y-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4">
+              <div class="space-y-1">
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Dish Photo</h3>
+                <p class="text-sm text-gray-600">Generate a plated photo of this recipe.</p>
+              </div>
+              {{if and .ServerSignedIn .ConversationID}}
+              <form method="POST"
+                    action="/recipe/{{.RecipeHash}}/image"
+                    hx-post="/recipe/{{.RecipeHash}}/image"
+                    hx-target="#recipe-image"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="#generate-image-submit"
+                    hx-on::before-request="document.getElementById('generate-image-submit').textContent='Cooking up image...'; document.getElementById('recipe-image-error').classList.add('hidden');"
+                    hx-on::after-request="document.getElementById('generate-image-submit').textContent='Generate dish photo';"
+                    hx-on::response-error="document.getElementById('recipe-image-error').classList.remove('hidden');"
+                    class="flex flex-wrap items-center gap-3">
+                <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
+                <input type="hidden" name="recipe_title" value="{{.Recipe.Title}}" />
+                <button type="submit"
+                        id="generate-image-submit"
+                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-brand-400 disabled:text-white/90">
+                  Generate dish photo
+                </button>
+              </form>
+              <p id="recipe-image-error" class="hidden text-sm font-medium text-red-700">Could not create an image. Try again, chef.</p>
+              {{else if .ServerSignedIn}}
+              <p class="text-sm text-gray-500">Image generation is unavailable for this recipe.</p>
+              {{else}}
+              <p class="text-sm text-gray-500">Sign in to generate a dish photo.</p>
+              {{end}}
+              <div id="recipe-image"></div>
+            </section>
+
             <div class="grid gap-6 md:grid-cols-2">
               <div>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Ingredients</h3>
@@ -248,5 +281,11 @@
   {{else if and .ServerSignedIn .ConversationID}}
   <p class="text-sm text-gray-500">No questions yet.</p>
   {{end}}
+</div>
+{{end}}
+
+{{define "recipe_image"}}
+<div id="recipe-image" class="overflow-hidden rounded-xl border border-brand-100 bg-white p-2 shadow-sm">
+  <img src="{{.ImageSrc}}" alt="Generated image of {{.RecipeTitle}}" class="h-auto w-full rounded-lg object-cover" loading="lazy" />
 </div>
 {{end}}

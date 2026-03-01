@@ -34,6 +34,7 @@ type locServer interface {
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
+	GenerateRecipeImage(ctx context.Context, conversationID string, recipeTitle string) (*ai.RecipeImage, error)
 	Ready(ctx context.Context) error
 }
 
@@ -66,6 +67,7 @@ func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
+	mux.HandleFunc("POST /recipe/{hash}/image", s.handleRecipeImage)
 	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
 	//maybe this should be under locations server?
 	mux.HandleFunc("GET /ingredients/{location}", s.ingredients)
@@ -207,6 +209,53 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	FormatRecipeThreadHTML(thread, true, conversationID, w)
+}
+
+func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
+
+	hash := r.PathValue("hash")
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+
+	_, err := s.clerk.GetUserIDFromRequest(r)
+	if errors.Is(err, auth.ErrNoSession) {
+		w.Header().Set("HX-Redirect", "/sign-in")
+		http.Error(w, "must be logged in to generate an image", http.StatusUnauthorized)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	conversationID := strings.TrimSpace(r.FormValue("conversation_id"))
+	if conversationID == "" {
+		http.Error(w, "conversation id not found", http.StatusBadRequest)
+		return
+	}
+	recipeTitle := strings.TrimSpace(r.FormValue("recipe_title"))
+	if recipeTitle == "" {
+		http.Error(w, "missing recipe title", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
+	defer cancel()
+	image, err := s.generator.GenerateRecipeImage(ctx, conversationID, recipeTitle)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to generate recipe image", "hash", hash, "title", recipeTitle, "error", err)
+		http.Error(w, "failed to generate image", http.StatusInternalServerError)
+		return
+	}
+
+	FormatRecipeImageHTML(recipeTitle, *image, w)
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
