@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -395,4 +396,12 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 func (m mock) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	_ = conversationID
 	return fmt.Sprintf("Mock answer: %s", question), nil
+}
+
+func (m mock) GenerateRecipeImage(ctx context.Context, conversationID string, recipeTitle string) (*ai.RecipeImage, error) {
+	_ = ctx
+	_ = conversationID
+	return &ai.RecipeImage{
+		URL: fmt.Sprintf("https://dummyimage.com/1024x1024/f2f2f2/334155.png&text=%s", url.QueryEscape(recipeTitle)),
+	}, nil
 }

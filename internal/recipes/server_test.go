@@ -159,7 +159,9 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 }
 
 type captureQuestionGenerator struct {
-	lastQuestion string
+	lastQuestion            string
+	lastImageConversationID string
+	lastImageTitle          string
 }
 
 func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -169,6 +171,14 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	c.lastQuestion = question
 	return "Try chicken thighs at the same cook time.", nil
+}
+
+func (c *captureQuestionGenerator) GenerateRecipeImage(ctx context.Context, conversationID string, recipeTitle string) (*ai.RecipeImage, error) {
+	c.lastImageConversationID = conversationID
+	c.lastImageTitle = recipeTitle
+	return &ai.RecipeImage{
+		URL: "https://example.com/recipe-image.png",
+	}, nil
 }
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
@@ -270,6 +280,99 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	}
 	if got, want := g.lastQuestion, "Regarding BBQ Pulled Pork: Can I swap the protein?"; got != want {
 		t.Fatalf("expected generator question %q, got %q", want, got)
+	}
+}
+
+func TestHandleRecipeImage_RequiresSignedInUser(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    noSessionAuth{},
+	}
+
+	form := url.Values{
+		"conversation_id": {"conv-test"},
+		"recipe_title":    {"Chicken Piccata"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/image", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleRecipeImage(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+	if got := rr.Header().Get("HX-Redirect"); got != "/sign-in" {
+		t.Fatalf("expected HX-Redirect to /sign-in, got %q", got)
+	}
+}
+
+func TestHandleRecipeImage_RejectsNonHTMXRequest(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   users.NewStorage(cacheStore),
+		clerk:     auth.DefaultMock(),
+		generator: &captureQuestionGenerator{},
+	}
+
+	form := url.Values{
+		"conversation_id": {"conv-test"},
+		"recipe_title":    {"Chicken Piccata"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/image", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleRecipeImage(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+func TestHandleRecipeImage_HTMXReturnsImageFragment(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	g := &captureQuestionGenerator{}
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   users.NewStorage(cacheStore),
+		clerk:     auth.DefaultMock(),
+		generator: g,
+	}
+
+	form := url.Values{
+		"conversation_id": {"conv-test"},
+		"recipe_title":    {"Chicken Piccata"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/image", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleRecipeImage(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if got, want := g.lastImageConversationID, "conv-test"; got != want {
+		t.Fatalf("expected conversation id %q, got %q", want, got)
+	}
+	if got, want := g.lastImageTitle, "Chicken Piccata"; got != want {
+		t.Fatalf("expected recipe title %q, got %q", want, got)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `id="recipe-image"`) {
+		t.Fatalf("expected recipe image fragment, got body: %s", body)
+	}
+	if !strings.Contains(body, "https://example.com/recipe-image.png") {
+		t.Fatalf("expected image URL in response, got body: %s", body)
 	}
 }
 

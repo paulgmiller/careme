@@ -177,6 +177,12 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should contain question input")
 	}
+	if !strings.Contains(html, "Generate dish photo") {
+		t.Error("recipe HTML should contain generate dish photo button")
+	}
+	if !strings.Contains(html, `id="recipe-image"`) {
+		t.Error("recipe HTML should include recipe image container")
+	}
 	if !strings.Contains(html, `name="recipe_title"`) {
 		t.Error("recipe HTML should include recipe title hidden input")
 	}
@@ -216,8 +222,14 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should not contain question input when signed out")
 	}
+	if strings.Contains(html, "Generate dish photo") {
+		t.Error("recipe HTML should not contain image generation button when signed out")
+	}
 	if !strings.Contains(html, "Sign in to ask follow-up questions.") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
+	}
+	if !strings.Contains(html, "Sign in to generate a dish photo.") {
+		t.Error("recipe HTML should prompt signed-out users to sign in for image generation")
 	}
 }
 
@@ -247,5 +259,20 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	}
 	if newerIndex > olderIndex {
 		t.Fatalf("expected newer question before older question, body: %s", body)
+	}
+}
+
+func TestFormatRecipeImageHTML_UsesDataURL(t *testing.T) {
+	w := httptest.NewRecorder()
+	FormatRecipeImageHTML("Chicken Piccata", ai.RecipeImage{
+		B64JSON: "dGVzdA==",
+	}, w)
+
+	body := w.Body.String()
+	if !strings.Contains(body, `id="recipe-image"`) {
+		t.Fatalf("expected image fragment id, got body: %s", body)
+	}
+	if !strings.Contains(body, `src="data:image/png;base64,dGVzdA=="`) {
+		t.Fatalf("expected data URL image source, got body: %s", body)
 	}
 }

@@ -77,6 +77,12 @@ type ShoppingList struct {
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
 }
 
+type RecipeImage struct {
+	B64JSON       string `json:"b64_json,omitempty"`
+	URL           string `json:"url,omitempty"`
+	RevisedPrompt string `json:"revised_prompt,omitempty"`
+}
+
 // ignoring model for now.
 func NewClient(apiKey, _ string) *Client {
 	//ignor model for now.
@@ -207,6 +213,45 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 	return answer, nil
 }
 
+func (c *Client) GenerateRecipeImage(ctx context.Context, conversationID string, recipeTitle string) (*RecipeImage, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return nil, fmt.Errorf("conversation ID is required for image generation")
+	}
+
+	recipeTitle = strings.TrimSpace(recipeTitle)
+	if recipeTitle == "" {
+		return nil, fmt.Errorf("recipe title is required for image generation")
+	}
+
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	resp, err := client.Images.Generate(ctx, openai.ImageGenerateParams{
+		Prompt:       recipeImagePrompt(recipeTitle),
+		Model:        openai.ImageModelGPTImage1,
+		Size:         openai.ImageGenerateParamsSize1024x1024,
+		OutputFormat: openai.ImageGenerateParamsOutputFormatPNG,
+		Quality:      openai.ImageGenerateParamsQualityMedium,
+		User:         openai.String(conversationID),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
+	}
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("image generation returned no images")
+	}
+
+	image := resp.Data[0]
+	if image.B64JSON == "" && image.URL == "" {
+		return nil, fmt.Errorf("image generation returned empty image payload")
+	}
+
+	return &RecipeImage{
+		B64JSON:       image.B64JSON,
+		URL:           image.URL,
+		RevisedPrompt: image.RevisedPrompt,
+	}, nil
+}
+
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
 func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
@@ -305,4 +350,8 @@ func cleanInstuctions(instructions []string) []responses.ResponseInputItemUnionP
 		responses = append(responses, user(i))
 	}
 	return responses
+}
+
+func recipeImagePrompt(recipeTitle string) string {
+	return fmt.Sprintf("Create a realistic, appetizing food photo of %q plated and ready to serve. Use natural lighting, shallow depth of field, and a clean kitchen or dining background.", recipeTitle)
 }

@@ -105,6 +105,32 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversat
 	}
 }
 
+// FormatRecipeImageHTML renders the generated recipe image fragment for HTMX swaps.
+func FormatRecipeImageHTML(recipeTitle string, image ai.RecipeImage, writer http.ResponseWriter) {
+	src := strings.TrimSpace(image.URL)
+	if src == "" {
+		if b64 := strings.TrimSpace(image.B64JSON); b64 != "" {
+			src = "data:image/png;base64," + b64
+		}
+	}
+	if src == "" {
+		http.Error(writer, "recipe image template error: empty image source", http.StatusInternalServerError)
+		return
+	}
+
+	data := struct {
+		RecipeTitle string
+		ImageSrc    template.URL
+	}{
+		RecipeTitle: recipeTitle,
+		ImageSrc:    template.URL(src),
+	}
+
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image", data); err != nil {
+		http.Error(writer, "recipe image template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // drops clarity, instructions and most of shoppinglist
 func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
 	// TODO just put params into shopping list and pass that up?
