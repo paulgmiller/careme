@@ -57,6 +57,8 @@ func ensure(templates *template.Template, name string) *template.Template {
 var Clarityproject string
 var GoogleTagID string
 
+const googleConversionLabel = "signup"
+
 // ClarityScript generates the Microsoft Clarity tracking script HTML
 func ClarityScript() template.HTML {
 	if Clarityproject == "" {
@@ -90,4 +92,11 @@ func GoogleTagScript() template.HTML {
 </script>`
 
 	return template.HTML(script)
+}
+
+func GoogleConversionTag() string {
+	if GoogleTagID == "" {
+		return ""
+	}
+	return GoogleTagID + "/" + googleConversionLabel
 }

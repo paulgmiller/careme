@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Signing In</title>
+    {{.GoogleTagScript}}
   </head>
   <body>
     <script
@@ -16,7 +17,20 @@
         const url = new URL(location.href);
         url.searchParams.delete("__clerk_db_jwt");
         history.replaceState({}, "", url.toString());
-        location.replace("/");
+
+        const redirectHome = () => location.replace("/");
+
+        if ({{.Signup}} &&
+            "{{.GoogleConversionTag}}" !== "" {
+          gtag("event", "conversion", {
+            send_to: "{{.GoogleConversionTag}}",
+            event_callback: redirectHome,
+          });
+          setTimeout(redirectHome, 1500);
+          return;
+        }
+
+        redirectHome();
       });
     </script>
   </body>
