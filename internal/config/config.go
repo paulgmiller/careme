@@ -2,16 +2,18 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 )
 
 type Config struct {
-	AI     AIConfig     `json:"ai"`
-	Kroger KrogerConfig `json:"kroger"`
-	Mocks  MockConfig   `json:"mocks"`
-	Clerk  ClerkConfig  `json:"clerk"`
-	Admin  AdminConfig  `json:"admin"`
+	AI      AIConfig      `json:"ai"`
+	Kroger  KrogerConfig  `json:"kroger"`
+	Walmart WalmartConfig `json:"walmart"`
+	Mocks   MockConfig    `json:"mocks"`
+	Clerk   ClerkConfig   `json:"clerk"`
+	Admin   AdminConfig   `json:"admin"`
 }
 
 type AIConfig struct {
@@ -35,21 +37,35 @@ type ClerkConfig struct {
 	Prod           bool
 }
 
-type AdminConfig struct {
-	Emails []string `json:"emails"`
-}
-
 func (c *ClerkConfig) IsEnabled() bool {
 	return c.SecretKey != "" && c.Domain != "" && c.PublishableKey != ""
 }
 
-var locahostredirect = "?redirect_url=http://localhost:8080/auth/establish"
+type AdminConfig struct {
+	Emails []string `json:"emails"`
+}
+
+// Config defines the required Walmart affiliate credentials and client options.
+type WalmartConfig struct {
+	ConsumerID string
+	KeyVersion string
+	PrivateKey string //base 64 the ssh key you give to Walmart (eg bas64 -w0 keys/walmart_prod)
+	BaseURL    string
+	HTTPClient *http.Client
+}
+
+func (c *WalmartConfig) IsEnabled() bool {
+	return c.ConsumerID != "" && c.PrivateKey != ""
+}
+
+var localhostSigninRedirect = "?redirect_url=http://localhost:8080/auth/establish"
+var localhostSignupRedirect = "?redirect_url=http://localhost:8080/auth/establish?signup=true"
 
 // move to auth pacakage?
 func (c *ClerkConfig) Signin() string {
 	url := fmt.Sprintf("https://%s/sign-in", c.Domain)
 	if !c.Prod {
-		url += locahostredirect
+		url += localhostSigninRedirect
 	}
 	return url
 }
@@ -57,7 +73,7 @@ func (c *ClerkConfig) Signin() string {
 func (c *ClerkConfig) Signup() string {
 	url := fmt.Sprintf("https://%s/sign-up", c.Domain)
 	if !c.Prod {
-		url += locahostredirect
+		url += localhostSignupRedirect
 	}
 	return url
 }
@@ -82,6 +98,12 @@ func Load() (*Config, error) {
 		},
 		Admin: AdminConfig{
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+		},
+		Walmart: WalmartConfig{
+			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),
+			KeyVersion: os.Getenv("WALMART_KEY_VERSION"),
+			PrivateKey: os.Getenv("WALMART_PRIVATE_KEY"),
+			BaseURL:    os.Getenv("WALMART_BASE_URL"),
 		},
 	}
 	if strings.HasSuffix(config.Clerk.Domain, "careme.cooking") {

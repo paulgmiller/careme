@@ -104,6 +104,41 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
+	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+
+	prev := templates.GoogleTagID
+	t.Cleanup(func() {
+		templates.GoogleTagID = prev
+	})
+	templates.GoogleTagID = "AW-1234567890"
+	w := httptest.NewRecorder()
+	FormatShoppingListHTML(p, list, true, w)
+	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtag/js?id=AW-1234567890")) {
+		t.Error("HTML should contain Google tag script URL")
+	}
+
+	if !bytes.Contains(w.Body.Bytes(), []byte("gtag('config', 'AW-1234567890');")) {
+		t.Error("HTML should contain Google tag ID")
+	}
+}
+
+func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
+	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	prev := templates.GoogleTagID
+	t.Cleanup(func() {
+		templates.GoogleTagID = prev
+	})
+	templates.GoogleTagID = ""
+	w := httptest.NewRecorder()
+	FormatShoppingListHTML(p, list, true, w)
+	if bytes.Contains(w.Body.Bytes(), []byte("googletagmanager.com")) {
+		t.Error("HTML should not contain Google tag script when tag ID is empty")
+	}
+}
+
 func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())

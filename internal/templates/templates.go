@@ -42,6 +42,8 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 
 	//todo pull from config.
 	Clarityproject = os.Getenv("CLARITY_PROJECT_ID")
+	GoogleTagID = os.Getenv("GOOGLE_TAG_ID")
+	GoogleConversionLabel = os.Getenv("GOOGLE_CONVERSION_LABEL")
 	return nil
 }
 
@@ -54,6 +56,8 @@ func ensure(templates *template.Template, name string) *template.Template {
 }
 
 var Clarityproject string
+var GoogleTagID string
+var GoogleConversionLabel string
 
 // ClarityScript generates the Microsoft Clarity tracking script HTML
 func ClarityScript() template.HTML {
@@ -70,4 +74,29 @@ func ClarityScript() template.HTML {
 </script>`
 
 	return template.HTML(script)
+}
+
+// GoogleTagScript generates the Google tag snippet HTML.
+func GoogleTagScript() template.HTML {
+	if GoogleTagID == "" {
+		return ""
+	}
+
+	script := `<script async src="https://www.googletagmanager.com/gtag/js?id=` + GoogleTagID + `"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', '` + GoogleTagID + `');
+</script>`
+
+	return template.HTML(script)
+}
+
+func GoogleConversionTag() string {
+	if GoogleTagID == "" || GoogleConversionLabel == "" {
+		return ""
+	}
+	return GoogleTagID + "/" + GoogleConversionLabel
 }

@@ -130,7 +130,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("failed to create generator: %v", err)
 	}
-	locationStorage, err := locations.New(cfg)
+	locationStorage, err := locations.New(cfg, cacheStore)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}

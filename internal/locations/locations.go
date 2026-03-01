@@ -2,35 +2,41 @@ package locations
 
 import (
 	"careme/internal/auth"
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
+	locationtypes "careme/internal/locations/types"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
+	"careme/internal/walmart"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
+	"math"
 	"net/http"
+	"sort"
 	"sync"
+	"time"
 )
-
-type krogerClient interface {
-	LocationListWithResponse(ctx context.Context, params *kroger.LocationListParams, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationListResponse, error)
-	// LocationDetailsWithResponse request
-	LocationDetailsWithResponse(ctx context.Context, locationId string, reqEditors ...kroger.RequestEditorFn) (*kroger.LocationDetailsResponse, error)
-}
 
 type userLookup interface {
 	FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error)
 }
 
 type locationStorage struct {
-	locationCache map[string]Location
-	cacheLock     sync.Mutex // to protect locationMap
-	client        krogerClient
+	client       []locationBackend
+	zipCentroids map[string]ZipCentroid
+	cache        cache.Cache
 }
+
+// bad for rural areas if zip code is huge?
+const maxLocationDistanceMiles = 20.0
+const locationCachePrefix = "location/"
 
 type locationServer struct {
 	storage     locationGetter
@@ -42,19 +48,45 @@ type locationGetter interface {
 	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
 }
 
-func New(cfg *config.Config) (locationGetter, error) {
+type locationBackend interface {
+	locationGetter
+	IsID(locationID string) bool
+}
+
+// Location is kept as an alias for compatibility with existing imports.
+type Location = locationtypes.Location
+
+func New(cfg *config.Config, c cache.Cache) (locationGetter, error) {
+	if c == nil {
+		return nil, fmt.Errorf("cache is required")
+	}
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
 
-	client, err := kroger.FromConfig(cfg)
+	//pass these in?
+	var backends []locationBackend
+	kclient, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
 	}
+	backends = append(backends, kclient)
+
+	if cfg.Walmart.IsEnabled() {
+		wclient, err := walmart.NewClient(cfg.Walmart)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Walmart client: %w", err)
+		}
+		backends = append(backends, wclient)
+	}
+	zipCentroids, err := loadEmbeddedZipCentroids()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load zip centroids: %w", err)
+	}
 	return &locationStorage{
-		locationCache: make(map[string]Location),
-		cacheLock:     sync.Mutex{},
-		client:        client,
+		client:       backends,
+		zipCentroids: zipCentroids,
+		cache:        c,
 	}, nil
 
 }
@@ -67,96 +99,182 @@ func NewServer(storage locationGetter, userStorage userLookup) *locationServer {
 }
 
 func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
-	l.cacheLock.Lock()
-
-	if loc, exists := l.locationCache[locationID]; exists {
-		l.cacheLock.Unlock()
-		return &loc, nil
-	}
-	l.cacheLock.Unlock()
-
-	resp, err := l.client.LocationDetailsWithResponse(ctx, locationID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get location details for ID %s: %w", locationID, err)
+	if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
+		return &cachedLoc, nil
 	}
 
-	if resp.JSON200 == nil || resp.JSON200.Data == nil {
-		return nil, fmt.Errorf("no data found for location ID %s", locationID)
-	}
+	for _, backend := range l.client {
+		if !backend.IsID(locationID) {
+			continue
+		}
 
-	data := resp.JSON200.Data
-	address := ""
-	state := ""
-	zipCode := ""
-	if data.Address != nil {
-		address = stringValue(data.Address.AddressLine1)
-		state = stringValue(data.Address.State)
-		zipCode = stringValue(data.Address.ZipCode)
-	}
-	loc := Location{
-		ID:      locationID,
-		Name:    stringValue(data.Name),
-		Address: address,
-		State:   state,
-		ZipCode: zipCode,
-	}
-	l.cacheLock.Lock()
-	defer l.cacheLock.Unlock()
-	l.locationCache[locationID] = loc
-	return &loc, nil
-}
+		loc, err := backend.GetLocationByID(ctx, locationID)
+		if err != nil {
+			return nil, err
+		}
 
-type Location struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Address string `json:"address"`
-	State   string `json:"state"`
-	ZipCode string `json:"zip_code"`
+		go func() {
+			if err := l.storeLocationIfMissing(*loc); err != nil {
+				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
+			}
+		}()
+		return loc, nil
+	}
+	return nil, fmt.Errorf("location ID %s not supported by any backend", locationID)
 }
 
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
-	locparams := &kroger.LocationListParams{
-		FilterZipCodeNear: &zipcode,
-	}
-	resp, err := l.client.LocationListWithResponse(ctx, locparams)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get location list for zip %s: %w", zipcode, err)
-	}
-	if resp.JSON200 == nil || len(*resp.JSON200.Data) == 0 {
-		fmt.Printf("No locations found for zip code %s\n", zipcode)
-		return nil, nil
+	requestedCentroid, hasRequestedCentroid := zipCentroidByZIP(zipcode, l.zipCentroids)
+	if !hasRequestedCentroid {
+		slog.ErrorContext(ctx, "requested zip has no centroid; skipping distance filter and sort", "zip", zipcode)
+		return nil, fmt.Errorf("invalid zip code %s. Can't find lat long", zipcode)
 	}
 
-	var locations []Location
-	l.cacheLock.Lock()
-	defer l.cacheLock.Unlock()
-	for _, loc := range *resp.JSON200.Data {
-		address := ""
-		state := ""
-		zipCode := ""
-		if loc.Address != nil {
-			address = stringValue(loc.Address.AddressLine1)
-			state = stringValue(loc.Address.State)
-			zipCode = stringValue(loc.Address.ZipCode)
-		}
-		loc := Location{
-			ID:      stringValue(loc.LocationId),
-			Name:    stringValue(loc.Name),
-			Address: address,
-			State:   state,
-			ZipCode: zipCode,
-		}
-		l.locationCache[loc.ID] = loc
-		locations = append(locations, loc)
+	results := make(chan []Location, len(l.client))
+	errors := make(chan error, len(l.client))
+	var wg sync.WaitGroup
+	for _, backend := range l.client {
+		wg.Add(1)
+		go func(backend locationBackend) {
+			defer wg.Done()
+			locations, err := backend.GetLocationsByZip(ctx, zipcode)
+			if err != nil {
+				slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "zip", zipcode)
+				errors <- err
+				return
+			}
+			results <- locations
+		}(backend)
 	}
-	return locations, nil
+	wg.Wait()
+	close(results)
+	close(errors)
+	if len(errors) == len(l.client) {
+		return nil, fmt.Errorf("all backends failed to get locations for zip %s", zipcode)
+	}
+	var allLocations []Location
+	for result := range results {
+		allLocations = append(allLocations, result...)
+	}
+
+	filtered := make([]Location, 0, len(allLocations))
+	for _, loc := range allLocations {
+		if _, hasZipCentroid := zipCentroidByZIP(loc.ZipCode, l.zipCentroids); !hasZipCentroid {
+			slog.WarnContext(ctx, "location has no zip centroid; skipping distance filter and sort", "location_id", loc.ID, "zip", loc.ZipCode)
+			continue
+		}
+
+		distance := locationDistanceTo(requestedCentroid, loc, l.zipCentroids)
+		if distance > maxLocationDistanceMiles {
+			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", maxLocationDistanceMiles)
+			continue
+		}
+		filtered = append(filtered, loc)
+	}
+	allLocations = filtered
+	sortLocationsByDistanceFromCentroid(allLocations, requestedCentroid, l.zipCentroids)
+
+	for _, loc := range allLocations {
+		go func(loc Location) {
+			if err := l.storeLocationIfMissing(loc); err != nil {
+				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
+			}
+		}(loc)
+	}
+	return allLocations, nil
 }
 
-func stringValue(p *string) string {
-	if p == nil {
-		return ""
+func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID string) (Location, bool) {
+	blob, err := l.cache.Get(ctx, locationCachePrefix+locationID)
+	if err != nil {
+		return Location{}, false
 	}
-	return *p
+	defer func() {
+		_ = blob.Close()
+	}()
+
+	raw, err := io.ReadAll(blob)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to read cached location blob", "location_id", locationID, "error", err)
+		return Location{}, false
+	}
+	var loc Location
+	if err := json.Unmarshal(raw, &loc); err != nil {
+		slog.WarnContext(ctx, "failed to parse cached location blob", "location_id", locationID, "error", err)
+		return Location{}, false
+	}
+	return loc, true
+}
+
+func (l *locationStorage) storeLocationIfMissing(loc Location) error {
+	//itentionally giving its own context so its not canceled
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	loc.CachedAt = time.Now().UTC()
+	id := locationCachePrefix + loc.ID
+	found, err := l.cache.Exists(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to check location cache: %w", err)
+	}
+	if found {
+		return nil
+	}
+
+	locationJSON, err := json.Marshal(loc)
+	if err != nil {
+		return fmt.Errorf("failed to marshal location for cache: %w", err)
+	}
+	//TODO clean out old ones?
+	if err := l.cache.Put(ctx, id, string(locationJSON), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
+		return err
+	}
+	return nil
+}
+
+func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid ZipCentroid, zipCentroids map[string]ZipCentroid) {
+	sort.SliceStable(locations, func(i, j int) bool {
+		leftDistance := locationDistanceTo(requestedCentroid, locations[i], zipCentroids)
+		rightDistance := locationDistanceTo(requestedCentroid, locations[j], zipCentroids)
+		return leftDistance < rightDistance
+	})
+}
+
+func locationDistanceTo(target ZipCentroid, loc Location, zipCentroids map[string]ZipCentroid) float64 {
+	lat, lon := locationCoordinates(loc, zipCentroids)
+	return haversineMiles(target.Lat, target.Lon, lat, lon)
+}
+
+func locationCoordinates(loc Location, zipCentroids map[string]ZipCentroid) (float64, float64) {
+	if loc.Lat != nil && loc.Lon != nil {
+		return *loc.Lat, *loc.Lon
+	}
+
+	//do we actualyl want to fall back?
+	centroid, _ := zipCentroidByZIP(loc.ZipCode, zipCentroids)
+	return centroid.Lat, centroid.Lon
+}
+
+// haversineMiles returns great-circle distance between two latitude/longitude
+// points in statute miles. Inputs are decimal degrees.
+func haversineMiles(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadiusMiles = 3958.7613
+	toRadians := math.Pi / 180.0
+
+	// Convert deltas and absolute latitudes to radians for trig functions.
+	dLat := (lat2 - lat1) * toRadians
+	dLon := (lon2 - lon1) * toRadians
+	lat1Rad := lat1 * toRadians
+	lat2Rad := lat2 * toRadians
+
+	// Standard Haversine formula:
+	// a = sin²(Δφ/2) + cos φ1 * cos φ2 * sin²(Δλ/2)
+	// c = 2 * atan2(√a, √(1-a))
+	// d = R * c
+	sinHalfDLat := math.Sin(dLat / 2.0)
+	sinHalfDLon := math.Sin(dLon / 2.0)
+	a := sinHalfDLat*sinHalfDLat + math.Cos(lat1Rad)*math.Cos(lat2Rad)*sinHalfDLon*sinHalfDLon
+	c := 2.0 * math.Atan2(math.Sqrt(a), math.Sqrt(1.0-a))
+	return earthRadiusMiles * c
 }
 
 func (l *locationServer) Ready(ctx context.Context) error {
@@ -200,19 +318,21 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	}
 
 	data := struct {
-		Locations      []Location
-		Zip            string
-		FavoriteStore  string
-		ClarityScript  template.HTML
-		Style          seasons.Style
-		ServerSignedIn bool
+		Locations       []Location
+		Zip             string
+		FavoriteStore   string
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
 	}{
-		Locations:      locs,
-		Zip:            zip,
-		FavoriteStore:  favoriteStore,
-		ClarityScript:  templates.ClarityScript(),
-		Style:          seasons.GetCurrentStyle(),
-		ServerSignedIn: serverSignedIn,
+		Locations:       locs,
+		Zip:             zip,
+		FavoriteStore:   favoriteStore,
+		ClarityScript:   templates.ClarityScript(),
+		GoogleTagScript: templates.GoogleTagScript(),
+		Style:           seasons.GetCurrentStyle(),
+		ServerSignedIn:  serverSignedIn,
 	}
 	return templates.Location.Execute(w, data)
 }
