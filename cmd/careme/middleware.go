@@ -1,12 +1,18 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"os"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
+	azureappinsights "github.com/microsoft/ApplicationInsights-Go/appinsights"
 )
 
 type logger struct {
@@ -44,6 +50,114 @@ type recoverer struct {
 	http.Handler
 }
 
+type requestTracker interface {
+	TrackRequest(method, url string, duration time.Duration, responseCode string)
+}
+
+type appInsightsTracker struct {
+	http.Handler
+	tracker requestTracker
+}
+
+const appInsightsIngestionPath = "/v2/track"
+
+type appInsightsConnectionParams struct {
+	instrumentationKey string
+	ingestionEndpoint  *url.URL
+}
+
+func (a *appInsightsTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	lrw := &loggingResponseWriter{w, http.StatusOK}
+	a.Handler.ServeHTTP(lrw, r)
+
+	if r.URL.Path == "/ready" {
+		return
+	}
+
+	a.tracker.TrackRequest(r.Method, r.URL.String(), time.Since(start), strconv.Itoa(lrw.statusCode))
+}
+
+func newAppInsightsTracker(next http.Handler, connectionString string) (http.Handler, error) {
+	client, err := newAppInsightsTelemetryClient(connectionString)
+	if err != nil {
+		return nil, err
+	}
+	return &appInsightsTracker{
+		Handler: next,
+		tracker: client,
+	}, nil
+}
+
+func newAppInsightsTrackerFromEnv(next http.Handler) http.Handler {
+	connectionString := os.Getenv(appInsightsConnectionStringEnv)
+	if connectionString == "" {
+		return next
+	}
+
+	handler, err := newAppInsightsTracker(next, connectionString)
+	if err != nil {
+		slog.Error("failed to configure app insights request tracking", "error", err)
+		return next
+	}
+
+	return handler
+}
+
+func newAppInsightsTelemetryClient(connectionString string) (azureappinsights.TelemetryClient, error) {
+	params, err := parseAppInsightsConnectionString(connectionString)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := azureappinsights.NewTelemetryConfiguration(params.instrumentationKey)
+	ingestionEndpoint := *params.ingestionEndpoint
+	ingestionEndpoint.Path = appInsightsIngestionPath
+	cfg.EndpointUrl = ingestionEndpoint.String()
+
+	return azureappinsights.NewTelemetryClientFromConfig(cfg), nil
+}
+
+func parseAppInsightsConnectionString(connectionString string) (*appInsightsConnectionParams, error) {
+	connectionString = strings.TrimSpace(connectionString)
+	if connectionString == "" {
+		return nil, errors.New("connection string is empty")
+	}
+
+	var instrumentationKey string
+	var ingestionEndpoint string
+
+	for _, value := range strings.Split(connectionString, ";") {
+		pair := strings.SplitN(value, "=", 2)
+		if len(pair) != 2 {
+			continue
+		}
+		switch pair[0] {
+		case "InstrumentationKey":
+			instrumentationKey = pair[1]
+		case "IngestionEndpoint":
+			ingestionEndpoint = pair[1]
+		}
+	}
+
+	if instrumentationKey == "" {
+		return nil, errors.New("instrumentation key is missing")
+	}
+	if ingestionEndpoint == "" {
+		return nil, errors.New("ingestion endpoint is missing")
+	}
+
+	ingestionURL, err := url.Parse(ingestionEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	return &appInsightsConnectionParams{
+		instrumentationKey: instrumentationKey,
+		ingestionEndpoint:  ingestionURL,
+	}, nil
+}
+
 func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -55,9 +169,9 @@ func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func WithMiddleware(h http.Handler) http.Handler {
+	h = &recoverer{h}
+	h = newAppInsightsTrackerFromEnv(h)
 	return &logger{
-		&recoverer{
-			h,
-		},
+		h,
 	}
 }
