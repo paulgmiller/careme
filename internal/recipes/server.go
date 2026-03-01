@@ -109,22 +109,24 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
+	originHash := normalizeRecipeListHash(recipe.OriginHash)
+	if originHash != recipe.OriginHash {
+		slog.InfoContext(ctx, "normalized recipe origin hash", "recipe_hash", hash, "origin_hash", recipe.OriginHash, "normalized_hash", originHash)
+		recipe.OriginHash = originHash
+	}
+
+	p, err := s.ParamsFromCache(ctx, originHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
-		//http.Error(w, "recipe not found or expired", http.StatusNotFound)
-		//return
-		p = DefaultParams(&locations.Location{
-			ID:   "",
-			Name: "Unknown Location",
-		}, time.Now())
+		slog.ErrorContext(ctx, "failed to load params for hash", "hash", originHash, "error", err)
+		http.Error(w, "recipe parameters not found", http.StatusNotFound)
+		return
 	}
 
 	if p.ConversationID == "" {
-		if slist, err := s.FromCache(ctx, recipe.OriginHash); err == nil {
+		if slist, err := s.FromCache(ctx, originHash); err == nil {
 			p.ConversationID = slist.ConversationID
 		} else if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load conversation id", "hash", recipe.OriginHash, "error", err)
+			slog.ErrorContext(ctx, "failed to load conversation id", "hash", originHash, "error", err)
 		}
 	}
 

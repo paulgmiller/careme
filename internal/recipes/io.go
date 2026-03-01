@@ -46,6 +46,7 @@ func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recip
 }
 
 func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error) {
+	hash = normalizeRecipeListHash(hash)
 	primaryKey := ShoppingListCachePrefix + hash
 	shoppinglist, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {
@@ -80,6 +81,7 @@ func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 }
 
 func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generatorParams, error) {
+	hash = normalizeRecipeListHash(hash)
 	primaryKey := paramsCachePrefix + hash
 	paramsReader, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/users"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -90,6 +91,120 @@ func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
 	}
 	if got := u.Query().Get("h"); got != hash {
 		t.Fatalf("expected redirect hash %q, got %q", hash, got)
+	}
+}
+
+func TestHandleSingle_NormalizesLegacyOriginHashForParams(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	rio := IO(cacheStore)
+
+	p := DefaultParams(&locations.Location{
+		ID:      "loc-legacy-origin",
+		Name:    "Legacy Market",
+		Address: "123 Main St",
+	}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
+	if err := rio.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+
+	recipe := ai.Recipe{
+		Title:        "Lemon Chicken",
+		Description:  "Bright and simple weeknight dish",
+		CookTime:     "30 minutes",
+		CostEstimate: "$18-22",
+		Ingredients:  []ai.Ingredient{{Name: "Chicken breast", Quantity: "1 lb", Price: "$8"}},
+		Instructions: []string{"Prep ingredients", "Cook chicken", "Finish with lemon"},
+		Health:       "Lean protein and fresh herbs",
+		DrinkPairing: "Sauvignon Blanc",
+	}
+
+	list := &ai.ShoppingList{
+		ConversationID: "conv-123",
+		Recipes:        []ai.Recipe{recipe},
+	}
+	if err := rio.SaveShoppingList(t.Context(), list, p.Hash()); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+
+	legacyOriginHash, ok := legacyRecipeHash(p.Hash())
+	if !ok {
+		t.Fatal("expected to derive legacy recipe hash")
+	}
+	recipe.OriginHash = legacyOriginHash
+	recipeHash := recipe.ComputeHash()
+	recipeJSON, err := json.Marshal(recipe)
+	if err != nil {
+		t.Fatalf("failed to marshal recipe: %v", err)
+	}
+	if err := cacheStore.Put(t.Context(), recipeCachePrefix+recipeHash, string(recipeJSON), cache.Unconditional()); err != nil {
+		t.Fatalf("failed to overwrite recipe with legacy origin hash: %v", err)
+	}
+
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		clerk:    noSessionAuth{},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipe/"+url.PathEscape(recipeHash), nil)
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSingle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Legacy Market") {
+		t.Fatalf("expected rendered location from params, got body: %s", body)
+	}
+	if strings.Contains(body, "Unknown Location") {
+		t.Fatalf("expected to avoid unknown fallback location, got body: %s", body)
+	}
+	if !strings.Contains(body, "/recipes?h="+p.Hash()) {
+		t.Fatalf("expected canonical origin hash link, got body: %s", body)
+	}
+}
+
+func TestHandleSingle_ReturnsNotFoundWhenParamsMissing(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+
+	recipe := ai.Recipe{
+		Title:        "Missing Params Recipe",
+		Description:  "Recipe with absent params",
+		CookTime:     "20 minutes",
+		CostEstimate: "$10-14",
+		Ingredients:  []ai.Ingredient{{Name: "Tofu", Quantity: "14 oz", Price: "$3"}},
+		Instructions: []string{"Prep", "Cook"},
+		Health:       "High protein",
+		DrinkPairing: "Sparkling water",
+		OriginHash:   "nonexistent-origin-hash",
+	}
+	recipeHash := recipe.ComputeHash()
+	recipeJSON, err := json.Marshal(recipe)
+	if err != nil {
+		t.Fatalf("failed to marshal recipe: %v", err)
+	}
+	if err := cacheStore.Put(t.Context(), recipeCachePrefix+recipeHash, string(recipeJSON), cache.Unconditional()); err != nil {
+		t.Fatalf("failed to store recipe: %v", err)
+	}
+
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		clerk:    noSessionAuth{},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipe/"+url.PathEscape(recipeHash), nil)
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSingle(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "recipe parameters not found") {
+		t.Fatalf("expected params-not-found error body, got %q", rr.Body.String())
 	}
 }
 

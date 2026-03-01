@@ -90,6 +90,14 @@ func normalizeLegacyRecipeHash(hash string) (string, bool) {
 	return legacyHashToCurrent(hash, legacyRecipeHashSeed)
 }
 
+func normalizeRecipeListHash(hash string) string {
+	trimmed := strings.TrimSpace(hash)
+	if normalized, ok := normalizeLegacyRecipeHash(trimmed); ok {
+		return normalized
+	}
+	return trimmed
+}
+
 func legacyRecipeHash(hash string) (string, bool) {
 	return currentHashToLegacy(hash, legacyRecipeHashSeed)
 }

@@ -180,6 +180,36 @@ func TestFromCache_FallsBackToLegacyHashedKeyForCanonicalHash(t *testing.T) {
 	}
 }
 
+func TestFromCache_NormalizesLegacyHashInputToCanonicalKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	p := DefaultParams(&locations.Location{ID: "loc-legacy-in", Name: "Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
+	hash := p.Hash()
+	legacyHash, ok := legacyRecipeHash(hash)
+	if !ok {
+		t.Fatal("expected to derive legacy recipe hash")
+	}
+
+	list := ai.ShoppingList{ConversationID: "canonical-conversation"}
+	listJSON, err := json.Marshal(list)
+	if err != nil {
+		t.Fatalf("failed to marshal shopping list: %v", err)
+	}
+	if err := cacheStore.Put(t.Context(), ShoppingListCachePrefix+hash, string(listJSON), cache.Unconditional()); err != nil {
+		t.Fatalf("failed to store canonical shopping list key: %v", err)
+	}
+
+	got, err := rio.FromCache(t.Context(), legacyHash)
+	if err != nil {
+		t.Fatalf("FromCache failed for legacy hash input: %v", err)
+	}
+	if got.ConversationID != list.ConversationID {
+		t.Fatalf("expected conversation id %q, got %q", list.ConversationID, got.ConversationID)
+	}
+}
+
 func TestParamsFromCache_FallsBackToLegacyHashedKeyForCanonicalHash(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
@@ -203,6 +233,35 @@ func TestParamsFromCache_FallsBackToLegacyHashedKeyForCanonicalHash(t *testing.T
 	got, err := rio.ParamsFromCache(t.Context(), hash)
 	if err != nil {
 		t.Fatalf("ParamsFromCache failed to read legacy hash key: %v", err)
+	}
+	if got.Location == nil || got.Location.ID != p.Location.ID {
+		t.Fatalf("expected location id %q, got %+v", p.Location.ID, got.Location)
+	}
+}
+
+func TestParamsFromCache_NormalizesLegacyHashInputToCanonicalKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	p := DefaultParams(&locations.Location{ID: "loc-legacy-params", Name: "Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
+	hash := p.Hash()
+	legacyHash, ok := legacyRecipeHash(hash)
+	if !ok {
+		t.Fatal("expected to derive legacy recipe hash")
+	}
+
+	paramsJSON, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("failed to marshal params: %v", err)
+	}
+	if err := cacheStore.Put(t.Context(), paramsCachePrefix+hash, string(paramsJSON), cache.Unconditional()); err != nil {
+		t.Fatalf("failed to store canonical params key: %v", err)
+	}
+
+	got, err := rio.ParamsFromCache(t.Context(), legacyHash)
+	if err != nil {
+		t.Fatalf("ParamsFromCache failed for legacy hash input: %v", err)
 	}
 	if got.Location == nil || got.Location.ID != p.Location.ID {
 		t.Fatalf("expected location id %q, got %+v", p.Location.ID, got.Location)
