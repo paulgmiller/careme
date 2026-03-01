@@ -34,6 +34,8 @@ spec:
               value: "td2gxd3sq9"
             - name: GOOGLE_TAG_ID
               value: "AW-17902827663"
+            - name: GOOGLE_CONVERSION_LABEL
+              value: "xDzACMu074AcEI_x3dhC"
             - name: ADMIN_EMAILS
               value: "paul.miller@gmail.com"
           volumeMounts:

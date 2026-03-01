@@ -21,7 +21,8 @@
         const redirectHome = () => location.replace("/");
 
         if ({{.Signup}} &&
-            "{{.GoogleConversionTag}}" !== "" {
+            "{{.GoogleConversionTag}}" !== "" &&
+            typeof gtag === "function") {
           gtag("event", "conversion", {
             send_to: "{{.GoogleConversionTag}}",
             event_callback: redirectHome,
