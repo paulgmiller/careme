@@ -39,6 +39,8 @@ type Ingredient struct {
 type Recipe struct {
 	Title        string       `json:"title"`
 	Description  string       `json:"description"`
+	CookTime     string       `json:"cook_time"`
+	CostEstimate string       `json:"cost_estimate"`
 	Ingredients  []Ingredient `json:"ingredients"`
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
@@ -57,6 +59,8 @@ func (r *Recipe) ComputeHash() string {
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, r.Title))
 	lo.Must(io.WriteString(fnv, r.Description))
+	lo.Must(io.WriteString(fnv, r.CookTime))
+	lo.Must(io.WriteString(fnv, r.CostEstimate))
 	for _, ing := range r.Ingredients {
 		lo.Must(io.WriteString(fnv, ing.Name))
 		lo.Must(io.WriteString(fnv, ing.Quantity))
@@ -114,6 +118,8 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Each recipe includes:
   - Title
   - Description: Try to sell the dish and add some flair.
+  - Estimated cook time (for example: "35 minutes")
+  - Estimated total cost in dollars (for example: "$18-24")
   - Ingredient list: should include quantities and price if in input.
   - Step-by-step instructions starting with prep. Don't prefix with numbers.
   - A guess at calorie count and healthiness
