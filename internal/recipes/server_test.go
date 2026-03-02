@@ -443,6 +443,13 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if user.LastRecipes[0].Hash != recipeHash {
 		t.Fatalf("expected saved hash %q, got %q", recipeHash, user.LastRecipes[0].Hash)
 	}
+	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "origin-hash")
+	if err != nil {
+		t.Fatalf("failed to load selection: %v", err)
+	}
+	if len(selection.SavedHashes) != 1 || selection.SavedHashes[0] != recipeHash {
+		t.Fatalf("expected saved selection with hash %q, got %#v", recipeHash, selection.SavedHashes)
+	}
 }
 
 func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
@@ -477,6 +484,15 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 		clerk:    auth.DefaultMock(),
 	}
 
+	recipe := ai.Recipe{
+		Title:       "Dismiss Recipe",
+		Description: "Recipe to dismiss",
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "origin-hash"); err != nil {
+		t.Fatalf("failed to save recipe in cache: %v", err)
+	}
+
 	user := &utypes.User{
 		ID:          "mock-clerk-user-id",
 		Email:       []string{"you@careme.cooking"},
@@ -490,7 +506,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 			},
 			{
 				Title:     "Dismiss Recipe",
-				Hash:      "dismiss-hash",
+				Hash:      recipeHash,
 				CreatedAt: time.Now(),
 			},
 		},
@@ -499,9 +515,9 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 		t.Fatalf("failed to create user: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/recipe/dismiss-hash/dismiss", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/dismiss", nil)
 	req.Header.Set("HX-Request", "true")
-	req.SetPathValue("hash", "dismiss-hash")
+	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()
 
 	s.handleDismissRecipe(rr, req)
@@ -522,6 +538,13 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	}
 	if updated.LastRecipes[0].Hash != "keep-hash" {
 		t.Fatalf("expected remaining hash keep-hash, got %q", updated.LastRecipes[0].Hash)
+	}
+	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "origin-hash")
+	if err != nil {
+		t.Fatalf("failed to load selection: %v", err)
+	}
+	if len(selection.DismissedHashes) != 1 || selection.DismissedHashes[0] != recipeHash {
+		t.Fatalf("expected dismissed selection with hash %q, got %#v", recipeHash, selection.DismissedHashes)
 	}
 }
 
@@ -545,6 +568,157 @@ func TestHandleDismissRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	}
 	if got := rr.Header().Get("HX-Redirect"); got != "/sign-in" {
 		t.Fatalf("expected HX-Redirect to /sign-in, got %q", got)
+	}
+}
+
+func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   storage,
+		clerk:     auth.DefaultMock(),
+		generator: mock{},
+	}
+	t.Cleanup(s.Wait)
+
+	p := DefaultParams(&locations.Location{ID: "loc-1", Name: "Store"}, time.Now())
+	p.ConversationID = "conv-123"
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+
+	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
+	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{savedRecipe, dismissedRecipe}, originHash); err != nil {
+		t.Fatalf("failed to save recipes: %v", err)
+	}
+	shoppingList := &ai.ShoppingList{
+		Recipes:        []ai.Recipe{savedRecipe, dismissedRecipe},
+		ConversationID: "conv-123",
+	}
+	if err := s.SaveShoppingList(t.Context(), shoppingList, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+
+	selection := recipeSelection{
+		SavedHashes:     []string{savedRecipe.ComputeHash()},
+		DismissedHashes: []string{dismissedRecipe.ComputeHash()},
+	}
+	if err := s.saveRecipeSelection(t.Context(), "mock-clerk-user-id", originHash, selection); err != nil {
+		t.Fatalf("failed to save selection: %v", err)
+	}
+
+	form := url.Values{"instructions": {"make it vegetarian"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+originHash+"/regenerate", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", originHash)
+	rr := httptest.NewRecorder()
+
+	s.handleRegenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	location := rr.Header().Get("HX-Redirect")
+	if location == "" {
+		t.Fatal("expected HX-Redirect header")
+	}
+	u, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("failed to parse HX-Redirect: %v", err)
+	}
+	newHash := u.Query().Get("h")
+	if newHash == "" {
+		t.Fatalf("expected redirect hash in %q", location)
+	}
+	if newHash == originHash {
+		t.Fatal("expected a new hash after regenerate")
+	}
+
+	updatedParams, err := s.ParamsFromCache(t.Context(), newHash)
+	if err != nil {
+		t.Fatalf("failed to load new params: %v", err)
+	}
+	if updatedParams.Instructions != "make it vegetarian" {
+		t.Fatalf("expected instructions to persist, got %q", updatedParams.Instructions)
+	}
+	if len(updatedParams.Saved) != 1 || updatedParams.Saved[0].ComputeHash() != savedRecipe.ComputeHash() {
+		t.Fatalf("expected saved recipe selection to persist in params, got %#v", updatedParams.Saved)
+	}
+	if len(updatedParams.Dismissed) != 1 || updatedParams.Dismissed[0].ComputeHash() != dismissedRecipe.ComputeHash() {
+		t.Fatalf("expected dismissed recipe selection to persist in params, got %#v", updatedParams.Dismissed)
+	}
+}
+
+func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  storage,
+		clerk:    auth.DefaultMock(),
+	}
+
+	p := DefaultParams(&locations.Location{ID: "loc-1", Name: "Store"}, time.Now())
+	p.ConversationID = "conv-123"
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+
+	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
+	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{savedRecipe, dismissedRecipe}, originHash); err != nil {
+		t.Fatalf("failed to save recipes: %v", err)
+	}
+	shoppingList := &ai.ShoppingList{
+		Recipes:        []ai.Recipe{savedRecipe, dismissedRecipe},
+		ConversationID: "conv-123",
+	}
+	if err := s.SaveShoppingList(t.Context(), shoppingList, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+
+	selection := recipeSelection{
+		SavedHashes:     []string{savedRecipe.ComputeHash()},
+		DismissedHashes: []string{dismissedRecipe.ComputeHash()},
+	}
+	if err := s.saveRecipeSelection(t.Context(), "mock-clerk-user-id", originHash, selection); err != nil {
+		t.Fatalf("failed to save selection: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+originHash+"/finalize", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", originHash)
+	rr := httptest.NewRecorder()
+
+	s.handleFinalize(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	location := rr.Header().Get("HX-Redirect")
+	if location == "" {
+		t.Fatal("expected HX-Redirect header")
+	}
+	u, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("failed to parse HX-Redirect: %v", err)
+	}
+	finalHash := u.Query().Get("h")
+	if finalHash == "" {
+		t.Fatalf("expected redirect hash in %q", location)
+	}
+
+	finalList, err := s.FromCache(t.Context(), finalHash)
+	if err != nil {
+		t.Fatalf("failed to load finalized list: %v", err)
+	}
+	if len(finalList.Recipes) != 1 || finalList.Recipes[0].ComputeHash() != savedRecipe.ComputeHash() {
+		t.Fatalf("expected only saved recipe in finalized list, got %#v", finalList.Recipes)
 	}
 }
 

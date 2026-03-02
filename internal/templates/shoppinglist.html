@@ -40,10 +40,13 @@
         </div>
 
         <div class="p-8">
-          <form id="regenerateForm" method="GET">
-            <input type="hidden" name="location" value="{{.Location.ID}}" />
-            <input type="hidden" name="date" value="{{.Date}}" />
-            <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
+          <form id="regenerateForm"
+                method="POST"
+                action="/recipes/{{.Hash}}/regenerate"
+                hx-post="/recipes/{{.Hash}}/regenerate"
+                hx-swap="none"
+                hx-on::before-request="document.getElementById('regenerate-button').setAttribute('disabled', 'disabled'); document.getElementById('regenerate-button').textContent='Thinking...';"
+                hx-on::after-request="document.getElementById('regenerate-button').removeAttribute('disabled'); document.getElementById('regenerate-button').textContent='Try again, chef';">
 
             <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
               <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
@@ -55,6 +58,7 @@
                        placeholder="e.g. make it vegetarian"
                        class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
                 <button type="submit"
+                        id="regenerate-button"
                         class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Try again, chef
                 </button>
@@ -89,6 +93,7 @@
                       Save
                     </label>
                     <input type="radio"
+                           {{if index $.DismissedHashes (.ComputeHash)}}checked{{end}}
                            name="recipe-{{.ComputeHash}}"
                            value="dismiss"
                            id="dismiss-{{.ComputeHash}}"
@@ -106,18 +111,16 @@
                     <button type="button"
                             id="details-{{.ComputeHash}}-button"
                             aria-controls="details-{{.ComputeHash}}"
-                            aria-expanded="{{if .Saved}}false{{else}}true{{end}}"
+                            aria-expanded="{{if or .Saved (index $.DismissedHashes (.ComputeHash))}}false{{else}}true{{end}}"
                             onclick="toggleRecipeDetails('{{.ComputeHash}}')"
                             class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      {{if .Saved}}Show details{{else}}Hide details{{end}}
+                      {{if or .Saved (index $.DismissedHashes (.ComputeHash))}}Show details{{else}}Hide details{{end}}
                     </button>
-                    <input type="hidden" name="saved" id="saved-{{.ComputeHash}}" value="{{if .Saved}}{{.ComputeHash}}{{end}}" {{if not .Saved}}disabled{{end}} />
-                    <input type="hidden" name="dismissed" id="dismissed-{{.ComputeHash}}" value="" disabled />
                     <span id="profile-status-{{.ComputeHash}}" class="text-xs font-medium text-ink-600" aria-live="polite"></span>
                   </div>
                 </header>
 
-              <section id="details-{{.ComputeHash}}" class="space-y-6 {{if .Saved}}hidden{{end}}">
+              <section id="details-{{.ComputeHash}}" class="space-y-6 {{if or .Saved (index $.DismissedHashes (.ComputeHash))}}hidden{{end}}">
                 <div class="grid gap-6 md:grid-cols-2">
                   <div>
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Ingredients</h3>
@@ -183,7 +186,12 @@
           </form>
 
           <div class="mt-10 flex flex-wrap items-center gap-4">
-            <button type="submit" form="regenerateForm" name="finalize" value="true" id="finalizeButton"
+            <button type="button"
+                    id="finalizeButton"
+                    hx-post="/recipes/{{.Hash}}/finalize"
+                    hx-swap="none"
+                    hx-on::before-request="document.getElementById('finalizeButton').setAttribute('disabled', 'disabled'); document.getElementById('finalizeButton').textContent='Finalizing...';"
+                    hx-on::after-request="document.getElementById('finalizeButton').textContent='Finalize'; updateFinalizeButton();"
                     class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
               Finalize
             </button>
@@ -202,34 +210,16 @@
 
   <script>
     function setRecipeChoice(hash, choice) {
-      const savedInput = document.getElementById('saved-' + hash);
-      const dismissedInput = document.getElementById('dismissed-' + hash);
-      if (!savedInput || !dismissedInput) {
-        return;
-      }
-
-      if (choice === 'save') {
-        savedInput.value = hash;
-        savedInput.disabled = false;
-        dismissedInput.value = '';
-        dismissedInput.disabled = true;
-      } else if (choice === 'dismiss') {
-        dismissedInput.value = hash;
-        dismissedInput.disabled = false;
-        savedInput.value = '';
-        savedInput.disabled = true;
-      }
-
       setRecipeDetailsVisible(hash, false);
       updateFinalizeButton();
     }
 
     function updateFinalizeButton() {
       const form = document.getElementById('regenerateForm');
-      const savedInputs = form.querySelectorAll('input[name="saved"]');
+      const savedInputs = form.querySelectorAll('input[type="radio"][value="save"]');
       const finalizeButton = document.getElementById('finalizeButton');
 
-      const hasSavedRecipes = Array.from(savedInputs).some((input) => !input.disabled && input.value.trim() !== '');
+      const hasSavedRecipes = Array.from(savedInputs).some((input) => input.checked);
 
       finalizeButton.disabled = !hasSavedRecipes;
     }

@@ -15,6 +15,10 @@ import (
 // FormatShoppingListHTML renders the multi-recipe shopping list view.
 func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
 	// TODO just put params into shopping list and pass that up?
+	dismissedHashes := make(map[string]bool, len(p.Dismissed))
+	for _, recipe := range p.Dismissed {
+		dismissedHashes[recipe.ComputeHash()] = true
+	}
 	data := struct {
 		Location        locations.Location
 		Date            string
@@ -25,6 +29,7 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool
 		Recipes         []ai.Recipe
 		ShoppingList    []ai.Ingredient
 		ConversationID  string
+		DismissedHashes map[string]bool
 		Style           seasons.Style
 		ServerSignedIn  bool
 	}{
@@ -37,6 +42,7 @@ func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool
 		Recipes:         l.Recipes,
 		ShoppingList:    shoppingListForDisplay(l.Recipes),
 		ConversationID:  l.ConversationID,
+		DismissedHashes: dismissedHashes,
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
 	}

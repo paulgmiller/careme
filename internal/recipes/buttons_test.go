@@ -46,14 +46,6 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Verify HTML is valid
 	isValidHTML(t, html)
 
-	// Check for Save and Dismiss radio buttons and labels
-	if !strings.Contains(html, `name="saved"`) {
-		t.Error("HTML should contain saved hidden inputs")
-	}
-	if !strings.Contains(html, `name="dismissed"`) {
-		t.Error("HTML should contain dismissed hidden inputs")
-	}
-
 	// Check for radio buttons
 	if !strings.Contains(html, `type="radio"`) {
 		t.Error("HTML should contain radio button inputs")
@@ -89,12 +81,12 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 		t.Error("HTML should contain Finalize button")
 	}
 
-	// Check for finalize submit button (not a POST form anymore)
-	if !strings.Contains(html, `name="finalize"`) {
-		t.Error("HTML should have finalize submit button")
+	// Check for finalize HTMX button
+	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
+		t.Error("HTML should submit finalize with HTMX POST")
 	}
-	if !strings.Contains(html, `value="true"`) {
-		t.Error("HTML should have finalize value set to true")
+	if !strings.Contains(html, `/recipes/`) || !strings.Contains(html, `/regenerate"`) {
+		t.Error("HTML should submit regenerate with POST endpoint")
 	}
 
 	// Check that recipes are present with their titles
