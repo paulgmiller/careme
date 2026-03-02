@@ -16,7 +16,7 @@ import (
 	"os"
 
 	"github.com/openclosed-dev/slogan/appinsights"
-	multi "github.com/samber/slog-multi"
+	multi "github.com/samber/slog-multi" //this is getting a native version in newest golang
 )
 
 const appInsightsConnectionStringEnv = "APPLICATIONINSIGHTS_CONNECTION_STRING"
@@ -90,6 +90,7 @@ func configureLogger(ctx context.Context, logcfg logsink.Config) (func(), error)
 		handlers = append(handlers, handler)
 	}
 
+	//you'd think this just be a slice of closedrs but app inights isn't an io.Closer because it returns no erro
 	close := func() {
 		if logSinkCloser != nil {
 			if err := logSinkCloser.Close(); err != nil {

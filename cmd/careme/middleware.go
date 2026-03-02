@@ -100,7 +100,9 @@ func newAppInsightsTelemetryClient(connectionString string) (azureappinsights.Te
 	if err != nil {
 		return nil, err
 	}
-	return azureappinsights.NewTelemetryClientFromConfig(cfg), nil
+	return azureappinsights.NewTelemetryClient(cfg.InstrumentationKey), nil
+	//if we want somethhing fancy we can do this.
+	//return azureappinsights.NewTelemetryClientFromConfig(cfg), nil
 }
 
 // suprise there is not a parse function here.
@@ -149,6 +151,7 @@ type recoverer struct {
 }
 
 func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	//app insights could also track this https://github.com/microsoft/ApplicationInsights-Go?tab=readme-ov-file#exceptions
 	defer func() {
 		if err := recover(); err != nil {
 			slog.ErrorContext(req.Context(), "panic recovered", "error", err, "stack", debug.Stack())
