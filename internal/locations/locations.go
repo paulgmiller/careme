@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"sync"
@@ -292,27 +293,34 @@ func (l *locationServer) Ready(ctx context.Context) error {
 
 func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient) {
 	mux.HandleFunc("GET /locations/zip-from-coordinates", func(w http.ResponseWriter, r *http.Request) {
+		isHXRequest := r.Header.Get("HX-Request") == "true"
+		if !isHXRequest {
+			http.Error(w, "htmx request required", http.StatusBadRequest)
+			return
+		}
+
 		lat, err := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
 		if err != nil {
-			http.Error(w, "invalid latitude", http.StatusBadRequest)
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("Try again, chef. We could not read your location."))
 			return
 		}
 		lon, err := strconv.ParseFloat(r.URL.Query().Get("lon"), 64)
 		if err != nil {
-			http.Error(w, "invalid longitude", http.StatusBadRequest)
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("Try again, chef. We could not read your location."))
 			return
 		}
 
 		zip, ok := l.zipFetcher.NearestZIPToCoordinates(lat, lon)
 		if !ok {
-			http.Error(w, "zip not found for coordinates", http.StatusNotFound)
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("Try again, chef. We could not find your ZIP code."))
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]string{"zip": zip}); err != nil {
-			http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		}
+		w.Header().Set("HX-Redirect", "/locations?zip="+url.QueryEscape(zip))
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	mux.HandleFunc("GET /locations", func(w http.ResponseWriter, r *http.Request) {
