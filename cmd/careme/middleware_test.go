@@ -125,21 +125,18 @@ func TestAppInsightsTrackerTracksRecoveredPanicAs500(t *testing.T) {
 	}
 }
 
-func TestParseAppInsightsConnectionString(t *testing.T) {
+func TestParseAppInsightsKey(t *testing.T) {
 	connectionString := "InstrumentationKey=test-key;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=app-id"
-	cfg, err := parseAppInsightsConnectionString(connectionString)
+	key, err := parseAppInsightsKey(connectionString)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.InstrumentationKey != "test-key" {
-		t.Fatalf("expected instrumentation key test-key, got %q", cfg.InstrumentationKey)
-	}
-	if cfg.EndpointUrl != "https://westus3-1.in.applicationinsights.azure.com/v2/track" {
-		t.Fatalf("unexpected ingestion endpoint: %q", cfg.EndpointUrl)
+	if key != "test-key" {
+		t.Fatalf("expected instrumentation key test-key, got %q", key)
 	}
 }
 
-func TestParseAppInsightsConnectionStringErrors(t *testing.T) {
+func TestParseAppInsightsKeyErrors(t *testing.T) {
 	testCases := []struct {
 		name        string
 		value       string
@@ -148,28 +145,18 @@ func TestParseAppInsightsConnectionStringErrors(t *testing.T) {
 		{
 			name:        "empty",
 			value:       "",
-			wantErrText: "connection string is empty",
+			wantErrText: "instrumentation key is missing",
 		},
 		{
 			name:        "missing instrumentation key",
 			value:       "IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/",
 			wantErrText: "instrumentation key is missing",
 		},
-		{
-			name:        "missing ingestion endpoint",
-			value:       "InstrumentationKey=test-key",
-			wantErrText: "ingestion endpoint is missing",
-		},
-		{
-			name:        "bad ingestion endpoint",
-			value:       "InstrumentationKey=test-key;IngestionEndpoint=:bad://",
-			wantErrText: "missing protocol scheme",
-		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := parseAppInsightsConnectionString(tc.value)
+			_, err := parseAppInsightsKey(tc.value)
 			if err == nil {
 				t.Fatalf("expected error containing %q", tc.wantErrText)
 			}

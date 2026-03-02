@@ -83,6 +83,7 @@ func configureLogger(ctx context.Context, logcfg logsink.Config) (func(), error)
 	}
 	var appinsightsHandler *appinsights.Handler
 	if connectionString := os.Getenv(appInsightsConnectionStringEnv); connectionString != "" {
+		//prefer we just send the key like  azureappinsights.NewTelemetryClient(key) but need to make a PR.
 		handler, err := appinsights.NewHandler(connectionString, nil)
 		if err != nil {
 			return nil, fmt.Errorf("create app insights handler: %w", err)
