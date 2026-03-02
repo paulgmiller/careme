@@ -113,16 +113,15 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 }
 
-func TestZipFromCoordinatesHTMXRedirect(t *testing.T) {
+func TestZipFromCoordinatesRedirect(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
 
-	client := newTestClient(t)
+	client := newNoRedirectClient()
 	req, err := http.NewRequest(http.MethodGet, srv.URL+"/locations/zip-from-coordinates?lat=47.6097&lon=-122.3331", nil)
 	if err != nil {
 		t.Fatalf("failed to build request: %v", err)
 	}
-	req.Header.Set("HX-Request", "true")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -134,28 +133,11 @@ func TestZipFromCoordinatesHTMXRedirect(t *testing.T) {
 		}
 	}()
 
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("expected status %d, got %d", http.StatusNoContent, resp.StatusCode)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("expected status %d, got %d", http.StatusFound, resp.StatusCode)
 	}
-	if got := resp.Header.Get("HX-Redirect"); got != "/locations?zip=98101" {
-		t.Fatalf("expected HX-Redirect %q, got %q", "/locations?zip=98101", got)
-	}
-}
-
-func TestZipFromCoordinatesRejectsNonHTMX(t *testing.T) {
-	srv := newTestServer(t)
-	defer srv.Close()
-
-	client := newTestClient(t)
-	resp := mustGet(t, client, srv.URL+"/locations/zip-from-coordinates?lat=47.6097&lon=-122.3331")
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Fatalf("failed to close response body: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, resp.StatusCode)
+	if got := resp.Header.Get("Location"); got != "/locations?zip=98101" {
+		t.Fatalf("expected Location %q, got %q", "/locations?zip=98101", got)
 	}
 }
 
@@ -200,6 +182,14 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 func newTestClient(t *testing.T) *http.Client {
 	return &http.Client{}
+}
+
+func newNoRedirectClient() *http.Client {
+	return &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 func mustGet(t *testing.T, client *http.Client, url string) *http.Response {
