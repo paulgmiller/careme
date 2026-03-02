@@ -72,11 +72,34 @@
                     <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-3">
-                    <input type="radio" {{if .Saved}}checked{{end}} name="recipe-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" onchange="document.getElementById('saved-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('dismissed-{{.ComputeHash}}').value = ''; setRecipeDetailsVisible('{{.ComputeHash}}', false); updateFinalizeButton();" />
+                    <input type="radio"
+                           {{if .Saved}}checked{{end}}
+                           name="recipe-{{.ComputeHash}}"
+                           value="save"
+                           id="save-{{.ComputeHash}}"
+                           class="peer/save hidden"
+                           onchange="setRecipeChoice('{{.ComputeHash}}', 'save')"
+                           hx-post="/recipe/{{.ComputeHash}}/save"
+                           hx-trigger="change[checked]"
+                           hx-target="#profile-status-{{.ComputeHash}}"
+                           hx-swap="innerHTML"
+                           hx-on::before-request="document.getElementById('profile-status-{{.ComputeHash}}').textContent = 'Saving...';"
+                           hx-on::response-error="document.getElementById('profile-status-{{.ComputeHash}}').textContent = 'Could not update profile.';" />
                     <label for="save-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
                       Save
                     </label>
-                    <input type="radio" name="recipe-{{.ComputeHash}}" value="dismiss" id="dismiss-{{.ComputeHash}}" class="peer/dismiss hidden" onchange="document.getElementById('dismissed-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('saved-{{.ComputeHash}}').value = ''; setRecipeDetailsVisible('{{.ComputeHash}}', false); updateFinalizeButton();" />
+                    <input type="radio"
+                           name="recipe-{{.ComputeHash}}"
+                           value="dismiss"
+                           id="dismiss-{{.ComputeHash}}"
+                           class="peer/dismiss hidden"
+                           onchange="setRecipeChoice('{{.ComputeHash}}', 'dismiss')"
+                           hx-post="/recipe/{{.ComputeHash}}/dismiss"
+                           hx-trigger="change[checked]"
+                           hx-target="#profile-status-{{.ComputeHash}}"
+                           hx-swap="innerHTML"
+                           hx-on::before-request="document.getElementById('profile-status-{{.ComputeHash}}').textContent = 'Saving...';"
+                           hx-on::response-error="document.getElementById('profile-status-{{.ComputeHash}}').textContent = 'Could not update profile.';" />
                     <label for="dismiss-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
                       Dismiss
                     </label>
@@ -88,8 +111,9 @@
                             class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                       {{if .Saved}}Show details{{else}}Hide details{{end}}
                     </button>
-                    <input type="hidden" name="saved" id="saved-{{.ComputeHash}}" value="{{if .Saved}}{{.ComputeHash}}{{end}}" />
-                    <input type="hidden" name="dismissed" id="dismissed-{{.ComputeHash}}" value="" />
+                    <input type="hidden" name="saved" id="saved-{{.ComputeHash}}" value="{{if .Saved}}{{.ComputeHash}}{{end}}" {{if not .Saved}}disabled{{end}} />
+                    <input type="hidden" name="dismissed" id="dismissed-{{.ComputeHash}}" value="" disabled />
+                    <span id="profile-status-{{.ComputeHash}}" class="text-xs font-medium text-ink-600" aria-live="polite"></span>
                   </div>
                 </header>
 
@@ -177,15 +201,36 @@
   </main>
 
   <script>
+    function setRecipeChoice(hash, choice) {
+      const savedInput = document.getElementById('saved-' + hash);
+      const dismissedInput = document.getElementById('dismissed-' + hash);
+      if (!savedInput || !dismissedInput) {
+        return;
+      }
+
+      if (choice === 'save') {
+        savedInput.value = hash;
+        savedInput.disabled = false;
+        dismissedInput.value = '';
+        dismissedInput.disabled = true;
+      } else if (choice === 'dismiss') {
+        dismissedInput.value = hash;
+        dismissedInput.disabled = false;
+        savedInput.value = '';
+        savedInput.disabled = true;
+      }
+
+      setRecipeDetailsVisible(hash, false);
+      updateFinalizeButton();
+    }
+
     function updateFinalizeButton() {
       const form = document.getElementById('regenerateForm');
       const savedInputs = form.querySelectorAll('input[name="saved"]');
       const finalizeButton = document.getElementById('finalizeButton');
 
-      // Check if any saved inputs have non-empty values
-      const hasSavedRecipes = Array.from(savedInputs).some(input => input.value.trim() !== '');
+      const hasSavedRecipes = Array.from(savedInputs).some((input) => !input.disabled && input.value.trim() !== '');
 
-      // Enable/disable the button based on whether recipes are saved
       finalizeButton.disabled = !hasSavedRecipes;
     }
 
@@ -236,6 +281,7 @@
       });
     }
   </script>
+  <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>

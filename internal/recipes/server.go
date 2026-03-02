@@ -67,6 +67,8 @@ func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
 	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
+	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
+	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
 	//maybe this should be under locations server?
 	mux.HandleFunc("GET /ingredients/{location}", s.ingredients)
 
@@ -289,6 +291,93 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			w.Header().Set("HX-Redirect", "/sign-in")
+			http.Error(w, "must be logged in to save recipes", http.StatusUnauthorized)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for recipe save", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+
+	recipe, err := s.SingleFromCache(ctx, hash)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			http.Error(w, "recipe not found", http.StatusNotFound)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load recipe for profile save", "hash", hash, "error", err)
+		http.Error(w, "failed to load recipe", http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, []ai.Recipe{*recipe}); err != nil {
+		slog.ErrorContext(ctx, "failed to save recipe to user profile", "user_id", currentUser.ID, "hash", hash, "error", err)
+		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-green-700">Saved to profile</span>`)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to write save response", "hash", hash, "error", err)
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
+	}
+}
+
+func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			w.Header().Set("HX-Redirect", "/sign-in")
+			http.Error(w, "must be logged in to dismiss recipes", http.StatusUnauthorized)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for recipe dismiss", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.removeRecipeFromUserProfile(ctx, currentUser.ID, hash); err != nil {
+		slog.ErrorContext(ctx, "failed to remove recipe from user profile", "user_id", currentUser.ID, "hash", hash, "error", err)
+		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-red-700">Removed from profile</span>`)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", hash, "error", err)
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
+	}
+}
+
 const (
 	queryArgHash  = "h"
 	queryArgStart = "start"
@@ -490,15 +579,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 			slog.ErrorContext(ctx, "save error", "error", err)
 			return
 		}
-		// saveRecipesToUserProfile saves recipes to the user profile if they were marked as saved.
-
-		// Use the current user ID when saving recipes to the user profile
-		// needs user to be logged in. Only do on finalize?
-		if currentUser.ID != "" {
-			if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
-				slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
-			}
-		}
 	}()
 }
 
@@ -600,6 +680,36 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, sa
 		slog.InfoContext(ctx, "saved recipes to user profile", "user_id", userID, "count", added)
 	}
 
+	return nil
+}
+
+func (s *server) removeRecipeFromUserProfile(ctx context.Context, userID, recipeHash string) error {
+	if userID == "" {
+		return fmt.Errorf("invalid user")
+	}
+	recipeHash = strings.TrimSpace(recipeHash)
+	if recipeHash == "" {
+		return fmt.Errorf("invalid recipe hash")
+	}
+
+	currentUser, err := s.storage.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("failed to reload user: %w", err)
+	}
+
+	before := len(currentUser.LastRecipes)
+	currentUser.LastRecipes = lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
+		return r.Hash != recipeHash
+	})
+
+	if len(currentUser.LastRecipes) == before {
+		return nil
+	}
+
+	if err := s.storage.Update(currentUser); err != nil {
+		return fmt.Errorf("failed to update user when dismissing recipe: %w", err)
+	}
+	slog.InfoContext(ctx, "removed recipe from user profile", "user_id", userID, "hash", recipeHash)
 	return nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/users"
+	utypes "careme/internal/users/types"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -397,6 +398,153 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	}
 	if got, want := g.lastQuestion, "Regarding BBQ Pulled Pork: Can I swap the protein?"; got != want {
 		t.Fatalf("expected generator question %q, got %q", want, got)
+	}
+}
+
+func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  storage,
+		clerk:    auth.DefaultMock(),
+	}
+
+	recipe := ai.Recipe{
+		Title:       "Save Me",
+		Description: "Recipe to save",
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "origin-hash"); err != nil {
+		t.Fatalf("failed to save recipe in cache: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSaveRecipe(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Saved to profile") {
+		t.Fatalf("expected success response, got body: %s", rr.Body.String())
+	}
+
+	user, err := storage.GetByID("mock-clerk-user-id")
+	if err != nil {
+		t.Fatalf("failed to load user: %v", err)
+	}
+	if len(user.LastRecipes) != 1 {
+		t.Fatalf("expected one saved recipe, got %d", len(user.LastRecipes))
+	}
+	if user.LastRecipes[0].Hash != recipeHash {
+		t.Fatalf("expected saved hash %q, got %q", recipeHash, user.LastRecipes[0].Hash)
+	}
+}
+
+func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    noSessionAuth{},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/save", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleSaveRecipe(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+	if got := rr.Header().Get("HX-Redirect"); got != "/sign-in" {
+		t.Fatalf("expected HX-Redirect to /sign-in, got %q", got)
+	}
+}
+
+func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  storage,
+		clerk:    auth.DefaultMock(),
+	}
+
+	user := &utypes.User{
+		ID:          "mock-clerk-user-id",
+		Email:       []string{"you@careme.cooking"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{
+			{
+				Title:     "Keep Recipe",
+				Hash:      "keep-hash",
+				CreatedAt: time.Now().Add(-1 * time.Hour),
+			},
+			{
+				Title:     "Dismiss Recipe",
+				Hash:      "dismiss-hash",
+				CreatedAt: time.Now(),
+			},
+		},
+	}
+	if err := storage.Update(user); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/dismiss-hash/dismiss", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "dismiss-hash")
+	rr := httptest.NewRecorder()
+
+	s.handleDismissRecipe(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Removed from profile") {
+		t.Fatalf("expected dismiss response, got body: %s", rr.Body.String())
+	}
+
+	updated, err := storage.GetByID("mock-clerk-user-id")
+	if err != nil {
+		t.Fatalf("failed to load user: %v", err)
+	}
+	if len(updated.LastRecipes) != 1 {
+		t.Fatalf("expected one recipe after dismiss, got %d", len(updated.LastRecipes))
+	}
+	if updated.LastRecipes[0].Hash != "keep-hash" {
+		t.Fatalf("expected remaining hash keep-hash, got %q", updated.LastRecipes[0].Hash)
+	}
+}
+
+func TestHandleDismissRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    noSessionAuth{},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/dismiss", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleDismissRecipe(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+	if got := rr.Header().Get("HX-Redirect"); got != "/sign-in" {
+		t.Fatalf("expected HX-Redirect to /sign-in, got %q", got)
 	}
 }
 

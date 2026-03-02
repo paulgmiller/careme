@@ -191,3 +191,58 @@ func TestSaveRecipesToUserProfile_InvalidUser(t *testing.T) {
 		t.Error("expected error with empty user ID, got nil")
 	}
 }
+
+func TestRemoveRecipeFromUserProfile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "careme-test-user-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Fatalf("failed to remove temp dir: %v", err)
+		}
+	})
+
+	tmpCache := cache.NewFileCache(tmpDir)
+	storage := users.NewStorage(tmpCache)
+
+	keep := utypes.Recipe{
+		Title:     "Keep Recipe",
+		Hash:      "keep-hash",
+		CreatedAt: time.Now().Add(-24 * time.Hour),
+	}
+	remove := utypes.Recipe{
+		Title:     "Remove Recipe",
+		Hash:      "remove-hash",
+		CreatedAt: time.Now(),
+	}
+	testUser := &utypes.User{
+		ID:          "test-user-id",
+		Email:       []string{"test@example.com"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{keep, remove},
+	}
+	if err := storage.Update(testUser); err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	srv := &server{
+		storage: storage,
+	}
+
+	if err := srv.removeRecipeFromUserProfile(context.Background(), testUser.ID, remove.Hash); err != nil {
+		t.Fatalf("failed to remove recipe from user profile: %v", err)
+	}
+
+	updatedUser, err := storage.GetByID(testUser.ID)
+	if err != nil {
+		t.Fatalf("failed to load updated user: %v", err)
+	}
+	if len(updatedUser.LastRecipes) != 1 {
+		t.Fatalf("expected 1 recipe after removal, got %d", len(updatedUser.LastRecipes))
+	}
+	if updatedUser.LastRecipes[0].Hash != keep.Hash {
+		t.Fatalf("expected remaining recipe hash %q, got %q", keep.Hash, updatedUser.LastRecipes[0].Hash)
+	}
+}

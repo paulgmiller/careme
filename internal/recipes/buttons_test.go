@@ -58,6 +58,15 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	if !strings.Contains(html, `type="radio"`) {
 		t.Error("HTML should contain radio button inputs")
 	}
+	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/save"`) {
+		t.Error("HTML should contain HTMX save action")
+	}
+	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/dismiss"`) {
+		t.Error("HTML should contain HTMX dismiss action")
+	}
+	if !strings.Contains(html, `hx-trigger="change[checked]"`) {
+		t.Error("HTML should trigger HTMX requests only on checked state changes")
+	}
 
 	// Check for Save and Dismiss labels (without span tags)
 	if !strings.Contains(html, `Save`) {
