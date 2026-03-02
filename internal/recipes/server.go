@@ -109,13 +109,13 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
-	normalizedHash, ok := legacyHashToCurrent(recipe.OriginHash, legacyRecipeHashSeed)
-	if ok {
+	if normalizedHash, ok := legacyHashToCurrent(recipe.OriginHash, legacyRecipeHashSeed); ok {
 		slog.InfoContext(ctx, "normalized legacy origin hash to current hash", "origin_hash", recipe.OriginHash, "hash", normalizedHash)
+		recipe.OriginHash = normalizedHash
 	}
-	p, err := s.ParamsFromCache(ctx, normalizedHash)
+	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for hash", "hash", normalizedHash, "error", err)
+		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
 		//http.Error(w, "recipe not found or expired", http.StatusNotFound)
 		//return
 		p = DefaultParams(&locations.Location{
@@ -128,7 +128,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		if slist, err := s.FromCache(ctx, recipe.OriginHash); err == nil {
 			p.ConversationID = slist.ConversationID
 		} else if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load conversation id", "hash", normalizedHash, "error", err)
+			slog.ErrorContext(ctx, "failed to load conversation id", "hash", recipe.OriginHash, "error", err)
 		}
 	}
 

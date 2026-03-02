@@ -89,11 +89,11 @@ func (g *generatorParams) LocationHash() string {
 func legacyHashToCurrent(hash string, seed string) (string, bool) {
 	decoded, err := base64.URLEncoding.DecodeString(hash)
 	if err != nil {
-		return "", false
+		return hash, false
 	}
 	seedBytes := []byte(seed)
 	if !bytes.HasPrefix(decoded, seedBytes) || len(decoded) == len(seedBytes) {
-		return "", false
+		return hash, false
 	}
 	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
 }
