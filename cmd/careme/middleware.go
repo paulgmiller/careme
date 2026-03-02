@@ -100,12 +100,10 @@ func newAppInsightsTelemetryClient(connectionString string) (azureappinsights.Te
 	if err != nil {
 		return nil, err
 	}
-	return azureappinsights.NewTelemetryClient(cfg.InstrumentationKey), nil
-	//if we want somethhing fancy we can do this.
-	//return azureappinsights.NewTelemetryClientFromConfig(cfg), nil
+	return azureappinsights.NewTelemetryClientFromConfig(cfg), nil
 }
 
-// suprise there is not a parse function here.
+// suprise there is not a parse function here. Chatgpt things github.com/Azure/go-autorest/autorest/azure.ParseConnectionString but codex coudln't find it
 func parseAppInsightsConnectionString(connectionString string) (*azureappinsights.TelemetryConfiguration, error) {
 	connectionString = strings.TrimSpace(connectionString)
 	if connectionString == "" {
