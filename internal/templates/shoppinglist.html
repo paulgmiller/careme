@@ -44,9 +44,7 @@
                 method="POST"
                 action="/recipes/{{.Hash}}/regenerate"
                 hx-post="/recipes/{{.Hash}}/regenerate"
-                hx-swap="none"
-                hx-on::before-request="document.getElementById('regenerate-button').setAttribute('disabled', 'disabled'); document.getElementById('regenerate-button').textContent='Thinking...';"
-                hx-on::after-request="document.getElementById('regenerate-button').removeAttribute('disabled'); document.getElementById('regenerate-button').textContent='Try again, chef';">
+                hx-swap="none">
 
             <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
               <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
@@ -58,7 +56,6 @@
                        placeholder="e.g. make it vegetarian"
                        class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
                 <button type="submit"
-                        id="regenerate-button"
                         class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Try again, chef
                 </button>
@@ -82,13 +79,10 @@
                            value="save"
                            id="save-{{.ComputeHash}}"
                            class="peer/save hidden"
-                           onchange="setRecipeChoice('{{.ComputeHash}}', 'save')"
                            hx-post="/recipe/{{.ComputeHash}}/save"
                            hx-trigger="change[checked]"
                            hx-target="#profile-status-{{.ComputeHash}}"
-                           hx-swap="innerHTML"
-                           hx-on::before-request="document.getElementById('profile-status-{{.ComputeHash}}').textContent = 'Saving...';"
-                           hx-on::response-error="document.getElementById('profile-status-{{.ComputeHash}}').textContent = 'Could not update profile.';" />
+                           hx-swap="innerHTML" />
                     <label for="save-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
                       Save
                     </label>
@@ -98,29 +92,23 @@
                            value="dismiss"
                            id="dismiss-{{.ComputeHash}}"
                            class="peer/dismiss hidden"
-                           onchange="setRecipeChoice('{{.ComputeHash}}', 'dismiss')"
                            hx-post="/recipe/{{.ComputeHash}}/dismiss"
                            hx-trigger="change[checked]"
                            hx-target="#profile-status-{{.ComputeHash}}"
-                           hx-swap="innerHTML"
-                           hx-on::before-request="document.getElementById('profile-status-{{.ComputeHash}}').textContent = 'Saving...';"
-                           hx-on::response-error="document.getElementById('profile-status-{{.ComputeHash}}').textContent = 'Could not update profile.';" />
+                           hx-swap="innerHTML" />
                     <label for="dismiss-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
                       Dismiss
                     </label>
-                    <button type="button"
-                            id="details-{{.ComputeHash}}-button"
-                            aria-controls="details-{{.ComputeHash}}"
-                            aria-expanded="{{if or .Saved (index $.DismissedHashes (.ComputeHash))}}false{{else}}true{{end}}"
-                            onclick="toggleRecipeDetails('{{.ComputeHash}}')"
+                    <label for="details-{{.ComputeHash}}"
                             class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      {{if or .Saved (index $.DismissedHashes (.ComputeHash))}}Show details{{else}}Hide details{{end}}
-                    </button>
+                      Details
+                    </label>
                     <span id="profile-status-{{.ComputeHash}}" class="text-xs font-medium text-ink-600" aria-live="polite"></span>
                   </div>
                 </header>
 
-              <section id="details-{{.ComputeHash}}" class="space-y-6 {{if or .Saved (index $.DismissedHashes (.ComputeHash))}}hidden{{end}}">
+              <input id="details-{{.ComputeHash}}" type="checkbox" class="peer/details hidden" {{if not (or .Saved (index $.DismissedHashes (.ComputeHash)))}}checked{{end}} />
+              <section class="hidden space-y-6 peer-checked/details:block">
                 <div class="grid gap-6 md:grid-cols-2">
                   <div>
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Ingredients</h3>
@@ -162,15 +150,13 @@
             <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
-                <button type="button"
-                        id="shoppingListToggle"
-                        aria-controls="shoppingListPanel"
-                        aria-expanded="false"
+                <label for="shoppingListToggle"
                         class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Show
-                </button>
+                </label>
               </div>
-              <div id="shoppingListPanel" class="mt-4 hidden">
+              <input id="shoppingListToggle" type="checkbox" class="peer hidden" />
+              <div class="mt-4 hidden peer-checked:block">
                 <ul class="space-y-2 text-ink-700">
                   {{range .ShoppingList}}
                   <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
@@ -190,15 +176,8 @@
                     id="finalizeButton"
                     hx-post="/recipes/{{.Hash}}/finalize"
                     hx-swap="none"
-                    hx-on::before-request="document.getElementById('finalizeButton').setAttribute('disabled', 'disabled'); document.getElementById('finalizeButton').textContent='Finalizing...';"
-                    hx-on::after-request="document.getElementById('finalizeButton').textContent='Finalize'; updateFinalizeButton();"
                     class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
               Finalize
-            </button>
-            <button type="button"
-                    onclick="shareRecipes()"
-                    class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
-              Share Recipes
             </button>
           </div>
         </div>
@@ -207,70 +186,6 @@
       <p class="text-center text-sm text-ink-500">Generated by Careme.</p>
     </section>
   </main>
-
-  <script>
-    function setRecipeChoice(hash, choice) {
-      setRecipeDetailsVisible(hash, false);
-      updateFinalizeButton();
-    }
-
-    function updateFinalizeButton() {
-      const form = document.getElementById('regenerateForm');
-      const savedInputs = form.querySelectorAll('input[type="radio"][value="save"]');
-      const finalizeButton = document.getElementById('finalizeButton');
-
-      const hasSavedRecipes = Array.from(savedInputs).some((input) => input.checked);
-
-      finalizeButton.disabled = !hasSavedRecipes;
-    }
-
-    // Initialize button state on page load
-    document.addEventListener('DOMContentLoaded', updateFinalizeButton);
-
-    async function shareRecipes() {
-      try {
-        await navigator.share({title: document.title, url: window.location.href});
-      } catch (err) {
-        if (err && err.name === 'AbortError') {
-          return;
-        }
-        window.prompt('Copy this link:', window.location.href);
-      }
-    }
-
-    function toggleRecipeDetails(hash) {
-      const panel = document.getElementById('details-' + hash);
-      if (!panel) {
-        return;
-      }
-      const isOpen = panel.classList.contains('hidden');
-      setRecipeDetailsVisible(hash, isOpen);
-    }
-
-    function setRecipeDetailsVisible(hash, isVisible) {
-      const panel = document.getElementById('details-' + hash);
-      if (!panel) {
-        return;
-      }
-      panel.classList.toggle('hidden', !isVisible);
-      const button = document.getElementById('details-' + hash + '-button');
-      if (button) {
-        button.setAttribute('aria-expanded', isVisible ? 'true' : 'false');
-        button.textContent = isVisible ? 'Hide details' : 'Show details';
-      }
-    }
-
-    const shoppingListToggle = document.getElementById('shoppingListToggle');
-    const shoppingListPanel = document.getElementById('shoppingListPanel');
-    if (shoppingListToggle && shoppingListPanel) {
-      shoppingListToggle.addEventListener('click', function () {
-        shoppingListPanel.classList.toggle('hidden');
-        const isOpen = !shoppingListPanel.classList.contains('hidden');
-        shoppingListToggle.textContent = isOpen ? 'Hide' : 'Show';
-        shoppingListToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      });
-    }
-  </script>
   <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
