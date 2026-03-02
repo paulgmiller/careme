@@ -46,10 +46,6 @@ func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "form", r.Form, "duration", time.Since(start))
 }
 
-type recoverer struct {
-	http.Handler
-}
-
 type requestTracker interface {
 	TrackRequest(method, url string, duration time.Duration, responseCode string)
 }
@@ -60,11 +56,6 @@ type appInsightsTracker struct {
 }
 
 const appInsightsIngestionPath = "/v2/track"
-
-type appInsightsConnectionParams struct {
-	instrumentationKey string
-	ingestionEndpoint  *url.URL
-}
 
 func (a *appInsightsTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -105,20 +96,15 @@ func newAppInsightsTrackerFromEnv(next http.Handler) http.Handler {
 }
 
 func newAppInsightsTelemetryClient(connectionString string) (azureappinsights.TelemetryClient, error) {
-	params, err := parseAppInsightsConnectionString(connectionString)
+	cfg, err := parseAppInsightsConnectionString(connectionString)
 	if err != nil {
 		return nil, err
 	}
-
-	cfg := azureappinsights.NewTelemetryConfiguration(params.instrumentationKey)
-	ingestionEndpoint := *params.ingestionEndpoint
-	ingestionEndpoint.Path = appInsightsIngestionPath
-	cfg.EndpointUrl = ingestionEndpoint.String()
-
 	return azureappinsights.NewTelemetryClientFromConfig(cfg), nil
 }
 
-func parseAppInsightsConnectionString(connectionString string) (*appInsightsConnectionParams, error) {
+// suprise there is not a parse function here.
+func parseAppInsightsConnectionString(connectionString string) (*azureappinsights.TelemetryConfiguration, error) {
 	connectionString = strings.TrimSpace(connectionString)
 	if connectionString == "" {
 		return nil, errors.New("connection string is empty")
@@ -152,10 +138,14 @@ func parseAppInsightsConnectionString(connectionString string) (*appInsightsConn
 		return nil, err
 	}
 
-	return &appInsightsConnectionParams{
-		instrumentationKey: instrumentationKey,
-		ingestionEndpoint:  ingestionURL,
-	}, nil
+	cfg := azureappinsights.NewTelemetryConfiguration(instrumentationKey)
+	ingestionURL.Path = appInsightsIngestionPath
+	cfg.EndpointUrl = ingestionURL.String()
+	return cfg, nil
+}
+
+type recoverer struct {
+	http.Handler
 }
 
 func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -171,7 +161,5 @@ func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func WithMiddleware(h http.Handler) http.Handler {
 	h = &recoverer{h}
 	h = newAppInsightsTrackerFromEnv(h)
-	return &logger{
-		h,
-	}
+	return &logger{h}
 }
