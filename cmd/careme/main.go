@@ -10,7 +10,6 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -72,34 +71,31 @@ func main() {
 
 func configureLogger(ctx context.Context, logcfg logsink.Config) (func(), error) {
 	handlers := make([]slog.Handler, 0, 3)
-	var logSinkCloser io.Closer
+	var closers []func() //neat to be io.Closer
 	if logcfg.Enabled() {
 		handler, closer, err := logsink.NewJson(ctx, logcfg)
 		if err != nil {
 			return nil, fmt.Errorf("create logsink: %w", err)
 		}
 		handlers = append(handlers, handler)
-		logSinkCloser = closer
+		closers = append(closers, func() {
+			if err := closer.Close(); err != nil {
+				slog.Error("failed to close logsink", "error", err)
+			}
+		})
 	}
-	var appinsightsHandler *appinsights.Handler
 	if connectionString := os.Getenv(appInsightsConnectionStringEnv); connectionString != "" {
-		//prefer we just send the key like  azureappinsights.NewTelemetryClient(key) but need to make a PR.
 		handler, err := appinsights.NewHandler(connectionString, nil)
 		if err != nil {
 			return nil, fmt.Errorf("create app insights handler: %w", err)
 		}
 		handlers = append(handlers, handler)
+		closers = append(closers, handler.Close)
 	}
 
-	//you'd think this just be a slice of closedrs but app inights isn't an io.Closer because it returns no erro
 	close := func() {
-		if logSinkCloser != nil {
-			if err := logSinkCloser.Close(); err != nil {
-				fmt.Printf("error closing log sink: %s", err)
-			}
-		}
-		if appinsightsHandler != nil {
-			appinsightsHandler.Close()
+		for _, closer := range closers {
+			closer()
 		}
 	}
 
