@@ -130,6 +130,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("failed to create generator: %v", err)
 	}
+	//just explicitly use mock here?
 	locationStorage, err := locations.New(cfg, cacheStore)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
@@ -138,7 +139,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	mockAuth := auth.Mock(cfg)
 
 	mux := http.NewServeMux()
-	locationServer := locations.NewServer(locationStorage, userStorage)
+	locationServer := locations.NewServer(locationStorage, locationStorage, userStorage)
 	locationServer.Register(mux, mockAuth)
 	users.NewHandler(userStorage, locationStorage, mockAuth).Register(mux)
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(mux)

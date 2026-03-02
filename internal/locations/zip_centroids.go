@@ -14,6 +14,14 @@ type ZipCentroid struct {
 	Lon float64
 }
 
+type zipCentroidIndex struct {
+	centroids map[string]ZipCentroid
+}
+
+func (z zipCentroidIndex) Len() int {
+	return len(z.centroids)
+}
+
 var (
 	// zip_centroids.csv generation notes:
 	// 1) Downloaded U.S. Census Bureau Gazetteer ZCTA centroids:
@@ -28,18 +36,22 @@ var (
 	zipCentroidsCSV []byte
 )
 
-func loadEmbeddedZipCentroids() (map[string]ZipCentroid, error) {
-	return parseZipCentroidsCSV(zipCentroidsCSV)
+func LoadCentroids() zipCentroidIndex {
+	zci, err := parseZipCentroidsCSV(zipCentroidsCSV)
+	if err != nil {
+		panic("failed to parse embedded zip centroids dataset: " + err.Error())
+	}
+	return zci
 }
 
-func parseZipCentroidsCSV(raw []byte) (map[string]ZipCentroid, error) {
+func parseZipCentroidsCSV(raw []byte) (zipCentroidIndex, error) {
 	reader := csv.NewReader(bytes.NewReader(raw))
 	rows, err := reader.ReadAll()
 	if err != nil {
-		return nil, err
+		return zipCentroidIndex{}, err
 	}
 	if len(rows) == 0 {
-		return nil, errors.New("empty centroid dataset")
+		return zipCentroidIndex{}, errors.New("empty centroid dataset")
 	}
 
 	data := make(map[string]ZipCentroid, len(rows)-1)
@@ -58,27 +70,27 @@ func parseZipCentroidsCSV(raw []byte) (map[string]ZipCentroid, error) {
 		}
 		data[row[0]] = ZipCentroid{Lat: lat, Lon: lon}
 	}
-	return data, nil
+	return zipCentroidIndex{centroids: data}, nil
 }
 
-func zipCentroidByZIP(zip string, centroids map[string]ZipCentroid) (ZipCentroid, bool) {
+func (z zipCentroidIndex) ZipCentroidByZIP(zip string) (ZipCentroid, bool) {
 	zip5, ok := normalizeZIP(zip)
 	if !ok {
 		return ZipCentroid{}, false
 	}
 
-	centroid, ok := centroids[zip5]
+	centroid, ok := z.centroids[zip5]
 	return centroid, ok
 }
 
-func nearestZIPToCoordinates(lat, lon float64, centroids map[string]ZipCentroid) (string, bool) {
-	if len(centroids) == 0 {
+func (z zipCentroidIndex) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
+	if len(z.centroids) == 0 {
 		return "", false
 	}
 
 	nearestZip := ""
 	nearestDistance := 0.0
-	for zip, centroid := range centroids {
+	for zip, centroid := range z.centroids {
 		distance := haversineMiles(lat, lon, centroid.Lat, centroid.Lon)
 		if nearestZip == "" || distance < nearestDistance {
 			nearestZip = zip
