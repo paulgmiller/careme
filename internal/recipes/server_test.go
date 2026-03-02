@@ -171,6 +171,55 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 	}
 }
 
+func TestHandleSingle_LegacyOriginHashDoesNotFailWhenParamsMissing(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	p := DefaultParams(
+		&locations.Location{ID: "loc-legacy-origin-missing-params", Name: "Ignored"},
+		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
+	)
+	canonicalHash := p.Hash()
+	legacyHash, ok := legacyRecipeHash(canonicalHash)
+	if !ok {
+		t.Fatal("expected to derive legacy recipe hash")
+	}
+
+	recipe := ai.Recipe{
+		Title:        "Legacy Hash Recipe",
+		Description:  "Recipe with legacy origin hash and no params record.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1 lb", Price: "$8"}},
+		Instructions: []string{"Cook chicken until done."},
+		Health:       "Protein rich",
+		DrinkPairing: "Sparkling water",
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, legacyHash); err != nil {
+		t.Fatalf("failed to save recipe with legacy origin hash: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash, nil)
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSingle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "/recipes?h="+canonicalHash) {
+		t.Fatalf("expected canonical back-link hash %q in response body: %s", canonicalHash, body)
+	}
+	if !strings.Contains(body, "Unknown Location") {
+		t.Fatalf("expected fallback params rendering with Unknown Location, body: %s", body)
+	}
+}
+
 type noSessionAuth struct{}
 
 func (n noSessionAuth) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {
