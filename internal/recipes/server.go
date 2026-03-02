@@ -108,7 +108,12 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		FormatRecipeHTML(p, *recipe, signedIn, thread, *feedback, w)
 		return
 	}
-
+	//we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
+	if normalizedHash, ok := legacyHashToCurrent(recipe.OriginHash, legacyRecipeHashSeed); ok {
+		slog.InfoContext(ctx, "normalized legacy origin hash to current hash", "origin_hash", recipe.OriginHash, "hash", normalizedHash)
+		recipe.OriginHash = normalizedHash
+		//could resave to backfill but don't think we'll ever get them all without looping
+	}
 	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
@@ -328,7 +333,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if hashParam := r.URL.Query().Get(queryArgHash); hashParam != "" {
-		if normalizedHash, ok := normalizeLegacyRecipeHash(hashParam); ok {
+		if normalizedHash, ok := legacyHashToCurrent(hashParam, legacyRecipeHashSeed); ok {
 			slog.InfoContext(ctx, "redirecting legacy hash to canonical hash", "legacy_hash", hashParam, "hash", normalizedHash)
 			redirectToHash(w, r, normalizedHash, false /*useStart*/)
 			return
