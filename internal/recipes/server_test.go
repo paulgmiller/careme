@@ -113,6 +113,64 @@ func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
 	}
 }
 
+func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	p := DefaultParams(
+		&locations.Location{ID: "loc-legacy-origin", Name: "Canonical Test Store"},
+		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
+	)
+	p.ConversationID = "conv-canonical"
+	canonicalHash := p.Hash()
+	legacyHash, ok := legacyRecipeHash(canonicalHash)
+	if !ok {
+		t.Fatal("expected to derive legacy recipe hash")
+	}
+
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save canonical params: %v", err)
+	}
+
+	recipe := ai.Recipe{
+		Title:        "Sheet Pan Salmon",
+		Description:  "Simple weeknight salmon dinner.",
+		Ingredients:  []ai.Ingredient{{Name: "salmon", Quantity: "1 lb", Price: "$12"}},
+		Instructions: []string{"Roast salmon and vegetables until done."},
+		Health:       "High protein",
+		DrinkPairing: "Pinot Noir",
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, legacyHash); err != nil {
+		t.Fatalf("failed to save recipe with legacy origin hash: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash, nil)
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSingle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "/recipes?h="+canonicalHash) {
+		t.Fatalf("expected recipe page to link to canonical hash %q; body: %s", canonicalHash, body)
+	}
+	if strings.Contains(body, "/recipes?h="+legacyHash) {
+		t.Fatalf("expected recipe page not to link to legacy hash %q; body: %s", legacyHash, body)
+	}
+	if !strings.Contains(body, "Canonical Test Store") {
+		t.Fatalf("expected canonical params location to render, body: %s", body)
+	}
+}
+
 type noSessionAuth struct{}
 
 func (n noSessionAuth) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {
