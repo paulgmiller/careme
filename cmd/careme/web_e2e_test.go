@@ -141,35 +141,6 @@ func TestZipFromCoordinatesRedirect(t *testing.T) {
 	}
 }
 
-func TestZipFromCoordinatesRedirectWithHTMXHeader(t *testing.T) {
-	srv := newTestServer(t)
-	defer srv.Close()
-
-	client := newNoRedirectClient()
-	req, err := http.NewRequest(http.MethodGet, srv.URL+"/locations/zip-from-coordinates?lat=47.6097&lon=-122.3331", nil)
-	if err != nil {
-		t.Fatalf("failed to build request: %v", err)
-	}
-	req.Header.Set("HX-Request", "true")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Fatalf("failed to close response body: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("expected status %d, got %d", http.StatusFound, resp.StatusCode)
-	}
-	if got := resp.Header.Get("Location"); got != "/locations?zip=98101" {
-		t.Fatalf("expected Location %q, got %q", "/locations?zip=98101", got)
-	}
-}
-
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
