@@ -75,7 +75,7 @@
                     Find stores
                   </button>
                   <button type="button" id="use-location-btn"
-                          class="hidden sm:hidden inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                          class="inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     Use your location
                   </button>
                   <p id="use-location-message" class="hidden text-xs text-ink-600" aria-live="polite"></p>
@@ -147,19 +147,16 @@ Generate a weekly meal plan from a variety of cuisines and cooking styles.
       const button = document.getElementById('use-location-btn');
       const message = document.getElementById('use-location-message');
       const zipInput = document.getElementById('zip');
-      if (!button || !message || !zipInput || !navigator.geolocation) {
+      if (!button || !message || !zipInput) {
         return;
       }
-
-      const isMobileScreen = window.matchMedia('(max-width: 640px)').matches;
-      const isPhoneAgent = /Android|iPhone|iPod|Windows Phone|Mobile/i.test(navigator.userAgent || '');
-      if (!isMobileScreen || !isPhoneAgent) {
-        return;
-      }
-
-      button.classList.remove('hidden');
 
       button.addEventListener('click', () => {
+        if (!navigator.geolocation) {
+          message.classList.remove('hidden');
+          message.textContent = 'Try again, chef. Location is not available in this browser.';
+          return;
+        }
         message.classList.remove('hidden');
         message.textContent = 'Finding your ZIP code...';
 
