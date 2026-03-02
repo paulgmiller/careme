@@ -21,13 +21,6 @@ import (
 
 const appInsightsConnectionStringEnv = "APPLICATIONINSIGHTS_CONNECTION_STRING"
 
-type closerFn func()
-
-func (f closerFn) Close() error {
-	f()
-	return nil
-}
-
 func main() {
 	var serve, mailer bool
 	var addr string
@@ -51,11 +44,11 @@ func main() {
 	}
 
 	logcfg := logsink.ConfigFromEnv("logs")
-	logClosers, err := configureLogger(ctx, logcfg)
+	close, err := configureLogger(ctx, logcfg)
 	if err != nil {
 		log.Fatalf("failed to configure logging: %v", err)
 	}
-	defer closeAll(logClosers)
+	defer close()
 
 	static.Init()
 	if err := templates.Init(cfg, static.TailwindAssetPath); err != nil {
@@ -77,41 +70,38 @@ func main() {
 	}
 }
 
-func configureLogger(ctx context.Context, logcfg logsink.Config) ([]io.Closer, error) {
+func configureLogger(ctx context.Context, logcfg logsink.Config) (func(), error) {
 	handlers := make([]slog.Handler, 0, 3)
-	closers := make([]io.Closer, 0, 2)
-
+	var logSinkCloser io.Closer
 	if logcfg.Enabled() {
 		handler, closer, err := logsink.NewJson(ctx, logcfg)
 		if err != nil {
 			return nil, fmt.Errorf("create logsink: %w", err)
 		}
 		handlers = append(handlers, handler)
-		closers = append(closers, closer)
+		logSinkCloser = closer
 	}
-
+	var appinsightsHandler *appinsights.Handler
 	if connectionString := os.Getenv(appInsightsConnectionStringEnv); connectionString != "" {
 		handler, err := appinsights.NewHandler(connectionString, nil)
 		if err != nil {
 			return nil, fmt.Errorf("create app insights handler: %w", err)
 		}
 		handlers = append(handlers, handler)
-		closers = append(closers, closerFn(handler.Close))
 	}
 
-	if len(handlers) == 0 {
-		return closers, nil
+	close := func() {
+		if logSinkCloser != nil {
+			if err := logSinkCloser.Close(); err != nil {
+				fmt.Printf("error closing log sink: %s", err)
+			}
+		}
+		if appinsightsHandler != nil {
+			appinsightsHandler.Close()
+		}
 	}
 
 	handlers = append(handlers, slog.NewTextHandler(os.Stdout, nil))
 	slog.SetDefault(slog.New(multi.Fanout(handlers...)))
-	return closers, nil
-}
-
-func closeAll(closers []io.Closer) {
-	for i := len(closers) - 1; i >= 0; i-- {
-		if err := closers[i].Close(); err != nil {
-			slog.Error("failed to close logger", "error", err)
-		}
-	}
+	return close, nil
 }
