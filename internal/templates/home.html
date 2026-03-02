@@ -74,6 +74,11 @@
                           class="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     Find stores
                   </button>
+                  <button type="button" id="use-location-btn"
+                          class="hidden sm:hidden inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Use your location
+                  </button>
+                  <p id="use-location-message" class="hidden text-xs text-ink-600" aria-live="polite"></p>
                 </div>
               </form>
             </div>
@@ -137,5 +142,50 @@ Generate a weekly meal plan from a variety of cuisines and cooking styles.
     </section>
   </main>
   {{template "clerk_refresh.html" .}}
+  <script>
+    (() => {
+      const button = document.getElementById('use-location-btn');
+      const message = document.getElementById('use-location-message');
+      const zipInput = document.getElementById('zip');
+      if (!button || !message || !zipInput || !navigator.geolocation) {
+        return;
+      }
+
+      const isMobileScreen = window.matchMedia('(max-width: 640px)').matches;
+      const isPhoneAgent = /Android|iPhone|iPod|Windows Phone|Mobile/i.test(navigator.userAgent || '');
+      if (!isMobileScreen || !isPhoneAgent) {
+        return;
+      }
+
+      button.classList.remove('hidden');
+
+      button.addEventListener('click', () => {
+        message.classList.remove('hidden');
+        message.textContent = 'Finding your ZIP code...';
+
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          try {
+            const lat = encodeURIComponent(position.coords.latitude.toString());
+            const lon = encodeURIComponent(position.coords.longitude.toString());
+            const response = await fetch(`/locations/zip-from-coordinates?lat=${lat}&lon=${lon}`);
+            if (!response.ok) {
+              throw new Error('zip lookup failed');
+            }
+            const payload = await response.json();
+            if (!payload.zip) {
+              throw new Error('missing zip');
+            }
+
+            zipInput.value = payload.zip;
+            window.location.assign(`/locations?zip=${encodeURIComponent(payload.zip)}`);
+          } catch (_err) {
+            message.textContent = 'Try again, chef. We could not find your ZIP code.';
+          }
+        }, () => {
+          message.textContent = 'Try again, chef. Please allow location access.';
+        }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+      });
+    })();
+  </script>
 </body>
 </html>

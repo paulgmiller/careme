@@ -71,6 +71,24 @@ func zipCentroidByZIP(zip string, centroids map[string]ZipCentroid) (ZipCentroid
 	return centroid, ok
 }
 
+func nearestZIPToCoordinates(lat, lon float64, centroids map[string]ZipCentroid) (string, bool) {
+	if len(centroids) == 0 {
+		return "", false
+	}
+
+	nearestZip := ""
+	nearestDistance := 0.0
+	for zip, centroid := range centroids {
+		distance := haversineMiles(lat, lon, centroid.Lat, centroid.Lon)
+		if nearestZip == "" || distance < nearestDistance {
+			nearestZip = zip
+			nearestDistance = distance
+		}
+	}
+
+	return nearestZip, nearestZip != ""
+}
+
 func normalizeZIP(raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if len(raw) == 5 && isAllDigits(raw) {

@@ -20,6 +20,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -39,13 +40,18 @@ const maxLocationDistanceMiles = 20.0
 const locationCachePrefix = "location/"
 
 type locationServer struct {
-	storage     locationGetter
+	storage     locationService
 	userStorage userLookup
 }
 
 type locationGetter interface {
 	GetLocationByID(ctx context.Context, locationID string) (*Location, error)
 	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
+}
+
+type locationService interface {
+	locationGetter
+	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
 type locationBackend interface {
@@ -56,7 +62,7 @@ type locationBackend interface {
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
 
-func New(cfg *config.Config, c cache.Cache) (locationGetter, error) {
+func New(cfg *config.Config, c cache.Cache) (locationService, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
 	}
@@ -91,7 +97,7 @@ func New(cfg *config.Config, c cache.Cache) (locationGetter, error) {
 
 }
 
-func NewServer(storage locationGetter, userStorage userLookup) *locationServer {
+func NewServer(storage locationService, userStorage userLookup) *locationServer {
 	return &locationServer{
 		storage:     storage,
 		userStorage: userStorage,
@@ -182,6 +188,10 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		}(loc)
 	}
 	return allLocations, nil
+}
+
+func (l *locationStorage) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
+	return nearestZIPToCoordinates(lat, lon, l.zipCentroids)
 }
 
 func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID string) (Location, bool) {
@@ -283,6 +293,35 @@ func (l *locationServer) Ready(ctx context.Context) error {
 }
 
 func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient) {
+	mux.HandleFunc("/locations/zip-from-coordinates", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		lat, err := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
+		if err != nil {
+			http.Error(w, "invalid latitude", http.StatusBadRequest)
+			return
+		}
+		lon, err := strconv.ParseFloat(r.URL.Query().Get("lon"), 64)
+		if err != nil {
+			http.Error(w, "invalid longitude", http.StatusBadRequest)
+			return
+		}
+
+		zip, ok := l.storage.NearestZIPToCoordinates(lat, lon)
+		if !ok {
+			http.Error(w, "zip not found for coordinates", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]string{"zip": zip}); err != nil {
+			http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		}
+	})
+
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		currentUser, err := l.userStorage.FromRequest(ctx, r, authClient)
