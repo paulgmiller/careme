@@ -112,6 +112,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	if normalizedHash, ok := legacyHashToCurrent(recipe.OriginHash, legacyRecipeHashSeed); ok {
 		slog.InfoContext(ctx, "normalized legacy origin hash to current hash", "origin_hash", recipe.OriginHash, "hash", normalizedHash)
 		recipe.OriginHash = normalizedHash
+		//could resave to backfill but don't think we'll ever get them all without looping
 	}
 	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
