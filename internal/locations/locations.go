@@ -19,7 +19,9 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -30,7 +32,7 @@ type userLookup interface {
 
 type locationStorage struct {
 	client       []locationBackend
-	zipCentroids map[string]ZipCentroid
+	zipCentroids centroidByZip
 	cache        cache.Cache
 }
 
@@ -40,12 +42,17 @@ const locationCachePrefix = "location/"
 
 type locationServer struct {
 	storage     locationGetter
+	zipFetcher  zipFetcher
 	userStorage userLookup
 }
 
 type locationGetter interface {
 	GetLocationByID(ctx context.Context, locationID string) (*Location, error)
 	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
+}
+
+type zipFetcher interface {
+	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
 type locationBackend interface {
@@ -56,11 +63,16 @@ type locationBackend interface {
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
 
-func New(cfg *config.Config, c cache.Cache) (locationGetter, error) {
+type centroidByZip interface {
+	ZipCentroidByZIP(zip string) (ZipCentroid, bool)
+}
+
+func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGetter, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
 	}
 	if cfg.Mocks.Enable {
+		//should probably have something else return th mock so we can just return concerete type here.
 		return mock{}, nil
 	}
 
@@ -79,21 +91,18 @@ func New(cfg *config.Config, c cache.Cache) (locationGetter, error) {
 		}
 		backends = append(backends, wclient)
 	}
-	zipCentroids, err := loadEmbeddedZipCentroids()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load zip centroids: %w", err)
-	}
 	return &locationStorage{
 		client:       backends,
-		zipCentroids: zipCentroids,
+		zipCentroids: centroids,
 		cache:        c,
 	}, nil
 
 }
 
-func NewServer(storage locationGetter, userStorage userLookup) *locationServer {
+func NewServer(storage locationGetter, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
 	return &locationServer{
 		storage:     storage,
+		zipFetcher:  zipFetcher,
 		userStorage: userStorage,
 	}
 }
@@ -124,7 +133,7 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 }
 
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
-	requestedCentroid, hasRequestedCentroid := zipCentroidByZIP(zipcode, l.zipCentroids)
+	requestedCentroid, hasRequestedCentroid := l.zipCentroids.ZipCentroidByZIP(zipcode)
 	if !hasRequestedCentroid {
 		slog.ErrorContext(ctx, "requested zip has no centroid; skipping distance filter and sort", "zip", zipcode)
 		return nil, fmt.Errorf("invalid zip code %s. Can't find lat long", zipcode)
@@ -159,7 +168,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 
 	filtered := make([]Location, 0, len(allLocations))
 	for _, loc := range allLocations {
-		if _, hasZipCentroid := zipCentroidByZIP(loc.ZipCode, l.zipCentroids); !hasZipCentroid {
+		if _, hasZipCentroid := l.zipCentroids.ZipCentroidByZIP(loc.ZipCode); !hasZipCentroid {
 			slog.WarnContext(ctx, "location has no zip centroid; skipping distance filter and sort", "location_id", loc.ID, "zip", loc.ZipCode)
 			continue
 		}
@@ -231,7 +240,7 @@ func (l *locationStorage) storeLocationIfMissing(loc Location) error {
 	return nil
 }
 
-func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid ZipCentroid, zipCentroids map[string]ZipCentroid) {
+func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid ZipCentroid, zipCentroids centroidByZip) {
 	sort.SliceStable(locations, func(i, j int) bool {
 		leftDistance := locationDistanceTo(requestedCentroid, locations[i], zipCentroids)
 		rightDistance := locationDistanceTo(requestedCentroid, locations[j], zipCentroids)
@@ -239,18 +248,18 @@ func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid
 	})
 }
 
-func locationDistanceTo(target ZipCentroid, loc Location, zipCentroids map[string]ZipCentroid) float64 {
+func locationDistanceTo(target ZipCentroid, loc Location, zipCentroids centroidByZip) float64 {
 	lat, lon := locationCoordinates(loc, zipCentroids)
 	return haversineMiles(target.Lat, target.Lon, lat, lon)
 }
 
-func locationCoordinates(loc Location, zipCentroids map[string]ZipCentroid) (float64, float64) {
+func locationCoordinates(loc Location, zipCentroids centroidByZip) (float64, float64) {
 	if loc.Lat != nil && loc.Lon != nil {
 		return *loc.Lat, *loc.Lon
 	}
 
 	//do we actualyl want to fall back?
-	centroid, _ := zipCentroidByZIP(loc.ZipCode, zipCentroids)
+	centroid, _ := zipCentroids.ZipCentroidByZIP(loc.ZipCode)
 	return centroid.Lat, centroid.Lon
 }
 
@@ -283,7 +292,38 @@ func (l *locationServer) Ready(ctx context.Context) error {
 }
 
 func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient) {
-	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /locations/zip-from-coordinates", func(w http.ResponseWriter, r *http.Request) {
+		isHXRequest := r.Header.Get("HX-Request") == "true"
+		if !isHXRequest {
+			http.Error(w, "htmx request required", http.StatusBadRequest)
+			return
+		}
+
+		lat, err := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("Try again, chef. We could not read your location."))
+			return
+		}
+		lon, err := strconv.ParseFloat(r.URL.Query().Get("lon"), 64)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("Try again, chef. We could not read your location."))
+			return
+		}
+
+		zip, ok := l.zipFetcher.NearestZIPToCoordinates(lat, lon)
+		if !ok {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("Try again, chef. We could not find your ZIP code."))
+			return
+		}
+
+		w.Header().Set("HX-Redirect", "/locations?zip="+url.QueryEscape(zip))
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("GET /locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		currentUser, err := l.userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {

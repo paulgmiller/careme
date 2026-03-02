@@ -1,12 +1,14 @@
 package locations
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestZipCentroidByZIP_KnownZip(t *testing.T) {
 	t.Parallel()
 
-	centroids := mustLoadEmbeddedZipCentroids(t)
-	centroid, ok := zipCentroidByZIP("00601", centroids)
+	centroids := LoadCentroids()
+	centroid, ok := centroids.ZipCentroidByZIP("00601")
 	if !ok {
 		t.Fatal("expected centroid for 00601")
 	}
@@ -21,8 +23,8 @@ func TestZipCentroidByZIP_KnownZip(t *testing.T) {
 func TestZipCentroidByZIP_ZipPlus4(t *testing.T) {
 	t.Parallel()
 
-	centroids := mustLoadEmbeddedZipCentroids(t)
-	centroid, ok := zipCentroidByZIP("00601-1234", centroids)
+	centroids := LoadCentroids()
+	centroid, ok := centroids.ZipCentroidByZIP("00601-1234")
 	if !ok {
 		t.Fatal("expected centroid for ZIP+4")
 	}
@@ -34,8 +36,8 @@ func TestZipCentroidByZIP_ZipPlus4(t *testing.T) {
 func TestZipCentroidByZIP_Unknown(t *testing.T) {
 	t.Parallel()
 
-	centroids := mustLoadEmbeddedZipCentroids(t)
-	_, ok := zipCentroidByZIP("00000", centroids)
+	centroids := LoadCentroids()
+	_, ok := centroids.ZipCentroidByZIP("00000")
 	if ok {
 		t.Fatal("expected no centroid for unknown zip")
 	}
@@ -44,18 +46,35 @@ func TestZipCentroidByZIP_Unknown(t *testing.T) {
 func TestZipCentroidDataLoaded(t *testing.T) {
 	t.Parallel()
 
-	centroids := mustLoadEmbeddedZipCentroids(t)
-	if len(centroids) < 30000 {
-		t.Fatalf("expected large centroid dataset, got %d", len(centroids))
+	centroids := LoadCentroids()
+	if centroids.Len() < 30000 {
+		t.Fatalf("expected large centroid dataset, got %d", centroids.Len())
 	}
 }
 
-func mustLoadEmbeddedZipCentroids(t *testing.T) map[string]ZipCentroid {
-	t.Helper()
+func TestNearestZIPToCoordinates(t *testing.T) {
+	t.Parallel()
 
-	centroids, err := loadEmbeddedZipCentroids()
-	if err != nil {
-		t.Fatalf("loadEmbeddedZipCentroids error: %v", err)
+	centroids := zipCentroidIndex{map[string]ZipCentroid{
+		"10001": {Lat: 40.7506, Lon: -73.9972},
+		"94105": {Lat: 37.7898, Lon: -122.3942},
+		"98101": {Lat: 47.6105, Lon: -122.3348},
+	}}
+
+	zip, ok := centroids.NearestZIPToCoordinates(47.6097, -122.3331)
+	if !ok {
+		t.Fatal("expected nearest ZIP for valid coordinates")
 	}
-	return centroids
+	if zip != "98101" {
+		t.Fatalf("unexpected nearest ZIP: got %q want %q", zip, "98101")
+	}
+}
+
+func TestNearestZIPToCoordinates_EmptyCentroids(t *testing.T) {
+	t.Parallel()
+
+	zip, ok := zipCentroidIndex{}.NearestZIPToCoordinates(47.6097, -122.3331)
+	if ok {
+		t.Fatalf("expected no nearest ZIP, got %q", zip)
+	}
 }

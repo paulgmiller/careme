@@ -54,7 +54,9 @@ func main() {
 		log.Fatalf("failed to create cache: %v", err)
 	}
 
-	client, err := locations.New(cfg, cacheStore)
+	centroids := locations.LoadCentroids()
+
+	client, err := locations.New(cfg, cacheStore, centroids)
 	if err != nil {
 		log.Fatalf("failed to create location storage: %v", err)
 	}
