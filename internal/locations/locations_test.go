@@ -238,10 +238,9 @@ func TestGetLocationsByZipReturnsErrorWhenAllBackendsFail(t *testing.T) {
 }
 
 func TestLocationStorageNearestZIPToCoordinates(t *testing.T) {
-	client := newFakeLocationClient()
-	server := newTestLocationServer(client)
+	centroids := LoadCentroids()
 
-	zip, ok := server.NearestZIPToCoordinates(47.6097, -122.3331)
+	zip, ok := centroids.NearestZIPToCoordinates(47.6097, -122.3331)
 	if !ok {
 		t.Fatal("expected nearest zip for valid coordinates")
 	}
@@ -326,10 +325,7 @@ func newTestLocationServerWithBackends(backends []locationBackend) *locationStor
 }
 
 func newTestLocationServerWithBackendsAndCache(backends []locationBackend, c cachepkg.Cache) *locationStorage {
-	zipCentroids, err := loadEmbeddedZipCentroids()
-	if err != nil {
-		panic(err)
-	}
+	zipCentroids := LoadCentroids()
 	return &locationStorage{
 		client:       backends,
 		zipCentroids: zipCentroids,
