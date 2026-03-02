@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime/debug"
 	"strconv"
@@ -95,29 +96,54 @@ func newAppInsightsTrackerFromEnv(next http.Handler) http.Handler {
 }
 
 func newAppInsightsTelemetryClient(connectionString string) (azureappinsights.TelemetryClient, error) {
-	key, err := parseAppInsightsKey(connectionString)
+	cfg, err := parseAppInsightsConnectionString(connectionString)
 	if err != nil {
 		return nil, err
 	}
-	return azureappinsights.NewTelemetryClient(key), nil
+	return azureappinsights.NewTelemetryClient(cfg.InstrumentationKey), nil
 	//if we want somethhing fancy we can do this.
 	//return azureappinsights.NewTelemetryClientFromConfig(cfg), nil
 }
 
-// replace with github.com/Azure/go-autorest/autorest/azure.ParseConnectionString?
-func parseAppInsightsKey(connectionString string) (string, error) {
+// suprise there is not a parse function here.
+func parseAppInsightsConnectionString(connectionString string) (*azureappinsights.TelemetryConfiguration, error) {
 	connectionString = strings.TrimSpace(connectionString)
+	if connectionString == "" {
+		return nil, errors.New("connection string is empty")
+	}
+
+	var instrumentationKey string
+	var ingestionEndpoint string
+
 	for _, value := range strings.Split(connectionString, ";") {
 		pair := strings.SplitN(value, "=", 2)
 		if len(pair) != 2 {
 			continue
 		}
-		if pair[0] == "InstrumentationKey" {
-			return pair[1], nil
+		switch pair[0] {
+		case "InstrumentationKey":
+			instrumentationKey = pair[1]
+		case "IngestionEndpoint":
+			ingestionEndpoint = pair[1]
 		}
 	}
-	return "", errors.New("instrumentation key is missing")
 
+	if instrumentationKey == "" {
+		return nil, errors.New("instrumentation key is missing")
+	}
+	if ingestionEndpoint == "" {
+		return nil, errors.New("ingestion endpoint is missing")
+	}
+
+	ingestionURL, err := url.Parse(ingestionEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := azureappinsights.NewTelemetryConfiguration(instrumentationKey)
+	ingestionURL.Path = appInsightsIngestionPath
+	cfg.EndpointUrl = ingestionURL.String()
+	return cfg, nil
 }
 
 type recoverer struct {
