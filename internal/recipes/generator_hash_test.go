@@ -27,14 +27,6 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 		t.Fatalf("expected hash to be stable and equal to JjKXkKjKKpE, got %s", h1)
 	}
 
-	legacyHash, ok := legacyRecipeHash(h1)
-	if !ok {
-		t.Fatal("expected current hash passhed to legacy")
-	}
-	if legacyHash != "cmVjaXBlJjKXkKjKKpE=" {
-		t.Fatalf("expected legacy hash to be base64 of recipe hash with prefix, got %s", legacyHash)
-	}
-
 	// ensure stability across multiple calls
 	if h1 != p1.Hash() {
 		t.Fatalf("hash not stable across multiple calls: %s vs %s", h1, p1.Hash())
@@ -76,7 +68,7 @@ func TestNormalizeLegacyRecipeHash(t *testing.T) {
 		t.Fatal("expected to derive legacy recipe hash")
 	}
 
-	normalized, ok := normalizeLegacyRecipeHash(legacyHash)
+	normalized, ok := legacyHashToCurrent(legacyHash, legacyRecipeHashSeed)
 	if !ok {
 		t.Fatal("expected legacy hash normalization to succeed")
 	}
@@ -84,7 +76,7 @@ func TestNormalizeLegacyRecipeHash(t *testing.T) {
 		t.Fatalf("expected normalized hash %q, got %q", hash, normalized)
 	}
 
-	if _, ok := normalizeLegacyRecipeHash(hash); ok {
+	if _, ok := legacyHashToCurrent(hash, legacyRecipeHashSeed); ok {
 		t.Fatalf("expected canonical hash %q not to be treated as legacy", hash)
 	}
 }

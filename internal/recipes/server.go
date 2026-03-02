@@ -108,10 +108,14 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		FormatRecipeHTML(p, *recipe, signedIn, thread, *feedback, w)
 		return
 	}
-
-	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
+	//we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
+	normalizedHash, ok := legacyHashToCurrent(recipe.OriginHash, legacyRecipeHashSeed)
+	if ok {
+		slog.InfoContext(ctx, "normalized legacy origin hash to current hash", "origin_hash", recipe.OriginHash, "hash", normalizedHash)
+	}
+	p, err := s.ParamsFromCache(ctx, normalizedHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
+		slog.ErrorContext(ctx, "failed to load params for hash", "hash", normalizedHash, "error", err)
 		//http.Error(w, "recipe not found or expired", http.StatusNotFound)
 		//return
 		p = DefaultParams(&locations.Location{
@@ -124,7 +128,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		if slist, err := s.FromCache(ctx, recipe.OriginHash); err == nil {
 			p.ConversationID = slist.ConversationID
 		} else if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load conversation id", "hash", recipe.OriginHash, "error", err)
+			slog.ErrorContext(ctx, "failed to load conversation id", "hash", normalizedHash, "error", err)
 		}
 	}
 
@@ -328,7 +332,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if hashParam := r.URL.Query().Get(queryArgHash); hashParam != "" {
-		if normalizedHash, ok := normalizeLegacyRecipeHash(hashParam); ok {
+		if normalizedHash, ok := legacyHashToCurrent(hashParam, legacyRecipeHashSeed); ok {
 			slog.InfoContext(ctx, "redirecting legacy hash to canonical hash", "legacy_hash", hashParam, "hash", normalizedHash)
 			redirectToHash(w, r, normalizedHash, false /*useStart*/)
 			return

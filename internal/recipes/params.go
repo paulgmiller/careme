@@ -86,18 +86,6 @@ func (g *generatorParams) LocationHash() string {
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-func normalizeLegacyRecipeHash(hash string) (string, bool) {
-	return legacyHashToCurrent(hash, legacyRecipeHashSeed)
-}
-
-func legacyRecipeHash(hash string) (string, bool) {
-	return currentHashToLegacy(hash, legacyRecipeHashSeed)
-}
-
-func legacyLocationHash(hash string) (string, bool) {
-	return currentHashToLegacy(hash, legacyIngredientsHashSeed)
-}
-
 func legacyHashToCurrent(hash string, seed string) (string, bool) {
 	decoded, err := base64.URLEncoding.DecodeString(hash)
 	if err != nil {
@@ -108,21 +96,6 @@ func legacyHashToCurrent(hash string, seed string) (string, bool) {
 		return "", false
 	}
 	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
-}
-
-func currentHashToLegacy(hash string, seed string) (string, bool) {
-	decoded, err := base64.RawURLEncoding.DecodeString(hash)
-	if err != nil || len(decoded) == 0 {
-		return "", false
-	}
-	seedBytes := []byte(seed)
-	if bytes.HasPrefix(decoded, seedBytes) {
-		return hash, false
-	}
-	legacyDecoded := make([]byte, 0, len(seedBytes)+len(decoded))
-	legacyDecoded = append(legacyDecoded, seedBytes...)
-	legacyDecoded = append(legacyDecoded, decoded...)
-	return base64.URLEncoding.EncodeToString(legacyDecoded), true
 }
 
 func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generatorParams, error) {

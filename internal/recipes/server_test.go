@@ -1,12 +1,14 @@
 package recipes
 
 import (
+	"bytes"
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/users"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -37,6 +39,24 @@ func TestRedirectToHash(t *testing.T) {
 	if !strings.HasPrefix(location, expectedLocation) {
 		t.Errorf("handler returned wrong location: got %v want prefix %v", location, expectedLocation)
 	}
+}
+func legacyRecipeHash(hash string) (string, bool) {
+	return currentHashToLegacy(hash, legacyRecipeHashSeed)
+}
+
+func currentHashToLegacy(hash string, seed string) (string, bool) {
+	decoded, err := base64.RawURLEncoding.DecodeString(hash)
+	if err != nil || len(decoded) == 0 {
+		return "", false
+	}
+	seedBytes := []byte(seed)
+	if bytes.HasPrefix(decoded, seedBytes) {
+		return hash, false
+	}
+	legacyDecoded := make([]byte, 0, len(seedBytes)+len(decoded))
+	legacyDecoded = append(legacyDecoded, seedBytes...)
+	legacyDecoded = append(legacyDecoded, decoded...)
+	return base64.URLEncoding.EncodeToString(legacyDecoded), true
 }
 
 func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
