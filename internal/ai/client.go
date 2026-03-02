@@ -39,6 +39,8 @@ type Ingredient struct {
 type Recipe struct {
 	Title        string       `json:"title"`
 	Description  string       `json:"description"`
+	CookTime     string       `json:"cook_time"`
+	CostEstimate string       `json:"cost_estimate"`
 	Ingredients  []Ingredient `json:"ingredients"`
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
@@ -57,6 +59,8 @@ func (r *Recipe) ComputeHash() string {
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, r.Title))
 	lo.Must(io.WriteString(fnv, r.Description))
+	lo.Must(io.WriteString(fnv, r.CookTime))
+	lo.Must(io.WriteString(fnv, r.CostEstimate))
 	for _, ing := range r.Ingredients {
 		lo.Must(io.WriteString(fnv, ing.Name))
 		lo.Must(io.WriteString(fnv, ing.Quantity))
@@ -105,8 +109,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch is also good.
 - Recipes should use diverse cooking methods and represent a variety of cuisines.
 - Provide clear, step-by-step instructions and an ingredient list for each recipe. repeat amounts and prep for each recipe in instructions.
-- Recipes should take under 1 hour to prepare, unless the user asks for something longer
-- Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles and a local brand if possible. Really put your Sommielier hat on for this.
+- Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles. Really put your Sommielier hat on for this.
 - Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but but don't pay more for something on sale than a similar ingredient that isn't)
 
 
@@ -114,14 +117,18 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Each recipe includes:
   - Title
   - Description: Try to sell the dish and add some flair.
+  - Estimated cook time (for example: "35 minutes")
+  - Estimated total cost in dollars (for example: "$18-24")
   - Ingredient list: should include quantities and price if in input.
   - Step-by-step instructions starting with prep. Don't prefix with numbers.
-  - A guess at calorie count and healthiness
+  - Estimated Calorie count and other nutrient health tips.
   - Optional wine pairing guidance.
   - Three wine or less wine styles.
 
 # Planning & Verification
-- Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.`
+- Reference your checklist to ensure variety in cooking methods and cuisines
+- confirm ingredient prioritization matches sale/seasonal data.
+- Check cooktime and cost match instructions and ingredient list`
 
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
 	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
@@ -255,6 +262,7 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
 	messages = append(messages, user("Default: each recipe should serve 2 people."))
 	messages = append(messages, user("Default: generate 3 recipes"))
+	messages = append(messages, user("Default: prep and cook time under 1 hour"))
 	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
 	//location and date for seasonal ingredientss
 

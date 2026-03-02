@@ -75,6 +75,12 @@
             </div>
 
             <div class="space-y-2 text-sm text-gray-600">
+              {{if .Recipe.CookTime}}
+              <p><span class="font-semibold text-brand-700">Cook time:</span> {{.Recipe.CookTime}}</p>
+              {{end}}
+              {{if .Recipe.CostEstimate}}
+              <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.Recipe.CostEstimate}}</p>
+              {{end}}
               <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Recipe.Health}}</p>
               <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.Recipe.DrinkPairing}}</p>
             </div>
