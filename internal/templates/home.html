@@ -168,7 +168,7 @@ Generate a weekly meal plan from a variety of cuisines and cooking styles.
 
       button.addEventListener("click", () => {
         if (!navigator.geolocation) {
-          showMessage("Try again, chef. Location is not available in this browser.");
+          showMessage("Sorry, chef. Location is not available in this browser.");
           return;
         }
 
@@ -180,7 +180,7 @@ Generate a weekly meal plan from a variety of cuisines and cooking styles.
             window.htmx.trigger(button, "zip:lookup");
           },
           () => {
-            showMessage("Try again, chef. Please allow location access.");
+            showMessage("Sorry, chef. Have to allow location access.");
           },
           { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
         );

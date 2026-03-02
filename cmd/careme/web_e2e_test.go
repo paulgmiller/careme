@@ -113,6 +113,52 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 }
 
+func TestZipFromCoordinatesHTMXRedirect(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.Close()
+
+	client := newTestClient(t)
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/locations/zip-from-coordinates?lat=47.6097&lon=-122.3331", nil)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+	req.Header.Set("HX-Request", "true")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, resp.StatusCode)
+	}
+	if got := resp.Header.Get("HX-Redirect"); got != "/locations?zip=98101" {
+		t.Fatalf("expected HX-Redirect %q, got %q", "/locations?zip=98101", got)
+	}
+}
+
+func TestZipFromCoordinatesRejectsNonHTMX(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.Close()
+
+	client := newTestClient(t)
+	resp := mustGet(t, client, srv.URL+"/locations/zip-from-coordinates?lat=47.6097&lon=-122.3331")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, resp.StatusCode)
+	}
+}
+
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
