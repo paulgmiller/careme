@@ -45,20 +45,14 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 	}
 
 	// Create test recipes
-	savedRecipes := []ai.Recipe{
-		{
-			Title:       "Test Recipe 1",
-			Description: "A test recipe",
-		},
-		{
-			Title:       "Test Recipe 2",
-			Description: "Another test recipe",
-		},
+	savedRecipe := ai.Recipe{
+		Title:       "Test Recipe 1",
+		Description: "A test recipe",
 	}
 
 	// Save recipes to user profile
 	ctx := context.Background()
-	if err := srv.saveRecipesToUserProfile(ctx, testUser.ID, savedRecipes); err != nil {
+	if err := srv.saveRecipesToUserProfile(ctx, testUser, savedRecipe); err != nil {
 		t.Fatalf("failed to save recipes to user profile: %v", err)
 	}
 
@@ -72,15 +66,13 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 		t.Fatalf("expected 2 recipes in user profile, got %d", len(updatedUser.LastRecipes))
 	}
 
-	// Verify recipe titles match
-	for i, recipe := range savedRecipes {
-		if updatedUser.LastRecipes[i].Title != recipe.Title {
-			t.Errorf("recipe %d title mismatch: expected %q, got %q", i, recipe.Title, updatedUser.LastRecipes[i].Title)
-		}
-		if updatedUser.LastRecipes[i].Hash != recipe.ComputeHash() {
-			t.Errorf("recipe %d hash mismatch", i)
-		}
+	if updatedUser.LastRecipes[0].Title != savedRecipe.Title {
+		t.Errorf("recipe title mismatch: expected %q, got %q", savedRecipe.Title, updatedUser.LastRecipes[0].Title)
 	}
+	if updatedUser.LastRecipes[0].Hash != savedRecipe.ComputeHash() {
+		t.Errorf("recipe hash mismatch: expected %q, got %q", savedRecipe.ComputeHash(), updatedUser.LastRecipes[0].Hash)
+	}
+
 }
 
 func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
@@ -99,21 +91,14 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 	storage := users.NewStorage(tmpCache)
 
 	// Try to save the same recipe again (case-insensitive)
-	savedRecipes := []ai.Recipe{
-		{
-			Title:       "test recipe 1", // lowercase version
-			Description: "A test recipe",
-		},
-		{
-			Title:       "Test Recipe 2",
-			Description: "Another test recipe",
-		},
+	savedRecipe := ai.Recipe{
+		Title:       "test recipe 1", // lowercase version
+		Description: "A test recipe",
 	}
-
 	// Create a test user with an existing recipe
 	existingRecipe := utypes.Recipe{
-		Title:     savedRecipes[0].Title,
-		Hash:      savedRecipes[0].ComputeHash(),
+		Title:     savedRecipe.Title,
+		Hash:      savedRecipe.ComputeHash(),
 		CreatedAt: time.Now().Add(-24 * time.Hour),
 	}
 	testUser := &utypes.User{
@@ -134,7 +119,7 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 
 	// Save recipes to user profile
 	ctx := context.Background()
-	if err := srv.saveRecipesToUserProfile(ctx, testUser.ID, savedRecipes); err != nil {
+	if err := srv.saveRecipesToUserProfile(ctx, testUser, savedRecipe); err != nil {
 		t.Fatalf("failed to save recipes to user profile: %v", err)
 	}
 
@@ -157,38 +142,6 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 			}
 			found = true
 		}
-	}
-}
-
-func TestSaveRecipesToUserProfile_InvalidUser(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "careme-test-user-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			t.Fatalf("failed to remove temp dir: %v", err)
-		}
-	})
-
-	tmpCache := cache.NewFileCache(tmpDir)
-	storage := users.NewStorage(tmpCache)
-
-	srv := &server{
-		storage: storage,
-	}
-
-	savedRecipes := []ai.Recipe{
-		{
-			Title:       "Test Recipe",
-			Description: "A test recipe",
-		},
-	}
-
-	ctx := context.Background()
-
-	if err := srv.saveRecipesToUserProfile(ctx, "", savedRecipes); err == nil {
-		t.Error("expected error with empty user ID, got nil")
 	}
 }
 
@@ -231,7 +184,7 @@ func TestRemoveRecipeFromUserProfile(t *testing.T) {
 		storage: storage,
 	}
 
-	if err := srv.removeRecipeFromUserProfile(context.Background(), testUser.ID, remove.Hash); err != nil {
+	if err := srv.removeRecipeFromUserProfile(context.Background(), *testUser, remove.Hash); err != nil {
 		t.Fatalf("failed to remove recipe from user profile: %v", err)
 	}
 
