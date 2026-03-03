@@ -345,14 +345,14 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, []ai.Recipe{*recipe}); err != nil {
+	if err := s.saveRecipesToUserProfile(ctx, currentUser, *recipe); err != nil {
 		slog.ErrorContext(ctx, "failed to save recipe to user profile", "user_id", currentUser.ID, "hash", recipeHash, "error", err)
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-green-700">Saved to profile</span>`)
+	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-green-700">Saved to kitchen</span>`)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write save response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
@@ -393,6 +393,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
+	//if we pass in the origin hash as part of query then maybe we don't need to load recipe in dimsiss
 	if recipe.OriginHash == "" {
 		http.Error(w, "recipe origin not found", http.StatusBadRequest)
 		return
@@ -411,7 +412,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.removeRecipeFromUserProfile(ctx, currentUser.ID, recipeHash); err != nil {
+	if err := s.removeRecipeFromUserProfile(ctx, *currentUser, recipeHash); err != nil {
 		slog.ErrorContext(ctx, "failed to remove recipe from user profile", "user_id", currentUser.ID, "hash", recipeHash, "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
@@ -510,16 +511,6 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	newHash := p.Hash()
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
 		slog.ErrorContext(ctx, "failed to save params for finalize", "hash", newHash, "error", err)
-		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
-		return
-	}
-	if err := s.saveRecipeSelection(ctx, currentUser.ID, newHash, recipeSelectionFromParams(p)); err != nil {
-		slog.ErrorContext(ctx, "failed to persist recipe selection for finalize", "user_id", currentUser.ID, "hash", newHash, "error", err)
-		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
-		return
-	}
-	if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
-		slog.ErrorContext(ctx, "failed to save finalized recipes to user profile", "user_id", currentUser.ID, "error", err)
 		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
 		return
 	}
@@ -715,47 +706,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	// Handle finalize - save recipes to user profile and display filtered list
-	if r.URL.Query().Get("finalize") == "true" {
-		// Check if user is authenticated
-		if currentUser.ID == "" {
-			http.Error(w, "must be logged in to finalize recipes", http.StatusUnauthorized)
-			return
-		}
-
-		// If no recipes are saved, just return to home
-		if len(p.Saved) == 0 {
-			http.Error(w, "no recipes selected to save", http.StatusBadRequest)
-			return
-		}
-
-		// Save recipes to user profile
-		if err := s.saveRecipesToUserProfile(ctx, currentUser.ID, p.Saved); err != nil {
-			slog.ErrorContext(ctx, "failed to save recipes to user profile", "user_id", currentUser.ID, "error", err)
-			http.Error(w, "failed to save recipes", http.StatusInternalServerError)
-			return
-		}
-		//styles := wineStyles(p.Saved)
-		// todo regeenrate after grabbing list of wine styles from store.
-		slog.InfoContext(ctx, "finalized recipes", "user_id", currentUser.ID, "count", len(p.Saved))
-
-		// Display the saved recipes
-		shoppingList := &ai.ShoppingList{
-			Recipes:        p.Saved,
-			ConversationID: p.ConversationID,
-		}
-
-		// should finalize go into params to get a different hash that previous one with unsaved?
-		// or should we shove a guid or iteration in params along with conversation id. Response id?
-		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
-			slog.ErrorContext(ctx, "save error", "error", err)
-			http.Error(w, "failed to save finalized recipes", http.StatusInternalServerError)
-			return
-		}
-		redirectToHash(w, r, hash, false /*useStart*/)
-		return
-	}
-
 	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
@@ -856,67 +806,41 @@ func (s *server) Wait() {
 }
 
 // saveRecipesToUserProfile adds saved recipes to the user's profile
-func (s *server) saveRecipesToUserProfile(ctx context.Context, userID string, savedRecipes []ai.Recipe) error {
-	if userID == "" {
+func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utypes.User, recipe ai.Recipe) error {
+	if currentUser == nil {
 		return fmt.Errorf("invalid user")
 	}
 
-	if len(savedRecipes) == 0 {
+	// Check if recipe already exists in user's last recipes
+	hash := recipe.ComputeHash()
+
+	_, exists := lo.Find(currentUser.LastRecipes, func(r utypes.Recipe) bool {
+		return r.Hash == hash
+	})
+	if exists {
 		return nil
 	}
-
-	// Reload the user to get the latest state
-	currentUser, err := s.storage.GetByID(userID)
-	if err != nil {
-		return fmt.Errorf("failed to reload user: %w", err)
+	newRecipe := utypes.Recipe{
+		Title:     recipe.Title,
+		Hash:      hash,
+		CreatedAt: time.Now(),
 	}
+	currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
 
-	// Track if any new recipes were added
-	added := 0
-	addTime := time.Now()
-	for _, recipe := range savedRecipes {
-		// Check if recipe already exists in user's last recipes
-		hash := recipe.ComputeHash()
-
-		_, exists := lo.Find(currentUser.LastRecipes, func(r utypes.Recipe) bool {
-			return r.Hash == hash
-		})
-		if exists {
-			continue
-		}
-		newRecipe := utypes.Recipe{
-			Title:     recipe.Title,
-			Hash:      hash,
-			CreatedAt: addTime,
-		}
-		currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
-		added++
-		slog.InfoContext(ctx, "added saved recipe to user profile", "user_id", userID, "title", recipe.Title)
+	// etag mismatch fun!
+	if err := s.storage.Update(currentUser); err != nil {
+		return fmt.Errorf("failed to update user with saved recipes: %w", err)
 	}
-
-	if added > 0 {
-		// etag mismatch fun!
-		if err := s.storage.Update(currentUser); err != nil {
-			return fmt.Errorf("failed to update user with saved recipes: %w", err)
-		}
-		slog.InfoContext(ctx, "saved recipes to user profile", "user_id", userID, "count", added)
-	}
+	slog.InfoContext(ctx, "added saved recipe to user profile", "user_id", currentUser.ID, "title", recipe.Title)
 
 	return nil
 }
 
-func (s *server) removeRecipeFromUserProfile(ctx context.Context, userID, recipeHash string) error {
-	if userID == "" {
-		return fmt.Errorf("invalid user")
-	}
+func (s *server) removeRecipeFromUserProfile(ctx context.Context, currentUser utypes.User, recipeHash string) error {
+
 	recipeHash = strings.TrimSpace(recipeHash)
 	if recipeHash == "" {
 		return fmt.Errorf("invalid recipe hash")
-	}
-
-	currentUser, err := s.storage.GetByID(userID)
-	if err != nil {
-		return fmt.Errorf("failed to reload user: %w", err)
 	}
 
 	before := len(currentUser.LastRecipes)
@@ -928,10 +852,10 @@ func (s *server) removeRecipeFromUserProfile(ctx context.Context, userID, recipe
 		return nil
 	}
 
-	if err := s.storage.Update(currentUser); err != nil {
+	if err := s.storage.Update(&currentUser); err != nil {
 		return fmt.Errorf("failed to update user when dismissing recipe: %w", err)
 	}
-	slog.InfoContext(ctx, "removed recipe from user profile", "user_id", userID, "hash", recipeHash)
+	slog.InfoContext(ctx, "removed recipe from user profile", "user_id", currentUser.ID, "hash", recipeHash)
 	return nil
 }
 
