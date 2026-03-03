@@ -5,6 +5,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/ingredients"
 	"careme/internal/locations"
 	"careme/internal/logs"
 	"careme/internal/logsink"
@@ -70,6 +71,8 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
+	ingredientsHandler := ingredients.NewHandler(cache)
+	ingredientsHandler.Register(adminMux)
 	mux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 
 	if logsinkCfg.Enabled() {

@@ -5,14 +5,12 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -75,9 +73,6 @@ func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
 	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
 	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
-	//maybe this should be under locations server?
-	mux.HandleFunc("GET /ingredients/{hash}", s.ingredients)
-
 }
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
@@ -837,51 +832,4 @@ func (s *server) removeRecipeFromUserProfile(ctx context.Context, currentUser ut
 	}
 	slog.InfoContext(ctx, "removed recipe from user profile", "user_id", currentUser.ID, "hash", recipeHash)
 	return nil
-}
-
-// move to admin? Nah let the people see
-func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	hash := r.PathValue("hash")
-	p, err := s.ParamsFromCache(ctx, hash)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			http.Error(w, "parameters not found in cache", http.StatusNotFound)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hash, "error", err)
-		http.Error(w, "failed to fetch params", http.StatusInternalServerError)
-		return
-	}
-	lochash := p.LocationHash()
-
-	ingredients, err := s.IngredientsFromCache(ctx, lochash)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			http.Error(w, "ingredients not found in cache", http.StatusNotFound)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load ingredients for hash", "hash", lochash, "error", err)
-		http.Error(w, "failed to fetch ingredients", http.StatusInternalServerError)
-		return
-	}
-	slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
-	// make this a html thats readable.
-	if r.URL.Query().Get("format") == "tsv" {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		err := kroger.ToTSV(ingredients, w)
-		if err != nil {
-			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
-			return
-		}
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(ingredients); err != nil {
-		http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
-		return
-	}
 }
