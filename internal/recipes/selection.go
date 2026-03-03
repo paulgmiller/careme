@@ -121,10 +121,27 @@ func (s *server) selectionRecipes(ctx context.Context, hashes []string, current 
 	return recipes
 }
 
-func applySelectionToRecipes(recipes []ai.Recipe, selection recipeSelection) {
-	saved := make(map[string]struct{}, len(selection.SavedHashes))
+func (s *server) mergeParamsWithSelection(ctx context.Context, p *generatorParams, selection recipeSelection, current []ai.Recipe) {
+	if p == nil {
+		return
+	}
+
+	merged := recipeSelectionFromParams(p)
 	for _, hash := range selection.SavedHashes {
-		saved[hash] = struct{}{}
+		merged.markSaved(hash)
+	}
+	for _, hash := range selection.DismissedHashes {
+		merged.markDismissed(hash)
+	}
+
+	p.Saved = s.selectionRecipes(ctx, merged.SavedHashes, current)
+	p.Dismissed = s.selectionRecipes(ctx, merged.DismissedHashes, current)
+}
+
+func applySavedToRecipes(recipes []ai.Recipe, p *generatorParams) {
+	saved := make(map[string]struct{}, len(p.Saved))
+	for _, r := range p.Saved {
+		saved[r.ComputeHash()] = struct{}{}
 	}
 	for i := range recipes {
 		hash := recipes[i].ComputeHash()

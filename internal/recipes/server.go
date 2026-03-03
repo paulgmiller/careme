@@ -547,8 +547,7 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 
 	params := *baseParams
 	params.Instructions = instructions
-	params.Saved = s.selectionRecipes(ctx, selection.SavedHashes, currentList.Recipes)
-	params.Dismissed = s.selectionRecipes(ctx, selection.DismissedHashes, currentList.Recipes)
+	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
 	if params.ConversationID == "" {
 		params.ConversationID = currentList.ConversationID
 	}
@@ -639,7 +638,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(ctx, "wines!", "hash", hashParam, "wine_styles", styles)
 		userID, err := s.clerk.GetUserIDFromRequest(r)
 		signedIn := !errors.Is(err, auth.ErrNoSession)
-		selection := recipeSelectionFromParams(p)
 		if signedIn {
 			fromStore, selErr := s.loadRecipeSelection(ctx, userID, hashParam)
 			if selErr != nil {
@@ -647,17 +645,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
 				return
 			}
-			if !fromStore.Empty() {
-				selection = fromStore
-			}
-
+			s.mergeParamsWithSelection(ctx, p, fromStore, slist.Recipes)
 		}
-		applySelectionToRecipes(slist.Recipes, selection)
-		p.Saved = s.selectionRecipes(ctx, selection.SavedHashes, slist.Recipes)
-		for i := range p.Saved {
-			p.Saved[i].Saved = true
-		}
-		p.Dismissed = s.selectionRecipes(ctx, selection.DismissedHashes, slist.Recipes)
+		applySavedToRecipes(slist.Recipes, p)
 		FormatShoppingListHTMLForHash(p, *slist, signedIn, hashParam, w)
 		return
 	}

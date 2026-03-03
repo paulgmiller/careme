@@ -722,6 +722,86 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 	}
 }
 
+func TestParamsForAction_PreservesBaseSelectionWhenSelectionCacheEmpty(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+	}
+
+	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
+	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
+	p := DefaultParams(&locations.Location{ID: "loc-1", Name: "Store"}, time.Now())
+	p.Saved = []ai.Recipe{savedRecipe}
+	p.Dismissed = []ai.Recipe{dismissedRecipe}
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{savedRecipe, dismissedRecipe},
+		ConversationID: "conv-1",
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+
+	updated, err := s.paramsForAction(t.Context(), originHash, "user-1", "make it vegetarian")
+	if err != nil {
+		t.Fatalf("paramsForAction failed: %v", err)
+	}
+
+	if updated.Instructions != "make it vegetarian" {
+		t.Fatalf("expected instructions to update, got %q", updated.Instructions)
+	}
+	if len(updated.Saved) != 1 || updated.Saved[0].ComputeHash() != savedRecipe.ComputeHash() {
+		t.Fatalf("expected saved recipes from params to persist, got %#v", updated.Saved)
+	}
+	if len(updated.Dismissed) != 1 || updated.Dismissed[0].ComputeHash() != dismissedRecipe.ComputeHash() {
+		t.Fatalf("expected dismissed recipes from params to persist, got %#v", updated.Dismissed)
+	}
+}
+
+func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+	}
+
+	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
+	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
+	p := DefaultParams(&locations.Location{ID: "loc-1", Name: "Store"}, time.Now())
+	p.Saved = []ai.Recipe{savedRecipe}
+	p.Dismissed = []ai.Recipe{dismissedRecipe}
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{savedRecipe, dismissedRecipe},
+		ConversationID: "conv-1",
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+
+	if err := s.saveRecipeSelection(t.Context(), "user-1", originHash, recipeSelection{
+		SavedHashes:     []string{dismissedRecipe.ComputeHash()},
+		DismissedHashes: []string{savedRecipe.ComputeHash()},
+	}); err != nil {
+		t.Fatalf("failed to save selection: %v", err)
+	}
+
+	updated, err := s.paramsForAction(t.Context(), originHash, "user-1", "")
+	if err != nil {
+		t.Fatalf("paramsForAction failed: %v", err)
+	}
+
+	if len(updated.Saved) != 1 || updated.Saved[0].ComputeHash() != dismissedRecipe.ComputeHash() {
+		t.Fatalf("expected selection to move dismissed recipe into saved, got %#v", updated.Saved)
+	}
+	if len(updated.Dismissed) != 1 || updated.Dismissed[0].ComputeHash() != savedRecipe.ComputeHash() {
+		t.Fatalf("expected selection to move saved recipe into dismissed, got %#v", updated.Dismissed)
+	}
+}
+
 func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
