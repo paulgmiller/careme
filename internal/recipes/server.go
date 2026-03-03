@@ -5,6 +5,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -861,6 +862,16 @@ func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 	// make this a html thats readable.
+	if r.URL.Query().Get("format") == "tsv" {
+		w.Header().Add("Content-Type", "text/tab-separated-values")
+		err := kroger.ToTSV(ingredients, w)
+		if err != nil {
+			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
+			return
+		}
+		return
+	}
+
 	w.Header().Add("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

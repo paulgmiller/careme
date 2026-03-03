@@ -265,14 +265,12 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
 	//location and date for seasonal ingredientss
 
-	//Available ingredients (in TOON format for token efficiency)
-	ingredientsMessage := "Ingredients currently on sale in TOON format\n"
+	ingredientsMessage := "Ingredients currently on sale in TSV format. Blank PriceSale means no sale\n"
 	var buf strings.Builder
 	if err := kroger.ToTSV(saleIngredients, &buf); err != nil {
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
 	ingredientsMessage += buf.String()
-
 	messages = append(messages, user(ingredientsMessage))
 
 	// Previous recipes to avoid (if any)
