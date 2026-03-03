@@ -202,14 +202,22 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 				continue
 			}
 
+			var aisle *string
+			if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
+				aisle = (*product.AisleLocations)[0].Number
+			}
+
 			// does just giving the model json work better here?
 			ingredient := kroger.Ingredient{
+				ProductId:    product.ProductId, //chat gpt act
 				Brand:        product.Brand,
 				Description:  product.Description,
 				Size:         item.Size,
 				PriceRegular: item.Price.Regular,
 				PriceSale:    item.Price.Promo,
 				Categories:   product.Categories,
+				AisleNumber:  aisle,
+
 				/*"taxonomies": [
 				{
 				"department": {},
