@@ -15,6 +15,8 @@ import (
 
 const recipeSelectionCachePrefix = "recipe_selection/"
 
+// recipeSelection tracks which recipes have been saved and dismisse by a user between regeneration/finalization.
+// After that they are merged back into params.
 type recipeSelection struct {
 	SavedHashes     []string  `json:"saved_hashes,omitempty"`
 	DismissedHashes []string  `json:"dismissed_hashes,omitempty"`
