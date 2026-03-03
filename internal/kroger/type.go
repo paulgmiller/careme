@@ -31,6 +31,9 @@ func ToTSV(ingredient []Ingredient, w io.Writer) error {
 	header := []string{"ProductId", "AisleNumber", "Brand", "Description", "Size", "PriceRegular", "PriceSale"}
 	csvw.Write(header)
 	for _, i := range ingredient {
+		if i.PriceSale == nil {
+			i.PriceSale = i.PriceRegular
+		}
 		row := []string{
 			toStr(i.ProductId),
 			toStr(i.AisleNumber),
@@ -39,6 +42,7 @@ func ToTSV(ingredient []Ingredient, w io.Writer) error {
 			toStr(i.Size),
 			floatToStr(i.PriceRegular),
 			floatToStr(i.PriceSale),
+			//todo add a dicount?
 		}
 		if len(header) != len(row) {
 			return fmt.Errorf("header and row length mismatch: %d vs %d", len(header), len(row))

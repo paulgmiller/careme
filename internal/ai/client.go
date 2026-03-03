@@ -263,9 +263,8 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	messages = append(messages, user("Default: generate 3 recipes"))
 	messages = append(messages, user("Default: prep and cook time under 1 hour"))
 	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
-	//location and date for seasonal ingredientss
 
-	ingredientsMessage := "Ingredients currently on sale in TSV format. Blank PriceSale means no sale\n"
+	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
 	var buf strings.Builder
 	if err := kroger.ToTSV(saleIngredients, &buf); err != nil {
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
@@ -273,7 +272,7 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	ingredientsMessage += buf.String()
 	messages = append(messages, user(ingredientsMessage))
 
-	// Previous recipes to avoid (if any)
+	// Previous recipes to avoid (if any). Reduce this to already cooked?
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
 		prevRecipesMsg.WriteString("Avoid recipes similar to these from the past 2 weeks:\n")
