@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alpkeskin/gotoon"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/conversations"
 	"github.com/openai/openai-go/v3/option"
@@ -268,12 +267,11 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 
 	//Available ingredients (in TOON format for token efficiency)
 	ingredientsMessage := "Ingredients currently on sale in TOON format\n"
-
-	encoded, err := gotoon.Encode(saleIngredients)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode ingredients to TOON: %w", err)
+	var buf strings.Builder
+	if err := kroger.ToTSV(saleIngredients, &buf); err != nil {
+		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
-	ingredientsMessage += encoded
+	ingredientsMessage += buf.String()
 
 	messages = append(messages, user(ingredientsMessage))
 
