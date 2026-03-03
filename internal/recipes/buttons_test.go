@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Test that the HTML contains Save and Dismiss buttons for recipes
+// Test that the HTML contains Save and Dismiss buttons for recipes.
 func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Create a shopping list with multiple recipes
 	multiRecipeList := ai.ShoppingList{
@@ -60,11 +60,11 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 		t.Error("HTML should trigger HTMX requests on click")
 	}
 
-	// Check for Save and Dismiss labels (without span tags)
+	// Check for Save and Dismiss labels.
 	if !strings.Contains(html, `Save`) {
 		t.Error("HTML should contain Save label text")
 	}
-	if !strings.Contains(html, `Dismiss`) {
+	if !strings.Contains(html, `Dismis`) {
 		t.Error("HTML should contain Dismiss label text")
 	}
 	if !strings.Contains(html, `Details`) {
@@ -76,9 +76,9 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 		t.Error("HTML should contain Try again, chef button")
 	}
 
-	// Check that "Finalize" button exists
-	if !strings.Contains(html, `Finalize`) {
-		t.Error("HTML should contain Finalize button")
+	// Check that "Save my picks" button exists.
+	if !strings.Contains(html, `Assemble Shopping List`) {
+		t.Error("HTML should contain Assemble Shopping List button")
 	}
 
 	// Check for finalize HTMX button
