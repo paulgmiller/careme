@@ -543,6 +543,7 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 		return nil, fmt.Errorf("failed to load recipe selection")
 	}
 	if len(selection.SavedHashes) == 0 && len(selection.DismissedHashes) == 0 {
+		//iffy? back compat but is it what we want
 		selection = recipeSelectionFromParams(baseParams)
 	}
 
