@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// Test that the HTML contains Save and Dismiss buttons for recipes
-func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
+// Test that the HTML contains Save and Skip buttons for recipes.
+func TestFormatShoppingListHTML_ContainsSaveAndSkipButtons(t *testing.T) {
 	// Create a shopping list with multiple recipes
 	multiRecipeList := ai.ShoppingList{
 		Recipes: []ai.Recipe{
@@ -46,7 +46,7 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Verify HTML is valid
 	isValidHTML(t, html)
 
-	// Check for Save and Dismiss radio buttons and labels
+	// Check for Save and Skip radio buttons and labels.
 	if !strings.Contains(html, `name="saved"`) {
 		t.Error("HTML should contain saved hidden inputs")
 	}
@@ -59,12 +59,12 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 		t.Error("HTML should contain radio button inputs")
 	}
 
-	// Check for Save and Dismiss labels (without span tags)
+	// Check for Save and Skip labels.
 	if !strings.Contains(html, `Save`) {
 		t.Error("HTML should contain Save label text")
 	}
-	if !strings.Contains(html, `Dismiss`) {
-		t.Error("HTML should contain Dismiss label text")
+	if !strings.Contains(html, `Skip this dish`) {
+		t.Error("HTML should contain Skip this dish label text")
 	}
 	if !strings.Contains(html, `Details`) {
 		t.Error("HTML should contain Details button text")
@@ -75,9 +75,9 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 		t.Error("HTML should contain Try again, chef button")
 	}
 
-	// Check that "Finalize" button exists
-	if !strings.Contains(html, `Finalize`) {
-		t.Error("HTML should contain Finalize button")
+	// Check that "Save my picks" button exists.
+	if !strings.Contains(html, `Save my picks`) {
+		t.Error("HTML should contain Save my picks button")
 	}
 
 	// Check for finalize submit button (not a POST form anymore)

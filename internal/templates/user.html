@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Careme · User Profile</title>
+  <title>Careme · Your Kitchen</title>
 
   {{template "tailwind_head" .Style}}
 
@@ -56,7 +56,7 @@
                        name="favorite_store"
                        type="text"
                        value="{{.User.FavoriteStore}}"
-                       placeholder="Store ID"
+                       placeholder="Store name or number"
                        class="w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
                 <p class="text-xs text-gray-500">Set your favorite store from the <a href="/" class="text-brand-600 hover:underline">home page</a> by searching for locations.</p>
                 {{end}}
@@ -91,15 +91,15 @@
               </div>
 
               <div class="space-y-2">
-                <label for="directive" class="text-sm font-medium text-gray-700">Chef’s directive</label>
+                <label for="directive" class="text-sm font-medium text-gray-700">Cooking preferences</label>
                 <textarea id="directive"
                           name="directive"
                           rows="8"
                           placeholder="Example: Generate 5 recipes for 4 people, avoid shellfish, prioritize high-protein meals, and keep prep under 30 minutes."
                           class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400">{{.User.Directive}}</textarea>
-                <p class="text-xs text-gray-500">This is injected directly into recipe generation. Keep it free form and edit anytime.</p>
+                <p class="text-xs text-gray-500">We use this when planning your recipes. Write it in your own words and edit anytime.</p>
                 <ul class="list-disc space-y-1 pl-5 text-xs text-gray-500">
-                  <li>Override defaults: "Generate 5 recipes for 4 people."</li>
+                  <li>Set your basics: "Generate 5 recipes for 4 people."</li>
                   <li>Diet focus: "Low-carb, high-protein, no pork or shellfish."</li>
                   <li>Style: "One vegetarian meal and one soup each week."</li>
                   <li>Time/equipment: "Weeknight meals under 30 minutes, no slow cooker."</li>

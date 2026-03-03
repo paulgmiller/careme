@@ -132,7 +132,7 @@
             <p id="question-error" class="hidden text-sm font-medium text-red-700">Could not answer your question. Please try again.</p>
             {{else if .ServerSignedIn}}
             <div class="flex flex-wrap items-center gap-3">
-              <p class="text-sm text-gray-500">Questions are unavailable for this recipe.</p>
+              <p class="text-sm text-gray-500">Chef chat isn't available for this recipe yet.</p>
               <button type="button"
                       id="cooked-feedback-button"
                       hx-post="/recipe/{{.RecipeHash}}/feedback"
@@ -252,7 +252,7 @@
     {{end}}
   </div>
   {{else if and .ServerSignedIn .ConversationID}}
-  <p class="text-sm text-gray-500">No questions yet.</p>
+  <p class="text-sm text-gray-500">No kitchen questions yet.</p>
   {{end}}
 </div>
 {{end}}
