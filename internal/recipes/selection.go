@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -22,28 +21,6 @@ type recipeSelection struct {
 	UpdatedAt       time.Time `json:"updated_at,omitempty"`
 }
 
-func (s *recipeSelection) normalize() {
-	clean := func(v string) string { return strings.TrimSpace(v) }
-	s.SavedHashes = lo.Uniq(lo.FilterMap(s.SavedHashes, func(v string, _ int) (string, bool) {
-		h := clean(v)
-		return h, h != ""
-	}))
-	s.DismissedHashes = lo.Uniq(lo.FilterMap(s.DismissedHashes, func(v string, _ int) (string, bool) {
-		h := clean(v)
-		return h, h != ""
-	}))
-
-	// A recipe cannot be both saved and dismissed; keep the saved state.
-	dismissed := make([]string, 0, len(s.DismissedHashes))
-	for _, hash := range s.DismissedHashes {
-		if slices.Contains(s.SavedHashes, hash) {
-			continue
-		}
-		dismissed = append(dismissed, hash)
-	}
-	s.DismissedHashes = dismissed
-}
-
 func (s *recipeSelection) markSaved(recipeHash string) {
 	hash := strings.TrimSpace(recipeHash)
 	if hash == "" {
@@ -51,7 +28,6 @@ func (s *recipeSelection) markSaved(recipeHash string) {
 	}
 	s.SavedHashes = lo.Uniq(append(s.SavedHashes, hash))
 	s.DismissedHashes = lo.Filter(s.DismissedHashes, func(v string, _ int) bool { return v != hash })
-	s.UpdatedAt = time.Now()
 }
 
 func (s *recipeSelection) markDismissed(recipeHash string) {
@@ -61,13 +37,13 @@ func (s *recipeSelection) markDismissed(recipeHash string) {
 	}
 	s.DismissedHashes = lo.Uniq(append(s.DismissedHashes, hash))
 	s.SavedHashes = lo.Filter(s.SavedHashes, func(v string, _ int) bool { return v != hash })
-	s.UpdatedAt = time.Now()
 }
 
 func recipeSelectionKey(userID, originHash string) string {
 	return fmt.Sprintf("%s%s/%s", recipeSelectionCachePrefix, strings.TrimSpace(userID), strings.TrimSpace(originHash))
 }
 
+// this should die off eventually.
 func recipeSelectionFromParams(p *generatorParams) recipeSelection {
 	if p == nil {
 		return recipeSelection{}
@@ -82,7 +58,6 @@ func recipeSelectionFromParams(p *generatorParams) recipeSelection {
 	for _, r := range p.Dismissed {
 		selection.DismissedHashes = append(selection.DismissedHashes, r.ComputeHash())
 	}
-	selection.normalize()
 	return selection
 }
 
@@ -102,17 +77,16 @@ func (s *server) loadRecipeSelection(ctx context.Context, userID, originHash str
 	if err := json.NewDecoder(reader).Decode(&selection); err != nil {
 		return recipeSelection{}, fmt.Errorf("failed to decode recipe selection: %w", err)
 	}
-	selection.normalize()
 	return selection, nil
 }
 
 func (s *server) saveRecipeSelection(ctx context.Context, userID, originHash string, selection recipeSelection) error {
-	selection.normalize()
 	selection.UpdatedAt = time.Now()
 	body, err := json.Marshal(selection)
 	if err != nil {
 		return fmt.Errorf("failed to marshal recipe selection: %w", err)
 	}
+	//good place for etags :)
 	if err := s.Cache.Put(ctx, recipeSelectionKey(userID, originHash), string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("failed to save recipe selection: %w", err)
 	}
