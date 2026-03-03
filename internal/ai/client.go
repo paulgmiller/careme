@@ -1,7 +1,7 @@
 package ai
 
 import (
-	"careme/internal/kroger"
+	aitypes "careme/internal/ai/types"
 	"careme/internal/locations"
 	"context"
 	"encoding/base64"
@@ -215,7 +215,7 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 }
 
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
-func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []aitypes.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -256,7 +256,7 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
+func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []aitypes.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	//constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))

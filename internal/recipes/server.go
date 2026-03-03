@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"careme/internal/ai"
+	aitypes "careme/internal/ai/types"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -24,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alpkeskin/gotoon"
 	"github.com/samber/lo"
 )
 
@@ -76,7 +78,7 @@ func (s *server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
 	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
 	//maybe this should be under locations server?
-	mux.HandleFunc("GET /ingredients/{location}", s.ingredients)
+	mux.HandleFunc("GET /ingredients/{hash}", s.ingredients)
 
 }
 
@@ -842,39 +844,46 @@ func (s *server) removeRecipeFromUserProfile(ctx context.Context, currentUser ut
 // move to admin? Nah let the people see
 func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	loc := r.PathValue("location")
-	l, err := s.locServer.GetLocationByID(ctx, loc)
+	hash := r.PathValue("hash")
+	p, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
-		http.Error(w, "invalid location id", http.StatusBadRequest)
-		return
+		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hash, "error", err)
+		//http.Error(w, "recipe not found or expired", http.StatusNotFound)
+		//return
+		p = DefaultParams(&locations.Location{
+			ID:   "",
+			Name: "Unknown Location",
+		}, time.Now())
 	}
-	// later use saved items
-	p := DefaultParams(l, time.Now())
-
 	lochash := p.LocationHash()
-	ingredientblob, err := s.cache.Get(ctx, lochash)
+
+	//will eventaully need a hint on what ingredients tehyse are.
+	kingredients, err := s.IngredientsFromCache(ctx, lochash)
 	if err != nil {
 		http.Error(w, "ingredients not found in cache", http.StatusNotFound)
 		return
 	}
 	slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
-	defer func() {
-		if err := ingredientblob.Close(); err != nil {
-			slog.ErrorContext(ctx, "failed to close cached ingredients", "location", p.String(), "error", err)
+	// make this a html thats readable.
+	if r.URL.Query().Get("format") == "toon" {
+		w.Header().Add("Content-Type", "text/plain")
+		ingredients := lo.Map(kingredients, func(ing kroger.Ingredient, _ int) aitypes.Ingredient {
+			return ing.ToAI()
+		})
+
+		encoded, err := gotoon.Encode(ingredients)
+		if err != nil {
+			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
+			return
 		}
-	}()
-	dec := json.NewDecoder(ingredientblob)
-	var ingredients []kroger.Ingredient
-	err = dec.Decode(&ingredients)
-	if err != nil {
-		http.Error(w, "failed to decode ingredients", http.StatusInternalServerError)
+		w.Write([]byte(encoded))
 		return
 	}
-	// make this a html thats readable.
+
 	w.Header().Add("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(ingredients); err != nil {
+	if err := enc.Encode(kingredients); err != nil {
 		http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
 		return
 	}

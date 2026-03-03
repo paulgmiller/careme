@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"careme/internal/ai"
+	aitypes "careme/internal/ai/types"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
@@ -22,7 +23,7 @@ import (
 )
 
 type aiClient interface {
-	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []aitypes.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	Ready(ctx context.Context) error
@@ -76,10 +77,15 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		return shoppingList, nil
 	}
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
-	ingredients, err := g.GetStaples(ctx, p)
+	//todo pull this out into depeendncy/interface
+	kingredients, err := g.GetStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
+
+	ingredients := lo.Map(kingredients, func(i kroger.Ingredient, _ int) aitypes.Ingredient {
+		return i.ToAI()
+	})
 
 	instructions := []string{p.Directive, p.Instructions}
 
