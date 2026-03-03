@@ -419,7 +419,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-red-700">Removed from profile</span>`)
+	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-red-700">Removed from kitchen</span>`)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
@@ -528,6 +528,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, newHash, false /*useStart*/)
 }
 
+// paramsForAction merges selction, old params, and selection(saved/dismissed) into a new params
 func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions string) (*generatorParams, error) {
 	baseParams, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
@@ -541,10 +542,6 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	selection, err := s.loadRecipeSelection(ctx, userID, hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load recipe selection")
-	}
-	if len(selection.SavedHashes) == 0 && len(selection.DismissedHashes) == 0 {
-		//iffy? back compat but is it what we want
-		selection = recipeSelectionFromParams(baseParams)
 	}
 
 	params := *baseParams
@@ -812,7 +809,7 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utyp
 		return fmt.Errorf("invalid user")
 	}
 
-	// Check if recipe already exists in user's last recipes
+	// Check if reciProfilepe already exists in user's last recipes
 	hash := recipe.ComputeHash()
 
 	_, exists := lo.Find(currentUser.LastRecipes, func(r utypes.Recipe) bool {

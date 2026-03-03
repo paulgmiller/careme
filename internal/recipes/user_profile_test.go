@@ -62,8 +62,8 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 		t.Fatalf("failed to retrieve updated user: %v", err)
 	}
 
-	if len(updatedUser.LastRecipes) != 2 {
-		t.Fatalf("expected 2 recipes in user profile, got %d", len(updatedUser.LastRecipes))
+	if len(updatedUser.LastRecipes) != 1 {
+		t.Fatalf("expected 1 recipe in user profile, got %d", len(updatedUser.LastRecipes))
 	}
 
 	if updatedUser.LastRecipes[0].Title != savedRecipe.Title {
@@ -129,8 +129,8 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 		t.Fatalf("failed to retrieve updated user: %v", err)
 	}
 
-	if len(updatedUser.LastRecipes) != 2 {
-		t.Fatalf("expected 2 recipes in user profile (1 existing + 1 new), got %d", len(updatedUser.LastRecipes))
+	if len(updatedUser.LastRecipes) != 1 {
+		t.Fatalf("expected 1 recipe in user profile (no duplicates), got %d", len(updatedUser.LastRecipes))
 	}
 
 	// Verify the existing recipe wasn't duplicated

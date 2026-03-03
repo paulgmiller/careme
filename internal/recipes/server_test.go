@@ -429,7 +429,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Saved to profile") {
+	if !strings.Contains(rr.Body.String(), "Saved to kitchen") {
 		t.Fatalf("expected success response, got body: %s", rr.Body.String())
 	}
 
@@ -525,7 +525,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Removed from profile") {
+	if !strings.Contains(rr.Body.String(), "Removed from kitchen") {
 		t.Fatalf("expected dismiss response, got body: %s", rr.Body.String())
 	}
 
