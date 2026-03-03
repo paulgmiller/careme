@@ -50,15 +50,9 @@
                   {{.FavoriteStoreName}}
                 </div>
                 <input type="hidden" name="favorite_store" value="{{.User.FavoriteStore}}" />
-                <p class="text-xs text-gray-500">To change your favorite store, visit the <a href="/" class="text-brand-600 hover:underline">home page</a> and search for locations.</p>
+                <p class="text-xs text-gray-500">To change your favorite store, visit the <a href="/" class="text-brand-600 hover:underline">home page</a> and star a store.</p>
                 {{else}}
-                <input id="favorite_store"
-                       name="favorite_store"
-                       type="text"
-                       value="{{.User.FavoriteStore}}"
-                       placeholder="Store name"
-                       class="w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-                <p class="text-xs text-gray-500">Set your favorite store from the <a href="/" class="text-brand-600 hover:underline">home page</a> by searching for locations.</p>
+                <p class="text-xs text-gray-500">No favorite store yet. Visit the <a href="/" class="text-brand-600 hover:underline">home page</a> and star a favorite store.</p>
                 {{end}}
               </div>
 
