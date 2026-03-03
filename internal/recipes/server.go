@@ -676,7 +676,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			p.Saved[i].Saved = true
 		}
 		p.Dismissed = s.selectionRecipes(ctx, selection.DismissedHashes, slist.Recipes)
-		FormatShoppingListHTML(p, *slist, signedIn, w)
+		FormatShoppingListHTMLForHash(p, *slist, signedIn, hashParam, w)
 		return
 	}
 

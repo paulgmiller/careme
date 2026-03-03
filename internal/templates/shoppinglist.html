@@ -84,6 +84,7 @@
                            hx-trigger="click"
                            hx-target="next .profile-status"
                            hx-swap="innerHTML"
+                           onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
                            class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
                       Save
                     </label>
@@ -98,17 +99,21 @@
                            hx-trigger="click"
                            hx-target="next .profile-status"
                            hx-swap="innerHTML"
+                           onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
                            class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
                       Dismiss
                     </label>
+                    <button type="button"
+                            onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
+                            class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                      Details
+                    </button>
                     <span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>
                   </div>
                 </header>
 
               <details {{if not (or .Saved (index $.DismissedHashes (.ComputeHash)))}}open{{end}} class="space-y-4">
-                <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Details
-                </summary>
+                <summary class="hidden">Details</summary>
                 <section class="space-y-6">
                 <div class="grid gap-6 md:grid-cols-2">
                   <div>
