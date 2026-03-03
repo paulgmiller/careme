@@ -119,14 +119,13 @@ func (rio recipeio) SaveIngredients(ctx context.Context, hash string, ingredient
 
 // exported for backfilling
 func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, originHash string) error {
-	// Save each recipe separately by its hash
+	// Save each recipe separately by its hash (could skip ones that are saved?)
 	var errs []error
 	for i := range recipes {
 		recipe := &recipes[i]
 		recipe.OriginHash = originHash
 		hash := recipe.ComputeHash()
 
-		slog.InfoContext(ctx, "storing recipe", "title", recipe.Title, "hash", hash)
 		recipeJSON := lo.Must(json.Marshal(recipe))
 		if err := rio.Cache.Put(ctx, recipeCachePrefix+hash, string(recipeJSON), cache.IfNoneMatch()); err != nil {
 			if errors.Is(err, cache.ErrAlreadyExists) {
@@ -135,6 +134,7 @@ func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, origin
 			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
 			errs = append(errs, fmt.Errorf("error saving %s, %w", hash, err))
 		}
+		slog.InfoContext(ctx, "stored recipe", "title", recipe.Title, "hash", hash)
 	}
 	return errors.Join(errs...)
 }
