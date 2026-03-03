@@ -40,10 +40,12 @@
         </div>
 
         <div class="p-8">
-          <form id="regenerateForm" method="GET">
-            <input type="hidden" name="location" value="{{.Location.ID}}" />
-            <input type="hidden" name="date" value="{{.Date}}" />
-            <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
+          <form id="regenerateForm"
+                method="POST"
+                action="/recipes/{{.Hash}}/regenerate"
+                hx-post="/recipes/{{.Hash}}/regenerate"
+                hx-params="instructions"
+                hx-swap="none">
 
             <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
               <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
@@ -60,40 +62,63 @@
                 </button>
               </div>
             </div>
+          </form>
 
-            <div class="mt-8 space-y-8">
-              {{range .Recipes}}
-              <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-                <header class="space-y-4">
-                  <div>
-                    <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      {{.Title}}
-                    </a>
-                    <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
-                  </div>
-                  <div class="flex flex-wrap items-center gap-3">
-                    <input type="radio" {{if .Saved}}checked{{end}} name="recipe-{{.ComputeHash}}" value="save" id="save-{{.ComputeHash}}" class="peer/save hidden" onchange="document.getElementById('saved-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('dismissed-{{.ComputeHash}}').value = ''; setRecipeDetailsVisible('{{.ComputeHash}}', false); updateFinalizeButton();" />
-                    <label for="save-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
-                      Save
-                    </label>
-                    <input type="radio" name="recipe-{{.ComputeHash}}" value="dismiss" id="dismiss-{{.ComputeHash}}" class="peer/dismiss hidden" onchange="document.getElementById('dismissed-{{.ComputeHash}}').value = '{{.ComputeHash}}'; document.getElementById('saved-{{.ComputeHash}}').value = ''; setRecipeDetailsVisible('{{.ComputeHash}}', false); updateFinalizeButton();" />
-                    <label for="dismiss-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
-                      Dismiss
-                    </label>
-                    <button type="button"
-                            id="details-{{.ComputeHash}}-button"
-                            aria-controls="details-{{.ComputeHash}}"
-                            aria-expanded="{{if .Saved}}false{{else}}true{{end}}"
-                            onclick="toggleRecipeDetails('{{.ComputeHash}}')"
-                            class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      {{if .Saved}}Show details{{else}}Hide details{{end}}
-                    </button>
-                    <input type="hidden" name="saved" id="saved-{{.ComputeHash}}" value="{{if .Saved}}{{.ComputeHash}}{{end}}" />
-                    <input type="hidden" name="dismissed" id="dismissed-{{.ComputeHash}}" value="" />
-                  </div>
-                </header>
+          <div class="mt-8 space-y-8">
+            {{range .Recipes}}
+            <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+              <header class="space-y-4">
+                <div>
+                  <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    {{.Title}}
+                  </a>
+                  <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <input type="radio"
+                         {{if .Saved}}checked{{end}}
+                         name="recipe-{{.ComputeHash}}"
+                         value="save"
+                         id="save-{{.ComputeHash}}"
+                         class="peer/save hidden" />
+                  <label for="save-{{.ComputeHash}}"
+                         hx-post="/recipe/{{.ComputeHash}}/save"
+                         hx-vals='{"h":"{{$.Hash}}"}'
+                         hx-trigger="click"
+                         hx-target="next .profile-status"
+                         hx-swap="innerHTML"
+                         onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
+                         class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
+                    Save
+                  </label>
+                  <input type="radio"
+                         {{if index $.DismissedHashes (.ComputeHash)}}checked{{end}}
+                         name="recipe-{{.ComputeHash}}"
+                         value="dismiss"
+                         id="dismiss-{{.ComputeHash}}"
+                         class="peer/dismiss hidden" />
+                  <label for="dismiss-{{.ComputeHash}}"
+                         hx-post="/recipe/{{.ComputeHash}}/dismiss"
+                         hx-vals='{"h":"{{$.Hash}}"}'
+                         hx-trigger="click"
+                         hx-target="next .profile-status"
+                         hx-swap="innerHTML"
+                         onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
+                         class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
+                    Dismiss
+                  </label>
+                  <button type="button"
+                          onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
+                          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Details
+                  </button>
+                  <span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>
+                </div>
+              </header>
 
-              <section id="details-{{.ComputeHash}}" class="space-y-6 {{if .Saved}}hidden{{end}}">
+              <details {{if not (or .Saved (index $.DismissedHashes (.ComputeHash)))}}open{{end}} class="space-y-4">
+                <summary class="hidden">Details</summary>
+                <section class="space-y-6">
                 <div class="grid gap-6 md:grid-cols-2">
                   <div>
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Ingredients</h3>
@@ -128,22 +153,17 @@
                   <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
                 </div>
               </section>
+              </details>
             </article>
             {{end}}
 
             {{if .ShoppingList}}
             <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
-                <button type="button"
-                        id="shoppingListToggle"
-                        aria-controls="shoppingListPanel"
-                        aria-expanded="false"
-                        class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Show
-                </button>
-              </div>
-              <div id="shoppingListPanel" class="mt-4 hidden">
+              <details>
+                <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Shopping list
+                </summary>
+                <div class="mt-4">
                 <ul class="space-y-2 text-ink-700">
                   {{range .ShoppingList}}
                   <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
@@ -152,21 +172,19 @@
                   </li>
                   {{end}}
                 </ul>
-              </div>
+                </div>
+              </details>
             </section>
             {{end}}
           </div>
-          </form>
 
           <div class="mt-10 flex flex-wrap items-center gap-4">
-            <button type="submit" form="regenerateForm" name="finalize" value="true" id="finalizeButton"
+            <button type="button"
+                    id="finalizeButton"
+                    hx-post="/recipes/{{.Hash}}/finalize"
+                    hx-swap="none"
                     class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
               Assemble Shopping List
-            </button>
-            <button type="button"
-                    onclick="shareRecipes()"
-                    class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
-              Share Recipes
             </button>
           </div>
         </div>
@@ -175,67 +193,7 @@
       <p class="text-center text-sm text-ink-500">Planned by Careme.</p>
     </section>
   </main>
-
-  <script>
-    function updateFinalizeButton() {
-      const form = document.getElementById('regenerateForm');
-      const savedInputs = form.querySelectorAll('input[name="saved"]');
-      const finalizeButton = document.getElementById('finalizeButton');
-
-      // Check if any saved inputs have non-empty values
-      const hasSavedRecipes = Array.from(savedInputs).some(input => input.value.trim() !== '');
-
-      // Enable/disable the button based on whether recipes are saved
-      finalizeButton.disabled = !hasSavedRecipes;
-    }
-
-    // Initialize button state on page load
-    document.addEventListener('DOMContentLoaded', updateFinalizeButton);
-
-    async function shareRecipes() {
-      try {
-        await navigator.share({title: document.title, url: window.location.href});
-      } catch (err) {
-        if (err && err.name === 'AbortError') {
-          return;
-        }
-        window.prompt('Copy this link:', window.location.href);
-      }
-    }
-
-    function toggleRecipeDetails(hash) {
-      const panel = document.getElementById('details-' + hash);
-      if (!panel) {
-        return;
-      }
-      const isOpen = panel.classList.contains('hidden');
-      setRecipeDetailsVisible(hash, isOpen);
-    }
-
-    function setRecipeDetailsVisible(hash, isVisible) {
-      const panel = document.getElementById('details-' + hash);
-      if (!panel) {
-        return;
-      }
-      panel.classList.toggle('hidden', !isVisible);
-      const button = document.getElementById('details-' + hash + '-button');
-      if (button) {
-        button.setAttribute('aria-expanded', isVisible ? 'true' : 'false');
-        button.textContent = isVisible ? 'Hide details' : 'Show details';
-      }
-    }
-
-    const shoppingListToggle = document.getElementById('shoppingListToggle');
-    const shoppingListPanel = document.getElementById('shoppingListPanel');
-    if (shoppingListToggle && shoppingListPanel) {
-      shoppingListToggle.addEventListener('click', function () {
-        shoppingListPanel.classList.toggle('hidden');
-        const isOpen = !shoppingListPanel.classList.contains('hidden');
-        shoppingListToggle.textContent = isOpen ? 'Hide' : 'Show';
-        shoppingListToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      });
-    }
-  </script>
+  <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>

@@ -70,6 +70,9 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, "Estimated cost:") {
 		t.Error("shopping list HTML should contain estimated cost")
 	}
+	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
+		t.Error("shopping list HTML should include htmx script")
+	}
 }
 
 func TestFormatMail_ValidHTML(t *testing.T) {
