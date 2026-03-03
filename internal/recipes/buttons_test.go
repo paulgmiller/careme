@@ -88,6 +88,9 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	if !strings.Contains(html, `/recipes/`) || !strings.Contains(html, `/regenerate"`) {
 		t.Error("HTML should submit regenerate with POST endpoint")
 	}
+	if !strings.Contains(html, `hx-params="instructions"`) {
+		t.Error("HTML regenerate form should submit only instructions")
+	}
 
 	// Check that recipes are present with their titles
 	if !strings.Contains(html, "Recipe One") {

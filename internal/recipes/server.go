@@ -320,7 +320,30 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
 
+	selectionHash := strings.TrimSpace(r.FormValue(queryArgHash))
+	if selectionHash == "" {
+		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
+		return
+	}
+	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, selectionHash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load recipe selection for save", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
+		return
+	}
+	selection.markSaved(recipeHash)
+	if err := s.saveRecipeSelection(ctx, currentUser.ID, selectionHash, selection); err != nil {
+		slog.ErrorContext(ctx, "failed to save recipe selection", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
+		return
+	}
+
+	//could pass this in with htmx instead of loading title
 	recipe, err := s.SingleFromCache(ctx, recipeHash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -329,23 +352,6 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.ErrorContext(ctx, "failed to load recipe for profile save", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to load recipe", http.StatusInternalServerError)
-		return
-	}
-	if recipe.OriginHash == "" {
-		http.Error(w, "recipe origin not found", http.StatusBadRequest)
-		return
-	}
-
-	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, recipe.OriginHash)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to load recipe selection for save", "user_id", currentUser.ID, "origin_hash", recipe.OriginHash, "error", err)
-		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
-		return
-	}
-	selection.markSaved(recipeHash)
-	if err := s.saveRecipeSelection(ctx, currentUser.ID, recipe.OriginHash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe selection", "user_id", currentUser.ID, "origin_hash", recipe.OriginHash, "error", err)
-		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
 
@@ -386,32 +392,25 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
-
-	recipe, err := s.SingleFromCache(ctx, recipeHash)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			http.Error(w, "recipe not found", http.StatusNotFound)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load recipe for profile dismiss", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
-		return
-	}
-	//if we pass in the origin hash as part of query then maybe we don't need to load recipe in dimsiss
-	if recipe.OriginHash == "" {
-		http.Error(w, "recipe origin not found", http.StatusBadRequest)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
 
-	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, recipe.OriginHash)
+	selectionHash := strings.TrimSpace(r.FormValue(queryArgHash))
+	if selectionHash == "" {
+		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
+		return
+	}
+	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, selectionHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load recipe selection for dismiss", "user_id", currentUser.ID, "origin_hash", recipe.OriginHash, "error", err)
+		slog.ErrorContext(ctx, "failed to load recipe selection for dismiss", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
 	selection.markDismissed(recipeHash)
-	if err := s.saveRecipeSelection(ctx, currentUser.ID, recipe.OriginHash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe selection for dismiss", "user_id", currentUser.ID, "origin_hash", recipe.OriginHash, "error", err)
+	if err := s.saveRecipeSelection(ctx, currentUser.ID, selectionHash, selection); err != nil {
+		slog.ErrorContext(ctx, "failed to save recipe selection for dismiss", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}

@@ -419,7 +419,9 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 		t.Fatalf("failed to save recipe in cache: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save", nil)
+	form := url.Values{"h": {"origin-hash"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()
@@ -475,6 +477,50 @@ func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	}
 }
 
+func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  storage,
+		clerk:    auth.DefaultMock(),
+	}
+
+	recipe := ai.Recipe{
+		Title:       "Save Me",
+		Description: "Recipe to save",
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "stale-origin-hash"); err != nil {
+		t.Fatalf("failed to save recipe in cache: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save?h=current-list-hash", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSaveRecipe(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	currentSelection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "current-list-hash")
+	if err != nil {
+		t.Fatalf("failed to load current hash selection: %v", err)
+	}
+	if len(currentSelection.SavedHashes) != 1 || currentSelection.SavedHashes[0] != recipeHash {
+		t.Fatalf("expected saved selection under current hash, got %#v", currentSelection.SavedHashes)
+	}
+	staleSelection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "stale-origin-hash")
+	if err != nil {
+		t.Fatalf("failed to load stale hash selection: %v", err)
+	}
+	if !staleSelection.Empty() {
+		t.Fatalf("expected no selection under stale origin hash, got %#v", staleSelection)
+	}
+}
+
 func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -515,7 +561,9 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 		t.Fatalf("failed to create user: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/dismiss", nil)
+	form := url.Values{"h": {"origin-hash"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/dismiss", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()
@@ -568,6 +616,67 @@ func TestHandleDismissRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	}
 	if got := rr.Header().Get("HX-Redirect"); got != "/sign-in" {
 		t.Fatalf("expected HX-Redirect to /sign-in, got %q", got)
+	}
+}
+
+func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  storage,
+		clerk:    auth.DefaultMock(),
+	}
+
+	recipe := ai.Recipe{
+		Title:       "Dismiss Recipe",
+		Description: "Recipe to dismiss",
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "stale-origin-hash"); err != nil {
+		t.Fatalf("failed to save recipe in cache: %v", err)
+	}
+
+	user := &utypes.User{
+		ID:          "mock-clerk-user-id",
+		Email:       []string{"you@careme.cooking"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{
+			{
+				Title:     "Dismiss Recipe",
+				Hash:      recipeHash,
+				CreatedAt: time.Now(),
+			},
+		},
+	}
+	if err := storage.Update(user); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/dismiss?h=current-list-hash", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleDismissRecipe(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	currentSelection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "current-list-hash")
+	if err != nil {
+		t.Fatalf("failed to load current hash selection: %v", err)
+	}
+	if len(currentSelection.DismissedHashes) != 1 || currentSelection.DismissedHashes[0] != recipeHash {
+		t.Fatalf("expected dismissed selection under current hash, got %#v", currentSelection.DismissedHashes)
+	}
+	staleSelection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "stale-origin-hash")
+	if err != nil {
+		t.Fatalf("failed to load stale hash selection: %v", err)
+	}
+	if !staleSelection.Empty() {
+		t.Fatalf("expected no selection under stale origin hash, got %#v", staleSelection)
 	}
 }
 

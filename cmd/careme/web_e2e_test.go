@@ -54,10 +54,10 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 	// Step 4: persist selection immediately via HTMX.
 	saveURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/save"
-	_ = mustPostFormBodyHTMX(t, client, saveURL, url.Values{})
+	_ = mustPostFormBodyHTMX(t, client, saveURL, url.Values{"h": {recipesHash}})
 	for _, dismissed := range dismissedHashes {
 		dismissURL := srv.URL + "/recipe/" + url.PathEscape(dismissed) + "/dismiss"
-		_ = mustPostFormBodyHTMX(t, client, dismissURL, url.Values{})
+		_ = mustPostFormBodyHTMX(t, client, dismissURL, url.Values{"h": {recipesHash}})
 	}
 
 	// Step 5: finalize using server-side selection.

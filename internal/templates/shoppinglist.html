@@ -44,6 +44,7 @@
                 method="POST"
                 action="/recipes/{{.Hash}}/regenerate"
                 hx-post="/recipes/{{.Hash}}/regenerate"
+                hx-params="instructions"
                 hx-swap="none">
 
             <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
@@ -61,56 +62,59 @@
                 </button>
               </div>
             </div>
+          </form>
 
-            <div class="mt-8 space-y-8">
-              {{range .Recipes}}
-              <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-                <header class="space-y-4">
-                  <div>
-                    <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      {{.Title}}
-                    </a>
-                    <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
-                  </div>
-                  <div class="flex flex-wrap items-center gap-3">
-                    <input type="radio"
-                           {{if .Saved}}checked{{end}}
-                           name="recipe-{{.ComputeHash}}"
-                           value="save"
-                           id="save-{{.ComputeHash}}"
-                           class="peer/save hidden" />
-                    <label for="save-{{.ComputeHash}}"
-                           hx-post="/recipe/{{.ComputeHash}}/save"
-                           hx-trigger="click"
-                           hx-target="next .profile-status"
-                           hx-swap="innerHTML"
-                           onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
-                           class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
-                      Save
-                    </label>
-                    <input type="radio"
-                           {{if index $.DismissedHashes (.ComputeHash)}}checked{{end}}
-                           name="recipe-{{.ComputeHash}}"
-                           value="dismiss"
-                           id="dismiss-{{.ComputeHash}}"
-                           class="peer/dismiss hidden" />
-                    <label for="dismiss-{{.ComputeHash}}"
-                           hx-post="/recipe/{{.ComputeHash}}/dismiss"
-                           hx-trigger="click"
-                           hx-target="next .profile-status"
-                           hx-swap="innerHTML"
-                           onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
-                           class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
-                      Dismiss
-                    </label>
-                    <button type="button"
-                            onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
-                            class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      Details
-                    </button>
-                    <span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>
-                  </div>
-                </header>
+          <div class="mt-8 space-y-8">
+            {{range .Recipes}}
+            <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+              <header class="space-y-4">
+                <div>
+                  <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    {{.Title}}
+                  </a>
+                  <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <input type="radio"
+                         {{if .Saved}}checked{{end}}
+                         name="recipe-{{.ComputeHash}}"
+                         value="save"
+                         id="save-{{.ComputeHash}}"
+                         class="peer/save hidden" />
+                  <label for="save-{{.ComputeHash}}"
+                         hx-post="/recipe/{{.ComputeHash}}/save"
+                         hx-vals='{"h":"{{$.Hash}}"}'
+                         hx-trigger="click"
+                         hx-target="next .profile-status"
+                         hx-swap="innerHTML"
+                         onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
+                         class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
+                    Save
+                  </label>
+                  <input type="radio"
+                         {{if index $.DismissedHashes (.ComputeHash)}}checked{{end}}
+                         name="recipe-{{.ComputeHash}}"
+                         value="dismiss"
+                         id="dismiss-{{.ComputeHash}}"
+                         class="peer/dismiss hidden" />
+                  <label for="dismiss-{{.ComputeHash}}"
+                         hx-post="/recipe/{{.ComputeHash}}/dismiss"
+                         hx-vals='{"h":"{{$.Hash}}"}'
+                         hx-trigger="click"
+                         hx-target="next .profile-status"
+                         hx-swap="innerHTML"
+                         onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
+                         class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
+                    Dismiss
+                  </label>
+                  <button type="button"
+                          onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
+                          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Details
+                  </button>
+                  <span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>
+                </div>
+              </header>
 
               <details {{if not (or .Saved (index $.DismissedHashes (.ComputeHash)))}}open{{end}} class="space-y-4">
                 <summary class="hidden">Details</summary>
@@ -173,7 +177,6 @@
             </section>
             {{end}}
           </div>
-          </form>
 
           <div class="mt-10 flex flex-wrap items-center gap-4">
             <button type="button"
