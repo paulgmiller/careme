@@ -27,6 +27,10 @@ import (
 	"github.com/samber/lo"
 )
 
+func setTextContent(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+}
+
 type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
@@ -285,7 +289,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setTextContent(w)
 	_, err = fmt.Fprint(w, `<span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><span aria-hidden="true">✓</span>Saved</span>`)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write feedback response", "hash", hash, "error", err)
@@ -351,7 +355,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setTextContent(w)
 	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-green-700">Saved to kitchen</span>`)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write save response", "hash", recipeHash, "error", err)
@@ -418,7 +422,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setTextContent(w)
 	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-red-700">Removed from kitchen</span>`)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
@@ -458,21 +462,16 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	newHash := p.Hash()
 
-	saveErr := s.SaveParams(ctx, p)
-	if saveErr != nil && !errors.Is(saveErr, ErrAlreadyExists) {
-		slog.ErrorContext(ctx, "failed to save params for regenerate", "hash", newHash, "error", saveErr)
+	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
+		slog.ErrorContext(ctx, "failed to save params for regenerate", "hash", newHash, "error", err)
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
-	selection := recipeSelectionFromParams(p)
-	if err := s.saveRecipeSelection(ctx, currentUser.ID, newHash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to persist recipe selection for regenerate", "user_id", currentUser.ID, "hash", newHash, "error", err)
-		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
-		return
-	}
-	if saveErr == nil {
-		s.kickgeneration(ctx, p, currentUser)
-	}
+	//so we have a choice we could save slection here matching params
+	// or backfill it on first load after regeneration Backfilling is a little more resilient
+	//selection := recipeSelectionFromParams(p)
+	//if err := s.saveRecipeSelection(ctx, currentUser.ID, newHash, selection);
+	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, newHash, true /*useStart*/)
 }
@@ -485,7 +484,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	userid, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			if isHTMXRequest(r) {
@@ -498,12 +497,13 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := s.paramsForAction(ctx, hash, currentUser.ID, "")
+	p, err := s.paramsForAction(ctx, hash, userid, "")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if len(p.Saved) == 0 {
+		//ui should ideally not allow us to get here
 		http.Error(w, "no recipes selected to save", http.StatusBadRequest)
 		return
 	}
@@ -541,15 +541,13 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 
 	selection, err := s.loadRecipeSelection(ctx, userID, hash)
 	if err != nil {
+		//should we just fall back to params? selection saving
 		return nil, fmt.Errorf("failed to load recipe selection")
 	}
 
 	params := *baseParams
 	params.Instructions = instructions
 	params.Saved = s.selectionRecipes(ctx, selection.SavedHashes, currentList.Recipes)
-	for i := range params.Saved {
-		params.Saved[i].Saved = true
-	}
 	params.Dismissed = s.selectionRecipes(ctx, selection.DismissedHashes, currentList.Recipes)
 	if params.ConversationID == "" {
 		params.ConversationID = currentList.ConversationID
@@ -640,24 +638,19 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		styles := wineStyles(slist.Recipes)
 		slog.InfoContext(ctx, "wines!", "hash", hashParam, "wine_styles", styles)
 		userID, err := s.clerk.GetUserIDFromRequest(r)
-		signedIn := err == nil
-		if err != nil && !errors.Is(err, auth.ErrNoSession) {
-			slog.ErrorContext(ctx, "failed to load auth state for shopping list", "error", err)
-		}
+		signedIn := !errors.Is(err, auth.ErrNoSession)
 		selection := recipeSelectionFromParams(p)
 		if signedIn {
 			fromStore, selErr := s.loadRecipeSelection(ctx, userID, hashParam)
 			if selErr != nil {
 				slog.ErrorContext(ctx, "failed to load recipe selection for render", "user_id", userID, "hash", hashParam, "error", selErr)
-			} else {
-				if len(fromStore.SavedHashes) > 0 || len(fromStore.DismissedHashes) > 0 {
-					selection = fromStore
-				} else if len(selection.SavedHashes) > 0 || len(selection.DismissedHashes) > 0 {
-					if saveErr := s.saveRecipeSelection(ctx, userID, hashParam, selection); saveErr != nil {
-						slog.ErrorContext(ctx, "failed to seed recipe selection for render", "user_id", userID, "hash", hashParam, "error", saveErr)
-					}
-				}
+				http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
+				return
 			}
+			if !fromStore.Empty() {
+				selection = fromStore
+			}
+
 		}
 		applySelectionToRecipes(slist.Recipes, selection)
 		p.Saved = s.selectionRecipes(ctx, selection.SavedHashes, slist.Recipes)

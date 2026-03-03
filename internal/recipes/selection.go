@@ -30,6 +30,10 @@ func (s *recipeSelection) markSaved(recipeHash string) {
 	s.DismissedHashes = lo.Filter(s.DismissedHashes, func(v string, _ int) bool { return v != hash })
 }
 
+func (s *recipeSelection) Empty() bool {
+	return len(s.SavedHashes) == 0 && len(s.DismissedHashes) == 0
+}
+
 func (s *recipeSelection) markDismissed(recipeHash string) {
 	hash := strings.TrimSpace(recipeHash)
 	if hash == "" {
