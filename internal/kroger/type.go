@@ -29,7 +29,9 @@ func ToTSV(ingredient []Ingredient, w io.Writer) error {
 	csvw := csv.NewWriter(w)
 	csvw.Comma = '\t'
 	header := []string{"ProductId", "AisleNumber", "Brand", "Description", "Size", "PriceRegular", "PriceSale"}
-	csvw.Write(header)
+	if err := csvw.Write(header); err != nil {
+		return err
+	}
 	for _, i := range ingredient {
 		if i.PriceSale == nil {
 			i.PriceSale = i.PriceRegular
