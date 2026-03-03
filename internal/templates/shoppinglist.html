@@ -78,12 +78,13 @@
                            name="recipe-{{.ComputeHash}}"
                            value="save"
                            id="save-{{.ComputeHash}}"
-                           class="peer/save hidden"
+                           class="peer/save hidden" />
+                    <label for="save-{{.ComputeHash}}"
                            hx-post="/recipe/{{.ComputeHash}}/save"
-                           hx-trigger="change[checked]"
-                           hx-target="#profile-status-{{.ComputeHash}}"
-                           hx-swap="innerHTML" />
-                    <label for="save-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
+                           hx-trigger="click"
+                           hx-target="next .profile-status"
+                           hx-swap="innerHTML"
+                           class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
                       Save
                     </label>
                     <input type="radio"
@@ -91,24 +92,24 @@
                            name="recipe-{{.ComputeHash}}"
                            value="dismiss"
                            id="dismiss-{{.ComputeHash}}"
-                           class="peer/dismiss hidden"
+                           class="peer/dismiss hidden" />
+                    <label for="dismiss-{{.ComputeHash}}"
                            hx-post="/recipe/{{.ComputeHash}}/dismiss"
-                           hx-trigger="change[checked]"
-                           hx-target="#profile-status-{{.ComputeHash}}"
-                           hx-swap="innerHTML" />
-                    <label for="dismiss-{{.ComputeHash}}" class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
+                           hx-trigger="click"
+                           hx-target="next .profile-status"
+                           hx-swap="innerHTML"
+                           class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
                       Dismiss
                     </label>
-                    <label for="details-{{.ComputeHash}}"
-                            class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                      Details
-                    </label>
-                    <span id="profile-status-{{.ComputeHash}}" class="text-xs font-medium text-ink-600" aria-live="polite"></span>
+                    <span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>
                   </div>
                 </header>
 
-              <input id="details-{{.ComputeHash}}" type="checkbox" class="peer/details hidden" {{if not (or .Saved (index $.DismissedHashes (.ComputeHash)))}}checked{{end}} />
-              <section class="hidden space-y-6 peer-checked/details:block">
+              <details {{if not (or .Saved (index $.DismissedHashes (.ComputeHash)))}}open{{end}} class="space-y-4">
+                <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Details
+                </summary>
+                <section class="space-y-6">
                 <div class="grid gap-6 md:grid-cols-2">
                   <div>
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Ingredients</h3>
@@ -143,20 +144,17 @@
                   <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
                 </div>
               </section>
+              </details>
             </article>
             {{end}}
 
             {{if .ShoppingList}}
             <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
-                <label for="shoppingListToggle"
-                        class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Show
-                </label>
-              </div>
-              <input id="shoppingListToggle" type="checkbox" class="peer hidden" />
-              <div class="mt-4 hidden peer-checked:block">
+              <details>
+                <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Shopping list
+                </summary>
+                <div class="mt-4">
                 <ul class="space-y-2 text-ink-700">
                   {{range .ShoppingList}}
                   <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
@@ -165,7 +163,8 @@
                   </li>
                   {{end}}
                 </ul>
-              </div>
+                </div>
+              </details>
             </section>
             {{end}}
           </div>

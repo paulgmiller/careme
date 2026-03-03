@@ -56,8 +56,8 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/dismiss"`) {
 		t.Error("HTML should contain HTMX dismiss action")
 	}
-	if !strings.Contains(html, `hx-trigger="change[checked]"`) {
-		t.Error("HTML should trigger HTMX requests only on checked state changes")
+	if !strings.Contains(html, `hx-trigger="click"`) {
+		t.Error("HTML should trigger HTMX requests on click")
 	}
 
 	// Check for Save and Dismiss labels (without span tags)
