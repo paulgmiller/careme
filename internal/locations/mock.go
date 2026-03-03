@@ -43,6 +43,13 @@ func (m mock) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location
 	return lo.Values(fakes), nil
 }
 
+func (m mock) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
+	for _, location := range fakes {
+		return location.ZipCode, true
+	}
+	return "", false
+}
+
 func (m mock) Register(mux *http.ServeMux, _ auth.AuthClient) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		data := struct {
