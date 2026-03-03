@@ -63,7 +63,9 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-	locationserver, err := locations.New(cfg, cache)
+	centroids := locations.LoadCentroids()
+
+	locationserver, err := locations.New(cfg, cache, centroids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}

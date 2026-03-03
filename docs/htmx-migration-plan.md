@@ -12,9 +12,7 @@ Move interactive UI behavior toward server-rendered HTML with [HTMX](https://htm
 ## Page-by-Page Plan
 
 ### `internal/templates/home.html`
-- Current state: no custom interaction JS.
-- Plan: optional future HTMX ZIP lookup preview, otherwise keep as-is.
-- Priority: low.
+- Debated using htmx for location lookup of zip (see commit 8037997) but sicne it didn't do anything online and geolocation needs js anyways inline javascript was simpler. 
 
 ### `internal/templates/locations.html`
 - Current state: migrated
