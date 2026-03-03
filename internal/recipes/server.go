@@ -857,13 +857,18 @@ func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
 
 	ingredients, err := s.IngredientsFromCache(ctx, lochash)
 	if err != nil {
-		http.Error(w, "ingredients not found in cache", http.StatusNotFound)
+		if errors.Is(err, cache.ErrNotFound) {
+			http.Error(w, "parameters not found in cache", http.StatusNotFound)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load ingredients for hash", "hash", lochash, "error", err)
+		http.Error(w, "failed to fetch ingredients", http.StatusInternalServerError)
 		return
 	}
 	slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 	// make this a html thats readable.
 	if r.URL.Query().Get("format") == "tsv" {
-		w.Header().Add("Content-Type", "text/plain")
+		w.Header().Set("Content-Type", "text/plain")
 		err := kroger.ToTSV(ingredients, w)
 		if err != nil {
 			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
@@ -872,7 +877,7 @@ func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Add("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(ingredients); err != nil {
