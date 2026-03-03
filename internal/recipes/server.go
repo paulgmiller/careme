@@ -845,13 +845,13 @@ func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
 	hash := r.PathValue("hash")
 	p, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			http.Error(w, "parameters not found in cache", http.StatusNotFound)
+			return
+		}
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hash, "error", err)
-		//http.Error(w, "recipe not found or expired", http.StatusNotFound)
-		//return
-		p = DefaultParams(&locations.Location{
-			ID:   "",
-			Name: "Unknown Location",
-		}, time.Now())
+		http.Error(w, "failed to fetch params", http.StatusInternalServerError)
+		return
 	}
 	lochash := p.LocationHash()
 
@@ -863,7 +863,7 @@ func (s *server) ingredients(w http.ResponseWriter, r *http.Request) {
 	slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash)
 	// make this a html thats readable.
 	if r.URL.Query().Get("format") == "tsv" {
-		w.Header().Add("Content-Type", "text/tab-separated-values")
+		w.Header().Add("Content-Type", "text/plain")
 		err := kroger.ToTSV(ingredients, w)
 		if err != nil {
 			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)

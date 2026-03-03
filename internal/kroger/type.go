@@ -52,7 +52,7 @@ func ToTSV(ingredient []Ingredient, w io.Writer) error {
 		}
 	}
 	csvw.Flush()
-	return nil
+	return csvw.Error()
 }
 
 // toStr returns the string value if non-nil, or "empty" otherwise.
