@@ -2,52 +2,11 @@ package recipes
 
 import (
 	"careme/internal/ai"
-	"careme/internal/cache"
+	"careme/internal/recipes/selectionstate"
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"strings"
-	"time"
-
-	"github.com/samber/lo"
 )
 
-const recipeSelectionCachePrefix = "recipe_selection/"
-
-// recipeSelection tracks which recipes have been saved and dismisse by a user between regeneration/finalization.
-// After that they are merged back into params.
-type recipeSelection struct {
-	SavedHashes     []string  `json:"saved_hashes,omitempty"`
-	DismissedHashes []string  `json:"dismissed_hashes,omitempty"`
-	UpdatedAt       time.Time `json:"updated_at,omitempty"`
-}
-
-func (s *recipeSelection) markSaved(recipeHash string) {
-	hash := strings.TrimSpace(recipeHash)
-	if hash == "" {
-		return
-	}
-	s.SavedHashes = lo.Uniq(append(s.SavedHashes, hash))
-	s.DismissedHashes = lo.Filter(s.DismissedHashes, func(v string, _ int) bool { return v != hash })
-}
-
-func (s *recipeSelection) Empty() bool {
-	return len(s.SavedHashes) == 0 && len(s.DismissedHashes) == 0
-}
-
-func (s *recipeSelection) markDismissed(recipeHash string) {
-	hash := strings.TrimSpace(recipeHash)
-	if hash == "" {
-		return
-	}
-	s.DismissedHashes = lo.Uniq(append(s.DismissedHashes, hash))
-	s.SavedHashes = lo.Filter(s.SavedHashes, func(v string, _ int) bool { return v != hash })
-}
-
-func recipeSelectionKey(userID, originHash string) string {
-	return fmt.Sprintf("%s%s/%s", recipeSelectionCachePrefix, strings.TrimSpace(userID), strings.TrimSpace(originHash))
-}
+type recipeSelection = selectionstate.State
 
 // this should die off eventually.
 func recipeSelectionFromParams(p *generatorParams) recipeSelection {
@@ -67,60 +26,23 @@ func recipeSelectionFromParams(p *generatorParams) recipeSelection {
 	return selection
 }
 
-func (s *server) loadRecipeSelection(ctx context.Context, userID, originHash string) (recipeSelection, error) {
-	reader, err := s.Cache.Get(ctx, recipeSelectionKey(userID, originHash))
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			return recipeSelection{}, nil
-		}
-		return recipeSelection{}, err
+func (s *server) selectionRepo() *selectionstate.Store {
+	if s.selectionStore == nil {
+		s.selectionStore = selectionstate.NewStore(s.Cache)
 	}
-	defer func() {
-		_ = reader.Close()
-	}()
+	return s.selectionStore
+}
 
-	var selection recipeSelection
-	if err := json.NewDecoder(reader).Decode(&selection); err != nil {
-		return recipeSelection{}, fmt.Errorf("failed to decode recipe selection: %w", err)
-	}
-	return selection, nil
+func (s *server) loadRecipeSelection(ctx context.Context, userID, originHash string) (recipeSelection, error) {
+	return s.selectionRepo().Load(ctx, userID, originHash)
 }
 
 func (s *server) saveRecipeSelection(ctx context.Context, userID, originHash string, selection recipeSelection) error {
-	selection.UpdatedAt = time.Now()
-	body, err := json.Marshal(selection)
-	if err != nil {
-		return fmt.Errorf("failed to marshal recipe selection: %w", err)
-	}
-	//good place for etags :)
-	if err := s.Cache.Put(ctx, recipeSelectionKey(userID, originHash), string(body), cache.Unconditional()); err != nil {
-		return fmt.Errorf("failed to save recipe selection: %w", err)
-	}
-	return nil
+	return s.selectionRepo().Save(ctx, userID, originHash, selection)
 }
 
 func (s *server) selectionRecipes(ctx context.Context, hashes []string, current []ai.Recipe) []ai.Recipe {
-	if len(hashes) == 0 {
-		return nil
-	}
-	currentByHash := make(map[string]ai.Recipe, len(current))
-	for _, recipe := range current {
-		currentByHash[recipe.ComputeHash()] = recipe
-	}
-
-	recipes := make([]ai.Recipe, 0, len(hashes))
-	for _, hash := range hashes {
-		if recipe, ok := currentByHash[hash]; ok {
-			recipes = append(recipes, recipe)
-			continue
-		}
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			continue
-		}
-		recipes = append(recipes, *recipe)
-	}
-	return recipes
+	return selectionstate.RecipesForHashes(ctx, hashes, current, s.SingleFromCache)
 }
 
 func (s *server) mergeParamsWithSelection(ctx context.Context, p *generatorParams, selection recipeSelection, current []ai.Recipe) {
@@ -130,10 +52,10 @@ func (s *server) mergeParamsWithSelection(ctx context.Context, p *generatorParam
 
 	merged := recipeSelectionFromParams(p)
 	for _, hash := range selection.SavedHashes {
-		merged.markSaved(hash)
+		merged.MarkSaved(hash)
 	}
 	for _, hash := range selection.DismissedHashes {
-		merged.markDismissed(hash)
+		merged.MarkDismissed(hash)
 	}
 
 	p.Saved = s.selectionRecipes(ctx, merged.SavedHashes, current)
