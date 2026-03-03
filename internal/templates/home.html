@@ -25,7 +25,7 @@
             <div>
               <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Careme</h1>
               <p class="mt-2 text-ink-600">
-                Your weeknight kitchen helper.
+                Your personal chef and sommelier.
               </p>
             </div>
             {{if .User}}
@@ -74,6 +74,11 @@
                           class="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     Find stores
                   </button>
+                  <button type="button" id="use-location-btn"
+                          class="inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Use your location
+                  </button>
+                  <p id="use-location-message" class="hidden text-xs text-ink-600" aria-live="polite"></p>
                 </div>
               </form>
             </div>
@@ -103,8 +108,8 @@
           <p class="whitespace-pre-line text-ink-700">Careme will:
 
 Find your local grocery stores.
-See what's fresh at your nearby store.
-Build a week of dinners in your favorite style.
+Check the store's inventory for fresh meat and seasonal produce.
+Generate a weekly meal plan from a variety of cuisines and cooking styles.
 </p>
           <!-- Signed-out state -->
           <div class="mt-6">
@@ -137,5 +142,40 @@ Build a week of dinners in your favorite style.
     </section>
   </main>
   {{template "clerk_refresh.html" .}}
+  <script>
+    (() => {
+      const button = document.getElementById("use-location-btn");
+      const message = document.getElementById("use-location-message");
+
+      if (!button || !message) {
+        return;
+      }
+
+      const showMessage = (text) => {
+        message.classList.remove("hidden");
+        message.textContent = text;
+      };
+
+      button.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          showMessage("Sorry, chef. Location is not available in this browser.");
+          return;
+        }
+
+        showMessage("Finding your ZIP code...");
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = encodeURIComponent(position.coords.latitude.toString());
+            const lon = encodeURIComponent(position.coords.longitude.toString());
+            window.location.assign(`/locations/zip-from-coordinates?lat=${lat}&lon=${lon}`);
+          },
+          () => {
+            showMessage("Sorry, chef. Have to allow location access.");
+          },
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
+        );
+      });
+    })();
+  </script>
 </body>
 </html>
