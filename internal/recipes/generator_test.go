@@ -6,7 +6,6 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
-	"strings"
 	"testing"
 	"time"
 )
@@ -20,8 +19,10 @@ func (panicKrogerClient) ProductSearchWithResponse(ctx context.Context, params *
 }
 
 type captureWineQuestionAIClient struct {
-	question string
-	answer   string
+	question    string
+	answer      string
+	recipeTitle string
+	selection   *ai.WineSelection
 }
 
 func (c *captureWineQuestionAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
@@ -35,6 +36,17 @@ func (c *captureWineQuestionAIClient) Regenerate(ctx context.Context, newinstruc
 func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	c.question = question
 	return c.answer, nil
+}
+
+func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error) {
+	c.recipeTitle = recipeTitle
+	if c.selection != nil {
+		return c.selection, nil
+	}
+	return &ai.WineSelection{
+		Wines:      []ai.Ingredient{},
+		Commentary: c.answer,
+	}, nil
 }
 
 func (c *captureWineQuestionAIClient) Ready(ctx context.Context) error {
@@ -69,7 +81,13 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 		t.Fatalf("failed to seed wine ingredients cache: %v", err)
 	}
 
-	aiStub := &captureWineQuestionAIClient{answer: "Great with your dish."}
+	aiStub := &captureWineQuestionAIClient{
+		answer: "Great with your dish.",
+		selection: &ai.WineSelection{
+			Wines:      []ai.Ingredient{{Name: "Cached Pinot Noir", Quantity: "750mL"}},
+			Commentary: "Great with your dish.",
+		},
+	}
 	g := &Generator{
 		io:           IO(cacheStore),
 		aiClient:     aiStub,
@@ -83,10 +101,17 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PickAWine returned error: %v", err)
 	}
-	if got != aiStub.answer {
-		t.Fatalf("unexpected answer: got %q want %q", got, aiStub.answer)
+	if got == nil {
+		t.Fatal("expected non-nil wine selection")
+		return
 	}
-	if !strings.Contains(aiStub.question, "Cached Pinot Noir") {
-		t.Fatalf("expected cached wine to appear in question payload, got: %s", aiStub.question)
+	if got.Commentary != aiStub.answer {
+		t.Fatalf("unexpected commentary: got %q want %q", got.Commentary, aiStub.answer)
+	}
+	if got.Wines == nil || len(got.Wines) != 1 || got.Wines[0].Name != "Cached Pinot Noir" {
+		t.Fatalf("unexpected wine selection payload: %+v", got.Wines)
+	}
+	if aiStub.recipeTitle != "Roast Chicken" {
+		t.Fatalf("expected recipe title %q, got %q", "Roast Chicken", aiStub.recipeTitle)
 	}
 }

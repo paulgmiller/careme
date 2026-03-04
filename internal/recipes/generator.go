@@ -28,6 +28,7 @@ type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
+	PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error)
 	Ready(ctx context.Context) error
 }
 
@@ -60,7 +61,7 @@ func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
 	}, nil
 }
 
-func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (string, error) {
+func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
@@ -69,7 +70,7 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 		}
 	}
 	if len(styles) == 0 {
-		return "No wine Styles for recipe", nil
+		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
 	}
 	dateStr := date.Format("2006-01-02")
 	wines, err := asParallel(styles, func(style string) ([]kroger.Ingredient, error) {
@@ -96,22 +97,19 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 		return winesOfStyle, nil
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if len(wines) == 0 {
-		return "no wines of those styles found", nil
+		return &ai.WineSelection{Commentary: "no wines found", Wines: []ai.Ingredient{}}, nil
 	}
 	wines = uniqueByDescription(wines)
 
-	var sb strings.Builder
-	_ = lo.Must(fmt.Fprintf(&sb, "Pick a wine that would go well with %q. Here are %d wines in TSV format.\n", recipe.Title, len(wines)))
-	err = kroger.ToTSV(wines, &sb)
+	selection, err := g.aiClient.PickWine(ctx, conversationID, recipe.Title, wines)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to convert wines to TSV", "error", err)
-		return "", err
+		return nil, err
 	}
-	return g.aiClient.AskQuestion(ctx, sb.String(), conversationID)
+	return selection, nil
 }
 
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {

@@ -307,18 +307,19 @@ func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question str
 	return "Try chicken thighs at the same cook time.", nil
 }
 
-func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe, date time.Time) (string, error) {
+func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	if c.panicOnWine {
 		panic("unexpected call to PickAWine")
 	}
+	_ = location
 	c.winePickCalls++
 	c.lastWinePick.conversationID = conversationID
 	c.lastWinePick.recipeTitle = recipe.Title
 	c.lastWinePick.date = date
 	if c.wineRecommendation != "" {
-		return c.wineRecommendation, nil
+		return &ai.WineSelection{Commentary: c.wineRecommendation, Wines: []ai.Ingredient{}}, nil
 	}
-	return "Try a chilled sauvignon blanc.", nil
+	return &ai.WineSelection{Commentary: "Try a chilled sauvignon blanc.", Wines: []ai.Ingredient{}}, nil
 }
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {

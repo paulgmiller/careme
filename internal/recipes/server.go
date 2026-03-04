@@ -36,7 +36,7 @@ type locServer interface {
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
-	PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (string, error)
+	PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 	Ready(ctx context.Context) error
 }
 
@@ -230,8 +230,12 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	if recommendation, err := s.WineFromCache(ctx, hash); err == nil {
-		FormatRecipeWineHTML(hash, recommendation, w)
+	if selection, err := s.WineFromCache(ctx, hash); err == nil {
+		if selection == nil {
+			http.Error(w, "failed to load wine recommendation", http.StatusInternalServerError)
+			return
+		}
+		FormatRecipeWineHTML(hash, selection.Commentary, w)
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
@@ -263,17 +267,21 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
 	defer cancel()
-	recommendation, err := s.generator.PickAWine(ctx, conversationID, p.Location.ID, *recipe, p.Date)
+	selection, err := s.generator.PickAWine(ctx, conversationID, p.Location.ID, *recipe, p.Date)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to pick wine", "hash", hash, "conversation_id", conversationID, "error", err)
 		http.Error(w, "failed to pick wine", http.StatusInternalServerError)
 		return
 	}
-	if err := s.SaveWine(ctx, hash, recommendation); err != nil {
+	if selection == nil {
+		http.Error(w, "failed to pick wine", http.StatusInternalServerError)
+		return
+	}
+	if err := s.SaveWine(ctx, hash, selection); err != nil {
 		slog.ErrorContext(ctx, "failed to save wine recommendation", "hash", hash, "error", err)
 	}
 
-	FormatRecipeWineHTML(hash, recommendation, w)
+	FormatRecipeWineHTML(hash, selection.Commentary, w)
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
