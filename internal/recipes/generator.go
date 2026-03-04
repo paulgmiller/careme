@@ -31,11 +31,16 @@ type aiClient interface {
 	Ready(ctx context.Context) error
 }
 
+type ingredientio interface {
+	SaveIngredients(ctx context.Context, hash string, ingredients []kroger.Ingredient) error
+	IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error)
+}
+
 type Generator struct {
 	config       *config.Config
 	aiClient     aiClient
 	krogerClient kroger.ClientWithResponsesInterface // probably need only subset
-	cache        cache.Cache
+	io           ingredientio
 }
 
 func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
@@ -48,7 +53,7 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 		return nil, err
 	}
 	return &Generator{
-		cache:        cache, // should this also pull from config?
+		io:           IO(cache),
 		config:       cfg,
 		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
@@ -67,11 +72,10 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 		return "", fmt.Errorf("no wine styles available for recipe %q", recipe.Title)
 	}
 
-	rio := IO(g.cache)
 	cacheDate := date
 	wines, err := asParallel(styles, func(style string) ([]kroger.Ingredient, error) {
 		cacheKey := wineIngredientsCacheKey(style, location, cacheDate)
-		winesOfStyle, err := rio.IngredientsFromCache(ctx, cacheKey)
+		winesOfStyle, err := g.io.IngredientsFromCache(ctx, cacheKey)
 		if err == nil {
 			slog.InfoContext(ctx, "Serving cached wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "count", len(winesOfStyle))
 			return winesOfStyle, nil
@@ -87,7 +91,7 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 			return nil, fmt.Errorf("failed to get ingredients for style %q: %w", style, err)
 		}
 
-		if err := rio.SaveIngredients(ctx, cacheKey, winesOfStyle); err != nil {
+		if err := g.io.SaveIngredients(ctx, cacheKey, winesOfStyle); err != nil {
 			slog.ErrorContext(ctx, "Failed to cache wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "error", err)
 		}
 		return winesOfStyle, nil
@@ -180,9 +184,8 @@ func Filter(term string, brands []string, frozen bool) filter {
 func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
 	lochash := p.LocationHash()
 	var ingredients []kroger.Ingredient
-	rio := IO(g.cache)
 
-	if cachedIngredients, err := rio.IngredientsFromCache(ctx, lochash); err == nil {
+	if cachedIngredients, err := g.io.IngredientsFromCache(ctx, lochash); err == nil {
 		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
 		return cachedIngredients, nil
 	} else if !errors.Is(err, cache.ErrNotFound) {
@@ -204,7 +207,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toStr(i.Description) })
 	mutable.Shuffle(ingredients)
 
-	if err := rio.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {
+	if err := g.io.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}

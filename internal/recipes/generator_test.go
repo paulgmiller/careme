@@ -71,7 +71,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 
 	aiStub := &captureWineQuestionAIClient{answer: "Great with your dish."}
 	g := &Generator{
-		cache:        cacheStore,
+		io:           IO(cacheStore),
 		aiClient:     aiStub,
 		krogerClient: panicKrogerClient{},
 	}
