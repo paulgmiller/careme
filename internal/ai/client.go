@@ -224,23 +224,28 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 	return answer, nil
 }
 
-func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wineTSV string) (*WineSelection, error) {
+func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*WineSelection, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	recipeTitle = strings.TrimSpace(recipeTitle)
-	wineTSV = strings.TrimSpace(wineTSV)
 	if conversationID == "" {
 		return nil, fmt.Errorf("conversation ID is required for wine picks")
 	}
 	if recipeTitle == "" {
 		return nil, fmt.Errorf("recipe title is required for wine picks")
 	}
-	if wineTSV == "" {
-		return nil, fmt.Errorf("wine tsv is required for wine picks")
+	if len(wines) == 0 {
+		return nil, fmt.Errorf("wines are required for wine picks")
+	}
+	var wineTSV strings.Builder
+	err := kroger.ToTSV(wines, &wineTSV)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to convert wines to TSV", "error", err)
+		return nil, err
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	input := []responses.ResponseInputItemUnionParam{}
 	input = append(input, user(fmt.Sprintf("Recipe title: %s", recipeTitle)))
-	input = append(input, user(fmt.Sprintf("Candidate wines in TSV format:\n%s", wineTSV)))
+	input = append(input, user(fmt.Sprintf("Candidate wines in TSV format:\n%s", wineTSV.String())))
 	params := responses.ResponseNewParams{
 		Model: c.model,
 		Instructions: openai.String(

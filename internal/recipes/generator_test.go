@@ -6,7 +6,6 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
-	"strings"
 	"testing"
 	"time"
 )
@@ -23,7 +22,6 @@ type captureWineQuestionAIClient struct {
 	question    string
 	answer      string
 	recipeTitle string
-	wineTSV     string
 	selection   *ai.WineSelection
 }
 
@@ -40,9 +38,8 @@ func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question 
 	return c.answer, nil
 }
 
-func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, conversationID string, recipeTitle string, wineTSV string) (*ai.WineSelection, error) {
+func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error) {
 	c.recipeTitle = recipeTitle
-	c.wineTSV = wineTSV
 	if c.selection != nil {
 		return c.selection, nil
 	}
@@ -115,8 +112,5 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 	if aiStub.recipeTitle != "Roast Chicken" {
 		t.Fatalf("expected recipe title %q, got %q", "Roast Chicken", aiStub.recipeTitle)
-	}
-	if !strings.Contains(aiStub.wineTSV, "Cached Pinot Noir") {
-		t.Fatalf("expected cached wine to appear in wine TSV payload, got: %s", aiStub.wineTSV)
 	}
 }
