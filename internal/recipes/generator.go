@@ -66,18 +66,38 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 	}
 
 	wines := []kroger.Ingredient{}
+	var wg sync.WaitGroup
+	var lock sync.Mutex
+	var firstErr error
+
+	wg.Add(len(styles))
 	for _, style := range styles {
-		slog.InfoContext(ctx, "Picking wine for style", "style", style)
-		//need to cache this.
-		winesOfStyle, err := g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
-		if err != nil {
-			slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
-			return "", err
-		}
-		wines = append(wines, winesOfStyle...)
+		go func(style string) {
+			defer wg.Done()
+
+			slog.InfoContext(ctx, "Picking wine for style", "style", style)
+			// need to cache this.
+			winesOfStyle, err := g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
+
+			lock.Lock()
+			defer lock.Unlock()
+			if err != nil {
+				slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
+				if firstErr == nil {
+					firstErr = err
+				}
+				return
+			}
+			wines = append(wines, winesOfStyle...)
+		}(style)
 	}
+	wg.Wait()
+	if firstErr != nil {
+		return "", firstErr
+	}
+
 	if len(wines) == 0 {
-		return "", fmt.Errorf("no wines found for recipe %q", recipe.Title)
+		return "no wines found ", nil
 	}
 	wines = lo.UniqBy(wines, func(i kroger.Ingredient) string { return strings.ToLower(toStr(i.Description)) })
 
