@@ -48,7 +48,7 @@ func main() {
 		log.Fatalf("failed to create cache: %v", err)
 	}
 
-	generator, err := recipes.NewGenerator(cfg, cacheStore)
+	generator, err := recipes.NewGenerator(cfg, recipes.IO(cacheStore))
 	if err != nil {
 		log.Fatalf("failed to create recipe generator: %v", err)
 	}

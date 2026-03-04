@@ -43,7 +43,7 @@ type Generator struct {
 	io           ingredientio
 }
 
-func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
+func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -53,7 +53,7 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 		return nil, err
 	}
 	return &Generator{
-		io:           IO(cache),
+		io:           io,
 		config:       cfg,
 		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
