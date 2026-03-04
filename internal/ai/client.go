@@ -238,17 +238,19 @@ func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitl
 		return nil, fmt.Errorf("wine tsv is required for wine picks")
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
-
-	input := fmt.Sprintf("Recipe title: %s\nCandidate wines in TSV format:\n%s", recipeTitle, wineTSV)
+	input := []responses.ResponseInputItemUnionParam{}
+	input = append(input, user(fmt.Sprintf("Recipe title: %s", recipeTitle)))
+	input = append(input, user(fmt.Sprintf("Candidate wines in TSV format:\n%s", wineTSV)))
 	params := responses.ResponseNewParams{
 		Model: c.model,
 		Instructions: openai.String(
-			"Select 1 to 3 wines from the provided TSV that pair well with the recipe title. " +
-				"Return JSON with keys: commentary (string) and wines (array). " +
+			"Act as a sommelier. Select 1 to 2 wines from the provided TSV that pair well with the recipe title. " +
+				"Return JSON with commentary (string) and wines (array). " +
+				"Size wine appropriately to people eating. Price according to the meal fanciness" +
 				"For each wine include name and optionally quantity/price when available from TSV.",
 		),
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: []responses.ResponseInputItemUnionParam{user(input)},
+			OfInputItemList: input,
 		},
 		Store: openai.Bool(true),
 		Conversation: responses.ResponseNewParamsConversationUnion{
@@ -264,12 +266,6 @@ func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitl
 	var selection WineSelection
 	if err := json.Unmarshal([]byte(resp.OutputText()), &selection); err != nil {
 		return nil, fmt.Errorf("failed to parse wine selection: %w", err)
-	}
-	if selection.Wines == nil {
-		selection.Wines = []Ingredient{}
-	}
-	if strings.TrimSpace(selection.Commentary) == "" {
-		return nil, fmt.Errorf("empty wine commentary")
 	}
 	return &selection, nil
 }
