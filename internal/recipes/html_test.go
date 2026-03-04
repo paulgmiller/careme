@@ -197,6 +197,15 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `id="question-thread"`) {
 		t.Error("recipe HTML should contain question thread container")
 	}
+	if !strings.Contains(html, `id="wine-recommendation"`) {
+		t.Error("recipe HTML should contain wine recommendation container")
+	}
+	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/wine"`) {
+		t.Error("recipe HTML should include wine picker htmx endpoint")
+	}
+	if !strings.Contains(html, "choose a wine") {
+		t.Error("recipe HTML should include choose a wine button")
+	}
 	if !strings.Contains(html, "Cook time:") {
 		t.Error("recipe HTML should contain cook time")
 	}
@@ -264,5 +273,19 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	}
 	if newerIndex > olderIndex {
 		t.Fatalf("expected newer question before older question, body: %s", body)
+	}
+}
+
+func TestFormatRecipeWineHTML_RendersRecommendation(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	FormatRecipeWineHTML("recipe-hash", "Try a light pinot noir.", w)
+	body := w.Body.String()
+
+	if !strings.Contains(body, `id="wine-recommendation"`) {
+		t.Fatalf("expected wine fragment container in response, got body: %s", body)
+	}
+	if !strings.Contains(body, "Try a light pinot noir.") {
+		t.Fatalf("expected recommendation in response, got body: %s", body)
 	}
 }

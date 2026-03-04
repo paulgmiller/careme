@@ -288,6 +288,10 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 
 type captureQuestionGenerator struct {
 	lastQuestion string
+	lastWinePick struct {
+		conversationID string
+		recipeTitle    string
+	}
 }
 
 func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -297,6 +301,12 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	c.lastQuestion = question
 	return "Try chicken thighs at the same cook time.", nil
+}
+
+func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID string, recipe ai.Recipe) (string, error) {
+	c.lastWinePick.conversationID = conversationID
+	c.lastWinePick.recipeTitle = recipe.Title
+	return "Try a chilled sauvignon blanc.", nil
 }
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
@@ -398,6 +408,79 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	}
 	if got, want := g.lastQuestion, "Regarding BBQ Pulled Pork: Can I swap the protein?"; got != want {
 		t.Fatalf("expected generator question %q, got %q", want, got)
+	}
+}
+
+func TestHandleWine_RejectsNonHTMXRequest(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/wine", nil)
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleWine(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	g := &captureQuestionGenerator{}
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   users.NewStorage(cacheStore),
+		clerk:     auth.DefaultMock(),
+		generator: g,
+	}
+
+	p := DefaultParams(&locations.Location{ID: "loc-wine", Name: "Wine Test Store"}, time.Now())
+	p.ConversationID = "conv-wine"
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	recipe := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+		WineStyles:   []string{"pinot noir"},
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
+		t.Fatalf("failed to save recipe: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleWine(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `id="wine-recommendation"`) {
+		t.Fatalf("expected wine fragment container in response, got body: %s", body)
+	}
+	if !strings.Contains(body, "Try a chilled sauvignon blanc.") {
+		t.Fatalf("expected wine recommendation in response, got body: %s", body)
+	}
+	if got, want := g.lastWinePick.conversationID, "conv-wine"; got != want {
+		t.Fatalf("expected conversation id %q, got %q", want, got)
+	}
+	if got, want := g.lastWinePick.recipeTitle, "Roast Chicken"; got != want {
+		t.Fatalf("expected recipe title %q, got %q", want, got)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +51,44 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
 	}, nil
+}
+
+func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe) (string, error) {
+	styles := make([]string, 0, len(recipe.WineStyles)+1)
+	for _, style := range recipe.WineStyles {
+		style = strings.TrimSpace(style)
+		if style != "" {
+			styles = append(styles, style)
+		}
+	}
+	if len(styles) == 0 {
+		return "", fmt.Errorf("no wine styles available for recipe %q", recipe.Title)
+	}
+
+	wines := []kroger.Ingredient{}
+	for _, style := range styles {
+		slog.InfoContext(ctx, "Picking wine for style", "style", style)
+		//need to cache this.
+		winesOfStyle, err := g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
+			return "", err
+		}
+		wines = append(wines, winesOfStyle...)
+	}
+	if len(wines) == 0 {
+		return "", fmt.Errorf("no wines found for recipe %q", recipe.Title)
+	}
+	wines = lo.UniqBy(wines, func(i kroger.Ingredient) string { return strings.ToLower(toStr(i.Description)) })
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Pick a wine that would go well with %q. Here are %d wines in TSV format.\n", recipe.Title, len(wines)))
+	err := kroger.ToTSV(wines, &sb)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to convert wines to TSV", "error", err)
+		return "", err
+	}
+	return g.aiClient.AskQuestion(ctx, sb.String(), conversationID)
 }
 
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
