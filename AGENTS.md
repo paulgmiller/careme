@@ -8,6 +8,9 @@
 - `recipes/`: Local output directory created at runtime; keep it out of commits unless intentionally adding fixtures.
 - `internal/auth` : mostly clerk authorization
 
+## Cache Layout
+- Cache key/prefix docs live in `docs/cache-layout.md`. Keep that file updated when cache keys are added or changed.
+
 ## Build, Test, and Development Commands
 - Sandbox-safe Go cache setup (recommended before running Go commands in restricted environments):
   - `export GOCACHE=/tmp/go-build`

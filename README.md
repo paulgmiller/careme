@@ -30,6 +30,9 @@ bash tailwind/generate.sh
 ```
 if you change input css or any *.html
 
+## Cache Key Layout
+See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key/prefix layout and backend notes.
+
 ## Frontend Approach
 - Prefer server-rendered HTML and HTMX for interactive behavior.
 - Avoid SPA-style architecture for routine page interactions.
