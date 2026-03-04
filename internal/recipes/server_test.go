@@ -221,6 +221,67 @@ func TestHandleSingle_LegacyOriginHashDoesNotFailWhenParamsMissing(t *testing.T)
 	}
 }
 
+func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	p := DefaultParams(
+		&locations.Location{ID: "loc-wine-single", Name: "Wine Store"},
+		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+	)
+	p.ConversationID = "conv-wine-single"
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+
+	recipe := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+		Health:       "High protein",
+		DrinkPairing: "Pinot noir",
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
+		t.Fatalf("failed to save recipe: %v", err)
+	}
+	if err := s.SaveWine(t.Context(), recipeHash, &ai.WineSelection{
+		Wines: []ai.Ingredient{
+			{Name: "Light Pinot Noir", Price: "$13.99"},
+		},
+		Commentary: "Balances the rich chicken skin.",
+	}); err != nil {
+		t.Fatalf("failed to save wine recommendation: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash, nil)
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSingle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Light Pinot Noir") || !strings.Contains(body, "$13.99") {
+		t.Fatalf("expected cached wine picks in response, got body: %s", body)
+	}
+	if !strings.Contains(body, "Balances the rich chicken skin.") {
+		t.Fatalf("expected cached wine commentary in response, got body: %s", body)
+	}
+	if strings.Contains(body, "choose a wine") {
+		t.Fatalf("expected no choose-a-wine button when cached recommendation exists, got body: %s", body)
+	}
+}
+
 type noSessionAuth struct{}
 
 func (n noSessionAuth) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {

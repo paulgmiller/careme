@@ -133,7 +133,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
   - Step-by-step instructions starting with prep. Don't prefix with numbers.
   - Estimated Calorie count and other nutrient health tips.
   - Optional wine pairing guidance.
-  - Three wine or less wine styles.
+  - Two or less simple, brief wine styles that can be searched for. No embelishment in this field.
 
 # Planning & Verification
 - Reference your checklist to ensure variety in cooking methods and cuisines

@@ -58,7 +58,7 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, signed
 }
 
 // FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, writer http.ResponseWriter) {
+func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
@@ -70,7 +70,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		Recipe             ai.Recipe
 		OriginHash         string
 		ConversationID     string
-		WineRecommendation string
+		WineRecommendation *ai.WineSelection
 		Thread             []RecipeThreadEntry
 		Feedback           RecipeFeedback
 		RecipeHash         string
@@ -84,7 +84,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		Recipe:             recipe,
 		OriginHash:         recipe.OriginHash,
 		ConversationID:     p.ConversationID,
-		WineRecommendation: "",
+		WineRecommendation: wineRecommendation,
 		Thread:             thread,
 		Feedback:           feedback,
 		RecipeHash:         recipe.ComputeHash(),
@@ -120,8 +120,15 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversat
 
 // FormatRecipeWineHTML renders the wine recommendation fragment for HTMX swaps.
 func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer http.ResponseWriter) {
+	data := struct {
+		RecipeHash         string
+		WineRecommendation *ai.WineSelection
+	}{
+		RecipeHash:         recipeHash,
+		WineRecommendation: selection,
+	}
 
-	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_wine", selection); err != nil {
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_wine", data); err != nil {
 		http.Error(writer, "recipe wine template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }

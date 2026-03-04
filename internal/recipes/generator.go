@@ -73,26 +73,27 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
 	}
 	dateStr := date.Format("2006-01-02")
+	logger := slog.With("location", location, "date", dateStr)
 	wines, err := asParallel(styles, func(style string) ([]kroger.Ingredient, error) {
 		cacheKey := wineIngredientsCacheKey(style, location, date)
 		winesOfStyle, err := g.io.IngredientsFromCache(ctx, cacheKey)
 		if err == nil {
-			slog.InfoContext(ctx, "Serving cached wines for style", "style", style, "location", location, "date", dateStr, "count", len(winesOfStyle))
+			logger.InfoContext(ctx, "Serving cached wines for style", "style", style, "count", len(winesOfStyle))
 			return winesOfStyle, nil
 		}
 		if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "location", location, "date", dateStr, "error", err)
+			logger.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "error", err)
 		}
 
-		slog.InfoContext(ctx, "Picking wine for style", "style", style)
 		winesOfStyle, err = g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
 			return nil, fmt.Errorf("failed to get ingredients for style %q: %w", style, err)
 		}
+		logger.InfoContext(ctx, "Found wines.", "style", style, "count", len(winesOfStyle))
 
 		if err := g.io.SaveIngredients(ctx, cacheKey, winesOfStyle); err != nil {
-			slog.ErrorContext(ctx, "Failed to cache wines for style", "style", style, "location", location, "date", dateStr, "error", err)
+			logger.ErrorContext(ctx, "Failed to cache wines for style", "style", style, "error", err)
 		}
 		return winesOfStyle, nil
 	})
