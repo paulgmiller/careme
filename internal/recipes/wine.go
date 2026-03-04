@@ -1,10 +1,14 @@
 package recipes
 
 import (
+	"careme/internal/ai"
 	"careme/internal/cache"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 )
 
 const wineRecommendationsCachePrefix = "wine_recommendations/"
@@ -13,18 +17,46 @@ func recipeWineCacheKey(hash string) string {
 	return wineRecommendationsCachePrefix + hash
 }
 
-func (rio recipeio) WineFromCache(ctx context.Context, hash string) (string, error) {
-	return rio.readStringFromCache(ctx, recipeWineCacheKey(hash))
+func (rio recipeio) WineFromCache(ctx context.Context, hash string) (*ai.WineSelection, error) {
+	body, err := rio.readBytesFromCache(ctx, recipeWineCacheKey(hash))
+	if err != nil {
+		return nil, err
+	}
+
+	var selection ai.WineSelection
+	if err := json.Unmarshal(body, &selection); err == nil {
+		if selection.Wines == nil {
+			selection.Wines = []ai.Ingredient{}
+		}
+		return &selection, nil
+	}
+
+	// Legacy compatibility: cache may contain plain commentary text.
+	commentary := strings.TrimSpace(string(body))
+	if commentary == "" {
+		return nil, fmt.Errorf("wine cache entry is empty")
+	}
+	return &ai.WineSelection{
+		Wines:      []ai.Ingredient{},
+		Commentary: commentary,
+	}, nil
 }
 
-func (rio recipeio) SaveWine(ctx context.Context, hash string, recommendation string) error {
-	return rio.Cache.Put(ctx, recipeWineCacheKey(hash), recommendation, cache.Unconditional())
+func (rio recipeio) SaveWine(ctx context.Context, hash string, selection *ai.WineSelection) error {
+	if selection == nil {
+		return fmt.Errorf("wine selection is required")
+	}
+	body, err := json.Marshal(selection)
+	if err != nil {
+		return err
+	}
+	return rio.Cache.Put(ctx, recipeWineCacheKey(hash), string(body), cache.Unconditional())
 }
 
-func (rio recipeio) readStringFromCache(ctx context.Context, key string) (string, error) {
+func (rio recipeio) readBytesFromCache(ctx context.Context, key string) ([]byte, error) {
 	reader, err := rio.Cache.Get(ctx, key)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer func() {
 		if err := reader.Close(); err != nil {
@@ -34,7 +66,7 @@ func (rio recipeio) readStringFromCache(ctx context.Context, key string) (string
 
 	body, err := io.ReadAll(reader)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(body), nil
+	return body, nil
 }

@@ -23,9 +23,10 @@ import (
 )
 
 type Client struct {
-	apiKey string
-	schema map[string]any
-	model  string
+	apiKey     string
+	schema     map[string]any
+	wineSchema map[string]any
+	model      string
 }
 
 // todo collapse closer to
@@ -80,6 +81,11 @@ type ShoppingList struct {
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
 }
 
+type WineSelection struct {
+	Wines      []Ingredient `json:"wines"`
+	Commentary string       `json:"commentary"`
+}
+
 // ignoring model for now.
 func NewClient(apiKey, _ string) *Client {
 	//ignor model for now.
@@ -87,14 +93,19 @@ func NewClient(apiKey, _ string) *Client {
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
 	}
-	schema := r.Reflect(&ShoppingList{})
-	schemaJSON, _ := json.Marshal(schema)
+	recipesSchema := r.Reflect(&ShoppingList{})
+	recipesSchemaJSON, _ := json.Marshal(recipesSchema)
+	wineSchema := r.Reflect(&WineSelection{})
+	wineSchemaJSON, _ := json.Marshal(wineSchema)
 	var m map[string]any
-	_ = json.Unmarshal(schemaJSON, &m)
+	_ = json.Unmarshal(recipesSchemaJSON, &m)
+	var wine map[string]any
+	_ = json.Unmarshal(wineSchemaJSON, &wine)
 	return &Client{
-		apiKey: apiKey,
-		schema: m,
-		model:  openai.ChatModelGPT5_2,
+		apiKey:     apiKey,
+		schema:     m,
+		wineSchema: wine,
+		model:      openai.ChatModelGPT5_2,
 	}
 }
 
@@ -211,6 +222,56 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 		return "", fmt.Errorf("empty response from model")
 	}
 	return answer, nil
+}
+
+func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wineTSV string) (*WineSelection, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	recipeTitle = strings.TrimSpace(recipeTitle)
+	wineTSV = strings.TrimSpace(wineTSV)
+	if conversationID == "" {
+		return nil, fmt.Errorf("conversation ID is required for wine picks")
+	}
+	if recipeTitle == "" {
+		return nil, fmt.Errorf("recipe title is required for wine picks")
+	}
+	if wineTSV == "" {
+		return nil, fmt.Errorf("wine tsv is required for wine picks")
+	}
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+
+	input := fmt.Sprintf("Recipe title: %s\nCandidate wines in TSV format:\n%s", recipeTitle, wineTSV)
+	params := responses.ResponseNewParams{
+		Model: c.model,
+		Instructions: openai.String(
+			"Select 1 to 3 wines from the provided TSV that pair well with the recipe title. " +
+				"Return JSON with keys: commentary (string) and wines (array). " +
+				"For each wine include name and optionally quantity/price when available from TSV.",
+		),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(input)},
+		},
+		Store: openai.Bool(true),
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfString: openai.String(conversationID),
+		},
+		Text: scheme(c.wineSchema),
+	}
+	resp, err := client.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pick wine: %w", err)
+	}
+
+	var selection WineSelection
+	if err := json.Unmarshal([]byte(resp.OutputText()), &selection); err != nil {
+		return nil, fmt.Errorf("failed to parse wine selection: %w", err)
+	}
+	if selection.Wines == nil {
+		selection.Wines = []Ingredient{}
+	}
+	if strings.TrimSpace(selection.Commentary) == "" {
+		return nil, fmt.Errorf("empty wine commentary")
+	}
+	return &selection, nil
 }
 
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
