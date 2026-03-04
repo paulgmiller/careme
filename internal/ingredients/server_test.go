@@ -1,8 +1,8 @@
 package ingredients
 
 import (
+	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"net/http"
@@ -24,7 +24,7 @@ func TestServerReturnsIngredientsJSON(t *testing.T) {
 	}
 
 	description := "Honeycrisp apple"
-	entries := []kroger.Ingredient{{Description: &description}}
+	entries := []ai.InputIngredient{{Description: &description}}
 	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
 		t.Fatalf("SaveIngredients failed: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 	}
 
 	description := "Broccoli"
-	entries := []kroger.Ingredient{{Description: &description}}
+	entries := []ai.InputIngredient{{Description: &description}}
 	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
 		t.Fatalf("SaveIngredients failed: %v", err)
 	}

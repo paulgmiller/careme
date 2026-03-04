@@ -1,8 +1,8 @@
 package ingredients
 
 import (
+	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 	"careme/internal/recipes"
 	"encoding/json"
 	"errors"
@@ -53,7 +53,7 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 	slog.Info("serving cached ingredients", "location", params.String(), "hash", locationHash)
 	if r.URL.Query().Get("format") == "tsv" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		if err := kroger.ToTSV(ingredients, w); err != nil {
+		if err := ai.ToTSV(ingredients, w); err != nil {
 			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
 		}
 		return

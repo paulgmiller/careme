@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
 	"encoding/base64"
@@ -26,6 +25,17 @@ type Client struct {
 	apiKey string
 	schema map[string]any
 	model  string
+}
+
+// InputIngredient is a provider-agnostic ingredient payload for recipe generation.
+type InputIngredient struct {
+	ProductID    *string  `json:"id,omitempty"`
+	AisleNumber  *string  `json:"number,omitempty"`
+	Brand        *string  `json:"brand,omitempty"`
+	Description  *string  `json:"description,omitempty"`
+	PriceSale    *float32 `json:"salePrice,omitempty"`
+	PriceRegular *float32 `json:"regularPrice,omitempty"`
+	Size         *string  `json:"size,omitempty"`
 }
 
 // todo collapse closer to
@@ -213,8 +223,7 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 	return answer, nil
 }
 
-// is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
-func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -255,7 +264,7 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
+func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	//constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
@@ -266,7 +275,7 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
 	var buf strings.Builder
-	if err := kroger.ToTSV(saleIngredients, &buf); err != nil {
+	if err := ToTSV(saleIngredients, &buf); err != nil {
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
 	ingredientsMessage += buf.String()

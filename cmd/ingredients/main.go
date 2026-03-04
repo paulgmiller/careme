@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"strings"
 )
 
 func main() {
@@ -47,16 +46,9 @@ func main() {
 	}
 
 	for _, i := range ings {
-		fmt.Printf("%s - %s:(%s))\n", toString(i.Brand), toString(i.Description), strings.Join(toSlice(i.Categories), ","))
+		fmt.Printf("%s - %s (%s)\n", toString(i.Brand), toString(i.Description), toString(i.Size))
 	}
 
-}
-
-func toSlice(s *[]string) []string {
-	if s == nil {
-		return nil
-	}
-	return *s
 }
 
 func toString(s *string) string {

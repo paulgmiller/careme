@@ -3,7 +3,6 @@ package recipes
 import (
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"errors"
 	"os"
@@ -122,7 +121,7 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	rio := IO(cacheStore)
 
 	hash := "ingredient-hash"
-	ingredients := []kroger.Ingredient{
+	ingredients := []ai.InputIngredient{
 		{
 			Description: loPtr("Chicken Breast"),
 			Size:        loPtr("1 lb"),

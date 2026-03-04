@@ -1,7 +1,7 @@
 package main
 
 import (
-	"careme/internal/kroger"
+	"careme/internal/ai"
 	"reflect"
 	"testing"
 )
@@ -57,9 +57,9 @@ func TestHasProduce_UsesTokenMatching(t *testing.T) {
 		strPtr("Simple Truth Organic® Whole Baby Bella Mushrooms"),
 		strPtr("Simple Truth Organic® Kiwifruit"),
 	}
-	ingredients := make([]kroger.Ingredient, 0, len(descriptions))
+	ingredients := make([]ai.InputIngredient, 0, len(descriptions))
 	for _, d := range descriptions {
-		ingredients = append(ingredients, kroger.Ingredient{Description: d})
+		ingredients = append(ingredients, ai.InputIngredient{Description: d})
 	}
 
 	tests := []struct {
@@ -86,9 +86,9 @@ func TestSummarizeFilterMatches(t *testing.T) {
 		strPtr("Fresh Jalapeno Peppers"),
 		strPtr("Simple Truth Organic® Kiwifruit"),
 	}
-	ingredients := make([]kroger.Ingredient, 0, len(descriptions))
+	ingredients := make([]ai.InputIngredient, 0, len(descriptions))
 	for _, d := range descriptions {
-		ingredients = append(ingredients, kroger.Ingredient{Description: d})
+		ingredients = append(ingredients, ai.InputIngredient{Description: d})
 	}
 
 	produce := []string{

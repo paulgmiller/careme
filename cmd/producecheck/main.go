@@ -1,9 +1,9 @@
 package main
 
 import (
+	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/kroger"
 	"careme/internal/recipes"
 	"context"
 	"flag"
@@ -101,7 +101,7 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 	filters := recipes.Produce()
 	type filterResult struct {
 		filter      string
-		ingredients []kroger.Ingredient
+		ingredients []ai.InputIngredient
 		err         error
 	}
 	//todo check total number of queries.
@@ -121,7 +121,7 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 		}()
 	}
 	wg.Wait()
-	ingredients := make([]kroger.Ingredient, 0, 300)
+	ingredients := make([]ai.InputIngredient, 0, 300)
 	stats := make([]produceFilterStats, 0, len(filters))
 	for _, result := range results {
 		if result.err != nil {
@@ -138,7 +138,7 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 		})
 		ingredients = append(ingredients, result.ingredients...)
 	}
-	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toString(i.Description) })
+	ingredients = lo.UniqBy(ingredients, func(i ai.InputIngredient) string { return toString(i.Description) })
 
 	annotateUniqueOnlyMatches(stats)
 	printProduceFilterSummary(stats, len(produce))
@@ -153,7 +153,7 @@ func toString(s *string) string {
 	return *s
 }
 
-func evaluateProduceAvailability(produce []string, ingredients []kroger.Ingredient) []string {
+func evaluateProduceAvailability(produce []string, ingredients []ai.InputIngredient) []string {
 	missing := make([]string, 0)
 	for _, term := range produce {
 		matches := hasProduce(ingredients, term)
@@ -169,12 +169,12 @@ func evaluateProduceAvailability(produce []string, ingredients []kroger.Ingredie
 	return missing
 }
 
-func summarizeFilterMatches(produce []string, ingredients []kroger.Ingredient) (int, int) {
+func summarizeFilterMatches(produce []string, ingredients []ai.InputIngredient) (int, int) {
 	matchedTerms, matchedProducts, _ := summarizeFilterMatchesDetailed(produce, ingredients)
 	return matchedTerms, matchedProducts
 }
 
-func summarizeFilterMatchesDetailed(produce []string, ingredients []kroger.Ingredient) (int, int, []string) {
+func summarizeFilterMatchesDetailed(produce []string, ingredients []ai.InputIngredient) (int, int, []string) {
 	matchedTerms := 0
 	matchedProducts := 0
 	descriptions := make(map[string]struct{})
@@ -238,7 +238,7 @@ func printProduceFilterSummary(stats []produceFilterStats, totalProduceTerms int
 	fmt.Println()
 }
 
-func hasProduce(ingredients []kroger.Ingredient, term string) []string {
+func hasProduce(ingredients []ai.InputIngredient, term string) []string {
 	needleTokens := tokens(normalizeTerm(term))
 	if len(needleTokens) == 0 {
 		return nil
