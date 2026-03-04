@@ -19,6 +19,7 @@ func TestMockGenerateRecipes_Returns3Recipes(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("expected non-nil result")
+		return
 	}
 
 	if len(result.Recipes) != 3 {
