@@ -7,8 +7,10 @@ import (
 	"log/slog"
 )
 
+const wineRecommendationsCachePrefix = "wine_recommendations/"
+
 func recipeWineCacheKey(hash string) string {
-	return recipeCachePrefix + hash + "/wine"
+	return wineRecommendationsCachePrefix + hash
 }
 
 func (rio recipeio) WineFromCache(ctx context.Context, hash string) (string, error) {
