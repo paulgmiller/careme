@@ -291,6 +291,7 @@ type captureQuestionGenerator struct {
 	lastWinePick struct {
 		conversationID string
 		recipeTitle    string
+		date           time.Time
 	}
 }
 
@@ -303,9 +304,10 @@ func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question str
 	return "Try chicken thighs at the same cook time.", nil
 }
 
-func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe) (string, error) {
+func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe, date time.Time) (string, error) {
 	c.lastWinePick.conversationID = conversationID
 	c.lastWinePick.recipeTitle = recipe.Title
+	c.lastWinePick.date = date
 	return "Try a chilled sauvignon blanc.", nil
 }
 
@@ -481,6 +483,9 @@ func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
 	}
 	if got, want := g.lastWinePick.recipeTitle, "Roast Chicken"; got != want {
 		t.Fatalf("expected recipe title %q, got %q", want, got)
+	}
+	if got, want := g.lastWinePick.date.Format("2006-01-02"), p.Date.Format("2006-01-02"); got != want {
+		t.Fatalf("expected wine date %q, got %q", want, got)
 	}
 }
 

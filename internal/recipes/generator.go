@@ -7,9 +7,12 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -53,7 +56,7 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 	}, nil
 }
 
-func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe) (string, error) {
+func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (string, error) {
 	styles := make([]string, 0, len(recipe.WineStyles)+1)
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
@@ -69,26 +72,44 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 	var wg sync.WaitGroup
 	var lock sync.Mutex
 	var firstErr error
+	rio := IO(g.cache)
+	cacheDate := date
 
 	wg.Add(len(styles))
 	for _, style := range styles {
 		go func(style string) {
 			defer wg.Done()
 
-			slog.InfoContext(ctx, "Picking wine for style", "style", style)
-			// need to cache this.
-			winesOfStyle, err := g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
+			cacheKey := wineIngredientsCacheKey(style, location, cacheDate)
+			if cachedWines, err := rio.IngredientsFromCache(ctx, cacheKey); err == nil {
+				lock.Lock()
+				wines = append(wines, cachedWines...)
+				lock.Unlock()
+				slog.InfoContext(ctx, "Serving cached wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "count", len(cachedWines))
+				return
+			} else if !errors.Is(err, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "error", err)
+			}
 
-			lock.Lock()
-			defer lock.Unlock()
+			slog.InfoContext(ctx, "Picking wine for style", "style", style)
+			winesOfStyle, err := g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
 			if err != nil {
+				lock.Lock()
 				slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
 				if firstErr == nil {
 					firstErr = err
 				}
+				lock.Unlock()
 				return
 			}
+
+			if err := rio.SaveIngredients(ctx, cacheKey, winesOfStyle); err != nil {
+				slog.ErrorContext(ctx, "Failed to cache wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "error", err)
+			}
+
+			lock.Lock()
 			wines = append(wines, winesOfStyle...)
+			lock.Unlock()
 		}(style)
 	}
 	wg.Wait()
@@ -327,4 +348,13 @@ func toStr(s *string) string {
 		return "empty"
 	}
 	return *s
+}
+
+func wineIngredientsCacheKey(style, location string, date time.Time) string {
+	normalizedStyle := strings.ToLower(strings.TrimSpace(style))
+	fnv := fnv.New64a()
+	lo.Must(io.WriteString(fnv, location))
+	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
+	lo.Must(io.WriteString(fnv, normalizedStyle))
+	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
