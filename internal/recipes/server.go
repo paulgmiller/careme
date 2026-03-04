@@ -235,7 +235,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to load wine recommendation", http.StatusInternalServerError)
 			return
 		}
-		FormatRecipeWineHTML(hash, selection.Commentary, w)
+		FormatRecipeWineHTML(hash, selection, w)
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
@@ -281,7 +281,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "failed to save wine recommendation", "hash", hash, "error", err)
 	}
 
-	FormatRecipeWineHTML(hash, selection.Commentary, w)
+	FormatRecipeWineHTML(hash, selection, w)
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {

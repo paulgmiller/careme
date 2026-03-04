@@ -119,16 +119,9 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversat
 }
 
 // FormatRecipeWineHTML renders the wine recommendation fragment for HTMX swaps.
-func FormatRecipeWineHTML(recipeHash, recommendation string, writer http.ResponseWriter) {
-	data := struct {
-		RecipeHash         string
-		WineRecommendation string
-	}{
-		RecipeHash:         recipeHash,
-		WineRecommendation: recommendation,
-	}
+func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer http.ResponseWriter) {
 
-	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_wine", data); err != nil {
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_wine", selection); err != nil {
 		http.Error(writer, "recipe wine template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }

@@ -250,8 +250,8 @@ func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitl
 		Model: c.model,
 		Instructions: openai.String(
 			"Act as a sommelier. Select 1 to 2 wines from the provided TSV that pair well with the recipe title. " +
-				"Return JSON with commentary (string) and wines (array). " +
-				"Size wine appropriately to people eating. Price according to the meal fanciness" +
+				"Return JSON with wines (ingredient array) and commentary about why those particular wines work well" +
+				"Size wine appropriately to number of people. Price according to the meal fanciness" +
 				"For each wine include name and optionally quantity/price when available from TSV.",
 		),
 		Input: responses.ResponseNewParamsInputUnion{
