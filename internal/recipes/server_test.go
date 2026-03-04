@@ -303,7 +303,7 @@ func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question str
 	return "Try chicken thighs at the same cook time.", nil
 }
 
-func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID string, recipe ai.Recipe) (string, error) {
+func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe) (string, error) {
 	c.lastWinePick.conversationID = conversationID
 	c.lastWinePick.recipeTitle = recipe.Title
 	return "Try a chilled sauvignon blanc.", nil
