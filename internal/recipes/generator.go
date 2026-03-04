@@ -7,15 +7,17 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/samber/lo"
@@ -29,14 +31,19 @@ type aiClient interface {
 	Ready(ctx context.Context) error
 }
 
+type ingredientio interface {
+	SaveIngredients(ctx context.Context, hash string, ingredients []kroger.Ingredient) error
+	IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error)
+}
+
 type Generator struct {
 	config       *config.Config
 	aiClient     aiClient
 	krogerClient kroger.ClientWithResponsesInterface // probably need only subset
-	cache        cache.Cache
+	io           ingredientio
 }
 
-func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
+func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -46,64 +53,60 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generator, error) {
 		return nil, err
 	}
 	return &Generator{
-		cache:        cache, // should this also pull from config?
+		io:           io,
 		config:       cfg,
 		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		krogerClient: client,
 	}, nil
 }
 
-func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe) (string, error) {
-	styles := make([]string, 0, len(recipe.WineStyles)+1)
+func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (string, error) {
+	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
-		if style != "" {
+		if style != "" { //would this ever happen?
 			styles = append(styles, style)
 		}
 	}
 	if len(styles) == 0 {
-		return "", fmt.Errorf("no wine styles available for recipe %q", recipe.Title)
+		return "No wine Styles for recipe", nil
 	}
+	dateStr := date.Format("2006-01-02")
+	wines, err := asParallel(styles, func(style string) ([]kroger.Ingredient, error) {
+		cacheKey := wineIngredientsCacheKey(style, location, date)
+		winesOfStyle, err := g.io.IngredientsFromCache(ctx, cacheKey)
+		if err == nil {
+			slog.InfoContext(ctx, "Serving cached wines for style", "style", style, "location", location, "date", dateStr, "count", len(winesOfStyle))
+			return winesOfStyle, nil
+		}
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "location", location, "date", dateStr, "error", err)
+		}
 
-	wines := []kroger.Ingredient{}
-	var wg sync.WaitGroup
-	var lock sync.Mutex
-	var firstErr error
+		slog.InfoContext(ctx, "Picking wine for style", "style", style)
+		winesOfStyle, err = g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
+			return nil, fmt.Errorf("failed to get ingredients for style %q: %w", style, err)
+		}
 
-	wg.Add(len(styles))
-	for _, style := range styles {
-		go func(style string) {
-			defer wg.Done()
-
-			slog.InfoContext(ctx, "Picking wine for style", "style", style)
-			// need to cache this.
-			winesOfStyle, err := g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
-
-			lock.Lock()
-			defer lock.Unlock()
-			if err != nil {
-				slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
-				if firstErr == nil {
-					firstErr = err
-				}
-				return
-			}
-			wines = append(wines, winesOfStyle...)
-		}(style)
-	}
-	wg.Wait()
-	if firstErr != nil {
-		return "", firstErr
+		if err := g.io.SaveIngredients(ctx, cacheKey, winesOfStyle); err != nil {
+			slog.ErrorContext(ctx, "Failed to cache wines for style", "style", style, "location", location, "date", dateStr, "error", err)
+		}
+		return winesOfStyle, nil
+	})
+	if err != nil {
+		return "", err
 	}
 
 	if len(wines) == 0 {
-		return "no wines found ", nil
+		return "no wines of those styles found", nil
 	}
-	wines = lo.UniqBy(wines, func(i kroger.Ingredient) string { return strings.ToLower(toStr(i.Description)) })
+	wines = uniqueByDescription(wines)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Pick a wine that would go well with %q. Here are %d wines in TSV format.\n", recipe.Title, len(wines)))
-	err := kroger.ToTSV(wines, &sb)
+	_ = lo.Must(fmt.Fprintf(&sb, "Pick a wine that would go well with %q. Here are %d wines in TSV format.\n", recipe.Title, len(wines)))
+	err = kroger.ToTSV(wines, &sb)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to convert wines to TSV", "error", err)
 		return "", err
@@ -180,43 +183,40 @@ func Filter(term string, brands []string, frozen bool) filter {
 func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
 	lochash := p.LocationHash()
 	var ingredients []kroger.Ingredient
-	rio := IO(g.cache)
 
-	if cachedIngredients, err := rio.IngredientsFromCache(ctx, lochash); err == nil {
+	if cachedIngredients, err := g.io.IngredientsFromCache(ctx, lochash); err == nil {
 		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
 		return cachedIngredients, nil
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
-	var wg sync.WaitGroup
-	var lock sync.Mutex
-	wg.Add(len(p.Staples))
-	for _, category := range p.Staples {
-		go func(category filter) {
-			defer wg.Done()
-			cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
-				return
-			}
-			lock.Lock()
-			defer lock.Unlock()
-			ingredients = append(ingredients, cingredients...)
-			ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toStr(i.Description) })
-			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID, "runningtotal", len(ingredients))
-		}(category)
+	ingredients, err := asParallel(p.Staples, func(category filter) ([]kroger.Ingredient, error) {
+		cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
+			return nil, err
+		}
+		slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID, "runningtotal", len(ingredients))
+		return cingredients, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ingredients for staples: %w", err)
 	}
-
-	wg.Wait()
-
+	ingredients = uniqueByDescription(ingredients)
 	mutable.Shuffle(ingredients)
 
-	if err := rio.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {
+	if err := g.io.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
 	return ingredients, nil
+}
+
+func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
+	return lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
+		return toStr(i.Description)
+	})
 }
 
 // move to krogrer client as everyone will be differnt here?
@@ -327,4 +327,13 @@ func toStr(s *string) string {
 		return "empty"
 	}
 	return *s
+}
+
+func wineIngredientsCacheKey(style, location string, date time.Time) string {
+	normalizedStyle := strings.ToLower(strings.TrimSpace(style))
+	fnv := fnv.New64a()
+	lo.Must(io.WriteString(fnv, location))
+	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
+	lo.Must(io.WriteString(fnv, normalizedStyle))
+	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }

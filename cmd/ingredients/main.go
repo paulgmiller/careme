@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("failed to load configuration: %s", err)
 	}
 
-	generator, err := recipes.NewGenerator(cfg, cache)
+	generator, err := recipes.NewGenerator(cfg, recipes.IO(cache))
 	if err != nil {
 		log.Fatalf("failed to create recipe generator: %s", err)
 	}

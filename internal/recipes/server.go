@@ -36,7 +36,7 @@ type locServer interface {
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
-	PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe) (string, error)
+	PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (string, error)
 	Ready(ctx context.Context) error
 }
 
@@ -230,6 +230,12 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
+	if recommendation, err := s.WineFromCache(ctx, hash); err == nil {
+		FormatRecipeWineHTML(hash, recommendation, w)
+		return
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
+	}
 
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
@@ -257,11 +263,14 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
 	defer cancel()
-	recommendation, err := s.generator.PickAWine(ctx, conversationID, p.Location.ID, *recipe)
+	recommendation, err := s.generator.PickAWine(ctx, conversationID, p.Location.ID, *recipe, p.Date)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to pick wine", "hash", hash, "conversation_id", conversationID, "error", err)
 		http.Error(w, "failed to pick wine", http.StatusInternalServerError)
 		return
+	}
+	if err := s.SaveWine(ctx, hash, recommendation); err != nil {
+		slog.ErrorContext(ctx, "failed to save wine recommendation", "hash", hash, "error", err)
 	}
 
 	FormatRecipeWineHTML(hash, recommendation, w)
