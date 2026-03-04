@@ -103,6 +103,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 	if got == nil {
 		t.Fatal("expected non-nil wine selection")
+		return
 	}
 	if got.Commentary != aiStub.answer {
 		t.Fatalf("unexpected commentary: got %q want %q", got.Commentary, aiStub.answer)
