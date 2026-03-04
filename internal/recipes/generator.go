@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -61,25 +60,16 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
 		// these should both always be true. Warn if not because its a caching bug?
 		instructions := []string{p.Instructions}
-		var dismissedTitles []string
 		for _, dismissed := range p.Dismissed {
-			dismissedTitles = append(dismissedTitles, dismissed.Title)
+			instructions = append(instructions, "Passed on "+dismissed.Title)
 		}
-		if len(p.Dismissed) > 0 {
-			instructions = append(instructions, "Did not like "+strings.Join(dismissedTitles, "; "))
-		}
-		// TODO pipe through dismissed and saved so we dont mess with instructions. Also format dismissed titles with toon?
+
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
+		// want to add saved to insructions but only once. TODO
 		// Include saved recipes in the shopping list
-
-		/*if len(p.Saved) > 0 {
-			instructions += " Enjoyed and saved :"
-		}*/
-		// This ended up giving me a "Preference update + replacements requested" recipe
-		// instructions += saved.Title + "; " //is this enough or do we keep the exact one?
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
@@ -212,14 +202,22 @@ func (g *Generator) GetIngredients(ctx context.Context, location string, f filte
 				continue
 			}
 
+			var aisle *string
+			if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
+				aisle = (*product.AisleLocations)[0].Number
+			}
+
 			// does just giving the model json work better here?
 			ingredient := kroger.Ingredient{
+				ProductId:    product.ProductId, //chat gpt act
 				Brand:        product.Brand,
 				Description:  product.Description,
 				Size:         item.Size,
 				PriceRegular: item.Price.Regular,
 				PriceSale:    item.Price.Promo,
 				Categories:   product.Categories,
+				AisleNumber:  aisle,
+
 				/*"taxonomies": [
 				{
 				"department": {},

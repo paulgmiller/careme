@@ -5,6 +5,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/ingredients"
 	"careme/internal/locations"
 	"careme/internal/logs"
 	"careme/internal/logsink"
@@ -49,7 +50,9 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-	locationStorage, err := locations.New(cfg, cache)
+	centroids := locations.LoadCentroids()
+
+	locationStorage, err := locations.New(cfg, cache, centroids)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -57,7 +60,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
 	userHandler.Register(mux)
 
-	locationServer := locations.NewServer(locationStorage, userStorage)
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
 	locationServer.Register(mux, authClient)
 
 	sitemapHandler := sitemap.New(cache)
@@ -68,6 +71,8 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
+	ingredientsHandler := ingredients.NewHandler(cache)
+	ingredientsHandler.Register(adminMux)
 	mux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 
 	if logsinkCfg.Enabled() {

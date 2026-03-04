@@ -37,9 +37,10 @@ type generatorParams struct {
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
 	LastRecipes  []string `json:"last_recipes,omitempty"`
 	// UserID         string      `json:"user_id,omitempty"`
-	ConversationID string      `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
-	Saved          []ai.Recipe `json:"saved_recipes,omitempty"`
-	Dismissed      []ai.Recipe `json:"dismissed_recipes,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
+	//TODO Both should just be title and hash insread of full ai.Recipe
+	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
+	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -125,40 +126,6 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 
 	p := DefaultParams(l, date)
 	p.Instructions = r.URL.Query().Get("instructions")
-
-	// Handle saved and dismissed recipe hashes from checkboxes
-	// Query().Get returns first value, Query() returns all values
-	// will be empty values for every recipe and two for ones with no action
-	// TODO look at way not to duplicate so many query arguments and pass down just a saved list or a query arg for each saved item.
-	clean := func(s string, _ int) (string, bool) {
-		ts := strings.TrimSpace(s)
-		return ts, ts != ""
-	}
-	savedHashes := lo.FilterMap(r.URL.Query()["saved"], clean)
-	dismissedHashes := lo.FilterMap(r.URL.Query()["dismissed"], clean)
-	// Load saved recipes from cache by their hashes
-	// TODO is it overkill to pull full recip in param instead of just hash?
-	for _, hash := range savedHashes {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
-			continue
-		}
-		recipe.Saved = true
-		slog.InfoContext(ctx, "adding saved recipe to params", "title", recipe.Title, "hash", hash)
-		p.Saved = append(p.Saved, *recipe)
-	}
-
-	// Add dismissed recipe titles to instructions so AI knows what to avoid
-	for _, hash := range dismissedHashes {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
-			continue
-		}
-		slog.InfoContext(ctx, "adding dismissed recipe to params", "title", recipe.Title, "hash", hash)
-		p.Dismissed = append(p.Dismissed, *recipe)
-	}
 	// should this be in hash?
 	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 

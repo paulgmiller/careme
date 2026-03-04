@@ -41,9 +41,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL, true /*expectSpinner*/)
 
 	// Step 3: select one recipe to save and two to dismiss.
-	conversationID := extractHiddenValue(t, recipesBody, "conversation_id")
-	date := extractHiddenValue(t, recipesBody, "date")
-	location := extractHiddenValue(t, recipesBody, "location")
+	recipesHash := extractRecipesHash(t, recipesBody)
 	recipeHashes := extractRecipeHashes(t, recipesBody)
 	if len(recipeHashes) < 3 {
 		t.Fatalf("expected at least 3 recipes, got %d", len(recipeHashes))
@@ -54,11 +52,21 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	_ = mustGetBody(t, client, srv.URL+"/recipe/"+url.PathEscape(savedHash))
 	dismissedHashes := recipeHashes[1:3]
 
-	//step 4 todo  regenrate again with commentary then save two more
+	// Step 4: persist selection immediately via HTMX.
+	saveURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/save"
+	_ = mustPostFormBodyHTMX(t, client, saveURL, url.Values{"h": {recipesHash}})
+	for _, dismissed := range dismissedHashes {
+		dismissURL := srv.URL + "/recipe/" + url.PathEscape(dismissed) + "/dismiss"
+		_ = mustPostFormBodyHTMX(t, client, dismissURL, url.Values{"h": {recipesHash}})
+	}
 
-	// Step 5: finalize with the saved/dismissed selections.
-	finalizeURL := buildRecipesURL(srv.URL, location, date, conversationID, savedHash, dismissedHashes, true)
-	_, finalizedBody := followUntilRecipes(t, client, finalizeURL, false /*expectSpinner*/)
+	// Step 5: finalize using server-side selection.
+	finalizeURL := srv.URL + "/recipes/" + url.PathEscape(recipesHash) + "/finalize"
+	finalizeRedirect := mustPostFormRedirectHTMX(t, client, finalizeURL, url.Values{})
+	if !strings.HasPrefix(finalizeRedirect, "/recipes?") {
+		t.Fatalf("expected finalize redirect to /recipes, got %q", finalizeRedirect)
+	}
+	_, finalizedBody := followUntilRecipes(t, client, srv.URL+finalizeRedirect, false /*expectSpinner*/)
 	recipeHashes = extractRecipeHashes(t, finalizedBody)
 	if len(recipeHashes) != 1 {
 		t.Fatalf("expected finalized page to show 1 recipe, got %d", len(recipeHashes))
@@ -75,6 +83,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 	// Step 6: ask a question on the finalized single recipe page.
 	question := "Can I use skirt steak instead?"
+	conversationID := extractHiddenValue(t, mustGetBody(t, client, srv.URL+"/recipe/"+url.PathEscape(savedHash)), "conversation_id")
 	questionURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/question"
 	questionBody := mustPostFormBodyHTMX(t, client, questionURL, url.Values{
 		"conversation_id": {conversationID},
@@ -113,6 +122,34 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 }
 
+func TestZipFromCoordinatesRedirect(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.Close()
+
+	client := newNoRedirectClient()
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/locations/zip-from-coordinates?lat=47.6097&lon=-122.3331", nil)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("expected status %d, got %d", http.StatusFound, resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != "/locations?zip=98101" {
+		t.Fatalf("expected Location %q, got %q", "/locations?zip=98101", got)
+	}
+}
+
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -130,7 +167,8 @@ func newTestServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("failed to create generator: %v", err)
 	}
-	locationStorage, err := locations.New(cfg, cacheStore)
+	centroids := locations.LoadCentroids()
+	locationStorage, err := locations.New(cfg, cacheStore, centroids)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}
@@ -138,7 +176,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	mockAuth := auth.Mock(cfg)
 
 	mux := http.NewServeMux()
-	locationServer := locations.NewServer(locationStorage, userStorage)
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
 	locationServer.Register(mux, mockAuth)
 	users.NewHandler(userStorage, locationStorage, mockAuth).Register(mux)
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(mux)
@@ -153,6 +191,14 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 func newTestClient(t *testing.T) *http.Client {
 	return &http.Client{}
+}
+
+func newNoRedirectClient() *http.Client {
+	return &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 func mustGet(t *testing.T, client *http.Client, url string) *http.Response {
@@ -203,6 +249,34 @@ func mustPostFormBodyHTMX(t *testing.T, client *http.Client, targetURL string, d
 		t.Fatalf("POST %s expected 200, got %d: %s", targetURL, resp.StatusCode, body)
 	}
 	return readAll(t, resp.Body)
+}
+
+func mustPostFormRedirectHTMX(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		t.Fatalf("POST %s failed to build request: %v", targetURL, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s failed: %v", targetURL, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body := readAll(t, resp.Body)
+		t.Fatalf("POST %s expected 200, got %d: %s", targetURL, resp.StatusCode, body)
+	}
+	redirect := resp.Header.Get("HX-Redirect")
+	if redirect == "" {
+		t.Fatalf("POST %s expected HX-Redirect header", targetURL)
+	}
+	return redirect
 }
 
 func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectSpinner bool) (string, string) {
@@ -296,19 +370,14 @@ func extractRecipeTitleForHash(t *testing.T, body, hash string) string {
 	return strings.TrimSpace(match[1])
 }
 
-func buildRecipesURL(base, location, date, conversationID, savedHash string, dismissedHashes []string, finalize bool) string {
-	params := url.Values{}
-	params.Set("location", location)
-	params.Set("date", date)
-	params.Set("conversation_id", conversationID)
-	params.Add("saved", savedHash)
-	for _, hash := range dismissedHashes {
-		params.Add("dismissed", hash)
+func extractRecipesHash(t *testing.T, body string) string {
+	t.Helper()
+	re := regexp.MustCompile(`/recipes/([^"/?]+)/regenerate`)
+	match := re.FindStringSubmatch(body)
+	if len(match) < 2 {
+		t.Fatalf("expected recipes page to include regenerate form action hash")
 	}
-	if finalize {
-		params.Set("finalize", "true")
-	}
-	return base + "/recipes?" + params.Encode()
+	return match[1]
 }
 
 func readAll(t *testing.T, r io.Reader) string {
