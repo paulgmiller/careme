@@ -18,7 +18,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/samber/lo"
@@ -68,53 +67,33 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 		return "", fmt.Errorf("no wine styles available for recipe %q", recipe.Title)
 	}
 
-	wines := []kroger.Ingredient{}
-	var wg sync.WaitGroup
-	var lock sync.Mutex
-	var firstErr error
 	rio := IO(g.cache)
 	cacheDate := date
+	wines, err := asParallel(styles, func(style string) ([]kroger.Ingredient, error) {
+		cacheKey := wineIngredientsCacheKey(style, location, cacheDate)
+		winesOfStyle, err := rio.IngredientsFromCache(ctx, cacheKey)
+		if err == nil {
+			slog.InfoContext(ctx, "Serving cached wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "count", len(winesOfStyle))
+			return winesOfStyle, nil
+		}
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "error", err)
+		}
 
-	wg.Add(len(styles))
-	for _, style := range styles {
-		go func(style string) {
-			defer wg.Done()
+		slog.InfoContext(ctx, "Picking wine for style", "style", style)
+		winesOfStyle, err = g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
+			return nil, fmt.Errorf("failed to get ingredients for style %q: %w", style, err)
+		}
 
-			cacheKey := wineIngredientsCacheKey(style, location, cacheDate)
-			if cachedWines, err := rio.IngredientsFromCache(ctx, cacheKey); err == nil {
-				lock.Lock()
-				wines = append(wines, cachedWines...)
-				lock.Unlock()
-				slog.InfoContext(ctx, "Serving cached wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "count", len(cachedWines))
-				return
-			} else if !errors.Is(err, cache.ErrNotFound) {
-				slog.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "error", err)
-			}
-
-			slog.InfoContext(ctx, "Picking wine for style", "style", style)
-			winesOfStyle, err := g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
-			if err != nil {
-				lock.Lock()
-				slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
-				if firstErr == nil {
-					firstErr = err
-				}
-				lock.Unlock()
-				return
-			}
-
-			if err := rio.SaveIngredients(ctx, cacheKey, winesOfStyle); err != nil {
-				slog.ErrorContext(ctx, "Failed to cache wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "error", err)
-			}
-
-			lock.Lock()
-			wines = append(wines, winesOfStyle...)
-			lock.Unlock()
-		}(style)
-	}
-	wg.Wait()
-	if firstErr != nil {
-		return "", firstErr
+		if err := rio.SaveIngredients(ctx, cacheKey, winesOfStyle); err != nil {
+			slog.ErrorContext(ctx, "Failed to cache wines for style", "style", style, "location", location, "date", cacheDate.Format("2006-01-02"), "error", err)
+		}
+		return winesOfStyle, nil
+	})
+	if err != nil {
+		return "", err
 	}
 
 	if len(wines) == 0 {
@@ -124,7 +103,7 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Pick a wine that would go well with %q. Here are %d wines in TSV format.\n", recipe.Title, len(wines)))
-	err := kroger.ToTSV(wines, &sb)
+	err = kroger.ToTSV(wines, &sb)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to convert wines to TSV", "error", err)
 		return "", err
@@ -210,27 +189,19 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
-	var wg sync.WaitGroup
-	var lock sync.Mutex
-	wg.Add(len(p.Staples))
-	for _, category := range p.Staples {
-		go func(category filter) {
-			defer wg.Done()
-			cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
-				return
-			}
-			lock.Lock()
-			defer lock.Unlock()
-			ingredients = append(ingredients, cingredients...)
-			ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toStr(i.Description) })
-			slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID, "runningtotal", len(ingredients))
-		}(category)
+	ingredients, err := asParallel(p.Staples, func(category filter) ([]kroger.Ingredient, error) {
+		cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
+			return nil, err
+		}
+		slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID, "runningtotal", len(ingredients))
+		return cingredients, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ingredients for staples: %w", err)
 	}
-
-	wg.Wait()
-
+	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toStr(i.Description) })
 	mutable.Shuffle(ingredients)
 
 	if err := rio.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {
