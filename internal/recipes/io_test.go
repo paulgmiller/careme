@@ -149,6 +149,21 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	}
 }
 
+func TestSaveWine_ReturnsErrorWhenRecipeKeyAlreadyExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	hash := "recipe-hash"
+	if err := cacheStore.Put(t.Context(), recipeCachePrefix+hash, `{"title":"Roast Chicken"}`, cache.Unconditional()); err != nil {
+		t.Fatalf("failed to seed recipe entry: %v", err)
+	}
+
+	if err := rio.SaveWine(t.Context(), hash, "Try a tempranillo."); err == nil {
+		t.Fatal("expected SaveWine to fail when recipe key is already a file")
+	}
+}
+
 func loPtr(v string) *string {
 	return &v
 }

@@ -230,6 +230,12 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
+	if recommendation, err := s.WineFromCache(ctx, hash); err == nil {
+		FormatRecipeWineHTML(hash, recommendation, w)
+		return
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
+	}
 
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
@@ -262,6 +268,9 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "failed to pick wine", "hash", hash, "conversation_id", conversationID, "error", err)
 		http.Error(w, "failed to pick wine", http.StatusInternalServerError)
 		return
+	}
+	if err := s.SaveWine(ctx, hash, recommendation); err != nil {
+		slog.ErrorContext(ctx, "failed to save wine recommendation", "hash", hash, "error", err)
 	}
 
 	FormatRecipeWineHTML(hash, recommendation, w)
