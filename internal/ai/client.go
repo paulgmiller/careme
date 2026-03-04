@@ -28,6 +28,7 @@ type Client struct {
 }
 
 // InputIngredient is a provider-agnostic ingredient payload for recipe generation.
+// do we wnt to match this closs to kroger I don't think so.
 type InputIngredient struct {
 	ProductID    *string  `json:"id,omitempty"`
 	AisleNumber  *string  `json:"number,omitempty"`
@@ -38,7 +39,7 @@ type InputIngredient struct {
 	Size         *string  `json:"size,omitempty"`
 }
 
-// todo collapse closer to
+// output ingredient usually a subnset of input
 type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` //should this and price be numbers? need units then
