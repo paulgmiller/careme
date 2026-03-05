@@ -1,6 +1,3 @@
-// https://app.sendgrid.com/guide/integrate/langs/go
-// using SendGrid's Go Library
-// https://github.com/sendgrid/sendgrid-go
 package mail
 
 import (
@@ -17,12 +14,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
-
-	"github.com/sendgrid/rest"
-	"github.com/sendgrid/sendgrid-go"
-	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
 const mailSentPrefix = "mail/sent/"
@@ -37,8 +29,24 @@ type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
 
+type EmailMessage struct {
+	FromName         string
+	FromAddress      string
+	To               []string
+	Subject          string
+	PlainTextContent string
+	HTMLContent      string
+}
+
+type SendResult struct {
+	StatusCode int
+	Body       string
+	Headers    http.Header
+	MessageID  string
+}
+
 type emailClient interface {
-	Send(message *mail.SGMailV3) (*rest.Response, error)
+	Send(ctx context.Context, message EmailMessage) (*SendResult, error)
 }
 
 type mailer struct {
@@ -47,6 +55,7 @@ type mailer struct {
 	generator   *recipes.Generator // interface requires making params public
 	locServer   locServer
 	client      emailClient
+	senderEmail string
 }
 
 // TODO share some of this with web.go? good for mocking?
@@ -70,10 +79,9 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}
 
-	// shove into cfg?
-	sendgridkey := os.Getenv("SENDGRID_API_KEY")
-	if sendgridkey == "" {
-		return nil, fmt.Errorf("SENDGRID_API_KEY environment variable is not set")
+	emailClient, senderEmail, err := newACSEmailClientFromConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	return &mailer{
@@ -81,7 +89,8 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		userStorage: userStorage,
 		generator:   generator.(*recipes.Generator), // TODO do better
 		locServer:   locationserver,
-		client:      sendgrid.NewSendClient(sendgridkey),
+		client:      emailClient,
+		senderEmail: senderEmail,
 	}, nil
 }
 
@@ -187,34 +196,30 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		return
 	}
 
-	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"
-
 	plainTextContent := "Check out your new recipes at https://careme.cooking/recipes?h=" + paramsHash
-
-	to := mail.NewEmail(user.Email[0], user.Email[0])
-	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
-	for _, e := range user.Email[1:] {
-		p := mail.NewPersonalization()
-		p.AddTos(mail.NewEmail(e, e))
-		message.AddPersonalizations(p)
+	message := EmailMessage{
+		FromName:         "Chef",
+		FromAddress:      m.senderEmail,
+		To:               append([]string(nil), user.Email...),
+		Subject:          subject,
+		PlainTextContent: plainTextContent,
+		HTMLContent:      buf.String(),
 	}
-	// client.Request, _ = sendgrid.SetDataResidency(client.Request, "eu")
-	// uncomment the above line if you are sending mail using a regional EU subuser
-	response, err := m.client.Send(message)
+	response, err := m.client.Send(ctx, message)
 	if err != nil {
 		slog.ErrorContext(ctx, "mail error", "error", err.Error(), "user", user.Email[0])
 		return
 	}
 	if response == nil {
-		slog.ErrorContext(ctx, "mail error", "error", "nil sendgrid response", "user", user.Email[0])
+		slog.ErrorContext(ctx, "mail error", "error", "nil email provider response", "user", user.Email[0])
 		return
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		slog.ErrorContext(ctx, "mail rejected by sendgrid", "status", response.StatusCode, "body", response.Body, "headers", response.Headers, "user", user.Email[0])
+		slog.ErrorContext(ctx, "mail rejected by provider", "status", response.StatusCode, "body", response.Body, "headers", response.Headers, "user", user.Email[0])
 		return
 	}
-	slog.InfoContext(ctx, "status", slog.Int("status", response.StatusCode), "body", response.Body, "headers", response.Headers)
+	slog.InfoContext(ctx, "status", slog.Int("status", response.StatusCode), "body", response.Body, "headers", response.Headers, "message_id", response.MessageID)
 
 	sentClaim, err := json.Marshal(mailSentClaim{
 		SentAt:     time.Now().UTC(),

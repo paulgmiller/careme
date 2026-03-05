@@ -14,6 +14,7 @@ type Config struct {
 	Mocks   MockConfig    `json:"mocks"`
 	Clerk   ClerkConfig   `json:"clerk"`
 	Admin   AdminConfig   `json:"admin"`
+	ACS     ACSConfig     `json:"acs"`
 }
 
 type AIConfig struct {
@@ -43,6 +44,12 @@ func (c *ClerkConfig) IsEnabled() bool {
 
 type AdminConfig struct {
 	Emails []string `json:"emails"`
+}
+
+type ACSConfig struct {
+	EmailEndpoint  string `json:"email_endpoint"`
+	EmailAccessKey string `json:"email_access_key"`
+	EmailSender    string `json:"email_sender"`
 }
 
 // Config defines the required Walmart affiliate credentials and client options.
@@ -98,6 +105,11 @@ func Load() (*Config, error) {
 		},
 		Admin: AdminConfig{
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+		},
+		ACS: ACSConfig{
+			EmailEndpoint:  os.Getenv("ACS_EMAIL_ENDPOINT"),
+			EmailAccessKey: os.Getenv("ACS_EMAIL_ACCESS_KEY"),
+			EmailSender:    os.Getenv("ACS_EMAIL_SENDER"),
 		},
 		Walmart: WalmartConfig{
 			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),
