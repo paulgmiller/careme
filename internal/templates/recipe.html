@@ -55,7 +55,7 @@
               <div>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Ingredients</h3>
                 <ul class="mt-3 space-y-2 text-gray-700">
-                  {{range .Recipe.Ingredients}}
+                  {{range .DisplayIngredients}}
                   <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
                     <span class="font-medium text-brand-700">{{.Name}}</span>
                     <span class="text-gray-600">{{.Quantity}}</span>
@@ -288,10 +288,10 @@
           hx-target="#wine-recommendation"
           hx-swap="outerHTML"
           hx-disabled-elt="#wine-picker-button"
-          hx-on::before-request="this.textContent='Choosing...';"
-          hx-on::response-error="this.textContent='choose a wine';"
+          hx-on::before-request="this.textContent='Choosing 🍷 ...';"
+          hx-on::response-error="this.textContent='wine failure 😞';"
           class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    choose a wine
+    🍷 Choose a wine
   </button>
   {{end}}
 </div>

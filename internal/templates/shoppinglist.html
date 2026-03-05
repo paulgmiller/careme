@@ -66,10 +66,10 @@
 
           <div class="mt-8 space-y-8">
             {{range .Recipes}}
-            <article class="space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+            <article class="shopping-recipe-card space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
               <header class="space-y-4">
                 <div>
-                  <a href="/recipe/{{.ComputeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  <a href="/recipe/{{.Hash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     {{.Title}}
                   </a>
                   <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
@@ -77,12 +77,12 @@
                 <div class="flex flex-wrap items-center gap-3">
                   <input type="radio"
                          {{if .Saved}}checked{{end}}
-                         name="recipe-{{.ComputeHash}}"
+                         name="recipe-{{.Hash}}"
                          value="save"
-                         id="save-{{.ComputeHash}}"
+                         id="save-{{.Hash}}"
                          class="peer/save hidden" />
-                  <label for="save-{{.ComputeHash}}"
-                         hx-post="/recipe/{{.ComputeHash}}/save"
+                  <label for="save-{{.Hash}}"
+                         hx-post="/recipe/{{.Hash}}/save"
                          hx-vals='{"h":"{{$.Hash}}"}'
                          hx-trigger="click"
                          hx-target="next .profile-status"
@@ -92,13 +92,13 @@
                     Save
                   </label>
                   <input type="radio"
-                         {{if index $.DismissedHashes (.ComputeHash)}}checked{{end}}
-                         name="recipe-{{.ComputeHash}}"
+                         {{if .Dismissed}}checked{{end}}
+                         name="recipe-{{.Hash}}"
                          value="dismiss"
-                         id="dismiss-{{.ComputeHash}}"
+                         id="dismiss-{{.Hash}}"
                          class="peer/dismiss hidden" />
-                  <label for="dismiss-{{.ComputeHash}}"
-                         hx-post="/recipe/{{.ComputeHash}}/dismiss"
+                  <label for="dismiss-{{.Hash}}"
+                         hx-post="/recipe/{{.Hash}}/dismiss"
                          hx-vals='{"h":"{{$.Hash}}"}'
                          hx-trigger="click"
                          hx-target="next .profile-status"
@@ -112,11 +112,16 @@
                           class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     Details
                   </button>
+                  {{template "shopping_recipe_wine_action" .}}
                   <span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>
                 </div>
               </header>
 
-              <details {{if not (or .Saved (index $.DismissedHashes (.ComputeHash)))}}open{{end}} class="space-y-4">
+              <div class="pt-1">
+                  {{template "shopping_recipe_wine_preview" .}}
+              </div>
+
+              <details {{if not (or .Saved .Dismissed)}}open{{end}} class="space-y-4">
                 <summary class="hidden">Details</summary>
                 <section class="space-y-6">
                 <div class="grid gap-6 md:grid-cols-2">
@@ -151,6 +156,7 @@
                   {{end}}
                   <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
                   <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
+                  {{template "shopping_recipe_wine_details" .}}
                 </div>
               </section>
               </details>
@@ -194,6 +200,144 @@
     </section>
   </main>
   <script src="/static/htmx@2.0.8.js"></script>
+  <script>
+    (() => {
+      const key = "shopping-wine-refresh:{{.Hash}}";
+      window.addEventListener("pageshow", (event) => {
+        if (sessionStorage.getItem(key) !== "1") return;
+        if (event.persisted) {
+          sessionStorage.removeItem(key);
+          location.reload();
+          return;
+        }
+        sessionStorage.removeItem(key);
+      });
+    })();
+  </script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
+
+{{define "shopping_recipe_wine_action"}}
+<div id="{{.WineActionID}}" class="shopping-wine-action">
+  {{template "shopping_recipe_wine_action_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_action_oob"}}
+<div id="{{.WineActionID}}" hx-swap-oob="outerHTML" class="shopping-wine-action">
+  {{template "shopping_recipe_wine_action_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_action_content"}}
+  {{if not .WineRecommendation}}
+  <button type="button"
+          id="{{.WineButtonID}}"
+          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=action"
+          hx-target="#{{.WineActionID}}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="#{{.WineButtonID}}"
+          hx-on::before-request="this.textContent='🍷🔄';"
+          hx-on::response-error="this.textContent='😞';"
+          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{$.Hash}}','1');}"
+          aria-label="Choose wine"
+          title="Choose wine"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    🍷
+  </button>
+  {{end}}
+{{end}}
+
+{{define "shopping_recipe_wine_preview"}}
+<div id="{{.WinePreviewID}}" class="shopping-wine-preview">
+  {{template "shopping_recipe_wine_preview_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_preview_oob"}}
+<div id="{{.WinePreviewID}}" hx-swap-oob="outerHTML" class="shopping-wine-preview">
+  {{template "shopping_recipe_wine_preview_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_preview_content"}}
+  {{if .WineRecommendation}}
+  <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-900">
+    {{if .WinePreview}}
+    <p class="font-semibold text-brand-700">Wine picks:</p>
+    <ul class="mt-1 space-y-1">
+      {{range .WinePreview}}
+      <li class="flex flex-wrap items-baseline gap-x-2">
+        <span class="font-medium text-brand-800">{{.Name}}</span>
+        {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
+        {{if .Quantity}}<span class="text-brand-600">{{.Quantity}}</span>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  </div>
+  {{end}}
+{{end}}
+
+{{define "shopping_recipe_wine_details"}}
+<div id="{{.WineDetailID}}" class="shopping-wine-details pt-2">
+  {{template "shopping_recipe_wine_details_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_details_oob"}}
+<div id="{{.WineDetailID}}" hx-swap-oob="outerHTML" class="shopping-wine-details pt-2">
+  {{template "shopping_recipe_wine_details_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_details_content"}}
+  {{if .WineRecommendation}}
+  <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
+    {{if .WineRecommendation.Wines}}
+    <p class="font-semibold text-brand-700">Wine picks:</p>
+    <ul class="mt-1 space-y-1">
+      {{range .WineRecommendation.Wines}}
+      <li class="flex flex-wrap items-baseline gap-x-2">
+        <span class="font-medium text-brand-800">{{.Name}}</span>
+        {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
+        {{if .Quantity}}<span class="text-brand-600">{{.Quantity}}</span>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+    {{if .WineRecommendation.Commentary}}
+    <p class="{{if .WineRecommendation.Wines}}mt-2{{end}}">
+      <span class="font-semibold text-brand-700">Why it works:</span>
+      <span class="whitespace-pre-line">{{.WineRecommendation.Commentary}}</span>
+    </p>
+    {{end}}
+  </div>
+  {{else}}
+  <button type="button"
+          id="{{.WineDetailButtonID}}"
+          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=details"
+          hx-target="#{{.WineDetailID}}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="#{{.WineDetailButtonID}}"
+          hx-on::before-request="this.textContent='Choosing 🍷 ...';"
+          hx-on::response-error="this.textContent='wine failure 😞';"
+          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{$.Hash}}','1');}"
+          class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    🍷 Choose a wine
+  </button>
+  {{end}}
+{{end}}
+
+{{define "shopping_recipe_wine_action_response"}}
+{{template "shopping_recipe_wine_action" .}}
+{{template "shopping_recipe_wine_preview_oob" .}}
+{{template "shopping_recipe_wine_details_oob" .}}
+{{end}}
+
+{{define "shopping_recipe_wine_details_response"}}
+{{template "shopping_recipe_wine_action_oob" .}}
+{{template "shopping_recipe_wine_preview_oob" .}}
+{{template "shopping_recipe_wine_details" .}}
+{{end}}
