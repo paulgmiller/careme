@@ -78,6 +78,10 @@ func (s *server) Register(mux *http.ServeMux) {
 }
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
+	// This page has user-visible HTMX mutations (wine picks, feedback, Q&A).
+	// If the browser restores it from history or an intermediary cache, the user can
+	// see stale UI that no longer matches cache-backed state, so force a fresh GET.
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ctx := r.Context()
 	hash := r.PathValue("hash")
 	if hash == "" {
@@ -248,6 +252,8 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
+	renderShoppingVariant := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("view")), "shopping")
+	shoppingSlot := strings.TrimSpace(r.URL.Query().Get("slot"))
 	hash := strings.TrimSpace(r.PathValue("hash"))
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
@@ -258,7 +264,11 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to load wine recommendation", http.StatusInternalServerError)
 			return
 		}
-		FormatRecipeWineHTML(hash, selection, w)
+		if renderShoppingVariant {
+			FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
+		} else {
+			FormatRecipeWineHTML(hash, selection, w)
+		}
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
@@ -304,6 +314,10 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "failed to save wine recommendation", "hash", hash, "error", err)
 	}
 
+	if renderShoppingVariant {
+		FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
+		return
+	}
 	FormatRecipeWineHTML(hash, selection, w)
 }
 
@@ -680,6 +694,10 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 }
 
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
+	// The shopping list page is mutated in-place via HTMX (save/dismiss/wine picks).
+	// We disable browser/intermediary caching so Back/Forward revalidation fetches the
+	// latest server-rendered state instead of restoring a stale DOM snapshot.
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ctx := r.Context()
 	// TODO(pm): Revisit route shape for hash-based recipe lists. `h` is a derived key from
 	// query params, so `/recipes?h=...` is defensible; decide later if we also want a
@@ -730,7 +748,28 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			s.mergeParamsWithSelection(ctx, p, fromStore, slist.Recipes)
 		}
 		applySavedToRecipes(slist.Recipes, p)
-		FormatShoppingListHTMLForHash(p, *slist, signedIn, hashParam, w)
+		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
+		var wineWG sync.WaitGroup
+		var wineMu sync.Mutex
+		wineWG.Add(len(slist.Recipes))
+		for _, recipe := range slist.Recipes {
+			recipeHash := recipe.ComputeHash()
+			go func(recipeHash string) {
+				defer wineWG.Done()
+				wineRecommendation, wineErr := s.WineFromCache(ctx, recipeHash)
+				if wineErr != nil {
+					if !errors.Is(wineErr, cache.ErrNotFound) {
+						slog.ErrorContext(ctx, "failed to load cached wine recommendation for shopping list render", "recipe_hash", recipeHash, "error", wineErr)
+					}
+					return
+				}
+				wineMu.Lock()
+				wineRecommendations[recipeHash] = wineRecommendation
+				wineMu.Unlock()
+			}(recipeHash)
+		}
+		wineWG.Wait()
+		FormatShoppingListHTMLForHash(p, *slist, wineRecommendations, signedIn, hashParam, w)
 		return
 	}
 

@@ -85,6 +85,9 @@ func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
 	if got := u.Query().Get("h"); got != hash {
 		t.Fatalf("expected redirect hash %q, got %q", hash, got)
 	}
+	if got := rr.Header().Get("Cache-Control"); got != "no-store, no-cache, must-revalidate" {
+		t.Fatalf("expected cache control header on recipes page, got %q", got)
+	}
 }
 
 func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
@@ -169,6 +172,9 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 	}
 	if !strings.Contains(body, "Canonical Test Store") {
 		t.Fatalf("expected canonical params location to render, body: %s", body)
+	}
+	if got := rr.Header().Get("Cache-Control"); got != "no-store, no-cache, must-revalidate" {
+		t.Fatalf("expected cache control header on recipe page, got %q", got)
 	}
 }
 
@@ -561,6 +567,60 @@ func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
 	}
 	if got, want := g.winePickCalls, 1; got != want {
 		t.Fatalf("expected PickAWine call count %d, got %d", want, got)
+	}
+}
+
+func TestHandleWine_ShoppingVariantReturnsShoppingFragment(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	g := &captureQuestionGenerator{}
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   users.NewStorage(cacheStore),
+		clerk:     auth.DefaultMock(),
+		generator: g,
+	}
+
+	p := DefaultParams(&locations.Location{ID: "loc-wine", Name: "Wine Test Store"}, time.Now())
+	p.ConversationID = "conv-wine"
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	recipe := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+		WineStyles:   []string{"pinot noir"},
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
+		t.Fatalf("failed to save recipe: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine?view=shopping", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleWine(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	actionID, _ := shoppingWineDOMIDs(recipeHash)
+	previewID := shoppingWinePreviewDOMID(recipeHash)
+	detailContainerID, _ := shoppingWineDetailDOMIDs(recipeHash)
+	if !strings.Contains(body, `id="`+actionID+`"`) {
+		t.Fatalf("expected shopping wine fragment container in response, got body: %s", body)
+	}
+	if !strings.Contains(body, `id="`+previewID+`"`) || !strings.Contains(body, `id="`+detailContainerID+`"`) || !strings.Contains(body, `hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected shopping wine response to update preview and details containers out-of-band, got body: %s", body)
+	}
+	if !strings.Contains(body, "Try a chilled sauvignon blanc.") {
+		t.Fatalf("expected wine recommendation in response, got body: %s", body)
 	}
 }
 
