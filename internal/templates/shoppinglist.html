@@ -202,6 +202,10 @@
   <script src="/static/htmx@2.0.8.js"></script>
   <script>
     (() => {
+      // After an HTMX wine pick, browser Back/Forward can restore a stale shopping-list
+      // DOM from history instead of refetching the page. We mark the page as dirty in
+      // sessionStorage and force one reload on pageshow so the restored page matches the
+      // latest server-rendered wine state, then clear the flag immediately.
       const key = "shopping-wine-refresh:{{.Hash}}";
       window.addEventListener("pageshow", (event) => {
         if (sessionStorage.getItem(key) !== "1") return;
