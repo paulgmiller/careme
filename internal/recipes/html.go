@@ -284,21 +284,10 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []ai.Ingredient {
 func ingredientsForDisplay(base []ai.Ingredient, wineRecommendation *ai.WineSelection) []ai.Ingredient {
 	display := make([]ai.Ingredient, 0, len(base))
 	display = append(display, base...)
-	if wineRecommendation == nil {
+	if wineRecommendation == nil || len(wineRecommendation.Wines) == 0 {
 		return display
 	}
-	for _, wine := range wineRecommendation.Wines {
-		name := strings.TrimSpace(wine.Name)
-		if name == "" {
-			continue
-		}
-		display = append(display, ai.Ingredient{
-			Name:     name,
-			Quantity: strings.TrimSpace(wine.Quantity),
-			Price:    strings.TrimSpace(wine.Price),
-		})
-		break //just geting the first one. Need a way to let user pick.
-	}
+	display = append(display, wineRecommendation.Wines[0]) // Need a way to let the user pick among wines.
 	return display
 }
 
