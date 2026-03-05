@@ -1,6 +1,7 @@
 package static
 
 import (
+	"careme/internal/seasons"
 	"crypto/sha256"
 	_ "embed"
 	"fmt"
@@ -14,8 +15,17 @@ var tailwindCSS []byte
 //go:embed htmx@2.0.8.js
 var htmx208JS []byte
 
-//go:embed favicon.png
-var favicon []byte
+//go:embed favicon-fall.png
+var faviconFall []byte
+
+//go:embed favicon-winter.png
+var faviconWinter []byte
+
+//go:embed favicon-spring.png
+var faviconSpring []byte
+
+//go:embed favicon-summer.png
+var faviconSummer []byte
 
 var TailwindAssetPath string
 
@@ -46,9 +56,26 @@ func Register(mux *http.ServeMux) {
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		// Keep cache short so clients can refresh seasonally without manual cache clear.
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		favicon := faviconBySeason(seasons.GetCurrentSeason())
 		if _, err := w.Write(favicon); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write favicon", "error", err)
 		}
 	})
+}
+
+func faviconBySeason(season seasons.Season) []byte {
+	switch season {
+	case seasons.Winter:
+		return faviconWinter
+	case seasons.Spring:
+		return faviconSpring
+	case seasons.Summer:
+		return faviconSummer
+	case seasons.Fall:
+		fallthrough
+	default:
+		return faviconFall
+	}
 }
