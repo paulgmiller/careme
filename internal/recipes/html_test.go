@@ -171,7 +171,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, w)
+	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -196,6 +196,15 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	}
 	if !strings.Contains(html, `id="question-thread"`) {
 		t.Error("recipe HTML should contain question thread container")
+	}
+	if !strings.Contains(html, `id="wine-recommendation"`) {
+		t.Error("recipe HTML should contain wine recommendation container")
+	}
+	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/wine"`) {
+		t.Error("recipe HTML should include wine picker htmx endpoint")
+	}
+	if !strings.Contains(html, "choose a wine") {
+		t.Error("recipe HTML should include choose a wine button")
 	}
 	if !strings.Contains(html, "Cook time:") {
 		t.Error("recipe HTML should contain cook time")
@@ -225,7 +234,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], false, []RecipeThreadEntry{}, RecipeFeedback{}, w)
+	FormatRecipeHTML(p, list.Recipes[0], false, []RecipeThreadEntry{}, RecipeFeedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -235,6 +244,32 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	}
 	if !strings.Contains(html, "Sign in to ask follow-up questions.") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
+	}
+}
+
+func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
+	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.ConversationID = "convo123"
+	w := httptest.NewRecorder()
+	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, &ai.WineSelection{
+		Wines: []ai.Ingredient{
+			{Name: "Oregon Pinot Noir", Price: "$14.99"},
+		},
+		Commentary: "Great with the savory notes.",
+	}, w)
+	html := w.Body.String()
+
+	isValidHTML(t, html)
+
+	if !strings.Contains(html, "Oregon Pinot Noir") || !strings.Contains(html, "$14.99") {
+		t.Error("recipe HTML should render cached wine picks with prices")
+	}
+	if !strings.Contains(html, "Great with the savory notes.") {
+		t.Error("recipe HTML should render cached wine commentary")
+	}
+	if strings.Contains(html, "choose a wine") {
+		t.Error("recipe HTML should not render choose a wine button when recommendation exists")
 	}
 }
 
@@ -264,5 +299,31 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	}
 	if newerIndex > olderIndex {
 		t.Fatalf("expected newer question before older question, body: %s", body)
+	}
+}
+
+func TestFormatRecipeWineHTML_RendersRecommendation(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	FormatRecipeWineHTML("recipe-hash", &ai.WineSelection{
+		Wines: []ai.Ingredient{
+			{Name: "Light Pinot Noir", Price: "$12.99"},
+			{Name: "Dry Rose", Price: "$10.50"},
+		},
+		Commentary: "Try a light pinot noir.",
+	}, w)
+	body := w.Body.String()
+
+	if !strings.Contains(body, `id="wine-recommendation"`) {
+		t.Fatalf("expected wine fragment container in response, got body: %s", body)
+	}
+	if !strings.Contains(body, "Light Pinot Noir") || !strings.Contains(body, "$12.99") {
+		t.Fatalf("expected wine picks with prices in response, got body: %s", body)
+	}
+	if !strings.Contains(body, "Try a light pinot noir.") {
+		t.Fatalf("expected recommendation in response, got body: %s", body)
+	}
+	if strings.Index(body, "Light Pinot Noir") > strings.Index(body, "Try a light pinot noir.") {
+		t.Fatalf("expected wine picks to render before commentary, got body: %s", body)
 	}
 }

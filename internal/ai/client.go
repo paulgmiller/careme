@@ -23,9 +23,10 @@ import (
 )
 
 type Client struct {
-	apiKey string
-	schema map[string]any
-	model  string
+	apiKey     string
+	schema     map[string]any
+	wineSchema map[string]any
+	model      string
 }
 
 // todo collapse closer to
@@ -80,6 +81,11 @@ type ShoppingList struct {
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
 }
 
+type WineSelection struct {
+	Wines      []Ingredient `json:"wines"`
+	Commentary string       `json:"commentary"`
+}
+
 // ignoring model for now.
 func NewClient(apiKey, _ string) *Client {
 	//ignor model for now.
@@ -87,14 +93,19 @@ func NewClient(apiKey, _ string) *Client {
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
 	}
-	schema := r.Reflect(&ShoppingList{})
-	schemaJSON, _ := json.Marshal(schema)
+	recipesSchema := r.Reflect(&ShoppingList{})
+	recipesSchemaJSON, _ := json.Marshal(recipesSchema)
+	wineSchema := r.Reflect(&WineSelection{})
+	wineSchemaJSON, _ := json.Marshal(wineSchema)
 	var m map[string]any
-	_ = json.Unmarshal(schemaJSON, &m)
+	_ = json.Unmarshal(recipesSchemaJSON, &m)
+	var wine map[string]any
+	_ = json.Unmarshal(wineSchemaJSON, &wine)
 	return &Client{
-		apiKey: apiKey,
-		schema: m,
-		model:  openai.ChatModelGPT5_2,
+		apiKey:     apiKey,
+		schema:     m,
+		wineSchema: wine,
+		model:      openai.ChatModelGPT5_2,
 	}
 }
 
@@ -114,15 +125,16 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 
 # Output Format
 - Each recipe includes:
-  - Title
-  - Description: Try to sell the dish and add some flair.
-  - Estimated cook time (for example: "35 minutes")
-  - Estimated total cost in dollars (for example: "$18-24")
-  - Ingredient list: should include quantities and price if in input.
+  - title: A short catchy name for the dish.
+  - description: Try to sell the dish and add some flair.
+  - cook_time: Estimated cook time (for example: "35 minutes")
+  - cost_estimate: Estimated total cost in dollars (for example: "$18-24")
+  - instructions: should include quantities and price if in input.
   - Step-by-step instructions starting with prep. Don't prefix with numbers.
-  - Estimated Calorie count and other nutrient health tips.
-  - Optional wine pairing guidance.
-  - Three wine or less wine styles.
+  - health: Estimated Calorie count and other nutrient health tips.
+  - drink_pairing: the wine pairing suggestion mentioned in instructions
+  - wine_styles: Two or fewer consumer-recognizable wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc", "Cabernet Sauvignon").
+  - wine_styles must only contain searchable style names: no regions, no parenthetical notes, no commas, no "or", no "*-style blend" phrasing.
 
 # Planning & Verification
 - Reference your checklist to ensure variety in cooking methods and cuisines
@@ -135,6 +147,7 @@ func responseToShoppingList(ctx context.Context, resp *responses.Response) (*Sho
 	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
+	normalizeWineStyles(&shoppingList)
 	if resp.Conversation.ID == "" {
 		return nil, fmt.Errorf("failed to get conversation ID")
 	}
@@ -211,6 +224,55 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 		return "", fmt.Errorf("empty response from model")
 	}
 	return answer, nil
+}
+
+func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*WineSelection, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	recipeTitle = strings.TrimSpace(recipeTitle)
+	if conversationID == "" {
+		return nil, fmt.Errorf("conversation ID is required for wine picks")
+	}
+	if recipeTitle == "" {
+		return nil, fmt.Errorf("recipe title is required for wine picks")
+	}
+	if len(wines) == 0 {
+		return nil, fmt.Errorf("wines are required for wine picks")
+	}
+	var wineTSV strings.Builder
+	err := kroger.ToTSV(wines, &wineTSV)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to convert wines to TSV", "error", err)
+		return nil, err
+	}
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	input := []responses.ResponseInputItemUnionParam{user(fmt.Sprintf("Candidate wines:\n%s", wineTSV.String()))}
+	params := responses.ResponseNewParams{
+		Model: c.model,
+		Instructions: openai.String(
+			"Act as a sommelier. Select 1 to 2 wines from the provided TSV that pair well with the recipe " + recipeTitle + "." +
+				"Return JSON with wines (ingredient array) and commentary about why those particular wines work well" +
+				"Pick wine sizes appropriate to number of people. Price according to the meal fanciness" +
+				"For each wine include name and optionally quantity/price when available from TSV.",
+		),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: input,
+		},
+		Store: openai.Bool(true),
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfString: openai.String(conversationID),
+		},
+		Text: scheme(c.wineSchema),
+	}
+	resp, err := client.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pick wine: %w", err)
+	}
+
+	var selection WineSelection
+	if err := json.Unmarshal([]byte(resp.OutputText()), &selection); err != nil {
+		return nil, fmt.Errorf("failed to parse wine selection: %w", err)
+	}
+	return &selection, nil
 }
 
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
@@ -308,4 +370,55 @@ func cleanInstuctions(instructions []string) []responses.ResponseInputItemUnionP
 		responses = append(responses, user(i))
 	}
 	return responses
+}
+
+func normalizeWineStyles(shoppingList *ShoppingList) {
+	if shoppingList == nil {
+		return
+	}
+	for i := range shoppingList.Recipes {
+		shoppingList.Recipes[i].WineStyles = normalizeRecipeWineStyles(shoppingList.Recipes[i].WineStyles)
+	}
+}
+
+func normalizeRecipeWineStyles(styles []string) []string {
+	if len(styles) == 0 {
+		return nil
+	}
+	cleaned := make([]string, 0, min(len(styles), 2))
+	seen := map[string]struct{}{}
+	for _, style := range styles {
+		normalized := normalizeWineStyle(style)
+		if normalized == "" {
+			continue
+		}
+		key := strings.ToLower(normalized)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		cleaned = append(cleaned, normalized)
+		if len(cleaned) == 2 {
+			break
+		}
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	return cleaned
+}
+
+func normalizeWineStyle(style string) string {
+	style = strings.TrimSpace(style)
+	if style == "" {
+		return ""
+	}
+	if idx := strings.IndexAny(style, "(["); idx >= 0 {
+		style = strings.TrimSpace(style[:idx])
+	}
+	style = strings.TrimSpace(strings.TrimSuffix(style, "."))
+	if style == "" {
+		return ""
+	}
+	return strings.Join(strings.Fields(style), " ")
 }

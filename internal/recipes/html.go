@@ -58,36 +58,38 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, signed
 }
 
 // FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, writer http.ResponseWriter) {
+func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	data := struct {
-		Location        locations.Location
-		Date            string
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Recipe          ai.Recipe
-		OriginHash      string
-		ConversationID  string
-		Thread          []RecipeThreadEntry
-		Feedback        RecipeFeedback
-		RecipeHash      string
-		Style           seasons.Style
-		ServerSignedIn  bool
+		Location           locations.Location
+		Date               string
+		ClarityScript      template.HTML
+		GoogleTagScript    template.HTML
+		Recipe             ai.Recipe
+		OriginHash         string
+		ConversationID     string
+		WineRecommendation *ai.WineSelection
+		Thread             []RecipeThreadEntry
+		Feedback           RecipeFeedback
+		RecipeHash         string
+		Style              seasons.Style
+		ServerSignedIn     bool
 	}{
-		Location:        *p.Location,
-		Date:            p.Date.Format("2006-01-02"),
-		ClarityScript:   templates.ClarityScript(),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Recipe:          recipe,
-		OriginHash:      recipe.OriginHash,
-		ConversationID:  p.ConversationID,
-		Thread:          thread,
-		Feedback:        feedback,
-		RecipeHash:      recipe.ComputeHash(),
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  signedIn,
+		Location:           *p.Location,
+		Date:               p.Date.Format("2006-01-02"),
+		ClarityScript:      templates.ClarityScript(),
+		GoogleTagScript:    templates.GoogleTagScript(),
+		Recipe:             recipe,
+		OriginHash:         recipe.OriginHash,
+		ConversationID:     p.ConversationID,
+		WineRecommendation: wineRecommendation,
+		Thread:             thread,
+		Feedback:           feedback,
+		RecipeHash:         recipe.ComputeHash(),
+		Style:              seasons.GetCurrentStyle(),
+		ServerSignedIn:     signedIn,
 	}
 
 	if err := templates.Recipe.Execute(writer, data); err != nil {
@@ -113,6 +115,21 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversat
 
 	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
 		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// FormatRecipeWineHTML renders the wine recommendation fragment for HTMX swaps.
+func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer http.ResponseWriter) {
+	data := struct {
+		RecipeHash         string
+		WineRecommendation *ai.WineSelection
+	}{
+		RecipeHash:         recipeHash,
+		WineRecommendation: selection,
+	}
+
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_wine", data); err != nil {
+		http.Error(writer, "recipe wine template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 

@@ -221,6 +221,67 @@ func TestHandleSingle_LegacyOriginHashDoesNotFailWhenParamsMissing(t *testing.T)
 	}
 }
 
+func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	p := DefaultParams(
+		&locations.Location{ID: "loc-wine-single", Name: "Wine Store"},
+		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+	)
+	p.ConversationID = "conv-wine-single"
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+
+	recipe := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+		Health:       "High protein",
+		DrinkPairing: "Pinot noir",
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
+		t.Fatalf("failed to save recipe: %v", err)
+	}
+	if err := s.SaveWine(t.Context(), recipeHash, &ai.WineSelection{
+		Wines: []ai.Ingredient{
+			{Name: "Light Pinot Noir", Price: "$13.99"},
+		},
+		Commentary: "Balances the rich chicken skin.",
+	}); err != nil {
+		t.Fatalf("failed to save wine recommendation: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash, nil)
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSingle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Light Pinot Noir") || !strings.Contains(body, "$13.99") {
+		t.Fatalf("expected cached wine picks in response, got body: %s", body)
+	}
+	if !strings.Contains(body, "Balances the rich chicken skin.") {
+		t.Fatalf("expected cached wine commentary in response, got body: %s", body)
+	}
+	if strings.Contains(body, "choose a wine") {
+		t.Fatalf("expected no choose-a-wine button when cached recommendation exists, got body: %s", body)
+	}
+}
+
 type noSessionAuth struct{}
 
 func (n noSessionAuth) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {
@@ -288,6 +349,14 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 
 type captureQuestionGenerator struct {
 	lastQuestion string
+	lastWinePick struct {
+		conversationID string
+		recipeTitle    string
+		date           time.Time
+	}
+	wineRecommendation string
+	winePickCalls      int
+	panicOnWine        bool
 }
 
 func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -297,6 +366,21 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	c.lastQuestion = question
 	return "Try chicken thighs at the same cook time.", nil
+}
+
+func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+	if c.panicOnWine {
+		panic("unexpected call to PickAWine")
+	}
+	_ = location
+	c.winePickCalls++
+	c.lastWinePick.conversationID = conversationID
+	c.lastWinePick.recipeTitle = recipe.Title
+	c.lastWinePick.date = date
+	if c.wineRecommendation != "" {
+		return &ai.WineSelection{Commentary: c.wineRecommendation, Wines: []ai.Ingredient{}}, nil
+	}
+	return &ai.WineSelection{Commentary: "Try a chilled sauvignon blanc.", Wines: []ai.Ingredient{}}, nil
 }
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
@@ -398,6 +482,155 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	}
 	if got, want := g.lastQuestion, "Regarding BBQ Pulled Pork: Can I swap the protein?"; got != want {
 		t.Fatalf("expected generator question %q, got %q", want, got)
+	}
+}
+
+func TestHandleWine_RejectsNonHTMXRequest(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: recipeio{Cache: cacheStore},
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/wine", nil)
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleWine(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	g := &captureQuestionGenerator{}
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   users.NewStorage(cacheStore),
+		clerk:     auth.DefaultMock(),
+		generator: g,
+	}
+
+	p := DefaultParams(&locations.Location{ID: "loc-wine", Name: "Wine Test Store"}, time.Now())
+	p.ConversationID = "conv-wine"
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	recipe := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+		WineStyles:   []string{"pinot noir"},
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
+		t.Fatalf("failed to save recipe: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleWine(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `id="wine-recommendation"`) {
+		t.Fatalf("expected wine fragment container in response, got body: %s", body)
+	}
+	if !strings.Contains(body, "Try a chilled sauvignon blanc.") {
+		t.Fatalf("expected wine recommendation in response, got body: %s", body)
+	}
+	if got, want := g.lastWinePick.conversationID, "conv-wine"; got != want {
+		t.Fatalf("expected conversation id %q, got %q", want, got)
+	}
+	if got, want := g.lastWinePick.recipeTitle, "Roast Chicken"; got != want {
+		t.Fatalf("expected recipe title %q, got %q", want, got)
+	}
+	if got, want := g.lastWinePick.date.Format("2006-01-02"), p.Date.Format("2006-01-02"); got != want {
+		t.Fatalf("expected wine date %q, got %q", want, got)
+	}
+	if got, want := g.winePickCalls, 1; got != want {
+		t.Fatalf("expected PickAWine call count %d, got %d", want, got)
+	}
+}
+
+func TestHandleWine_UsesCachedWineRecommendation(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
+	g1 := &captureQuestionGenerator{wineRecommendation: "Try a crisp riesling."}
+	s1 := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   users.NewStorage(cacheStore),
+		clerk:     auth.DefaultMock(),
+		generator: g1,
+	}
+
+	p := DefaultParams(&locations.Location{ID: "loc-wine", Name: "Wine Test Store"}, time.Now())
+	p.ConversationID = "conv-wine"
+	originHash := p.Hash()
+	if err := s1.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	recipe := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+		WineStyles:   []string{"pinot noir"},
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := s1.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
+		t.Fatalf("failed to save recipe: %v", err)
+	}
+
+	req1 := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine", nil)
+	req1.Header.Set("HX-Request", "true")
+	req1.SetPathValue("hash", recipeHash)
+	rr1 := httptest.NewRecorder()
+	s1.handleWine(rr1, req1)
+
+	if rr1.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr1.Code, rr1.Body.String())
+	}
+	if !strings.Contains(rr1.Body.String(), "Try a crisp riesling.") {
+		t.Fatalf("expected initial recommendation in response, got body: %s", rr1.Body.String())
+	}
+	if got, want := g1.winePickCalls, 1; got != want {
+		t.Fatalf("expected PickAWine call count %d, got %d", want, got)
+	}
+
+	g2 := &captureQuestionGenerator{panicOnWine: true}
+	s2 := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   users.NewStorage(cacheStore),
+		clerk:     auth.DefaultMock(),
+		generator: g2,
+	}
+
+	req2 := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine", nil)
+	req2.Header.Set("HX-Request", "true")
+	req2.SetPathValue("hash", recipeHash)
+	rr2 := httptest.NewRecorder()
+	s2.handleWine(rr2, req2)
+
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr2.Code, rr2.Body.String())
+	}
+	if !strings.Contains(rr2.Body.String(), "Try a crisp riesling.") {
+		t.Fatalf("expected cached recommendation in response, got body: %s", rr2.Body.String())
+	}
+	if got, want := g2.winePickCalls, 0; got != want {
+		t.Fatalf("expected PickAWine call count %d, got %d", want, got)
 	}
 }
 

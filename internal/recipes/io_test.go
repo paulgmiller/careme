@@ -149,6 +149,36 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	}
 }
 
+func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	hash := "recipe-hash"
+	if err := cacheStore.Put(t.Context(), recipeCachePrefix+hash, `{"title":"Roast Chicken"}`, cache.Unconditional()); err != nil {
+		t.Fatalf("failed to seed recipe entry: %v", err)
+	}
+
+	if err := rio.SaveWine(t.Context(), hash, &ai.WineSelection{
+		Commentary: "Try a tempranillo.",
+		Wines:      []ai.Ingredient{{Name: "Tempranillo", Quantity: "750mL", Price: "$12.99"}},
+	}); err != nil {
+		t.Fatal("shouldn't matter if theres a conflicting recipe key", "error", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpDir, wineRecommendationsCachePrefix, hash)); err != nil {
+		t.Fatalf("expected wine recommendation at prefixed key: %v", err)
+	}
+
+	got, err := rio.WineFromCache(t.Context(), hash)
+	if err != nil {
+		t.Fatalf("WineFromCache failed: %v", err)
+	}
+	if got.Commentary != "Try a tempranillo." {
+		t.Fatalf("unexpected cached wine recommendation: got %q", got)
+	}
+}
+
 func loPtr(v string) *string {
 	return &v
 }
