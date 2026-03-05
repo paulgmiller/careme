@@ -19,7 +19,7 @@ import (
 // The remaining extra fields are shopping-list-specific UI state that ai.Recipe
 // should not own.
 type shoppingRecipeView struct {
-	Recipe             ai.Recipe
+	ai.Recipe
 	Hash               string
 	DisplayIngredients []ai.Ingredient //merged food and wine
 	Dismissed          bool            //saved already in recipe
