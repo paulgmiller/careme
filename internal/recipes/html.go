@@ -21,8 +21,8 @@ import (
 type shoppingRecipeView struct {
 	Recipe             ai.Recipe
 	Hash               string
-	DisplayIngredients []ai.Ingredient
-	Dismissed          bool
+	DisplayIngredients []ai.Ingredient //merged food and wine
+	Dismissed          bool            //saved already in recipe
 	Wine               shoppingRecipeWineView
 }
 
