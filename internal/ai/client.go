@@ -133,7 +133,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
   - Step-by-step instructions starting with prep. Don't prefix with numbers.
   - Estimated Calorie count and other nutrient health tips.
   - Optional wine pairing guidance.
-  - Three wine or less wine styles.
+  - Two or less simple, brief wine styles that can be searched for. No embelishment in this field.
 
 # Planning & Verification
 - Reference your checklist to ensure variety in cooking methods and cuisines
@@ -243,15 +243,13 @@ func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitl
 		return nil, err
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
-	input := []responses.ResponseInputItemUnionParam{}
-	input = append(input, user(fmt.Sprintf("Recipe title: %s", recipeTitle)))
-	input = append(input, user(fmt.Sprintf("Candidate wines in TSV format:\n%s", wineTSV.String())))
+	input := []responses.ResponseInputItemUnionParam{user(fmt.Sprintf("Candidate wines:\n%s", wineTSV.String()))}
 	params := responses.ResponseNewParams{
 		Model: c.model,
 		Instructions: openai.String(
-			"Act as a sommelier. Select 1 to 2 wines from the provided TSV that pair well with the recipe title. " +
-				"Return JSON with commentary (string) and wines (array). " +
-				"Size wine appropriately to people eating. Price according to the meal fanciness" +
+			"Act as a sommelier. Select 1 to 2 wines from the provided TSV that pair well with the recipe " + recipeTitle + "." +
+				"Return JSON with wines (ingredient array) and commentary about why those particular wines work well" +
+				"Pick wine sizes appropriate to number of people. Price according to the meal fanciness" +
 				"For each wine include name and optionally quantity/price when available from TSV.",
 		),
 		Input: responses.ResponseNewParamsInputUnion{

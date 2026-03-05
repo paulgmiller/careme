@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strings"
 )
 
 const wineRecommendationsCachePrefix = "wine_recommendations/"
@@ -24,22 +23,8 @@ func (rio recipeio) WineFromCache(ctx context.Context, hash string) (*ai.WineSel
 	}
 
 	var selection ai.WineSelection
-	if err := json.Unmarshal(body, &selection); err == nil {
-		if selection.Wines == nil {
-			selection.Wines = []ai.Ingredient{}
-		}
-		return &selection, nil
-	}
-
-	// Legacy compatibility: cache may contain plain commentary text.
-	commentary := strings.TrimSpace(string(body))
-	if commentary == "" {
-		return nil, fmt.Errorf("wine cache entry is empty")
-	}
-	return &ai.WineSelection{
-		Wines:      []ai.Ingredient{},
-		Commentary: commentary,
-	}, nil
+	err = json.Unmarshal(body, &selection)
+	return &selection, err
 }
 
 func (rio recipeio) SaveWine(ctx context.Context, hash string, selection *ai.WineSelection) error {

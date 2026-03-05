@@ -262,8 +262,24 @@
 <div id="wine-recommendation" class="pt-2">
   {{if .WineRecommendation}}
   <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
-    <span class="font-semibold text-brand-700">Wine pick:</span>
-    <span class="whitespace-pre-line">{{.WineRecommendation}}</span>
+    {{if .WineRecommendation.Wines}}
+    <p class="font-semibold text-brand-700">Wine picks:</p>
+    <ul class="mt-1 space-y-1">
+      {{range .WineRecommendation.Wines}}
+      <li class="flex flex-wrap items-baseline gap-x-2">
+        <span class="font-medium text-brand-800">{{.Name}}</span>
+        {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
+        {{if .Quantity}}<span class="text-brand-600">{{.Quantity}}</span>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+    {{if .WineRecommendation.Commentary}}
+    <p class="{{if .WineRecommendation.Wines}}mt-2{{end}}">
+      <span class="font-semibold text-brand-700">Why it works:</span>
+      <span class="whitespace-pre-line">{{.WineRecommendation.Commentary}}</span>
+    </p>
+    {{end}}
   </div>
   {{else}}
   <button type="button"

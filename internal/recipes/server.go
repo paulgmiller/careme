@@ -92,13 +92,45 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = s.clerk.GetUserIDFromRequest(r)
 	signedIn := !errors.Is(err, auth.ErrNoSession)
-	feedback, err := s.FeedbackFromCache(ctx, hash)
-	if err != nil {
-		if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load recipe feedback", "hash", hash, "error", err)
+	feedback := RecipeFeedback{}
+	var thread []RecipeThreadEntry
+	var wineRecommendation *ai.WineSelection
+	var loadWG sync.WaitGroup
+	loadWG.Add(3)
+	go func() {
+		defer loadWG.Done()
+		existing, err := s.FeedbackFromCache(ctx, hash)
+		if err != nil {
+			if !errors.Is(err, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to load recipe feedback", "hash", hash, "error", err)
+			}
+			return
 		}
-		feedback = &RecipeFeedback{}
-	}
+		feedback = *existing
+	}()
+	go func() {
+		defer loadWG.Done()
+		existing, err := s.ThreadFromCache(ctx, hash)
+		if err != nil {
+			if !errors.Is(err, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
+			}
+			return
+		}
+		thread = existing
+	}()
+	go func() {
+		defer loadWG.Done()
+		selection, err := s.WineFromCache(ctx, hash)
+		if err != nil {
+			if !errors.Is(err, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
+			}
+			return
+		}
+		wineRecommendation = selection
+	}()
+	loadWG.Wait()
 
 	if recipe.OriginHash == "" {
 		slog.WarnContext(ctx, "recipe missing origin hash Probably and old recipe", "hash", hash)
@@ -106,11 +138,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
-		thread, err := s.ThreadFromCache(ctx, hash)
-		if err != nil && !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
-		}
-		FormatRecipeHTML(p, *recipe, signedIn, thread, *feedback, w)
+		FormatRecipeHTML(p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
 		return
 	}
 	//we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
@@ -138,13 +166,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	thread, err := s.ThreadFromCache(ctx, hash)
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
-	}
-
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(p, *recipe, signedIn, thread, *feedback, w)
+	FormatRecipeHTML(p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +258,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to load wine recommendation", http.StatusInternalServerError)
 			return
 		}
-		FormatRecipeWineHTML(hash, selection.Commentary, w)
+		FormatRecipeWineHTML(hash, selection, w)
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
@@ -281,7 +304,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "failed to save wine recommendation", "hash", hash, "error", err)
 	}
 
-	FormatRecipeWineHTML(hash, selection.Commentary, w)
+	FormatRecipeWineHTML(hash, selection, w)
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -695,8 +718,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		styles := wineStyles(slist.Recipes)
-		slog.InfoContext(ctx, "wines!", "hash", hashParam, "wine_styles", styles)
 		userID, err := s.clerk.GetUserIDFromRequest(r)
 		signedIn := !errors.Is(err, auth.ErrNoSession)
 		if signedIn {
@@ -751,13 +772,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
-}
-
-func wineStyles(recipes []ai.Recipe) []string {
-	styles := lo.Flatten(lo.Map(recipes, func(r ai.Recipe, _ int) []string {
-		return r.WineStyles
-	}))
-	return lo.Uniq(styles)
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
