@@ -7,16 +7,16 @@
 
   {{if .Recipes}}
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
-  <meta property="og:title" content="{{(index .Recipes 0).Title}}" />
-  <meta property="og:description" content="{{(index .Recipes 0).Description}}" />
+  <meta property="og:title" content="{{(index .Recipes 0).Recipe.Title}}" />
+  <meta property="og:description" content="{{(index .Recipes 0).Recipe.Description}}" />
   <meta property="og:image" content="https://careme.cooking/favicon.ico" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Careme" />
 
   <!-- Twitter Card meta tags -->
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="{{(index .Recipes 0).Title}}" />
-  <meta name="twitter:description" content="{{(index .Recipes 0).Description}}" />
+  <meta name="twitter:title" content="{{(index .Recipes 0).Recipe.Title}}" />
+  <meta name="twitter:description" content="{{(index .Recipes 0).Recipe.Description}}" />
   <meta name="twitter:image" content="https://careme.cooking/favicon.ico" />
   {{end}}
 
@@ -70,13 +70,13 @@
               <header class="space-y-4">
                 <div>
                   <a href="/recipe/{{.Hash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    {{.Title}}
+                    {{.Recipe.Title}}
                   </a>
-                  <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
+                  <p class="mt-1 text-sm text-ink-500">{{.Recipe.Description}}</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
                   <input type="radio"
-                         {{if .Saved}}checked{{end}}
+                         {{if .Recipe.Saved}}checked{{end}}
                          name="recipe-{{.Hash}}"
                          value="save"
                          id="save-{{.Hash}}"
@@ -121,14 +121,14 @@
                   {{template "shopping_recipe_wine_preview" .}}
               </div>
 
-              <details {{if not (or .Saved .Dismissed)}}open{{end}} class="space-y-4">
+              <details {{if not (or .Recipe.Saved .Dismissed)}}open{{end}} class="space-y-4">
                 <summary class="hidden">Details</summary>
                 <section class="space-y-6">
                 <div class="grid gap-6 md:grid-cols-2">
                   <div>
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Ingredients</h3>
                     <ul class="mt-3 space-y-2 text-ink-700">
-                      {{range .Ingredients}}
+                      {{range .DisplayIngredients}}
                       <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
                         <span class="font-medium text-brand-700">{{.Name}}</span>
                         <span class="text-ink-600">{{.Quantity}}</span>
@@ -140,7 +140,7 @@
                   <div>
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Instructions</h3>
                     <ol class="mt-3 list-decimal space-y-2 pl-5 text-ink-700">
-                      {{range .Instructions}}
+                      {{range .Recipe.Instructions}}
                       <li>{{.}}</li>
                       {{end}}
                     </ol>
@@ -148,14 +148,14 @@
                 </div>
 
                 <div class="space-y-2 text-sm text-ink-600">
-                  {{if .CookTime}}
-                  <p><span class="font-semibold text-brand-700">Cook time:</span> {{.CookTime}}</p>
+                  {{if .Recipe.CookTime}}
+                  <p><span class="font-semibold text-brand-700">Cook time:</span> {{.Recipe.CookTime}}</p>
                   {{end}}
-                  {{if .CostEstimate}}
-                  <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.CostEstimate}}</p>
+                  {{if .Recipe.CostEstimate}}
+                  <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.Recipe.CostEstimate}}</p>
                   {{end}}
-                  <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
-                  <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
+                  <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Recipe.Health}}</p>
+                  <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.Recipe.DrinkPairing}}</p>
                   {{template "shopping_recipe_wine_details" .}}
                 </div>
               </section>
@@ -219,25 +219,25 @@
 </html>
 
 {{define "shopping_recipe_wine_action"}}
-<div id="{{.WineActionID}}" class="shopping-wine-action">
+<div id="{{.Wine.ActionID}}" class="shopping-wine-action">
   {{template "shopping_recipe_wine_action_content" .}}
 </div>
 {{end}}
 
 {{define "shopping_recipe_wine_action_oob"}}
-<div id="{{.WineActionID}}" hx-swap-oob="outerHTML" class="shopping-wine-action">
+<div id="{{.Wine.ActionID}}" hx-swap-oob="outerHTML" class="shopping-wine-action">
   {{template "shopping_recipe_wine_action_content" .}}
 </div>
 {{end}}
 
 {{define "shopping_recipe_wine_action_content"}}
-  {{if not .WineRecommendation}}
+  {{if not .Wine.Recommendation}}
   <button type="button"
-          id="{{.WineButtonID}}"
+          id="{{.Wine.ActionButtonID}}"
           hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=action"
-          hx-target="#{{.WineActionID}}"
+          hx-target="#{{.Wine.ActionID}}"
           hx-swap="outerHTML"
-          hx-disabled-elt="#{{.WineButtonID}}"
+          hx-disabled-elt="#{{.Wine.ActionButtonID}}"
           hx-on::before-request="this.textContent='🍷🔄';"
           hx-on::response-error="this.textContent='😞';"
           hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{$.Hash}}','1');}"
@@ -250,24 +250,24 @@
 {{end}}
 
 {{define "shopping_recipe_wine_preview"}}
-<div id="{{.WinePreviewID}}" class="shopping-wine-preview">
+<div id="{{.Wine.PreviewID}}" class="shopping-wine-preview">
   {{template "shopping_recipe_wine_preview_content" .}}
 </div>
 {{end}}
 
 {{define "shopping_recipe_wine_preview_oob"}}
-<div id="{{.WinePreviewID}}" hx-swap-oob="outerHTML" class="shopping-wine-preview">
+<div id="{{.Wine.PreviewID}}" hx-swap-oob="outerHTML" class="shopping-wine-preview">
   {{template "shopping_recipe_wine_preview_content" .}}
 </div>
 {{end}}
 
 {{define "shopping_recipe_wine_preview_content"}}
-  {{if .WineRecommendation}}
+  {{if .Wine.Recommendation}}
   <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-900">
-    {{if .WinePreview}}
+    {{if .Wine.Preview}}
     <p class="font-semibold text-brand-700">Wine picks:</p>
     <ul class="mt-1 space-y-1">
-      {{range .WinePreview}}
+      {{range .Wine.Preview}}
       <li class="flex flex-wrap items-baseline gap-x-2">
         <span class="font-medium text-brand-800">{{.Name}}</span>
         {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
@@ -281,24 +281,24 @@
 {{end}}
 
 {{define "shopping_recipe_wine_details"}}
-<div id="{{.WineDetailID}}" class="shopping-wine-details pt-2">
+<div id="{{.Wine.DetailID}}" class="shopping-wine-details pt-2">
   {{template "shopping_recipe_wine_details_content" .}}
 </div>
 {{end}}
 
 {{define "shopping_recipe_wine_details_oob"}}
-<div id="{{.WineDetailID}}" hx-swap-oob="outerHTML" class="shopping-wine-details pt-2">
+<div id="{{.Wine.DetailID}}" hx-swap-oob="outerHTML" class="shopping-wine-details pt-2">
   {{template "shopping_recipe_wine_details_content" .}}
 </div>
 {{end}}
 
 {{define "shopping_recipe_wine_details_content"}}
-  {{if .WineRecommendation}}
+  {{if .Wine.Recommendation}}
   <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
-    {{if .WineRecommendation.Wines}}
+    {{if .Wine.Recommendation.Wines}}
     <p class="font-semibold text-brand-700">Wine picks:</p>
     <ul class="mt-1 space-y-1">
-      {{range .WineRecommendation.Wines}}
+      {{range .Wine.Recommendation.Wines}}
       <li class="flex flex-wrap items-baseline gap-x-2">
         <span class="font-medium text-brand-800">{{.Name}}</span>
         {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
@@ -307,20 +307,20 @@
       {{end}}
     </ul>
     {{end}}
-    {{if .WineRecommendation.Commentary}}
-    <p class="{{if .WineRecommendation.Wines}}mt-2{{end}}">
+    {{if .Wine.Recommendation.Commentary}}
+    <p class="{{if .Wine.Recommendation.Wines}}mt-2{{end}}">
       <span class="font-semibold text-brand-700">Why it works:</span>
-      <span class="whitespace-pre-line">{{.WineRecommendation.Commentary}}</span>
+      <span class="whitespace-pre-line">{{.Wine.Recommendation.Commentary}}</span>
     </p>
     {{end}}
   </div>
   {{else}}
   <button type="button"
-          id="{{.WineDetailButtonID}}"
+          id="{{.Wine.DetailButtonID}}"
           hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=details"
-          hx-target="#{{.WineDetailID}}"
+          hx-target="#{{.Wine.DetailID}}"
           hx-swap="outerHTML"
-          hx-disabled-elt="#{{.WineDetailButtonID}}"
+          hx-disabled-elt="#{{.Wine.DetailButtonID}}"
           hx-on::before-request="this.textContent='Choosing 🍷 ...';"
           hx-on::response-error="this.textContent='wine failure 😞';"
           hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{$.Hash}}','1');}"

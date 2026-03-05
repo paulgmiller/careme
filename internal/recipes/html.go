@@ -12,25 +12,31 @@ import (
 	"strings"
 )
 
+// shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
+//
+// We keep ingredient expansion in Go instead of the template because the same derived
+// list is used both for card rendering and for the combined shopping list below.
+// The remaining extra fields are shopping-list-specific UI state that ai.Recipe
+// should not own.
 type shoppingRecipeView struct {
+	Recipe             ai.Recipe
 	Hash               string
-	WineActionID       string
-	WineButtonID       string
-	WinePreviewID      string
-	WineDetailID       string
-	WineDetailButtonID string
-	Title              string
-	Description        string
-	CookTime           string
-	CostEstimate       string
-	Ingredients        []ai.Ingredient
-	Instructions       []string
-	Health             string
-	DrinkPairing       string
-	Saved              bool
+	DisplayIngredients []ai.Ingredient
 	Dismissed          bool
-	WinePreview        []ai.Ingredient
-	WineRecommendation *ai.WineSelection
+	Wine               shoppingRecipeWineView
+}
+
+// shoppingRecipeWineView holds the template-only state for the shopping list wine UI.
+// The shopping card has three independently swappable regions, so the IDs are grouped
+// here instead of being spread across the parent recipe view.
+type shoppingRecipeWineView struct {
+	ActionID       string
+	ActionButtonID string
+	PreviewID      string
+	DetailID       string
+	DetailButtonID string
+	Preview        []ai.Ingredient
+	Recommendation *ai.WineSelection
 }
 
 // FormatShoppingListHTML renders the multi-recipe shopping list view.
@@ -54,24 +60,19 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 		winePreviewID := shoppingWinePreviewDOMID(recipeHash)
 		wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
+			Recipe:             recipe,
 			Hash:               recipeHash,
-			WineActionID:       wineActionID,
-			WineButtonID:       wineButtonID,
-			WinePreviewID:      winePreviewID,
-			WineDetailID:       wineDetailID,
-			WineDetailButtonID: wineDetailButtonID,
-			Title:              recipe.Title,
-			Description:        recipe.Description,
-			CookTime:           recipe.CookTime,
-			CostEstimate:       recipe.CostEstimate,
-			Ingredients:        displayIngredients,
-			Instructions:       recipe.Instructions,
-			Health:             recipe.Health,
-			DrinkPairing:       recipe.DrinkPairing,
-			Saved:              recipe.Saved,
+			DisplayIngredients: displayIngredients,
 			Dismissed:          dismissedHashes[recipeHash],
-			WinePreview:        winePreviewPicks(wineRecommendation),
-			WineRecommendation: wineRecommendation,
+			Wine: shoppingRecipeWineView{
+				ActionID:       wineActionID,
+				ActionButtonID: wineButtonID,
+				PreviewID:      winePreviewID,
+				DetailID:       wineDetailID,
+				DetailButtonID: wineDetailButtonID,
+				Preview:        winePreviewPicks(wineRecommendation),
+				Recommendation: wineRecommendation,
+			},
 		})
 		recipesForCombinedList = append(recipesForCombinedList, ai.Recipe{Ingredients: displayIngredients})
 	}
@@ -190,23 +191,19 @@ func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSel
 	winePreviewID := shoppingWinePreviewDOMID(recipeHash)
 	wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 	data := struct {
-		Hash               string
-		WineActionID       string
-		WineButtonID       string
-		WinePreviewID      string
-		WineDetailID       string
-		WineDetailButtonID string
-		WinePreview        []ai.Ingredient
-		WineRecommendation *ai.WineSelection
+		Hash string
+		Wine shoppingRecipeWineView
 	}{
-		Hash:               recipeHash,
-		WineActionID:       wineActionID,
-		WineButtonID:       wineButtonID,
-		WinePreviewID:      winePreviewID,
-		WineDetailID:       wineDetailID,
-		WineDetailButtonID: wineDetailButtonID,
-		WinePreview:        winePreviewPicks(selection),
-		WineRecommendation: selection,
+		Hash: recipeHash,
+		Wine: shoppingRecipeWineView{
+			ActionID:       wineActionID,
+			ActionButtonID: wineButtonID,
+			PreviewID:      winePreviewID,
+			DetailID:       wineDetailID,
+			DetailButtonID: wineDetailButtonID,
+			Preview:        winePreviewPicks(selection),
+			Recommendation: selection,
+		},
 	}
 
 	templateName := "shopping_recipe_wine_action_response"
