@@ -125,15 +125,15 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 
 # Output Format
 - Each recipe includes:
-  - Title
+  - Title: A short catchy name for the dish.
   - Description: Try to sell the dish and add some flair.
-  - Estimated cook time (for example: "35 minutes")
-  - Estimated total cost in dollars (for example: "$18-24")
-  - Ingredient list: should include quantities and price if in input.
+  - cook_time: Estimated cook time (for example: "35 minutes")
+  - cost_estimate: Estimated total cost in dollars (for example: "$18-24")
+  - instructions: should include quantities and price if in input.
   - Step-by-step instructions starting with prep. Don't prefix with numbers.
-  - Estimated Calorie count and other nutrient health tips.
-  - Optional wine pairing guidance.
-  - Two or less simple, brief wine styles that can be searched for. No embelishment in this field.
+  - health: Estimated Calorie count and other nutrient health tips.
+  - drink_pairing: the wine pairing suggestion mentioned in instructions
+  - wine_styles: Two or fewer consumer-recognizable  wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc").  must only contain style names: no regions, no parenthetical notes, no commas, no "or".
 
 # Planning & Verification
 - Reference your checklist to ensure variety in cooking methods and cuisines
@@ -146,6 +146,7 @@ func responseToShoppingList(ctx context.Context, resp *responses.Response) (*Sho
 	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
+	normalizeWineStyles(&shoppingList)
 	if resp.Conversation.ID == "" {
 		return nil, fmt.Errorf("failed to get conversation ID")
 	}
@@ -368,4 +369,55 @@ func cleanInstuctions(instructions []string) []responses.ResponseInputItemUnionP
 		responses = append(responses, user(i))
 	}
 	return responses
+}
+
+func normalizeWineStyles(shoppingList *ShoppingList) {
+	if shoppingList == nil {
+		return
+	}
+	for i := range shoppingList.Recipes {
+		shoppingList.Recipes[i].WineStyles = normalizeRecipeWineStyles(shoppingList.Recipes[i].WineStyles)
+	}
+}
+
+func normalizeRecipeWineStyles(styles []string) []string {
+	if len(styles) == 0 {
+		return nil
+	}
+	cleaned := make([]string, 0, min(len(styles), 2))
+	seen := map[string]struct{}{}
+	for _, style := range styles {
+		normalized := normalizeWineStyle(style)
+		if normalized == "" {
+			continue
+		}
+		key := strings.ToLower(normalized)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		cleaned = append(cleaned, normalized)
+		if len(cleaned) == 2 {
+			break
+		}
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	return cleaned
+}
+
+func normalizeWineStyle(style string) string {
+	style = strings.TrimSpace(style)
+	if style == "" {
+		return ""
+	}
+	if idx := strings.IndexAny(style, "(["); idx >= 0 {
+		style = strings.TrimSpace(style[:idx])
+	}
+	style = strings.TrimSpace(strings.TrimSuffix(style, "."))
+	if style == "" {
+		return ""
+	}
+	return strings.Join(strings.Fields(style), " ")
 }
