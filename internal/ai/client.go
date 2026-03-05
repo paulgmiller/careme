@@ -125,15 +125,16 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 
 # Output Format
 - Each recipe includes:
-  - Title: A short catchy name for the dish.
-  - Description: Try to sell the dish and add some flair.
+  - title: A short catchy name for the dish.
+  - description: Try to sell the dish and add some flair.
   - cook_time: Estimated cook time (for example: "35 minutes")
   - cost_estimate: Estimated total cost in dollars (for example: "$18-24")
   - instructions: should include quantities and price if in input.
   - Step-by-step instructions starting with prep. Don't prefix with numbers.
   - health: Estimated Calorie count and other nutrient health tips.
   - drink_pairing: the wine pairing suggestion mentioned in instructions
-  - wine_styles: Two or fewer consumer-recognizable  wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc").  must only contain style names: no regions, no parenthetical notes, no commas, no "or".
+  - wine_styles: Two or fewer consumer-recognizable wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc", "Cabernet Sauvignon").
+  - wine_styles must only contain searchable style names: no regions, no parenthetical notes, no commas, no "or", no "*-style blend" phrasing.
 
 # Planning & Verification
 - Reference your checklist to ensure variety in cooking methods and cuisines
