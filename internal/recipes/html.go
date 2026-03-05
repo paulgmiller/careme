@@ -57,7 +57,6 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 		wineRecommendation := wineRecommendations[recipeHash]
 		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
 		wineActionID, wineButtonID := shoppingWineDOMIDs(recipeHash)
-		winePreviewID := shoppingWinePreviewDOMID(recipeHash)
 		wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
@@ -67,7 +66,7 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 			Wine: shoppingRecipeWineView{
 				ActionID:       wineActionID,
 				ActionButtonID: wineButtonID,
-				PreviewID:      winePreviewID,
+				PreviewID:      shoppingWinePreviewDOMID(recipeHash),
 				DetailID:       wineDetailID,
 				DetailButtonID: wineDetailButtonID,
 				Preview:        winePreviewPicks(wineRecommendation),
@@ -301,19 +300,32 @@ func ingredientsForDisplay(base []ai.Ingredient, wineRecommendation *ai.WineSele
 	return display
 }
 
+// shoppingWineDOMIDs and friends live in Go rather than the template because the IDs
+// have to match across two render paths:
+// - the full shopping list page render
+// - the HTMX wine fragment responses that swap those regions later
+//
+// Keeping the ID construction here gives us one source of truth for:
+// - how recipe hashes are normalized into valid DOM ids
+// - which ids belong to the action, preview, and details regions
+// - tests that assert HTMX responses target the same elements as the full page
 func shoppingWineDOMIDs(hash string) (containerID string, buttonID string) {
-	safeHash := strings.TrimRight(strings.TrimSpace(hash), "=")
+	safeHash := shoppingWineSafeHash(hash)
 	return "shopping-wine-" + safeHash, "shopping-wine-picker-" + safeHash
 }
 
 func shoppingWinePreviewDOMID(hash string) string {
-	safeHash := strings.TrimRight(strings.TrimSpace(hash), "=")
+	safeHash := shoppingWineSafeHash(hash)
 	return "shopping-wine-preview-" + safeHash
 }
 
 func shoppingWineDetailDOMIDs(hash string) (containerID string, buttonID string) {
-	safeHash := strings.TrimRight(strings.TrimSpace(hash), "=")
+	safeHash := shoppingWineSafeHash(hash)
 	return "shopping-wine-details-" + safeHash, "shopping-wine-details-picker-" + safeHash
+}
+
+func shoppingWineSafeHash(hash string) string {
+	return strings.TrimRight(strings.TrimSpace(hash), "=")
 }
 
 func winePreviewPicks(selection *ai.WineSelection) []ai.Ingredient {
