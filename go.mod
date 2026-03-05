@@ -12,7 +12,7 @@ require (
 	github.com/clerk/clerk-sdk-go/v2 v2.5.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/microsoft/ApplicationInsights-Go v0.4.4
-	github.com/openai/openai-go/v3 v3.21.0
+	github.com/openai/openai-go/v3 v3.25.0
 	github.com/openclosed-dev/slogan v0.2.0
 	github.com/samber/slog-multi v1.5.0
 	github.com/sendgrid/rest v2.6.9+incompatible

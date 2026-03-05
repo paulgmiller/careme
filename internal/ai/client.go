@@ -105,7 +105,7 @@ func NewClient(apiKey, _ string) *Client {
 		apiKey:     apiKey,
 		schema:     m,
 		wineSchema: wine,
-		model:      openai.ChatModelGPT5_2,
+		model:      openai.ChatModelGPT5_4,
 	}
 }
 
