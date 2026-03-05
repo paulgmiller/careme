@@ -24,7 +24,7 @@ func (rio recipeio) WineFromCache(ctx context.Context, hash string) (*ai.WineSel
 
 	var selection ai.WineSelection
 	err = json.Unmarshal(body, &selection)
-	return &selection, nil
+	return &selection, err
 }
 
 func (rio recipeio) SaveWine(ctx context.Context, hash string, selection *ai.WineSelection) error {
