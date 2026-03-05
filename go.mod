@@ -1,6 +1,6 @@
 module careme
 
-go 1.24.6
+go 1.25
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
