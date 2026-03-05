@@ -51,7 +51,7 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 		dismissedHashes[recipe.ComputeHash()] = true
 	}
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
-	recipesForCombinedList := make([]ai.Recipe, 0, len(l.Recipes))
+	combinedIngredients := make([]ai.Ingredient, 0)
 	for _, recipe := range l.Recipes {
 		recipeHash := recipe.ComputeHash()
 		wineRecommendation := wineRecommendations[recipeHash]
@@ -73,7 +73,11 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 				Recommendation: wineRecommendation,
 			},
 		})
-		recipesForCombinedList = append(recipesForCombinedList, ai.Recipe{Ingredients: displayIngredients})
+		combinedIngredients = append(combinedIngredients, displayIngredients...)
+	}
+	var shoppingList []ai.Ingredient
+	if len(l.Recipes) > 1 {
+		shoppingList = shoppingListForDisplay(combinedIngredients)
 	}
 	data := struct {
 		Location        locations.Location
@@ -95,7 +99,7 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 		Instructions:    p.Instructions,
 		Hash:            hash,
 		Recipes:         recipeViews,
-		ShoppingList:    shoppingListForDisplay(recipesForCombinedList),
+		ShoppingList:    shoppingList,
 		ConversationID:  l.ConversationID,
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
@@ -238,38 +242,36 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
 	return templates.Mail.Execute(writer, data)
 }
 
-func shoppingListForDisplay(recipes []ai.Recipe) []ai.Ingredient {
-	if len(recipes) <= 1 {
+func shoppingListForDisplay(ingredients []ai.Ingredient) []ai.Ingredient {
+	if len(ingredients) == 0 {
 		return nil
 	}
 	items := make(map[string]*ai.Ingredient)
 	order := make([]string, 0)
 
-	for _, recipe := range recipes {
-		for _, ingredient := range recipe.Ingredients {
-			name := strings.ToLower(strings.TrimSpace(ingredient.Name))
-			if name == "" {
-				continue
-			}
-			existing, ok := items[name]
-			if !ok {
-				items[name] = &ai.Ingredient{
-					Name:     ingredient.Name,
-					Quantity: strings.TrimSpace(ingredient.Quantity),
-				}
-				order = append(order, name)
-				continue
-			}
-			qty := strings.TrimSpace(ingredient.Quantity)
-			if qty == "" {
-				continue
-			}
-			if existing.Quantity == "" {
-				existing.Quantity = qty
-				continue
-			}
-			existing.Quantity = existing.Quantity + ", " + qty
+	for _, ingredient := range ingredients {
+		name := strings.ToLower(strings.TrimSpace(ingredient.Name))
+		if name == "" {
+			continue
 		}
+		existing, ok := items[name]
+		if !ok {
+			items[name] = &ai.Ingredient{
+				Name:     ingredient.Name,
+				Quantity: strings.TrimSpace(ingredient.Quantity),
+			}
+			order = append(order, name)
+			continue
+		}
+		qty := strings.TrimSpace(ingredient.Quantity)
+		if qty == "" {
+			continue
+		}
+		if existing.Quantity == "" {
+			existing.Quantity = qty
+			continue
+		}
+		existing.Quantity = existing.Quantity + ", " + qty
 	}
 
 	combined := make([]ai.Ingredient, 0, len(order))
