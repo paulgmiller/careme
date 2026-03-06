@@ -133,11 +133,6 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 }
 
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
-	requestedCentroid, hasRequestedCentroid := l.zipCentroids.ZipCentroidByZIP(zipcode)
-	if !hasRequestedCentroid {
-		slog.ErrorContext(ctx, "requested zip has no centroid; skipping distance filter and sort", "zip", zipcode)
-		return nil, fmt.Errorf("invalid zip code %s. Can't find lat long", zipcode)
-	}
 
 	results := make(chan []Location, len(l.client))
 	errors := make(chan error, len(l.client))
@@ -166,6 +161,21 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		allLocations = append(allLocations, result...)
 	}
 
+	for _, loc := range allLocations {
+		go func(loc Location) {
+			if err := l.storeLocationIfMissing(loc); err != nil {
+				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
+			}
+		}(loc)
+	}
+
+	requestedCentroid, hasRequestedCentroid := l.zipCentroids.ZipCentroidByZIP(zipcode)
+	if !hasRequestedCentroid {
+		//were missign zip codes. Make this an error later?
+		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode)
+		return allLocations, nil
+	}
+
 	filtered := make([]Location, 0, len(allLocations))
 	for _, loc := range allLocations {
 		if _, hasZipCentroid := l.zipCentroids.ZipCentroidByZIP(loc.ZipCode); !hasZipCentroid {
@@ -183,13 +193,6 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 	allLocations = filtered
 	sortLocationsByDistanceFromCentroid(allLocations, requestedCentroid, l.zipCentroids)
 
-	for _, loc := range allLocations {
-		go func(loc Location) {
-			if err := l.storeLocationIfMissing(loc); err != nil {
-				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
-			}
-		}(loc)
-	}
 	return allLocations, nil
 }
 
@@ -336,7 +339,7 @@ func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient
 		}
 		if err := l.renderLocationsPage(w, ctx, zip, favoriteStore, currentUser != nil); err != nil {
 			slog.ErrorContext(ctx, "failed to render locations page", "zip", zip, "error", err)
-			http.Error(w, "template error", http.StatusInternalServerError)
+			http.Error(w, "Failed to render locations page. ", http.StatusInternalServerError)
 		}
 	})
 }
