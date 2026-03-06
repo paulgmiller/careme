@@ -117,6 +117,148 @@ func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
 	}
 }
 
+func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	location := &locations.Location{
+		ID:      "store-1",
+		Name:    "Test Store",
+		ZipCode: "94105",
+	}
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   storage,
+		clerk:     auth.DefaultMock(),
+		generator: mock{},
+		locServer: staticLocationLookup{location: location},
+	}
+	t.Cleanup(s.Wait)
+
+	currentUser, err := storage.FindOrCreateFromClerk(t.Context(), "mock-clerk-user-id", auth.DefaultMock())
+	if err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+	currentUser.Directive = "No shellfish. Prefer high-protein dinners."
+	if err := storage.Update(currentUser); err != nil {
+		t.Fatalf("failed to save user directive: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=store-1&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	expectedParams, err := s.ParseQueryArgs(t.Context(), req)
+	if err != nil {
+		t.Fatalf("failed to build expected params: %v", err)
+	}
+	baselineHash := expectedParams.Hash()
+	expectedParams.Directive = currentUser.Directive
+	expectedHash := expectedParams.Hash()
+	if expectedHash == baselineHash {
+		t.Fatal("expected stored directive to change params hash")
+	}
+
+	rr := httptest.NewRecorder()
+	s.handleRecipes(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+
+	locationHeader := rr.Header().Get("Location")
+	if locationHeader == "" {
+		t.Fatal("expected redirect location")
+	}
+	redirectURL, err := url.Parse(locationHeader)
+	if err != nil {
+		t.Fatalf("failed to parse redirect location %q: %v", locationHeader, err)
+	}
+	if got := redirectURL.Query().Get("h"); got != expectedHash {
+		t.Fatalf("expected redirect hash %q, got %q", expectedHash, got)
+	}
+	if got := redirectURL.Query().Get("h"); got == baselineHash {
+		t.Fatalf("expected redirect hash not to use empty-directive hash %q", baselineHash)
+	}
+
+	savedParams, err := s.ParamsFromCache(t.Context(), expectedHash)
+	if err != nil {
+		t.Fatalf("failed to load saved params: %v", err)
+	}
+	if got, want := savedParams.Directive, currentUser.Directive; got != want {
+		t.Fatalf("expected saved directive %q, got %q", want, got)
+	}
+	if got, want := savedParams.Hash(), expectedHash; got != want {
+		t.Fatalf("expected saved params hash %q, got %q", want, got)
+	}
+}
+
+func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	location := &locations.Location{
+		ID:      "store-1",
+		Name:    "Test Store",
+		ZipCode: "94105",
+	}
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   storage,
+		clerk:     auth.DefaultMock(),
+		generator: mock{},
+		locServer: staticLocationLookup{location: location},
+	}
+	t.Cleanup(s.Wait)
+
+	currentUser, err := storage.FindOrCreateFromClerk(t.Context(), "mock-clerk-user-id", auth.DefaultMock())
+	if err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=store-1&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	runRequest := func(t *testing.T, directive string) string {
+		t.Helper()
+
+		currentUser.Directive = directive
+		if err := storage.Update(currentUser); err != nil {
+			t.Fatalf("failed to save user directive %q: %v", directive, err)
+		}
+
+		rr := httptest.NewRecorder()
+		s.handleRecipes(rr, req.Clone(t.Context()))
+
+		if rr.Code != http.StatusSeeOther {
+			t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+		}
+
+		locationHeader := rr.Header().Get("Location")
+		if locationHeader == "" {
+			t.Fatal("expected redirect location")
+		}
+		redirectURL, err := url.Parse(locationHeader)
+		if err != nil {
+			t.Fatalf("failed to parse redirect location %q: %v", locationHeader, err)
+		}
+		hash := redirectURL.Query().Get("h")
+		if hash == "" {
+			t.Fatalf("expected redirect hash in %q", locationHeader)
+		}
+
+		savedParams, err := s.ParamsFromCache(t.Context(), hash)
+		if err != nil {
+			t.Fatalf("failed to load saved params for hash %q: %v", hash, err)
+		}
+		if got := savedParams.Directive; got != directive {
+			t.Fatalf("expected saved directive %q, got %q", directive, got)
+		}
+
+		return hash
+	}
+
+	hash1 := runRequest(t, "No shellfish. Prefer high-protein dinners.")
+	hash2 := runRequest(t, "Vegetarian meals only. Avoid mushrooms.")
+
+	if hash1 == hash2 {
+		t.Fatalf("expected different hashes for different directives, got %q", hash1)
+	}
+}
+
 func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
