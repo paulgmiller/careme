@@ -147,6 +147,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 				errors <- err
 				return
 			}
+			slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations))
 			results <- locations
 		}(backend)
 	}
@@ -172,7 +173,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 	requestedCentroid, hasRequestedCentroid := l.zipCentroids.ZipCentroidByZIP(zipcode)
 	if !hasRequestedCentroid {
 		//were missign zip codes. Make this an error later?
-		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode)
+		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode, "count", len(allLocations))
 		return allLocations, nil
 	}
 
