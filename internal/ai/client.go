@@ -10,6 +10,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ type Client struct {
 	apiKey     string
 	schema     map[string]any
 	wineSchema map[string]any
+	adSchema   map[string]any
 	model      string
 }
 
@@ -34,6 +36,19 @@ type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` //should this and price be numbers? need units then
 	Price    string `json:"price"`    //TODO exclude empty
+}
+
+type WeeklyAdIngredient struct {
+	PageNumber int    `json:"page_number,omitempty"`
+	Name       string `json:"name"`
+	Brand      string `json:"brand,omitempty"`
+	Size       string `json:"size,omitempty"`
+	Price      string `json:"price,omitempty"`
+	SaleNotes  string `json:"sale_notes,omitempty"`
+}
+
+type WeeklyAdIngredients struct {
+	Ingredients []WeeklyAdIngredient `json:"ingredients" jsonschema:"required"`
 }
 
 type Recipe struct {
@@ -97,14 +112,19 @@ func NewClient(apiKey, _ string) *Client {
 	recipesSchemaJSON, _ := json.Marshal(recipesSchema)
 	wineSchema := r.Reflect(&WineSelection{})
 	wineSchemaJSON, _ := json.Marshal(wineSchema)
+	adSchema := r.Reflect(&WeeklyAdIngredients{})
+	adSchemaJSON, _ := json.Marshal(adSchema)
 	var m map[string]any
 	_ = json.Unmarshal(recipesSchemaJSON, &m)
 	var wine map[string]any
 	_ = json.Unmarshal(wineSchemaJSON, &wine)
+	var ads map[string]any
+	_ = json.Unmarshal(adSchemaJSON, &ads)
 	return &Client{
 		apiKey:     apiKey,
 		schema:     m,
 		wineSchema: wine,
+		adSchema:   ads,
 		model:      openai.ChatModelGPT5_4,
 	}
 }
@@ -154,6 +174,15 @@ func responseToShoppingList(ctx context.Context, resp *responses.Response) (*Sho
 	shoppingList.ConversationID = resp.Conversation.ID
 
 	return &shoppingList, nil
+}
+
+func responseToWeeklyAdIngredients(ctx context.Context, resp *responses.Response) ([]WeeklyAdIngredient, error) {
+	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
+	var out WeeklyAdIngredients
+	if err := json.Unmarshal([]byte(resp.OutputText()), &out); err != nil {
+		return nil, fmt.Errorf("failed to parse weekly ad response: %w", err)
+	}
+	return normalizeWeeklyAdIngredients(out.Ingredients), nil
 }
 
 func scheme(schema map[string]any) responses.ResponseTextConfigParam {
@@ -224,6 +253,46 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 		return "", fmt.Errorf("empty response from model")
 	}
 	return answer, nil
+}
+
+func (c *Client) ExtractWeeklyAdIngredients(ctx context.Context, imageBytes []byte, contentType string) ([]WeeklyAdIngredient, error) {
+	if len(imageBytes) == 0 {
+		return nil, fmt.Errorf("image bytes are required")
+	}
+	contentType = strings.TrimSpace(contentType)
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+	dataURL := "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(imageBytes)
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	input := responses.ResponseInputMessageContentListParam{
+		responses.ResponseInputContentParamOfInputText(
+			"Read this Safeway weekly ad image and return a normalized JSON ingredient list. " +
+				"Each entry should describe a grocery item visible in the ad. " +
+				"Use sale_notes for member pricing, coupon notes, multi-buy terms, or uncertainty. " +
+				"Do not include non-item decoration, loyalty boilerplate, or duplicate entries unless the ad shows distinct offers.",
+		),
+		{
+			OfInputImage: &responses.ResponseInputImageParam{
+				Detail:   responses.ResponseInputImageDetailHigh,
+				ImageURL: openai.String(dataURL),
+			},
+		},
+	}
+	params := responses.ResponseNewParams{
+		Model: c.model,
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{
+				responses.ResponseInputItemParamOfMessage(input, responses.EasyInputMessageRoleUser),
+			},
+		},
+		Text: scheme(c.adSchema),
+	}
+	resp, err := client.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract weekly ad ingredients: %w", err)
+	}
+	return responseToWeeklyAdIngredients(ctx, resp)
 }
 
 func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*WineSelection, error) {
@@ -349,6 +418,37 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	messages = append(messages, cleanInstuctions(instructions)...)
 
 	return messages, nil
+}
+
+func normalizeWeeklyAdIngredients(in []WeeklyAdIngredient) []WeeklyAdIngredient {
+	var out []WeeklyAdIngredient
+	seen := make(map[string]struct{}, len(in))
+	for _, item := range in {
+		if item.PageNumber < 0 {
+			item.PageNumber = 0
+		}
+		item.Name = strings.TrimSpace(item.Name)
+		item.Brand = strings.TrimSpace(item.Brand)
+		item.Size = strings.TrimSpace(item.Size)
+		item.Price = strings.TrimSpace(item.Price)
+		item.SaleNotes = strings.TrimSpace(item.SaleNotes)
+		if item.Name == "" {
+			continue
+		}
+		key := strings.ToLower(strings.Join([]string{
+			strconv.Itoa(item.PageNumber),
+			item.Name,
+			item.Brand,
+			item.Size,
+			item.Price,
+		}, "|"))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, item)
+	}
+	return out
 }
 
 func (c *Client) Ready(ctx context.Context) error {

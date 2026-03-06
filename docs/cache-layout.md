@@ -2,7 +2,8 @@
 
 This project stores cache entries in:
 - Local filesystem under `cache/` (default)
-- Azure Blob container `recipes` (when `AZURE_STORAGE_ACCOUNT_NAME` is set)
+- Azure Blob container `recipes` by default (when `AZURE_STORAGE_ACCOUNT_NAME` is set)
+- Azure Blob container `safewayads` for the Safeway batch job when `SAFEWAYADS_STORAGE_CONTAINER=safewayads`
 
 The same cache keys are used in both backends. Keys with `/` become subdirectories (filesystem) or blob prefixes (Azure).
 
@@ -20,10 +21,15 @@ The same cache keys are used in both backends. Keys with `/` become subdirectori
 | `recipe_feedback/` | JSON `RecipeFeedback` (`cooked`, `stars`, `comment`, `updated_at`) per recipe hash | `internal/recipes/feedback.go` (`SaveFeedback`) via `internal/recipes/server.go` (`handleFeedback`) | `internal/recipes/feedback.go` (`FeedbackFromCache`) and `internal/recipes/server.go` (`handleSingle`, `handleFeedback`) |
 | `users/` | JSON `users/types.User` by user ID | `internal/users/storage.go` (`Update`) | `internal/users/storage.go` (`GetByID`, `List`) |
 | `email2user/` | Plain text user ID keyed by normalized email | `internal/users/storage.go` (`FindOrCreateFromClerk`) | `internal/users/storage.go` (`GetByEmail`) |
+| `safeway/weeklyads/images/` | Binary weekly-ad page images by store/date/publication/page number | `cmd/safewayads` via `internal/safewayads/storage.go` (`PutBytes`) | not read by app yet; used for archival and later extraction |
+| `safeway/weeklyads/ingredients/` | JSON extracted ingredient document keyed by store/date/publication ID | `cmd/safewayads` via `internal/safewayads/storage.go` (`PutJSON`) | not read by app yet |
+| `safeway/weeklyads/runs/` | JSON `safewayads.RunStatus` keyed by store ID | `cmd/safewayads` via `internal/safewayads/storage.go` (`PutJSON`) | `cmd/safewayads` resume flow via `internal/safewayads/storage.go` (`GetJSON`) |
 
 ## Notes
 
 - Cache backend selection is in `internal/cache/azure.go` (`MakeCache`).
 - Local cache path is `cache/` when filesystem backend is used.
 - Blob names in Azure match the same key strings listed above.
+- The Safeway weekly-ad pipeline writes through `internal/safewayads/storage.go` instead of the text cache abstraction because it stores binary images and separate run metadata.
+- The Safeway batch job can target a dedicated blob container by setting `SAFEWAYADS_STORAGE_CONTAINER`; the Kubernetes job manifest sets it to `safewayads`.
 - Do not create nested keys under `recipe/<hash>` (for example `recipe/<hash>/wine`) because `FileCache` stores `recipe/<hash>` as a file path.

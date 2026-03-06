@@ -92,3 +92,21 @@ func TestNormalizeRecipeWineStyles(t *testing.T) {
 		t.Fatalf("unexpected normalized wine styles: got %#v want %#v", got, want)
 	}
 }
+
+func TestNormalizeWeeklyAdIngredients(t *testing.T) {
+	got := normalizeWeeklyAdIngredients([]WeeklyAdIngredient{
+		{PageNumber: 1, Name: " Strawberries ", Brand: "Safeway", Size: "1 lb", Price: "$2.99", SaleNotes: "member price"},
+		{PageNumber: 1, Name: "Strawberries", Brand: "Safeway", Size: "1 lb", Price: "$2.99", SaleNotes: "member price"},
+		{PageNumber: 1, Name: " ", Brand: "Ignored"},
+		{PageNumber: 2, Name: "Avocado", SaleNotes: "4 for $5"},
+	})
+
+	want := []WeeklyAdIngredient{
+		{PageNumber: 1, Name: "Strawberries", Brand: "Safeway", Size: "1 lb", Price: "$2.99", SaleNotes: "member price"},
+		{PageNumber: 2, Name: "Avocado", SaleNotes: "4 for $5"},
+	}
+
+	if !slices.Equal(got, want) {
+		t.Fatalf("unexpected normalized weekly ad ingredients: got %#v want %#v", got, want)
+	}
+}
