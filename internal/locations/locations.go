@@ -10,6 +10,7 @@ import (
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"careme/internal/walmart"
+	"careme/internal/wholefoods"
 	"context"
 	"encoding/json"
 	"errors"
@@ -91,12 +92,37 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 		}
 		backends = append(backends, wclient)
 	}
+	if cfg.WholeFoods.IsEnabled() {
+		slog.Info("initializing Whole Foods location backend")
+		listCache, err := cache.NewBlobCache("wholefoods")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Whole Foods list cache: %w", err)
+		}
+
+		wfBackend, err := wholefoods.NewLocationBackend(context.Background(), listCache, wholefoodsCentroidLookup{centroids: centroids})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Whole Foods backend: %w", err)
+		}
+		backends = append(backends, wfBackend)
+	}
 	return &locationStorage{
 		client:       backends,
 		zipCentroids: centroids,
 		cache:        c,
 	}, nil
 
+}
+
+type wholefoodsCentroidLookup struct {
+	centroids centroidByZip
+}
+
+func (w wholefoodsCentroidLookup) CoordinatesByZIP(zip string) (lat, lon float64, ok bool) {
+	centroid, ok := w.centroids.ZipCentroidByZIP(zip)
+	if !ok {
+		return 0, 0, false
+	}
+	return centroid.Lat, centroid.Lon, true
 }
 
 func NewServer(storage locationGetter, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
