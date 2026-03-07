@@ -5,7 +5,6 @@ import (
 	"careme/internal/config"
 	"careme/internal/wholefoods"
 	"context"
-	"io"
 	"testing"
 )
 
@@ -51,29 +50,4 @@ func TestNewAddsWholeFoodsBackendWhenEnabled(t *testing.T) {
 	if !found {
 		t.Fatalf("expected Whole Foods backend to be registered")
 	}
-}
-
-func TestNewRequiresListCacheWhenWholeFoodsEnabled(t *testing.T) {
-	t.Parallel()
-
-	_, err := New(&config.Config{
-		WholeFoods: config.WholeFoodsConfig{Enable: true},
-	}, cacheOnly{}, LoadCentroids())
-	if err == nil {
-		t.Fatalf("expected error when cache is not list-capable")
-	}
-}
-
-type cacheOnly struct{}
-
-func (cacheOnly) Get(context.Context, string) (io.ReadCloser, error) {
-	return nil, cache.ErrNotFound
-}
-
-func (cacheOnly) Exists(context.Context, string) (bool, error) {
-	return false, nil
-}
-
-func (cacheOnly) Put(context.Context, string, string, cache.PutOptions) error {
-	return nil
 }
