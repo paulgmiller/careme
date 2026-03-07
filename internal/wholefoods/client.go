@@ -23,8 +23,8 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// Response matches the public category API payload shape used in wf-output/beef.json.
-type Response struct {
+// CategoryResponse matches the public category API payload shape used in wf-output/beef.json.
+type CategoryResponse struct {
 	Facets     []Facet      `json:"facets"`
 	Breadcrumb []Breadcrumb `json:"breadcrumb"`
 	Results    []Product    `json:"results"`
@@ -88,6 +88,49 @@ type StateRefinement struct {
 	FilterSlug string `json:"filterSlug"`
 }
 
+// StoreSummaryResponse matches the public store summary payload returned by /api/stores/{store}/summary.
+type StoreSummaryResponse struct {
+	StoreID                  int               `json:"storeId"`
+	Token                    string            `json:"token"`
+	DisplayName              string            `json:"displayName"`
+	Status                   string            `json:"status"`
+	Phone                    string            `json:"phone"`
+	StorePrimeEligibility    bool              `json:"storePrimeEligibility"`
+	StoreOperationalGuidance string            `json:"storeOperationalGuidance"`
+	BU                       int               `json:"bu"`
+	Folder                   string            `json:"folder"`
+	OpenedAt                 string            `json:"openedAt"`
+	Links                    StoreSummaryLinks `json:"links"`
+	PrimaryLocation          StoreLocation     `json:"primaryLocation"`
+	Hours                    map[string]string `json:"hours"`
+	Holidays                 map[string]any    `json:"holidays"`
+}
+
+type StoreSummaryLinks struct {
+	Details                   string `json:"Details"`
+	Directions                string `json:"Directions"`
+	Sales                     string `json:"Sales"`
+	PrimeNowPickUpAndDelivery string `json:"PrimeNowPickUpAndDelivery"`
+	MapURLDesktop             string `json:"MapUrlDesktop"`
+	MapURLTablet              string `json:"MapUrlTablet"`
+	MapURLMobile              string `json:"MapUrlMobile"`
+}
+
+type StoreLocation struct {
+	Address   StoreAddress `json:"address"`
+	Latitude  float64      `json:"latitude"`
+	Longitude float64      `json:"longitude"`
+}
+
+type StoreAddress struct {
+	StreetAddressLine1 string `json:"STREET_ADDRESS_LINE1"`
+	City               string `json:"CITY"`
+	State              string `json:"STATE"`
+	PostalCode         string `json:"POSTAL_CODE"`
+	ZipCode            string `json:"ZIP_CODE"`
+	Country            string `json:"COUNTRY"`
+}
+
 // NewClient creates a Whole Foods client with a default base URL and timeout.
 func NewClient(httpClient *http.Client) *Client {
 	return NewClientWithBaseURL(DefaultBaseURL, httpClient)
@@ -110,7 +153,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *Client {
 }
 
 // Category fetches a category page payload like /api/products/category/beef?store=10216.
-func (c *Client) Category(ctx context.Context, queryterm, store string) (*Response, error) {
+func (c *Client) Category(ctx context.Context, queryterm, store string) (*CategoryResponse, error) {
 	queryterm = strings.TrimSpace(queryterm)
 	if queryterm == "" {
 		return nil, errors.New("queryterm is required")
@@ -130,15 +173,39 @@ func (c *Client) Category(ctx context.Context, queryterm, store string) (*Respon
 	params.Set("store", store)
 	endpoint.RawQuery = params.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	var decoded CategoryResponse
+	if err := c.getJSON(ctx, endpoint.String(), &decoded); err != nil {
+		return nil, err
+	}
+	return &decoded, nil
+}
+
+// StoreSummary fetches a store summary payload like /api/stores/10216/summary.
+func (c *Client) StoreSummary(ctx context.Context, store string) (*StoreSummaryResponse, error) {
+	store = strings.TrimSpace(store)
+	if store == "" {
+		return nil, errors.New("store is required")
+	}
+
+	endpoint := c.baseURL + "/api/stores/" + url.PathEscape(store) + "/summary"
+
+	var decoded StoreSummaryResponse
+	if err := c.getJSON(ctx, endpoint, &decoded); err != nil {
+		return nil, err
+	}
+	return &decoded, nil
+}
+
+func (c *Client) getJSON(ctx context.Context, endpoint string, dest any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("build category request: %w", err)
+		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request category %q: %w", queryterm, err)
+		return fmt.Errorf("request %q: %w", endpoint, err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -146,16 +213,14 @@ func (c *Client) Category(ctx context.Context, queryterm, store string) (*Respon
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
 	if err != nil {
-		return nil, fmt.Errorf("read category response: %w", err)
+		return fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("category request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var decoded Response
-	if err := json.Unmarshal(body, &decoded); err != nil {
-		return nil, fmt.Errorf("decode category response: %w", err)
+	if err := json.Unmarshal(body, dest); err != nil {
+		return fmt.Errorf("decode response: %w", err)
 	}
-
-	return &decoded, nil
+	return nil
 }
