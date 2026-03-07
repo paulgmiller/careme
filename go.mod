@@ -15,8 +15,6 @@ require (
 	github.com/openai/openai-go/v3 v3.25.0
 	github.com/openclosed-dev/slogan v0.2.0
 	github.com/samber/slog-multi v1.5.0
-	github.com/sendgrid/rest v2.6.9+incompatible
-	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	golang.org/x/crypto v0.40.0
 	golang.org/x/net v0.42.0
 )

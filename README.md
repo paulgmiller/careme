@@ -16,7 +16,9 @@ The application is configured via environment variables:
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `GOOGLE_TAG_ID` - Google Ads/gtag ID for web analytics (optional)
 - `GOOGLE_CONVERSION_LABEL` - Google Ads conversion label used on `/auth/establish?signup=true` (optional)
-- `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
+- `ACS_EMAIL_ENDPOINT` - Azure Communication Services endpoint used for weekly email delivery
+- `ACS_EMAIL_ACCESS_KEY` - Azure Communication Services access key for request signing
+- `ACS_EMAIL_SENDER` - Verified ACS sender address used for weekly email delivery
 
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above

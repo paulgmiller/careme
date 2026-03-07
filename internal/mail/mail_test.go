@@ -16,9 +16,6 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
-
-	"github.com/sendgrid/rest"
-	sgmail "github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
 func TestMain(m *testing.M) {
@@ -84,11 +81,11 @@ func (f *fakeMailLocServer) GetLocationByID(_ context.Context, _ string) (*locat
 }
 
 type fakeMailClient struct {
-	response *rest.Response
+	response *SendResult
 	err      error
 }
 
-func (f *fakeMailClient) Send(_ *sgmail.SGMailV3) (*rest.Response, error) {
+func (f *fakeMailClient) Send(_ context.Context, _ EmailMessage) (*SendResult, error) {
 	return f.response, f.err
 }
 
@@ -101,7 +98,7 @@ func shoppingDayForStore(t *testing.T, location *locations.Location) string {
 	return date.Weekday().String()
 }
 
-func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T) {
+func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessProviderStatus(t *testing.T) {
 
 	fc := newFakeMailCache(t)
 	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
@@ -111,7 +108,7 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 			location: location,
 		},
 		client: &fakeMailClient{
-			response: &rest.Response{StatusCode: 500, Body: "sendgrid internal error"},
+			response: &SendResult{StatusCode: 500, Body: "acs internal error"},
 		},
 	}
 
@@ -130,7 +127,7 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 	}
 }
 
-func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
+func TestSendEmail_RecordsSentClaimOnSuccessProviderStatus(t *testing.T) {
 
 	fc := newFakeMailCache(t)
 	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
@@ -140,7 +137,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 			location: location,
 		},
 		client: &fakeMailClient{
-			response: &rest.Response{StatusCode: 202, Body: "accepted"},
+			response: &SendResult{StatusCode: 202, Body: "accepted"},
 		},
 	}
 
