@@ -6,6 +6,8 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"context"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 )
@@ -15,6 +17,12 @@ type captureWineQuestionAIClient struct {
 	answer      string
 	recipeTitle string
 	selection   *ai.WineSelection
+}
+
+type captureWineStaplesProvider struct {
+	mu        sync.Mutex
+	searches  []string
+	responses map[string][]kroger.Ingredient
 }
 
 func (c *captureWineQuestionAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
@@ -43,6 +51,23 @@ func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, conversation
 
 func (c *captureWineQuestionAIClient) Ready(ctx context.Context) error {
 	return nil
+}
+
+func (s *captureWineStaplesProvider) FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error) {
+	panic("unexpected call to FetchStaples")
+}
+
+func (s *captureWineStaplesProvider) GetIngredients(_ context.Context, _ string, searchTerm string, _ int) ([]kroger.Ingredient, error) {
+	s.mu.Lock()
+	s.searches = append(s.searches, searchTerm)
+	s.mu.Unlock()
+	return slices.Clone(s.responses[searchTerm]), nil
+}
+
+func (s *captureWineStaplesProvider) searchTerms() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.searches)
 }
 
 func TestWineIngredientsCacheKey_UsesStyleDateAndLocation(t *testing.T) {
@@ -104,5 +129,52 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 	if aiStub.recipeTitle != "Roast Chicken" {
 		t.Fatalf("expected recipe title %q, got %q", "Roast Chicken", aiStub.recipeTitle)
+	}
+}
+
+func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
+	aiStub := &captureWineQuestionAIClient{
+		answer: "Try one of these bottles.",
+		selection: &ai.WineSelection{
+			Wines: []ai.Ingredient{
+				{Name: "Whole Foods Red"},
+				{Name: "Whole Foods White"},
+				{Name: "Whole Foods Bubbly"},
+			},
+			Commentary: "Try one of these bottles.",
+		},
+	}
+	staplesStub := &captureWineStaplesProvider{
+		responses: map[string][]kroger.Ingredient{
+			"red-wine":   {{Description: loPtr("Whole Foods Red")}},
+			"white-wine": {{Description: loPtr("Whole Foods White")}},
+			"sparkling":  {{Description: loPtr("Whole Foods Bubbly")}},
+		},
+	}
+	g := &Generator{
+		io:              IO(cache.NewFileCache(t.TempDir())),
+		aiClient:        aiStub,
+		staplesProvider: staplesStub,
+	}
+
+	got, err := g.PickAWine(t.Context(), "conv-wholefoods", "wholefoods_10216", ai.Recipe{
+		Title:      "Salmon",
+		WineStyles: []string{"Pinot Noir"},
+	}, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("PickAWine returned error: %v", err)
+	}
+
+	searches := staplesStub.searchTerms()
+	slices.Sort(searches)
+	wantSearches := []string{"red-wine", "sparkling", "white-wine"}
+	if !slices.Equal(searches, wantSearches) {
+		t.Fatalf("unexpected whole foods wine searches: got %v want %v", searches, wantSearches)
+	}
+	if got == nil || len(got.Wines) != 3 {
+		t.Fatalf("unexpected wine selection: %+v", got)
+	}
+	if aiStub.recipeTitle != "Salmon" {
+		t.Fatalf("expected recipe title %q, got %q", "Salmon", aiStub.recipeTitle)
 	}
 }

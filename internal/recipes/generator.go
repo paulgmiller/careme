@@ -7,6 +7,7 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
+	"careme/internal/wholefoods"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -61,12 +62,16 @@ func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
 
 func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	var styles []string
-	//THIS is broken for wholefoods until we put in product search or just fetch all red/whiteines.
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
 		if style != "" { //would this ever happen?
 			styles = append(styles, style)
 		}
+	}
+
+	//whole foods search not actually implmented hard code categories
+	if wholefoods.NewIdentityProvider().IsID(location) {
+		styles = []string{"red-wine", "white-wine", "sparkling"} //rose
 	}
 
 	if len(styles) == 0 {
