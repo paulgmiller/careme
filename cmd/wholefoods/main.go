@@ -10,19 +10,16 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 )
 
 func main() {
 	var (
-		storesPath string
 		baseURL    string
 		sitemapURL string
 		timeoutSec int
 	)
 
-	flag.StringVar(&storesPath, "stores", "", "optional path to stores.txt in <store_id><tab><url> format")
 	flag.StringVar(&baseURL, "base-url", wholefoods.DefaultBaseURL, "Whole Foods base URL")
 	flag.StringVar(&sitemapURL, "sitemap-url", wholefoods.DefaultStoreSitemapURL, "Whole Foods store sitemap URL")
 	flag.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
@@ -37,7 +34,7 @@ func main() {
 	client := wholefoods.NewClientWithBaseURL(baseURL, httpClient)
 
 	ctx := context.Background()
-	refs, err := resolveStoreReferences(ctx, cacheStore, httpClient, storesPath, sitemapURL)
+	refs, err := resolveStoreReferences(ctx, cacheStore, httpClient, sitemapURL)
 	if err != nil {
 		log.Fatalf("failed to resolve store references: %v", err)
 	}
@@ -63,25 +60,7 @@ func main() {
 	fmt.Printf("synced %d Whole Foods store summaries\n", synced)
 }
 
-func resolveStoreReferences(ctx context.Context, cacheStore cache.ListCache, httpClient *http.Client, storesPath, sitemapURL string) ([]wholefoods.StoreReference, error) {
-	if storesPath != "" {
-		file, err := os.Open(storesPath)
-		if err != nil {
-			return nil, fmt.Errorf("open stores file: %w", err)
-		}
-		defer func() {
-			_ = file.Close()
-		}()
-
-		refs, err := wholefoods.ReadStoreReferences(file)
-		if err != nil {
-			return nil, err
-		}
-		if err := wholefoods.SaveStoreURLMap(ctx, cacheStore, refs); err != nil {
-			return nil, err
-		}
-		return refs, nil
-	}
+func resolveStoreReferences(ctx context.Context, cacheStore cache.ListCache, httpClient *http.Client, sitemapURL string) ([]wholefoods.StoreReference, error) {
 
 	urlMap, err := wholefoods.LoadStoreURLMap(ctx, cacheStore)
 	switch {
