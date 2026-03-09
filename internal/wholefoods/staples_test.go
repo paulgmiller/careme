@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"sync"
 	"testing"
 )
 
@@ -25,15 +26,30 @@ func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
 type stubCategoryClient struct {
 	results map[string][]Product
 	errs    map[string]error
+	mu      sync.Mutex
 	calls   []string
 }
 
-func (s *stubCategoryClient) Category(_ context.Context, queryterm, store string) (*CategoryResponse, error) {
+func (s *stubCategoryClient) Category(_ context.Context, queryterm, store string) ([]Product, error) {
+	s.mu.Lock()
 	s.calls = append(s.calls, store+":"+queryterm)
+	s.mu.Unlock()
 	if err := s.errs[queryterm]; err != nil {
 		return nil, err
 	}
-	return &CategoryResponse{Results: slices.Clone(s.results[queryterm])}, nil
+	return slices.Clone(s.results[queryterm]), nil
+}
+
+func (s *stubCategoryClient) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.calls)
+}
+
+func (s *stubCategoryClient) hasCall(want string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Contains(s.calls, want)
 }
 
 func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
@@ -78,8 +94,8 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	if ingredient.PriceSale == nil || *ingredient.PriceSale != float32(4.49) {
 		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
 	}
-	if len(client.calls) != len(defaultStaples()) {
-		t.Fatalf("expected %d category calls, got %d", len(defaultStaples()), len(client.calls))
+	if got, want := client.callCount(), len(defaultStaples()); got != want {
+		t.Fatalf("expected %d category calls, got %d", want, got)
 	}
 }
 
@@ -116,7 +132,10 @@ func TestStaplesProvider_GetIngredients_UsesSearchTerm(t *testing.T) {
 	if got[0].Description == nil || *got[0].Description != "Rose" {
 		t.Fatalf("unexpected ingredient description: %+v", got[0].Description)
 	}
-	if len(client.calls) != 1 || client.calls[0] != "10216:pinot noir" {
-		t.Fatalf("unexpected category calls: %v", client.calls)
+	if got := client.callCount(); got != 1 {
+		t.Fatalf("expected 1 category call, got %d", got)
+	}
+	if !client.hasCall("10216:pinot noir") {
+		t.Fatalf("missing expected category call")
 	}
 }

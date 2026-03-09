@@ -18,7 +18,7 @@ import (
 var defaultStaplesSignature = lo.Must(json.Marshal(defaultStaples()))
 
 type CategoryClient interface {
-	Category(ctx context.Context, queryterm, store string) (*CategoryResponse, error)
+	Category(ctx context.Context, queryterm, store string) ([]Product, error)
 }
 
 type identityProvider struct{}
@@ -62,7 +62,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			return nil, err
 		}
 
-		ingredients := lo.Map(resp.Results, func(product Product, _ int) kroger.Ingredient {
+		ingredients := lo.Map(resp, func(product Product, _ int) kroger.Ingredient {
 			return productToIngredient(product)
 		})
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category, "location", locationID)
@@ -86,7 +86,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 		return nil, err
 	}
 
-	ingredients := lo.Map(resp.Results, func(product Product, _ int) kroger.Ingredient {
+	ingredients := lo.Map(resp, func(product Product, _ int) kroger.Ingredient {
 		return productToIngredient(product)
 	})
 	if skip >= len(ingredients) {
