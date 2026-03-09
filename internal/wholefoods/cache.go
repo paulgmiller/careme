@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	Container              = "wholefoods"
 	StoreCachePrefix       = "wholefoods/stores/"
 	StoreURLMapCacheKey    = "wholefoods/store_url_map.json"
 	LocationIDPrefix       = "wholefoods_"
@@ -161,7 +162,7 @@ func LoadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 	summaries = lo.Compact(summaries)
 
 	if len(summaries) == 0 {
-		slog.WarnContext(ctx, "No wholefoods store summaries found")
+		return nil, fmt.Errorf("failed to load wholefoods locations")
 	}
 
 	return summaries, nil

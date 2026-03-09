@@ -3,6 +3,7 @@ package wholefoods
 import (
 	"careme/internal/cache"
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -86,6 +87,20 @@ func TestLocationBackendReturnsAllWhenZipUnknown(t *testing.T) {
 	}
 	if len(locs) != 2 {
 		t.Fatalf("expected all locations when zip centroid is unknown, got %d", len(locs))
+	}
+}
+
+func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+
+	_, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
+	if err == nil {
+		t.Fatal("expected NewLocationBackend to return an error")
+	}
+	if !strings.Contains(err.Error(), "failed to load wholefoods locations") {
+		t.Fatalf("expected missing summaries error, got %v", err)
 	}
 }
 

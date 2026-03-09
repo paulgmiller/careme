@@ -25,7 +25,7 @@ func main() {
 	flag.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
 	flag.Parse()
 
-	cacheStore, err := cache.NewBlobCache("wholefoods")
+	cacheStore, err := cache.EnsureCache(wholefoods.Container)
 	if err != nil {
 		log.Fatalf("failed to create cache: %v", err)
 	}
