@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -162,8 +161,7 @@ func TestStoreSummary_RequiresStore(t *testing.T) {
 func loadFixture(t *testing.T, name string) []byte {
 	t.Helper()
 
-	path := filepath.Join("..", "..", "wf-output", name)
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(name)
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", name, err)
 	}
