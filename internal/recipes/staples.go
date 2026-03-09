@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/walmart"
@@ -31,10 +32,14 @@ type backendStaplesProvider interface {
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
 }
 
-func newStaplesProvider(krogerClient kroger.ClientWithResponsesInterface) staplesProvider {
-	return routingStaplesProvider{
-		backends: defaultStaplesBackends(krogerClient),
+func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
+	kclient, err := kroger.FromConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
+	return routingStaplesProvider{
+		backends: defaultStaplesBackends(kclient),
+	}, nil
 }
 
 func (p routingStaplesProvider) FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error) {

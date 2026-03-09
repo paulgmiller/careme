@@ -1,7 +1,6 @@
 package main
 
 import (
-	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/recipes"
 	"context"
@@ -19,22 +18,18 @@ func main() {
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
 	flag.Parse()
 	ctx := context.Background()
-	cache, err := cache.MakeCache()
-	if err != nil {
-		log.Fatalf("failed to create cache: %s", err)
-	}
 
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load configuration: %s", err)
 	}
 
-	generator, err := recipes.NewGenerator(cfg, recipes.IO(cache))
+	sp, err := recipes.NewStaplesProvider(cfg)
 	if err != nil {
 		log.Fatalf("failed to create recipe generator: %s", err)
 	}
 
-	ings, err := generator.GetIngredients(ctx, location, searchTerm, 0)
+	ings, err := sp.GetIngredients(ctx, location, searchTerm, 0)
 	if err != nil {
 		log.Fatalf("failed to get ingredients: %s", err)
 	}

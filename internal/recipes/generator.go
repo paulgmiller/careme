@@ -46,31 +46,35 @@ func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
 		return mock{}, nil
 	}
 
-	client, err := kroger.FromConfig(cfg)
+	stapesProvider, err := NewStaplesProvider(cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create staples provider: %w", err)
 	}
+
 	return &Generator{
 		io:              io,
 		config:          cfg,
 		aiClient:        ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
-		staplesProvider: newStaplesProvider(client),
+		staplesProvider: stapesProvider,
 	}, nil
 }
 
 func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	var styles []string
+	//THIS is broken for wholefoods until we put in product search or just fetch all red/whiteines.
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
 		if style != "" { //would this ever happen?
 			styles = append(styles, style)
 		}
 	}
+
 	if len(styles) == 0 {
 		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
 	}
 	dateStr := date.Format("2006-01-02")
 	logger := slog.With("location", location, "date", dateStr)
+
 	wines, err := parallelism.Flatten(styles, func(style string) ([]kroger.Ingredient, error) {
 		cacheKey := wineIngredientsCacheKey(style, location, date)
 		winesOfStyle, err := g.io.IngredientsFromCache(ctx, cacheKey)
@@ -82,7 +86,7 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 			logger.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "error", err)
 		}
 
-		winesOfStyle, err = g.GetIngredients(ctx, location, style, 0)
+		winesOfStyle, err = g.staplesProvider.GetIngredients(ctx, location, style, 0)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
 			return nil, fmt.Errorf("failed to get ingredients for style %q: %w", style, err)
