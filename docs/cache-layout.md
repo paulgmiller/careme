@@ -30,6 +30,6 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 - Cache backend selection is in `internal/cache/azure.go` (`MakeCache`).
 - Most app caches use the default cache created via `cache.MakeCache()` / `cache.EnsureCache("recipes")`.
 - Whole Foods uses a separate cache created via `cache.EnsureCache("wholefoods")`; it does not share the `recipes` container/directory.
-- Local cache paths are `cache/` for most app data and `wholefoods/` for Whole Foods data when filesystem backend is used.
+- Local cache paths are `recipes/` for most app data and `wholefoods/` for Whole Foods data when filesystem backend is used.
 - Blob names in Azure match the same key strings listed above inside their respective containers.
 - Do not create nested keys under `recipe/<hash>` (for example `recipe/<hash>/wine`) because `FileCache` stores `recipe/<hash>` as a file path.

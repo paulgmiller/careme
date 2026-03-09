@@ -12,17 +12,17 @@ import (
 
 const maxLocationDistanceMiles = 20.0
 
-type ZIPCoordinateLookup interface {
-	CoordinatesByZIP(zip string) (lat, lon float64, ok bool)
+type centroidByZip interface {
+	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
 type LocationBackend struct {
-	zipLookup ZIPCoordinateLookup
+	zipLookup centroidByZip
 	byID      map[string]locationtypes.Location
 	locations []locationtypes.Location
 }
 
-func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup ZIPCoordinateLookup) (*LocationBackend, error) {
+func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
 	if c == nil {
 		return nil, fmt.Errorf("list cache is required")
 	}
@@ -73,7 +73,7 @@ func (b *LocationBackend) GetLocationsByZip(_ context.Context, zipcode string) (
 		return copyLocations(b.locations), nil
 	}
 
-	lat, lon, ok := b.zipLookup.CoordinatesByZIP(strings.TrimSpace(zipcode))
+	centroid, ok := b.zipLookup.ZipCentroidByZIP(strings.TrimSpace(zipcode))
 	if !ok {
 		return copyLocations(b.locations), nil
 	}
@@ -87,7 +87,7 @@ func (b *LocationBackend) GetLocationsByZip(_ context.Context, zipcode string) (
 		if loc.Lat == nil || loc.Lon == nil {
 			continue
 		}
-		distance := haversineMiles(lat, lon, *loc.Lat, *loc.Lon)
+		distance := haversineMiles(centroid.Lat, centroid.Lon, *loc.Lat, *loc.Lon)
 		if distance > maxLocationDistanceMiles {
 			continue
 		}

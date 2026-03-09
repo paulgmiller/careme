@@ -12,3 +12,8 @@ type Location struct {
 	Lon      *float64  `json:"lon,omitempty"`
 	CachedAt time.Time `json:"cached_at,omitempty"`
 }
+
+type ZipCentroid struct {
+	Lat float64
+	Lon float64
+}

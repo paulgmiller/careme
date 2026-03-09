@@ -1,6 +1,7 @@
 package locations
 
 import (
+	locationtypes "careme/internal/locations/types"
 	"testing"
 )
 
@@ -55,7 +56,7 @@ func TestZipCentroidDataLoaded(t *testing.T) {
 func TestNearestZIPToCoordinates(t *testing.T) {
 	t.Parallel()
 
-	centroids := zipCentroidIndex{map[string]ZipCentroid{
+	centroids := zipCentroidIndex{map[string]locationtypes.ZipCentroid{
 		"10001": {Lat: 40.7506, Lon: -73.9972},
 		"94105": {Lat: 37.7898, Lon: -122.3942},
 		"98101": {Lat: 47.6105, Lon: -122.3348},

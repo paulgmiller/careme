@@ -2,6 +2,7 @@ package wholefoods
 
 import (
 	"careme/internal/cache"
+	locationtypes "careme/internal/locations/types"
 	"context"
 	"strings"
 	"testing"
@@ -111,12 +112,12 @@ type coords struct {
 	Lon float64
 }
 
-func (s staticZIPLookup) CoordinatesByZIP(zip string) (lat, lon float64, ok bool) {
+func (s staticZIPLookup) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
 	coord, ok := s[zip]
 	if !ok {
-		return 0, 0, false
+		return locationtypes.ZipCentroid{}, false
 	}
-	return coord.Lat, coord.Lon, true
+	return locationtypes.ZipCentroid{Lat: coord.Lat, Lon: coord.Lon}, true
 }
 
 func westlakeSummary() *StoreSummaryResponse {

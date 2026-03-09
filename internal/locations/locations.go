@@ -65,7 +65,7 @@ type locationBackend interface {
 type Location = locationtypes.Location
 
 type centroidByZip interface {
-	ZipCentroidByZIP(zip string) (ZipCentroid, bool)
+	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
 func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGetter, error) {
@@ -99,7 +99,7 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 			return nil, fmt.Errorf("failed to create Whole Foods list cache: %w", err)
 		}
 
-		wfBackend, err := wholefoods.NewLocationBackend(context.Background(), listCache, wholefoodsCentroidLookup{centroids: centroids})
+		wfBackend, err := wholefoods.NewLocationBackend(context.Background(), listCache, centroids)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Whole Foods backend: %w", err)
 		}
@@ -111,18 +111,6 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 		cache:        c,
 	}, nil
 
-}
-
-type wholefoodsCentroidLookup struct {
-	centroids centroidByZip
-}
-
-func (w wholefoodsCentroidLookup) CoordinatesByZIP(zip string) (lat, lon float64, ok bool) {
-	centroid, ok := w.centroids.ZipCentroidByZIP(zip)
-	if !ok {
-		return 0, 0, false
-	}
-	return centroid.Lat, centroid.Lon, true
 }
 
 func NewServer(storage locationGetter, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
@@ -270,7 +258,7 @@ func (l *locationStorage) storeLocationIfMissing(loc Location) error {
 	return nil
 }
 
-func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid ZipCentroid, zipCentroids centroidByZip) {
+func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid locationtypes.ZipCentroid, zipCentroids centroidByZip) {
 	sort.SliceStable(locations, func(i, j int) bool {
 		leftDistance := locationDistanceTo(requestedCentroid, locations[i], zipCentroids)
 		rightDistance := locationDistanceTo(requestedCentroid, locations[j], zipCentroids)
@@ -278,7 +266,7 @@ func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid
 	})
 }
 
-func locationDistanceTo(target ZipCentroid, loc Location, zipCentroids centroidByZip) float64 {
+func locationDistanceTo(target locationtypes.ZipCentroid, loc Location, zipCentroids centroidByZip) float64 {
 	lat, lon := locationCoordinates(loc, zipCentroids)
 	return haversineMiles(target.Lat, target.Lon, lat, lon)
 }
