@@ -17,12 +17,6 @@ type staplesProvider interface {
 	FetchStaples(ctx context.Context, location *locations.Location, staples []filter) ([]kroger.Ingredient, error)
 }
 
-type staplesProviderFunc func(ctx context.Context, location *locations.Location, staples []filter) ([]kroger.Ingredient, error)
-
-func (f staplesProviderFunc) FetchStaples(ctx context.Context, location *locations.Location, staples []filter) ([]kroger.Ingredient, error) {
-	return f(ctx, location, staples)
-}
-
 type wholeFoodsCategoryClient interface {
 	Category(ctx context.Context, queryterm, store string) (*wholefoods.CategoryResponse, error)
 }
