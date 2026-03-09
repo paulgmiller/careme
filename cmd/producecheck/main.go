@@ -87,6 +87,7 @@ type produceFilterStats struct {
 
 func checkProduceAvailability(ctx context.Context, client kroger.ClientWithResponsesInterface, locationID string, produce []string) ([]string, int, error) {
 
+	//TODO expand this to other staple providers
 	filters := kroger.ProduceFilters()
 	type filterResult struct {
 		filter      string

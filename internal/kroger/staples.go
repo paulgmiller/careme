@@ -13,7 +13,7 @@ import (
 
 var defaultStaplesSignature = mustJSONSignature(defaultStaples())
 
-type StaplesFilter struct {
+type staplesFilter struct {
 	Term   string   `json:"term,omitempty"`
 	Brands []string `json:"brands,omitempty"`
 	Frozen bool     `json:"frozen,omitempty"`
@@ -52,7 +52,7 @@ func NewStaplesProvider(client ClientWithResponsesInterface) StaplesProvider {
 }
 
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]Ingredient, error) {
-	return parallelism.Flatten(defaultStaples(), func(category StaplesFilter) ([]Ingredient, error) {
+	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]Ingredient, error) {
 
 		ingredients, err := SearchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category.Term, "location", locationID)
@@ -141,8 +141,8 @@ func SearchIngredients(ctx context.Context, client ClientWithResponsesInterface,
 	return ingredients, nil
 }
 
-func defaultStaples() []StaplesFilter {
-	return append(ProduceFilters(), []StaplesFilter{
+func defaultStaples() []staplesFilter {
+	return append(ProduceFilters(), []staplesFilter{
 		{
 			Term:   "beef",
 			Brands: []string{"Simple Truth", "Kroger"},
@@ -170,8 +170,8 @@ func defaultStaples() []StaplesFilter {
 	}...)
 }
 
-func ProduceFilters() []StaplesFilter {
-	return []StaplesFilter{
+func ProduceFilters() []staplesFilter {
+	return []staplesFilter{
 		{
 			Term:   "fresh vegatable",
 			Brands: []string{"*"},
