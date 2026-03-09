@@ -54,7 +54,7 @@ func NewStaplesProvider(client ClientWithResponsesInterface) StaplesProvider {
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]Ingredient, error) {
 	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]Ingredient, error) {
 
-		ingredients, err := SearchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
+		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category.Term, "location", locationID)
 		return ingredients, err
 	})
@@ -62,10 +62,10 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 }
 
 func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]Ingredient, error) {
-	return SearchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
+	return searchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
 }
 
-func SearchIngredients(ctx context.Context, client ClientWithResponsesInterface, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
+func searchIngredients(ctx context.Context, client ClientWithResponsesInterface, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
 	limit := 50
 	limitStr := strconv.Itoa(limit)
 	startStr := strconv.Itoa(skip)
@@ -132,7 +132,7 @@ func SearchIngredients(ctx context.Context, client ClientWithResponsesInterface,
 	// recursion is pretty dumb pagination
 	// kroger limites us to 250
 	if len(*products.JSON200.Data) == limit && skip < 250 {
-		page, err := SearchIngredients(ctx, client, locationID, term, brands, frozen, skip+limit)
+		page, err := searchIngredients(ctx, client, locationID, term, brands, frozen, skip+limit)
 		if err == nil {
 			ingredients = append(ingredients, page...)
 		}

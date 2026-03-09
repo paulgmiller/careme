@@ -98,11 +98,11 @@ func checkProduceAvailability(ctx context.Context, client kroger.ClientWithRespo
 	results := make([]filterResult, len(filters))
 	var wg sync.WaitGroup
 	wg.Add(len(filters))
+	kprovider := kroger.NewStaplesProvider(client)
 	for i, filter := range filters {
-		i, filter := i, filter
 		go func() {
 			defer wg.Done()
-			filterIngredients, err := kroger.SearchIngredients(ctx, client, locationID, filter.Term, filter.Brands, filter.Frozen, 0)
+			filterIngredients, err := kprovider.GetIngredients(ctx, locationID, filter.Term, 0)
 			results[i] = filterResult{
 				filter:      filter.Term,
 				ingredients: filterIngredients,
