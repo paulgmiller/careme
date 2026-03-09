@@ -2,14 +2,12 @@ package wholefoods
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"careme/internal/kroger"
-
-	lop "github.com/samber/lo/parallel"
+	"careme/internal/parallelism"
 )
 
 const DefaultStaplesSignature = "wholefoods-staples-v1"
@@ -52,7 +50,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
 	}
 
-	return flattenParallel(defaultStaples(), func(category string) ([]kroger.Ingredient, error) {
+	return parallelism.Flatten(defaultStaples(), func(category string) ([]kroger.Ingredient, error) {
 		resp, err := p.client.Category(ctx, category, storeID)
 		if err != nil {
 			return nil, err
@@ -145,32 +143,4 @@ func slicePtr(values []string) *[]string {
 		return nil
 	}
 	return &values
-}
-
-func flattenParallel[T any, T2 any](items []T, fn func(T) ([]T2, error)) ([]T2, error) {
-	if len(items) == 0 {
-		return []T2{}, nil
-	}
-
-	type result struct {
-		values []T2
-		err    error
-	}
-
-	mapped := lop.Map(items, func(item T, _ int) result {
-		values, err := fn(item)
-		return result{values: values, err: err}
-	})
-
-	merged := make([]T2, 0)
-	errs := make([]error, 0)
-	for _, r := range mapped {
-		if r.err != nil {
-			errs = append(errs, r.err)
-			continue
-		}
-		merged = append(merged, r.values...)
-	}
-
-	return merged, errors.Join(errs...)
 }

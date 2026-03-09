@@ -6,6 +6,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/locations"
+	"careme/internal/parallelism"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -73,7 +74,7 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 	}
 	dateStr := date.Format("2006-01-02")
 	logger := slog.With("location", location, "date", dateStr)
-	wines, err := asParallel(styles, func(style string) ([]kroger.Ingredient, error) {
+	wines, err := parallelism.Flatten(styles, func(style string) ([]kroger.Ingredient, error) {
 		cacheKey := wineIngredientsCacheKey(style, location, date)
 		winesOfStyle, err := g.io.IngredientsFromCache(ctx, cacheKey)
 		if err == nil {

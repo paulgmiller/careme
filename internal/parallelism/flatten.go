@@ -1,4 +1,4 @@
-package recipes
+package parallelism
 
 import (
 	"errors"
@@ -6,8 +6,8 @@ import (
 	lop "github.com/samber/lo/parallel"
 )
 
-// we need to make a bunch of calls and merge results but not lose track of errors.
-func asParallel[T any, T2 any](items []T, fn func(T) ([]T2, error)) ([]T2, error) {
+// Flatten runs fn for each item concurrently, merging all returned slices and errors.
+func Flatten[T any, T2 any](items []T, fn func(T) ([]T2, error)) ([]T2, error) {
 	if len(items) == 0 {
 		return []T2{}, nil
 	}
