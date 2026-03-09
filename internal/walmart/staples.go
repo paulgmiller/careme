@@ -11,15 +11,29 @@ const UnsupportedStaplesSignature = "unsupported-staples-v1"
 
 type StaplesProvider struct{}
 
+type StoreIdentityProvider struct{}
+
 func NewStaplesProvider() StaplesProvider {
 	return StaplesProvider{}
 }
 
+func NewStoreIdentityProvider() StoreIdentityProvider {
+	return StoreIdentityProvider{}
+}
+
 func (p StaplesProvider) IsID(locationID string) bool {
-	return (&Client{}).IsID(locationID)
+	return NewStoreIdentityProvider().IsID(locationID)
 }
 
 func (p StaplesProvider) Signature() string {
+	return NewStoreIdentityProvider().Signature()
+}
+
+func (p StoreIdentityProvider) IsID(locationID string) bool {
+	return (&Client{}).IsID(locationID)
+}
+
+func (p StoreIdentityProvider) Signature() string {
 	return UnsupportedStaplesSignature
 }
 

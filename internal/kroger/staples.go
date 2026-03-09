@@ -24,15 +24,29 @@ type StaplesProvider struct {
 	client ClientWithResponsesInterface
 }
 
+type StoreIdentityProvider struct{}
+
 func NewStaplesProvider(client ClientWithResponsesInterface) StaplesProvider {
 	return StaplesProvider{client: client}
 }
 
+func NewStoreIdentityProvider() StoreIdentityProvider {
+	return StoreIdentityProvider{}
+}
+
 func (p StaplesProvider) Signature() string {
-	return DefaultStaplesSignature
+	return NewStoreIdentityProvider().Signature()
 }
 
 func (p StaplesProvider) IsID(locationID string) bool {
+	return NewStoreIdentityProvider().IsID(locationID)
+}
+
+func (p StoreIdentityProvider) Signature() string {
+	return DefaultStaplesSignature
+}
+
+func (p StoreIdentityProvider) IsID(locationID string) bool {
 	if locationID == "" {
 		return false
 	}

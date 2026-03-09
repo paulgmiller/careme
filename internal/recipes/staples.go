@@ -13,6 +13,11 @@ type staplesProvider interface {
 	FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error)
 }
 
+type storeIdentityProvider interface {
+	IsID(locationID string) bool
+	Signature() string
+}
+
 type routingStaplesProvider struct {
 	backends []backendStaplesProvider
 }
@@ -42,9 +47,9 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, location *loca
 }
 
 func staplesSignatureForLocation(locationID string) string {
-	for _, backend := range defaultStaplesBackends(nil) {
-		if backend.IsID(locationID) {
-			return backend.Signature()
+	for _, provider := range defaultStoreIdentityProviders() {
+		if provider.IsID(locationID) {
+			return provider.Signature()
 		}
 	}
 	panic("unknown staples provider for location " + locationID)
@@ -64,5 +69,13 @@ func defaultStaplesBackends(krogerClient kroger.ClientWithResponsesInterface) []
 		kroger.NewStaplesProvider(krogerClient),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(nil)),
 		walmart.NewStaplesProvider(),
+	}
+}
+
+func defaultStoreIdentityProviders() []storeIdentityProvider {
+	return []storeIdentityProvider{
+		kroger.NewStoreIdentityProvider(),
+		wholefoods.NewStoreIdentityProvider(),
+		walmart.NewStoreIdentityProvider(),
 	}
 }
