@@ -2,6 +2,7 @@ package wholefoods
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -13,7 +14,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const DefaultStaplesSignature = "wholefoods-staples-v2"
+var DefaultStaplesSignature = mustJSONSignature(defaultStaples())
 
 type CategoryClient interface {
 	Category(ctx context.Context, queryterm, store string) (*CategoryResponse, error)
@@ -171,4 +172,12 @@ func slicePtr(values []string) *[]string {
 		return nil
 	}
 	return &values
+}
+
+func mustJSONSignature(value any) string {
+	signature, err := json.Marshal(value)
+	if err != nil {
+		panic(fmt.Errorf("marshal staples signature: %w", err))
+	}
+	return string(signature)
 }

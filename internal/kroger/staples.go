@@ -11,7 +11,7 @@ import (
 	"strconv"
 )
 
-const DefaultStaplesSignature = "kroger-staples-v1"
+var DefaultStaplesSignature = mustJSONSignature(defaultStaples())
 
 type StaplesFilter struct {
 	Term   string
@@ -193,4 +193,12 @@ func requireSuccess(statusCode int, payload any) error {
 		return nil
 	}
 	return krogerError(statusCode, payload)
+}
+
+func mustJSONSignature(value any) string {
+	signature, err := json.Marshal(value)
+	if err != nil {
+		panic(fmt.Errorf("marshal staples signature: %w", err))
+	}
+	return string(signature)
 }

@@ -42,14 +42,6 @@ func main() {
 	for _, i := range ings {
 		fmt.Printf("%s - %s:(%s)\n", toString(i.Brand), toString(i.Description), toFloat(i.PriceRegular))
 	}
-
-}
-
-func toSlice(s *[]string) []string {
-	if s == nil {
-		return nil
-	}
-	return *s
 }
 
 func toString(s *string) string {

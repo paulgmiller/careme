@@ -6,6 +6,15 @@ import (
 	"testing"
 )
 
+func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
+	got := NewIdentityProvider().Signature()
+	want := mustJSONSignature(defaultStaples())
+
+	if got != want {
+		t.Fatalf("unexpected signature: got %q want %q", got, want)
+	}
+}
+
 type stubCategoryClient struct {
 	results map[string][]Product
 	errs    map[string]error
@@ -23,7 +32,7 @@ func (s *stubCategoryClient) Category(_ context.Context, queryterm, store string
 func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	client := &stubCategoryClient{
 		results: map[string][]Product{
-			"vegetables": {
+			"fresh-vegetables": {
 				{
 					Name:         "Organic Asparagus",
 					Slug:         "organic-asparagus",
