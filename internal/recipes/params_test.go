@@ -87,3 +87,14 @@ func TestTimezoneNameForZip(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultParams_UsesWholeFoodsStaplesForWholeFoodsLocations(t *testing.T) {
+	params := DefaultParams(&locations.Location{ID: "wholefoods_10216", Name: "Westlake"}, time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
+
+	if len(params.Staples) != len(WholeFoodsStaples()) {
+		t.Fatalf("expected %d whole foods staples, got %d", len(WholeFoodsStaples()), len(params.Staples))
+	}
+	if got, want := params.Staples[0].Term, "vegetables"; got != want {
+		t.Fatalf("unexpected first whole foods staple: got %q want %q", got, want)
+	}
+}

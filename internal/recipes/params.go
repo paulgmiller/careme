@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/wholefoods"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -50,7 +51,7 @@ func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 		Date:     date, // shave time
 		Location: l,
 		// People:   2,
-		Staples: DefaultStaples(),
+		Staples: DefaultStaplesForLocation(l),
 	}
 }
 
@@ -161,6 +162,13 @@ func DefaultStaples() []filter {
 	}...)
 }
 
+func DefaultStaplesForLocation(location *locations.Location) []filter {
+	if location != nil && strings.HasPrefix(location.ID, wholefoods.LocationIDPrefix) {
+		return WholeFoodsStaples()
+	}
+	return DefaultStaples()
+}
+
 func Produce() []filter {
 	return []filter{
 		{
@@ -173,6 +181,19 @@ func Produce() []filter {
 		},
 	}
 
+}
+
+func WholeFoodsStaples() []filter {
+	return []filter{
+		{Term: "vegetables"},
+		{Term: "fruit"},
+		{Term: "beef"},
+		{Term: "chicken"},
+		{Term: "fish"},
+		{Term: "pork"},
+		{Term: "shellfish"},
+		{Term: "lamb"},
+	}
 }
 
 func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {

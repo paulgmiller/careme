@@ -32,4 +32,5 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 - Whole Foods uses a separate cache created via `cache.EnsureCache("wholefoods")`; it does not share the `recipes` container/directory.
 - Local cache paths are `recipes/` for most app data and `wholefoods/` for Whole Foods data when filesystem backend is used.
 - Blob names in Azure match the same key strings listed above inside their respective containers.
+- Staple `ingredients/` cache keys derive from location ID, date, and the store-specific staple list, so Kroger and Whole Foods locations do not share staple caches.
 - Do not create nested keys under `recipe/<hash>` (for example `recipe/<hash>/wine`) because `FileCache` stores `recipe/<hash>` as a file path.

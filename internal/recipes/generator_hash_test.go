@@ -68,6 +68,15 @@ func TestGeneratorParamsLocationHashStableForDifferentHours(t *testing.T) {
 	}
 }
 
+func TestGeneratorParamsLocationHash_DiffersAcrossStoreBackends(t *testing.T) {
+	krogerParams := DefaultParams(&locations.Location{ID: "10216", Name: "Kroger 10216"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+	wholeFoodsParams := DefaultParams(&locations.Location{ID: "wholefoods_10216", Name: "Whole Foods 10216"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+
+	if got, want := krogerParams.LocationHash() != wholeFoodsParams.LocationHash(), true; got != want {
+		t.Fatalf("expected location hashes to differ across store backends: kroger=%s wholefoods=%s", krogerParams.LocationHash(), wholeFoodsParams.LocationHash())
+	}
+}
+
 func TestNormalizeLegacyRecipeHash(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "loc-legacy", Name: "Legacy Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 	hash := p.Hash()
