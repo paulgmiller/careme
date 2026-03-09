@@ -37,7 +37,6 @@ type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
-	// /GetIngredients(ctx context.Context, location string, searchTerm string, skip int) ([]kroger.Ingredient, error)
 	Ready(ctx context.Context) error
 }
 

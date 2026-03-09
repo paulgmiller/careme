@@ -11,6 +11,7 @@ import (
 	"testing"
 )
 
+// todo make this a indepenedent ingredient object not kroger.
 type staplesProvider interface {
 	FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error)
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)

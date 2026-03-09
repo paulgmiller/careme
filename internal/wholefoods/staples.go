@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 
 	"careme/internal/kroger"
@@ -49,6 +48,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		return nil, fmt.Errorf("whole foods client is required")
 	}
 
+	//should identity provider do this?
 	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
 	if storeID == locationID || storeID == "" {
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
@@ -124,25 +124,24 @@ func productToIngredient(product Product) kroger.Ingredient {
 		salePrice = &price
 	}
 
+	/* unit of measure is more around pricing than total size)
+	TODO how should we normalize prices per units here and in kroger.
 	var size *string
 	sizeText := strings.TrimSpace(strings.Join(compactStrings(product.UOM), " "))
 	if sizeText != "" {
 		size = &sizeText
-	}
+	}*/
 
-	productID := strconv.Itoa(product.Store) + ":" + product.Slug
-	productName := strings.TrimSpace(product.Name)
-	brand := strings.TrimSpace(product.Brand)
-	categories := compactStrings(localCategory(product))
+	//categories := compactStrings(localCategory(product))
 
 	return kroger.Ingredient{
-		ProductId:    stringPtr(productID),
-		Brand:        stringPtr(brand),
-		Description:  stringPtr(productName),
-		Size:         size,
+		ProductId:   stringPtr(product.Slug),
+		Brand:       stringPtr(strings.TrimSpace(product.Brand)),
+		Description: stringPtr(strings.TrimSpace(product.Name)),
+		//Size:         size,
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
-		Categories:   slicePtr(categories),
+		// /	Categories:   slicePtr(categories),
 	}
 }
 

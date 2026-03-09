@@ -196,10 +196,6 @@ func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
 	})
 }
 
-func (g *Generator) GetIngredients(ctx context.Context, location string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
-	return g.staplesProvider.GetIngredients(ctx, location, searchTerm, skip)
-}
-
 func (g *Generator) Ready(ctx context.Context) error {
 	return g.aiClient.Ready(ctx)
 }
