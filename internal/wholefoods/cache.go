@@ -94,6 +94,9 @@ func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 			slog.WarnContext(ctx, "failed to read cached whole foods store summary", "key", key, "error", err)
 			return nil
 		}
+		defer func() {
+			_ = reader.Close()
+		}()
 		var summary StoreSummaryResponse
 		if err := json.NewDecoder(reader).Decode(&summary); err != nil {
 			slog.WarnContext(ctx, "failed to decode cached whole foods store summary", "key", key, "error", err)
