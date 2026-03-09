@@ -190,6 +190,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 	return ingredients, nil
 }
 
+// TODO should we be going off product id instead?
 func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
 	return lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
 		return toStr(i.Description)

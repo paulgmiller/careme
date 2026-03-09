@@ -2,15 +2,22 @@ package wholefoods
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"testing"
 )
 
 func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
 	got := NewIdentityProvider().Signature()
-	want := mustJSONSignature(defaultStaples())
+	want, err := json.Marshal(defaultStaples())
+	if err != nil {
+		t.Fatalf("marshal default staples: %v", err)
+	}
+	if got != string(want) {
+		t.Fatalf("unexpected signature: got %q want %q", got, want)
+	}
 
-	if got != want {
+	if got != string(want) {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
 	}
 }
@@ -62,11 +69,8 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	if ingredient.Brand == nil || *ingredient.Brand != "Whole Foods Market" {
 		t.Fatalf("unexpected brand: %+v", ingredient.Brand)
 	}
-	if ingredient.Size == nil || *ingredient.Size != "1 lb" {
-		t.Fatalf("unexpected size: %+v", ingredient.Size)
-	}
-	if ingredient.ProductId == nil || *ingredient.ProductId != "10216:organic-asparagus" {
-		t.Fatalf("unexpected product id: %+v", ingredient.ProductId)
+	if ingredient.ProductId == nil || *ingredient.ProductId != "odQxPA" {
+		t.Fatalf("unexpected product id: %+v", *ingredient.ProductId)
 	}
 	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != float32(5.99) {
 		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)

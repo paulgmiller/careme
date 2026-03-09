@@ -2,8 +2,10 @@ package wholefoods
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"strings"
 
@@ -13,7 +15,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var defaultStaplesSignature = mustJSONSignature(defaultStaples())
+var defaultStaplesSignature = lo.Must(json.Marshal(defaultStaples()))
 
 type CategoryClient interface {
 	Category(ctx context.Context, queryterm, store string) (*CategoryResponse, error)
@@ -35,7 +37,7 @@ func NewIdentityProvider() identityProvider {
 }
 
 func (p identityProvider) Signature() string {
-	return defaultStaplesSignature
+	return string(defaultStaplesSignature)
 }
 
 func (p identityProvider) IsID(locationID string) bool {
@@ -134,8 +136,11 @@ func productToIngredient(product Product) kroger.Ingredient {
 
 	//categories := compactStrings(localCategory(product))
 
+	hasher := fnv.New32a()
+	_ = lo.Must(hasher.Write([]byte(product.Slug)))
+	productId := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
 	return kroger.Ingredient{
-		ProductId:   stringPtr(product.Slug),
+		ProductId:   stringPtr(productId),
 		Brand:       stringPtr(strings.TrimSpace(product.Brand)),
 		Description: stringPtr(strings.TrimSpace(product.Name)),
 		//Size:         size,
@@ -145,43 +150,9 @@ func productToIngredient(product Product) kroger.Ingredient {
 	}
 }
 
-func localCategory(product Product) string {
-	if product.IsLocal {
-		return "Local"
-	}
-	return ""
-}
-
-func compactStrings(values ...string) []string {
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		out = append(out, value)
-	}
-	return out
-}
-
 func stringPtr(value string) *string {
 	if value == "" {
 		return nil
 	}
 	return &value
-}
-
-func slicePtr(values []string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	return &values
-}
-
-func mustJSONSignature(value any) string {
-	signature, err := json.Marshal(value)
-	if err != nil {
-		panic(fmt.Errorf("marshal staples signature: %w", err))
-	}
-	return string(signature)
 }

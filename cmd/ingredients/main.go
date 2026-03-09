@@ -35,7 +35,7 @@ func main() {
 	}
 
 	for _, i := range ings {
-		fmt.Printf("%s - %s:($%s) size: %s\n", toString(i.Brand), toString(i.Description), toFloat(i.PriceRegular), toString(i.Size))
+		fmt.Printf("%s: %s - %s:($%s) size: %s\n", toString(i.ProductId), toString(i.Brand), toString(i.Description), toFloat(i.PriceRegular), toString(i.Size))
 	}
 }
 

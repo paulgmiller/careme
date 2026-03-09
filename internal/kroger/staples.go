@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+
+	"github.com/samber/lo"
 )
 
-var defaultStaplesSignature = mustJSONSignature(defaultStaples())
+var defaultStaplesSignature = string(lo.Must(json.Marshal(defaultStaples())))
 
 type staplesFilter struct {
 	Term   string   `json:"term,omitempty"`
