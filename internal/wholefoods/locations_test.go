@@ -31,7 +31,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLocationByID returned error: %v", err)
 	}
-	if loc.Name != "Westlake" || loc.ZipCode != "98121" {
+	if loc.Name != "Whole Foods Westlake" || loc.ZipCode != "98121" {
 		t.Fatalf("unexpected location: %+v", loc)
 	}
 }

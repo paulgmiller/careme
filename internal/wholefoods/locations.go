@@ -28,7 +28,7 @@ func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centro
 	}
 
 	//Is this too much? should we just fetch a single blob that is all coordinates -> store ids and lazily fetch stores?
-	summaries, err := LoadCachedStoreSummaries(ctx, c)
+	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centro
 	locations := make([]locationtypes.Location, 0, len(summaries))
 	byID := make(map[string]locationtypes.Location, len(summaries))
 	for _, summary := range summaries {
-		loc := StoreSummaryToLocation(*summary)
+		loc := storeSummaryToLocation(*summary)
 		locations = append(locations, loc)
 		byID[loc.ID] = loc
 	}
@@ -111,9 +111,6 @@ func parseLocationID(locationID string) (string, bool) {
 	}
 
 	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
-	if !isAllDigits(storeID) {
-		return "", false
-	}
 	return LocationIDPrefix + storeID, true
 }
 

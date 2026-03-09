@@ -89,6 +89,7 @@ func resolveStoreReferences(ctx context.Context, cacheStore cache.ListCache, htt
 			slog.Warn("failed to discover Whole Foods store id", "url", url, "error", err)
 			continue
 		}
+		time.Sleep(2 * time.Second) // be nice to the server no rush
 		urlMap[url] = storeID
 		updated = true
 		refs = append(refs, wholefoods.StoreReference{ID: storeID, URL: url})
