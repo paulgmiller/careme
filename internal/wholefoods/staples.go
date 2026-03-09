@@ -18,33 +18,26 @@ type CategoryClient interface {
 	Category(ctx context.Context, queryterm, store string) (*CategoryResponse, error)
 }
 
+type identityProvider struct{}
+
 type StaplesProvider struct {
+	identityProvider
 	client CategoryClient
 }
-
-type StoreIdentityProvider struct{}
 
 func NewStaplesProvider(client CategoryClient) StaplesProvider {
 	return StaplesProvider{client: client}
 }
 
-func NewStoreIdentityProvider() StoreIdentityProvider {
-	return StoreIdentityProvider{}
+func NewStoreIdentityProvider() identityProvider {
+	return identityProvider{}
 }
 
-func (p StaplesProvider) Signature() string {
-	return NewStoreIdentityProvider().Signature()
-}
-
-func (p StaplesProvider) IsID(locationID string) bool {
-	return NewStoreIdentityProvider().IsID(locationID)
-}
-
-func (p StoreIdentityProvider) Signature() string {
+func (p identityProvider) Signature() string {
 	return DefaultStaplesSignature
 }
 
-func (p StoreIdentityProvider) IsID(locationID string) bool {
+func (p identityProvider) IsID(locationID string) bool {
 	_, ok := parseLocationID(locationID)
 	return ok
 }

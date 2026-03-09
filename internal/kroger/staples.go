@@ -20,33 +20,17 @@ type StaplesFilter struct {
 	Frozen bool
 }
 
-type StaplesProvider struct {
-	client ClientWithResponsesInterface
+type identityProvider struct{}
+
+func NewStoreIdentityProvider() identityProvider {
+	return identityProvider{}
 }
 
-type StoreIdentityProvider struct{}
-
-func NewStaplesProvider(client ClientWithResponsesInterface) StaplesProvider {
-	return StaplesProvider{client: client}
-}
-
-func NewStoreIdentityProvider() StoreIdentityProvider {
-	return StoreIdentityProvider{}
-}
-
-func (p StaplesProvider) Signature() string {
-	return NewStoreIdentityProvider().Signature()
-}
-
-func (p StaplesProvider) IsID(locationID string) bool {
-	return NewStoreIdentityProvider().IsID(locationID)
-}
-
-func (p StoreIdentityProvider) Signature() string {
+func (p identityProvider) Signature() string {
 	return DefaultStaplesSignature
 }
 
-func (p StoreIdentityProvider) IsID(locationID string) bool {
+func (p identityProvider) IsID(locationID string) bool {
 	if locationID == "" {
 		return false
 	}
@@ -56,6 +40,16 @@ func (p StoreIdentityProvider) IsID(locationID string) bool {
 		}
 	}
 	return true
+}
+
+// internal?
+type StaplesProvider struct {
+	identityProvider
+	client ClientWithResponsesInterface
+}
+
+func NewStaplesProvider(client ClientWithResponsesInterface) StaplesProvider {
+	return StaplesProvider{client: client}
 }
 
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]Ingredient, error) {

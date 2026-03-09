@@ -3,37 +3,44 @@ package walmart
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"careme/internal/kroger"
 )
 
 const UnsupportedStaplesSignature = "unsupported-staples-v1"
 
-type StaplesProvider struct{}
-
-type StoreIdentityProvider struct{}
+type identityProvider struct{}
 
 func NewStaplesProvider() StaplesProvider {
 	return StaplesProvider{}
 }
 
-func NewStoreIdentityProvider() StoreIdentityProvider {
-	return StoreIdentityProvider{}
+type StaplesProvider struct {
+	identityProvider
 }
 
-func (p StaplesProvider) IsID(locationID string) bool {
-	return NewStoreIdentityProvider().IsID(locationID)
+func NewStoreIdentityProvider() identityProvider {
+	return identityProvider{}
 }
 
-func (p StaplesProvider) Signature() string {
-	return NewStoreIdentityProvider().Signature()
+func (c identityProvider) IsID(locationID string) bool {
+	const prefix = "walmart_"
+	if !strings.HasPrefix(locationID, prefix) {
+		return false
+	}
+	if len(locationID) == len(prefix) {
+		return false
+	}
+	for i := len(prefix); i < len(locationID); i++ {
+		if locationID[i] < '0' || locationID[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
-func (p StoreIdentityProvider) IsID(locationID string) bool {
-	return (&Client{}).IsID(locationID)
-}
-
-func (p StoreIdentityProvider) Signature() string {
+func (p identityProvider) Signature() string {
 	return UnsupportedStaplesSignature
 }
 
