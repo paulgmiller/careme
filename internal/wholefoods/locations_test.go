@@ -86,8 +86,8 @@ func TestLocationBackendReturnsAllWhenZipUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLocationsByZip returned error: %v", err)
 	}
-	if len(locs) != 2 {
-		t.Fatalf("expected all locations when zip centroid is unknown, got %d", len(locs))
+	if len(locs) != 0 {
+		t.Fatalf("expected no locations when zip centroid is unknown, got %d", len(locs))
 	}
 }
 

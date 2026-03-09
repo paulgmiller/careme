@@ -2,6 +2,7 @@ package locations
 
 import (
 	"bytes"
+	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 	_ "embed"
 	"encoding/csv"
@@ -87,7 +88,7 @@ func (z zipCentroidIndex) NearestZIPToCoordinates(lat, lon float64) (string, boo
 	nearestZip := ""
 	nearestDistance := 0.0
 	for zip, centroid := range z.centroids {
-		distance := haversineMiles(lat, lon, centroid.Lat, centroid.Lon)
+		distance := geo.HaversineMiles(lat, lon, centroid.Lat, centroid.Lon)
 		if nearestZip == "" || distance < nearestDistance {
 			nearestZip = zip
 			nearestDistance = distance
