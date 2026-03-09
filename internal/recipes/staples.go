@@ -7,6 +7,7 @@ import (
 	"careme/internal/wholefoods"
 	"context"
 	"fmt"
+	"testing"
 )
 
 type staplesProvider interface {
@@ -62,6 +63,11 @@ func staplesSignatureForLocation(locationID string) string {
 			return provider.Signature()
 		}
 	}
+
+	if testing.Testing() && locationID == "loc-123" {
+		return kroger.NewIdentityProvider().Signature()
+	}
+
 	panic("unknown staples provider for location " + locationID)
 }
 

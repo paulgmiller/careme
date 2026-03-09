@@ -11,12 +11,12 @@ import (
 	"strconv"
 )
 
-var DefaultStaplesSignature = mustJSONSignature(defaultStaples())
+var defaultStaplesSignature = mustJSONSignature(defaultStaples())
 
 type StaplesFilter struct {
-	Term   string
-	Brands []string
-	Frozen bool
+	Term   string   `json:"term,omitempty"`
+	Brands []string `json:"brands,omitempty"`
+	Frozen bool     `json:"frozen,omitempty"`
 }
 
 type identityProvider struct{}
@@ -26,7 +26,7 @@ func NewIdentityProvider() identityProvider {
 }
 
 func (p identityProvider) Signature() string {
-	return DefaultStaplesSignature
+	return defaultStaplesSignature
 }
 
 func (p identityProvider) IsID(locationID string) bool {

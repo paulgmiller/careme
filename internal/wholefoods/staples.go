@@ -14,7 +14,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var DefaultStaplesSignature = mustJSONSignature(defaultStaples())
+var defaultStaplesSignature = mustJSONSignature(defaultStaples())
 
 type CategoryClient interface {
 	Category(ctx context.Context, queryterm, store string) (*CategoryResponse, error)
@@ -36,7 +36,7 @@ func NewIdentityProvider() identityProvider {
 }
 
 func (p identityProvider) Signature() string {
-	return DefaultStaplesSignature
+	return defaultStaplesSignature
 }
 
 func (p identityProvider) IsID(locationID string) bool {
@@ -96,6 +96,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 func defaultStaples() []string {
 	return []string{
 		"fresh-vegetables",
+		"fresh-herbs",
 		"fresh-fruit",
 		"beef",
 		"chicken",
@@ -103,7 +104,11 @@ func defaultStaples() []string {
 		"pork",
 		"shellfish",
 		"goat-lamb-veal",
+		"game-meats",
 	}
+	//rice-grains?
+	//pasta-noodles
+	//red-wine, white-wine, sparkling
 }
 
 func productToIngredient(product Product) kroger.Ingredient {

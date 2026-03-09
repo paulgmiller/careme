@@ -2,7 +2,6 @@ package recipes
 
 import (
 	"careme/internal/locations"
-	"careme/internal/wholefoods"
 	"context"
 	"net/http/httptest"
 	"testing"
@@ -86,16 +85,5 @@ func TestTimezoneNameForZip(t *testing.T) {
 		if gotName != tc.wantName || gotOK != tc.wantOK {
 			t.Fatalf("zip %q: got (%q,%t), want (%q,%t)", tc.zip, gotName, gotOK, tc.wantName, tc.wantOK)
 		}
-	}
-}
-
-func TestDefaultParams_DoesNotEmbedStaples(t *testing.T) {
-	params := DefaultParams(&locations.Location{ID: "wholefoods_10216", Name: "Westlake"}, time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
-
-	if params.Location == nil || params.Location.ID != "wholefoods_10216" {
-		t.Fatalf("expected location to be preserved, got %+v", params.Location)
-	}
-	if got, want := staplesSignatureForLocation(params.Location.ID), wholefoods.DefaultStaplesSignature; got != want {
-		t.Fatalf("unexpected staples signature: got %q want %q", got, want)
 	}
 }

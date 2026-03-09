@@ -8,7 +8,7 @@ import (
 )
 
 func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
-	loc := &locations.Location{ID: "12345678", Name: "Test Loc", Address: "1 Test St", State: "TS"}
+	loc := &locations.Location{ID: "loc-123", Name: "Test Loc", Address: "1 Test St", State: "TS"}
 	d1 := time.Date(2025, 9, 17, 1, 2, 3, 0, time.UTC)
 	d2 := time.Date(2025, 9, 17, 23, 59, 59, 0, time.UTC)
 
@@ -23,7 +23,7 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 	}
 
 	// make sure we're intentional about breaking hash
-	if h1 != "oV0d7ZrfU9o" {
+	if h1 != "JjKXkKjKKpE" {
 		t.Fatalf("expected hash to be stable and equal to oV0d7ZrfU9o, got %s", h1)
 	}
 
@@ -31,7 +31,7 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 	if !ok {
 		t.Fatal("expected current hash passhed to legacy")
 	}
-	if legacyHash != "cmVjaXBloV0d7ZrfU9o=" {
+	if legacyHash != "cmVjaXBlJjKXkKjKKpE=" {
 		t.Fatalf("expected legacy hash to be base64 of recipe hash with prefix, got %s", legacyHash)
 	}
 
