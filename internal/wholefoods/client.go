@@ -14,7 +14,8 @@ import (
 
 const (
 	// DefaultBaseURL is the public Whole Foods Market website origin.
-	DefaultBaseURL = "https://www.wholefoodsmarket.com"
+	DefaultBaseURL       = "https://www.wholefoodsmarket.com"
+	defaultCategoryLimit = 60
 )
 
 // Client calls the public Whole Foods category products endpoint.
@@ -153,10 +154,9 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *Client {
 	}
 }
 
-// Category fetches a category page payload like /api/products/category/beef?store=10216.
-// TODO add pagination
-// /api/products/category/fish?store=10216&limit=60&offset=0
-func (c *Client) Category(ctx context.Context, queryterm, store string) (*CategoryResponse, error) {
+// Category fetches category products and follows limit/offset pagination until
+// the API returns fewer items than the requested page size.
+func (c *Client) Category(ctx context.Context, queryterm, store string) ([]Product, error) {
 	queryterm = strings.TrimSpace(queryterm)
 	if queryterm == "" {
 		return nil, errors.New("queryterm is required")
@@ -172,14 +172,25 @@ func (c *Client) Category(ctx context.Context, queryterm, store string) (*Catego
 		return nil, fmt.Errorf("parse category URL: %w", err)
 	}
 
-	params := endpoint.Query()
-	params.Set("store", store)
-	endpoint.RawQuery = params.Encode()
-	var decoded CategoryResponse
-	if err := c.getJSON(ctx, endpoint.String(), &decoded); err != nil {
-		return nil, err
+	var combined []Product
+	for offset := 0; ; offset += defaultCategoryLimit {
+		params := endpoint.Query()
+		params.Set("store", store)
+		params.Set("limit", fmt.Sprintf("%d", defaultCategoryLimit))
+		params.Set("offset", fmt.Sprintf("%d", offset))
+		endpoint.RawQuery = params.Encode()
+
+		var page CategoryResponse
+		if err := c.getJSON(ctx, endpoint.String(), &page); err != nil {
+			return nil, err
+		}
+
+		combined = append(combined, page.Results...)
+
+		if len(page.Results) < defaultCategoryLimit {
+			return combined, nil
+		}
 	}
-	return &decoded, nil
 }
 
 // StoreSummary fetches a store summary payload like /api/stores/10216/summary.

@@ -2,9 +2,13 @@ package wholefoods
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -38,29 +42,23 @@ func TestCategory_BuildsRequestAndDecodesFixture(t *testing.T) {
 	if got := capturedReq.URL.Query().Get("store"); got != "10216" {
 		t.Fatalf("unexpected store query value: %q", got)
 	}
+	if got := capturedReq.URL.Query().Get("limit"); got != "60" {
+		t.Fatalf("unexpected limit query value: %q", got)
+	}
+	if got := capturedReq.URL.Query().Get("offset"); got != "0" {
+		t.Fatalf("unexpected offset query value: %q", got)
+	}
 	if got := capturedReq.Header.Get("Accept"); got != "application/json" {
 		t.Fatalf("unexpected Accept header: %q", got)
 	}
 
-	if len(resp.Facets) != 3 {
-		t.Fatalf("unexpected facets count: %d", len(resp.Facets))
+	if len(resp) != 18 {
+		t.Fatalf("unexpected results count: %d", len(resp))
 	}
-	if len(resp.Breadcrumb) != 2 {
-		t.Fatalf("unexpected breadcrumb count: %d", len(resp.Breadcrumb))
-	}
-	if got := resp.Breadcrumb[1].Slug; got != "beef" {
-		t.Fatalf("unexpected breadcrumb slug: %q", got)
-	}
-	if got := resp.Meta.Total.Value; got != 18 {
-		t.Fatalf("unexpected total value: %d", got)
-	}
-	if len(resp.Results) != 18 {
-		t.Fatalf("unexpected results count: %d", len(resp.Results))
-	}
-	if got := resp.Results[0].Name; got != "Organic Ground Beef 93% Lean/7% Fat, 16 OZ" {
+	if got := resp[0].Name; got != "Organic Ground Beef 93% Lean/7% Fat, 16 OZ" {
 		t.Fatalf("unexpected first result name: %q", got)
 	}
-	if got := resp.Results[14].SalePrice; got != 12.44 {
+	if got := resp[14].SalePrice; got != 12.44 {
 		t.Fatalf("unexpected sale price: %v", got)
 	}
 }
@@ -97,6 +95,77 @@ func TestCategory_StatusError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "status 502") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCategory_PaginatesUntilShortPage(t *testing.T) {
+	t.Parallel()
+
+	var offsets []int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
+		if err != nil {
+			t.Fatalf("parse offset: %v", err)
+		}
+		offsets = append(offsets, offset)
+
+		limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+		if err != nil {
+			t.Fatalf("parse limit: %v", err)
+		}
+		if limit != defaultCategoryLimit {
+			t.Fatalf("unexpected limit: %d", limit)
+		}
+
+		pageSize := limit
+		if offset >= limit*2 {
+			pageSize = 5
+		}
+
+		results := make([]Product, 0, pageSize)
+		for i := 0; i < pageSize; i++ {
+			n := offset + i
+			results = append(results, Product{
+				Name:  fmt.Sprintf("Product %d", n),
+				Slug:  fmt.Sprintf("product-%d", n),
+				Brand: "Whole Foods Market",
+				Store: 10216,
+			})
+		}
+
+		resp := CategoryResponse{
+			Breadcrumb: []Breadcrumb{{Label: "Meat", Slug: "meat"}, {Label: "Fish", Slug: "fish"}},
+			Meta: Meta{
+				Total: Total{Value: limit*2 + 5, Relation: "eq"},
+			},
+			Results: results,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClientWithBaseURL(server.URL, server.Client())
+
+	resp, err := client.Category(context.Background(), "fish", "10216")
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+
+	if got, want := offsets, []int{0, defaultCategoryLimit, defaultCategoryLimit * 2}; !slices.Equal(got, want) {
+		t.Fatalf("unexpected offsets: got %v want %v", got, want)
+	}
+	if got, want := len(resp), defaultCategoryLimit*2+5; got != want {
+		t.Fatalf("unexpected result count: got %d want %d", got, want)
+	}
+	if got := resp[0].Slug; got != "product-0" {
+		t.Fatalf("unexpected first slug: %q", got)
+	}
+	if got := resp[len(resp)-1].Slug; got != "product-124" {
+		t.Fatalf("unexpected last slug: %q", got)
 	}
 }
 
