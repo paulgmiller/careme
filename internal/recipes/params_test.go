@@ -88,13 +88,13 @@ func TestTimezoneNameForZip(t *testing.T) {
 	}
 }
 
-func TestDefaultParams_UsesWholeFoodsStaplesForWholeFoodsLocations(t *testing.T) {
+func TestDefaultParams_DoesNotEmbedStaples(t *testing.T) {
 	params := DefaultParams(&locations.Location{ID: "wholefoods_10216", Name: "Westlake"}, time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
 
-	if len(params.Staples) != len(WholeFoodsStaples()) {
-		t.Fatalf("expected %d whole foods staples, got %d", len(WholeFoodsStaples()), len(params.Staples))
+	if params.Location == nil || params.Location.ID != "wholefoods_10216" {
+		t.Fatalf("expected location to be preserved, got %+v", params.Location)
 	}
-	if got, want := params.Staples[0].Term, "vegetables"; got != want {
-		t.Fatalf("unexpected first whole foods staple: got %q want %q", got, want)
+	if got, want := staplesSignatureForLocation(params.Location), "wholefoods-staples-v1"; got != want {
+		t.Fatalf("unexpected staples signature: got %q want %q", got, want)
 	}
 }

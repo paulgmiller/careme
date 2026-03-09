@@ -4,7 +4,6 @@ import (
 	"careme/internal/cache"
 	"careme/internal/kroger"
 	"careme/internal/locations"
-	"careme/internal/wholefoods"
 	"context"
 	"slices"
 	"testing"
@@ -17,7 +16,11 @@ type stubStaplesProvider struct {
 	calls       int
 }
 
-func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ *locations.Location, _ []filter) ([]kroger.Ingredient, error) {
+func (s *stubStaplesProvider) Signature() string {
+	return "stub-staples-v1"
+}
+
+func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ string) ([]kroger.Ingredient, error) {
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
@@ -25,18 +28,18 @@ func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ *locations.Locat
 	return slices.Clone(s.ingredients), nil
 }
 
-type stubWholeFoodsClient struct {
-	results map[string][]wholefoods.Product
-	errs    map[string]error
-	calls   []string
+type stubRoutingStaplesProvider struct {
+	ingredients []kroger.Ingredient
+	err         error
+	calls       int
 }
 
-func (s *stubWholeFoodsClient) Category(_ context.Context, queryterm, store string) (*wholefoods.CategoryResponse, error) {
-	s.calls = append(s.calls, store+":"+queryterm)
-	if err := s.errs[queryterm]; err != nil {
-		return nil, err
+func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ *locations.Location) ([]kroger.Ingredient, error) {
+	s.calls++
+	if s.err != nil {
+		return nil, s.err
 	}
-	return &wholefoods.CategoryResponse{Results: slices.Clone(s.results[queryterm])}, nil
+	return slices.Clone(s.ingredients), nil
 }
 
 func TestRoutingStaplesProvider_SelectsProviderByLocationID(t *testing.T) {
@@ -47,14 +50,14 @@ func TestRoutingStaplesProvider_SelectsProviderByLocationID(t *testing.T) {
 		wholeFoods: wholeFoodsProvider,
 	}
 
-	if _, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "70100023"}, []filter{{Term: "fresh produce"}}); err != nil {
+	if _, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "70100023"}); err != nil {
 		t.Fatalf("FetchStaples kroger returned error: %v", err)
 	}
 	if krogerProvider.calls != 1 || wholeFoodsProvider.calls != 0 {
 		t.Fatalf("expected kroger provider to be selected, got kroger=%d wholefoods=%d", krogerProvider.calls, wholeFoodsProvider.calls)
 	}
 
-	if _, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "wholefoods_10216"}, []filter{{Term: "vegetables"}}); err != nil {
+	if _, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "wholefoods_10216"}); err != nil {
 		t.Fatalf("FetchStaples whole foods returned error: %v", err)
 	}
 	if krogerProvider.calls != 1 || wholeFoodsProvider.calls != 1 {
@@ -68,7 +71,7 @@ func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) 
 		wholeFoods: &stubStaplesProvider{},
 	}
 
-	_, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "walmart_3098"}, []filter{{Term: "produce"}})
+	_, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "walmart_3098"})
 	if err == nil {
 		t.Fatal("expected unsupported backend error")
 	}
@@ -77,56 +80,9 @@ func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) 
 	}
 }
 
-func TestWholeFoodsStaplesProvider_MapsProductsToIngredients(t *testing.T) {
-	client := &stubWholeFoodsClient{
-		results: map[string][]wholefoods.Product{
-			"vegetables": {
-				{
-					Name:         "Organic Asparagus",
-					Slug:         "organic-asparagus",
-					Brand:        "Whole Foods Market",
-					Store:        10216,
-					UOM:          "1 lb",
-					RegularPrice: 5.99,
-					SalePrice:    4.49,
-				},
-			},
-		},
-	}
-	provider := wholeFoodsStaplesProvider{client: client}
-
-	got, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "wholefoods_10216"}, []filter{{Term: "vegetables"}})
-	if err != nil {
-		t.Fatalf("FetchStaples returned error: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("expected 1 ingredient, got %d", len(got))
-	}
-
-	ingredient := got[0]
-	if ingredient.Description == nil || *ingredient.Description != "Organic Asparagus" {
-		t.Fatalf("unexpected description: %+v", ingredient.Description)
-	}
-	if ingredient.Brand == nil || *ingredient.Brand != "Whole Foods Market" {
-		t.Fatalf("unexpected brand: %+v", ingredient.Brand)
-	}
-	if ingredient.Size == nil || *ingredient.Size != "1 lb" {
-		t.Fatalf("unexpected size: %+v", ingredient.Size)
-	}
-	if ingredient.ProductId == nil || *ingredient.ProductId != "10216:organic-asparagus" {
-		t.Fatalf("unexpected product id: %+v", ingredient.ProductId)
-	}
-	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != float32(5.99) {
-		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
-	}
-	if ingredient.PriceSale == nil || *ingredient.PriceSale != float32(4.49) {
-		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
-	}
-}
-
 func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
-	provider := &stubStaplesProvider{
+	provider := &stubRoutingStaplesProvider{
 		ingredients: []kroger.Ingredient{
 			{Description: loPtr("Honeycrisp Apple")},
 			{Description: loPtr("Honeycrisp Apple")},
@@ -140,7 +96,6 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	params := &generatorParams{
 		Location: &locations.Location{ID: "wholefoods_10216", Name: "Westlake"},
 		Date:     time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC),
-		Staples:  WholeFoodsStaples(),
 	}
 
 	got, err := g.GetStaples(t.Context(), params)
@@ -171,17 +126,5 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	}
 	if len(gotAgain) != 2 {
 		t.Fatalf("expected cached results, got %d", len(gotAgain))
-	}
-}
-
-func TestWholeFoodsStaplesProvider_InvalidLocationID(t *testing.T) {
-	provider := wholeFoodsStaplesProvider{client: &stubWholeFoodsClient{}}
-
-	_, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "10216"}, []filter{{Term: "vegetables"}})
-	if err == nil {
-		t.Fatalf("expected invalid location error, got %v", err)
-	}
-	if got, want := err.Error(), `invalid whole foods location id "10216"`; got != want {
-		t.Fatalf("unexpected error: got %q want %q", got, want)
 	}
 }

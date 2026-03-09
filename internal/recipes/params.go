@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"careme/internal/ai"
 	"careme/internal/locations"
-	"careme/internal/wholefoods"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -31,7 +29,6 @@ var nowFn = time.Now
 type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
 	Date     time.Time           `json:"date,omitempty"`
-	Staples  []filter            `json:"staples,omitempty"`
 	// People       int
 	//per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
@@ -51,7 +48,6 @@ func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 		Date:     date, // shave time
 		Location: l,
 		// People:   2,
-		Staples: DefaultStaplesForLocation(l),
 	}
 }
 
@@ -65,8 +61,7 @@ func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	bytes := lo.Must(json.Marshal(g.Staples)) //should we remove this so this is stable when we change staples?
-	lo.Must(fnv.Write(bytes))
+	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location)))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
@@ -83,8 +78,7 @@ func (g *generatorParams) LocationHash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	bytes := lo.Must(json.Marshal(g.Staples)) // excited fro this to break in some weird way
-	lo.Must(fnv.Write(bytes))
+	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location)))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
@@ -131,69 +125,6 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
 	return p, nil
-}
-
-func DefaultStaples() []filter {
-	return append(Produce(), []filter{
-		{
-			Term:   "beef",
-			Brands: []string{"Simple Truth", "Kroger"},
-		},
-		{
-			Term:   "chicken",
-			Brands: []string{"Foster Farms", "Draper Valley", "Simple Truth"}, //"Simple Truth"? do these vary in every state?
-		},
-		{
-			Term: "fish",
-		},
-		{
-			Term:   "pork", // Kroger?
-			Brands: []string{"PORK", "Kroger", "Harris Teeter"},
-		},
-		{
-			Term:   "shellfish",
-			Brands: []string{"Sand Bar", "Kroger"},
-			Frozen: true, // remove after 500 sadness?
-		},
-		{
-			Term:   "lamb",
-			Brands: []string{"Simple Truth"},
-		},
-	}...)
-}
-
-func DefaultStaplesForLocation(location *locations.Location) []filter {
-	if location != nil && strings.HasPrefix(location.ID, wholefoods.LocationIDPrefix) {
-		return WholeFoodsStaples()
-	}
-	return DefaultStaples()
-}
-
-func Produce() []filter {
-	return []filter{
-		{
-			Term:   "fresh vegatable",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "fresh produce",
-			Brands: []string{"*"},
-		},
-	}
-
-}
-
-func WholeFoodsStaples() []filter {
-	return []filter{
-		{Term: "vegetables"},
-		{Term: "fruit"},
-		{Term: "beef"},
-		{Term: "chicken"},
-		{Term: "fish"},
-		{Term: "pork"},
-		{Term: "shellfish"},
-		{Term: "lamb"},
-	}
 }
 
 func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {

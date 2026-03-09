@@ -98,7 +98,7 @@ type produceFilterStats struct {
 
 func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, int, error) {
 
-	filters := recipes.Produce()
+	filters := kroger.ProduceFilters()
 	type filterResult struct {
 		filter      string
 		ingredients []kroger.Ingredient
@@ -112,7 +112,7 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 		i, filter := i, filter
 		go func() {
 			defer wg.Done()
-			filterIngredients, err := g.GetIngredients(ctx, locationID, filter, 0)
+			filterIngredients, err := g.GetIngredients(ctx, locationID, recipes.Filter(filter.Term, filter.Brands, filter.Frozen), 0)
 			results[i] = filterResult{
 				filter:      filter.Term,
 				ingredients: filterIngredients,
