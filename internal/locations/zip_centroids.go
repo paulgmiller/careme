@@ -31,24 +31,41 @@ var (
 	//
 	//go:embed zip_centroids.csv
 	zipCentroidsCSV []byte
+
+	// zip_centroids_backfill.csv contains ZIP centroids missing from the Census
+	// ZCTA dataset and backfilled from:
+	// https://raw.githubusercontent.com/millbj92/US-Zip-Codes-JSON/refs/heads/master/USCities.json
+	//
+	//go:embed zip_centroids_backfill.csv
+	zipCentroidsBackfillCSV []byte
 )
 
 func LoadCentroids() zipCentroidIndex {
-	zci, err := parseZipCentroidsCSV(zipCentroidsCSV)
+	centroids, err := parseZipCentroidsCSV(zipCentroidsCSV)
 	if err != nil {
 		panic("failed to parse embedded zip centroids dataset: " + err.Error())
 	}
-	return zci
+	backfill, err := parseZipCentroidsCSV(zipCentroidsBackfillCSV)
+	if err != nil {
+		panic("failed to parse embedded zip centroid backfill dataset: " + err.Error())
+	}
+	for zip, centroid := range backfill {
+		if _, ok := centroids[zip]; ok {
+			continue
+		}
+		centroids[zip] = centroid
+	}
+	return zipCentroidIndex{centroids: centroids}
 }
 
-func parseZipCentroidsCSV(raw []byte) (zipCentroidIndex, error) {
+func parseZipCentroidsCSV(raw []byte) (map[string]locationtypes.ZipCentroid, error) {
 	reader := csv.NewReader(bytes.NewReader(raw))
 	rows, err := reader.ReadAll()
 	if err != nil {
-		return zipCentroidIndex{}, err
+		return nil, err
 	}
 	if len(rows) == 0 {
-		return zipCentroidIndex{}, errors.New("empty centroid dataset")
+		return nil, errors.New("empty centroid dataset")
 	}
 
 	data := make(map[string]locationtypes.ZipCentroid, len(rows)-1)
@@ -67,7 +84,7 @@ func parseZipCentroidsCSV(raw []byte) (zipCentroidIndex, error) {
 		}
 		data[row[0]] = locationtypes.ZipCentroid{Lat: lat, Lon: lon}
 	}
-	return zipCentroidIndex{centroids: data}, nil
+	return data, nil
 }
 
 func (z zipCentroidIndex) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
