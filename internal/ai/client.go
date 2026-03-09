@@ -339,7 +339,7 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 		var prevRecipesMsg strings.Builder
 		prevRecipesMsg.WriteString("Avoid recipes similar to these from the past 2 weeks:\n")
 		for _, recipe := range lastRecipes {
-			prevRecipesMsg.WriteString(fmt.Sprintf("%s\n", recipe))
+			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
 		}
 		messages = append(messages, user(prevRecipesMsg.String()))
 	}

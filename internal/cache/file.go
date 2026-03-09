@@ -58,6 +58,10 @@ func NewFileCache(dir string) *FileCache {
 
 func (fc *FileCache) List(_ context.Context, prefix string, _ string) ([]string, error) {
 	var keys []string
+	if _, err := os.Stat(fc.Dir); os.IsNotExist(err) {
+		return nil, nil
+	}
+
 	err := filepath.Walk(fc.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err

@@ -132,12 +132,16 @@ func (fc *BlobCache) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// TODO take a config? let it set container or directory?
+// Legacy probably want to use Ensure cache for new ones.
 func MakeCache() (ListCache, error) {
+	return EnsureCache("recipes")
+}
+
+func EnsureCache(container string) (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
 		log.Println("Using Azure Blob Storage for cache")
-		return NewBlobCache("recipes")
+		return NewBlobCache(container)
 	}
-	return NewFileCache("cache"), nil
+	return NewFileCache(container), nil
 }

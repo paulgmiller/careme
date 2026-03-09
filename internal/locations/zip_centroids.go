@@ -2,6 +2,8 @@ package locations
 
 import (
 	"bytes"
+	"careme/internal/locations/geo"
+	locationtypes "careme/internal/locations/types"
 	_ "embed"
 	"encoding/csv"
 	"errors"
@@ -9,13 +11,8 @@ import (
 	"strings"
 )
 
-type ZipCentroid struct {
-	Lat float64
-	Lon float64
-}
-
 type zipCentroidIndex struct {
-	centroids map[string]ZipCentroid
+	centroids map[string]locationtypes.ZipCentroid
 }
 
 func (z zipCentroidIndex) Len() int {
@@ -54,7 +51,7 @@ func parseZipCentroidsCSV(raw []byte) (zipCentroidIndex, error) {
 		return zipCentroidIndex{}, errors.New("empty centroid dataset")
 	}
 
-	data := make(map[string]ZipCentroid, len(rows)-1)
+	data := make(map[string]locationtypes.ZipCentroid, len(rows)-1)
 	for i := 1; i < len(rows); i++ {
 		row := rows[i]
 		if len(row) < 3 {
@@ -68,15 +65,15 @@ func parseZipCentroidsCSV(raw []byte) (zipCentroidIndex, error) {
 		if err != nil {
 			continue
 		}
-		data[row[0]] = ZipCentroid{Lat: lat, Lon: lon}
+		data[row[0]] = locationtypes.ZipCentroid{Lat: lat, Lon: lon}
 	}
 	return zipCentroidIndex{centroids: data}, nil
 }
 
-func (z zipCentroidIndex) ZipCentroidByZIP(zip string) (ZipCentroid, bool) {
+func (z zipCentroidIndex) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
 	zip5, ok := normalizeZIP(zip)
 	if !ok {
-		return ZipCentroid{}, false
+		return locationtypes.ZipCentroid{}, false
 	}
 
 	centroid, ok := z.centroids[zip5]
@@ -91,7 +88,7 @@ func (z zipCentroidIndex) NearestZIPToCoordinates(lat, lon float64) (string, boo
 	nearestZip := ""
 	nearestDistance := 0.0
 	for zip, centroid := range z.centroids {
-		distance := haversineMiles(lat, lon, centroid.Lat, centroid.Lon)
+		distance := geo.HaversineMiles(lat, lon, centroid.Lat, centroid.Lon)
 		if nearestZip == "" || distance < nearestDistance {
 			nearestZip = zip
 			nearestDistance = distance

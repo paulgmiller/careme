@@ -8,12 +8,13 @@ import (
 )
 
 type Config struct {
-	AI      AIConfig      `json:"ai"`
-	Kroger  KrogerConfig  `json:"kroger"`
-	Walmart WalmartConfig `json:"walmart"`
-	Mocks   MockConfig    `json:"mocks"`
-	Clerk   ClerkConfig   `json:"clerk"`
-	Admin   AdminConfig   `json:"admin"`
+	AI         AIConfig         `json:"ai"`
+	Kroger     KrogerConfig     `json:"kroger"`
+	Walmart    WalmartConfig    `json:"walmart"`
+	WholeFoods WholeFoodsConfig `json:"wholefoods"`
+	Mocks      MockConfig       `json:"mocks"`
+	Clerk      ClerkConfig      `json:"clerk"`
+	Admin      AdminConfig      `json:"admin"`
 }
 
 type AIConfig struct {
@@ -43,6 +44,14 @@ func (c *ClerkConfig) IsEnabled() bool {
 
 type AdminConfig struct {
 	Emails []string `json:"emails"`
+}
+
+type WholeFoodsConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *WholeFoodsConfig) IsEnabled() bool {
+	return c.Enable
 }
 
 // Config defines the required Walmart affiliate credentials and client options.
@@ -98,6 +107,9 @@ func Load() (*Config, error) {
 		},
 		Admin: AdminConfig{
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+		},
+		WholeFoods: WholeFoodsConfig{
+			Enable: os.Getenv("WHOLEFOODS_ENABLE") != "",
 		},
 		Walmart: WalmartConfig{
 			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),

@@ -5,11 +5,13 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
+	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"careme/internal/walmart"
+	"careme/internal/wholefoods"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,7 +19,6 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
-	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -64,7 +65,7 @@ type locationBackend interface {
 type Location = locationtypes.Location
 
 type centroidByZip interface {
-	ZipCentroidByZIP(zip string) (ZipCentroid, bool)
+	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
 func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGetter, error) {
@@ -90,6 +91,19 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 			return nil, fmt.Errorf("failed to create Walmart client: %w", err)
 		}
 		backends = append(backends, wclient)
+	}
+	if cfg.WholeFoods.IsEnabled() {
+		slog.Info("initializing Whole Foods location backend")
+		listCache, err := cache.EnsureCache(wholefoods.Container)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Whole Foods list cache: %w", err)
+		}
+
+		wfBackend, err := wholefoods.NewLocationBackend(context.Background(), listCache, centroids)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Whole Foods backend: %w", err)
+		}
+		backends = append(backends, wfBackend)
 	}
 	return &locationStorage{
 		client:       backends,
@@ -141,13 +155,14 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		wg.Add(1)
 		go func(backend locationBackend) {
 			defer wg.Done()
+			start := time.Now()
 			locations, err := backend.GetLocationsByZip(ctx, zipcode)
 			if err != nil {
 				slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "zip", zipcode)
 				errors <- err
 				return
 			}
-			slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations))
+			slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
 			results <- locations
 		}(backend)
 	}
@@ -244,7 +259,7 @@ func (l *locationStorage) storeLocationIfMissing(loc Location) error {
 	return nil
 }
 
-func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid ZipCentroid, zipCentroids centroidByZip) {
+func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid locationtypes.ZipCentroid, zipCentroids centroidByZip) {
 	sort.SliceStable(locations, func(i, j int) bool {
 		leftDistance := locationDistanceTo(requestedCentroid, locations[i], zipCentroids)
 		rightDistance := locationDistanceTo(requestedCentroid, locations[j], zipCentroids)
@@ -252,9 +267,9 @@ func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid
 	})
 }
 
-func locationDistanceTo(target ZipCentroid, loc Location, zipCentroids centroidByZip) float64 {
+func locationDistanceTo(target locationtypes.ZipCentroid, loc Location, zipCentroids centroidByZip) float64 {
 	lat, lon := locationCoordinates(loc, zipCentroids)
-	return haversineMiles(target.Lat, target.Lon, lat, lon)
+	return geo.HaversineMiles(target.Lat, target.Lon, lat, lon)
 }
 
 func locationCoordinates(loc Location, zipCentroids centroidByZip) (float64, float64) {
@@ -265,29 +280,6 @@ func locationCoordinates(loc Location, zipCentroids centroidByZip) (float64, flo
 	//do we actualyl want to fall back?
 	centroid, _ := zipCentroids.ZipCentroidByZIP(loc.ZipCode)
 	return centroid.Lat, centroid.Lon
-}
-
-// haversineMiles returns great-circle distance between two latitude/longitude
-// points in statute miles. Inputs are decimal degrees.
-func haversineMiles(lat1, lon1, lat2, lon2 float64) float64 {
-	const earthRadiusMiles = 3958.7613
-	toRadians := math.Pi / 180.0
-
-	// Convert deltas and absolute latitudes to radians for trig functions.
-	dLat := (lat2 - lat1) * toRadians
-	dLon := (lon2 - lon1) * toRadians
-	lat1Rad := lat1 * toRadians
-	lat2Rad := lat2 * toRadians
-
-	// Standard Haversine formula:
-	// a = sin²(Δφ/2) + cos φ1 * cos φ2 * sin²(Δλ/2)
-	// c = 2 * atan2(√a, √(1-a))
-	// d = R * c
-	sinHalfDLat := math.Sin(dLat / 2.0)
-	sinHalfDLon := math.Sin(dLon / 2.0)
-	a := sinHalfDLat*sinHalfDLat + math.Cos(lat1Rad)*math.Cos(lat2Rad)*sinHalfDLon*sinHalfDLon
-	c := 2.0 * math.Atan2(math.Sqrt(a), math.Sqrt(1.0-a))
-	return earthRadiusMiles * c
 }
 
 func (l *locationServer) Ready(ctx context.Context) error {
