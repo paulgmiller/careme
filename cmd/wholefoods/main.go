@@ -54,6 +54,7 @@ func main() {
 			slog.Warn("failed to cache Whole Foods store summary", "store_id", ref.ID, "error", err)
 			continue
 		}
+		time.Sleep(5 * time.Second) // be nice to the server no rush here
 		synced++
 	}
 
@@ -61,12 +62,8 @@ func main() {
 }
 
 func resolveStoreReferences(ctx context.Context, cacheStore cache.ListCache, httpClient *http.Client, sitemapURL string) ([]wholefoods.StoreReference, error) {
-
 	urlMap, err := wholefoods.LoadStoreURLMap(ctx, cacheStore)
-	switch {
-	case err == nil && len(urlMap) > 0:
-		return wholefoods.StoreReferencesFromURLMap(urlMap), nil
-	case err != nil && !errors.Is(err, cache.ErrNotFound):
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return nil, err
 	}
 
@@ -75,17 +72,34 @@ func resolveStoreReferences(ctx context.Context, cacheStore cache.ListCache, htt
 		return nil, err
 	}
 
+	if urlMap == nil {
+		urlMap = make(map[string]string, len(urls))
+	}
+
 	refs := make([]wholefoods.StoreReference, 0, len(urls))
+	var updated bool
 	for _, url := range urls {
+		if storeID := urlMap[url]; storeID != "" {
+			refs = append(refs, wholefoods.StoreReference{ID: storeID, URL: url})
+			continue
+		}
+
 		storeID, err := wholefoods.FetchStoreIDFromPage(ctx, httpClient, url)
 		if err != nil {
 			slog.Warn("failed to discover Whole Foods store id", "url", url, "error", err)
 			continue
 		}
+		urlMap[url] = storeID
+		updated = true
 		refs = append(refs, wholefoods.StoreReference{ID: storeID, URL: url})
 	}
-	if err := wholefoods.SaveStoreURLMap(ctx, cacheStore, refs); err != nil {
-		return nil, err
+
+	//TOD remove stores from url map not in itemap?
+
+	if updated {
+		if err := wholefoods.SaveStoreURLMap(ctx, cacheStore, refs); err != nil {
+			return nil, err
+		}
 	}
 	return refs, nil
 }

@@ -94,7 +94,7 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 	}
 	if cfg.WholeFoods.IsEnabled() {
 		slog.Info("initializing Whole Foods location backend")
-		listCache, err := cache.NewBlobCache("wholefoods")
+		listCache, err := cache.EnsureCache("wholefoods")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Whole Foods list cache: %w", err)
 		}

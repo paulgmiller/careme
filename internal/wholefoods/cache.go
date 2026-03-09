@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -96,13 +95,8 @@ func LoadStoreURLMap(ctx context.Context, c cache.Cache) (map[string]string, err
 		_ = reader.Close()
 	}()
 
-	raw, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("read store url map cache: %w", err)
-	}
-
 	var urlMap map[string]string
-	if err := json.Unmarshal(raw, &urlMap); err != nil {
+	if err := json.NewDecoder(reader).Decode(&urlMap); err != nil {
 		return nil, fmt.Errorf("decode store url map cache: %w", err)
 	}
 	return urlMap, nil
@@ -116,12 +110,6 @@ func StoreReferencesFromURLMap(urlMap map[string]string) []StoreReference {
 		}
 		refs = append(refs, StoreReference{ID: id, URL: url})
 	}
-	sort.Slice(refs, func(i, j int) bool {
-		if refs[i].ID == refs[j].ID {
-			return refs[i].URL < refs[j].URL
-		}
-		return refs[i].ID < refs[j].ID
-	})
 	return refs
 }
 
@@ -173,12 +161,9 @@ func LoadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 	summaries = lo.Compact(summaries)
 
 	if len(summaries) == 0 {
-		return nil, fmt.Errorf("failed to load locations")
+		slog.WarnContext(ctx, "No wholefoods store summaries found")
 	}
 
-	sort.Slice(summaries, func(i, j int) bool {
-		return summaries[i].StoreID < summaries[j].StoreID
-	})
 	return summaries, nil
 }
 
