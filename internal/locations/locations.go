@@ -155,13 +155,14 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		wg.Add(1)
 		go func(backend locationBackend) {
 			defer wg.Done()
+			start := time.Now()
 			locations, err := backend.GetLocationsByZip(ctx, zipcode)
 			if err != nil {
 				slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "zip", zipcode)
 				errors <- err
 				return
 			}
-			slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations))
+			slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
 			results <- locations
 		}(backend)
 	}
