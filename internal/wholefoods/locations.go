@@ -111,9 +111,3 @@ func parseLocationID(locationID string) (string, bool) {
 	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
 	return LocationIDPrefix + storeID, true
 }
-
-func copyLocations(in []locationtypes.Location) []locationtypes.Location {
-	out := make([]locationtypes.Location, len(in))
-	copy(out, in)
-	return out
-}

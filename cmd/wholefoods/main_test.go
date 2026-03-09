@@ -19,9 +19,13 @@ func TestResolveStoreReferencesFillsMissingCachedSitemapEntries(t *testing.T) {
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/sitemap.xml":
-			fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/stores/westlake</loc></url><url><loc>%s/stores/greenville</loc></url></urlset>`, server.URL, server.URL)
+			if _, err := fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/stores/westlake</loc></url><url><loc>%s/stores/greenville</loc></url></urlset>`, server.URL, server.URL); err != nil {
+				t.Fatalf("Fprintf returned error: %v", err)
+			}
 		case "/stores/greenville":
-			fmt.Fprint(w, `<div store-id="10224"></div>`)
+			if _, err := fmt.Fprint(w, `<div store-id="10224"></div>`); err != nil {
+				t.Fatalf("Fprint returned error: %v", err)
+			}
 		default:
 			http.NotFound(w, r)
 		}
@@ -70,10 +74,14 @@ func TestResolveStoreReferencesChecksSitemapEvenWithCompleteCache(t *testing.T) 
 		switch r.URL.Path {
 		case "/sitemap.xml":
 			sitemapRequests.Add(1)
-			fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/stores/westlake</loc></url></urlset>`, server.URL)
+			if _, err := fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/stores/westlake</loc></url></urlset>`, server.URL); err != nil {
+				t.Fatalf("Fprintf returned error: %v", err)
+			}
 		case "/stores/westlake":
 			pageRequests.Add(1)
-			fmt.Fprint(w, `<div store-id="10216"></div>`)
+			if _, err := fmt.Fprint(w, `<div store-id="10216"></div>`); err != nil {
+				t.Fatalf("Fprint returned error: %v", err)
+			}
 		default:
 			http.NotFound(w, r)
 		}
