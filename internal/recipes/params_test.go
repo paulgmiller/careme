@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"careme/internal/locations"
+	"careme/internal/wholefoods"
 	"context"
 	"net/http/httptest"
 	"testing"
@@ -94,7 +95,7 @@ func TestDefaultParams_DoesNotEmbedStaples(t *testing.T) {
 	if params.Location == nil || params.Location.ID != "wholefoods_10216" {
 		t.Fatalf("expected location to be preserved, got %+v", params.Location)
 	}
-	if got, want := staplesSignatureForLocation(params.Location.ID), "wholefoods-staples-v1"; got != want {
+	if got, want := staplesSignatureForLocation(params.Location.ID), wholefoods.DefaultStaplesSignature; got != want {
 		t.Fatalf("unexpected staples signature: got %q want %q", got, want)
 	}
 }

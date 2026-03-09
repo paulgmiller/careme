@@ -5,6 +5,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
@@ -533,6 +534,14 @@ func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
 	return nil
+}
+
+func (c *captureQuestionGenerator) GetIngredients(ctx context.Context, location string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
+	_ = ctx
+	_ = location
+	_ = searchTerm
+	_ = skip
+	return nil, nil
 }
 
 func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {

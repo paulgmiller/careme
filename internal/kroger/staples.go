@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -20,7 +21,7 @@ type StaplesFilter struct {
 
 type identityProvider struct{}
 
-func NewStoreIdentityProvider() identityProvider {
+func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
@@ -52,8 +53,16 @@ func NewStaplesProvider(client ClientWithResponsesInterface) StaplesProvider {
 
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]Ingredient, error) {
 	return parallelism.Flatten(defaultStaples(), func(category StaplesFilter) ([]Ingredient, error) {
-		return SearchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
+
+		ingredients, err := SearchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
+		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category.Term, "location", locationID)
+		return ingredients, err
 	})
+
+}
+
+func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]Ingredient, error) {
+	return SearchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
 }
 
 func SearchIngredients(ctx context.Context, client ClientWithResponsesInterface, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
@@ -104,9 +113,24 @@ func SearchIngredients(ctx context.Context, client ClientWithResponsesInterface,
 				Categories:   product.Categories,
 				AisleNumber:  aisle,
 			})
+
+			//DO we care about these?
+			/*"taxonomies": [
+			{
+			"department": {},
+			"commodity": {},
+			"subCommodity": {}
+			}
+			],*/
+			//Taxonomy:  product.,
+			// CountryOrigin: product.CountryOrigin,
+			// Favorite: item.Favorite,
+			// InventoryStockLevel: item.InventoryStockLevel),
 		}
 	}
 
+	// recursion is pretty dumb pagination
+	// kroger limites us to 250
 	if len(*products.JSON200.Data) == limit && skip < 250 {
 		page, err := SearchIngredients(ctx, client, locationID, term, brands, frozen, skip+limit)
 		if err == nil {

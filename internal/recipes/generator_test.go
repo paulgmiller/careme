@@ -10,14 +10,6 @@ import (
 	"time"
 )
 
-type panicKrogerClient struct {
-	kroger.ClientWithResponsesInterface
-}
-
-func (panicKrogerClient) ProductSearchWithResponse(ctx context.Context, params *kroger.ProductSearchParams, reqEditors ...kroger.RequestEditorFn) (*kroger.ProductSearchResponse, error) {
-	panic("unexpected call to ProductSearchWithResponse")
-}
-
 type captureWineQuestionAIClient struct {
 	question    string
 	answer      string
@@ -89,9 +81,8 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 		},
 	}
 	g := &Generator{
-		io:           IO(cacheStore),
-		aiClient:     aiStub,
-		krogerClient: panicKrogerClient{},
+		io:       IO(cacheStore),
+		aiClient: aiStub,
 	}
 
 	got, err := g.PickAWine(t.Context(), conversation, location, ai.Recipe{

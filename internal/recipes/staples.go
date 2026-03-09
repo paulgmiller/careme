@@ -11,9 +11,10 @@ import (
 
 type staplesProvider interface {
 	FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error)
+	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
 }
 
-type storeIdentityProvider interface {
+type identityProvider interface {
 	IsID(locationID string) bool
 	Signature() string
 }
@@ -26,6 +27,7 @@ type backendStaplesProvider interface {
 	IsID(locationID string) bool
 	Signature() string
 	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
+	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
 }
 
 func newStaplesProvider(krogerClient kroger.ClientWithResponsesInterface) staplesProvider {
@@ -46,8 +48,16 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, location *loca
 	return provider.FetchStaples(ctx, location.ID)
 }
 
+func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
+	provider, err := p.providerForLocation(locationID)
+	if err != nil {
+		return nil, err
+	}
+	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
+}
+
 func staplesSignatureForLocation(locationID string) string {
-	for _, provider := range defaultStoreIdentityProviders() {
+	for _, provider := range defaultIdentityProviders() {
 		if provider.IsID(locationID) {
 			return provider.Signature()
 		}
@@ -72,10 +82,10 @@ func defaultStaplesBackends(krogerClient kroger.ClientWithResponsesInterface) []
 	}
 }
 
-func defaultStoreIdentityProviders() []storeIdentityProvider {
-	return []storeIdentityProvider{
-		kroger.NewStoreIdentityProvider(),
-		wholefoods.NewStoreIdentityProvider(),
-		walmart.NewStoreIdentityProvider(),
+func defaultIdentityProviders() []identityProvider {
+	return []identityProvider{
+		kroger.NewIdentityProvider(),
+		wholefoods.NewIdentityProvider(),
+		walmart.NewIdentityProvider(),
 	}
 }

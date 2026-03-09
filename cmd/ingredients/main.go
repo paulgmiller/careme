@@ -8,14 +8,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"strings"
 )
 
 func main() {
-	var ingredient string
+	var searchTerm string
 	var location string
-	flag.StringVar(&ingredient, "ingredient", "", "Ingredient to filter recipes")
-	flag.StringVar(&ingredient, "i", "", "Ingredient to filter recipes")
+	flag.StringVar(&searchTerm, "ingredient", "", "Search term for ingredient lookup")
+	flag.StringVar(&searchTerm, "i", "", "Search term for ingredient lookup")
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
 	flag.Parse()
@@ -35,19 +34,13 @@ func main() {
 		log.Fatalf("failed to create recipe generator: %s", err)
 	}
 
-	g, ok := generator.(*recipes.Generator)
-	if !ok {
-		log.Fatalf("failed to cast generator to *recipes.Generator")
-	}
-
-	f := recipes.Filter(ingredient, []string{"*"}, false /*frozen*/)
-	ings, err := g.GetIngredients(ctx, location, f, 0)
+	ings, err := generator.GetIngredients(ctx, location, searchTerm, 0)
 	if err != nil {
 		log.Fatalf("failed to get ingredients: %s", err)
 	}
 
 	for _, i := range ings {
-		fmt.Printf("%s - %s:(%s))\n", toString(i.Brand), toString(i.Description), strings.Join(toSlice(i.Categories), ","))
+		fmt.Printf("%s - %s:(%s)\n", toString(i.Brand), toString(i.Description), toFloat(i.PriceRegular))
 	}
 
 }
@@ -64,4 +57,11 @@ func toString(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func toFloat(f *float32) string {
+	if f == nil {
+		return ""
+	}
+	return fmt.Sprintf("%.2f", *f)
 }

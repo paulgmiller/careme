@@ -33,6 +33,10 @@ func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ string) ([]kroge
 	return slices.Clone(s.ingredients), nil
 }
 
+func (s *stubStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]kroger.Ingredient, error) {
+	return s.FetchStaples(context.Background(), "")
+}
+
 type stubRoutingStaplesProvider struct {
 	ingredients []kroger.Ingredient
 	err         error
@@ -40,6 +44,14 @@ type stubRoutingStaplesProvider struct {
 }
 
 func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ *locations.Location) ([]kroger.Ingredient, error) {
+	s.calls++
+	if s.err != nil {
+		return nil, s.err
+	}
+	return slices.Clone(s.ingredients), nil
+}
+
+func (s *stubRoutingStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]kroger.Ingredient, error) {
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
@@ -83,6 +95,31 @@ func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) 
 	}
 	if got, want := err.Error(), `staples provider does not support location "walmart_3098"`; got != want {
 		t.Fatalf("unexpected error: got %q want %q", got, want)
+	}
+}
+
+func TestRoutingStaplesProvider_GetIngredients_SelectsProviderByLocationID(t *testing.T) {
+	krogerProvider := &stubStaplesProvider{
+		ids:         map[string]bool{"70100023": true},
+		ingredients: []kroger.Ingredient{{Description: loPtr("Pinot Noir")}},
+	}
+	wholeFoodsProvider := &stubStaplesProvider{
+		ids:         map[string]bool{"wholefoods_10216": true},
+		ingredients: []kroger.Ingredient{{Description: loPtr("Whole Foods Pinot Noir")}},
+	}
+	provider := routingStaplesProvider{
+		backends: []backendStaplesProvider{krogerProvider, wholeFoodsProvider},
+	}
+
+	got, err := provider.GetIngredients(t.Context(), "wholefoods_10216", "pinot noir", 0)
+	if err != nil {
+		t.Fatalf("GetIngredients returned error: %v", err)
+	}
+	if len(got) != 1 || got[0].Description == nil || *got[0].Description != "Whole Foods Pinot Noir" {
+		t.Fatalf("unexpected ingredients: %+v", got)
+	}
+	if krogerProvider.calls != 0 || wholeFoodsProvider.calls != 1 {
+		t.Fatalf("expected whole foods provider to be selected, got kroger=%d wholefoods=%d", krogerProvider.calls, wholeFoodsProvider.calls)
 	}
 }
 

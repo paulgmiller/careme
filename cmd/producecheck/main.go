@@ -1,10 +1,8 @@
 package main
 
 import (
-	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
-	"careme/internal/recipes"
 	"context"
 	"flag"
 	"fmt"
@@ -43,21 +41,12 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	cacheStore, err := cache.MakeCache()
+	client, err := kroger.FromConfig(cfg)
 	if err != nil {
-		log.Fatalf("failed to create cache: %v", err)
+		log.Fatalf("failed to create Kroger client: %v", err)
 	}
 
-	generator, err := recipes.NewGenerator(cfg, recipes.IO(cacheStore))
-	if err != nil {
-		log.Fatalf("failed to create recipe generator: %v", err)
-	}
-	g, ok := generator.(*recipes.Generator)
-	if !ok {
-		log.Fatalf("failed to cast generator to *recipes.Generator")
-	}
-
-	missing, results, err := checkProduceAvailability(ctx, g, locationID, produce)
+	missing, results, err := checkProduceAvailability(ctx, client, locationID, produce)
 	if err != nil {
 		log.Fatalf("availability check failed: %v", err)
 	}
@@ -96,7 +85,7 @@ type produceFilterStats struct {
 	matchedDescriptions []string
 }
 
-func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, int, error) {
+func checkProduceAvailability(ctx context.Context, client kroger.ClientWithResponsesInterface, locationID string, produce []string) ([]string, int, error) {
 
 	filters := kroger.ProduceFilters()
 	type filterResult struct {
@@ -112,7 +101,7 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 		i, filter := i, filter
 		go func() {
 			defer wg.Done()
-			filterIngredients, err := g.GetIngredients(ctx, locationID, recipes.Filter(filter.Term, filter.Brands, filter.Frozen), 0)
+			filterIngredients, err := kroger.SearchIngredients(ctx, client, locationID, filter.Term, filter.Brands, filter.Frozen, 0)
 			results[i] = filterResult{
 				filter:      filter.Term,
 				ingredients: filterIngredients,

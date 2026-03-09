@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"careme/internal/ai"
+	"careme/internal/kroger"
 	"context"
 	"fmt"
 	"log/slog"
@@ -406,4 +407,12 @@ func (m mock) PickAWine(ctx context.Context, conversationID string, location str
 		Wines:      []ai.Ingredient{},
 		Commentary: fmt.Sprintf("Mock wine pick for %s: try a medium-bodied red.", recipe.Title),
 	}, nil
+}
+
+func (m mock) GetIngredients(ctx context.Context, location string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
+	_ = ctx
+	_ = location
+	_ = searchTerm
+	_ = skip
+	return []kroger.Ingredient{}, nil
 }

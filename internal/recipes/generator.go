@@ -37,7 +37,6 @@ type ingredientio interface {
 type Generator struct {
 	config          *config.Config
 	aiClient        aiClient
-	krogerClient    kroger.ClientWithResponsesInterface // probably need only subset
 	staplesProvider staplesProvider
 	io              ingredientio
 }
@@ -51,14 +50,12 @@ func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
 	if err != nil {
 		return nil, err
 	}
-	g := &Generator{
-		io:           io,
-		config:       cfg,
-		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
-		krogerClient: client,
-	}
-	g.staplesProvider = newStaplesProvider(client)
-	return g, nil
+	return &Generator{
+		io:              io,
+		config:          cfg,
+		aiClient:        ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
+		staplesProvider: newStaplesProvider(client),
+	}, nil
 }
 
 func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
@@ -85,7 +82,7 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 			logger.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "error", err)
 		}
 
-		winesOfStyle, err = g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
+		winesOfStyle, err = g.GetIngredients(ctx, location, style, 0)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
 			return nil, fmt.Errorf("failed to get ingredients for style %q: %w", style, err)
@@ -111,20 +108,6 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 		return nil, err
 	}
 	return selection, nil
-}
-
-type filter struct {
-	Term   string
-	Brands []string
-	Frozen bool
-}
-
-func Filter(term string, brands []string, frozen bool) filter {
-	return filter{
-		Term:   term,
-		Brands: brands,
-		Frozen: frozen,
-	}
 }
 
 func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -209,8 +192,8 @@ func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
 	})
 }
 
-func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]kroger.Ingredient, error) {
-	return kroger.SearchIngredients(ctx, g.krogerClient, location, f.Term, f.Brands, f.Frozen, skip)
+func (g *Generator) GetIngredients(ctx context.Context, location string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
+	return g.staplesProvider.GetIngredients(ctx, location, searchTerm, skip)
 }
 
 func (g *Generator) Ready(ctx context.Context) error {

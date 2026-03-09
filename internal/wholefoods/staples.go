@@ -3,14 +3,17 @@ package wholefoods
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
 	"careme/internal/kroger"
 	"careme/internal/parallelism"
+
+	"github.com/samber/lo"
 )
 
-const DefaultStaplesSignature = "wholefoods-staples-v1"
+const DefaultStaplesSignature = "wholefoods-staples-v2"
 
 type CategoryClient interface {
 	Category(ctx context.Context, queryterm, store string) (*CategoryResponse, error)
@@ -27,7 +30,7 @@ func NewStaplesProvider(client CategoryClient) StaplesProvider {
 	return StaplesProvider{client: client}
 }
 
-func NewStoreIdentityProvider() identityProvider {
+func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
@@ -56,24 +59,49 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			return nil, err
 		}
 
-		found := make([]kroger.Ingredient, 0, len(resp.Results))
-		for _, product := range resp.Results {
-			found = append(found, productToIngredient(product))
-		}
-		return found, nil
+		ingredients := lo.Map(resp.Results, func(product Product, _ int) kroger.Ingredient {
+			return productToIngredient(product)
+		})
+		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category, "location", locationID)
+
+		return ingredients, nil
 	})
+}
+
+func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
+	if p.client == nil {
+		return nil, fmt.Errorf("whole foods client is required")
+	}
+
+	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
+	if storeID == locationID || storeID == "" {
+		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
+	}
+
+	resp, err := p.client.Category(ctx, searchTerm, storeID)
+	if err != nil {
+		return nil, err
+	}
+
+	ingredients := lo.Map(resp.Results, func(product Product, _ int) kroger.Ingredient {
+		return productToIngredient(product)
+	})
+	if skip >= len(ingredients) {
+		return []kroger.Ingredient{}, nil
+	}
+	return ingredients[skip:], nil
 }
 
 func defaultStaples() []string {
 	return []string{
-		"vegetables",
-		"fruit",
+		"fresh-vegetables",
+		"fresh-fruit",
 		"beef",
 		"chicken",
 		"fish",
 		"pork",
 		"shellfish",
-		"lamb",
+		"goat-lamb-veal",
 	}
 }
 

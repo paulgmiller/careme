@@ -81,3 +81,29 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 		t.Fatalf("unexpected error: got %q want %q", got, want)
 	}
 }
+
+func TestStaplesProvider_GetIngredients_UsesSearchTerm(t *testing.T) {
+	client := &stubCategoryClient{
+		results: map[string][]Product{
+			"pinot noir": {
+				{Name: "Pinot Noir", Slug: "pinot-noir", Brand: "WFM", Store: 10216},
+				{Name: "Rose", Slug: "rose", Brand: "WFM", Store: 10216},
+			},
+		},
+	}
+	provider := NewStaplesProvider(client)
+
+	got, err := provider.GetIngredients(t.Context(), "wholefoods_10216", "pinot noir", 1)
+	if err != nil {
+		t.Fatalf("GetIngredients returned error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 ingredient after skip, got %d", len(got))
+	}
+	if got[0].Description == nil || *got[0].Description != "Rose" {
+		t.Fatalf("unexpected ingredient description: %+v", got[0].Description)
+	}
+	if len(client.calls) != 1 || client.calls[0] != "10216:pinot noir" {
+		t.Fatalf("unexpected category calls: %v", client.calls)
+	}
+}
