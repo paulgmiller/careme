@@ -23,7 +23,7 @@ func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
 	hashes := make([]string, 0, 3)
 	for i := range 3 {
 		loc := &locations.Location{
-			ID:      fmt.Sprintf("store-%d", i),
+			ID:      fmt.Sprintf("7000500%d", i),
 			Name:    "Test Store",
 			Address: "123 Test St",
 		}
@@ -73,7 +73,7 @@ func TestHandleSitemapNormalizesLegacyShoppingListHashToCanonical(t *testing.T) 
 	t.Chdir(t.TempDir())
 
 	cacheStore := cache.NewFileCache(".")
-	params := recipes.DefaultParams(&locations.Location{ID: "store", Name: "Store"}, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	params := recipes.DefaultParams(&locations.Location{ID: "70006001", Name: "Store"}, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	hash := params.Hash()
 
 	if err := cacheStore.Put(context.Background(), "shoppinglist/"+hash, `{"mock":"legacy"}`, cache.Unconditional()); err != nil {
@@ -109,7 +109,7 @@ func TestHandleSitemap_IgnoresNonShoppingListKeys(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	cacheStore := cache.NewFileCache(".")
-	params := recipes.DefaultParams(&locations.Location{ID: "store", Name: "Store"}, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	params := recipes.DefaultParams(&locations.Location{ID: "70006002", Name: "Store"}, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	hash := params.Hash()
 
 	if err := cacheStore.Put(context.Background(), hash, `{"mock":"legacy-root-shopping-list"}`, cache.Unconditional()); err != nil {

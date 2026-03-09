@@ -30,6 +30,11 @@ func (p StaplesProvider) Signature() string {
 	return DefaultStaplesSignature
 }
 
+func (p StaplesProvider) IsID(locationID string) bool {
+	_, ok := parseLocationID(locationID)
+	return ok
+}
+
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
 	if p.client == nil {
 		return nil, fmt.Errorf("whole foods client is required")

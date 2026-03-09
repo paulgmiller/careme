@@ -8,7 +8,7 @@ import (
 )
 
 func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
-	loc := &locations.Location{ID: "loc-123", Name: "Test Loc", Address: "1 Test St", State: "TS"}
+	loc := &locations.Location{ID: "12345678", Name: "Test Loc", Address: "1 Test St", State: "TS"}
 	d1 := time.Date(2025, 9, 17, 1, 2, 3, 0, time.UTC)
 	d2 := time.Date(2025, 9, 17, 23, 59, 59, 0, time.UTC)
 
@@ -23,15 +23,15 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 	}
 
 	// make sure we're intentional about breaking hash
-	if h1 != "W5XoiV3b0tc" {
-		t.Fatalf("expected hash to be stable and equal to W5XoiV3b0tc, got %s", h1)
+	if h1 != "MJgL-w0lK6g" {
+		t.Fatalf("expected hash to be stable and equal to MJgL-w0lK6g, got %s", h1)
 	}
 
 	legacyHash, ok := legacyRecipeHash(h1)
 	if !ok {
 		t.Fatal("expected current hash passhed to legacy")
 	}
-	if legacyHash != "cmVjaXBlW5XoiV3b0tc=" {
+	if legacyHash != "cmVjaXBlMJgL-w0lK6g=" {
 		t.Fatalf("expected legacy hash to be base64 of recipe hash with prefix, got %s", legacyHash)
 	}
 
@@ -48,7 +48,7 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 }
 
 func TestGeneratorParamsLocationHashStableForDifferentHours(t *testing.T) {
-	loc := &locations.Location{ID: "loc-456", Name: "Another", Address: "2 Test Ave", State: "TS"}
+	loc := &locations.Location{ID: "23456789", Name: "Another", Address: "2 Test Ave", State: "TS"}
 	d1 := time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC)
 	d2 := time.Date(2025, 9, 17, 12, 0, 0, 0, time.UTC)
 
@@ -78,7 +78,7 @@ func TestGeneratorParamsLocationHash_DiffersAcrossStoreBackends(t *testing.T) {
 }
 
 func TestNormalizeLegacyRecipeHash(t *testing.T) {
-	p := DefaultParams(&locations.Location{ID: "loc-legacy", Name: "Legacy Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Legacy Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 	hash := p.Hash()
 	legacyHash, ok := legacyRecipeHash(hash)
 	if !ok {
@@ -96,4 +96,14 @@ func TestNormalizeLegacyRecipeHash(t *testing.T) {
 	if _, ok := legacyHashToCurrent(hash, legacyRecipeHashSeed); ok {
 		t.Fatalf("expected canonical hash %q not to be treated as legacy", hash)
 	}
+}
+
+func TestStaplesSignatureForLocation_PanicsForUnknownLocation(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for unknown location")
+		}
+	}()
+
+	_ = staplesSignatureForLocation("loc-unknown")
 }

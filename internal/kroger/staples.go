@@ -32,6 +32,18 @@ func (p StaplesProvider) Signature() string {
 	return DefaultStaplesSignature
 }
 
+func (p StaplesProvider) IsID(locationID string) bool {
+	if locationID == "" {
+		return false
+	}
+	for i := 0; i < len(locationID); i++ {
+		if locationID[i] < '0' || locationID[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]Ingredient, error) {
 	return flattenParallel(defaultStaples(), func(category StaplesFilter) ([]Ingredient, error) {
 		return SearchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)

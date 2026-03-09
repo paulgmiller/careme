@@ -16,7 +16,7 @@ func TestServerReturnsIngredientsJSON(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	rio := recipes.IO(cacheStore)
 	params := recipes.DefaultParams(
-		&locations.Location{ID: "loc-1", Name: "Store 1"},
+		&locations.Location{ID: "70000003", Name: "Store 1"},
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
 	)
 	if err := rio.SaveParams(t.Context(), params); err != nil {
@@ -51,7 +51,7 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	rio := recipes.IO(cacheStore)
 	params := recipes.DefaultParams(
-		&locations.Location{ID: "loc-2", Name: "Store 2"},
+		&locations.Location{ID: "70000004", Name: "Store 2"},
 		time.Date(2026, 1, 26, 0, 0, 0, 0, time.UTC),
 	)
 	if err := rio.SaveParams(t.Context(), params); err != nil {

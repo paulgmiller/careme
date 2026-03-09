@@ -55,7 +55,7 @@ var list = ai.ShoppingList{
 }
 
 func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	FormatShoppingListHTML(p, list, true, w)
@@ -79,7 +79,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 }
 
 func TestFormatMail_ValidHTML(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	FormatShoppingListHTML(p, list, true, w)
@@ -92,7 +92,7 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 
 	templates.Clarityproject = "test456"
@@ -108,7 +108,7 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	templates.Clarityproject = ""
 	w := httptest.NewRecorder()
@@ -119,7 +119,7 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 
 	prev := templates.GoogleTagID
@@ -139,7 +139,7 @@ func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	prev := templates.GoogleTagID
 	t.Cleanup(func() {
@@ -154,7 +154,7 @@ func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	FormatShoppingListHTML(p, list, true, w)
@@ -170,7 +170,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 }
 
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
@@ -233,7 +233,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 }
 
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
@@ -251,7 +251,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 }
 
 func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
@@ -284,7 +284,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 }
 
 func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *testing.T) {
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	multi := ai.ShoppingList{
 		Recipes: []ai.Recipe{

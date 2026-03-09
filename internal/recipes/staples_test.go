@@ -11,9 +11,14 @@ import (
 )
 
 type stubStaplesProvider struct {
+	ids         map[string]bool
 	ingredients []kroger.Ingredient
 	err         error
 	calls       int
+}
+
+func (s *stubStaplesProvider) IsID(locationID string) bool {
+	return s.ids[locationID]
 }
 
 func (s *stubStaplesProvider) Signature() string {
@@ -43,11 +48,10 @@ func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ *location
 }
 
 func TestRoutingStaplesProvider_SelectsProviderByLocationID(t *testing.T) {
-	krogerProvider := &stubStaplesProvider{}
-	wholeFoodsProvider := &stubStaplesProvider{}
+	krogerProvider := &stubStaplesProvider{ids: map[string]bool{"70100023": true}}
+	wholeFoodsProvider := &stubStaplesProvider{ids: map[string]bool{"wholefoods_10216": true}}
 	provider := routingStaplesProvider{
-		kroger:     krogerProvider,
-		wholeFoods: wholeFoodsProvider,
+		backends: []backendStaplesProvider{krogerProvider, wholeFoodsProvider},
 	}
 
 	if _, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "70100023"}); err != nil {
@@ -67,8 +71,10 @@ func TestRoutingStaplesProvider_SelectsProviderByLocationID(t *testing.T) {
 
 func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) {
 	provider := routingStaplesProvider{
-		kroger:     &stubStaplesProvider{},
-		wholeFoods: &stubStaplesProvider{},
+		backends: []backendStaplesProvider{
+			&stubStaplesProvider{ids: map[string]bool{"70100023": true}},
+			&stubStaplesProvider{ids: map[string]bool{"wholefoods_10216": true}},
+		},
 	}
 
 	_, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "walmart_3098"})

@@ -61,7 +61,7 @@ func currentHashToLegacy(hash string, seed string) (string, bool) {
 }
 
 func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
-	p := DefaultParams(&locations.Location{ID: "loc-123", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
 	hash := p.Hash()
 	legacyHash, ok := legacyRecipeHash(hash)
 	if !ok {
@@ -91,7 +91,7 @@ func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
 }
 
 func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
-	p := DefaultParams(&locations.Location{ID: "loc-abc", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
+	p := DefaultParams(&locations.Location{ID: "70000456", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
 	hash := p.Hash()
 	legacyHash, ok := legacyRecipeHash(hash)
 	if !ok {
@@ -121,7 +121,7 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
-		ID:      "store-1",
+		ID:      "70001001",
 		Name:    "Test Store",
 		ZipCode: "94105",
 	}
@@ -143,7 +143,7 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 		t.Fatalf("failed to save user directive: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=store-1&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
 	expectedParams, err := s.ParseQueryArgs(t.Context(), req)
 	if err != nil {
 		t.Fatalf("failed to build expected params: %v", err)
@@ -193,7 +193,7 @@ func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *t
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
-		ID:      "store-1",
+		ID:      "70001001",
 		Name:    "Test Store",
 		ZipCode: "94105",
 	}
@@ -211,7 +211,7 @@ func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *t
 		t.Fatalf("failed to seed user: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=store-1&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
 	runRequest := func(t *testing.T, directive string) string {
 		t.Helper()
 
@@ -268,7 +268,7 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 	}
 
 	p := DefaultParams(
-		&locations.Location{ID: "loc-legacy-origin", Name: "Canonical Test Store"},
+		&locations.Location{ID: "70002001", Name: "Canonical Test Store"},
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
 	)
 	p.ConversationID = "conv-canonical"
@@ -329,7 +329,7 @@ func TestHandleSingle_LegacyOriginHashDoesNotFailWhenParamsMissing(t *testing.T)
 	}
 
 	p := DefaultParams(
-		&locations.Location{ID: "loc-legacy-origin-missing-params", Name: "Ignored"},
+		&locations.Location{ID: "70002002", Name: "Ignored"},
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
 	)
 	canonicalHash := p.Hash()
@@ -378,7 +378,7 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 	}
 
 	p := DefaultParams(
-		&locations.Location{ID: "loc-wine-single", Name: "Wine Store"},
+		&locations.Location{ID: "70003001", Name: "Wine Store"},
 		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 	)
 	p.ConversationID = "conv-wine-single"
@@ -662,7 +662,7 @@ func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
 		generator: g,
 	}
 
-	p := DefaultParams(&locations.Location{ID: "loc-wine", Name: "Wine Test Store"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Wine Test Store"}, time.Now())
 	p.ConversationID = "conv-wine"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
@@ -722,7 +722,7 @@ func TestHandleWine_ShoppingVariantReturnsShoppingFragment(t *testing.T) {
 		generator: g,
 	}
 
-	p := DefaultParams(&locations.Location{ID: "loc-wine", Name: "Wine Test Store"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Wine Test Store"}, time.Now())
 	p.ConversationID = "conv-wine"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
@@ -776,7 +776,7 @@ func TestHandleWine_UsesCachedWineRecommendation(t *testing.T) {
 		generator: g1,
 	}
 
-	p := DefaultParams(&locations.Location{ID: "loc-wine", Name: "Wine Test Store"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Wine Test Store"}, time.Now())
 	p.ConversationID = "conv-wine"
 	originHash := p.Hash()
 	if err := s1.SaveParams(t.Context(), p); err != nil {
@@ -1126,7 +1126,7 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 	}
 	t.Cleanup(s.Wait)
 
-	p := DefaultParams(&locations.Location{ID: "loc-1", Name: "Store"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.ConversationID = "conv-123"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
@@ -1206,7 +1206,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 		clerk:    auth.DefaultMock(),
 	}
 
-	p := DefaultParams(&locations.Location{ID: "loc-1", Name: "Store"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.ConversationID = "conv-123"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
@@ -1274,7 +1274,7 @@ func TestParamsForAction_PreservesBaseSelectionWhenSelectionCacheEmpty(t *testin
 
 	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
 	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
-	p := DefaultParams(&locations.Location{ID: "loc-1", Name: "Store"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{savedRecipe}
 	p.Dismissed = []ai.Recipe{dismissedRecipe}
 	originHash := p.Hash()
@@ -1312,7 +1312,7 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 
 	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
 	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
-	p := DefaultParams(&locations.Location{ID: "loc-1", Name: "Store"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{savedRecipe}
 	p.Dismissed = []ai.Recipe{dismissedRecipe}
 	originHash := p.Hash()

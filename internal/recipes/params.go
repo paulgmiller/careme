@@ -61,7 +61,7 @@ func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location)))
+	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
@@ -78,7 +78,7 @@ func (g *generatorParams) LocationHash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location)))
+	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
