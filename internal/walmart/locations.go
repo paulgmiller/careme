@@ -5,24 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 )
-
-func (c *Client) IsID(locationID string) bool {
-	const prefix = "walmart_"
-	if !strings.HasPrefix(locationID, prefix) {
-		return false
-	}
-	if len(locationID) == len(prefix) {
-		return false
-	}
-	for i := len(prefix); i < len(locationID); i++ {
-		if locationID[i] < '0' || locationID[i] > '9' {
-			return false
-		}
-	}
-	return true
-}
 
 func (c *Client) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
 	//depending on cache to protect us.

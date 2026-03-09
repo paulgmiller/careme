@@ -1,10 +1,8 @@
 package main
 
 import (
-	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
-	"careme/internal/recipes"
 	"context"
 	"flag"
 	"fmt"
@@ -43,21 +41,12 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	cacheStore, err := cache.MakeCache()
+	client, err := kroger.FromConfig(cfg)
 	if err != nil {
-		log.Fatalf("failed to create cache: %v", err)
+		log.Fatalf("failed to create Kroger client: %v", err)
 	}
 
-	generator, err := recipes.NewGenerator(cfg, recipes.IO(cacheStore))
-	if err != nil {
-		log.Fatalf("failed to create recipe generator: %v", err)
-	}
-	g, ok := generator.(*recipes.Generator)
-	if !ok {
-		log.Fatalf("failed to cast generator to *recipes.Generator")
-	}
-
-	missing, results, err := checkProduceAvailability(ctx, g, locationID, produce)
+	missing, results, err := checkProduceAvailability(ctx, client, locationID, produce)
 	if err != nil {
 		log.Fatalf("availability check failed: %v", err)
 	}
@@ -96,9 +85,10 @@ type produceFilterStats struct {
 	matchedDescriptions []string
 }
 
-func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locationID string, produce []string) ([]string, int, error) {
+func checkProduceAvailability(ctx context.Context, client kroger.ClientWithResponsesInterface, locationID string, produce []string) ([]string, int, error) {
 
-	filters := recipes.Produce()
+	//TODO expand this to other staple providers
+	filters := kroger.ProduceFilters()
 	type filterResult struct {
 		filter      string
 		ingredients []kroger.Ingredient
@@ -108,11 +98,11 @@ func checkProduceAvailability(ctx context.Context, g *recipes.Generator, locatio
 	results := make([]filterResult, len(filters))
 	var wg sync.WaitGroup
 	wg.Add(len(filters))
+	kprovider := kroger.NewStaplesProvider(client)
 	for i, filter := range filters {
-		i, filter := i, filter
 		go func() {
 			defer wg.Done()
-			filterIngredients, err := g.GetIngredients(ctx, locationID, filter, 0)
+			filterIngredients, err := kprovider.GetIngredients(ctx, locationID, filter.Term, 0)
 			results[i] = filterResult{
 				filter:      filter.Term,
 				ingredients: filterIngredients,

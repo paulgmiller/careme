@@ -9,7 +9,7 @@ import (
 
 func TestMockGenerateRecipes_Returns3Recipes(t *testing.T) {
 	m := mock{}
-	loc := &locations.Location{ID: "test-loc", Name: "Test Location", Address: "123 Test St", State: "TS"}
+	loc := &locations.Location{ID: "70000002", Name: "Test Location", Address: "123 Test St", State: "TS"}
 	params := DefaultParams(loc, time.Now())
 
 	result, err := m.GenerateRecipes(context.Background(), params)
@@ -45,7 +45,7 @@ func TestMockGenerateRecipes_Returns3Recipes(t *testing.T) {
 
 func TestMockGenerateRecipes_ReturnsRandomRecipes(t *testing.T) {
 	m := mock{}
-	loc := &locations.Location{ID: "test-loc", Name: "Test Location", Address: "123 Test St", State: "TS"}
+	loc := &locations.Location{ID: "70000002", Name: "Test Location", Address: "123 Test St", State: "TS"}
 	params := DefaultParams(loc, time.Now())
 
 	// Generate recipes multiple times and check that we get different combinations

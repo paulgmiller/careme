@@ -64,7 +64,8 @@ type Product struct {
 	ImageThumbnail       string  `json:"imageThumbnail"`
 	Store                int     `json:"store"`
 	IsLocal              bool    `json:"isLocal"`
-	UOM                  string  `json:"uom,omitempty"`
+	//unit of measure.
+	UOM string `json:"uom,omitempty"`
 }
 
 type Meta struct {
@@ -153,6 +154,8 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *Client {
 }
 
 // Category fetches a category page payload like /api/products/category/beef?store=10216.
+// TODO add pagination
+// /api/products/category/fish?store=10216&limit=60&offset=0
 func (c *Client) Category(ctx context.Context, queryterm, store string) (*CategoryResponse, error) {
 	queryterm = strings.TrimSpace(queryterm)
 	if queryterm == "" {
@@ -172,7 +175,6 @@ func (c *Client) Category(ctx context.Context, queryterm, store string) (*Catego
 	params := endpoint.Query()
 	params.Set("store", store)
 	endpoint.RawQuery = params.Encode()
-
 	var decoded CategoryResponse
 	if err := c.getJSON(ctx, endpoint.String(), &decoded); err != nil {
 		return nil, err

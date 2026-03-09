@@ -6,17 +6,14 @@ import (
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/locations"
+	"careme/internal/parallelism"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
 	"log/slog"
-	"net/http"
-	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -38,10 +35,10 @@ type ingredientio interface {
 }
 
 type Generator struct {
-	config       *config.Config
-	aiClient     aiClient
-	krogerClient kroger.ClientWithResponsesInterface // probably need only subset
-	io           ingredientio
+	config          *config.Config
+	aiClient        aiClient
+	staplesProvider staplesProvider
+	io              ingredientio
 }
 
 func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
@@ -49,32 +46,36 @@ func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
 		return mock{}, nil
 	}
 
-	client, err := kroger.FromConfig(cfg)
+	stapesProvider, err := NewStaplesProvider(cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create staples provider: %w", err)
 	}
+
 	return &Generator{
-		io:           io,
-		config:       cfg,
-		aiClient:     ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
-		krogerClient: client,
+		io:              io,
+		config:          cfg,
+		aiClient:        ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
+		staplesProvider: stapesProvider,
 	}, nil
 }
 
 func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	var styles []string
+	//THIS is broken for wholefoods until we put in product search or just fetch all red/whiteines.
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
 		if style != "" { //would this ever happen?
 			styles = append(styles, style)
 		}
 	}
+
 	if len(styles) == 0 {
 		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
 	}
 	dateStr := date.Format("2006-01-02")
 	logger := slog.With("location", location, "date", dateStr)
-	wines, err := asParallel(styles, func(style string) ([]kroger.Ingredient, error) {
+
+	wines, err := parallelism.Flatten(styles, func(style string) ([]kroger.Ingredient, error) {
 		cacheKey := wineIngredientsCacheKey(style, location, date)
 		winesOfStyle, err := g.io.IngredientsFromCache(ctx, cacheKey)
 		if err == nil {
@@ -85,7 +86,7 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 			logger.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "error", err)
 		}
 
-		winesOfStyle, err = g.GetIngredients(ctx, location, Filter(style, []string{"*"}, false), 0)
+		winesOfStyle, err = g.staplesProvider.GetIngredients(ctx, location, style, 0)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
 			return nil, fmt.Errorf("failed to get ingredients for style %q: %w", style, err)
@@ -163,25 +164,10 @@ func (g *Generator) AskQuestion(ctx context.Context, question string, conversati
 	return g.aiClient.AskQuestion(ctx, question, conversationID)
 }
 
-type filter struct {
-	Term   string   `json:"term,omitempty"`
-	Brands []string `json:"brands,omitempty"`
-	Frozen bool     `json:"frozen,omitempty"`
-}
-
-func Filter(term string, brands []string, frozen bool) filter {
-	return filter{
-		Term:   term,
-		Brands: brands,
-		Frozen: frozen,
-	}
-}
-
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
 // tries to filter to no brand or certain brands to avoid shelved products
 func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
 	lochash := p.LocationHash()
-	var ingredients []kroger.Ingredient
 
 	if cachedIngredients, err := g.io.IngredientsFromCache(ctx, lochash); err == nil {
 		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
@@ -190,15 +176,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
-	ingredients, err := asParallel(p.Staples, func(category filter) ([]kroger.Ingredient, error) {
-		cingredients, err := g.GetIngredients(ctx, p.Location.ID, category, 0)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to get ingredients", "category", category.Term, "location", p.Location.ID, "error", err)
-			return nil, err
-		}
-		slog.InfoContext(ctx, "Found ingredients for category", "count", len(cingredients), "category", category.Term, "location", p.Location.ID, "runningtotal", len(ingredients))
-		return cingredients, nil
-	})
+	ingredients, err := g.staplesProvider.FetchStaples(ctx, p.Location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for staples: %w", err)
 	}
@@ -212,108 +190,11 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 	return ingredients, nil
 }
 
+// TODO should we be going off product id instead?
 func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
 	return lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
 		return toStr(i.Description)
 	})
-}
-
-// move to krogrer client as everyone will be differnt here?
-func (g *Generator) GetIngredients(ctx context.Context, location string, f filter, skip int) ([]kroger.Ingredient, error) {
-	limit := 50
-	limitStr := strconv.Itoa(limit)
-	startStr := strconv.Itoa(skip)
-	// brand := "empty" doesn't work have to check for nil
-	// fulfillment := "ais" drmatically shortens?
-	// wrapped this in a retry and it did nothng
-	products, err := g.krogerClient.ProductSearchWithResponse(ctx, &kroger.ProductSearchParams{
-		FilterLocationId: &location,
-		FilterTerm:       &f.Term,
-		FilterLimit:      &limitStr,
-		FilterStart:      &startStr,
-		// FilterBrand:      &brand,
-		// FilterFulfillment: &fulfillment,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("kroger product search request failed: %w", err)
-	}
-	if products.StatusCode() != http.StatusOK {
-		output, _ := json.Marshal(products.JSON500) // handle other errors?
-		return nil, fmt.Errorf("got %d code from kroger : %s", products.StatusCode(), string(output))
-	}
-
-	var ingredients []kroger.Ingredient
-
-	for _, product := range *products.JSON200.Data {
-		wildcard := len(f.Brands) > 0 && f.Brands[0] == "*"
-
-		if product.Brand != nil && !slices.Contains(f.Brands, toStr(product.Brand)) && !wildcard {
-			continue
-		}
-		// end up with a bunch of frozen chicken with out this.
-		if slices.Contains(*product.Categories, "Frozen") && !f.Frozen {
-			continue
-		}
-		for _, item := range *product.Items {
-			if item.Price == nil {
-				// todo what does this mean?
-				continue
-			}
-
-			var aisle *string
-			if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
-				aisle = (*product.AisleLocations)[0].Number
-			}
-
-			// does just giving the model json work better here?
-			ingredient := kroger.Ingredient{
-				ProductId:    product.ProductId, //chat gpt act
-				Brand:        product.Brand,
-				Description:  product.Description,
-				Size:         item.Size,
-				PriceRegular: item.Price.Regular,
-				PriceSale:    item.Price.Promo,
-				Categories:   product.Categories,
-				AisleNumber:  aisle,
-
-				/*"taxonomies": [
-				{
-				"department": {},
-				"commodity": {},
-				"subCommodity": {}
-				}
-				],*/
-				//Taxonomy:  product.,
-				// CountryOrigin: product.CountryOrigin,
-				// AisleNumber:   product.AisleLocations[0].Number,
-				// Favorite: item.Favorite,
-				// InventoryStockLevel: item.InventoryStockLevel),
-			}
-
-			/*if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
-				ingredient.AisleNumber = (*product.AisleLocations)[0].Number
-			}*/
-
-			ingredients = append(ingredients, ingredient)
-			// strings.Join(*product.Categories, ", "),
-
-		}
-	}
-
-	// Debug level?
-	// slog.InfoContext(ctx, "got", "ingredients", len(ingredients), "products", len(*products.JSON200.Data), "term", f.Term, "brands", f.Brands, "location", location, "skip", skip)
-
-	// recursion is pretty dumb pagination
-	// kroger limites us to 250
-	if len(*products.JSON200.Data) == limit && skip < 250 { // fence post error
-		page, err := g.GetIngredients(ctx, location, f, skip+limit)
-		if err != nil {
-			return ingredients, nil
-		}
-		ingredients = append(ingredients, page...)
-	}
-
-	return ingredients, nil
 }
 
 func (g *Generator) Ready(ctx context.Context) error {

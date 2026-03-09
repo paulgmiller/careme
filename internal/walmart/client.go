@@ -30,6 +30,7 @@ const (
 
 // Client calls Walmart Affiliates APIs with signed headers.
 type Client struct {
+	identityProvider
 	consumerID string
 	keyVersion string
 	privateKey *rsa.PrivateKey

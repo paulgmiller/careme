@@ -1,4 +1,4 @@
-package recipes
+package parallelism
 
 import (
 	"errors"
@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-func TestAsParallel_MergesResultsAndErrors(t *testing.T) {
+func TestFlatten_MergesResultsAndErrors(t *testing.T) {
 	errOne := errors.New("err one")
 	errTwo := errors.New("err two")
 
-	got, err := asParallel([]int{1, 2, 3, 4}, func(i int) ([]string, error) {
+	got, err := Flatten([]int{1, 2, 3, 4}, func(i int) ([]string, error) {
 		switch i {
 		case 1:
 			return []string{"a", "b"}, nil
@@ -38,8 +38,8 @@ func TestAsParallel_MergesResultsAndErrors(t *testing.T) {
 	}
 }
 
-func TestAsParallel_EmptyInput(t *testing.T) {
-	got, err := asParallel([]string{}, func(s string) ([]int, error) {
+func TestFlatten_EmptyInput(t *testing.T) {
+	got, err := Flatten([]string{}, func(s string) ([]int, error) {
 		return []int{1}, nil
 	})
 	if err != nil {
