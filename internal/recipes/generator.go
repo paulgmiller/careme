@@ -185,7 +185,9 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for staples: %w", err)
 	}
+	//should this be pushed down into staple proivder? go off product id?
 	ingredients = uniqueByDescription(ingredients)
+
 	mutable.Shuffle(ingredients)
 
 	if err := g.io.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {

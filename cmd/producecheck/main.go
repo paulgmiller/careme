@@ -3,18 +3,22 @@ package main
 import (
 	"careme/internal/config"
 	"careme/internal/kroger"
+	"careme/internal/recipes"
 	"context"
 	"flag"
 	"fmt"
 	"log"
 	"slices"
 	"strings"
-	"sync"
 	"unicode"
 
 	"github.com/samber/lo"
 	"golang.org/x/text/unicode/norm"
 )
+
+type staplesProvider interface {
+	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
+}
 
 func main() {
 	var locationID string
@@ -41,12 +45,12 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	client, err := kroger.FromConfig(cfg)
+	staples, err := recipes.NewStaplesProvider(cfg)
 	if err != nil {
-		log.Fatalf("failed to create Kroger client: %v", err)
+		log.Fatalf("failed to create staples provider: %v", err)
 	}
 
-	missing, results, err := checkProduceAvailability(ctx, client, locationID, produce)
+	missing, results, err := checkProduceAvailability(ctx, staples, locationID, produce)
 	if err != nil {
 		log.Fatalf("availability check failed: %v", err)
 	}
@@ -85,52 +89,30 @@ type produceFilterStats struct {
 	matchedDescriptions []string
 }
 
-func checkProduceAvailability(ctx context.Context, client kroger.ClientWithResponsesInterface, locationID string, produce []string) ([]string, int, error) {
+func checkProduceAvailability(ctx context.Context, client staplesProvider, locationID string, produce []string) ([]string, int, error) {
 
-	//TODO expand this to other staple providers
-	filters := kroger.ProduceFilters()
-	type filterResult struct {
-		filter      string
-		ingredients []kroger.Ingredient
-		err         error
-	}
 	//todo check total number of queries.
-	results := make([]filterResult, len(filters))
-	var wg sync.WaitGroup
-	wg.Add(len(filters))
-	kprovider := kroger.NewStaplesProvider(client)
-	for i, filter := range filters {
-		go func() {
-			defer wg.Done()
-			filterIngredients, err := kprovider.GetIngredients(ctx, locationID, filter.Term, 0)
-			results[i] = filterResult{
-				filter:      filter.Term,
-				ingredients: filterIngredients,
-				err:         err,
-			}
-		}()
-	}
-	wg.Wait()
-	ingredients := make([]kroger.Ingredient, 0, 300)
-	stats := make([]produceFilterStats, 0, len(filters))
-	for _, result := range results {
-		if result.err != nil {
-			log.Printf("warning: failed to get ingredients for filter %q at location %s: %v", result.filter, locationID, result.err)
-			continue
-		}
-		matchedTerms, matchedProducts, matchedDescriptions := summarizeFilterMatchesDetailed(produce, result.ingredients)
-		stats = append(stats, produceFilterStats{
-			FilterTerm:          result.filter,
-			IngredientMatches:   len(result.ingredients),
-			ProduceTermsMatched: matchedTerms,
-			ProduceMatches:      matchedProducts,
-			matchedDescriptions: matchedDescriptions,
-		})
-		ingredients = append(ingredients, result.ingredients...)
-	}
-	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string { return toString(i.Description) })
 
-	annotateUniqueOnlyMatches(stats)
+	ingredients, err := client.FetchStaples(ctx, locationID)
+	if err != nil {
+		log.Fatalf("warning: failed to fetch staples ingredients for location %s: %v", locationID, err)
+	}
+	matchedTerms, matchedProducts, matchedDescriptions := summarizeFilterMatchesDetailed(produce, ingredients)
+	stats := produceFilterStats{
+		FilterTerm:          "*",
+		IngredientMatches:   len(ingredients),
+		ProduceTermsMatched: matchedTerms,
+		ProduceMatches:      matchedProducts,
+		matchedDescriptions: matchedDescriptions,
+	}
+
+	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
+		return toString(i.ProductId)
+	})
+
+	// TODO have staples return subset of ingredient that can say the search term it go a match on
+	// then we can give info on whats coming from what queries. Could use categories for wholefoods.
+	//annotateUniqueOnlyMatches(stats)
 	printProduceFilterSummary(stats, len(produce))
 
 	return evaluateProduceAvailability(produce, ingredients), len(ingredients), nil
@@ -188,7 +170,7 @@ func summarizeFilterMatchesDetailed(produce []string, ingredients []kroger.Ingre
 }
 
 // see what filters return results NOT seen elsewhere then update UniqueOnlyMatches
-func annotateUniqueOnlyMatches(stats []produceFilterStats) {
+/*func annotateUniqueOnlyMatches(stats []produceFilterStats) {
 	descriptionCount := make(map[string]int)
 	for _, stat := range stats {
 		for _, description := range stat.matchedDescriptions {
@@ -205,26 +187,18 @@ func annotateUniqueOnlyMatches(stats []produceFilterStats) {
 		}
 		stats[i].UniqueOnlyMatches = uniqueOnly
 	}
-}
+}*/
 
-func printProduceFilterSummary(stats []produceFilterStats, totalProduceTerms int) {
-	if len(stats) == 0 {
-		fmt.Println("produce filter summary: no filters returned results")
-		return
-	}
+func printProduceFilterSummary(stat produceFilterStats, totalProduceTerms int) {
 
-	fmt.Println()
-	fmt.Println("produce filter summary:")
-	for _, stat := range stats {
-		fmt.Printf("- %s -> %d ingredients, %d/%d produce terms, %d matches, %d unique-only products\n",
-			stat.FilterTerm,
-			stat.IngredientMatches,
-			stat.ProduceTermsMatched,
-			totalProduceTerms,
-			stat.ProduceMatches,
-			stat.UniqueOnlyMatches,
-		)
-	}
+	fmt.Printf("- %s -> %d ingredients, %d/%d produce terms, %d matches, %d unique-only products\n",
+		stat.FilterTerm,
+		stat.IngredientMatches,
+		stat.ProduceTermsMatched,
+		totalProduceTerms,
+		stat.ProduceMatches,
+		stat.UniqueOnlyMatches,
+	)
 	fmt.Println()
 }
 
