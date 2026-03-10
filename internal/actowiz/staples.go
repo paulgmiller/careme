@@ -57,6 +57,12 @@ func all() []kroger.Ingredient {
 		if product.ProductName == "N/A" {
 			continue
 		}
+		//another option but dropped produce score.
+		//||	product.SubCategory == "Packaged Produce"
+		if product.SubCategory == "Salami & Lunch Meats" {
+			continue
+		}
+
 		ingredients = append(ingredients, productToIngredient(product))
 	}
 	return ingredients
