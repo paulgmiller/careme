@@ -53,7 +53,7 @@ func (c *captureWineQuestionAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (s *captureWineStaplesProvider) FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error) {
+func (s *captureWineStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
 	panic("unexpected call to FetchStaples")
 }
 

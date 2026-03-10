@@ -181,11 +181,13 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
-	ingredients, err := g.staplesProvider.FetchStaples(ctx, p.Location)
+	ingredients, err := g.staplesProvider.FetchStaples(ctx, p.Location.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for staples: %w", err)
 	}
+	//should this be pushed down into staple proivder? go off product id?
 	ingredients = uniqueByDescription(ingredients)
+
 	mutable.Shuffle(ingredients)
 
 	if err := g.io.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {

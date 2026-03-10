@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -33,6 +34,7 @@ func NewIdentityProvider() identityProvider {
 }
 
 func NewStaplesProvider() StaplesProvider {
+	slog.Info("Loaded safeway", "safeway_count", len(embeddedSafewayProducts), "filtered_count", len(all()))
 	return StaplesProvider{}
 }
 
