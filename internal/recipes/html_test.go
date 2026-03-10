@@ -76,6 +76,9 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, "shopping-wine-refresh:") {
 		t.Error("shopping list HTML should include wine refresh history handling")
 	}
+	if !strings.Contains(html, "Shopping list") {
+		t.Error("shopping list HTML should render the shopping list section for a single recipe")
+	}
 	if !strings.Contains(html, `id="finalize-help"`) {
 		t.Error("shopping list HTML should include helper text for disabled finalize state")
 	}

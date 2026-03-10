@@ -75,10 +75,7 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 		})
 		combinedIngredients = append(combinedIngredients, displayIngredients...)
 	}
-	var shoppingList []ai.Ingredient
-	if len(l.Recipes) > 1 {
-		shoppingList = shoppingListForDisplay(combinedIngredients)
-	}
+	shoppingList := shoppingListForDisplay(combinedIngredients)
 	data := struct {
 		Location        locations.Location
 		Date            string
