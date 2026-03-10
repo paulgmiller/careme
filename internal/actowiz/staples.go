@@ -34,7 +34,7 @@ func NewIdentityProvider() identityProvider {
 }
 
 func NewStaplesProvider() StaplesProvider {
-	slog.Info("Loaded safeway", "count", len(all()))
+	slog.Info("Loaded safeway", "safeway_count", len(embeddedSafewayProducts), "filtered_count", len(all()))
 	return StaplesProvider{}
 }
 

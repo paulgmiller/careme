@@ -40,8 +40,15 @@ func main() {
 		log.Fatalf("failed to get ingredients: %s", err)
 	}
 
+	catMap := make(map[string]int)
 	for _, i := range ings {
+		for _, cat := range *i.Categories {
+			catMap[cat] += 1
+		}
 		fmt.Printf("%s: %s - %s:($%s) size: %s categories: %v\n", toString(i.ProductId), toString(i.Brand), toString(i.Description), toFloat(i.PriceRegular), toString(i.Size), i.Categories)
+	}
+	for cat, count := range catMap {
+		fmt.Printf("Category: %s, Count: %d\n", cat, count)
 	}
 }
 
