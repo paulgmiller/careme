@@ -4,7 +4,6 @@ import (
 	"careme/internal/actowiz"
 	"careme/internal/config"
 	"careme/internal/kroger"
-	"careme/internal/locations"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 	"context"
@@ -14,7 +13,7 @@ import (
 
 // todo make this a indepenedent ingredient object not kroger.
 type staplesProvider interface {
-	FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error)
+	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
 }
 
@@ -30,8 +29,7 @@ type routingStaplesProvider struct {
 type backendStaplesProvider interface {
 	IsID(locationID string) bool
 	Signature() string
-	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
-	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
+	staplesProvider
 }
 
 func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
@@ -44,16 +42,12 @@ func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 	}, nil
 }
 
-func (p routingStaplesProvider) FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error) {
-	if location == nil {
-		return nil, fmt.Errorf("location is required")
-	}
-
-	provider, err := p.providerForLocation(location.ID)
+func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
+	provider, err := p.providerForLocation(locationID)
 	if err != nil {
 		return nil, err
 	}
-	return provider.FetchStaples(ctx, location.ID)
+	return provider.FetchStaples(ctx, locationID)
 }
 
 func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
