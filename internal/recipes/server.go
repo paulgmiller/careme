@@ -640,7 +640,8 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(p.Saved) == 0 {
-		//ui should ideally not allow us to get here
+		//ui does not allow this
+		slog.ErrorContext(ctx, "Got zero saved recipes finalize", "hash", hash)
 		http.Error(w, "no recipes selected to save", http.StatusBadRequest)
 		return
 	}
