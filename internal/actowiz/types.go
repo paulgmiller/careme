@@ -21,6 +21,7 @@ type SafewayProduct struct {
 	Availability       bool     `json:"Availability"`
 }
 
+// custom marshalling mostly to handle fact that prices get "N/A" sometimes
 func (p *SafewayProduct) UnmarshalJSON(data []byte) error {
 	type rawSafewayProduct struct {
 		StoreName          string          `json:"Store Name"`
