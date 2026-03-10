@@ -80,11 +80,16 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	if !strings.Contains(html, `Assemble Shopping List`) {
 		t.Error("HTML should contain Assemble Shopping List button")
 	}
-
-	// Check for finalize HTMX button
-	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
-		t.Error("HTML should submit finalize with HTMX POST")
+	if !strings.Contains(html, `disabled`) {
+		t.Error("HTML should disable finalize button when no recipes are saved")
 	}
+	if strings.Contains(html, `/finalize"`) {
+		t.Error("HTML should not wire finalize endpoint when button is disabled")
+	}
+	if !strings.Contains(html, `Save at least one recipe to assemble your shopping list.`) {
+		t.Error("HTML should explain how to enable finalize button")
+	}
+
 	if !strings.Contains(html, `/recipes/`) || !strings.Contains(html, `/regenerate"`) {
 		t.Error("HTML should submit regenerate with POST endpoint")
 	}
@@ -98,5 +103,36 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	}
 	if !strings.Contains(html, "Recipe Two") {
 		t.Error("HTML should contain Recipe Two title")
+	}
+}
+
+func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
+	listWithSavedRecipe := ai.ShoppingList{
+		Recipes: []ai.Recipe{
+			{
+				Title:       "Saved Recipe",
+				Description: "Saved recipe",
+				Ingredients: []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+				Instructions: []string{
+					"Step 1",
+				},
+				Health:       "Healthy",
+				DrinkPairing: "Water",
+			},
+		},
+	}
+
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
+	w := httptest.NewRecorder()
+	FormatShoppingListHTML(p, listWithSavedRecipe, true, w)
+	html := w.Body.String()
+
+	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
+		t.Error("HTML should submit finalize with HTMX POST when a recipe is saved")
+	}
+	if strings.Contains(html, `id="finalize-help"`) {
+		t.Error("HTML should not render finalize helper text when button is enabled")
 	}
 }

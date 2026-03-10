@@ -76,6 +76,12 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, "shopping-wine-refresh:") {
 		t.Error("shopping list HTML should include wine refresh history handling")
 	}
+	if !strings.Contains(html, `id="finalize-help"`) {
+		t.Error("shopping list HTML should include helper text for disabled finalize state")
+	}
+	if !strings.Contains(html, `disabled`) {
+		t.Error("shopping list HTML should disable finalize button when nothing is saved")
+	}
 }
 
 func TestFormatMail_ValidHTML(t *testing.T) {
