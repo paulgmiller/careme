@@ -184,15 +184,7 @@
             {{end}}
           </div>
 
-          <div class="mt-10 flex flex-wrap items-center gap-4">
-            <button type="button"
-                    id="finalizeButton"
-                    hx-post="/recipes/{{.Hash}}/finalize"
-                    hx-swap="none"
-                    class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
-              Assemble Shopping List
-            </button>
-          </div>
+          {{template "shopping_finalize_controls" .}}
         </div>
       </div>
 
@@ -221,6 +213,41 @@
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
+
+{{define "shopping_finalize_controls"}}
+<div id="shopping-finalize-controls" class="mt-10 flex flex-wrap items-center gap-4">
+  {{template "shopping_finalize_controls_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_finalize_controls_oob"}}
+<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" class="mt-10 flex flex-wrap items-center gap-4">
+  {{template "shopping_finalize_controls_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_finalize_controls_content"}}
+  <span class="inline-flex" {{if not .HasSavedRecipes}}title="Save at least one recipe to assemble your shopping list."{{end}}>
+    <button type="button"
+            id="finalizeButton"
+            {{if .HasSavedRecipes}}hx-post="/recipes/{{.Hash}}/finalize"
+            hx-swap="none"{{else}}disabled
+            aria-disabled="true"
+            aria-describedby="finalize-help"{{end}}
+            class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if .HasSavedRecipes}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
+      Assemble Shopping List
+    </button>
+  </span>
+  {{if not .HasSavedRecipes}}
+  <p id="finalize-help" class="text-sm text-ink-600">
+    Save at least one recipe to assemble your shopping list.
+  </p>
+  {{end}}
+{{end}}
+
+{{define "shopping_finalize_controls_response"}}
+{{template "shopping_finalize_controls_oob" .}}
+{{end}}
 
 {{define "shopping_recipe_wine_action"}}
 <div id="{{.Wine.ActionID}}" class="shopping-wine-action">

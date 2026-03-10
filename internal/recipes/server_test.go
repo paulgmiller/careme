@@ -849,12 +849,24 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 		Title:       "Save Me",
 		Description: "Recipe to save",
 	}
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	p.ConversationID = "conv-123"
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "origin-hash"); err != nil {
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
 		t.Fatalf("failed to save recipe in cache: %v", err)
 	}
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{recipe},
+		ConversationID: "conv-123",
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
 
-	form := url.Values{"h": {"origin-hash"}}
+	form := url.Values{"h": {originHash}}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
@@ -869,6 +881,12 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "Saved to kitchen") {
 		t.Fatalf("expected success response, got body: %s", rr.Body.String())
 	}
+	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `/recipes/`+originHash+`/finalize`) {
+		t.Fatalf("expected finalize button to become enabled after save, got body: %s", rr.Body.String())
+	}
 
 	user, err := storage.GetByID("mock-clerk-user-id")
 	if err != nil {
@@ -880,7 +898,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if user.LastRecipes[0].Hash != recipeHash {
 		t.Fatalf("expected saved hash %q, got %q", recipeHash, user.LastRecipes[0].Hash)
 	}
-	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "origin-hash")
+	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", originHash)
 	if err != nil {
 		t.Fatalf("failed to load selection: %v", err)
 	}
@@ -925,12 +943,24 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 		Title:       "Save Me",
 		Description: "Recipe to save",
 	}
+	currentParams := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	currentParams.ConversationID = "conv-123"
+	currentHash := currentParams.Hash()
+	if err := s.SaveParams(t.Context(), currentParams); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
 	recipeHash := recipe.ComputeHash()
 	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "stale-origin-hash"); err != nil {
 		t.Fatalf("failed to save recipe in cache: %v", err)
 	}
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{recipe},
+		ConversationID: "conv-123",
+	}, currentHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
 
-	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save?h=current-list-hash", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save?h="+currentHash, nil)
 	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()
@@ -940,7 +970,7 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	currentSelection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "current-list-hash")
+	currentSelection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", currentHash)
 	if err != nil {
 		t.Fatalf("failed to load current hash selection: %v", err)
 	}
@@ -969,9 +999,22 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 		Title:       "Dismiss Recipe",
 		Description: "Recipe to dismiss",
 	}
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	p.ConversationID = "conv-123"
+	p.Saved = []ai.Recipe{recipe}
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "origin-hash"); err != nil {
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
 		t.Fatalf("failed to save recipe in cache: %v", err)
+	}
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{recipe},
+		ConversationID: "conv-123",
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
 	}
 
 	user := &utypes.User{
@@ -996,7 +1039,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 		t.Fatalf("failed to create user: %v", err)
 	}
 
-	form := url.Values{"h": {"origin-hash"}}
+	form := url.Values{"h": {originHash}}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/dismiss", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
@@ -1011,6 +1054,12 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "Removed from kitchen") {
 		t.Fatalf("expected dismiss response, got body: %s", rr.Body.String())
 	}
+	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `disabled`) || !strings.Contains(rr.Body.String(), `Save at least one recipe to assemble your shopping list.`) {
+		t.Fatalf("expected finalize button to become disabled after dismiss, got body: %s", rr.Body.String())
+	}
 
 	updated, err := storage.GetByID("mock-clerk-user-id")
 	if err != nil {
@@ -1022,7 +1071,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if updated.LastRecipes[0].Hash != "keep-hash" {
 		t.Fatalf("expected remaining hash keep-hash, got %q", updated.LastRecipes[0].Hash)
 	}
-	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "origin-hash")
+	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", originHash)
 	if err != nil {
 		t.Fatalf("failed to load selection: %v", err)
 	}
@@ -1067,9 +1116,21 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 		Title:       "Dismiss Recipe",
 		Description: "Recipe to dismiss",
 	}
+	currentParams := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	currentParams.ConversationID = "conv-123"
+	currentHash := currentParams.Hash()
+	if err := s.SaveParams(t.Context(), currentParams); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
 	recipeHash := recipe.ComputeHash()
 	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "stale-origin-hash"); err != nil {
 		t.Fatalf("failed to save recipe in cache: %v", err)
+	}
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{recipe},
+		ConversationID: "conv-123",
+	}, currentHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
 	}
 
 	user := &utypes.User{
@@ -1089,7 +1150,7 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 		t.Fatalf("failed to create user: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/dismiss?h=current-list-hash", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/dismiss?h="+currentHash, nil)
 	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()
@@ -1099,7 +1160,7 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	currentSelection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", "current-list-hash")
+	currentSelection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", currentHash)
 	if err != nil {
 		t.Fatalf("failed to load current hash selection: %v", err)
 	}

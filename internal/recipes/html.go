@@ -75,10 +75,7 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 		})
 		combinedIngredients = append(combinedIngredients, displayIngredients...)
 	}
-	var shoppingList []ai.Ingredient
-	if len(l.Recipes) > 1 {
-		shoppingList = shoppingListForDisplay(combinedIngredients)
-	}
+	shoppingList := shoppingListForDisplay(combinedIngredients)
 	data := struct {
 		Location        locations.Location
 		Date            string
@@ -88,6 +85,7 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 		Hash            string
 		Recipes         []shoppingRecipeView
 		ShoppingList    []ai.Ingredient
+		HasSavedRecipes bool
 		ConversationID  string
 		Style           seasons.Style
 		ServerSignedIn  bool
@@ -100,6 +98,7 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 		Hash:            hash,
 		Recipes:         recipeViews,
 		ShoppingList:    shoppingList,
+		HasSavedRecipes: len(p.Saved) > 0,
 		ConversationID:  l.ConversationID,
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
@@ -217,6 +216,18 @@ func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSel
 	if err := templates.ShoppingList.ExecuteTemplate(writer, templateName, data); err != nil {
 		http.Error(writer, "shopping list wine template error: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, writer io.Writer) error {
+	data := struct {
+		Hash            string
+		HasSavedRecipes bool
+	}{
+		Hash:            hash,
+		HasSavedRecipes: hasSavedRecipes,
+	}
+
+	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_finalize_controls_response", data)
 }
 
 // drops clarity, instructions and most of shoppinglist

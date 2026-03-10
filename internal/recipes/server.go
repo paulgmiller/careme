@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"bytes"
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
@@ -460,8 +461,27 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	p, err := s.paramsForAction(ctx, selectionHash, currentUser.ID, "")
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load params for save response", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
+		return
+	}
+
+	var response bytes.Buffer
+	if _, err := fmt.Fprint(&response, `<span class="text-xs font-medium text-action-green-700">Saved to kitchen</span>`); err != nil {
+		slog.ErrorContext(ctx, "failed to build save response", "hash", recipeHash, "error", err)
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
+		return
+	}
+	if err := RenderShoppingFinalizeControlsHTML(selectionHash, len(p.Saved) > 0, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render finalize controls after save", "selection_hash", selectionHash, "error", err)
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
+		return
+	}
+
 	setTextContent(w)
-	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-green-700">Saved to kitchen</span>`)
+	_, err = w.Write(response.Bytes())
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write save response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
@@ -520,8 +540,27 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	p, err := s.paramsForAction(ctx, selectionHash, currentUser.ID, "")
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load params for dismiss response", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
+		return
+	}
+
+	var response bytes.Buffer
+	if _, err := fmt.Fprint(&response, `<span class="text-xs font-medium text-action-red-700">Removed from kitchen</span>`); err != nil {
+		slog.ErrorContext(ctx, "failed to build dismiss response", "hash", recipeHash, "error", err)
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
+		return
+	}
+	if err := RenderShoppingFinalizeControlsHTML(selectionHash, len(p.Saved) > 0, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render finalize controls after dismiss", "selection_hash", selectionHash, "error", err)
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
+		return
+	}
+
 	setTextContent(w)
-	_, err = fmt.Fprint(w, `<span class="text-xs font-medium text-action-red-700">Removed from kitchen</span>`)
+	_, err = w.Write(response.Bytes())
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
@@ -601,7 +640,8 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(p.Saved) == 0 {
-		//ui should ideally not allow us to get here
+		//ui does not allow this
+		slog.ErrorContext(ctx, "Got zero saved recipes finalize", "hash", hash)
 		http.Error(w, "no recipes selected to save", http.StatusBadRequest)
 		return
 	}
