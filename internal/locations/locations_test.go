@@ -165,12 +165,18 @@ func TestGetLocationsByZipLeavesOrderWhenQueryZipCentroidUnknown(t *testing.T) {
 	}
 }
 
-func TestGetLocationsByZipReturnsUnfilteredResultsWhenRequestedZipCentroidMissing(t *testing.T) {
+func TestGetLocationsByZipResolvesMissingRequestedZipCentroid(t *testing.T) {
 	client := newFakeLocationClient()
+	nearLat := 37.331714
+	nearLon := -122.341466
+	midLat := 37.388239
+	midLon := -122.075351
+	farLat := 47.60970
+	farLon := -122.33310
 	client.setListResponse("94012", []Location{
-		{ID: "first", Name: "First", ZipCode: "00602"},
-		{ID: "second", Name: "Second", ZipCode: "98004"},
-		{ID: "third", Name: "Third", ZipCode: "00601"},
+		{ID: "far", Name: "Far", ZipCode: "98004", Lat: &farLat, Lon: &farLon},
+		{ID: "mid", Name: "Mid", ZipCode: "94041", Lat: &midLat, Lon: &midLon},
+		{ID: "near", Name: "Near", ZipCode: "94074", Lat: &nearLat, Lon: &nearLon},
 	})
 
 	server := newTestLocationServer(client)
@@ -178,10 +184,10 @@ func TestGetLocationsByZipReturnsUnfilteredResultsWhenRequestedZipCentroidMissin
 	if err != nil {
 		t.Fatalf("GetLocationsByZip returned error: %v", err)
 	}
-	if len(locs) != 3 {
-		t.Fatalf("expected all locations to be returned, got %d", len(locs))
+	if len(locs) != 2 {
+		t.Fatalf("expected 2 nearby locations after centroid backfill, got %d", len(locs))
 	}
-	if got, want := []string{locs[0].ID, locs[1].ID, locs[2].ID}, []string{"first", "second", "third"}; got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+	if got, want := []string{locs[0].ID, locs[1].ID}, []string{"near", "mid"}; got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("unexpected order: got %v want %v", got, want)
 	}
 }
