@@ -105,5 +105,6 @@ func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
 		ZipCode: summary.ZipCode,
 		Lat:     summary.Lat,
 		Lon:     summary.Lon,
+		Chain:   Container,
 	}
 }

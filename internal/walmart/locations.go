@@ -36,5 +36,6 @@ func storeToLocation(store Store) locationtypes.Location {
 		ZipCode: store.Zip,
 		Lat:     &lat,
 		Lon:     &lon,
+		Chain:   "walmart",
 	}
 }

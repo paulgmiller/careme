@@ -81,4 +81,7 @@ func TestStoreToLocation_UsesWalmartPrefixWithUnderscore(t *testing.T) {
 	if location.Lon == nil || *location.Lon != -122.139487 {
 		t.Fatalf("unexpected location longitude: %v", location.Lon)
 	}
+	if location.Chain != "walmart" {
+		t.Fatalf("unexpected location chain: %q", location.Chain)
+	}
 }
