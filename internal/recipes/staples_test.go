@@ -132,6 +132,14 @@ func TestStaplesSignatureForLocation_UsesSafewayProvider(t *testing.T) {
 	}
 }
 
+func TestStaplesSignatureForLocation_UsesAlbertsonsProvider(t *testing.T) {
+	got := staplesSignatureForLocation("albertsons_611")
+	want := actowiz.NewIdentityProvider().Signature()
+	if got != want {
+		t.Fatalf("unexpected signature: got %q want %q", got, want)
+	}
+}
+
 func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	provider := &stubRoutingStaplesProvider{

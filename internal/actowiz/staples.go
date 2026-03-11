@@ -1,6 +1,7 @@
 package actowiz
 
 import (
+	"careme/internal/albertsons"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -43,8 +44,7 @@ func (p identityProvider) Signature() string {
 }
 
 func (p identityProvider) IsID(locationID string) bool {
-	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
-	return storeID != "" && storeID != locationID
+	return albertsons.IsID(locationID)
 }
 
 func all() []kroger.Ingredient {
@@ -70,14 +70,14 @@ func all() []kroger.Ingredient {
 
 func (p StaplesProvider) FetchStaples(_ context.Context, locationID string) ([]kroger.Ingredient, error) {
 	if !p.IsID(locationID) {
-		return nil, fmt.Errorf("invalid safeway location id %q", locationID)
+		return nil, fmt.Errorf("invalid albertsons-family location id %q", locationID)
 	}
 	return all(), nil
 }
 
 func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, searchTerm string, _ int) ([]kroger.Ingredient, error) {
 	if !p.IsID(locationID) {
-		return nil, fmt.Errorf("invalid safeway location id %q", locationID)
+		return nil, fmt.Errorf("invalid albertsons-family location id %q", locationID)
 	}
 
 	return filterIngredients(all(), searchTerm), nil

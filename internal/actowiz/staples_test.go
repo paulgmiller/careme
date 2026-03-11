@@ -43,7 +43,7 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid location error")
 	}
-	if got, want := err.Error(), `invalid safeway location id "1234"`; got != want {
+	if got, want := err.Error(), `invalid albertsons-family location id "1234"`; got != want {
 		t.Fatalf("unexpected error: got %q want %q", got, want)
 	}
 }
@@ -60,5 +60,21 @@ func TestStaplesProvider_GetIngredientsFiltersAndSkips(t *testing.T) {
 	}
 	if got[0].Description == nil {
 		t.Fatalf("missing description: %+v", got[0])
+	}
+}
+
+func TestIdentityProviderRecognizesAlbertsonsFamilyIDs(t *testing.T) {
+	t.Parallel()
+
+	for _, locationID := range []string{
+		"safeway_1444",
+		"albertsons_611",
+		"starmarket_4568",
+		"haggen_123",
+		"acmemarkets_987",
+	} {
+		if !NewIdentityProvider().IsID(locationID) {
+			t.Fatalf("expected %q to be recognized", locationID)
+		}
 	}
 }

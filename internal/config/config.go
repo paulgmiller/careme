@@ -12,6 +12,7 @@ type Config struct {
 	Kroger     KrogerConfig     `json:"kroger"`
 	Walmart    WalmartConfig    `json:"walmart"`
 	WholeFoods WholeFoodsConfig `json:"wholefoods"`
+	Albertsons AlbertsonsConfig `json:"albertsons"`
 	Mocks      MockConfig       `json:"mocks"`
 	Clerk      ClerkConfig      `json:"clerk"`
 	Admin      AdminConfig      `json:"admin"`
@@ -51,6 +52,14 @@ type WholeFoodsConfig struct {
 }
 
 func (c *WholeFoodsConfig) IsEnabled() bool {
+	return c.Enable
+}
+
+type AlbertsonsConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *AlbertsonsConfig) IsEnabled() bool {
 	return c.Enable
 }
 
@@ -110,6 +119,9 @@ func Load() (*Config, error) {
 		},
 		WholeFoods: WholeFoodsConfig{
 			Enable: os.Getenv("WHOLEFOODS_ENABLE") != "",
+		},
+		Albertsons: AlbertsonsConfig{
+			Enable: os.Getenv("ALBERTSONS_ENABLE") != "",
 		},
 		Walmart: WalmartConfig{
 			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),
