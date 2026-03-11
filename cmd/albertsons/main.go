@@ -53,6 +53,7 @@ func main() {
 	fmt.Printf("synced %d Albertsons-family store summaries\n", synced)
 }
 
+// not concurrent safe because url map is shared. Could fix that with etags or seperate maps.
 func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpClient *http.Client, chain albertsons.Chain, sitemapURL string, delay time.Duration) (int, error) {
 	urlMap, err := albertsons.LoadStoreURLMap(ctx, cacheStore)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
@@ -101,7 +102,7 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 	}
 
 	if updated {
-		if err := albertsons.SaveStoreURLMapEntries(ctx, cacheStore, urlMap); err != nil {
+		if err := albertsons.SaveStoreURLMap(ctx, cacheStore, urlMap); err != nil {
 			return synced, err
 		}
 	}

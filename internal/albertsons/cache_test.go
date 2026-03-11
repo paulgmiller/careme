@@ -31,7 +31,7 @@ func TestStoreURLMapRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSaveStoreURLMapEntriesRoundTrip(t *testing.T) {
+func TestSaveStoreURLMapRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
@@ -40,7 +40,7 @@ func TestSaveStoreURLMapEntriesRoundTrip(t *testing.T) {
 		"https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st.html": "safeway_1444",
 	}
 
-	if err := SaveStoreURLMapEntries(context.Background(), cacheStore, urlMap); err != nil {
+	if err := SaveStoreURLMapcontext.Background(), cacheStore, urlMap); err != nil {
 		t.Fatalf("SaveStoreURLMapEntries returned error: %v", err)
 	}
 

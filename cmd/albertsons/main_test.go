@@ -79,8 +79,8 @@ func TestSyncChainFromSitemapSkipsKnownURLsWithCachedSummaries(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
-	if err := albertsons.SaveStoreURLMap(context.Background(), cacheStore, []albertsons.StoreReference{
-		{ID: "albertsons_3204", URL: baseURL + "/az/lake-havasu-city/1980-mcculloch-blvd.html"},
+	if err := albertsons.SaveStoreURLMap(context.Background(), cacheStore, map[string]string{
+		baseURL + "/az/lake-havasu-city/1980-mcculloch-blvd.html": "albertsons_3204",
 	}); err != nil {
 		t.Fatalf("SaveStoreURLMap returned error: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestSyncChainFromSitemapPreservesOtherChainURLMappings(t *testing.T) {
 		}),
 	}
 
-	if err := albertsons.SaveStoreURLMapEntries(context.Background(), cacheStore, map[string]string{
+	if err := albertsons.SaveStoreURLMap(context.Background(), cacheStore, map[string]string{
 		"https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st.html": "safeway_1444",
 	}); err != nil {
 		t.Fatalf("SaveStoreURLMapEntries returned error: %v", err)

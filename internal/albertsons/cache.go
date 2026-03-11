@@ -24,7 +24,7 @@ type StoreReference struct {
 	URL string `json:"url"`
 }
 
-func SaveStoreURLMapEntries(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
+func SaveStoreURLMap(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
 	raw, err := json.Marshal(urlMap)
 	if err != nil {
 		return fmt.Errorf("marshal store url map: %w", err)
@@ -33,18 +33,6 @@ func SaveStoreURLMapEntries(ctx context.Context, c cache.Cache, urlMap map[strin
 		return fmt.Errorf("write store url map cache: %w", err)
 	}
 	return nil
-}
-
-func SaveStoreURLMap(ctx context.Context, c cache.Cache, refs []StoreReference) error {
-	urlMap := make(map[string]string, len(refs))
-	for _, ref := range refs {
-		if ref.URL == "" || ref.ID == "" {
-			continue
-		}
-		urlMap[ref.URL] = ref.ID
-	}
-
-	return SaveStoreURLMapEntries(ctx, c, urlMap)
 }
 
 func LoadStoreURLMap(ctx context.Context, c cache.Cache) (map[string]string, error) {
@@ -85,6 +73,7 @@ func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 		return nil, fmt.Errorf("list cached store summaries: %w", err)
 	}
 
+	//expensive. Just save a smaller map of centroids
 	summaries := lop.Map(keys, func(key string, _ int) *StoreSummary {
 		reader, err := c.Get(ctx, StoreCachePrefix+key)
 		if err != nil {
