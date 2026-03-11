@@ -31,7 +31,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLocationByID returned error: %v", err)
 	}
-	if loc.Name != "Whole Foods Westlake" || loc.ZipCode != "98121" {
+	if loc.Name != "Whole Foods Westlake" || loc.ZipCode != "98121" || loc.Chain != "wholefoods" {
 		t.Fatalf("unexpected location: %+v", loc)
 	}
 }
@@ -63,6 +63,9 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	}
 	if locs[0].ID != "wholefoods_10216" {
 		t.Fatalf("unexpected location id: %q", locs[0].ID)
+	}
+	if locs[0].Chain != "wholefoods" {
+		t.Fatalf("unexpected location chain: %q", locs[0].Chain)
 	}
 }
 

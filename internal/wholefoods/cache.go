@@ -128,5 +128,6 @@ func storeSummaryToLocation(summary StoreSummaryResponse) locationtypes.Location
 		ZipCode: summary.PrimaryLocation.Address.ZipCode,
 		Lat:     &lat,
 		Lon:     &lon,
+		Chain:   "wholefoods",
 	}
 }

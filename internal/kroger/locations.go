@@ -6,6 +6,8 @@ import (
 	"fmt"
 )
 
+const chainName = "kroger"
+
 func (c *ClientWithResponses) IsID(locationID string) bool {
 	if locationID == "" {
 		return false
@@ -51,6 +53,7 @@ func (c *ClientWithResponses) GetLocationByID(ctx context.Context, locationID st
 		ZipCode: zipCode,
 		Lat:     lat,
 		Lon:     lon,
+		Chain:   chainName,
 	}, nil
 }
 
@@ -91,6 +94,7 @@ func (c *ClientWithResponses) GetLocationsByZip(ctx context.Context, zipcode str
 			ZipCode: zipCode,
 			Lat:     lat,
 			Lon:     lon,
+			Chain:   chainName,
 		})
 	}
 	return locations, nil

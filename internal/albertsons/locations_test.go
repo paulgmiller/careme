@@ -34,7 +34,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLocationByID returned error: %v", err)
 	}
-	if loc.Name != "Safeway 15100 SE 38th St" || loc.ZipCode != "98006" {
+	if loc.Name != "Safeway 15100 SE 38th St" || loc.ZipCode != "98006" || loc.Chain != "albertsons" {
 		t.Fatalf("unexpected location: %+v", loc)
 	}
 }
@@ -66,6 +66,9 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	}
 	if locs[0].ID != "safeway_1444" {
 		t.Fatalf("unexpected location id: %q", locs[0].ID)
+	}
+	if locs[0].Chain != "albertsons" {
+		t.Fatalf("unexpected location chain: %q", locs[0].Chain)
 	}
 }
 
