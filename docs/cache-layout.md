@@ -25,6 +25,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `users/` | JSON `users/types.User` by user ID | `internal/users/storage.go` (`Update`) | `internal/users/storage.go` (`GetByID`, `List`) |
 | `email2user/` | Plain text user ID keyed by normalized email | `internal/users/storage.go` (`FindOrCreateFromClerk`) | `internal/users/storage.go` (`GetByEmail`) |
 | `albertsons/stores/` | JSON `albertsons.StoreSummary` keyed by prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `internal/albertsons` location backend |
+| `albertsons/store_url_map.json` | JSON object mapping store URL to prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `cmd/albertsons` incremental sync |
 | `wholefoods/stores/` | JSON `wholefoods.StoreSummaryResponse` keyed by Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `internal/wholefoods` location backend |
 | `wholefoods/store_url_map.json` | JSON object mapping store URL to Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `cmd/wholefoods` when `-stores` is not provided |
 

@@ -27,6 +27,29 @@ func (c Chain) SitemapURL() string {
 	return "https://" + c.Domain + "/sitemap.xml"
 }
 
+/*
+Acme Markets: 162 locations (CT, DE, MD, NJ, NY and PA)[158][159]
+Albertsons: 381 locations (AZ, AR, CA, CO, ID, LA, MT, NV, NM, ND, OK, OR, TX, UT, WA and WY)[160]
+Albertsons Market: 23 locations (NM)[161]
+Amigos: 4 locations (TX)[162]
+Andronico's: 7 locations (CA)[163]
+Balducci's: 8 locations (CT, MD, NY, VA)[164]
+Carrs: 11 locations (AK)[165]
+Haggen: 15 locations (WA)[166]
+Jewel-Osco: 188 locations (IL, IA, and IN)[167]
+Kings Food Markets: 19 locations (CT, NJ, NY)[168]
+Lucky: 4 locations (UT)[169]
+Market Street: 19 locations (NM and TX)[170]
+Pak 'n Save: 2 locations (CA)[171]
+Pavilions: 27 locations (Southern California)[172]
+Randalls: 28[173] locations (Greater Houston and Greater Austin, TX)[174]
+Safeway: 914 locations (AK, AZ, CA, CO, DC, DE, HI, ID, MD, MT, NE, NV, NM, OR, SD, VA, WA, WY)[175]
+Shaw's: 127 locations (MA, ME, NH, RI and VT)[176]
+Star Market: 21 locations (MA)[177]
+Tom Thumb: 65[173] locations (Dallas–Fort Worth metroplex, TX)[178]
+United Supermarkets: 97 locations (Texas Panhandle) plus 39 United Express locations (NM and TX)[179]
+Vons: 194 locations (Southern California and Southern Nevada)[180]
+*/
 var defaultChains = []Chain{
 	{
 		Brand:       "albertsons",

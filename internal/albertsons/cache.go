@@ -14,9 +14,69 @@ import (
 )
 
 const (
-	Container        = "albertsons"
-	StoreCachePrefix = "albertsons/stores/"
+	Container           = "albertsons"
+	StoreCachePrefix    = "albertsons/stores/"
+	StoreURLMapCacheKey = "albertsons/store_url_map.json"
 )
+
+type StoreReference struct {
+	ID  string `json:"id"`
+	URL string `json:"url"`
+}
+
+func StoreReferencesFromCachedSummaries(ctx context.Context, c cache.ListCache) ([]StoreReference, error) {
+	summaries, err := loadCachedStoreSummaries(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+
+	refs := make([]StoreReference, 0, len(summaries))
+	for _, summary := range summaries {
+		if summary == nil || summary.ID == "" || summary.URL == "" {
+			continue
+		}
+		refs = append(refs, StoreReference{
+			ID:  summary.ID,
+			URL: summary.URL,
+		})
+	}
+	return refs, nil
+}
+
+func SaveStoreURLMap(ctx context.Context, c cache.Cache, refs []StoreReference) error {
+	urlMap := make(map[string]string, len(refs))
+	for _, ref := range refs {
+		if ref.URL == "" || ref.ID == "" {
+			continue
+		}
+		urlMap[ref.URL] = ref.ID
+	}
+
+	raw, err := json.Marshal(urlMap)
+	if err != nil {
+		return fmt.Errorf("marshal store url map: %w", err)
+	}
+	if err := c.Put(ctx, StoreURLMapCacheKey, string(raw), cache.Unconditional()); err != nil {
+		return fmt.Errorf("write store url map cache: %w", err)
+	}
+	return nil
+}
+
+func LoadStoreURLMap(ctx context.Context, c cache.Cache) (map[string]string, error) {
+	reader, err := c.Get(ctx, StoreURLMapCacheKey)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	var urlMap map[string]string
+	if err := json.NewDecoder(reader).Decode(&urlMap); err != nil {
+		return nil, fmt.Errorf("decode store url map cache: %w", err)
+	}
+	return urlMap, nil
+}
 
 func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary) error {
 	if summary == nil {
