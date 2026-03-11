@@ -2,15 +2,11 @@ package wholefoods
 
 import (
 	"careme/internal/cache"
-	"careme/internal/locations/geo"
+	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
-	"log/slog"
-	"sort"
 	"strings"
-
-	"github.com/samber/lo"
 )
 
 const maxLocationDistanceMiles = 20.0
@@ -71,36 +67,11 @@ func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) 
 }
 
 func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	centroid, ok := b.zipLookup.ZipCentroidByZIP(strings.TrimSpace(zipcode))
-	if !ok {
-		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode)
-		//fall back to sort by zip?
-		return nil, nil
-	}
-
-	type ranked struct {
-		location locationtypes.Location
-		distance float64
-	}
-	var rankedLocations []ranked
+	candidates := make([]locationtypes.Location, 0, len(b.byID))
 	for _, loc := range b.byID {
-		if loc.Lat == nil || loc.Lon == nil {
-			continue
-		}
-		distance := geo.HaversineMiles(centroid.Lat, centroid.Lon, *loc.Lat, *loc.Lon)
-		if distance > maxLocationDistanceMiles {
-			continue
-		}
-		rankedLocations = append(rankedLocations, ranked{location: loc, distance: distance})
+		candidates = append(candidates, loc)
 	}
-
-	sort.SliceStable(rankedLocations, func(i, j int) bool {
-		return rankedLocations[i].distance < rankedLocations[j].distance
-	})
-
-	return lo.Map(rankedLocations, func(r ranked, _ int) locationtypes.Location {
-		return r.location
-	}), nil
+	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, maxLocationDistanceMiles), nil
 }
 
 func parseLocationID(locationID string) (string, bool) {
