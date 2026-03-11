@@ -22,7 +22,7 @@ func main() {
 
 	flag.StringVar(&brands, "brands", "", "comma-separated brand keys to sync (default: all configured chains)")
 	flag.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
-	flag.IntVar(&delayMS, "delay-ms", 250, "delay between store page requests in milliseconds")
+	flag.IntVar(&delayMS, "delay-ms", 1000, "delay between store page requests in milliseconds")
 	flag.Parse()
 
 	chains, err := selectedChains(brands)
@@ -44,14 +44,15 @@ func main() {
 		urls, err := albertsons.FetchSitemap(ctx, httpClient, chain.SitemapURL())
 		if err != nil {
 			slog.Warn("failed to fetch sitemap", "brand", chain.Brand, "domain", chain.Domain, "error", err)
+			time.Sleep(delay)
 			continue
 		}
 
-		pages := albertsons.FilterStorePages(urls, []albertsons.Chain{chain})
+		pages := albertsons.FilterStorePages(urls, chain)
 		slog.Info("syncing albertsons-family chain", "brand", chain.Brand, "domain", chain.Domain, "count", len(pages))
 
 		for _, page := range pages {
-			summary, err := albertsons.FetchStoreSummary(ctx, httpClient, page.URL, []albertsons.Chain{chain})
+			summary, err := albertsons.FetchStoreSummary(ctx, httpClient, page.URL, chain)
 			if err != nil {
 				slog.Warn("failed to fetch albertsons store summary", "brand", chain.Brand, "url", page.URL, "error", err)
 				continue
@@ -61,9 +62,7 @@ func main() {
 				continue
 			}
 			synced++
-			if delay > 0 {
-				time.Sleep(delay)
-			}
+			time.Sleep(delay)
 		}
 	}
 

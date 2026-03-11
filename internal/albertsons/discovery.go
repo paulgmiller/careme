@@ -85,18 +85,16 @@ type StoreSummary struct {
 	City    string   `json:"city"`
 	State   string   `json:"state"`
 	ZipCode string   `json:"zip_code"`
-	Phone   string   `json:"phone,omitempty"`
 	URL     string   `json:"url"`
 	Lat     *float64 `json:"lat,omitempty"`
 	Lon     *float64 `json:"lon,omitempty"`
 }
 
 type yextProfile struct {
-	ID               string           `json:"id"`
-	Name             string           `json:"name"`
-	MainPhone        string           `json:"mainPhone"`
-	Address          yextAddress      `json:"address"`
-	AppleActionLinks []yextActionLink `json:"appleActionLinks"`
+	ID      string      `json:"id"`
+	Name    string      `json:"name"`
+	Meta    yextMeta    `json:"meta"`
+	Address yextAddress `json:"address"`
 }
 
 type yextAddress struct {
@@ -106,8 +104,8 @@ type yextAddress struct {
 	Region     string `json:"region"`
 }
 
-type yextActionLink struct {
-	QuickLinkURL string `json:"quickLinkUrl"`
+type yextMeta struct {
+	ID string `json:"id"`
 }
 
 var (
@@ -166,11 +164,11 @@ func FetchSitemap(ctx context.Context, client *http.Client, sitemapURL string) (
 	return urls, nil
 }
 
-func FilterStorePages(urls []string, chains []Chain) []StorePage {
+func FilterStorePages(urls []string, chain Chain) []StorePage {
 	pages := make([]StorePage, 0, len(urls))
 	seen := make(map[string]struct{}, len(urls))
 	for _, rawURL := range urls {
-		page, ok := ParseStorePageURL(rawURL, chains)
+		page, ok := ParseStorePageURL(rawURL, chain)
 		if !ok {
 			continue
 		}
@@ -183,14 +181,21 @@ func FilterStorePages(urls []string, chains []Chain) []StorePage {
 	return pages
 }
 
-func ParseStorePageURL(rawURL string, chains []Chain) (StorePage, bool) {
+// ParseStorePageURL accepts only store landing pages.
+// Expected path shapes are:
+//
+//	/<state>/<city>/<address>.html
+//	/<brand>/<state>/<city>/<address>.html
+//
+// The final segment must be the store address page; category/service pages like
+// /produce.html or /bakery.html add an extra segment and are rejected.
+func ParseStorePageURL(rawURL string, chain Chain) (StorePage, bool) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
 		return StorePage{}, false
 	}
 
-	chain, ok := chainForHost(u.Host, chains)
-	if !ok {
+	if !strings.EqualFold(u.Host, chain.Domain) {
 		return StorePage{}, false
 	}
 
@@ -229,7 +234,7 @@ func ParseStorePageURL(rawURL string, chains []Chain) (StorePage, bool) {
 	}, true
 }
 
-func FetchStoreSummary(ctx context.Context, client *http.Client, pageURL string, chains []Chain) (*StoreSummary, error) {
+func FetchStoreSummary(ctx context.Context, client *http.Client, pageURL string, chain Chain) (*StoreSummary, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build store page request: %w", err)
@@ -253,11 +258,11 @@ func FetchStoreSummary(ctx context.Context, client *http.Client, pageURL string,
 		return nil, fmt.Errorf("read store page: %w", err)
 	}
 
-	return ExtractStoreSummary(pageURL, body, chains)
+	return ExtractStoreSummary(pageURL, body, chain)
 }
 
-func ExtractStoreSummary(pageURL string, body []byte, chains []Chain) (*StoreSummary, error) {
-	page, ok := ParseStorePageURL(pageURL, chains)
+func ExtractStoreSummary(pageURL string, body []byte, chain Chain) (*StoreSummary, error) {
+	page, ok := ParseStorePageURL(pageURL, chain)
 	if !ok {
 		return nil, fmt.Errorf("store page URL %q is invalid", pageURL)
 	}
@@ -274,10 +279,10 @@ func ExtractStoreSummary(pageURL string, body []byte, chains []Chain) (*StoreSum
 
 	storeID := strings.TrimSpace(profile.ID)
 	if storeID == "" {
-		storeID, err = storeIDFromActionLinks(profile.AppleActionLinks)
-		if err != nil {
-			return nil, err
-		}
+		storeID = strings.TrimSpace(profile.Meta.ID)
+	}
+	if storeID == "" {
+		return nil, fmt.Errorf("store id not found in yext profile")
 	}
 
 	address := strings.TrimSpace(profile.Address.Line1)
@@ -295,6 +300,8 @@ func ExtractStoreSummary(pageURL string, body []byte, chains []Chain) (*StoreSum
 		state = page.State
 	}
 
+	// These pages often embed only the banner name ("Safeway", "Albertsons"),
+	// so build a store-specific display name from the address when needed.
 	name := strings.TrimSpace(profile.Name)
 	if name == "" || strings.EqualFold(name, page.Chain.DisplayName) {
 		switch {
@@ -307,6 +314,7 @@ func ExtractStoreSummary(pageURL string, body []byte, chains []Chain) (*StoreSum
 		}
 	}
 
+	//seems fragile?
 	lat, lon := extractGeoPosition(body)
 
 	return &StoreSummary{
@@ -319,20 +327,10 @@ func ExtractStoreSummary(pageURL string, body []byte, chains []Chain) (*StoreSum
 		City:    city,
 		State:   state,
 		ZipCode: zipCode,
-		Phone:   strings.TrimSpace(profile.MainPhone),
 		URL:     pageURL,
 		Lat:     lat,
 		Lon:     lon,
 	}, nil
-}
-
-func chainForHost(host string, chains []Chain) (Chain, bool) {
-	for _, chain := range chains {
-		if strings.EqualFold(host, chain.Domain) {
-			return chain, true
-		}
-	}
-	return Chain{}, false
 }
 
 func extractProfileJSON(body []byte) ([]byte, error) {
@@ -348,25 +346,6 @@ func extractProfileJSON(body []byte) ([]byte, error) {
 	}
 
 	return body[start : start+end], nil
-}
-
-func storeIDFromActionLinks(links []yextActionLink) (string, error) {
-	for _, link := range links {
-		if strings.TrimSpace(link.QuickLinkURL) == "" {
-			continue
-		}
-
-		parsed, err := url.Parse(link.QuickLinkURL)
-		if err != nil {
-			continue
-		}
-
-		storeID := strings.TrimSpace(parsed.Query().Get("storeId"))
-		if storeID != "" {
-			return storeID, nil
-		}
-	}
-	return "", fmt.Errorf("store id not found in yext profile")
 }
 
 func extractGeoPosition(body []byte) (*float64, *float64) {

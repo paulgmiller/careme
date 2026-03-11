@@ -8,36 +8,45 @@ import (
 func TestParseStorePageURL(t *testing.T) {
 	t.Parallel()
 
-	chains := DefaultChains()
+	chainByBrand := make(map[string]Chain)
+	for _, chain := range DefaultChains() {
+		chainByBrand[chain.Brand] = chain
+	}
 	tests := []struct {
-		name string
-		url  string
-		want bool
+		name  string
+		chain Chain
+		url   string
+		want  bool
 	}{
 		{
-			name: "safeway store page",
-			url:  "https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st.html",
-			want: true,
+			name:  "safeway store page",
+			chain: chainByBrand["safeway"],
+			url:   "https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st.html",
+			want:  true,
 		},
 		{
-			name: "albertsons store page",
-			url:  "https://local.albertsons.com/ar/texarkana/3710-state-line-ave.html",
-			want: true,
+			name:  "albertsons store page",
+			chain: chainByBrand["albertsons"],
+			url:   "https://local.albertsons.com/ar/texarkana/3710-state-line-ave.html",
+			want:  true,
 		},
 		{
-			name: "category page",
-			url:  "https://local.acmemarkets.com/ct/new-canaan/288-elm-st/produce.html",
-			want: false,
+			name:  "category page",
+			chain: chainByBrand["acmemarkets"],
+			url:   "https://local.acmemarkets.com/ct/new-canaan/288-elm-st/produce.html",
+			want:  false,
 		},
 		{
-			name: "city page",
-			url:  "https://local.haggen.com/wa/bellingham.html",
-			want: false,
+			name:  "city page",
+			chain: chainByBrand["haggen"],
+			url:   "https://local.haggen.com/wa/bellingham.html",
+			want:  false,
 		},
 		{
-			name: "other brand under safeway host",
-			url:  "https://local.safeway.com/pak-n-save/ca/emeryville/3889-san-pablo-ave.html",
-			want: false,
+			name:  "other brand under safeway host",
+			chain: chainByBrand["safeway"],
+			url:   "https://local.safeway.com/pak-n-save/ca/emeryville/3889-san-pablo-ave.html",
+			want:  false,
 		},
 	}
 
@@ -46,7 +55,7 @@ func TestParseStorePageURL(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, got := ParseStorePageURL(tc.url, chains)
+			_, got := ParseStorePageURL(tc.url, tc.chain)
 			if got != tc.want {
 				t.Fatalf("ParseStorePageURL(%q) = %v, want %v", tc.url, got, tc.want)
 			}
@@ -57,12 +66,13 @@ func TestParseStorePageURL(t *testing.T) {
 func TestFilterStorePagesDeduplicatesAndSkipsNonStores(t *testing.T) {
 	t.Parallel()
 
+	safeway := DefaultChains()[2]
 	pages := FilterStorePages([]string{
 		"https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st.html",
 		"https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st.html",
 		"https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st/produce.html",
 		"https://local.starmarket.com/search.html",
-	}, DefaultChains())
+	}, safeway)
 
 	if len(pages) != 1 {
 		t.Fatalf("expected 1 store page, got %d", len(pages))
@@ -79,11 +89,11 @@ func TestExtractStoreSummary(t *testing.T) {
 	html := strings.Join([]string{
 		`<!doctype html><html><head>`,
 		`<meta name="geo.position" content="47.5765527;-122.1381125">`,
-		`<script type="text/javascript">window.Yext = (function(Yext){Yext.Profile = {"id":"1444","name":"Safeway","mainPhone":"(425) 641-0902","address":{"city":"Bellevue","line1":"15100 SE 38th St","postalCode":"98006","region":"WA"},"appleActionLinks":[{"quickLinkUrl":"https://www.safeway.com/?storeId=1444\u0026zipcode=98006"}]}; return Yext;})(window.Yext || {});</script>`,
+		`<script type="text/javascript">window.Yext = (function(Yext){Yext.Profile = {"id":"1444","name":"Safeway","address":{"city":"Bellevue","line1":"15100 SE 38th St","postalCode":"98006","region":"WA"}}; return Yext;})(window.Yext || {});</script>`,
 		`</head><body></body></html>`,
 	}, "")
 
-	summary, err := ExtractStoreSummary(pageURL, []byte(html), DefaultChains())
+	summary, err := ExtractStoreSummary(pageURL, []byte(html), DefaultChains()[2])
 	if err != nil {
 		t.Fatalf("ExtractStoreSummary returned error: %v", err)
 	}
@@ -105,18 +115,32 @@ func TestExtractStoreSummary(t *testing.T) {
 	}
 }
 
-func TestExtractStoreSummaryFallsBackToActionLinkStoreID(t *testing.T) {
+func TestExtractStoreSummaryRequiresEmbeddedStoreID(t *testing.T) {
 	t.Parallel()
 
 	pageURL := "https://local.albertsons.com/ar/texarkana/3710-state-line-ave.html"
-	html := `<!doctype html><html><head><script>window.Yext = (function(Yext){Yext.Profile = {"name":"Albertsons","address":{"city":"Texarkana","line1":"3710 State Line Ave","postalCode":"71854","region":"AR"},"appleActionLinks":[{"quickLinkUrl":"https://www.albertsons.com/?storeId=611\u0026zipcode=71854"}]}; return Yext;})(window.Yext || {});</script></head><body></body></html>`
+	html := `<!doctype html><html><head><script>window.Yext = (function(Yext){Yext.Profile = {"name":"Albertsons","address":{"city":"Texarkana","line1":"3710 State Line Ave","postalCode":"71854","region":"AR"}}; return Yext;})(window.Yext || {});</script></head><body></body></html>`
 
-	summary, err := ExtractStoreSummary(pageURL, []byte(html), DefaultChains())
+	_, err := ExtractStoreSummary(pageURL, []byte(html), DefaultChains()[0])
+	if err == nil {
+		t.Fatal("expected missing store id error")
+	}
+	if got, want := err.Error(), "store id not found in yext profile"; got != want {
+		t.Fatalf("unexpected error: got %q want %q", got, want)
+	}
+}
+
+func TestExtractStoreSummaryFallsBackToMetaID(t *testing.T) {
+	t.Parallel()
+
+	pageURL := "https://local.albertsons.com/az/lake-havasu-city/1980-mcculloch-blvd.html"
+	html := `<!doctype html><html><head><script>window.Yext = (function(Yext){Yext.Profile = {"name":"Albertsons","meta":{"id":"3204"},"address":{"city":"Lake Havasu City","line1":"1980 Mcculloch Blvd","postalCode":"86403","region":"AZ"}}; return Yext;})(window.Yext || {});</script></head><body></body></html>`
+
+	summary, err := ExtractStoreSummary(pageURL, []byte(html), DefaultChains()[0])
 	if err != nil {
 		t.Fatalf("ExtractStoreSummary returned error: %v", err)
 	}
-
-	if summary.ID != "albertsons_611" || summary.StoreID != "611" {
+	if summary.ID != "albertsons_3204" || summary.StoreID != "3204" {
 		t.Fatalf("unexpected summary: %+v", summary)
 	}
 }
