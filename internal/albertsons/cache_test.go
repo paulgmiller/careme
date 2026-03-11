@@ -6,31 +6,6 @@ import (
 	"testing"
 )
 
-func TestStoreURLMapRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	cacheStore := cache.NewInMemoryCache()
-	refs := []StoreReference{
-		{ID: "albertsons_611", URL: "https://local.albertsons.com/ar/texarkana/3710-state-line-ave.html"},
-		{ID: "safeway_1444", URL: "https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st.html"},
-	}
-
-	if err := SaveStoreURLMap(context.Background(), cacheStore, refs); err != nil {
-		t.Fatalf("SaveStoreURLMap returned error: %v", err)
-	}
-
-	urlMap, err := LoadStoreURLMap(context.Background(), cacheStore)
-	if err != nil {
-		t.Fatalf("LoadStoreURLMap returned error: %v", err)
-	}
-	if len(urlMap) != 2 {
-		t.Fatalf("expected 2 url mappings, got %d", len(urlMap))
-	}
-	if got := urlMap["https://local.albertsons.com/ar/texarkana/3710-state-line-ave.html"]; got != "albertsons_611" {
-		t.Fatalf("unexpected cached store id: %q", got)
-	}
-}
-
 func TestSaveStoreURLMapRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -40,7 +15,7 @@ func TestSaveStoreURLMapRoundTrip(t *testing.T) {
 		"https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st.html": "safeway_1444",
 	}
 
-	if err := SaveStoreURLMapcontext.Background(), cacheStore, urlMap); err != nil {
+	if err := SaveStoreURLMap(context.Background(), cacheStore, urlMap); err != nil {
 		t.Fatalf("SaveStoreURLMapEntries returned error: %v", err)
 	}
 

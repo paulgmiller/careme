@@ -19,11 +19,6 @@ const (
 	StoreURLMapCacheKey = "albertsons/store_url_map.json"
 )
 
-type StoreReference struct {
-	ID  string `json:"id"`
-	URL string `json:"url"`
-}
-
 func SaveStoreURLMap(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
 	raw, err := json.Marshal(urlMap)
 	if err != nil {
