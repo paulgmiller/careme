@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-const maxLocationDistanceMiles = 20.0
-
 type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
@@ -71,7 +69,7 @@ func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string)
 	for _, loc := range b.byID {
 		candidates = append(candidates, loc)
 	}
-	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, maxLocationDistanceMiles), nil
+	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, nearby.MaxLocationDistanceMiles), nil
 }
 
 func parseLocationID(locationID string) (string, bool) {
