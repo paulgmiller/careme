@@ -35,25 +35,6 @@ func SaveStoreURLMapEntries(ctx context.Context, c cache.Cache, urlMap map[strin
 	return nil
 }
 
-func StoreReferencesFromCachedSummaries(ctx context.Context, c cache.ListCache) ([]StoreReference, error) {
-	summaries, err := loadCachedStoreSummaries(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-
-	refs := make([]StoreReference, 0, len(summaries))
-	for _, summary := range summaries {
-		if summary == nil || summary.ID == "" || summary.URL == "" {
-			continue
-		}
-		refs = append(refs, StoreReference{
-			ID:  summary.ID,
-			URL: summary.URL,
-		})
-	}
-	return refs, nil
-}
-
 func SaveStoreURLMap(ctx context.Context, c cache.Cache, refs []StoreReference) error {
 	urlMap := make(map[string]string, len(refs))
 	for _, ref := range refs {

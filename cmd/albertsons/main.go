@@ -16,16 +16,14 @@ import (
 
 func main() {
 	var (
-		brands        string
-		timeoutSec    int
-		delayMS       int
-		rebuildURLMap bool
+		brands     string
+		timeoutSec int
+		delayMS    int
 	)
 
 	flag.StringVar(&brands, "brands", "", "comma-separated brand keys to sync (default: all configured chains)")
 	flag.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
 	flag.IntVar(&delayMS, "delay-ms", 1000, "delay between store page requests in milliseconds")
-	flag.BoolVar(&rebuildURLMap, "rebuild-url-map", false, "rebuild store_url_map.json from cached albertsons/stores entries before syncing")
 	flag.Parse()
 
 	chains, err := selectedChains(brands)
@@ -41,17 +39,6 @@ func main() {
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	ctx := context.Background()
 	delay := time.Duration(delayMS) * time.Millisecond
-
-	if rebuildURLMap {
-		refs, err := albertsons.StoreReferencesFromCachedSummaries(ctx, cacheStore)
-		if err != nil {
-			log.Fatalf("failed to rebuild store url map from cached summaries: %v", err)
-		}
-		if err := albertsons.SaveStoreURLMap(ctx, cacheStore, refs); err != nil {
-			log.Fatalf("failed to save rebuilt store url map: %v", err)
-		}
-		slog.Info("rebuilt albertsons store url map from cached summaries", "count", len(refs))
-	}
 
 	var synced int
 	for _, chain := range chains {
