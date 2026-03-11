@@ -11,21 +11,21 @@ import (
 )
 
 const (
-	defaultProgramType       = "GROCERY"
+	defaultProgramType      = "GROCERY"
 	defaultProductSearchSize = 30
 	defaultProductSearchSort = "relevanceblender"
 )
 
 // ProductSearchRequest configures a call to the Whole Foods product search API.
 type ProductSearchRequest struct {
-	Text                      string
-	OfferListingDiscriminator string
-	Offset                    int
-	Size                      int
-	Sort                      string
-	ProgramType               string
-	Filters                   string
-	Categories                []string
+	Text                       string
+	OfferListingDiscriminator  string
+	Offset                     int
+	Size                       int
+	Sort                       string
+	ProgramType                string
+	Filters                    string
+	Categories                 []string
 }
 
 // ProductSearchResponse matches the public Whole Foods search payload returned by the WWOS RSI API.
@@ -34,27 +34,27 @@ type ProductSearchResponse struct {
 }
 
 type ProductSearchResultSet struct {
-	SearchResults               []ProductSearchResult              `json:"searchResults"`
-	ApproximateTotalResultCount int                                `json:"approximateTotalResultCount"`
-	AvailableTotalResultCount   int                                `json:"availableTotalResultCount"`
-	TotalResultCountPreVE       int                                `json:"totalResultCountPreVE"`
-	Keywords                    string                             `json:"keywords"`
+	SearchResults               []ProductSearchResult            `json:"searchResults"`
+	ApproximateTotalResultCount int                              `json:"approximateTotalResultCount"`
+	AvailableTotalResultCount   int                              `json:"availableTotalResultCount"`
+	TotalResultCountPreVE       int                              `json:"totalResultCountPreVE"`
+	Keywords                    string                           `json:"keywords"`
 	AugmentModifications        []ProductSearchAugmentModification `json:"augmentModifications,omitempty"`
 }
 
 type ProductSearchResult struct {
-	ASIN                    string `json:"asin"`
-	InjectionSource         string `json:"injectionSource"`
-	IsAdultProduct          bool   `json:"isAdultProduct"`
-	ProductGroup            string `json:"productGroup,omitempty"`
-	AmazonsChoiceExactLabel bool   `json:"amazonsChoiceExactLabel"`
+	ASIN                     string `json:"asin"`
+	InjectionSource          string `json:"injectionSource"`
+	IsAdultProduct           bool   `json:"isAdultProduct"`
+	ProductGroup             string `json:"productGroup,omitempty"`
+	AmazonsChoiceExactLabel  bool   `json:"amazonsChoiceExactLabel"`
 }
 
 type ProductSearchAugmentModification struct {
-	Action   string            `json:"action"`
-	Type     string            `json:"type"`
-	Source   string            `json:"source"`
-	Metadata map[string]string `json:"metadata,omitempty"`
+	Action   string                           `json:"action"`
+	Type     string                           `json:"type"`
+	Source   string                           `json:"source"`
+	Metadata map[string]string                `json:"metadata,omitempty"`
 }
 
 // ProductHydrationRequest configures a call to the Whole Foods product hydration API.
@@ -68,21 +68,21 @@ type ProductHydrationRequest struct {
 type ProductHydrationResponse []HydratedProduct
 
 type HydratedProduct struct {
-	BrandName             string                         `json:"brandName"`
-	Name                  string                         `json:"name"`
-	ASIN                  string                         `json:"asin"`
-	ProgramType           string                         `json:"programType"`
-	Description           string                         `json:"description"`
-	About                 []string                       `json:"about"`
-	ProductImages         []string                       `json:"productImages"`
-	Availability          string                         `json:"availability"`
-	PDPType               string                         `json:"pdpType"`
-	OfferDetails          *HydratedOfferDetails          `json:"offerDetails"`
+	BrandName             string                       `json:"brandName"`
+	Name                  string                       `json:"name"`
+	ASIN                  string                       `json:"asin"`
+	ProgramType           string                       `json:"programType"`
+	Description           string                       `json:"description"`
+	About                 []string                     `json:"about"`
+	ProductImages         []string                     `json:"productImages"`
+	Availability          string                       `json:"availability"`
+	PDPType               string                       `json:"pdpType"`
+	OfferDetails          *HydratedOfferDetails        `json:"offerDetails"`
 	VariableUnitOfMeasure *HydratedVariableUnitOfMeasure `json:"variableUnitOfMeasure"`
-	CTATag                string                         `json:"ctaTag,omitempty"`
-	DeliveryPromiseHTML   string                         `json:"deliveryPromiseHtml,omitempty"`
-	DietTypes             []string                       `json:"dietTypes,omitempty"`
-	Category              HydratedCategory               `json:"category"`
+	CTATag                string                       `json:"ctaTag,omitempty"`
+	DeliveryPromiseHTML   string                       `json:"deliveryPromiseHtml,omitempty"`
+	DietTypes             []string                     `json:"dietTypes,omitempty"`
+	Category              HydratedCategory             `json:"category"`
 }
 
 type HydratedOfferDetails struct {
@@ -93,11 +93,11 @@ type HydratedOfferDetails struct {
 }
 
 type HydratedPrice struct {
-	CurrencyCode     string               `json:"currencyCode"`
-	PriceAmount      float64              `json:"priceAmount"`
-	BasisPriceAmount *float64             `json:"basisPriceAmount"`
-	Savings          HydratedSavings      `json:"savings"`
-	PrimeBenefit     HydratedPrimeBenefit `json:"primeBenefit"`
+	CurrencyCode     string                `json:"currencyCode"`
+	PriceAmount      float64               `json:"priceAmount"`
+	BasisPriceAmount *float64              `json:"basisPriceAmount"`
+	Savings          HydratedSavings       `json:"savings"`
+	PrimeBenefit     HydratedPrimeBenefit  `json:"primeBenefit"`
 }
 
 type HydratedSavings struct {
@@ -115,8 +115,8 @@ type HydratedPrimeBenefit struct {
 }
 
 type HydratedVariableUnitOfMeasure struct {
-	PricingUOM       HydratedUnitOfMeasure  `json:"pricingUom"`
-	SellingUOM       HydratedUnitOfMeasure  `json:"sellingUom"`
+	PricingUOM       HydratedUnitOfMeasure `json:"pricingUom"`
+	SellingUOM       HydratedUnitOfMeasure `json:"sellingUom"`
 	SelectorItemList []HydratedSelectorItem `json:"selectorItemList"`
 }
 
@@ -126,9 +126,9 @@ type HydratedUnitOfMeasure struct {
 }
 
 type HydratedSelectorItem struct {
-	SelectorPrice                 HydratedSelectorPrice `json:"selectorPrice"`
-	SelectorSellingQuantityString string                `json:"selectorSellingQuantityString"`
-	SelectorSellingQuantityValue  int                   `json:"selectorSellingQuantityValue"`
+	SelectorPrice                HydratedSelectorPrice `json:"selectorPrice"`
+	SelectorSellingQuantityString string               `json:"selectorSellingQuantityString"`
+	SelectorSellingQuantityValue  int                  `json:"selectorSellingQuantityValue"`
 }
 
 type HydratedSelectorPrice struct {
