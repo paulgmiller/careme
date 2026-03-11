@@ -84,14 +84,11 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 		urlMap = make(map[string]string, len(pages))
 	}
 
-	refs := make([]albertsons.StoreReference, 0, len(pages))
 	var synced int
 	var updated bool
 	for _, page := range pages {
 		locationID := strings.TrimSpace(urlMap[page.URL])
 		if locationID != "" {
-			refs = append(refs, albertsons.StoreReference{ID: locationID, URL: page.URL})
-
 			//exists, err := cacheStore.Exists(ctx, albertsons.StoreCachePrefix+locationID)
 			//if err == nil && exists {
 			continue
@@ -112,13 +109,12 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 			urlMap[page.URL] = summary.ID
 			updated = true
 		}
-		refs = append(refs, albertsons.StoreReference{ID: summary.ID, URL: page.URL})
 		synced++
 		time.Sleep(delay)
 	}
 
 	if updated {
-		if err := albertsons.SaveStoreURLMap(ctx, cacheStore, refs); err != nil {
+		if err := albertsons.SaveStoreURLMapEntries(ctx, cacheStore, urlMap); err != nil {
 			return synced, err
 		}
 	}

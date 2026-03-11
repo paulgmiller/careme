@@ -24,6 +24,17 @@ type StoreReference struct {
 	URL string `json:"url"`
 }
 
+func SaveStoreURLMapEntries(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
+	raw, err := json.Marshal(urlMap)
+	if err != nil {
+		return fmt.Errorf("marshal store url map: %w", err)
+	}
+	if err := c.Put(ctx, StoreURLMapCacheKey, string(raw), cache.Unconditional()); err != nil {
+		return fmt.Errorf("write store url map cache: %w", err)
+	}
+	return nil
+}
+
 func StoreReferencesFromCachedSummaries(ctx context.Context, c cache.ListCache) ([]StoreReference, error) {
 	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
@@ -52,14 +63,7 @@ func SaveStoreURLMap(ctx context.Context, c cache.Cache, refs []StoreReference) 
 		urlMap[ref.URL] = ref.ID
 	}
 
-	raw, err := json.Marshal(urlMap)
-	if err != nil {
-		return fmt.Errorf("marshal store url map: %w", err)
-	}
-	if err := c.Put(ctx, StoreURLMapCacheKey, string(raw), cache.Unconditional()); err != nil {
-		return fmt.Errorf("write store url map cache: %w", err)
-	}
-	return nil
+	return SaveStoreURLMapEntries(ctx, c, urlMap)
 }
 
 func LoadStoreURLMap(ctx context.Context, c cache.Cache) (map[string]string, error) {
