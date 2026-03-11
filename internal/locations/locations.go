@@ -1,6 +1,7 @@
 package locations
 
 import (
+	"careme/internal/albertsons"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -104,6 +105,19 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 			return nil, fmt.Errorf("failed to create Whole Foods backend: %w", err)
 		}
 		backends = append(backends, wfBackend)
+	}
+	if cfg.Albertsons.IsEnabled() {
+		slog.Info("initializing Albertsons location backend")
+		listCache, err := cache.EnsureCache(albertsons.Container)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Albertsons list cache: %w", err)
+		}
+
+		albertsonsBackend, err := albertsons.NewLocationBackend(context.Background(), listCache, centroids)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Albertsons backend: %w", err)
+		}
+		backends = append(backends, albertsonsBackend)
 	}
 	return &locationStorage{
 		client:       backends,

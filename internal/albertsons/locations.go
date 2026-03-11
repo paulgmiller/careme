@@ -1,4 +1,4 @@
-package wholefoods
+package albertsons
 
 import (
 	"careme/internal/cache"
@@ -26,7 +26,6 @@ func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centro
 		return nil, fmt.Errorf("zip centroid lookup is required")
 	}
 
-	//Is this too much? should we just fetch a single blob that is all coordinates -> store ids and lazily fetch stores?
 	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
 		return nil, err
@@ -45,19 +44,18 @@ func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centro
 }
 
 func (b *LocationBackend) IsID(locationID string) bool {
-	_, ok := parseLocationID(locationID)
-	return ok
+	return IsID(locationID)
 }
 
 func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
-	normalized, ok := parseLocationID(locationID)
-	if !ok {
-		return nil, fmt.Errorf("whole foods location id %q is invalid", locationID)
+	locationID = strings.TrimSpace(locationID)
+	if !IsID(locationID) {
+		return nil, fmt.Errorf("albertsons location id %q is invalid", locationID)
 	}
 
-	loc, exists := b.byID[normalized]
+	loc, exists := b.byID[locationID]
 	if !exists {
-		return nil, fmt.Errorf("whole foods location %q not found", locationID)
+		return nil, fmt.Errorf("albertsons location %q not found", locationID)
 	}
 
 	copy := loc
@@ -70,13 +68,4 @@ func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string)
 		candidates = append(candidates, loc)
 	}
 	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, nearby.MaxLocationDistanceMiles), nil
-}
-
-func parseLocationID(locationID string) (string, bool) {
-	if !strings.HasPrefix(locationID, LocationIDPrefix) {
-		return "", false
-	}
-
-	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
-	return LocationIDPrefix + storeID, true
 }
