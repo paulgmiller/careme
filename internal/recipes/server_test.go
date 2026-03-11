@@ -878,14 +878,23 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Saved to kitchen") {
-		t.Fatalf("expected success response, got body: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), `id="shopping-selection-`) {
+		t.Fatalf("expected selection action response, got body: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `/dismiss"`) || !strings.Contains(rr.Body.String(), `Dismiss`) {
+		t.Fatalf("expected save response to flip the action to dismiss, got body: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `id="shopping-list-section"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected shopping list oob response, got body: %s", rr.Body.String())
 	}
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
-		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
+		t.Fatalf("expected footer controls oob response, got body: %s", rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), `/recipes/`+originHash+`/finalize`) {
-		t.Fatalf("expected finalize button to become enabled after save, got body: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), `Saved`) {
+		t.Fatalf("expected save response to show saved state, got body: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `Save Me`) && !strings.Contains(rr.Body.String(), `Save a recipe to start your shopping list.`) {
+		t.Fatalf("expected save response to update the shopping list section, got body: %s", rr.Body.String())
 	}
 
 	user, err := storage.GetByID("mock-clerk-user-id")
@@ -1051,14 +1060,20 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Removed from kitchen") {
-		t.Fatalf("expected dismiss response, got body: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), `id="shopping-selection-`) {
+		t.Fatalf("expected selection action response, got body: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `/save"`) || !strings.Contains(rr.Body.String(), `Save`) {
+		t.Fatalf("expected dismiss response to flip the action back to save, got body: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `id="shopping-list-section"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected shopping list oob response, got body: %s", rr.Body.String())
 	}
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
-		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
+		t.Fatalf("expected footer controls oob response, got body: %s", rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), `disabled`) || !strings.Contains(rr.Body.String(), `Save at least one recipe to assemble your shopping list.`) {
-		t.Fatalf("expected finalize button to become disabled after dismiss, got body: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), `Save a recipe to start your shopping list.`) {
+		t.Fatalf("expected dismiss response to restore the empty shopping list state, got body: %s", rr.Body.String())
 	}
 
 	updated, err := storage.GetByID("mock-clerk-user-id")
