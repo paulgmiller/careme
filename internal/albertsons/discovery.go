@@ -58,6 +58,12 @@ var defaultChains = []Chain{
 		IDPrefix:    "albertsons_",
 	},
 	{
+		Brand:       "shaws",
+		DisplayName: "Shaw's",
+		Domain:      "local.shaws.com",
+		IDPrefix:    "shaws_",
+	},
+	{
 		Brand:       "starmarket",
 		DisplayName: "Star Market",
 		Domain:      "local.starmarket.com",
@@ -81,6 +87,48 @@ var defaultChains = []Chain{
 		DisplayName: "ACME Markets",
 		Domain:      "local.acmemarkets.com",
 		IDPrefix:    "acmemarkets_",
+	},
+	{
+		Brand:       "vons",
+		DisplayName: "Vons",
+		Domain:      "local.vons.com",
+		IDPrefix:    "vons_",
+	},
+	{
+		Brand:       "jewelosco",
+		DisplayName: "Jewel-Osco",
+		Domain:      "local.jewelosco.com",
+		IDPrefix:    "jewelosco_",
+	},
+	{
+		Brand:       "unitedsupermarkets",
+		DisplayName: "United Supermarkets",
+		Domain:      "local.unitedsupermarkets.com",
+		IDPrefix:    "unitedsupermarkets_",
+	},
+	{
+		Brand:       "tomthumb",
+		DisplayName: "Tom Thumb",
+		Domain:      "local.tomthumb.com",
+		IDPrefix:    "tomthumb_",
+	},
+	{
+		Brand:       "randalls",
+		DisplayName: "Randalls",
+		Domain:      "local.randalls.com",
+		IDPrefix:    "randalls_",
+	},
+	{
+		Brand:       "pavilions",
+		DisplayName: "Pavilions",
+		Domain:      "local.pavilions.com",
+		IDPrefix:    "pavilions_",
+	},
+	{
+		Brand:       "kingsfoodmarkets",
+		DisplayName: "Kings Food Markets",
+		Domain:      "local.kingsfoodmarkets.com",
+		IDPrefix:    "kingsfoodmarkets_",
 	},
 }
 
