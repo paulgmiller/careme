@@ -11,6 +11,7 @@ type Config struct {
 	AI         AIConfig         `json:"ai"`
 	Kroger     KrogerConfig     `json:"kroger"`
 	Walmart    WalmartConfig    `json:"walmart"`
+	Aldi       AldiConfig       `json:"aldi"`
 	WholeFoods WholeFoodsConfig `json:"wholefoods"`
 	Albertsons AlbertsonsConfig `json:"albertsons"`
 	Mocks      MockConfig       `json:"mocks"`
@@ -52,6 +53,14 @@ type WholeFoodsConfig struct {
 }
 
 func (c *WholeFoodsConfig) IsEnabled() bool {
+	return c.Enable
+}
+
+type AldiConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *AldiConfig) IsEnabled() bool {
 	return c.Enable
 }
 
@@ -116,6 +125,9 @@ func Load() (*Config, error) {
 		},
 		Admin: AdminConfig{
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+		},
+		Aldi: AldiConfig{
+			Enable: os.Getenv("ALDI_ENABLE") != "",
 		},
 		WholeFoods: WholeFoodsConfig{
 			Enable: os.Getenv("WHOLEFOODS_ENABLE") != "",
