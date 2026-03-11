@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -140,7 +141,7 @@ func MakeCache() (ListCache, error) {
 func EnsureCache(container string) (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
-		log.Println("Using Azure Blob Storage for cache")
+		slog.Info("Using Azure Blob Storage for cache", "container", container)
 		return NewBlobCache(container)
 	}
 	return NewFileCache(container), nil

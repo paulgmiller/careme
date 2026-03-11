@@ -122,6 +122,7 @@ func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 	if len(summaries) == 0 {
 		return nil, fmt.Errorf("failed to load albertsons locations")
 	}
+	slog.InfoContext(ctx, "loaded albertsons locations", "count", len(summaries))
 
 	return summaries, nil
 }
