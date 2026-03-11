@@ -2,6 +2,7 @@ package locations
 
 import (
 	"careme/internal/albertsons"
+	"careme/internal/aldi"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -93,6 +94,19 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 			return nil, fmt.Errorf("failed to create Walmart client: %w", err)
 		}
 		backends = append(backends, wclient)
+	}
+	if cfg.Aldi.IsEnabled() {
+		slog.Info("initializing ALDI location backend")
+		listCache, err := cache.EnsureCache(aldi.Container)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ALDI list cache: %w", err)
+		}
+
+		aldiBackend, err := aldi.NewLocationBackend(context.Background(), listCache, centroids)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ALDI backend: %w", err)
+		}
+		backends = append(backends, aldiBackend)
 	}
 	if cfg.WholeFoods.IsEnabled() {
 		slog.Info("initializing Whole Foods location backend")
