@@ -13,6 +13,7 @@ type Config struct {
 	Walmart    WalmartConfig    `json:"walmart"`
 	WholeFoods WholeFoodsConfig `json:"wholefoods"`
 	Albertsons AlbertsonsConfig `json:"albertsons"`
+	Publix     PublixConfig     `json:"publix"`
 	Mocks      MockConfig       `json:"mocks"`
 	Clerk      ClerkConfig      `json:"clerk"`
 	Admin      AdminConfig      `json:"admin"`
@@ -60,6 +61,14 @@ type AlbertsonsConfig struct {
 }
 
 func (c *AlbertsonsConfig) IsEnabled() bool {
+	return c.Enable
+}
+
+type PublixConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *PublixConfig) IsEnabled() bool {
 	return c.Enable
 }
 
@@ -122,6 +131,9 @@ func Load() (*Config, error) {
 		},
 		Albertsons: AlbertsonsConfig{
 			Enable: os.Getenv("ALBERTSONS_ENABLE") != "",
+		},
+		Publix: PublixConfig{
+			Enable: os.Getenv("PUBLIX_ENABLE") != "",
 		},
 		Walmart: WalmartConfig{
 			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),

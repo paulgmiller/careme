@@ -8,6 +8,7 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
+	"careme/internal/publix"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -118,6 +119,19 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 			return nil, fmt.Errorf("failed to create Albertsons backend: %w", err)
 		}
 		backends = append(backends, albertsonsBackend)
+	}
+	if cfg.Publix.IsEnabled() {
+		slog.Info("initializing Publix location backend")
+		listCache, err := cache.EnsureCache(publix.Container)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Publix list cache: %w", err)
+		}
+
+		publixBackend, err := publix.NewLocationBackend(context.Background(), listCache, centroids)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Publix backend: %w", err)
+		}
+		backends = append(backends, publixBackend)
 	}
 	return &locationStorage{
 		client:       backends,
