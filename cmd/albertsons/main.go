@@ -92,12 +92,12 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 		if locationID != "" {
 			refs = append(refs, albertsons.StoreReference{ID: locationID, URL: page.URL})
 
-			exists, err := cacheStore.Exists(ctx, albertsons.StoreCachePrefix+locationID)
-			if err == nil && exists {
-				continue
-			}
+			//exists, err := cacheStore.Exists(ctx, albertsons.StoreCachePrefix+locationID)
+			//if err == nil && exists {
+			continue
+			//	}
 		}
-
+		slog.Info("fetching albertsons store summary", "brand", chain.Brand, "url", page.URL)
 		summary, err := albertsons.FetchStoreSummary(ctx, httpClient, page.URL, chain)
 		if err != nil {
 			slog.Warn("failed to fetch albertsons store summary", "brand", chain.Brand, "url", page.URL, "error", err)
