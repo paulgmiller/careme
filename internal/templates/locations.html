@@ -8,13 +8,14 @@
   {{template "tailwind_head" .Style}}
 
   {{.ClarityScript}}
+  {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
   <main class="px-4 py-10">
     <section class="mx-auto w-full max-w-3xl">
       <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 p-8">
-          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Nearby Locations</h1>
+          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Nearby Stores</h1>
           <p class="mt-2 text-gray-600">Showing results near ZIP <span class="font-semibold text-brand-700">{{.Zip}}</span>.</p>
         </div>
 
@@ -49,7 +50,7 @@
                 </a>
                 <label for="instructions-{{.ID}}"
                   class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Instructions
+                  Chef notes
                 </label>
               </div>
             </div>
@@ -61,7 +62,7 @@
                 <div class="flex flex-wrap items-center gap-2">
                   <button type="submit"
                     class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Generate
+                    Build Recipes
                   </button>
                 </div>
               </form>
@@ -71,7 +72,10 @@
         </ul>
       </div>
 
-      <p class="mt-6 text-center text-sm text-gray-500">Can’t find the right store? Try a different ZIP code from the home page.</p>
+      <p class="mt-6 text-center text-sm text-gray-500">
+        Don't see your local store?
+        <a href="https://github.com/paulgmiller/careme/issues/99" class="font-medium text-brand-700 underline decoration-brand-300 underline-offset-2 transition hover:text-brand-800">Request it here</a>.
+      </p>
     </section>
   </main>
   <script src="/static/htmx@2.0.8.js"></script>

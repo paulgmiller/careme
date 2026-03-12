@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -57,18 +58,33 @@ func NewFileCache(dir string) *FileCache {
 
 func (fc *FileCache) List(_ context.Context, prefix string, _ string) ([]string, error) {
 	var keys []string
+	if _, err := os.Stat(fc.Dir); os.IsNotExist(err) {
+		return nil, nil
+	}
+
 	err := filepath.Walk(fc.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && strings.HasPrefix(path, prefix) {
-			keys = append(keys, strings.TrimPrefix(path, prefix))
+		if info.IsDir() {
+			return nil
+		}
+
+		relativePath, err := filepath.Rel(fc.Dir, path)
+		if err != nil {
+			return err
+		}
+
+		relativePath = filepath.ToSlash(relativePath)
+		if strings.HasPrefix(relativePath, prefix) {
+			keys = append(keys, strings.TrimPrefix(relativePath, prefix))
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	sort.Strings(keys)
 	return keys, nil
 }
 

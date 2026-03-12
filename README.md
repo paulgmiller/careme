@@ -14,6 +14,8 @@ The application is configured via environment variables:
 - `AI_API_KEY` - OpenAI or Anthropic API key (required)
 ### Optional 
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
+- `GOOGLE_TAG_ID` - Google Ads/gtag ID for web analytics (optional)
+- `GOOGLE_CONVERSION_LABEL` - Google Ads conversion label used on `/auth/establish?signup=true` (optional)
 - `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
 
 if you're
@@ -27,6 +29,9 @@ and
 bash tailwind/generate.sh
 ```
 if you change input css or any *.html
+
+## Cache Key Layout
+See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key/prefix layout and backend notes.
 
 ## Frontend Approach
 - Prefer server-rendered HTML and HTMX for interactive behavior.

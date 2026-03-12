@@ -8,13 +8,16 @@
 - `recipes/`: Local output directory created at runtime; keep it out of commits unless intentionally adding fixtures.
 - `internal/auth` : mostly clerk authorization
 
+## Cache Layout
+- Cache key/prefix docs live in `docs/cache-layout.md`. Keep that file updated when cache keys are added or changed.
+
 ## Build, Test, and Development Commands
 - Sandbox-safe Go cache setup (recommended before running Go commands in restricted environments):
   - `export GOCACHE=/tmp/go-build`
   - `export GOMODCACHE=/tmp/go-modcache`
   - Alternative persistent path inside repo: `export GOCACHE=$PWD/.cache/go-build && export GOMODCACHE=$PWD/.cache/go-modcache`
 - `go fmt ./...` then `go vet ./...`: Baseline formatting and static checks.
-- `golangci-lint run  ./...`: For expanded go linters
+- From the repo root, run `golangci-lint run ./...`: Expanded Go linters.
 - `export ENABLE_MOCKS=1`: to test without kroger, openai credentials
 - `go test ./...`: Run unit tests across all packages; add `-cover` when changing core logic.
 - `go run ./cmd/careme -serve -addr :8080`: Start the web server (requires env vars below).
@@ -31,6 +34,7 @@
 
 ## Testing Guidelines
 - Always run tests after making code changes. Default to `go test ./...`; use a narrower `go test ./... -run TestName` only when appropriate for quick iteration. If you cannot run tests, explicitly say why.
+- From the repo root, run `golangci-lint run ./...` after Go changes unless the task clearly does not affect linted code.
 - Place tests alongside code in `*_test.go`; prefer table-driven cases and explicit fixtures over implicit globals.
 - Use `go test ./... -run TestName` for targeted debugging; keep deterministic by avoiding network calls and using fakes where possible.
 - When touching recipe generation or Kroger client code, add assertions that cover API shape changes and template output (see existing tests in `internal/recipes` and `internal/html`).
@@ -42,5 +46,6 @@
 - Keep commits scoped and reviewable; avoid mixing refactors with feature changes unless necessary.
 
 ## Security & Configuration Notes
-- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `CLARITY_PROJECT_ID`, `HISTORY_PATH`. Azure logging uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`.
+- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `CLARITY_PROJECT_ID`, `GOOGLE_TAG_ID`, `GOOGLE_CONVERSION_LABEL`, `HISTORY_PATH`. Azure logging uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`.
 - Never commit secrets or generated recipe outputs. If testing against real APIs, use minimal scopes and rotate keys promptly.
+- Any handler that lets you see data from multiple users should go behind the /admin mux to secure it. 

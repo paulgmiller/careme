@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alpkeskin/gotoon"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/conversations"
 	"github.com/openai/openai-go/v3/option"
@@ -24,9 +23,10 @@ import (
 )
 
 type Client struct {
-	apiKey string
-	schema map[string]any
-	model  string
+	apiKey     string
+	schema     map[string]any
+	wineSchema map[string]any
+	model      string
 }
 
 // todo collapse closer to
@@ -39,6 +39,8 @@ type Ingredient struct {
 type Recipe struct {
 	Title        string       `json:"title"`
 	Description  string       `json:"description"`
+	CookTime     string       `json:"cook_time"`
+	CostEstimate string       `json:"cost_estimate"`
 	Ingredients  []Ingredient `json:"ingredients"`
 	Instructions []string     `json:"instructions"`
 	Health       string       `json:"health"`
@@ -57,6 +59,8 @@ func (r *Recipe) ComputeHash() string {
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, r.Title))
 	lo.Must(io.WriteString(fnv, r.Description))
+	lo.Must(io.WriteString(fnv, r.CookTime))
+	lo.Must(io.WriteString(fnv, r.CostEstimate))
 	for _, ing := range r.Ingredients {
 		lo.Must(io.WriteString(fnv, ing.Name))
 		lo.Must(io.WriteString(fnv, ing.Quantity))
@@ -77,6 +81,11 @@ type ShoppingList struct {
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
 }
 
+type WineSelection struct {
+	Wines      []Ingredient `json:"wines"`
+	Commentary string       `json:"commentary"`
+}
+
 // ignoring model for now.
 func NewClient(apiKey, _ string) *Client {
 	//ignor model for now.
@@ -84,14 +93,19 @@ func NewClient(apiKey, _ string) *Client {
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
 	}
-	schema := r.Reflect(&ShoppingList{})
-	schemaJSON, _ := json.Marshal(schema)
+	recipesSchema := r.Reflect(&ShoppingList{})
+	recipesSchemaJSON, _ := json.Marshal(recipesSchema)
+	wineSchema := r.Reflect(&WineSelection{})
+	wineSchemaJSON, _ := json.Marshal(wineSchema)
 	var m map[string]any
-	_ = json.Unmarshal(schemaJSON, &m)
+	_ = json.Unmarshal(recipesSchemaJSON, &m)
+	var wine map[string]any
+	_ = json.Unmarshal(wineSchemaJSON, &wine)
 	return &Client{
-		apiKey: apiKey,
-		schema: m,
-		model:  openai.ChatModelGPT5_2,
+		apiKey:     apiKey,
+		schema:     m,
+		wineSchema: wine,
+		model:      openai.ChatModelGPT5_4,
 	}
 }
 
@@ -105,23 +119,27 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch is also good.
 - Recipes should use diverse cooking methods and represent a variety of cuisines.
 - Provide clear, step-by-step instructions and an ingredient list for each recipe. repeat amounts and prep for each recipe in instructions.
-- Recipes should take under 1 hour to prepare, unless the user asks for something longer
-- Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles and a local brand if possible. Really put your Sommielier hat on for this.
+- Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles. Really put your Sommielier hat on for this.
 - Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but but don't pay more for something on sale than a similar ingredient that isn't)
 
 
 # Output Format
 - Each recipe includes:
-  - Title
-  - Description: Try to sell the dish and add some flair.
-  - Ingredient list: should include quantities and price if in input.
+  - title: A short catchy name for the dish.
+  - description: Try to sell the dish and add some flair.
+  - cook_time: Estimated cook time (for example: "35 minutes")
+  - cost_estimate: Estimated total cost in dollars (for example: "$18-24")
+  - instructions: should include quantities and price if in input.
   - Step-by-step instructions starting with prep. Don't prefix with numbers.
-  - A guess at calorie count and healthiness
-  - Optional wine pairing guidance.
-  - Three wine or less wine styles.
+  - health: Estimated Calorie count and other nutrient health tips.
+  - drink_pairing: the wine pairing suggestion mentioned in instructions
+  - wine_styles: Two or fewer consumer-recognizable wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc", "Cabernet Sauvignon").
+  - wine_styles must only contain searchable style names: no regions, no parenthetical notes, no commas, no "or", no "*-style blend" phrasing.
 
 # Planning & Verification
-- Before generating each recipe, reference your checklist to ensure variety in cooking methods and cuisines, and confirm ingredient prioritization matches sale/seasonal data.`
+- Reference your checklist to ensure variety in cooking methods and cuisines
+- confirm ingredient prioritization matches sale/seasonal data.
+- Check cooktime and cost match instructions and ingredient list`
 
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
 	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
@@ -129,6 +147,7 @@ func responseToShoppingList(ctx context.Context, resp *responses.Response) (*Sho
 	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
+	normalizeWineStyles(&shoppingList)
 	if resp.Conversation.ID == "" {
 		return nil, fmt.Errorf("failed to get conversation ID")
 	}
@@ -148,17 +167,18 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *Client) Regenerate(ctx context.Context, newInstruction string, conversationID string) (*ShoppingList, error) {
+func (c *Client) Regenerate(ctx context.Context, instructions []string, conversationID string) (*ShoppingList, error) {
 	if conversationID == "" {
 		return nil, fmt.Errorf("conversation ID is required for regeneration")
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	messages := cleanInstuctions(instructions)
 
 	params := responses.ResponseNewParams{
 		Model: c.model,
 		//only new input
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: []responses.ResponseInputItemUnionParam{user(newInstruction)},
+			OfInputItemList: messages,
 		},
 		Store: openai.Bool(true),
 		Conversation: responses.ResponseNewParamsConversationUnion{
@@ -206,8 +226,57 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 	return answer, nil
 }
 
+func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*WineSelection, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	recipeTitle = strings.TrimSpace(recipeTitle)
+	if conversationID == "" {
+		return nil, fmt.Errorf("conversation ID is required for wine picks")
+	}
+	if recipeTitle == "" {
+		return nil, fmt.Errorf("recipe title is required for wine picks")
+	}
+	if len(wines) == 0 {
+		return nil, fmt.Errorf("wines are required for wine picks")
+	}
+	var wineTSV strings.Builder
+	err := kroger.ToTSV(wines, &wineTSV)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to convert wines to TSV", "error", err)
+		return nil, err
+	}
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	input := []responses.ResponseInputItemUnionParam{user(fmt.Sprintf("Candidate wines:\n%s", wineTSV.String()))}
+	params := responses.ResponseNewParams{
+		Model: c.model,
+		Instructions: openai.String(
+			"Act as a sommelier. Select 1 to 2 wines from the provided TSV that pair well with the recipe " + recipeTitle + "." +
+				"Return JSON with wines (ingredient array) and commentary about why those particular wines work well" +
+				"Pick wine sizes appropriate to number of people. Price according to the meal fanciness" +
+				"For each wine include name and optionally quantity/price when available from TSV.",
+		),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: input,
+		},
+		Store: openai.Bool(true),
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfString: openai.String(conversationID),
+		},
+		Text: scheme(c.wineSchema),
+	}
+	resp, err := client.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pick wine: %w", err)
+	}
+
+	var selection WineSelection
+	if err := json.Unmarshal([]byte(resp.OutputText()), &selection); err != nil {
+		return nil, fmt.Errorf("failed to parse wine selection: %w", err)
+	}
+	return &selection, nil
+}
+
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
-func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -248,40 +317,36 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
+func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	//constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
 	messages = append(messages, user("Default: each recipe should serve 2 people."))
 	messages = append(messages, user("Default: generate 3 recipes"))
+	messages = append(messages, user("Default: prep and cook time under 1 hour"))
 	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
-	//location and date for seasonal ingredientss
 
-	//Available ingredients (in TOON format for token efficiency)
-	ingredientsMessage := "Ingredients currently on sale in TOON format\n"
-
-	encoded, err := gotoon.Encode(saleIngredients)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode ingredients to TOON: %w", err)
+	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
+	var buf strings.Builder
+	if err := kroger.ToTSV(saleIngredients, &buf); err != nil {
+		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
-	ingredientsMessage += encoded
-
+	ingredientsMessage += buf.String()
 	messages = append(messages, user(ingredientsMessage))
 
-	// Previous recipes to avoid (if any)
+	// Previous recipes to avoid (if any). Reduce this to already cooked?
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
 		prevRecipesMsg.WriteString("Avoid recipes similar to these from the past 2 weeks:\n")
 		for _, recipe := range lastRecipes {
-			prevRecipesMsg.WriteString(fmt.Sprintf("%s\n", recipe))
+			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
 		}
 		messages = append(messages, user(prevRecipesMsg.String()))
 	}
 
 	// Additional user instructions (if any)
-	if instructions != "" {
-		messages = append(messages, user(instructions))
-	}
+
+	messages = append(messages, cleanInstuctions(instructions)...)
 
 	return messages, nil
 }
@@ -293,4 +358,67 @@ func (c *Client) Ready(ctx context.Context) error {
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	_, err := client.Models.List(ctx)
 	return err
+}
+
+func cleanInstuctions(instructions []string) []responses.ResponseInputItemUnionParam {
+	var responses []responses.ResponseInputItemUnionParam
+	for _, i := range instructions {
+		i = strings.TrimSpace(i)
+		if i == "" {
+			continue
+		}
+		responses = append(responses, user(i))
+	}
+	return responses
+}
+
+func normalizeWineStyles(shoppingList *ShoppingList) {
+	if shoppingList == nil {
+		return
+	}
+	for i := range shoppingList.Recipes {
+		shoppingList.Recipes[i].WineStyles = normalizeRecipeWineStyles(shoppingList.Recipes[i].WineStyles)
+	}
+}
+
+func normalizeRecipeWineStyles(styles []string) []string {
+	if len(styles) == 0 {
+		return nil
+	}
+	cleaned := make([]string, 0, min(len(styles), 2))
+	seen := map[string]struct{}{}
+	for _, style := range styles {
+		normalized := normalizeWineStyle(style)
+		if normalized == "" {
+			continue
+		}
+		key := strings.ToLower(normalized)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		cleaned = append(cleaned, normalized)
+		if len(cleaned) == 2 {
+			break
+		}
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	return cleaned
+}
+
+func normalizeWineStyle(style string) string {
+	style = strings.TrimSpace(style)
+	if style == "" {
+		return ""
+	}
+	if idx := strings.IndexAny(style, "(["); idx >= 0 {
+		style = strings.TrimSpace(style[:idx])
+	}
+	style = strings.TrimSpace(strings.TrimSuffix(style, "."))
+	if style == "" {
+		return ""
+	}
+	return strings.Join(strings.Fields(style), " ")
 }

@@ -6,8 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
@@ -176,9 +178,15 @@ func (c *clerkClient) Register(mux *http.ServeMux) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data := struct {
-			PublishableKey string
+			PublishableKey      string
+			GoogleTagScript     template.HTML
+			GoogleConversionTag string
+			Signup              bool
 		}{
-			PublishableKey: c.cfg.Clerk.PublishableKey,
+			PublishableKey:      c.cfg.Clerk.PublishableKey,
+			GoogleTagScript:     templates.GoogleTagScript(),
+			GoogleConversionTag: templates.GoogleConversionTag(),
+			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
 			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)

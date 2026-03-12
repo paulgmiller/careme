@@ -5,7 +5,6 @@ import (
 	"careme/internal/cache"
 	"careme/internal/kroger"
 	"careme/internal/locations"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -150,92 +149,33 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	}
 }
 
-func TestFromCache_FallsBackToLegacyHashedKeyForCanonicalHash(t *testing.T) {
+func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
 	rio := IO(cacheStore)
 
-	p := DefaultParams(&locations.Location{ID: "loc-123", Name: "Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
-	hash := p.Hash()
-	legacyHash, ok := legacyRecipeHash(hash)
-	if !ok {
-		t.Fatal("expected to derive legacy recipe hash")
+	hash := "recipe-hash"
+	if err := cacheStore.Put(t.Context(), recipeCachePrefix+hash, `{"title":"Roast Chicken"}`, cache.Unconditional()); err != nil {
+		t.Fatalf("failed to seed recipe entry: %v", err)
 	}
 
-	list := ai.ShoppingList{ConversationID: "legacy-conversation"}
-	listJSON, err := json.Marshal(list)
+	if err := rio.SaveWine(t.Context(), hash, &ai.WineSelection{
+		Commentary: "Try a tempranillo.",
+		Wines:      []ai.Ingredient{{Name: "Tempranillo", Quantity: "750mL", Price: "$12.99"}},
+	}); err != nil {
+		t.Fatal("shouldn't matter if theres a conflicting recipe key", "error", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpDir, wineRecommendationsCachePrefix, hash)); err != nil {
+		t.Fatalf("expected wine recommendation at prefixed key: %v", err)
+	}
+
+	got, err := rio.WineFromCache(t.Context(), hash)
 	if err != nil {
-		t.Fatalf("failed to marshal shopping list: %v", err)
+		t.Fatalf("WineFromCache failed: %v", err)
 	}
-	if err := cacheStore.Put(t.Context(), legacyHash, string(listJSON), cache.Unconditional()); err != nil {
-		t.Fatalf("failed to store legacy shopping list key: %v", err)
-	}
-
-	got, err := rio.FromCache(t.Context(), hash)
-	if err != nil {
-		t.Fatalf("FromCache failed to read legacy hash key: %v", err)
-	}
-	if got.ConversationID != list.ConversationID {
-		t.Fatalf("expected conversation id %q, got %q", list.ConversationID, got.ConversationID)
-	}
-}
-
-func TestParamsFromCache_FallsBackToLegacyHashedKeyForCanonicalHash(t *testing.T) {
-	tmpDir := t.TempDir()
-	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
-
-	p := DefaultParams(&locations.Location{ID: "loc-321", Name: "Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
-	hash := p.Hash()
-	legacyHash, ok := legacyRecipeHash(hash)
-	if !ok {
-		t.Fatal("expected to derive legacy recipe hash")
-	}
-
-	paramsJSON, err := json.Marshal(p)
-	if err != nil {
-		t.Fatalf("failed to marshal params: %v", err)
-	}
-	if err := cacheStore.Put(t.Context(), legacyHash+".params", string(paramsJSON), cache.Unconditional()); err != nil {
-		t.Fatalf("failed to store legacy params key: %v", err)
-	}
-
-	got, err := rio.ParamsFromCache(t.Context(), hash)
-	if err != nil {
-		t.Fatalf("ParamsFromCache failed to read legacy hash key: %v", err)
-	}
-	if got.Location == nil || got.Location.ID != p.Location.ID {
-		t.Fatalf("expected location id %q, got %+v", p.Location.ID, got.Location)
-	}
-}
-
-func TestIngredientsFromCache_FallsBackToLegacyHashedKeyForCanonicalHash(t *testing.T) {
-	tmpDir := t.TempDir()
-	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
-
-	p := DefaultParams(&locations.Location{ID: "loc-777", Name: "Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
-	hash := p.LocationHash()
-	legacyHash, ok := legacyLocationHash(hash)
-	if !ok {
-		t.Fatal("expected to derive legacy location hash")
-	}
-
-	ingredients := []kroger.Ingredient{{Description: loPtr("Legacy Chicken")}}
-	ingredientsJSON, err := json.Marshal(ingredients)
-	if err != nil {
-		t.Fatalf("failed to marshal ingredients: %v", err)
-	}
-	if err := cacheStore.Put(t.Context(), legacyHash, string(ingredientsJSON), cache.Unconditional()); err != nil {
-		t.Fatalf("failed to store legacy ingredients key: %v", err)
-	}
-
-	got, err := rio.IngredientsFromCache(t.Context(), hash)
-	if err != nil {
-		t.Fatalf("IngredientsFromCache failed to read legacy hash key: %v", err)
-	}
-	if len(got) != 1 || got[0].Description == nil || *got[0].Description != "Legacy Chicken" {
-		t.Fatalf("unexpected ingredients payload: %+v", got)
+	if got.Commentary != "Try a tempranillo." {
+		t.Fatalf("unexpected cached wine recommendation: got %q", got)
 	}
 }
 

@@ -2,15 +2,22 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 )
 
 type Config struct {
-	AI     AIConfig     `json:"ai"`
-	Kroger KrogerConfig `json:"kroger"`
-	Mocks  MockConfig   `json:"mocks"`
-	Clerk  ClerkConfig  `json:"clerk"`
+	AI         AIConfig         `json:"ai"`
+	Kroger     KrogerConfig     `json:"kroger"`
+	Walmart    WalmartConfig    `json:"walmart"`
+	Aldi       AldiConfig       `json:"aldi"`
+	WholeFoods WholeFoodsConfig `json:"wholefoods"`
+	Albertsons AlbertsonsConfig `json:"albertsons"`
+	Publix     PublixConfig     `json:"publix"`
+	Mocks      MockConfig       `json:"mocks"`
+	Clerk      ClerkConfig      `json:"clerk"`
+	Admin      AdminConfig      `json:"admin"`
 }
 
 type AIConfig struct {
@@ -38,13 +45,63 @@ func (c *ClerkConfig) IsEnabled() bool {
 	return c.SecretKey != "" && c.Domain != "" && c.PublishableKey != ""
 }
 
-var locahostredirect = "?redirect_url=http://localhost:8080/auth/establish"
+type AdminConfig struct {
+	Emails []string `json:"emails"`
+}
+
+type WholeFoodsConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *WholeFoodsConfig) IsEnabled() bool {
+	return c.Enable
+}
+
+type AldiConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *AldiConfig) IsEnabled() bool {
+	return c.Enable
+}
+
+type AlbertsonsConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *AlbertsonsConfig) IsEnabled() bool {
+	return c.Enable
+}
+
+type PublixConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *PublixConfig) IsEnabled() bool {
+	return c.Enable
+}
+
+// Config defines the required Walmart affiliate credentials and client options.
+type WalmartConfig struct {
+	ConsumerID string
+	KeyVersion string
+	PrivateKey string //base 64 the ssh key you give to Walmart (eg bas64 -w0 keys/walmart_prod)
+	BaseURL    string
+	HTTPClient *http.Client
+}
+
+func (c *WalmartConfig) IsEnabled() bool {
+	return c.ConsumerID != "" && c.PrivateKey != ""
+}
+
+var localhostSigninRedirect = "?redirect_url=http://localhost:8080/auth/establish"
+var localhostSignupRedirect = "?redirect_url=http://localhost:8080/auth/establish?signup=true"
 
 // move to auth pacakage?
 func (c *ClerkConfig) Signin() string {
 	url := fmt.Sprintf("https://%s/sign-in", c.Domain)
 	if !c.Prod {
-		url += locahostredirect
+		url += localhostSigninRedirect
 	}
 	return url
 }
@@ -52,7 +109,7 @@ func (c *ClerkConfig) Signin() string {
 func (c *ClerkConfig) Signup() string {
 	url := fmt.Sprintf("https://%s/sign-up", c.Domain)
 	if !c.Prod {
-		url += locahostredirect
+		url += localhostSignupRedirect
 	}
 	return url
 }
@@ -74,6 +131,27 @@ func Load() (*Config, error) {
 			SecretKey:      os.Getenv("CLERK_SECRET_KEY"),
 			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
 			Domain:         os.Getenv("CLERK_DOMAIN"),
+		},
+		Admin: AdminConfig{
+			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+		},
+		Aldi: AldiConfig{
+			Enable: os.Getenv("ALDI_ENABLE") != "",
+		},
+		WholeFoods: WholeFoodsConfig{
+			Enable: os.Getenv("WHOLEFOODS_ENABLE") != "",
+		},
+		Albertsons: AlbertsonsConfig{
+			Enable: os.Getenv("ALBERTSONS_ENABLE") != "",
+		},
+		Publix: PublixConfig{
+			Enable: os.Getenv("PUBLIX_ENABLE") != "",
+		},
+		Walmart: WalmartConfig{
+			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),
+			KeyVersion: os.Getenv("WALMART_KEY_VERSION"),
+			PrivateKey: os.Getenv("WALMART_PRIVATE_KEY"),
+			BaseURL:    os.Getenv("WALMART_BASE_URL"),
 		},
 	}
 	if strings.HasSuffix(config.Clerk.Domain, "careme.cooking") {
@@ -98,4 +176,27 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("AI API  key must be set")
 	}
 	return nil
+}
+
+func parseAdminEmails(value string) []string {
+	if value == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	emails := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		email := strings.ToLower(strings.TrimSpace(part))
+		if email == "" {
+			continue
+		}
+		if _, ok := seen[email]; ok {
+			continue
+		}
+		seen[email] = struct{}{}
+		emails = append(emails, email)
+	}
+
+	return emails
 }

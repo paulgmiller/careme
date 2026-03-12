@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Test that the HTML contains Save and Dismiss buttons for recipes
+// Test that the HTML contains Save and Dismiss buttons for recipes.
 func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Create a shopping list with multiple recipes
 	multiRecipeList := ai.ShoppingList{
@@ -37,7 +37,7 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 		},
 	}
 
-	loc := locations.Location{ID: "L1", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	FormatShoppingListHTML(p, multiRecipeList, true, w)
@@ -46,24 +46,25 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Verify HTML is valid
 	isValidHTML(t, html)
 
-	// Check for Save and Dismiss radio buttons and labels
-	if !strings.Contains(html, `name="saved"`) {
-		t.Error("HTML should contain saved hidden inputs")
-	}
-	if !strings.Contains(html, `name="dismissed"`) {
-		t.Error("HTML should contain dismissed hidden inputs")
-	}
-
 	// Check for radio buttons
 	if !strings.Contains(html, `type="radio"`) {
 		t.Error("HTML should contain radio button inputs")
 	}
+	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/save"`) {
+		t.Error("HTML should contain HTMX save action")
+	}
+	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/dismiss"`) {
+		t.Error("HTML should contain HTMX dismiss action")
+	}
+	if !strings.Contains(html, `hx-trigger="click"`) {
+		t.Error("HTML should trigger HTMX requests on click")
+	}
 
-	// Check for Save and Dismiss labels (without span tags)
+	// Check for Save and Dismiss labels.
 	if !strings.Contains(html, `Save`) {
 		t.Error("HTML should contain Save label text")
 	}
-	if !strings.Contains(html, `Dismiss`) {
+	if !strings.Contains(html, `Dismis`) {
 		t.Error("HTML should contain Dismiss label text")
 	}
 	if !strings.Contains(html, `Details`) {
@@ -75,17 +76,25 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 		t.Error("HTML should contain Try again, chef button")
 	}
 
-	// Check that "Finalize" button exists
-	if !strings.Contains(html, `Finalize`) {
-		t.Error("HTML should contain Finalize button")
+	// Check that "Save my picks" button exists.
+	if !strings.Contains(html, `Assemble Shopping List`) {
+		t.Error("HTML should contain Assemble Shopping List button")
+	}
+	if !strings.Contains(html, `disabled`) {
+		t.Error("HTML should disable finalize button when no recipes are saved")
+	}
+	if strings.Contains(html, `/finalize"`) {
+		t.Error("HTML should not wire finalize endpoint when button is disabled")
+	}
+	if !strings.Contains(html, `Save at least one recipe to assemble your shopping list.`) {
+		t.Error("HTML should explain how to enable finalize button")
 	}
 
-	// Check for finalize submit button (not a POST form anymore)
-	if !strings.Contains(html, `name="finalize"`) {
-		t.Error("HTML should have finalize submit button")
+	if !strings.Contains(html, `/recipes/`) || !strings.Contains(html, `/regenerate"`) {
+		t.Error("HTML should submit regenerate with POST endpoint")
 	}
-	if !strings.Contains(html, `value="true"`) {
-		t.Error("HTML should have finalize value set to true")
+	if !strings.Contains(html, `hx-params="instructions"`) {
+		t.Error("HTML regenerate form should submit only instructions")
 	}
 
 	// Check that recipes are present with their titles
@@ -94,5 +103,36 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	}
 	if !strings.Contains(html, "Recipe Two") {
 		t.Error("HTML should contain Recipe Two title")
+	}
+}
+
+func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
+	listWithSavedRecipe := ai.ShoppingList{
+		Recipes: []ai.Recipe{
+			{
+				Title:       "Saved Recipe",
+				Description: "Saved recipe",
+				Ingredients: []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+				Instructions: []string{
+					"Step 1",
+				},
+				Health:       "Healthy",
+				DrinkPairing: "Water",
+			},
+		},
+	}
+
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
+	w := httptest.NewRecorder()
+	FormatShoppingListHTML(p, listWithSavedRecipe, true, w)
+	html := w.Body.String()
+
+	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
+		t.Error("HTML should submit finalize with HTMX POST when a recipe is saved")
+	}
+	if strings.Contains(html, `id="finalize-help"`) {
+		t.Error("HTML should not render finalize helper text when button is enabled")
 	}
 }

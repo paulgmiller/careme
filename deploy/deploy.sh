@@ -37,3 +37,6 @@ fi
 
 echo "Deploying image: ${IMAGE_TAG}"
 envsubst '${IMAGE_TAG}' <"${deploy_file}" | kubectl apply -f - -n "${namespace}"
+
+echo "Waiting for rollout of deployment/careme"
+kubectl rollout status deployment/careme -n "${namespace}" -w

@@ -396,3 +396,14 @@ func (m mock) AskQuestion(ctx context.Context, question string, conversationID s
 	_ = conversationID
 	return fmt.Sprintf("Mock answer: %s", question), nil
 }
+
+func (m mock) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+	_ = ctx
+	_ = conversationID
+	_ = location
+	_ = date
+	return &ai.WineSelection{
+		Wines:      []ai.Ingredient{},
+		Commentary: fmt.Sprintf("Mock wine pick for %s: try a medium-bodied red.", recipe.Title),
+	}, nil
+}

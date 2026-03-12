@@ -170,6 +170,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	}
 	data := struct {
 		ClarityScript     template.HTML
+		GoogleTagScript   template.HTML
 		User              *utypes.User
 		Success           bool
 		FavoriteStoreName string
@@ -178,6 +179,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		ServerSignedIn    bool
 	}{
 		ClarityScript:     templates.ClarityScript(),
+		GoogleTagScript:   templates.GoogleTagScript(),
 		User:              userForTemplate,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,

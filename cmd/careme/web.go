@@ -1,9 +1,11 @@
 package main
 
 import (
+	"careme/internal/admin"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/ingredients"
 	"careme/internal/locations"
 	"careme/internal/logs"
 	"careme/internal/logsink"
@@ -43,12 +45,14 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	userStorage := users.NewStorage(cache)
 
-	generator, err := recipes.NewGenerator(cfg, cache)
+	generator, err := recipes.NewGenerator(cfg, recipes.IO(cache))
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
-	locationStorage, err := locations.New(cfg)
+	centroids := locations.LoadCentroids()
+
+	locationStorage, err := locations.New(cfg, cache, centroids)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -56,7 +60,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
 	userHandler.Register(mux)
 
-	locationServer := locations.NewServer(locationStorage, userStorage)
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
 	locationServer.Register(mux, authClient)
 
 	sitemapHandler := sitemap.New(cache)
@@ -65,22 +69,30 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(mux)
 
+	adminMux := http.NewServeMux()
+	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
+	ingredientsHandler := ingredients.NewHandler(cache)
+	ingredientsHandler.Register(adminMux)
+	mux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
+
 	if logsinkCfg.Enabled() {
 		logsHandler, err := logs.NewHandler(logsinkCfg)
 		if err != nil {
 			return fmt.Errorf("failed to create logs handler: %w", err)
 		}
-		logsHandler.Register(mux)
+		logsHandler.Register(adminMux)
 	}
 
 	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		data := struct {
-			ClarityScript template.HTML
-			Style         seasons.Style
+			ClarityScript   template.HTML
+			GoogleTagScript template.HTML
+			Style           seasons.Style
 		}{
-			ClarityScript: templates.ClarityScript(),
-			Style:         seasons.GetCurrentStyle(),
+			ClarityScript:   templates.ClarityScript(),
+			GoogleTagScript: templates.GoogleTagScript(),
+			Style:           seasons.GetCurrentStyle(),
 		}
 		if err := templates.About.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "about template execute error", "error", err)
@@ -115,12 +127,14 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		}
 		data := struct {
 			ClarityScript     template.HTML
+			GoogleTagScript   template.HTML
 			User              *utypes.User
 			FavoriteStoreName string
 			Style             seasons.Style
 			ServerSignedIn    bool
 		}{
 			ClarityScript:     templates.ClarityScript(),
+			GoogleTagScript:   templates.GoogleTagScript(),
 			User:              currentUser,
 			FavoriteStoreName: favoriteStoreName,
 			Style:             seasons.GetCurrentStyle(),

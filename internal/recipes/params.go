@@ -6,7 +6,6 @@ import (
 	"careme/internal/locations"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -30,16 +29,16 @@ var nowFn = time.Now
 type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
 	Date     time.Time           `json:"date,omitempty"`
-	Staples  []filter            `json:"staples,omitempty"`
 	// People       int
 	//per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
 	LastRecipes  []string `json:"last_recipes,omitempty"`
 	// UserID         string      `json:"user_id,omitempty"`
-	ConversationID string      `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
-	Saved          []ai.Recipe `json:"saved_recipes,omitempty"`
-	Dismissed      []ai.Recipe `json:"dismissed_recipes,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
+	//TODO Both should just be title and hash insread of full ai.Recipe
+	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
+	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -49,7 +48,6 @@ func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 		Date:     date, // shave time
 		Location: l,
 		// People:   2,
-		Staples: DefaultStaples(),
 	}
 }
 
@@ -63,8 +61,7 @@ func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	bytes := lo.Must(json.Marshal(g.Staples)) //should we remove this so this is stable when we change staples?
-	lo.Must(fnv.Write(bytes))
+	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
@@ -81,48 +78,20 @@ func (g *generatorParams) LocationHash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	bytes := lo.Must(json.Marshal(g.Staples)) // excited fro this to break in some weird way
-	lo.Must(fnv.Write(bytes))
+	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
-}
-
-func normalizeLegacyRecipeHash(hash string) (string, bool) {
-	return legacyHashToCurrent(hash, legacyRecipeHashSeed)
-}
-
-func legacyRecipeHash(hash string) (string, bool) {
-	return currentHashToLegacy(hash, legacyRecipeHashSeed)
-}
-
-func legacyLocationHash(hash string) (string, bool) {
-	return currentHashToLegacy(hash, legacyIngredientsHashSeed)
 }
 
 func legacyHashToCurrent(hash string, seed string) (string, bool) {
 	decoded, err := base64.URLEncoding.DecodeString(hash)
 	if err != nil {
-		return "", false
+		return hash, false
 	}
 	seedBytes := []byte(seed)
 	if !bytes.HasPrefix(decoded, seedBytes) || len(decoded) == len(seedBytes) {
-		return "", false
-	}
-	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
-}
-
-func currentHashToLegacy(hash string, seed string) (string, bool) {
-	decoded, err := base64.RawURLEncoding.DecodeString(hash)
-	if err != nil || len(decoded) == 0 {
-		return "", false
-	}
-	seedBytes := []byte(seed)
-	if bytes.HasPrefix(decoded, seedBytes) {
 		return hash, false
 	}
-	legacyDecoded := make([]byte, 0, len(seedBytes)+len(decoded))
-	legacyDecoded = append(legacyDecoded, seedBytes...)
-	legacyDecoded = append(legacyDecoded, decoded...)
-	return base64.URLEncoding.EncodeToString(legacyDecoded), true
+	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
 }
 
 func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generatorParams, error) {
@@ -152,87 +121,10 @@ func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generato
 
 	p := DefaultParams(l, date)
 	p.Instructions = r.URL.Query().Get("instructions")
-
-	// Handle saved and dismissed recipe hashes from checkboxes
-	// Query().Get returns first value, Query() returns all values
-	// will be empty values for every recipe and two for ones with no action
-	// TODO look at way not to duplicate so many query arguments and pass down just a saved list or a query arg for each saved item.
-	clean := func(s string, _ int) (string, bool) {
-		ts := strings.TrimSpace(s)
-		return ts, ts != ""
-	}
-	savedHashes := lo.FilterMap(r.URL.Query()["saved"], clean)
-	dismissedHashes := lo.FilterMap(r.URL.Query()["dismissed"], clean)
-	// Load saved recipes from cache by their hashes
-	// TODO is it overkill to pull full recip in param instead of just hash?
-	for _, hash := range savedHashes {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load saved recipe by hash", "hash", hash, "error", err)
-			continue
-		}
-		recipe.Saved = true
-		slog.InfoContext(ctx, "adding saved recipe to params", "title", recipe.Title, "hash", hash)
-		p.Saved = append(p.Saved, *recipe)
-	}
-
-	// Add dismissed recipe titles to instructions so AI knows what to avoid
-	for _, hash := range dismissedHashes {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load dismissed recipe by hash", "hash", hash, "error", err)
-			continue
-		}
-		slog.InfoContext(ctx, "adding dismissed recipe to params", "title", recipe.Title, "hash", hash)
-		p.Dismissed = append(p.Dismissed, *recipe)
-	}
 	// should this be in hash?
 	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
 	return p, nil
-}
-
-func DefaultStaples() []filter {
-	return append(Produce(), []filter{
-		{
-			Term:   "beef",
-			Brands: []string{"Simple Truth", "Kroger"},
-		},
-		{
-			Term:   "chicken",
-			Brands: []string{"Foster Farms", "Draper Valley", "Simple Truth"}, //"Simple Truth"? do these vary in every state?
-		},
-		{
-			Term: "fish",
-		},
-		{
-			Term:   "pork", // Kroger?
-			Brands: []string{"PORK", "Kroger", "Harris Teeter"},
-		},
-		{
-			Term:   "shellfish",
-			Brands: []string{"Sand Bar", "Kroger"},
-			Frozen: true, // remove after 500 sadness?
-		},
-		{
-			Term:   "lamb",
-			Brands: []string{"Simple Truth"},
-		},
-	}...)
-}
-
-func Produce() []filter {
-	return []filter{
-		{
-			Term:   "fresh vegatable",
-			Brands: []string{"*"},
-		},
-		{
-			Term:   "fresh produce",
-			Brands: []string{"*"},
-		},
-	}
-
 }
 
 func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {

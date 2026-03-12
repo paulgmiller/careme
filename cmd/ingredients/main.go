@@ -1,62 +1,55 @@
 package main
 
 import (
-	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/kroger"
 	"careme/internal/recipes"
 	"context"
 	"flag"
 	"fmt"
 	"log"
-	"strings"
 )
 
 func main() {
-	var ingredient string
+	var searchTerm string
 	var location string
-	flag.StringVar(&ingredient, "ingredient", "", "Ingredient to filter recipes")
-	flag.StringVar(&ingredient, "i", "", "Ingredient to filter recipes")
+	flag.StringVar(&searchTerm, "ingredient", "", "Search term for ingredient lookup")
+	flag.StringVar(&searchTerm, "i", "", "Search term for ingredient lookup")
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
 	flag.Parse()
 	ctx := context.Background()
-	cache, err := cache.MakeCache()
-	if err != nil {
-		log.Fatalf("failed to create cache: %s", err)
-	}
 
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load configuration: %s", err)
 	}
 
-	generator, err := recipes.NewGenerator(cfg, cache)
+	sp, err := recipes.NewStaplesProvider(cfg)
 	if err != nil {
 		log.Fatalf("failed to create recipe generator: %s", err)
 	}
 
-	g, ok := generator.(*recipes.Generator)
-	if !ok {
-		log.Fatalf("failed to cast generator to *recipes.Generator")
+	var ings []kroger.Ingredient
+	if searchTerm == "" {
+		ings, err = sp.FetchStaples(ctx, location)
+	} else {
+		ings, err = sp.GetIngredients(ctx, location, searchTerm, 0)
 	}
-
-	f := recipes.Filter(ingredient, []string{"*"}, false /*frozen*/)
-	ings, err := g.GetIngredients(ctx, location, f, 0)
 	if err != nil {
 		log.Fatalf("failed to get ingredients: %s", err)
 	}
 
+	catMap := make(map[string]int)
 	for _, i := range ings {
-		fmt.Printf("%s - %s:(%s))\n", toString(i.Brand), toString(i.Description), strings.Join(toSlice(i.Categories), ","))
+		for _, cat := range *i.Categories {
+			catMap[cat] += 1
+		}
+		fmt.Printf("%s: %s - %s:($%s) size: %s categories: %v\n", toString(i.ProductId), toString(i.Brand), toString(i.Description), toFloat(i.PriceRegular), toString(i.Size), i.Categories)
 	}
-
-}
-
-func toSlice(s *[]string) []string {
-	if s == nil {
-		return nil
+	for cat, count := range catMap {
+		fmt.Printf("Category: %s, Count: %d\n", cat, count)
 	}
-	return *s
 }
 
 func toString(s *string) string {
@@ -64,4 +57,11 @@ func toString(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func toFloat(f *float32) string {
+	if f == nil {
+		return ""
+	}
+	return fmt.Sprintf("%.2f", *f)
 }

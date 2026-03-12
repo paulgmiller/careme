@@ -8,11 +8,13 @@
   {{template "tailwind_head" .Style}}
 
   {{.ClarityScript}}
+  {{.GoogleTagScript}}
+  <meta name='impact-site-verification' value='eee2b715-38ff-4749-8396-f05aa85220db'>
 </head>
 <body class="relative min-h-screen overflow-x-hidden bg-gradient-to-b from-brand-50/80 via-white to-brand-50/80 text-ink-700 antialiased">
   <div class="pointer-events-none absolute inset-0" aria-hidden="true">
-    <img src="https://images.northbriton.net/cdn-cgi/image/width=800/https://images.northbriton.net/AP1GczODcc6U8rXC6v9NcbUhHuYRa3JYqRxZsn6flSVCwfGL6_C1BNrzFpwfzaj29hg7QVFOomYxLoskLWJnHcBZqHe4FhDg83JFSGYPycvvTMCbgdBugu58" alt="" class="absolute inset-0 h-full w-full object-cover" style="opacity: 0.42;" />
-    <div class="absolute inset-0 bg-gradient-to-b from-white/56 via-white/50 to-white/68"></div>
+    <img src="https://images.northbriton.net/cdn-cgi/image/width=1600/https://images.northbriton.net/AP1GczPKKoL9ZZ3nmrcjf0d6tgLazTkNk2Yii2YfVhaRJoTA9Aap264ABsKEm5cqFJwKByELDuiMFas_z0KyjjvBRmEHL_yRHrTTIXbdT-7jKX1mqFKKejAp" alt="" class="absolute inset-0 h-full w-full object-cover" style="opacity: 0.34; object-position: 52% 34%;" />
+    <div class="absolute inset-0 bg-gradient-to-b from-white/72 via-white/62 to-white/78"></div>
   </div>
 
   <main class="relative px-4 py-8 sm:py-10">
@@ -73,6 +75,11 @@
                           class="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     Find stores
                   </button>
+                  <button type="button" id="use-location-btn"
+                          class="inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Use your location
+                  </button>
+                  <p id="use-location-message" class="hidden text-xs text-ink-600" aria-live="polite"></p>
                 </div>
               </form>
             </div>
@@ -103,7 +110,7 @@
 
 Find your local grocery stores.
 Check the store's inventory for fresh meat and seasonal produce.
-Generate a weekly meal plan from a variety of cuisines and cooking styles.
+Generate a weekly recipe plan from a variety of cuisines and cooking styles.
 </p>
           <!-- Signed-out state -->
           <div class="mt-6">
@@ -136,5 +143,40 @@ Generate a weekly meal plan from a variety of cuisines and cooking styles.
     </section>
   </main>
   {{template "clerk_refresh.html" .}}
+  <script>
+    (() => {
+      const button = document.getElementById("use-location-btn");
+      const message = document.getElementById("use-location-message");
+
+      if (!button || !message) {
+        return;
+      }
+
+      const showMessage = (text) => {
+        message.classList.remove("hidden");
+        message.textContent = text;
+      };
+
+      button.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          showMessage("Sorry, chef. Location is not available in this browser.");
+          return;
+        }
+
+        showMessage("Finding your ZIP code...");
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = encodeURIComponent(position.coords.latitude.toString());
+            const lon = encodeURIComponent(position.coords.longitude.toString());
+            window.location.assign(`/locations/zip-from-coordinates?lat=${lat}&lon=${lon}`);
+          },
+          () => {
+            showMessage("Sorry, chef. Have to allow location access.");
+          },
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
+        );
+      });
+    })();
+  </script>
 </body>
 </html>
