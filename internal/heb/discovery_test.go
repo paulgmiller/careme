@@ -127,6 +127,49 @@ func TestExtractStoreSummaryFallsBackToBodyAndURL(t *testing.T) {
 	}
 }
 
+func TestExtractStoreSummaryFallsBackToGenericEmbeddedJSON(t *testing.T) {
+	t.Parallel()
+
+	pageURL := "https://www.heb.com/heb-store/US/tx/stephenville/stephenville-h-e-b-6"
+	html := strings.Join([]string{
+		`<!doctype html><html><head>`,
+		`<title>Stephenville H-E-B | HEB.com</title>`,
+		`<meta property="business:contact_data:region" content="TX">`,
+		`<script>window.__DATA__={"store":{"storeId":"6","name":"Stephenville H-E-B","address":{"line1":"2150 W Washington St","city":"Stephenville","state":"TX","zipCode":"76401"}}};</script>`,
+		`</head><body><h1>Stephenville H-E-B</h1></body></html>`,
+	}, "")
+
+	summary, err := ExtractStoreSummary(pageURL, []byte(html))
+	if err != nil {
+		t.Fatalf("ExtractStoreSummary returned error: %v", err)
+	}
+	if summary.ID != "heb_6" || summary.StoreID != "6" {
+		t.Fatalf("unexpected ids: %+v", summary)
+	}
+	if summary.Address != "2150 W Washington St" || summary.City != "Stephenville" || summary.State != "TX" || summary.ZipCode != "76401" {
+		t.Fatalf("unexpected address fields: %+v", summary)
+	}
+}
+
+func TestExtractStoreSummaryPrefersURLStoreIDOverGenericJSONID(t *testing.T) {
+	t.Parallel()
+
+	pageURL := "https://www.heb.com/heb-store/US/tx/big-spring/big-spring-h-e-b-51"
+	html := strings.Join([]string{
+		`<!doctype html><html><head>`,
+		`<script>window.__DATA__={"store":{"storeId":"92","address":{"line1":"2000 S Gregg St","city":"Big Spring","state":"TX","zipCode":"79720"}}};</script>`,
+		`</head><body><h1>Big Spring H-E-B</h1></body></html>`,
+	}, "")
+
+	summary, err := ExtractStoreSummary(pageURL, []byte(html))
+	if err != nil {
+		t.Fatalf("ExtractStoreSummary returned error: %v", err)
+	}
+	if summary.ID != "heb_51" || summary.StoreID != "51" {
+		t.Fatalf("expected URL store id to win, got %+v", summary)
+	}
+}
+
 func TestExtractStoreSummaryRequiresAddress(t *testing.T) {
 	t.Parallel()
 

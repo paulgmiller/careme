@@ -3,6 +3,7 @@ package main
 import (
 	"careme/internal/cache"
 	"careme/internal/heb"
+	"careme/internal/sitemapfetch"
 	"context"
 	"errors"
 	"flag"
@@ -47,7 +48,7 @@ func syncFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpClient
 		return 0, err
 	}
 
-	urls, err := heb.FetchSitemap(ctx, httpClient, sitemapURL)
+	urls, err := sitemapfetch.FetchURLs(ctx, httpClient, sitemapURL)
 	if err != nil {
 		return 0, err
 	}
@@ -70,6 +71,7 @@ func syncFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpClient
 		slog.Info("fetching heb store summary", "url", page.URL)
 		summary, err := heb.FetchStoreSummary(ctx, httpClient, page.URL)
 		if err != nil {
+			time.Sleep(delay)
 			slog.Warn("failed to fetch heb store summary", "url", page.URL, "error", err)
 			continue
 		}

@@ -2,10 +2,10 @@ package heb
 
 import (
 	"bytes"
-	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"fmt"
+	htmlstd "html"
 	"io"
 	"math"
 	"net/http"
@@ -71,6 +71,11 @@ var (
 	geoPositionMetaRe = regexp.MustCompile(`(?i)^\s*([+-]?\d+(?:\.\d+)?)\s*;\s*([+-]?\d+(?:\.\d+)?)\s*$`)
 	jsonLatitudeRe    = regexp.MustCompile(`(?i)"(?:latitude|lat)"\s*:\s*"?([+-]?\d+(?:\.\d+)?)"?`)
 	jsonLongitudeRe   = regexp.MustCompile(`(?i)"(?:longitude|lng|lon)"\s*:\s*"?([+-]?\d+(?:\.\d+)?)"?`)
+	jsonStreetRe      = regexp.MustCompile(`(?i)"(?:streetAddress|address1|addressLine1|line1|street)"\s*:\s*"([^"]+)"`)
+	jsonCityRe        = regexp.MustCompile(`(?i)"(?:addressLocality|city)"\s*:\s*"([^"]+)"`)
+	jsonStateRe       = regexp.MustCompile(`(?i)"(?:addressRegion|state|region)"\s*:\s*"([a-z]{2})"`)
+	jsonZipRe         = regexp.MustCompile(`(?i)"(?:postalCode|zipCode|zip)"\s*:\s*"(\d{5}(?:-\d{4})?)"`)
+	jsonStoreIDRe     = regexp.MustCompile(`(?i)"(?:branchCode|storeCode|storeID|storeId|locationId|identifier)"\s*:\s*"?(\d+)"?`)
 	directionsCoordRe = regexp.MustCompile(`(?i)(?:destination|ll|q|center)=([+-]?\d+(?:\.\d+)?),([+-]?\d+(?:\.\d+)?)`)
 	addressLineRe     = regexp.MustCompile(`(?i)(\d[0-9a-z .#-]+?)\s+([a-z][a-z .'-]+),\s*([a-z]{2})\s+(\d{5}(?:-\d{4})?)`)
 )
@@ -81,10 +86,6 @@ func IsID(locationID string) bool {
 		return false
 	}
 	return isDigits(strings.TrimPrefix(locationID, LocationIDPrefix))
-}
-
-func FetchSitemap(ctx context.Context, client *http.Client, sitemapURL string) ([]string, error) {
-	return sitemapfetch.FetchURLs(ctx, client, sitemapURL)
 }
 
 func FilterStorePages(urls []string) []StorePage {
@@ -104,6 +105,17 @@ func FilterStorePages(urls []string) []StorePage {
 	return pages
 }
 
+// ParseStorePageURL accepts only HEB store landing pages.
+// Expected path shape is:
+//
+//	/heb-store/US/<state>/<city>/<store-slug>-<store-number>
+//
+// For example:
+//
+//	/heb-store/US/tx/robstown/robstown-h-e-b-22
+//
+// City pages, category pages, and store paths without the trailing numeric
+// store identifier are rejected.
 func ParseStorePageURL(rawURL string) (StorePage, bool) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
@@ -181,13 +193,9 @@ func ExtractStoreSummary(pageURL string, body []byte) (*StoreSummary, error) {
 
 	signals := collectHTMLSignals(body)
 	fields := extractFieldsFromJSONLD(signals.Scripts)
+	fields = fillMissingFields(fields, extractFieldsFromStructuredText(body, signals))
 
-	if fields.StoreID == "" {
-		fields.StoreID = extractStoreID(signals.BodyText)
-	}
-	if fields.StoreID == "" {
-		fields.StoreID = page.URLStoreID
-	}
+	fields.StoreID = resolveStoreID(page.URLStoreID, extractStoreID(signals.BodyText), fields.StoreID)
 	if fields.Name == "" {
 		fields.Name = strings.TrimSpace(signals.H1)
 	}
@@ -259,6 +267,10 @@ func ExtractStoreSummary(pageURL string, body []byte) (*StoreSummary, error) {
 	}, nil
 }
 
+// collectHTMLSignals pulls the small set of page features the parser uses for
+// store extraction: body text, title, first H1, first address block, script
+// contents, and named meta tags. It is intentionally lossy so later parsing can
+// use simple fallbacks without depending on the full DOM tree.
 func collectHTMLSignals(body []byte) htmlSignals {
 	signals := htmlSignals{
 		Meta: make(map[string]string),
@@ -311,6 +323,10 @@ func collectHTMLSignals(body []byte) htmlSignals {
 	return signals
 }
 
+// extractFieldsFromJSONLD scans application/ld+json blocks and returns the
+// strongest store-like candidate it can find. HEB pages may embed several JSON-LD
+// objects, so this ranks candidates by how many store signals they contain
+// instead of assuming the first object is the location record.
 func extractFieldsFromJSONLD(scripts []scriptBlock) storeFields {
 	best := storeFields{}
 	for _, script := range scripts {
@@ -325,6 +341,46 @@ func extractFieldsFromJSONLD(scripts []scriptBlock) storeFields {
 		best = pickBetterFields(best, walkJSON(payload))
 	}
 	return best
+}
+
+func extractFieldsFromStructuredText(body []byte, signals htmlSignals) storeFields {
+	fields := storeFields{
+		Name:    firstMetaValue(signals.Meta, "og:title", "twitter:title", "title"),
+		Address: firstMetaValue(signals.Meta, "business:contact_data:street_address", "og:street-address"),
+		City:    firstMetaValue(signals.Meta, "business:contact_data:locality", "og:locality"),
+		State:   firstMetaValue(signals.Meta, "business:contact_data:region", "og:region"),
+		ZipCode: firstMetaValue(signals.Meta, "business:contact_data:postal_code", "og:postal-code"),
+	}
+
+	for _, candidate := range structuredTextCandidates(body, signals) {
+		if fields.Address == "" {
+			fields.Address = firstMatch(candidate, jsonStreetRe)
+		}
+		if fields.City == "" {
+			fields.City = firstMatch(candidate, jsonCityRe)
+		}
+		if fields.State == "" {
+			fields.State = strings.ToUpper(firstMatch(candidate, jsonStateRe))
+		}
+		if fields.ZipCode == "" {
+			fields.ZipCode = firstMatch(candidate, jsonZipRe)
+		}
+		if fields.StoreID == "" {
+			fields.StoreID = firstMatch(candidate, jsonStoreIDRe)
+		}
+		if fields.Address != "" && fields.City != "" && fields.State != "" && fields.ZipCode != "" && fields.StoreID != "" {
+			break
+		}
+	}
+
+	fields.Name = titleName(fields.Name)
+	fields.Address = normalizeWhitespace(fields.Address)
+	fields.City = normalizeWhitespace(fields.City)
+	fields.State = strings.ToUpper(strings.TrimSpace(fields.State))
+	fields.ZipCode = strings.TrimSpace(fields.ZipCode)
+	fields.StoreID = strings.TrimSpace(fields.StoreID)
+	fields.score = filledFieldCount(fields)
+	return fields
 }
 
 func walkJSON(value any) storeFields {
@@ -412,6 +468,16 @@ func extractStoreID(text string) string {
 		return matches[1]
 	}
 	return ""
+}
+
+func resolveStoreID(urlStoreID, explicitStoreID, extractedStoreID string) string {
+	if explicitStoreID != "" {
+		return explicitStoreID
+	}
+	if urlStoreID != "" {
+		return urlStoreID
+	}
+	return extractedStoreID
 }
 
 func extractAddress(signals htmlSignals, pageCity string) (address, city, state, zip string) {
@@ -537,6 +603,34 @@ func titleCaseToken(part string) string {
 	return strings.ToUpper(lower[:1]) + lower[1:]
 }
 
+func fillMissingFields(base, extra storeFields) storeFields {
+	if base.Name == "" {
+		base.Name = extra.Name
+	}
+	if base.Address == "" {
+		base.Address = extra.Address
+	}
+	if base.City == "" {
+		base.City = extra.City
+	}
+	if base.State == "" {
+		base.State = extra.State
+	}
+	if base.ZipCode == "" {
+		base.ZipCode = extra.ZipCode
+	}
+	if base.StoreID == "" {
+		base.StoreID = extra.StoreID
+	}
+	if base.Lat == nil {
+		base.Lat = extra.Lat
+	}
+	if base.Lon == nil {
+		base.Lon = extra.Lon
+	}
+	return base
+}
+
 func pickBetterFields(a, b storeFields) storeFields {
 	if b.score > a.score {
 		return b
@@ -589,6 +683,52 @@ func firstNonEmptyString(values ...any) string {
 		}
 	}
 	return ""
+}
+
+func firstMetaValue(meta map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if value := normalizeWhitespace(meta[strings.ToLower(strings.TrimSpace(key))]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func structuredTextCandidates(body []byte, signals htmlSignals) []string {
+	seen := map[string]struct{}{}
+	add := func(values *[]string, raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		if _, ok := seen[raw]; ok {
+			return
+		}
+		seen[raw] = struct{}{}
+		*values = append(*values, raw)
+	}
+
+	candidates := make([]string, 0, len(signals.Scripts)+4)
+	rawBody := string(body)
+	unescapedBody := htmlstd.UnescapeString(strings.ReplaceAll(rawBody, `\"`, `"`))
+	add(&candidates, rawBody)
+	add(&candidates, strings.ReplaceAll(rawBody, `\"`, `"`))
+	add(&candidates, htmlstd.UnescapeString(rawBody))
+	add(&candidates, unescapedBody)
+	for _, script := range signals.Scripts {
+		add(&candidates, script.Content)
+		add(&candidates, strings.ReplaceAll(script.Content, `\"`, `"`))
+		add(&candidates, htmlstd.UnescapeString(script.Content))
+	}
+	return candidates
+}
+
+func firstMatch(value string, re *regexp.Regexp) string {
+	matches := re.FindStringSubmatch(value)
+	if len(matches) < 2 {
+		return ""
+	}
+	return matches[1]
 }
 
 func firstNumericString(values ...any) string {
