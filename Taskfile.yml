@@ -67,3 +67,11 @@ tasks:
       LOCATION: '{{default "70500874" .LOCATION}}'
     cmds:
       - go run ./cmd/producecheck -location {{.LOCATION}}
+
+  deploy:
+    desc: Deploy the app using deploy/deploy.sh
+    vars:
+      REF: '{{default "origin/master" .REF}}'
+      NAMESPACE: '{{default "careme" .NAMESPACE}}'
+    cmds:
+      - bash deploy/deploy.sh {{.REF}} {{.NAMESPACE}}
