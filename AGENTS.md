@@ -10,6 +10,8 @@ Use the repo docs as the source of truth before inferring behavior from scattere
 - `docs/tour.md`: main user journey and UI context.
 - `internal/locations/README.md`: provenance and generation notes for ZIP centroid data.
 
+Assume `Taskfile.yml` is the canonical entrypoint for routine local work. Prefer reading it before inventing new command sequences.
+
 ## Project Structure
 
 - `cmd/careme`: main binary. `main.go` handles startup and `web.go` wires HTTP routes, services, and shutdown.
@@ -41,36 +43,40 @@ export GOCACHE=/tmp/go-build
 export GOMODCACHE=/tmp/go-modcache
 ```
 
+Install Task if needed:
+
+```sh
+go install github.com/go-task/task/v3/cmd/task@latest
+```
+
 Baseline verification:
 
 ```sh
-go fmt ./...
-go vet ./...
-golangci-lint run ./...
-ENABLE_MOCKS=1 go test ./...
+task verify
 ```
 
 Useful local runs:
 
 ```sh
-go run ./cmd/careme -serve -addr :8080
-go run ./cmd/careme -zipcode 98101
-go build -o bin/careme ./cmd/careme
-bash tailwind/generate.sh
+task serve
+task css
+task zipcode ZIP=98101
 ```
 
 When changing the generator produce filter list in `internal/recipes/params.go` `Produce()`, also run:
 
 ```sh
-go run ./cmd/producecheck -location 70500874
+task producecheck LOCATION=70500874
 ```
 
 That command may require secrets from `.envtest`.
 
+If a task target exists for the workflow you need, use it instead of retyping the underlying commands. If `task` is unavailable in a restricted environment, inspect `Taskfile.yml` and run the equivalent commands directly for that session.
+
 ## Testing Expectations
 
-- Run tests after code changes. Default to `go test ./...`; narrow with `-run` only for quick iteration.
-- Run `golangci-lint run ./...` after Go changes unless the task clearly does not affect linted code.
+- After normal code changes, run `task verify`.
+- For quick iteration, it is fine to run a narrower command or task first, but finish with `task verify` unless the change is clearly docs-only.
 - Keep tests deterministic. Avoid network calls and prefer fakes or mocks.
 - Place tests next to code in `*_test.go`.
 - When touching recipe generation or Kroger client code, add assertions for API-shape drift and rendered output where applicable.
@@ -80,7 +86,7 @@ That command may require secrets from `.envtest`.
 
 - If you change cache keys or cache-backed object layout, update `docs/cache-layout.md`.
 - If you change recipe-generation state transitions, update `docs/data-object-flow.md`.
-- If you change templates or input CSS, run `bash tailwind/generate.sh`.
+- If you change templates or input CSS, run `task css`.
 - If you add a handler that can expose multi-user data, place it behind the `/admin` mux.
 
 ## Security And Configuration

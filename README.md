@@ -1,4 +1,4 @@
-Careme helps a signed-in user pick a grocery store, inspect store inventory and seasonality, and generate a weekly meal plan plus shopping list.
+Careme helps you pick a grocery store, check what is fresh and seasonal, and turn that into a weekly meal plan with a shopping list.
 
 ## Start Here
 
@@ -9,6 +9,28 @@ If you are trying to understand the repo quickly, read these in order:
 3. `docs/data-object-flow.md` for recipe-generation state and cache-backed lifecycle.
 4. `docs/cache-layout.md` for cache keys and persistence layout.
 5. `docs/tour.md` for the main user journey.
+
+## Quickstart
+
+Install Task once:
+
+```sh
+go install github.com/go-task/task/v3/cmd/task@latest
+```
+
+Then the main local commands are:
+
+```sh
+task verify
+task serve
+task css
+```
+
+For everything else, run:
+
+```sh
+task --list
+```
 
 ## System Map
 
@@ -60,41 +82,33 @@ export GOCACHE=/tmp/go-build
 export GOMODCACHE=/tmp/go-modcache
 ```
 
-### Verify Go changes
+### Verify the repo
 
 ```sh
-go fmt ./...
-go vet ./...
-golangci-lint run ./...
-ENABLE_MOCKS=1 go test ./...
+task verify
 ```
 
 ### Run the app locally
 
 ```sh
-go run ./cmd/careme -serve -addr :8080
+task serve
 ```
 
 ### Rebuild CSS after template or CSS changes
 
 ```sh
-bash tailwind/generate.sh
+task css
 ```
 
 ### Helpful targeted commands
 
 ```sh
-go run ./cmd/careme -zipcode 98101
-go build -o bin/careme ./cmd/careme
+task zipcode ZIP=98101
+task producecheck LOCATION=70500874
+task deploy REF=origin/master NAMESPACE=careme
 ```
 
-If you change the generator produce filter list in `internal/recipes/params.go`, also run:
-
-```sh
-go run ./cmd/producecheck -location 70500874
-```
-
-That command may require secrets from `.envtest`.
+If you want the underlying command list, see `Taskfile.yml`. The task targets are the canonical entrypoints for local verification and routine development work.
 
 ## Configuration
 
@@ -122,6 +136,7 @@ That command may require secrets from `.envtest`.
 - Prefer standard library and small focused packages.
 - Keep generated artifacts and user recipe output out of commits unless intentionally adding fixtures.
 - Any handler that exposes multi-user data belongs behind `/admin`.
+- Prefer `task` targets over ad hoc command sequences for common workflows.
 
 ## Docs Index
 
