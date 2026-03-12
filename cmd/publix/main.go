@@ -2,6 +2,8 @@ package main
 
 import (
 	"careme/internal/cache"
+	"careme/internal/logsetup"
+	"careme/internal/logsink"
 	"careme/internal/publix"
 	"context"
 	"errors"
@@ -46,6 +48,13 @@ func main() {
 	flag.BoolVar(&resumeMissing, "resume-missing", true, "skip ids already recorded as missing")
 	flag.Parse()
 
+	ctx := context.Background()
+	closeLogger, err := logsetup.Configure(ctx, logsink.ConfigFromEnv("logs"))
+	if err != nil {
+		log.Fatalf("failed to configure logging: %v", err)
+	}
+	defer closeLogger()
+
 	if startID <= 0 {
 		log.Fatalf("start-id must be positive")
 	}
@@ -61,7 +70,7 @@ func main() {
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	client := publix.NewClientWithBaseURL(baseURL, httpClient)
 
-	stats, err := syncStores(context.Background(), cacheStore, client, syncConfig{
+	stats, err := syncStores(ctx, cacheStore, client, syncConfig{
 		startID:       startID,
 		endID:         endID,
 		delay:         time.Duration(delayMS) * time.Millisecond,

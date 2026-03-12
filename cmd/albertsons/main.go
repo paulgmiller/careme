@@ -3,6 +3,8 @@ package main
 import (
 	"careme/internal/albertsons"
 	"careme/internal/cache"
+	"careme/internal/logsetup"
+	"careme/internal/logsink"
 	"context"
 	"errors"
 	"flag"
@@ -26,6 +28,13 @@ func main() {
 	flag.IntVar(&delayMS, "delay-ms", 1000, "delay between store page requests in milliseconds")
 	flag.Parse()
 
+	ctx := context.Background()
+	closeLogger, err := logsetup.Configure(ctx, logsink.ConfigFromEnv("logs"))
+	if err != nil {
+		log.Fatalf("failed to configure logging: %v", err)
+	}
+	defer closeLogger()
+
 	chains, err := selectedChains(brands)
 	if err != nil {
 		log.Fatalf("failed to parse brands: %v", err)
@@ -37,7 +46,6 @@ func main() {
 	}
 
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
-	ctx := context.Background()
 	delay := time.Duration(delayMS) * time.Millisecond
 
 	var synced int
