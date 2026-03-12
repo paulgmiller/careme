@@ -1,51 +1,101 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-- `cmd/careme`: Entry point; `main.go` parses flags for CLI vs `-serve` web mode; `web.go` wires handlers and middleware.
-- `internal/recipes`, `internal/locations`, `internal/kroger`: Business logic for meal planning, location lookup, and Kroger API access; generated client files live under `internal/kroger`.
-- `internal/templates` and `cmd/careme/favicon.png`: HTML templates and assets for the UI; `internal/html` holds helpers (e.g., Clarity snippet).
-- `internal/cache`, `internal/logsink`, `internal/ai`, `internal/users`: Cross-cutting services (caching, logging, AI provider glue, user storage).
-- `recipes/`: Local output directory created at runtime; keep it out of commits unless intentionally adding fixtures.
-- `internal/auth` : mostly clerk authorization
+## Read First
 
-## Cache Layout
-- Cache key/prefix docs live in `docs/cache-layout.md`. Keep that file updated when cache keys are added or changed.
+Use the repo docs as the source of truth before inferring behavior from scattered handlers.
 
-## Build, Test, and Development Commands
-- Sandbox-safe Go cache setup (recommended before running Go commands in restricted environments):
-  - `export GOCACHE=/tmp/go-build`
-  - `export GOMODCACHE=/tmp/go-modcache`
-  - Alternative persistent path inside repo: `export GOCACHE=$PWD/.cache/go-build && export GOMODCACHE=$PWD/.cache/go-modcache`
-- `go fmt ./...` then `go vet ./...`: Baseline formatting and static checks.
-- From the repo root, run `golangci-lint run ./...`: Expanded Go linters.
-- `export ENABLE_MOCKS=1`: to test without kroger, openai credentials
-- `go test ./...`: Run unit tests across all packages; add `-cover` when changing core logic.
-- `go run ./cmd/careme -serve -addr :8080`: Start the web server (requires env vars below).
-- `go run ./cmd/careme -zipcode 98101`: Helper to list Kroger location IDs by ZIP.
-- `go build -o bin/careme ./cmd/careme`: Produce a local binary for manual runs.
-- `tailwind\generate.sh`: run when ever you change css or html
+- `README.md`: top-level system map and common commands.
+- `docs/data-object-flow.md`: recipe generation lifecycle and object transitions.
+- `docs/cache-layout.md`: cache key and prefix layout. Update this doc when cache layout changes.
+- `docs/tour.md`: main user journey and UI context.
+- `internal/locations/README.md`: provenance and generation notes for ZIP centroid data.
 
-## Coding Style & Naming Conventions
-- Go 1.24; keep code `gofmt`-clean before review. Favor small, focused functions and table-driven tests.
-- Exported identifiers in `CamelCase`; package-private helpers in `lowerCamel`. Template names mirror file names in `internal/templates`.
-- Prefer standard library first; add dependencies sparingly and record rationale in PR description if new.
-- Prefer simple html to javascript frameworks
-- For UI copy, prefer plain culinary language over technical terms (example: use "Try again, chef" instead of "Regenerate", and "make it vegetarian" instead of "prefer vegetarian").
+## Project Structure
 
-## Testing Guidelines
-- Always run tests after making code changes. Default to `go test ./...`; use a narrower `go test ./... -run TestName` only when appropriate for quick iteration. If you cannot run tests, explicitly say why.
-- From the repo root, run `golangci-lint run ./...` after Go changes unless the task clearly does not affect linted code.
-- Place tests alongside code in `*_test.go`; prefer table-driven cases and explicit fixtures over implicit globals.
-- Use `go test ./... -run TestName` for targeted debugging; keep deterministic by avoiding network calls and using fakes where possible.
-- When touching recipe generation or Kroger client code, add assertions that cover API shape changes and template output (see existing tests in `internal/recipes` and `internal/html`).
-- When changing the generator produce filter list (`internal/recipes/params.go` `Produce()`), also run `go run ./cmd/producecheck -location 70500874` and see if score changes. Will need secrets in .envtest file
-  
-## Commit & Pull Request Guidelines
-- Reference an issue/PR number when applicable. Say why something was done rather than just what was done.
-- In PRs, include: what changed, why, how to verify (commands run), and any config/env impacts. Add screenshots for UI changes using `internal/templates`.
-- Keep commits scoped and reviewable; avoid mixing refactors with feature changes unless necessary.
+- `cmd/careme`: main binary. `main.go` handles startup and `web.go` wires HTTP routes, services, and shutdown.
+- `internal/recipes`: recipe generation, regeneration, shopping list assembly, handlers, and persistence helpers.
+- `internal/locations`: store lookup, ZIP centroid logic, and nearby-store abstractions.
+- `internal/users`: user storage, profile endpoints, favorites, preferences, and admin user views.
+- `internal/auth`: auth provider integration; mostly Clerk authorization.
+- `internal/cache`: backing storage abstraction used across the app.
+- `internal/ai`: AI provider client and recipe-generation glue.
+- `internal/templates`, `internal/static`: server-rendered UI templates and static assets.
+- `internal/<store>` packages: store-specific clients and data collection logic.
+- `recipes/`: runtime output directory. Do not commit generated recipe output unless intentionally adding fixtures.
 
-## Security & Configuration Notes
-- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `CLARITY_PROJECT_ID`, `GOOGLE_TAG_ID`, `GOOGLE_CONVERSION_LABEL`, `HISTORY_PATH`. Azure logging uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`.
-- Never commit secrets or generated recipe outputs. If testing against real APIs, use minimal scopes and rotate keys promptly.
-- Any handler that lets you see data from multiple users should go behind the /admin mux to secure it. 
+## Working Style
+
+- Go 1.24. Keep code `gofmt`-clean.
+- Prefer small functions, explicit control flow, and table-driven tests.
+- Prefer standard library first; add dependencies sparingly.
+- Prefer simple HTML and HTMX over heavier frontend frameworks.
+- For UI copy, use plain culinary language. Example: "Try again, chef" instead of "Regenerate".
+- Keep comments brief and only where intent is not obvious from code.
+
+## Development Commands
+
+Recommended for sandbox-safe Go work:
+
+```sh
+export GOCACHE=/tmp/go-build
+export GOMODCACHE=/tmp/go-modcache
+```
+
+Baseline verification:
+
+```sh
+go fmt ./...
+go vet ./...
+golangci-lint run ./...
+ENABLE_MOCKS=1 go test ./...
+```
+
+Useful local runs:
+
+```sh
+go run ./cmd/careme -serve -addr :8080
+go run ./cmd/careme -zipcode 98101
+go build -o bin/careme ./cmd/careme
+bash tailwind/generate.sh
+```
+
+When changing the generator produce filter list in `internal/recipes/params.go` `Produce()`, also run:
+
+```sh
+go run ./cmd/producecheck -location 70500874
+```
+
+That command may require secrets from `.envtest`.
+
+## Testing Expectations
+
+- Run tests after code changes. Default to `go test ./...`; narrow with `-run` only for quick iteration.
+- Run `golangci-lint run ./...` after Go changes unless the task clearly does not affect linted code.
+- Keep tests deterministic. Avoid network calls and prefer fakes or mocks.
+- Place tests next to code in `*_test.go`.
+- When touching recipe generation or Kroger client code, add assertions for API-shape drift and rendered output where applicable.
+- If you cannot run tests or lint, say so explicitly.
+
+## Change-Specific Rules
+
+- If you change cache keys or cache-backed object layout, update `docs/cache-layout.md`.
+- If you change recipe-generation state transitions, update `docs/data-object-flow.md`.
+- If you change templates or input CSS, run `bash tailwind/generate.sh`.
+- If you add a handler that can expose multi-user data, place it behind the `/admin` mux.
+
+## Security And Configuration
+
+Required env vars:
+- `KROGER_CLIENT_ID`
+- `KROGER_CLIENT_SECRET`
+- `AI_API_KEY`
+
+Optional env vars:
+- `CLARITY_PROJECT_ID`
+- `GOOGLE_TAG_ID`
+- `GOOGLE_CONVERSION_LABEL`
+- `HISTORY_PATH`
+- `AZURE_STORAGE_ACCOUNT_NAME`
+- `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`
+
+Never commit secrets or incidental generated output. If testing against real APIs, use minimal scopes and rotate keys promptly.
