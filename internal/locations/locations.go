@@ -6,6 +6,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
@@ -146,6 +147,19 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 			return nil, fmt.Errorf("failed to create Publix backend: %w", err)
 		}
 		backends = append(backends, publixBackend)
+	}
+	if cfg.HEB.IsEnabled() {
+		slog.Info("initializing HEB location backend")
+		listCache, err := cache.EnsureCache(heb.Container)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HEB list cache: %w", err)
+		}
+
+		hebBackend, err := heb.NewLocationBackend(context.Background(), listCache, centroids)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HEB backend: %w", err)
+		}
+		backends = append(backends, hebBackend)
 	}
 	return &locationStorage{
 		client:       backends,
