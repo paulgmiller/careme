@@ -1,0 +1,77 @@
+# Install Task: go install github.com/go-task/task/v3/cmd/task@latest
+version: "3"
+
+env:
+  GOCACHE: '{{default "/tmp/go-build" .GOCACHE}}'
+  GOMODCACHE: '{{default "/tmp/go-modcache" .GOMODCACHE}}'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  verify:
+    desc: Run the standard local verification suite
+    deps:
+      - fmt
+      - vet
+      - lint
+      - test
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  test:
+    desc: Run tests with mocks enabled by default
+    env:
+      ENABLE_MOCKS: '{{default "1" .ENABLE_MOCKS}}'
+    cmds:
+      - go test ./...
+
+  css:
+    desc: Rebuild Tailwind output
+    cmds:
+      - bash tailwind/generate.sh
+
+  serve:
+    desc: Run the local web server
+    vars:
+      ADDR: '{{default ":8080" .ADDR}}'
+    cmds:
+      - go run ./cmd/careme -serve -addr {{.ADDR}}
+
+  zipcode:
+    desc: Look up Kroger locations for a ZIP code
+    vars:
+      ZIP: '{{default "98101" .ZIP}}'
+    cmds:
+      - go run ./cmd/careme -zipcode {{.ZIP}}
+
+  producecheck:
+    desc: Run produce scoring checks for generator changes
+    vars:
+      LOCATION: '{{default "70500874" .LOCATION}}'
+    cmds:
+      - go run ./cmd/producecheck -location {{.LOCATION}}
+
+  deploy:
+    desc: Deploy the app using deploy/deploy.sh
+    vars:
+      REF: '{{default "origin/master" .REF}}'
+      NAMESPACE: '{{default "careme" .NAMESPACE}}'
+    cmds:
+      - bash deploy/deploy.sh {{.REF}} {{.NAMESPACE}}
