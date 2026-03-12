@@ -33,9 +33,6 @@ Thumbs.db
 .envprod
 
 tailwind/node_modules/
-playwright/node_modules/
-playwright/playwright-report/
-playwright/test-results/
 
 # Cache directory and compiled binary
 cache/
