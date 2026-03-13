@@ -2,10 +2,12 @@ package wholefoods
 
 import (
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -16,6 +18,26 @@ type centroidByZip interface {
 type LocationBackend struct {
 	zipLookup centroidByZip
 	byID      map[string]locationtypes.Location
+}
+
+func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
+	if !cfg.WholeFoods.IsEnabled() {
+		return nil, &locationtypes.DisabledBackendError{Backend: "Whole Foods"}
+	}
+
+	slog.Info("initializing Whole Foods location backend")
+
+	listCache, err := cache.EnsureCache(Container)
+	if err != nil {
+		return nil, fmt.Errorf("create Whole Foods list cache: %w", err)
+	}
+
+	backend, err := NewLocationBackend(ctx, listCache, zipLookup)
+	if err != nil {
+		return nil, fmt.Errorf("create Whole Foods backend: %w", err)
+	}
+
+	return backend, nil
 }
 
 func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {

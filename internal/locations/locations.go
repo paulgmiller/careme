@@ -25,8 +25,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -65,11 +68,69 @@ type locationBackend interface {
 	IsID(locationID string) bool
 }
 
+type locationBackendFactory func(context.Context, *config.Config, centroidByZip) (locationBackend, error)
+
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
 
 type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
+}
+
+func registeredLocationBackends() []locationBackendFactory {
+	return []locationBackendFactory{
+		newKrogerLocationBackend,
+		newWalmartLocationBackend,
+		newALDILocationBackend,
+		newWholeFoodsLocationBackend,
+		newAlbertsonsLocationBackend,
+		newPublixLocationBackend,
+		newHEBLocationBackend,
+	}
+}
+
+func newKrogerLocationBackend(_ context.Context, cfg *config.Config, _ centroidByZip) (locationBackend, error) {
+	return kroger.NewLocationBackendFromConfig(cfg)
+}
+
+func newWalmartLocationBackend(_ context.Context, cfg *config.Config, _ centroidByZip) (locationBackend, error) {
+	return walmart.NewLocationBackendFromConfig(cfg)
+}
+
+func newALDILocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
+	return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids)
+}
+
+func newWholeFoodsLocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
+	return wholefoods.NewLocationBackendFromConfig(ctx, cfg, centroids)
+}
+
+func newAlbertsonsLocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
+	return albertsons.NewLocationBackendFromConfig(ctx, cfg, centroids)
+}
+
+func newPublixLocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
+	return publix.NewLocationBackendFromConfig(ctx, cfg, centroids)
+}
+
+func newHEBLocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
+	return heb.NewLocationBackendFromConfig(ctx, cfg, centroids)
+}
+
+func locationBackendFactoryName(factory locationBackendFactory) string {
+	fn := runtime.FuncForPC(reflect.ValueOf(factory).Pointer())
+	if fn == nil {
+		return "unknown"
+	}
+
+	name := fn.Name()
+	if idx := strings.LastIndex(name, "/"); idx >= 0 {
+		name = name[idx+1:]
+	}
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		name = name[idx+1:]
+	}
+	return name
 }
 
 func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGetter, error) {
@@ -81,86 +142,18 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 		return mock{}, nil
 	}
 
-	//pass these in?
-	var backends []locationBackend
-	kclient, err := kroger.FromConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
+	backends := make([]locationBackend, 0, len(registeredLocationBackends()))
+	for _, factory := range registeredLocationBackends() {
+		backend, err := factory(context.Background(), cfg, centroids)
+		if err != nil {
+			if locationtypes.IsDisabledBackendError(err) {
+				continue
+			}
+			return nil, fmt.Errorf("failed to initialize %s location backend: %w", locationBackendFactoryName(factory), err)
+		}
+		backends = append(backends, backend)
 	}
-	backends = append(backends, kclient)
 
-	if cfg.Walmart.IsEnabled() {
-		wclient, err := walmart.NewClient(cfg.Walmart)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Walmart client: %w", err)
-		}
-		backends = append(backends, wclient)
-	}
-	if cfg.Aldi.IsEnabled() {
-		slog.Info("initializing ALDI location backend")
-		listCache, err := cache.EnsureCache(aldi.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create ALDI list cache: %w", err)
-		}
-
-		aldiBackend, err := aldi.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create ALDI backend: %w", err)
-		}
-		backends = append(backends, aldiBackend)
-	}
-	if cfg.WholeFoods.IsEnabled() {
-		slog.Info("initializing Whole Foods location backend")
-		listCache, err := cache.EnsureCache(wholefoods.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Whole Foods list cache: %w", err)
-		}
-
-		wfBackend, err := wholefoods.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Whole Foods backend: %w", err)
-		}
-		backends = append(backends, wfBackend)
-	}
-	if cfg.Albertsons.IsEnabled() {
-		slog.Info("initializing Albertsons location backend")
-		listCache, err := cache.EnsureCache(albertsons.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Albertsons list cache: %w", err)
-		}
-
-		albertsonsBackend, err := albertsons.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Albertsons backend: %w", err)
-		}
-		backends = append(backends, albertsonsBackend)
-	}
-	if cfg.Publix.IsEnabled() {
-		slog.Info("initializing Publix location backend")
-		listCache, err := cache.EnsureCache(publix.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Publix list cache: %w", err)
-		}
-
-		publixBackend, err := publix.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Publix backend: %w", err)
-		}
-		backends = append(backends, publixBackend)
-	}
-	if cfg.HEB.IsEnabled() {
-		slog.Info("initializing HEB location backend")
-		listCache, err := cache.EnsureCache(heb.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create HEB list cache: %w", err)
-		}
-
-		hebBackend, err := heb.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create HEB backend: %w", err)
-		}
-		backends = append(backends, hebBackend)
-	}
 	return &locationStorage{
 		client:       backends,
 		zipCentroids: centroids,
