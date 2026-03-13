@@ -37,9 +37,6 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 }
 
 func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	if c == nil {
-		return nil, fmt.Errorf("list cache is required")
-	}
 
 	//Is this too much? should we just fetch a single blob that is all coordinates -> store ids and lazily fetch stores?
 	summaries, err := loadCachedStoreSummaries(ctx, c)

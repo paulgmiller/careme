@@ -65,8 +65,6 @@ type locationBackend interface {
 	IsID(locationID string) bool
 }
 
-type locationBackendFactory func() (locationBackend, error)
-
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
 
@@ -84,7 +82,7 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 	}
 
 	ctx := context.Background()
-
+	type locationBackendFactory func() (locationBackend, error)
 	backendfactories := []locationBackendFactory{
 		func() (locationBackend, error) { return kroger.FromConfig(cfg) },
 		func() (locationBackend, error) { return walmart.NewClient(cfg.Walmart) },
