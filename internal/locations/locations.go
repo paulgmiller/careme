@@ -81,86 +81,30 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 		return mock{}, nil
 	}
 
-	//pass these in?
-	var backends []locationBackend
-	kclient, err := kroger.FromConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Kroger client: %w", err)
+	ctx := context.Background()
+	type locationBackendFactory func() (locationBackend, error)
+	backendfactories := []locationBackendFactory{
+		func() (locationBackend, error) { return kroger.FromConfig(cfg) },
+		func() (locationBackend, error) { return walmart.NewClient(cfg.Walmart) },
+		func() (locationBackend, error) { return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+		func() (locationBackend, error) { return wholefoods.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+		func() (locationBackend, error) { return albertsons.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+		func() (locationBackend, error) { return publix.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+		func() (locationBackend, error) { return heb.NewLocationBackendFromConfig(ctx, cfg, centroids) },
 	}
-	backends = append(backends, kclient)
 
-	if cfg.Walmart.IsEnabled() {
-		wclient, err := walmart.NewClient(cfg.Walmart)
+	backends := make([]locationBackend, 0, len(backendfactories))
+	for i, factory := range backendfactories {
+		backend, err := factory()
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Walmart client: %w", err)
+			if locationtypes.IsDisabledBackendError(err) {
+				continue
+			}
+			return nil, fmt.Errorf("failed to initialize location backend %d:  %w", i, err)
 		}
-		backends = append(backends, wclient)
+		backends = append(backends, backend)
 	}
-	if cfg.Aldi.IsEnabled() {
-		slog.Info("initializing ALDI location backend")
-		listCache, err := cache.EnsureCache(aldi.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create ALDI list cache: %w", err)
-		}
 
-		aldiBackend, err := aldi.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create ALDI backend: %w", err)
-		}
-		backends = append(backends, aldiBackend)
-	}
-	if cfg.WholeFoods.IsEnabled() {
-		slog.Info("initializing Whole Foods location backend")
-		listCache, err := cache.EnsureCache(wholefoods.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Whole Foods list cache: %w", err)
-		}
-
-		wfBackend, err := wholefoods.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Whole Foods backend: %w", err)
-		}
-		backends = append(backends, wfBackend)
-	}
-	if cfg.Albertsons.IsEnabled() {
-		slog.Info("initializing Albertsons location backend")
-		listCache, err := cache.EnsureCache(albertsons.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Albertsons list cache: %w", err)
-		}
-
-		albertsonsBackend, err := albertsons.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Albertsons backend: %w", err)
-		}
-		backends = append(backends, albertsonsBackend)
-	}
-	if cfg.Publix.IsEnabled() {
-		slog.Info("initializing Publix location backend")
-		listCache, err := cache.EnsureCache(publix.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Publix list cache: %w", err)
-		}
-
-		publixBackend, err := publix.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Publix backend: %w", err)
-		}
-		backends = append(backends, publixBackend)
-	}
-	if cfg.HEB.IsEnabled() {
-		slog.Info("initializing HEB location backend")
-		listCache, err := cache.EnsureCache(heb.Container)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create HEB list cache: %w", err)
-		}
-
-		hebBackend, err := heb.NewLocationBackend(context.Background(), listCache, centroids)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create HEB backend: %w", err)
-		}
-		backends = append(backends, hebBackend)
-	}
 	return &locationStorage{
 		client:       backends,
 		zipCentroids: centroids,

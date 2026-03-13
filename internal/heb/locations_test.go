@@ -16,11 +16,11 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
 		"78380": {Lat: 27.8000, Lon: -97.6700},
 	})
 	if err != nil {
-		t.Fatalf("NewLocationBackend returned error: %v", err)
+		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
 	if !backend.IsID("heb_22") {
@@ -47,11 +47,11 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 		t.Fatalf("cache far store summary: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
 		"78380": {Lat: 27.8000, Lon: -97.6700},
 	})
 	if err != nil {
-		t.Fatalf("NewLocationBackend returned error: %v", err)
+		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
 	locs, err := backend.GetLocationsByZip(context.Background(), "78380")
@@ -71,9 +71,9 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 
 	cacheStore := cache.NewInMemoryCache()
 
-	_, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
+	_, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
 	if err == nil {
-		t.Fatal("expected NewLocationBackend to return an error")
+		t.Fatal("expected newLocationBackend to return an error")
 	}
 	if !strings.Contains(err.Error(), "failed to load heb locations") {
 		t.Fatalf("expected missing summaries error, got %v", err)

@@ -2,6 +2,7 @@ package albertsons
 
 import (
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 	"context"
@@ -18,14 +19,24 @@ type LocationBackend struct {
 	byID      map[string]locationtypes.Location
 }
 
-func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	if c == nil {
-		return nil, fmt.Errorf("list cache is required")
+func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
+	if !cfg.Albertsons.IsEnabled() {
+		return nil, locationtypes.DisabledBackendError("Albertsons")
 	}
+
 	if zipLookup == nil {
 		return nil, fmt.Errorf("zip centroid lookup is required")
 	}
 
+	listCache, err := cache.EnsureCache(Container)
+	if err != nil {
+		return nil, fmt.Errorf("create Albertsons list cache: %w", err)
+	}
+
+	return newLocationBackend(ctx, listCache, zipLookup)
+}
+
+func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
 	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
 		return nil, err
