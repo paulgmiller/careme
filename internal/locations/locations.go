@@ -25,11 +25,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"reflect"
-	"runtime"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -68,69 +65,13 @@ type locationBackend interface {
 	IsID(locationID string) bool
 }
 
-type locationBackendFactory func(context.Context, *config.Config, centroidByZip) (locationBackend, error)
+type locationBackendFactory func() (locationBackend, error)
 
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
 
 type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
-}
-
-func registeredLocationBackends() []locationBackendFactory {
-	return []locationBackendFactory{
-		newKrogerLocationBackend,
-		newWalmartLocationBackend,
-		newALDILocationBackend,
-		newWholeFoodsLocationBackend,
-		newAlbertsonsLocationBackend,
-		newPublixLocationBackend,
-		newHEBLocationBackend,
-	}
-}
-
-func newKrogerLocationBackend(_ context.Context, cfg *config.Config, _ centroidByZip) (locationBackend, error) {
-	return kroger.NewLocationBackendFromConfig(cfg)
-}
-
-func newWalmartLocationBackend(_ context.Context, cfg *config.Config, _ centroidByZip) (locationBackend, error) {
-	return walmart.NewLocationBackendFromConfig(cfg)
-}
-
-func newALDILocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
-	return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids)
-}
-
-func newWholeFoodsLocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
-	return wholefoods.NewLocationBackendFromConfig(ctx, cfg, centroids)
-}
-
-func newAlbertsonsLocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
-	return albertsons.NewLocationBackendFromConfig(ctx, cfg, centroids)
-}
-
-func newPublixLocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
-	return publix.NewLocationBackendFromConfig(ctx, cfg, centroids)
-}
-
-func newHEBLocationBackend(ctx context.Context, cfg *config.Config, centroids centroidByZip) (locationBackend, error) {
-	return heb.NewLocationBackendFromConfig(ctx, cfg, centroids)
-}
-
-func locationBackendFactoryName(factory locationBackendFactory) string {
-	fn := runtime.FuncForPC(reflect.ValueOf(factory).Pointer())
-	if fn == nil {
-		return "unknown"
-	}
-
-	name := fn.Name()
-	if idx := strings.LastIndex(name, "/"); idx >= 0 {
-		name = name[idx+1:]
-	}
-	if idx := strings.LastIndex(name, "."); idx >= 0 {
-		name = name[idx+1:]
-	}
-	return name
 }
 
 func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGetter, error) {
@@ -142,14 +83,26 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 		return mock{}, nil
 	}
 
-	backends := make([]locationBackend, 0, len(registeredLocationBackends()))
-	for _, factory := range registeredLocationBackends() {
-		backend, err := factory(context.Background(), cfg, centroids)
+	ctx := context.Background()
+
+	backendfactories := []locationBackendFactory{
+		func() (locationBackend, error) { return kroger.FromConfig(cfg) },
+		func() (locationBackend, error) { return walmart.NewLocationBackendFromConfig(cfg) },
+		func() (locationBackend, error) { return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+		func() (locationBackend, error) { return wholefoods.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+		func() (locationBackend, error) { return albertsons.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+		func() (locationBackend, error) { return publix.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+		func() (locationBackend, error) { return heb.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+	}
+
+	backends := make([]locationBackend, 0, len(backendfactories))
+	for i, factory := range backendfactories {
+		backend, err := factory()
 		if err != nil {
 			if locationtypes.IsDisabledBackendError(err) {
 				continue
 			}
-			return nil, fmt.Errorf("failed to initialize %s location backend: %w", locationBackendFactoryName(factory), err)
+			return nil, fmt.Errorf("failed to initialize location backend %d:  %w", i, err)
 		}
 		backends = append(backends, backend)
 	}
