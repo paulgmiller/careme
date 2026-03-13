@@ -1,19 +1,15 @@
 package types
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
-type DisabledBackendError struct {
-	Backend string
+var errDisabledBackend = errors.New("location backend is disabled")
+
+func DisabledBackendError(backend string) error {
+	return fmt.Errorf("%w: %s", errDisabledBackend, backend)
 }
-
-func (e *DisabledBackendError) Error() string {
-	if e == nil || e.Backend == "" {
-		return "location backend disabled"
-	}
-	return e.Backend + " location backend disabled"
-}
-
 func IsDisabledBackendError(err error) bool {
-	var target *DisabledBackendError
-	return errors.As(err, &target)
+	return errors.Is(err, errDisabledBackend)
 }

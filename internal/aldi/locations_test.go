@@ -16,11 +16,11 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
 		"60610": {Lat: 41.9033, Lon: -87.6313},
 	})
 	if err != nil {
-		t.Fatalf("NewLocationBackend returned error: %v", err)
+		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
 	if !backend.IsID("aldi_F100") {
@@ -47,11 +47,11 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 		t.Fatalf("cache far summary: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
 		"60610": {Lat: 41.9033, Lon: -87.6313},
 	})
 	if err != nil {
-		t.Fatalf("NewLocationBackend returned error: %v", err)
+		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
 	locs, err := backend.GetLocationsByZip(context.Background(), "60610")
@@ -74,9 +74,9 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 
 	cacheStore := cache.NewInMemoryCache()
 
-	_, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
+	_, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
 	if err == nil {
-		t.Fatal("expected NewLocationBackend to return an error")
+		t.Fatal("expected newLocationBackend to return an error")
 	}
 	if !strings.Contains(err.Error(), "failed to load aldi locations") {
 		t.Fatalf("expected missing summaries error, got %v", err)

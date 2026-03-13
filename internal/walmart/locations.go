@@ -1,22 +1,11 @@
 package walmart
 
 import (
-	"careme/internal/config"
 	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
-	"log/slog"
 	"strconv"
 )
-
-func NewLocationBackendFromConfig(cfg *config.Config) (*Client, error) {
-	if !cfg.Walmart.IsEnabled() {
-		return nil, &locationtypes.DisabledBackendError{Backend: "Walmart"}
-	}
-
-	slog.Info("initializing Walmart location backend")
-	return NewClient(cfg.Walmart)
-}
 
 func (c *Client) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
 	//depending on cache to protect us.

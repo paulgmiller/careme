@@ -6,7 +6,7 @@ import (
 )
 
 func TestIsDisabledBackendError(t *testing.T) {
-	err := &DisabledBackendError{Backend: "HEB"}
+	err := DisabledBackendError("HEB")
 
 	if !IsDisabledBackendError(err) {
 		t.Fatalf("expected disabled backend error to be recognized")

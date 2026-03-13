@@ -7,7 +7,6 @@ import (
 	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 )
 
@@ -22,31 +21,21 @@ type LocationBackend struct {
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
 	if !cfg.Aldi.IsEnabled() {
-		return nil, &locationtypes.DisabledBackendError{Backend: "ALDI"}
+		return nil, locationtypes.DisabledBackendError("ALDI")
 	}
-
-	slog.Info("initializing ALDI location backend")
+	if zipLookup == nil {
+		return nil, fmt.Errorf("zip centroid lookup is required")
+	}
 
 	listCache, err := cache.EnsureCache(Container)
 	if err != nil {
 		return nil, fmt.Errorf("create ALDI list cache: %w", err)
 	}
+	return newLocationBackend(ctx, listCache, zipLookup)
 
-	backend, err := NewLocationBackend(ctx, listCache, zipLookup)
-	if err != nil {
-		return nil, fmt.Errorf("create ALDI backend: %w", err)
-	}
-
-	return backend, nil
 }
 
-func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	if c == nil {
-		return nil, fmt.Errorf("list cache is required")
-	}
-	if zipLookup == nil {
-		return nil, fmt.Errorf("zip centroid lookup is required")
-	}
+func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
 
 	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {

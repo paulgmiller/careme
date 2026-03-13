@@ -22,7 +22,7 @@ type LocationBackend struct {
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
 	if !cfg.Publix.IsEnabled() {
-		return nil, &locationtypes.DisabledBackendError{Backend: "Publix"}
+		return nil, locationtypes.DisabledBackendError("Publix")
 	}
 
 	slog.Info("initializing Publix location backend")

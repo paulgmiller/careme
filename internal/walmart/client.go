@@ -2,7 +2,6 @@ package walmart
 
 import (
 	"bytes"
-	"careme/internal/config"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -19,6 +18,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"careme/internal/config"
+	locationtypes "careme/internal/locations/types"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -49,6 +51,11 @@ type StoresQuery struct {
 
 // NewClient creates a Walmart affiliates client.
 func NewClient(cfg config.WalmartConfig) (*Client, error) {
+
+	if !cfg.IsEnabled() {
+		return nil, locationtypes.DisabledBackendError("Walmart")
+	}
+
 	if strings.TrimSpace(cfg.ConsumerID) == "" {
 		return nil, errors.New("consumer ID is required")
 	}

@@ -7,7 +7,6 @@ import (
 	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 )
 
@@ -22,30 +21,24 @@ type LocationBackend struct {
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
 	if !cfg.HEB.IsEnabled() {
-		return nil, &locationtypes.DisabledBackendError{Backend: "HEB"}
+		return nil, locationtypes.DisabledBackendError("HEB")
 	}
 
-	slog.Info("initializing HEB location backend")
+	if zipLookup == nil {
+		return nil, fmt.Errorf("zip centroid lookup is required")
+	}
 
 	listCache, err := cache.EnsureCache(Container)
 	if err != nil {
 		return nil, fmt.Errorf("create HEB list cache: %w", err)
 	}
 
-	backend, err := NewLocationBackend(ctx, listCache, zipLookup)
-	if err != nil {
-		return nil, fmt.Errorf("create HEB backend: %w", err)
-	}
-
-	return backend, nil
+	return newLocationBackend(ctx, listCache, zipLookup)
 }
 
-func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
+func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
 	if c == nil {
 		return nil, fmt.Errorf("list cache is required")
-	}
-	if zipLookup == nil {
-		return nil, fmt.Errorf("zip centroid lookup is required")
 	}
 
 	summaries, err := loadCachedStoreSummaries(ctx, c)

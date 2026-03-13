@@ -7,7 +7,6 @@ import (
 	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 )
 
@@ -22,32 +21,22 @@ type LocationBackend struct {
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
 	if !cfg.Albertsons.IsEnabled() {
-		return nil, &locationtypes.DisabledBackendError{Backend: "Albertsons"}
+		return nil, locationtypes.DisabledBackendError("Albertsons")
 	}
 
-	slog.Info("initializing Albertsons location backend")
+	if zipLookup == nil {
+		return nil, fmt.Errorf("zip centroid lookup is required")
+	}
 
 	listCache, err := cache.EnsureCache(Container)
 	if err != nil {
 		return nil, fmt.Errorf("create Albertsons list cache: %w", err)
 	}
 
-	backend, err := NewLocationBackend(ctx, listCache, zipLookup)
-	if err != nil {
-		return nil, fmt.Errorf("create Albertsons backend: %w", err)
-	}
-
-	return backend, nil
+	return newLocationBackend(ctx, listCache, zipLookup)
 }
 
-func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	if c == nil {
-		return nil, fmt.Errorf("list cache is required")
-	}
-	if zipLookup == nil {
-		return nil, fmt.Errorf("zip centroid lookup is required")
-	}
-
+func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
 	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
 		return nil, err

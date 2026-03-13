@@ -87,7 +87,7 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 
 	backendfactories := []locationBackendFactory{
 		func() (locationBackend, error) { return kroger.FromConfig(cfg) },
-		func() (locationBackend, error) { return walmart.NewLocationBackendFromConfig(cfg) },
+		func() (locationBackend, error) { return walmart.NewClient(cfg.Walmart) },
 		func() (locationBackend, error) { return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids) },
 		func() (locationBackend, error) { return wholefoods.NewLocationBackendFromConfig(ctx, cfg, centroids) },
 		func() (locationBackend, error) { return albertsons.NewLocationBackendFromConfig(ctx, cfg, centroids) },

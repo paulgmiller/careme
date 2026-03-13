@@ -1,17 +1,12 @@
 package kroger
 
 import (
-	"careme/internal/config"
 	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
 )
 
 const chainName = "kroger"
-
-func NewLocationBackendFromConfig(cfg *config.Config) (*ClientWithResponses, error) {
-	return FromConfig(cfg)
-}
 
 func (c *ClientWithResponses) IsID(locationID string) bool {
 	if locationID == "" {
