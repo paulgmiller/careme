@@ -2,10 +2,12 @@ package aldi
 
 import (
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -16,6 +18,26 @@ type centroidByZip interface {
 type LocationBackend struct {
 	zipLookup centroidByZip
 	byID      map[string]locationtypes.Location
+}
+
+func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
+	if !cfg.Aldi.IsEnabled() {
+		return nil, &locationtypes.DisabledBackendError{Backend: "ALDI"}
+	}
+
+	slog.Info("initializing ALDI location backend")
+
+	listCache, err := cache.EnsureCache(Container)
+	if err != nil {
+		return nil, fmt.Errorf("create ALDI list cache: %w", err)
+	}
+
+	backend, err := NewLocationBackend(ctx, listCache, zipLookup)
+	if err != nil {
+		return nil, fmt.Errorf("create ALDI backend: %w", err)
+	}
+
+	return backend, nil
 }
 
 func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
