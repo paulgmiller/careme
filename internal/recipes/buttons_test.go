@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// Test that the HTML contains Save and Dismiss buttons for recipes.
-func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
+// Test that the HTML contains the simplified recipe action and live shopping list state.
+func TestFormatShoppingListHTML_ContainsSaveActionAndEmptyListState(t *testing.T) {
 	// Create a shopping list with multiple recipes
 	multiRecipeList := ai.ShoppingList{
 		Recipes: []ai.Recipe{
@@ -46,26 +46,16 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Verify HTML is valid
 	isValidHTML(t, html)
 
-	// Check for radio buttons
-	if !strings.Contains(html, `type="radio"`) {
-		t.Error("HTML should contain radio button inputs")
-	}
 	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/save"`) {
 		t.Error("HTML should contain HTMX save action")
 	}
-	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/dismiss"`) {
-		t.Error("HTML should contain HTMX dismiss action")
-	}
-	if !strings.Contains(html, `hx-trigger="click"`) {
-		t.Error("HTML should trigger HTMX requests on click")
+	if strings.Contains(html, `/dismiss"`) {
+		t.Error("HTML should not render dismiss actions before a recipe is saved")
 	}
 
-	// Check for Save and Dismiss labels.
+	// Check for primary action labels.
 	if !strings.Contains(html, `Save`) {
 		t.Error("HTML should contain Save label text")
-	}
-	if !strings.Contains(html, `Dismis`) {
-		t.Error("HTML should contain Dismiss label text")
 	}
 	if !strings.Contains(html, `Details`) {
 		t.Error("HTML should contain Details button text")
@@ -76,18 +66,11 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 		t.Error("HTML should contain Try again, chef button")
 	}
 
-	// Check that "Save my picks" button exists.
-	if !strings.Contains(html, `Assemble Shopping List`) {
-		t.Error("HTML should contain Assemble Shopping List button")
-	}
-	if !strings.Contains(html, `disabled`) {
-		t.Error("HTML should disable finalize button when no recipes are saved")
-	}
 	if strings.Contains(html, `/finalize"`) {
-		t.Error("HTML should not wire finalize endpoint when button is disabled")
+		t.Error("HTML should not render set-the-menu endpoint when nothing is saved")
 	}
-	if !strings.Contains(html, `Save at least one recipe to assemble your shopping list.`) {
-		t.Error("HTML should explain how to enable finalize button")
+	if !strings.Contains(html, `Save a recipe to start your shopping list.`) {
+		t.Error("HTML should explain how to start the live shopping list")
 	}
 
 	if !strings.Contains(html, `/recipes/`) || !strings.Contains(html, `/regenerate"`) {
@@ -106,8 +89,8 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	}
 }
 
-func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
-	listWithSavedRecipe := ai.ShoppingList{
+func TestFormatShoppingListHTML_ShowsSetMenuWhenSavedAndPendingRecipesRemain(t *testing.T) {
+	listWithRecipes := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
 				Title:       "Saved Recipe",
@@ -119,20 +102,28 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 				Health:       "Healthy",
 				DrinkPairing: "Water",
 			},
+			{
+				Title:        "Pending Recipe",
+				Description:  "Waiting recipe",
+				Ingredients:  []ai.Ingredient{{Name: "ingredient2", Quantity: "2 cups", Price: "4.00"}},
+				Instructions: []string{"Step 2"},
+				Health:       "Healthy",
+				DrinkPairing: "Tea",
+			},
 		},
 	}
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
+	p.Saved = []ai.Recipe{listWithRecipes.Recipes[0]}
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, listWithSavedRecipe, true, w)
+	FormatShoppingListHTML(p, listWithRecipes, true, w)
 	html := w.Body.String()
 
 	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
-		t.Error("HTML should submit finalize with HTMX POST when a recipe is saved")
+		t.Error("HTML should submit set-the-menu with HTMX POST when saved and pending recipes coexist")
 	}
-	if strings.Contains(html, `id="finalize-help"`) {
-		t.Error("HTML should not render finalize helper text when button is enabled")
+	if !strings.Contains(html, `Set the menu`) {
+		t.Error("HTML should render the Set the menu label when saved and pending recipes coexist")
 	}
 }
