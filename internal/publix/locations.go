@@ -7,7 +7,6 @@ import (
 	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 )
 
@@ -25,28 +24,19 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 		return nil, locationtypes.DisabledBackendError("Publix")
 	}
 
-	slog.Info("initializing Publix location backend")
+	if zipLookup == nil {
+		return nil, fmt.Errorf("zip centroid lookup is required")
+	}
 
 	listCache, err := cache.EnsureCache(Container)
 	if err != nil {
 		return nil, fmt.Errorf("create Publix list cache: %w", err)
 	}
 
-	backend, err := NewLocationBackend(ctx, listCache, zipLookup)
-	if err != nil {
-		return nil, fmt.Errorf("create Publix backend: %w", err)
-	}
-
-	return backend, nil
+	return newLocationBackend(ctx, listCache, zipLookup)
 }
 
-func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	if c == nil {
-		return nil, fmt.Errorf("list cache is required")
-	}
-	if zipLookup == nil {
-		return nil, fmt.Errorf("zip centroid lookup is required")
-	}
+func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
 
 	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
