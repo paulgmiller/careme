@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/auth"
 	"careme/internal/cache"
@@ -68,6 +69,8 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(mux)
+
+	actowiz.NewServer().Register(mux)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
