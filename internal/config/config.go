@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const additionalStoresEnableEnv = "EXTRA_STORES_ENABLE"
+
 type Config struct {
 	AI         AIConfig         `json:"ai"`
 	Kroger     KrogerConfig     `json:"kroger"`
@@ -15,6 +17,7 @@ type Config struct {
 	WholeFoods WholeFoodsConfig `json:"wholefoods"`
 	Albertsons AlbertsonsConfig `json:"albertsons"`
 	Publix     PublixConfig     `json:"publix"`
+	HEB        HEBConfig        `json:"heb"`
 	Mocks      MockConfig       `json:"mocks"`
 	Clerk      ClerkConfig      `json:"clerk"`
 	Admin      AdminConfig      `json:"admin"`
@@ -81,6 +84,14 @@ func (c *PublixConfig) IsEnabled() bool {
 	return c.Enable
 }
 
+type HEBConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *HEBConfig) IsEnabled() bool {
+	return c.Enable
+}
+
 // Config defines the required Walmart affiliate credentials and client options.
 type WalmartConfig struct {
 	ConsumerID string
@@ -115,6 +126,8 @@ func (c *ClerkConfig) Signup() string {
 }
 
 func Load() (*Config, error) {
+	additionalStoresEnabled := envEnabled(additionalStoresEnableEnv)
+
 	config := &Config{
 		AI: AIConfig{
 			APIKey: os.Getenv("AI_API_KEY"),
@@ -136,16 +149,19 @@ func Load() (*Config, error) {
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
 		},
 		Aldi: AldiConfig{
-			Enable: os.Getenv("ALDI_ENABLE") != "",
+			Enable: additionalStoresEnabled || envEnabled("ALDI_ENABLE"),
 		},
 		WholeFoods: WholeFoodsConfig{
-			Enable: os.Getenv("WHOLEFOODS_ENABLE") != "",
+			Enable: additionalStoresEnabled || envEnabled("WHOLEFOODS_ENABLE"),
 		},
 		Albertsons: AlbertsonsConfig{
-			Enable: os.Getenv("ALBERTSONS_ENABLE") != "",
+			Enable: additionalStoresEnabled || envEnabled("ALBERTSONS_ENABLE"),
 		},
 		Publix: PublixConfig{
-			Enable: os.Getenv("PUBLIX_ENABLE") != "",
+			Enable: additionalStoresEnabled || envEnabled("PUBLIX_ENABLE"),
+		},
+		HEB: HEBConfig{
+			Enable: additionalStoresEnabled || envEnabled("HEB_ENABLE"),
 		},
 		Walmart: WalmartConfig{
 			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),
@@ -159,6 +175,10 @@ func Load() (*Config, error) {
 	}
 
 	return config, validate(config)
+}
+
+func envEnabled(name string) bool {
+	return os.Getenv(name) != ""
 }
 
 func validate(cfg *Config) error {
