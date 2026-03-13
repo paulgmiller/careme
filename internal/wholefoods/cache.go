@@ -3,6 +3,7 @@ package wholefoods
 import (
 	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
+	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"errors"
@@ -37,30 +38,11 @@ func SaveStoreURLMap(ctx context.Context, c cache.Cache, refs []StoreReference) 
 		urlMap[ref.URL] = ref.ID
 	}
 
-	raw, err := json.Marshal(urlMap)
-	if err != nil {
-		return fmt.Errorf("marshal store url map: %w", err)
-	}
-	if err := c.Put(ctx, StoreURLMapCacheKey, string(raw), cache.Unconditional()); err != nil {
-		return fmt.Errorf("write store url map cache: %w", err)
-	}
-	return nil
+	return sitemapfetch.SaveURLMap(ctx, c, StoreURLMapCacheKey, urlMap)
 }
 
 func LoadStoreURLMap(ctx context.Context, c cache.Cache) (map[string]string, error) {
-	reader, err := c.Get(ctx, StoreURLMapCacheKey)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = reader.Close()
-	}()
-
-	var urlMap map[string]string
-	if err := json.NewDecoder(reader).Decode(&urlMap); err != nil {
-		return nil, fmt.Errorf("decode store url map cache: %w", err)
-	}
-	return urlMap, nil
+	return sitemapfetch.LoadURLMap(ctx, c, StoreURLMapCacheKey)
 }
 
 func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummaryResponse) error {
