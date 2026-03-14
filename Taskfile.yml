@@ -42,7 +42,7 @@ tasks:
   fmt:
     desc: Format Go code with gofumpt
     deps:
-      - tools
+      - gofumpt
     cmds:
       - ./bin/gofumpt -w .
 
@@ -54,21 +54,26 @@ tasks:
   lint:
     desc: Run golangci-lint
     deps:
-      - tools
+      - golangci-lint
     cmds:
       - ./bin/golangci-lint run ./... --timeout=5m
 
   format-check:
     desc: Check Go formatting with gofumpt
     deps:
-      - tools
+      - gofumpt
     cmds:
-      - test -z "$$(./bin/gofumpt -l .)"
+      - |
+        files="$(./bin/gofumpt -l .)"
+        test -z "$files" || {
+          printf '%s\n' "$files"
+          exit 1
+        }
 
   k8s-lint:
     desc: Validate Kubernetes manifests with kubeconform
     deps:
-      - tools
+      - kubeconform
     cmds:
       - ./bin/kubeconform -strict -summary deploy/*.yaml
 
@@ -100,6 +105,7 @@ tasks:
 
   docker-build-all:
     desc: Build the same image matrix as CI locally without pushing
+    internal: true
     deps:
       - docker-build-careme
       - docker-build-wholefoods
@@ -109,6 +115,7 @@ tasks:
 
   docker-build-careme:
     desc: Build the careme image locally
+    internal: true
     cmds:
       - task: docker-build
         vars:
@@ -117,6 +124,7 @@ tasks:
 
   docker-build-wholefoods:
     desc: Build the wholefoods image locally
+    internal: true
     cmds:
       - task: docker-build
         vars:
@@ -125,6 +133,7 @@ tasks:
 
   docker-build-albertsons:
     desc: Build the albertsons image locally
+    internal: true
     cmds:
       - task: docker-build
         vars:
@@ -133,6 +142,7 @@ tasks:
 
   docker-build-publix:
     desc: Build the publix image locally
+    internal: true
     cmds:
       - task: docker-build
         vars:
@@ -141,6 +151,7 @@ tasks:
 
   docker-build-aldi:
     desc: Build the aldi image locally
+    internal: true
     cmds:
       - task: docker-build
         vars:
@@ -180,3 +191,24 @@ tasks:
     desc: Install pinned local CI tools into ./bin
     cmds:
       - bash tools/install.sh
+
+  gofumpt:
+    internal: true
+    status:
+      - test -x ./bin/gofumpt
+    cmds:
+      - bash tools/install.sh gofumpt
+
+  golangci-lint:
+    internal: true
+    status:
+      - test -x ./bin/golangci-lint
+    cmds:
+      - bash tools/install.sh golangci-lint
+
+  kubeconform:
+    internal: true
+    status:
+      - test -x ./bin/kubeconform
+    cmds:
+      - bash tools/install.sh kubeconform
