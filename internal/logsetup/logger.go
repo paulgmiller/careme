@@ -9,12 +9,12 @@ import (
 	"github.com/openclosed-dev/slogan/appinsights"
 )
 
-//just app insights for now. Giving up on logsink
+// just app insights for now. Giving up on logsink
 const AppInsightsConnectionStringEnv = "APPLICATIONINSIGHTS_CONNECTION_STRING"
 
 func Configure(ctx context.Context) (func(), error) {
 
-	var handlers []slog.Handler = []slog.Handler{slog.NewTextHandler(os.Stdout, nil)}
+	handlers := []slog.Handler{slog.NewTextHandler(os.Stdout, nil)}
 
 	closeFn := func() {} //can be a list if we have multiple
 
