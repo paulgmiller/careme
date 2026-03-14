@@ -3,7 +3,6 @@ package main
 import (
 	"careme/internal/cache"
 	"careme/internal/logsetup"
-	"careme/internal/logsink"
 	"careme/internal/wholefoods"
 	"context"
 	"errors"
@@ -28,7 +27,7 @@ func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	closeLogger, err := logsetup.Configure(ctx, logsink.ConfigFromEnv("logs"))
+	closeLogger, err := logsetup.Configure(ctx)
 	if err != nil {
 		log.Fatalf("failed to configure logging: %v", err)
 	}

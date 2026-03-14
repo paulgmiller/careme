@@ -37,8 +37,7 @@ func main() {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 
-	logcfg := logsink.ConfigFromEnv("logs")
-	close, err := logsetup.Configure(ctx, logcfg)
+	close, err := logsetup.Configure(ctx)
 	if err != nil {
 		log.Fatalf("failed to configure logging: %v", err)
 	}
@@ -59,6 +58,7 @@ func main() {
 		return
 	}
 
+	logcfg := logsink.ConfigFromEnv("logs")
 	if err := runServer(cfg, logcfg, addr); err != nil {
 		log.Fatalf("server error: %v", err)
 	}

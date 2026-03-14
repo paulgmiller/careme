@@ -4,7 +4,6 @@ import (
 	"careme/internal/aldi"
 	"careme/internal/cache"
 	"careme/internal/logsetup"
-	"careme/internal/logsink"
 	"context"
 	"flag"
 	"fmt"
@@ -31,7 +30,7 @@ func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	closeLogger, err := logsetup.Configure(ctx, logsink.ConfigFromEnv("logs"))
+	closeLogger, err := logsetup.Configure(ctx)
 	if err != nil {
 		log.Fatalf("failed to configure logging: %v", err)
 	}

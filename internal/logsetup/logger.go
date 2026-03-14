@@ -1,7 +1,6 @@
 package logsetup
 
 import (
-	"careme/internal/logsink"
 	"context"
 	"fmt"
 	"log/slog"
@@ -10,9 +9,10 @@ import (
 	"github.com/openclosed-dev/slogan/appinsights"
 )
 
+//just app insights for now. Giving up on logsink
 const AppInsightsConnectionStringEnv = "APPLICATIONINSIGHTS_CONNECTION_STRING"
 
-func Configure(ctx context.Context, logcfg logsink.Config) (func(), error) {
+func Configure(ctx context.Context) (func(), error) {
 
 	var handlers []slog.Handler = []slog.Handler{slog.NewTextHandler(os.Stdout, nil)}
 
