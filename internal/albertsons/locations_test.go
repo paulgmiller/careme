@@ -16,7 +16,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
 		"98006": {Lat: 47.5750, Lon: -122.1400},
 	})
 	if err != nil {
@@ -50,7 +50,7 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 		t.Fatalf("cache far summary: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
 		"98006": {Lat: 47.5750, Lon: -122.1400},
 	})
 	if err != nil {
@@ -77,7 +77,7 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 
 	cacheStore := cache.NewInMemoryCache()
 
-	_, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
+	_, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
 	if err == nil {
 		t.Fatal("expected NewLocationBackend to return an error")
 	}

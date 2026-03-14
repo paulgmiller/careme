@@ -16,11 +16,11 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
 		"98101": {Lat: 47.6101, Lon: -122.3344},
 	})
 	if err != nil {
-		t.Fatalf("NewLocationBackend returned error: %v", err)
+		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
 	if !backend.IsID("wholefoods_10216") {
@@ -47,11 +47,11 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 		t.Fatalf("cache far store summary: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
 		"98101": {Lat: 47.6101, Lon: -122.3344},
 	})
 	if err != nil {
-		t.Fatalf("NewLocationBackend returned error: %v", err)
+		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
 	locs, err := backend.GetLocationsByZip(context.Background(), "98101")
@@ -80,9 +80,9 @@ func TestLocationBackendReturnsAllWhenZipUnknown(t *testing.T) {
 		t.Fatalf("cache far store summary: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
 	if err != nil {
-		t.Fatalf("NewLocationBackend returned error: %v", err)
+		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
 	locs, err := backend.GetLocationsByZip(context.Background(), "unknown")
@@ -99,9 +99,9 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 
 	cacheStore := cache.NewInMemoryCache()
 
-	_, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
+	_, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
 	if err == nil {
-		t.Fatal("expected NewLocationBackend to return an error")
+		t.Fatal("expected newLocationBackend to return an error")
 	}
 	if !strings.Contains(err.Error(), "failed to load wholefoods locations") {
 		t.Fatalf("expected missing summaries error, got %v", err)

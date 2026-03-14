@@ -1,4 +1,4 @@
-package albertsons
+package heb
 
 import (
 	"careme/internal/cache"
@@ -15,9 +15,11 @@ import (
 )
 
 const (
-	Container           = "albertsons"
-	StoreCachePrefix    = "albertsons/stores/"
-	StoreURLMapCacheKey = "albertsons/store_url_map.json"
+	Container              = "heb"
+	StoreCachePrefix       = "heb/stores/"
+	StoreURLMapCacheKey    = "heb/store_url_map.json"
+	LocationIDPrefix       = "heb_"
+	DefaultStoreSitemapURL = "https://www.heb.com/sitemap/storeSitemap.xml"
 )
 
 func SaveStoreURLMap(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
@@ -50,11 +52,10 @@ func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 		return nil, fmt.Errorf("list cached store summaries: %w", err)
 	}
 
-	//expensive. Just save a smaller map of centroids
 	summaries := lop.Map(keys, func(key string, _ int) *StoreSummary {
 		reader, err := c.Get(ctx, StoreCachePrefix+key)
 		if err != nil {
-			slog.WarnContext(ctx, "failed to read cached albertsons store summary", "key", key, "error", err)
+			slog.WarnContext(ctx, "failed to read cached heb store summary", "key", key, "error", err)
 			return nil
 		}
 		defer func() {
@@ -63,7 +64,7 @@ func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 
 		var summary StoreSummary
 		if err := json.NewDecoder(reader).Decode(&summary); err != nil {
-			slog.WarnContext(ctx, "failed to decode cached albertsons store summary", "key", key, "error", err)
+			slog.WarnContext(ctx, "failed to decode cached heb store summary", "key", key, "error", err)
 			return nil
 		}
 		return &summary
@@ -71,9 +72,9 @@ func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 
 	summaries = lo.Compact(summaries)
 	if len(summaries) == 0 {
-		return nil, fmt.Errorf("failed to load albertsons locations")
+		return nil, fmt.Errorf("failed to load heb locations")
 	}
-	slog.InfoContext(ctx, "loaded albertsons locations", "count", len(summaries))
+	slog.InfoContext(ctx, "loaded heb locations", "count", len(summaries))
 
 	return summaries, nil
 }

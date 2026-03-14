@@ -1,4 +1,4 @@
-package albertsons
+package heb
 
 import (
 	"careme/internal/cache"
@@ -20,8 +20,8 @@ type LocationBackend struct {
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
-	if !cfg.Albertsons.IsEnabled() {
-		return nil, locationtypes.DisabledBackendError("Albertsons")
+	if !cfg.HEB.IsEnabled() {
+		return nil, locationtypes.DisabledBackendError("HEB")
 	}
 
 	if zipLookup == nil {
@@ -30,13 +30,17 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 
 	listCache, err := cache.EnsureCache(Container)
 	if err != nil {
-		return nil, fmt.Errorf("create Albertsons list cache: %w", err)
+		return nil, fmt.Errorf("create HEB list cache: %w", err)
 	}
 
 	return newLocationBackend(ctx, listCache, zipLookup)
 }
 
 func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
+	if c == nil {
+		return nil, fmt.Errorf("list cache is required")
+	}
+
 	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
 		return nil, err
@@ -61,12 +65,12 @@ func (b *LocationBackend) IsID(locationID string) bool {
 func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
 	locationID = strings.TrimSpace(locationID)
 	if !IsID(locationID) {
-		return nil, fmt.Errorf("albertsons location id %q is invalid", locationID)
+		return nil, fmt.Errorf("heb location id %q is invalid", locationID)
 	}
 
 	loc, exists := b.byID[locationID]
 	if !exists {
-		return nil, fmt.Errorf("albertsons location %q not found", locationID)
+		return nil, fmt.Errorf("heb location %q not found", locationID)
 	}
 
 	copy := loc
