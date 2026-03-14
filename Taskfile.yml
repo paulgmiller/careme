@@ -25,11 +25,6 @@ tasks:
       - docker-build-all
 
   verify:
-    desc: Run the CI verify job
-    deps:
-      - test
-
-  local-verify:
     desc: Run the broader local verification suite
     deps:
       - fmt
@@ -58,7 +53,7 @@ tasks:
     cmds:
       - ./bin/golangci-lint run ./... --timeout=5m
 
-  format-check:
+  fmt-check:
     desc: Check Go formatting with gofumpt
     deps:
       - gofumpt
@@ -166,7 +161,7 @@ tasks:
       - go run ./cmd/careme -serve -addr {{.ADDR}}
 
   zipcode:
-    desc: Look up Kroger locations for a ZIP code
+    desc: Look up locations for a ZIP code
     vars:
       ZIP: '{{default "98101" .ZIP}}'
     cmds:
