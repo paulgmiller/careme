@@ -115,7 +115,7 @@ spec:
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: wholefoods-weekly
+  name: wholefoods-scrape
   labels:
     app: careme
 spec:
@@ -130,7 +130,7 @@ spec:
         metadata:
           labels:
             app: careme
-            job: wholefoods-weekly
+            job: wholefoods-scrape
         spec:
           restartPolicy: Never
           securityContext:
@@ -138,7 +138,7 @@ spec:
             runAsUser: 65532
             runAsGroup: 65532
           containers:
-            - name: wholefoods-weekly
+            - name: wholefoods
               image: ghcr.io/paulgmiller/careme-wholefoods:${IMAGE_TAG}
               imagePullPolicy: IfNotPresent
               envFrom:
