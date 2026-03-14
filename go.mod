@@ -1,6 +1,6 @@
 module careme
 
-go 1.25
+go 1.26
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
@@ -14,7 +14,6 @@ require (
 	github.com/microsoft/ApplicationInsights-Go v0.4.4
 	github.com/openai/openai-go/v3 v3.25.0
 	github.com/openclosed-dev/slogan v0.2.0
-	github.com/samber/slog-multi v1.5.0
 	github.com/sendgrid/rest v2.6.9+incompatible
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	golang.org/x/crypto v0.40.0
@@ -28,7 +27,6 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
 	github.com/gofrs/uuid v3.3.0+incompatible // indirect
-	github.com/samber/slog-common v0.19.0 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	golang.org/x/sync v0.16.0 // indirect

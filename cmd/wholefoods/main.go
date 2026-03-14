@@ -2,6 +2,7 @@ package main
 
 import (
 	"careme/internal/cache"
+	"careme/internal/logsetup"
 	"careme/internal/wholefoods"
 	"context"
 	"errors"
@@ -25,6 +26,13 @@ func main() {
 	flag.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
 	flag.Parse()
 
+	ctx := context.Background()
+	closeLogger, err := logsetup.Configure(ctx)
+	if err != nil {
+		log.Fatalf("failed to configure logging: %v", err)
+	}
+	defer closeLogger()
+
 	cacheStore, err := cache.EnsureCache(wholefoods.Container)
 	if err != nil {
 		log.Fatalf("failed to create cache: %v", err)
@@ -33,7 +41,6 @@ func main() {
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	client := wholefoods.NewClientWithBaseURL(baseURL, httpClient)
 
-	ctx := context.Background()
 	refs, err := resolveStoreReferences(ctx, cacheStore, httpClient, sitemapURL)
 	if err != nil {
 		log.Fatalf("failed to resolve store references: %v", err)

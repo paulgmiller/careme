@@ -3,6 +3,7 @@ package main
 import (
 	"careme/internal/aldi"
 	"careme/internal/cache"
+	"careme/internal/logsetup"
 	"context"
 	"flag"
 	"fmt"
@@ -28,6 +29,13 @@ func main() {
 	flag.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
 	flag.Parse()
 
+	ctx := context.Background()
+	closeLogger, err := logsetup.Configure(ctx)
+	if err != nil {
+		log.Fatalf("failed to configure logging: %v", err)
+	}
+	defer closeLogger()
+
 	cacheStore, err := cache.EnsureCache(aldi.Container)
 	if err != nil {
 		log.Fatalf("failed to create cache: %v", err)
@@ -36,7 +44,7 @@ func main() {
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	client := aldi.NewClientWithBaseURL(baseURL, widgetKey, httpClient)
 
-	synced, err := syncLocations(context.Background(), cacheStore, client)
+	synced, err := syncLocations(ctx, cacheStore, client)
 	if err != nil {
 		log.Fatalf("failed to sync ALDI store summaries: %v", err)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/logsetup"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -81,7 +82,7 @@ func newAppInsightsTracker(next http.Handler, connectionString string) (http.Han
 }
 
 func newAppInsightsTrackerFromEnv(next http.Handler) http.Handler {
-	connectionString := os.Getenv(appInsightsConnectionStringEnv)
+	connectionString := os.Getenv(logsetup.AppInsightsConnectionStringEnv)
 	if connectionString == "" {
 		return next
 	}
