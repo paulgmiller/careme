@@ -3,7 +3,6 @@ package main
 import (
 	"careme/internal/config"
 	"careme/internal/logsetup"
-	"careme/internal/logsink"
 	"careme/internal/mail"
 	"careme/internal/static"
 	"careme/internal/templates"
@@ -58,8 +57,7 @@ func main() {
 		return
 	}
 
-	logcfg := logsink.ConfigFromEnv("logs")
-	if err := runServer(cfg, logcfg, addr); err != nil {
+	if err := runServer(cfg, addr); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }
