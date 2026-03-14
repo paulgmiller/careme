@@ -27,7 +27,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(t)
-	resp := mustGet(t, client, srv.URL+"/ready") //our readiness probe works even with mocks?
+	resp := mustGet(t, client, srv.URL+"/ready") // our readiness probe works even with mocks?
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected /ready to return 200 OK, got %d", resp.StatusCode)
 	}
@@ -118,8 +118,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		t.Fatalf("expected recipe page to persist stars value, got body: %s", recipeBody)
 	}
 
-	//TODO step 6 make sure recipes are saved to user page?
-
+	// TODO step 6 make sure recipes are saved to user page?
 }
 
 func TestZipFromCoordinatesRedirect(t *testing.T) {
@@ -154,7 +153,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	cfg := &config.Config{Mocks: config.MockConfig{Enable: true}}
-	err := templates.Init(cfg, "dummyhash") //initialize templates so they don't hit the file system during tests
+	err := templates.Init(cfg, "dummyhash") // initialize templates so they don't hit the file system during tests
 	if err != nil {
 		t.Fatalf("failed to create templates %v", err)
 	}

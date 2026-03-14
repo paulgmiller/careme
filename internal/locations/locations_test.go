@@ -1,13 +1,14 @@
 package locations
 
 import (
-	cachepkg "careme/internal/cache"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"testing"
 	"time"
+
+	cachepkg "careme/internal/cache"
 )
 
 func TestGetLocationByIDUsesCache(t *testing.T) {

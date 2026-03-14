@@ -5,12 +5,6 @@ package mail
 
 import (
 	"bytes"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/recipes"
-	"careme/internal/users"
-	utypes "careme/internal/users/types"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +13,13 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/recipes"
+	"careme/internal/users"
+	utypes "careme/internal/users/types"
 
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
@@ -168,7 +169,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 			}
 		}
 
-		//can orphan recipes here with crash or shutdown. Params should have a start time
+		// can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
 		if err != nil {

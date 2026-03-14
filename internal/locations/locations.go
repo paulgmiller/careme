@@ -1,6 +1,20 @@
 package locations
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html/template"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"sort"
+	"strconv"
+	"sync"
+	"time"
+
 	"careme/internal/albertsons"
 	"careme/internal/aldi"
 	"careme/internal/auth"
@@ -16,19 +30,6 @@ import (
 	utypes "careme/internal/users/types"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"html/template"
-	"io"
-	"log/slog"
-	"net/http"
-	"net/url"
-	"sort"
-	"strconv"
-	"sync"
-	"time"
 )
 
 type userLookup interface {
@@ -42,8 +43,10 @@ type locationStorage struct {
 }
 
 // bad for rural areas if zip code is huge?
-const maxLocationDistanceMiles = 20.0
-const locationCachePrefix = "location/"
+const (
+	maxLocationDistanceMiles = 20.0
+	locationCachePrefix      = "location/"
+)
 
 type locationServer struct {
 	storage     locationGetter
@@ -77,7 +80,7 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 		return nil, fmt.Errorf("cache is required")
 	}
 	if cfg.Mocks.Enable {
-		//should probably have something else return th mock so we can just return concerete type here.
+		// should probably have something else return th mock so we can just return concerete type here.
 		return mock{}, nil
 	}
 
@@ -110,7 +113,6 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 		zipCentroids: centroids,
 		cache:        c,
 	}, nil
-
 }
 
 func NewServer(storage locationGetter, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
@@ -147,7 +149,6 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 }
 
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
-
 	results := make(chan []Location, len(l.client))
 	errors := make(chan error, len(l.client))
 	var wg sync.WaitGroup
@@ -187,7 +188,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 
 	requestedCentroid, hasRequestedCentroid := l.zipCentroids.ZipCentroidByZIP(zipcode)
 	if !hasRequestedCentroid {
-		//were missign zip codes. Make this an error later?
+		// were missign zip codes. Make this an error later?
 		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode, "count", len(allLocations))
 		return allLocations, nil
 	}
@@ -235,7 +236,7 @@ func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID str
 }
 
 func (l *locationStorage) storeLocationIfMissing(loc Location) error {
-	//itentionally giving its own context so its not canceled
+	// itentionally giving its own context so its not canceled
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	loc.CachedAt = time.Now().UTC()
@@ -252,7 +253,7 @@ func (l *locationStorage) storeLocationIfMissing(loc Location) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal location for cache: %w", err)
 	}
-	//TODO clean out old ones?
+	// TODO clean out old ones?
 	if err := l.cache.Put(ctx, id, string(locationJSON), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
 		return err
 	}
@@ -277,13 +278,13 @@ func locationCoordinates(loc Location, zipCentroids centroidByZip) (float64, flo
 		return *loc.Lat, *loc.Lon
 	}
 
-	//do we actualyl want to fall back?
+	// do we actualyl want to fall back?
 	centroid, _ := zipCentroids.ZipCentroidByZIP(loc.ZipCode)
 	return centroid.Lat, centroid.Lon
 }
 
 func (l *locationServer) Ready(ctx context.Context) error {
-	_, err := l.storage.GetLocationsByZip(ctx, "98005") //magic number is my zip code :)
+	_, err := l.storage.GetLocationsByZip(ctx, "98005") // magic number is my zip code :)
 	return err
 }
 

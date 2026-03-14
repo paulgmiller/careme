@@ -1,12 +1,13 @@
 package locations
 
 import (
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/wholefoods"
 	"context"
 	"os"
 	"testing"
+
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/wholefoods"
 )
 
 func TestNewAddsWholeFoodsBackendWhenEnabled(t *testing.T) {

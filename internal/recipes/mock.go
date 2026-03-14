@@ -1,12 +1,13 @@
 package recipes
 
 import (
-	"careme/internal/ai"
 	"context"
 	"fmt"
 	"log/slog"
 	"math/rand"
 	"time"
+
+	"careme/internal/ai"
 
 	"github.com/google/uuid"
 )

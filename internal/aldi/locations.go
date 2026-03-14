@@ -1,13 +1,14 @@
 package aldi
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
-	"context"
-	"fmt"
-	"strings"
 )
 
 type centroidByZip interface {
@@ -32,11 +33,9 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 		return nil, fmt.Errorf("create ALDI list cache: %w", err)
 	}
 	return newLocationBackend(ctx, listCache, zipLookup)
-
 }
 
 func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-
 	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
 		return nil, err

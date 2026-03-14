@@ -12,16 +12,16 @@ type Ingredient struct {
 	ProductId   *string `json:"id,omitempty"`
 	AisleNumber *string `json:"number,omitempty"`
 	Brand       *string `json:"brand,omitempty"`
-	//CountryOrigin       *string   `json:"countryOrigin,omitempty"`
+	// CountryOrigin       *string   `json:"countryOrigin,omitempty"`
 	Description *string `json:"description,omitempty"`
-	//Favorite    *bool   `json:"favorite,omitempty"` //what does this mean?
-	//InventoryStockLevel *string   `json:"stockLevel,omitempty"`
+	// Favorite    *bool   `json:"favorite,omitempty"` //what does this mean?
+	// InventoryStockLevel *string   `json:"stockLevel,omitempty"`
 	PriceSale    *float32 `json:"salePrice,omitempty"`
 	PriceRegular *float32 `json:"regularPrice,omitempty"`
 	Size         *string  `json:"size,omitempty"`
-	//not used by llm.
+	// not used by llm.
 	Categories *[]string `json:"categories,omitempty"`
-	//Figure out what is in taxonomies
+	// Figure out what is in taxonomies
 }
 
 // this is what we'll actually pass to the llm
@@ -44,7 +44,7 @@ func ToTSV(ingredient []Ingredient, w io.Writer) error {
 			toStr(i.Size),
 			floatToStr(i.PriceRegular),
 			floatToStr(i.PriceSale),
-			//todo add a dicount?
+			// todo add a dicount?
 		}
 		if len(header) != len(row) {
 			return fmt.Errorf("header and row length mismatch: %d vs %d", len(header), len(row))

@@ -51,7 +51,6 @@ type StoresQuery struct {
 
 // NewClient creates a Walmart affiliates client.
 func NewClient(cfg config.WalmartConfig) (*Client, error) {
-
 	if !cfg.IsEnabled() {
 		return nil, locationtypes.DisabledBackendError("Walmart")
 	}
@@ -158,7 +157,7 @@ func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) 
 	}
 	storesURL.RawQuery = params.Encode()
 
-	//slog.InfoContext(ctx, "searching Walmart stores", "url", storesURL.String())
+	// slog.InfoContext(ctx, "searching Walmart stores", "url", storesURL.String())
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, storesURL.String(), nil)
 	if err != nil {

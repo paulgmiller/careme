@@ -1,13 +1,6 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/kroger"
-	"careme/internal/locations"
-	"careme/internal/parallelism"
-	"careme/internal/wholefoods"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -17,6 +10,14 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/kroger"
+	"careme/internal/locations"
+	"careme/internal/parallelism"
+	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
 	"github.com/samber/lo/mutable"
@@ -64,14 +65,14 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
-		if style != "" { //would this ever happen?
+		if style != "" { // would this ever happen?
 			styles = append(styles, style)
 		}
 	}
 
-	//whole foods search not actually implmented hard code categories
+	// whole foods search not actually implmented hard code categories
 	if wholefoods.NewIdentityProvider().IsID(location) {
-		styles = []string{"red-wine", "white-wine", "sparkling"} //rose
+		styles = []string{"red-wine", "white-wine", "sparkling"} // rose
 	}
 
 	if len(styles) == 0 {
@@ -158,7 +159,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	// should never happen? How do you get save on first generte?
 	// shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
-	//TODO this does not get saved in params and thus must be loaded from html
+	// TODO this does not get saved in params and thus must be loaded from html
 	// could update params after first generation or pregenerate before we save params.
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
@@ -185,7 +186,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for staples: %w", err)
 	}
-	//should this be pushed down into staple proivder? go off product id?
+	// should this be pushed down into staple proivder? go off product id?
 	ingredients = uniqueByDescription(ingredients)
 
 	mutable.Shuffle(ingredients)

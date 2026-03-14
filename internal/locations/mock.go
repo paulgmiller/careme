@@ -1,13 +1,14 @@
 package locations
 
 import (
-	"careme/internal/auth"
-	"careme/internal/seasons"
-	"careme/internal/templates"
 	"context"
 	"fmt"
 	"html/template"
 	"net/http"
+
+	"careme/internal/auth"
+	"careme/internal/seasons"
+	"careme/internal/templates"
 
 	"github.com/samber/lo"
 )

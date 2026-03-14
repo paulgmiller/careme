@@ -1,9 +1,10 @@
 package kroger
 
 import (
-	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
+
+	locationtypes "careme/internal/locations/types"
 )
 
 const chainName = "kroger"

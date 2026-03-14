@@ -1,8 +1,9 @@
 package locations
 
 import (
-	locationtypes "careme/internal/locations/types"
 	"testing"
+
+	locationtypes "careme/internal/locations/types"
 )
 
 func TestZipCentroidByZIP_KnownZip(t *testing.T) {

@@ -20,7 +20,7 @@ var safewayProductsJSON []byte
 
 var (
 	embeddedSafewayProducts = mustLoadSafewayProducts()
-	defaultStaplesSignature = "everything" //no filtering yet"
+	defaultStaplesSignature = "everything" // no filtering yet"
 )
 
 type identityProvider struct{}
@@ -48,7 +48,7 @@ func (p identityProvider) IsID(locationID string) bool {
 }
 
 func all() []kroger.Ingredient {
-	//do this once instead of every time?
+	// do this once instead of every time?
 	ingredients := make([]kroger.Ingredient, 0, len(embeddedSafewayProducts))
 	for _, product := range embeddedSafewayProducts {
 		if !product.Availability {
@@ -107,12 +107,12 @@ func ingredientMatches(ingredient kroger.Ingredient, searchTerm string) bool {
 			return true
 		}
 	}
-	//categories might help for wine?
+	// categories might help for wine?
 	return false
 }
 
 func productToIngredient(product SafewayProduct) kroger.Ingredient {
-	description, size := splitProductName(product.ProductName) //dubious size is really always
+	description, size := splitProductName(product.ProductName) // dubious size is really always
 	regularPrice := float32Ptr(product.MRP)
 	salePrice := float32Ptr(product.DiscountedPrice)
 	if salePrice == nil {

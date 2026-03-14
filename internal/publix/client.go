@@ -102,7 +102,7 @@ func (c *Client) ResolveStore(ctx context.Context, storeID string) (*ProbeResult
 		return nil, fmt.Errorf("request %q: %w", endpoint, err)
 	}
 	defer func() {
-		//why do we need to copy to discard here?
+		// why do we need to copy to discard here?
 		// Because some servers (including Cloudflare) will not close the connection
 		// if the response body is not fully read, which can lead to resource leaks and
 		// exhaustion of available connections in the HTTP client's connection pool.

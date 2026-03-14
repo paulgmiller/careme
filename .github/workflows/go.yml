@@ -1,6 +1,9 @@
 # .github/workflows/ghcr-publish-pr-gate.yml
 name: Build and Publish
 
+env:
+  GOLANGCI_LINT_CACHE: /tmp/golangci-lint
+
 on:
   push:
     branches: [master, main]
@@ -30,6 +33,43 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
+  vet:
+    name: vet
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run go vet
+        run: go vet ./...
+
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install gofumpt
+        run: bash tools/install.sh gofumpt
+
+      - name: Check Go formatting
+        run: test -z "$(./bin/gofumpt -l .)"
+
   lint:
     name: lint
     runs-on: ubuntu-latest
@@ -44,14 +84,35 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - uses: golangci/golangci-lint-action@v9
+      - name: Install golangci-lint
+        run: bash tools/install.sh golangci-lint
+
+      - name: Run golangci-lint
+        run: ./bin/golangci-lint run ./... --timeout=5m
+
+  k8s-lint:
+    name: k8s-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
         with:
-          version: v2.11.3
-          args: --timeout=5m
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install kubeconform
+        run: bash tools/install.sh kubeconform
+
+      - name: Validate Kubernetes manifests
+        run: ./bin/kubeconform -strict -summary deploy/*.yaml
 
   publish:
     name: publish (${{ matrix.name }})
-    needs: [verify, lint]
+    needs: [verify, vet, format, lint, k8s-lint]
     runs-on: ubuntu-latest
     permissions:
       contents: read

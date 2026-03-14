@@ -1,8 +1,6 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/recipes"
 	"context"
 	"flag"
 	"fmt"
@@ -12,6 +10,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"careme/internal/cache"
+	"careme/internal/recipes"
 )
 
 type purgeCache interface {

@@ -2,7 +2,6 @@ package albertsons
 
 import (
 	"bytes"
-	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"careme/internal/sitemapfetch"
 )
 
 type Chain struct {
@@ -348,7 +349,7 @@ func ExtractStoreSummary(pageURL string, body []byte, chain Chain) (*StoreSummar
 		}
 	}
 
-	//seems fragile?
+	// seems fragile?
 	lat, lon := extractGeoPosition(body)
 
 	return &StoreSummary{

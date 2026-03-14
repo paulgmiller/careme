@@ -2,7 +2,12 @@
 set -euo pipefail
 
 ref="${1:-origin/master}"
-deploy_file="deploy/deploy.yaml"
+deploy_dir="deploy"
+manifest_files=(
+  "${deploy_dir}/deploy.yaml"
+  "${deploy_dir}/cronjob-careme-mail.yaml"
+  "${deploy_dir}/cronjob-wholefoods-scrape.yaml"
+)
 namespace="${2:-careme}"
 short_len=7
 
@@ -25,18 +30,17 @@ fi
 
 export IMAGE_TAG="${commit_hash:0:${short_len}}"
 
-if [[ ! -f "${deploy_file}" ]]; then
-  echo "error: deploy file not found: ${deploy_file}" >&2
-  exit 1
-fi
-
-if [[ "$(<"${deploy_file}")" != *'${IMAGE_TAG}'* ]]; then
-  echo "error: ${deploy_file} does not contain \${IMAGE_TAG}" >&2
-  exit 1
-fi
+for manifest_file in "${manifest_files[@]}"; do
+  if [[ ! -f "${manifest_file}" ]]; then
+    echo "error: deploy file not found: ${manifest_file}" >&2
+    exit 1
+  fi
+done
 
 echo "Deploying image: ${IMAGE_TAG}"
-envsubst '${IMAGE_TAG}' <"${deploy_file}" | kubectl apply -f - -n "${namespace}"
+for manifest_file in "${manifest_files[@]}"; do
+  envsubst '${IMAGE_TAG}' <"${manifest_file}" | kubectl apply -f - -n "${namespace}"
+done
 
 echo "Waiting for rollout of deployment/careme"
 kubectl rollout status deployment/careme -n "${namespace}" -w

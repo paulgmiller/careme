@@ -2,13 +2,14 @@ package locations
 
 import (
 	"bytes"
-	"careme/internal/locations/geo"
-	locationtypes "careme/internal/locations/types"
 	_ "embed"
 	"encoding/csv"
 	"errors"
 	"strconv"
 	"strings"
+
+	"careme/internal/locations/geo"
+	locationtypes "careme/internal/locations/types"
 )
 
 type zipCentroidIndex struct {

@@ -1,11 +1,12 @@
 package publix
 
 import (
-	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
 	"context"
 	"strings"
 	"testing"
+
+	"careme/internal/cache"
+	locationtypes "careme/internal/locations/types"
 )
 
 func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {

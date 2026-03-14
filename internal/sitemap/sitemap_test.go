@@ -1,9 +1,6 @@
 package sitemap
 
 import (
-	"careme/internal/cache"
-	"careme/internal/locations"
-	"careme/internal/recipes"
 	"context"
 	"encoding/xml"
 	"fmt"
@@ -12,6 +9,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/recipes"
 )
 
 func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {

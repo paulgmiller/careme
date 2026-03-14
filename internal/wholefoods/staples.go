@@ -50,7 +50,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		return nil, fmt.Errorf("whole foods client is required")
 	}
 
-	//should identity provider do this?
+	// should identity provider do this?
 	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
 	if storeID == locationID || storeID == "" {
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
@@ -108,9 +108,9 @@ func defaultStaples() []string {
 		"goat-lamb-veal",
 		"game-meats",
 	}
-	//rice-grains?
-	//pasta-noodles
-	//red-wine, white-wine, sparkling
+	// rice-grains?
+	// pasta-noodles
+	// red-wine, white-wine, sparkling
 }
 
 func productToIngredient(product Product) kroger.Ingredient {
@@ -134,7 +134,7 @@ func productToIngredient(product Product) kroger.Ingredient {
 		size = &sizeText
 	}*/
 
-	//categories := compactStrings(localCategory(product))
+	// categories := compactStrings(localCategory(product))
 
 	hasher := fnv.New32a()
 	_ = lo.Must(hasher.Write([]byte(product.Slug)))
@@ -143,7 +143,7 @@ func productToIngredient(product Product) kroger.Ingredient {
 		ProductId:   stringPtr(productId),
 		Brand:       stringPtr(strings.TrimSpace(product.Brand)),
 		Description: stringPtr(strings.TrimSpace(product.Name)),
-		//Size:         size,
+		// Size:         size,
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		// /	Categories:   slicePtr(categories),

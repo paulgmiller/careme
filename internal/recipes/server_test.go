@@ -2,12 +2,6 @@ package recipes
 
 import (
 	"bytes"
-	"careme/internal/ai"
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/locations"
-	"careme/internal/users"
-	utypes "careme/internal/users/types"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -18,6 +12,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/users"
+	utypes "careme/internal/users/types"
 )
 
 func TestRedirectToHash(t *testing.T) {
@@ -41,6 +42,7 @@ func TestRedirectToHash(t *testing.T) {
 		t.Errorf("handler returned wrong location: got %v want prefix %v", location, expectedLocation)
 	}
 }
+
 func legacyRecipeHash(hash string) (string, bool) {
 	return currentHashToLegacy(hash, legacyRecipeHashSeed)
 }

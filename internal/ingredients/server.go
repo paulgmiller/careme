@@ -1,13 +1,14 @@
 package ingredients
 
 import (
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/recipes"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/recipes"
 )
 
 type server struct {

@@ -1,12 +1,13 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/locations"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/locations"
 )
 
 // Test that the HTML contains Save and Dismiss buttons for recipes.

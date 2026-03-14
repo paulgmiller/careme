@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
-	"careme/internal/locations"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
+
+	"careme/internal/locations"
 )
 
 func TestExtractZipCodes_UsesSecondColumn(t *testing.T) {

@@ -13,7 +13,7 @@ type SafewayProduct struct {
 	ProductName        string   `json:"Product Name"`
 	ID                 int64    `json:"ID"`
 	URL                string   `json:"URL"`
-	ProductDescription string   `json:"Product Description"` //this is really long
+	ProductDescription string   `json:"Product Description"` // this is really long
 	MRP                *float64 `json:"MRP"`
 	DiscountedPrice    *float64 `json:"Discounted Price"`
 	Category           string   `json:"Category"`

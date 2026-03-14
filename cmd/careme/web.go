@@ -1,6 +1,17 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"html/template"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/auth"
@@ -15,16 +26,6 @@ import (
 	"careme/internal/templates"
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
-	"context"
-	"errors"
-	"fmt"
-	"html/template"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 func runServer(cfg *config.Config, addr string) error {
@@ -102,9 +103,8 @@ func runServer(cfg *config.Config, addr string) error {
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
-			//no user is fine we'll just pass nil currentUser to template
+			// no user is fine we'll just pass nil currentUser to template
 			// just have two different templates?
-
 		}
 
 		var favoriteStoreName string
@@ -112,7 +112,7 @@ func runServer(cfg *config.Config, addr string) error {
 			loc, locErr := locationStorage.GetLocationByID(ctx, currentUser.FavoriteStore)
 			if locErr != nil {
 				slog.ErrorContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", locErr)
-				//mutation intentionally not saved bac.
+				// mutation intentionally not saved bac.
 				currentUser.FavoriteStore = ""
 			} else {
 				favoriteStoreName = loc.Name

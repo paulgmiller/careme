@@ -1,12 +1,13 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/publix"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"careme/internal/cache"
+	"careme/internal/publix"
 )
 
 func TestSyncStoresCachesSuccessesAndMisses(t *testing.T) {
@@ -55,7 +56,6 @@ func TestSyncStoresCachesSuccessesAndMisses(t *testing.T) {
 	if _, ok := missingIDs["1084"]; !ok {
 		t.Fatalf("expected missing store id 1084 to be cached")
 	}
-
 }
 
 func TestSyncStoresSkipsKnownMissingAndCachedSuccesses(t *testing.T) {
@@ -132,7 +132,6 @@ func TestSyncStoresUpdatesURLMapWhenCanonicalSlugChanges(t *testing.T) {
 	if stats.Synced != 1 {
 		t.Fatalf("unexpected stats: %+v", stats)
 	}
-
 }
 
 const sampleStoreHTML = `<!doctype html>

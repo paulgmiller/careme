@@ -1,14 +1,15 @@
 package albertsons
 
 import (
-	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
-	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+
+	"careme/internal/cache"
+	locationtypes "careme/internal/locations/types"
+	"careme/internal/sitemapfetch"
 
 	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"
@@ -50,7 +51,7 @@ func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 		return nil, fmt.Errorf("list cached store summaries: %w", err)
 	}
 
-	//expensive. Just save a smaller map of centroids
+	// expensive. Just save a smaller map of centroids
 	summaries := lop.Map(keys, func(key string, _ int) *StoreSummary {
 		reader, err := c.Get(ctx, StoreCachePrefix+key)
 		if err != nil {

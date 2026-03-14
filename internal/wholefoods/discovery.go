@@ -1,12 +1,13 @@
 package wholefoods
 
 import (
-	"careme/internal/sitemapfetch"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
+
+	"careme/internal/sitemapfetch"
 )
 
 var storeIDRe = regexp.MustCompile(`store-id="(\d+)"`)

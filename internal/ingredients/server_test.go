@@ -1,15 +1,16 @@
 package ingredients
 
 import (
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/locations"
-	"careme/internal/recipes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/locations"
+	"careme/internal/recipes"
 )
 
 func TestServerReturnsIngredientsJSON(t *testing.T) {

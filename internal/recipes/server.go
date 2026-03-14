@@ -2,15 +2,6 @@ package recipes
 
 import (
 	"bytes"
-	"careme/internal/ai"
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/seasons"
-	"careme/internal/templates"
-	"careme/internal/users"
-	utypes "careme/internal/users/types"
 	"context"
 	"errors"
 	"fmt"
@@ -22,6 +13,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/seasons"
+	"careme/internal/templates"
+	"careme/internal/users"
+	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
 )
@@ -146,17 +147,17 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		FormatRecipeHTML(p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
 		return
 	}
-	//we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
+	// we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
 	if normalizedHash, ok := legacyHashToCurrent(recipe.OriginHash, legacyRecipeHashSeed); ok {
 		slog.InfoContext(ctx, "normalized legacy origin hash to current hash", "origin_hash", recipe.OriginHash, "hash", normalizedHash)
 		recipe.OriginHash = normalizedHash
-		//could resave to backfill but don't think we'll ever get them all without looping
+		// could resave to backfill but don't think we'll ever get them all without looping
 	}
 	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
-		//http.Error(w, "recipe not found or expired", http.StatusNotFound)
-		//return
+		// http.Error(w, "recipe not found or expired", http.StatusNotFound)
+		// return
 		p = DefaultParams(&locations.Location{
 			ID:   "",
 			Name: "Unknown Location",
@@ -217,7 +218,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//this is going to take a while. Start a go routine? and spin?
+	// this is going to take a while. Start a go routine? and spin?
 	// can't use request context because it will be canceled when request finishes but we want to finish processing question and save it to cache.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 45*time.Second)
 	defer cancel()
@@ -443,7 +444,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//could pass this in with htmx instead of loading title
+	// could pass this in with htmx instead of loading title
 	recipe, err := s.SingleFromCache(ctx, recipeHash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -604,10 +605,10 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
-	//so we have a choice we could save slection here matching params
+	// so we have a choice we could save slection here matching params
 	// or backfill it on first load after regeneration Backfilling is a little more resilient
-	//selection := recipeSelectionFromParams(p)
-	//if err := s.saveRecipeSelection(ctx, currentUser.ID, newHash, selection);
+	// selection := recipeSelectionFromParams(p)
+	// if err := s.saveRecipeSelection(ctx, currentUser.ID, newHash, selection);
 	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, newHash, true /*useStart*/)
@@ -640,7 +641,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(p.Saved) == 0 {
-		//ui does not allow this
+		// ui does not allow this
 		slog.ErrorContext(ctx, "Got zero saved recipes finalize", "hash", hash)
 		http.Error(w, "no recipes selected to save", http.StatusBadRequest)
 		return
@@ -679,7 +680,7 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 
 	selection, err := s.loadRecipeSelection(ctx, userID, hash)
 	if err != nil {
-		//should we just fall back to params? selection saving
+		// should we just fall back to params? selection saving
 		return nil, fmt.Errorf("failed to load recipe selection")
 	}
 
@@ -700,7 +701,7 @@ const (
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	startArg := r.URL.Query().Get(queryArgStart)
 	hashParam := r.URL.Query().Get(queryArgHash)
-	//okay give them a new start time.
+	// okay give them a new start time.
 	if startArg == "" {
 		redirectToHash(w, r, hashParam, true /*useStart*/)
 		return
@@ -834,7 +835,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.Directive = currentUser.Directive
-	//if params are already saved redirect and assume someone kicks off genration
+	// if params are already saved redirect and assume someone kicks off genration
 
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
@@ -997,7 +998,6 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utyp
 }
 
 func (s *server) removeRecipeFromUserProfile(ctx context.Context, currentUser utypes.User, recipeHash string) error {
-
 	recipeHash = strings.TrimSpace(recipeHash)
 	if recipeHash == "" {
 		return fmt.Errorf("invalid recipe hash")

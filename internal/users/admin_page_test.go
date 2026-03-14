@@ -1,14 +1,15 @@
 package users
 
 import (
-	"careme/internal/cache"
-	utypes "careme/internal/users/types"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/cache"
+	utypes "careme/internal/users/types"
 )
 
 func TestAdminUsersPageRendersEmailsAndRecipes(t *testing.T) {

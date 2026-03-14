@@ -1,9 +1,6 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/heb"
-	"careme/internal/sitemapfetch"
 	"context"
 	"errors"
 	"flag"
@@ -12,6 +9,10 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/heb"
+	"careme/internal/sitemapfetch"
 )
 
 func main() {

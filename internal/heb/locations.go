@@ -1,13 +1,14 @@
 package heb
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
-	"context"
-	"fmt"
-	"strings"
 )
 
 type centroidByZip interface {

@@ -1,8 +1,6 @@
 package auth
 
 import (
-	"careme/internal/config"
-	"careme/internal/templates"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"careme/internal/config"
+	"careme/internal/templates"
+
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
 	"github.com/clerk/clerk-sdk-go/v2/jwks"
@@ -19,9 +20,7 @@ import (
 	"github.com/clerk/clerk-sdk-go/v2/user"
 )
 
-var (
-	ErrNoSession = errors.New("no valid session found")
-)
+var ErrNoSession = errors.New("no valid session found")
 
 type AuthClient interface {
 	GetUserEmail(ctx context.Context, clerkUserID string) (string, error)
@@ -62,8 +61,7 @@ func NewClient(cfg *config.Config) (*clerkClient, error) {
 }
 
 func (c *clerkClient) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {
-
-	//todo can we pull this right off of claims? not woth bothering?
+	// todo can we pull this right off of claims? not woth bothering?
 	clerkUser, err := c.userClient.Get(ctx, clerkUserID)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch clerk user: %w", err)
@@ -106,7 +104,6 @@ func (c *clerkClient) FromRequest(ctx context.Context, req *http.Request) (strin
 
 // WithClerkHTTP wraps the http.Handler with Clerk's authentication middleware
 func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
-
 	purgeAndRedirect := clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("authorization failure, purging cookies and redirecting")
 		// Clear any existing Clerk cookies by setting them to expired
@@ -117,7 +114,6 @@ func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	}))
 
 	useSessionCookie := clerkhttp.AuthorizationJWTExtractor(func(r *http.Request) string {
-
 		if c, err := r.Cookie("__session"); err == nil {
 			return c.Value
 		}

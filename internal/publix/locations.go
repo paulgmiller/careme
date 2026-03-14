@@ -1,13 +1,14 @@
 package publix
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
-	"context"
-	"fmt"
-	"strings"
 )
 
 type centroidByZip interface {
@@ -37,7 +38,6 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 }
 
 func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-
 	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
 		return nil, err

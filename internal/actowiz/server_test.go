@@ -34,5 +34,4 @@ func TestServerRegistersStoresJSON(t *testing.T) {
 	if len(got.StoreIDs) < 30 {
 		t.Fatalf("store id count = %d, want 30", len(got.StoreIDs))
 	}
-
 }

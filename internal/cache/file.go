@@ -10,8 +10,10 @@ import (
 	"strings"
 )
 
-var ErrNotFound = errors.New("cache entry not found")
-var ErrAlreadyExists = errors.New("cache entry already exists")
+var (
+	ErrNotFound      = errors.New("cache entry not found")
+	ErrAlreadyExists = errors.New("cache entry already exists")
+)
 
 type PutCondition uint8
 
@@ -113,7 +115,7 @@ func (fc *FileCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
 func (fc *FileCache) Put(_ context.Context, key, value string, opts PutOptions) error {
 	fullPath := filepath.Join(fc.Dir, key)
 	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 

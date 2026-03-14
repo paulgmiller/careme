@@ -1,7 +1,6 @@
 package main
 
 import (
-	"careme/internal/logsetup"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"careme/internal/logsetup"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	azureappinsights "github.com/microsoft/ApplicationInsights-Go/appinsights"
@@ -32,7 +33,7 @@ func (lrw *loggingResponseWriter) WriteHeader(code int) {
 
 func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	//should we use auth client?
+	// should we use auth client?
 	user := ""
 	if claims, ok := clerk.SessionClaimsFromContext(r.Context()); ok {
 		user = claims.Subject
@@ -150,7 +151,7 @@ type recoverer struct {
 }
 
 func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	//app insights could also track this https://github.com/microsoft/ApplicationInsights-Go?tab=readme-ov-file#exceptions
+	// app insights could also track this https://github.com/microsoft/ApplicationInsights-Go?tab=readme-ov-file#exceptions
 	defer func() {
 		if err := recover(); err != nil {
 			slog.ErrorContext(req.Context(), "panic recovered", "error", err, "stack", debug.Stack())

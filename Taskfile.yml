@@ -4,6 +4,7 @@ version: "3"
 env:
   GOCACHE: '{{default "/tmp/go-build" .GOCACHE}}'
   GOMODCACHE: '{{default "/tmp/go-modcache" .GOMODCACHE}}'
+  GOLANGCI_LINT_CACHE: '{{default "/tmp/golangci-lint" .GOLANGCI_LINT_CACHE}}'
 
 tasks:
   default:
@@ -12,18 +13,38 @@ tasks:
       - task --list
     silent: true
 
+  ci:
+    desc: Run the local equivalent of CI checks and image builds
+    deps:
+      - verify
+      - vet
+      - format-check
+      - lint
+      - k8s-lint
+      - tailwind-check
+      - docker-build-all
+
   verify:
-    desc: Run the standard local verification suite
+    desc: Run the CI verify job
+    deps:
+      - test
+
+  local-verify:
+    desc: Run the broader local verification suite
     deps:
       - fmt
       - vet
-      - lint
       - test
+      - lint
+      - k8s-lint
+      - tailwind-check
 
   fmt:
-    desc: Format Go code
+    desc: Format Go code with gofumpt
+    deps:
+      - tools
     cmds:
-      - go fmt ./...
+      - ./bin/gofumpt -w .
 
   vet:
     desc: Run go vet
@@ -32,8 +53,24 @@ tasks:
 
   lint:
     desc: Run golangci-lint
+    deps:
+      - tools
     cmds:
-      - golangci-lint run ./...
+      - ./bin/golangci-lint run ./... --timeout=5m
+
+  format-check:
+    desc: Check Go formatting with gofumpt
+    deps:
+      - tools
+    cmds:
+      - test -z "$$(./bin/gofumpt -l .)"
+
+  k8s-lint:
+    desc: Validate Kubernetes manifests with kubeconform
+    deps:
+      - tools
+    cmds:
+      - ./bin/kubeconform -strict -summary deploy/*.yaml
 
   test:
     desc: Run tests with mocks enabled by default
@@ -46,6 +83,69 @@ tasks:
     desc: Rebuild Tailwind output
     cmds:
       - bash tailwind/generate.sh
+
+  tailwind-check:
+    desc: Regenerate Tailwind output and fail on uncommitted changes
+    cmds:
+      - bash tailwind/generate.sh
+      - git diff --exit-code
+
+  docker-build:
+    desc: Build one Docker image locally without pushing
+    vars:
+      CMD_PATH: '{{default "./cmd/careme" .CMD_PATH}}'
+      IMAGE: '{{default "careme-local" .IMAGE}}'
+    cmds:
+      - docker build --build-arg CMD_PATH={{.CMD_PATH}} -t {{.IMAGE}} .
+
+  docker-build-all:
+    desc: Build the same image matrix as CI locally without pushing
+    deps:
+      - docker-build-careme
+      - docker-build-wholefoods
+      - docker-build-albertsons
+      - docker-build-publix
+      - docker-build-aldi
+
+  docker-build-careme:
+    desc: Build the careme image locally
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/careme
+          IMAGE: careme-local
+
+  docker-build-wholefoods:
+    desc: Build the wholefoods image locally
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/wholefoods
+          IMAGE: careme-wholefoods-local
+
+  docker-build-albertsons:
+    desc: Build the albertsons image locally
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/albertsons
+          IMAGE: careme-albertsons-local
+
+  docker-build-publix:
+    desc: Build the publix image locally
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/publix
+          IMAGE: careme-publix-local
+
+  docker-build-aldi:
+    desc: Build the aldi image locally
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/aldi
+          IMAGE: careme-aldi-local
 
   serve:
     desc: Run the local web server
@@ -75,3 +175,8 @@ tasks:
       NAMESPACE: '{{default "careme" .NAMESPACE}}'
     cmds:
       - bash deploy/deploy.sh {{.REF}} {{.NAMESPACE}}
+
+  tools:
+    desc: Install pinned local CI tools into ./bin
+    cmds:
+      - bash tools/install.sh
