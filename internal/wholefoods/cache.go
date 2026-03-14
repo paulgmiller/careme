@@ -1,9 +1,6 @@
 package wholefoods
 
 import (
-	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
-	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,13 +8,17 @@ import (
 	"log/slog"
 	"strconv"
 
+	"careme/internal/cache"
+	locationtypes "careme/internal/locations/types"
+	"careme/internal/sitemapfetch"
+
 	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"
 )
 
 const (
 	Container = "wholefoods"
-	//prefixes are a little redundant since we already have a container. Could simpify with reimport.
+	// prefixes are a little redundant since we already have a container. Could simpify with reimport.
 	StoreCachePrefix       = "wholefoods/stores/"
 	StoreURLMapCacheKey    = "wholefoods/store_url_map.json"
 	LocationIDPrefix       = "wholefoods_"

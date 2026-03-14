@@ -1,8 +1,6 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/heb"
 	"context"
 	"fmt"
 	"io"
@@ -11,6 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/heb"
 )
 
 func TestSyncFromSitemapSkipsKnownURLs(t *testing.T) {

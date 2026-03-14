@@ -1,10 +1,11 @@
 package sitemapfetch
 
 import (
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"careme/internal/cache"
 )
 
 func SaveURLMap(ctx context.Context, c cache.Cache, cacheKey string, urlMap map[string]string) error {

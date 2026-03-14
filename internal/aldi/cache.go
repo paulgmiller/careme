@@ -1,13 +1,14 @@
 package aldi
 
 import (
-	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+
+	"careme/internal/cache"
+	locationtypes "careme/internal/locations/types"
 
 	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"

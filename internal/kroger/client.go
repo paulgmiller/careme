@@ -1,8 +1,6 @@
 package kroger
 
 import (
-	"careme/internal/config"
-
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"careme/internal/config"
 )
 
 //go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config cfg.yaml swagger.yaml
@@ -67,7 +67,7 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 		endpoint := "https://api.kroger.com/v1/connect/oauth2/token"
 		data := url.Values{}
 		data.Set("grant_type", "client_credentials")
-		data.Set("scope", "product.compact") //wierd for location?
+		data.Set("scope", "product.compact") // wierd for location?
 
 		req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(data.Encode()))
 		if err != nil {

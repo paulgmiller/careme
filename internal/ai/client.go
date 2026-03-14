@@ -1,8 +1,6 @@
 package ai
 
 import (
-	"careme/internal/kroger"
-	"careme/internal/locations"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -12,6 +10,9 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"careme/internal/kroger"
+	"careme/internal/locations"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/conversations"
@@ -32,8 +33,8 @@ type Client struct {
 // todo collapse closer to
 type Ingredient struct {
 	Name     string `json:"name"`
-	Quantity string `json:"quantity"` //should this and price be numbers? need units then
-	Price    string `json:"price"`    //TODO exclude empty
+	Quantity string `json:"quantity"` // should this and price be numbers? need units then
+	Price    string `json:"price"`    // TODO exclude empty
 }
 
 type Recipe struct {
@@ -46,8 +47,8 @@ type Recipe struct {
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
 	WineStyles   []string     `json:"wine_styles"`
-	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      //not in schema
-	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` //not in schema
+	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
+	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` // not in schema
 }
 
 // ComputeHash calculates the fnv128 hash of the recipe content
@@ -74,8 +75,7 @@ func (r *Recipe) ComputeHash() string {
 	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-//intionally not including ConversationID to preserve old hashes
-
+// intionally not including ConversationID to preserve old hashes
 type ShoppingList struct {
 	ConversationID string   `json:"conversation_id,omitempty" jsonschema:"-"`
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
@@ -88,7 +88,7 @@ type WineSelection struct {
 
 // ignoring model for now.
 func NewClient(apiKey, _ string) *Client {
-	//ignor model for now.
+	// ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
@@ -161,7 +161,7 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 		Format: responses.ResponseFormatTextConfigUnionParam{
 			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
 				Name:   "recipes",
-				Schema: schema, //https://platform.openai.com/docs/guides/structured-outputs?example=structured-data
+				Schema: schema, // https://platform.openai.com/docs/guides/structured-outputs?example=structured-data
 			},
 		},
 	}
@@ -176,7 +176,7 @@ func (c *Client) Regenerate(ctx context.Context, instructions []string, conversa
 
 	params := responses.ResponseNewParams{
 		Model: c.model,
-		//only new input
+		// only new input
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
@@ -303,7 +303,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 		},
 		Text: scheme(c.schema),
 	}
-	//should we stream. Can we pass past generation.
+	// should we stream. Can we pass past generation.
 
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
@@ -319,7 +319,7 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
 func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
-	//constants we might make variable later
+	// constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
 	messages = append(messages, user("Default: each recipe should serve 2 people."))
 	messages = append(messages, user("Default: generate 3 recipes"))

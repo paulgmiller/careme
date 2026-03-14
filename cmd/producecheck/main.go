@@ -1,9 +1,6 @@
 package main
 
 import (
-	"careme/internal/config"
-	"careme/internal/kroger"
-	"careme/internal/recipes"
 	"context"
 	"flag"
 	"fmt"
@@ -11,6 +8,10 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"careme/internal/config"
+	"careme/internal/kroger"
+	"careme/internal/recipes"
 
 	"github.com/samber/lo"
 	"golang.org/x/text/unicode/norm"
@@ -24,7 +25,7 @@ func main() {
 	var locationID string
 	var produceCSV string
 
-	//local to bellevue Fred Meyer 70100023, factoria 70500822
+	// local to bellevue Fred Meyer 70100023, factoria 70500822
 	flag.StringVar(&locationID, "location", "70500874", "Kroger location ID to validate")
 	flag.StringVar(&locationID, "l", "70500874", "Kroger location ID to validate (short)")
 	flag.StringVar(&produceCSV, "produce", strings.Join(all, ","), "Comma-separated produce list to check")
@@ -90,8 +91,7 @@ type produceFilterStats struct {
 }
 
 func checkProduceAvailability(ctx context.Context, client staplesProvider, locationID string, produce []string) ([]string, int, error) {
-
-	//todo check total number of queries.
+	// todo check total number of queries.
 
 	ingredients, err := client.FetchStaples(ctx, locationID)
 	if err != nil {
@@ -112,7 +112,7 @@ func checkProduceAvailability(ctx context.Context, client staplesProvider, locat
 
 	// TODO have staples return subset of ingredient that can say the search term it go a match on
 	// then we can give info on whats coming from what queries. Could use categories for wholefoods.
-	//annotateUniqueOnlyMatches(stats)
+	// annotateUniqueOnlyMatches(stats)
 	printProduceFilterSummary(stats, len(produce))
 
 	return evaluateProduceAvailability(produce, ingredients), len(ingredients), nil
@@ -190,7 +190,6 @@ func summarizeFilterMatchesDetailed(produce []string, ingredients []kroger.Ingre
 }*/
 
 func printProduceFilterSummary(stat produceFilterStats, totalProduceTerms int) {
-
 	fmt.Printf("- %s -> %d ingredients, %d/%d produce terms, %d matches, %d unique-only products\n",
 		stat.FilterTerm,
 		stat.IngredientMatches,
@@ -318,7 +317,6 @@ func stripDiacritics(s string) string {
 }
 
 func normalizeToken(s string) string {
-
 	switch {
 	case strings.HasSuffix(s, "ies") && len(s) > 3:
 		s = s[:len(s)-3] + "y"

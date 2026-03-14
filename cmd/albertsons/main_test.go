@@ -1,8 +1,6 @@
 package main
 
 import (
-	"careme/internal/albertsons"
-	"careme/internal/cache"
 	"context"
 	"fmt"
 	"io"
@@ -11,6 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"careme/internal/albertsons"
+	"careme/internal/cache"
 )
 
 func TestSelectedChainsDefaultsToAll(t *testing.T) {

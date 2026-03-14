@@ -1,15 +1,16 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/locations"
-	"careme/internal/seasons"
-	"careme/internal/templates"
 	"html/template"
 	"io"
 	"net/http"
 	"slices"
 	"strings"
+
+	"careme/internal/ai"
+	"careme/internal/locations"
+	"careme/internal/seasons"
+	"careme/internal/templates"
 )
 
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
@@ -21,8 +22,8 @@ import (
 type shoppingRecipeView struct {
 	ai.Recipe
 	Hash               string
-	DisplayIngredients []ai.Ingredient //merged food and wine
-	Dismissed          bool            //saved already in recipe
+	DisplayIngredients []ai.Ingredient // merged food and wine
+	Dismissed          bool            // saved already in recipe
 	Wine               shoppingRecipeWineView
 }
 
@@ -153,7 +154,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
 func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer http.ResponseWriter) {
-	//memory waste because we alwways resort?
+	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})

@@ -1,10 +1,11 @@
 package templates
 
 import (
-	"careme/internal/config"
 	"embed"
 	"html/template"
 	"os"
+
+	"careme/internal/config"
 )
 
 //go:embed *.html
@@ -40,7 +41,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Location = ensure(tmpls, "locations.html")
 	Mail = ensure(tmpls, "mail.html")
 
-	//todo pull from config.
+	// todo pull from config.
 	Clarityproject = os.Getenv("CLARITY_PROJECT_ID")
 	GoogleTagID = os.Getenv("GOOGLE_TAG_ID")
 	GoogleConversionLabel = os.Getenv("GOOGLE_CONVERSION_LABEL")
@@ -55,9 +56,11 @@ func ensure(templates *template.Template, name string) *template.Template {
 	return tmpl
 }
 
-var Clarityproject string
-var GoogleTagID string
-var GoogleConversionLabel string
+var (
+	Clarityproject        string
+	GoogleTagID           string
+	GoogleConversionLabel string
+)
 
 // ClarityScript generates the Microsoft Clarity tracking script HTML
 func ClarityScript() template.HTML {

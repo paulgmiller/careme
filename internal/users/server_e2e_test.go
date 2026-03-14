@@ -1,10 +1,6 @@
 package users
 
 import (
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/templates"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/templates"
 )
 
 func TestMain(m *testing.M) {
@@ -22,7 +23,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestUserPageUpdate_E2E(t *testing.T) {
-
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
 

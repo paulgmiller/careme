@@ -1,8 +1,6 @@
 package users
 
 import (
-	"careme/internal/auth"
-	"careme/internal/cache"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"careme/internal/auth"
+	"careme/internal/cache"
 )
 
 type noSessionAuth struct{}

@@ -1,11 +1,6 @@
 package users
 
 import (
-	"careme/internal/auth"
-	"careme/internal/locations"
-	"careme/internal/seasons"
-	"careme/internal/templates"
-	utypes "careme/internal/users/types"
 	"context"
 	"errors"
 	"html/template"
@@ -13,6 +8,12 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"careme/internal/auth"
+	"careme/internal/locations"
+	"careme/internal/seasons"
+	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 )
 
 type locationGetter interface {

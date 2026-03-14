@@ -1,9 +1,6 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/logsetup"
-	"careme/internal/publix"
 	"context"
 	"errors"
 	"flag"
@@ -13,6 +10,10 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/logsetup"
+	"careme/internal/publix"
 )
 
 type syncConfig struct {

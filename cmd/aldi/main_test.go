@@ -1,10 +1,11 @@
 package main
 
 import (
-	"careme/internal/aldi"
-	"careme/internal/cache"
 	"context"
 	"testing"
+
+	"careme/internal/aldi"
+	"careme/internal/cache"
 )
 
 func TestSyncLocationsCachesSummaries(t *testing.T) {

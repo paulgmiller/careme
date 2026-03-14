@@ -1,7 +1,6 @@
 package walmart
 
 import (
-	"careme/internal/config"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -15,6 +14,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"careme/internal/config"
 )
 
 func TestCanonicalize_SortsAndFormatsLikeJavaExample(t *testing.T) {

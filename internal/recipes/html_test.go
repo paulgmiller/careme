@@ -2,16 +2,17 @@ package recipes
 
 import (
 	"bytes"
-	"careme/internal/ai"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/templates"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/templates"
 
 	"golang.org/x/net/html"
 )

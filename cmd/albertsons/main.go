@@ -1,9 +1,6 @@
 package main
 
 import (
-	"careme/internal/albertsons"
-	"careme/internal/cache"
-	"careme/internal/logsetup"
 	"context"
 	"errors"
 	"flag"
@@ -13,6 +10,10 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"careme/internal/albertsons"
+	"careme/internal/cache"
+	"careme/internal/logsetup"
 )
 
 func main() {
@@ -84,8 +85,8 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 	for _, page := range pages {
 		locationID := strings.TrimSpace(urlMap[page.URL])
 		if locationID != "" {
-			//exists, err := cacheStore.Exists(ctx, albertsons.StoreCachePrefix+locationID)
-			//if err == nil && exists {
+			// exists, err := cacheStore.Exists(ctx, albertsons.StoreCachePrefix+locationID)
+			// if err == nil && exists {
 			continue
 			//	}
 		}

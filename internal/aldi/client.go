@@ -18,7 +18,7 @@ const (
 	StoreCachePrefix = "aldi/stores/"
 	LocationIDPrefix = "aldi_"
 	DefaultBaseURL   = "https://locator.uberall.com"
-	DefaultWidgetKey = "LETA2YVm6txbe0b9lS297XdxDX4qVQ" //what is this?
+	DefaultWidgetKey = "LETA2YVm6txbe0b9lS297XdxDX4qVQ" // what is this?
 	DefaultLanguage  = "en_US"
 	DefaultCountry   = "US"
 )

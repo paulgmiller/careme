@@ -1,9 +1,6 @@
 package main
 
 import (
-	"careme/internal/aldi"
-	"careme/internal/cache"
-	"careme/internal/logsetup"
 	"context"
 	"flag"
 	"fmt"
@@ -11,6 +8,10 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"careme/internal/aldi"
+	"careme/internal/cache"
+	"careme/internal/logsetup"
 )
 
 type summaryClient interface {

@@ -1,9 +1,6 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/logsetup"
-	"careme/internal/wholefoods"
 	"context"
 	"errors"
 	"flag"
@@ -12,6 +9,10 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/logsetup"
+	"careme/internal/wholefoods"
 )
 
 func main() {
@@ -102,7 +103,7 @@ func resolveStoreReferences(ctx context.Context, cacheStore cache.ListCache, htt
 		refs = append(refs, wholefoods.StoreReference{ID: storeID, URL: url})
 	}
 
-	//TOD remove stores from url map not in itemap?
+	// TOD remove stores from url map not in itemap?
 
 	if updated {
 		if err := wholefoods.SaveStoreURLMap(ctx, cacheStore, refs); err != nil {

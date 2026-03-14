@@ -1,9 +1,10 @@
 package wholefoods
 
 import (
-	"careme/internal/cache"
 	"context"
 	"testing"
+
+	"careme/internal/cache"
 )
 
 func TestStoreURLMapRoundTrip(t *testing.T) {

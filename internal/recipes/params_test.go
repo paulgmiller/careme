@@ -1,11 +1,12 @@
 package recipes
 
 import (
-	"careme/internal/locations"
 	"context"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"careme/internal/locations"
 )
 
 type staticLocationLookup struct {

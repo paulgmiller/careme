@@ -20,7 +20,7 @@ func (r *readyOnce) Ready(ctx context.Context) error {
 			return err
 		}
 	}
-	//not thread safe? only ever set to true
+	// not thread safe? only ever set to true
 	r.done = true
 	return nil
 }

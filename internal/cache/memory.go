@@ -14,8 +14,10 @@ type InMemoryCache struct {
 	data map[string]string
 }
 
-var _ Cache = (*InMemoryCache)(nil)
-var _ ListCache = (*InMemoryCache)(nil)
+var (
+	_ Cache     = (*InMemoryCache)(nil)
+	_ ListCache = (*InMemoryCache)(nil)
+)
 
 func NewInMemoryCache() *InMemoryCache {
 	return &InMemoryCache{

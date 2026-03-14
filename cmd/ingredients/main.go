@@ -1,13 +1,14 @@
 package main
 
 import (
-	"careme/internal/config"
-	"careme/internal/kroger"
-	"careme/internal/recipes"
 	"context"
 	"flag"
 	"fmt"
 	"log"
+
+	"careme/internal/config"
+	"careme/internal/kroger"
+	"careme/internal/recipes"
 )
 
 func main() {

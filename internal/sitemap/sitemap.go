@@ -1,13 +1,14 @@
 package sitemap
 
 import (
-	"careme/internal/cache"
-	"careme/internal/recipes"
 	"encoding/xml"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"careme/internal/cache"
+	"careme/internal/recipes"
 )
 
 type Server struct {
@@ -26,7 +27,6 @@ Sitemap: %s/sitemap.xml
 )
 
 func New(c cache.ListCache) *Server {
-
 	return &Server{cache: c}
 }
 
@@ -47,7 +47,6 @@ type urlEntry struct {
 }
 
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
-
 	hashes, err := s.cache.List(r.Context(), recipes.ShoppingListCachePrefix, "")
 	if err != nil {
 		http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
@@ -57,8 +56,8 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	entries := make([]urlEntry, 0, len(hashes)+1)
 	entries = append(entries, urlEntry{Loc: domain + "/about"})
 
-	//this is going to get too  big.  at some point we need a real db to find latest
-	//or we track new entries and expire a lsit.
+	// this is going to get too  big.  at some point we need a real db to find latest
+	// or we track new entries and expire a lsit.
 	for _, key := range hashes {
 		hash := strings.TrimPrefix(key, recipes.ShoppingListCachePrefix)
 		entries = append(entries, urlEntry{Loc: domain + "/recipes?h=" + hash})

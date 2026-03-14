@@ -1,16 +1,17 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/locations"
 	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/locations"
 )
 
 func TestSaveParams_IsAtomic(t *testing.T) {

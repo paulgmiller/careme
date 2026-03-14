@@ -1,14 +1,15 @@
 package walmart
 
 import (
-	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
 	"strconv"
+
+	locationtypes "careme/internal/locations/types"
 )
 
 func (c *Client) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
-	//depending on cache to protect us.
+	// depending on cache to protect us.
 	return nil, fmt.Errorf("walmart GetLocationByID not supported yet for ID %s", locationID)
 }
 

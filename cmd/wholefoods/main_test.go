@@ -1,14 +1,15 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/wholefoods"
 	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+
+	"careme/internal/cache"
+	"careme/internal/wholefoods"
 )
 
 func TestResolveStoreReferencesFillsMissingCachedSitemapEntries(t *testing.T) {

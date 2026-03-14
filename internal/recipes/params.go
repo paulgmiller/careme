@@ -2,8 +2,6 @@ package recipes
 
 import (
 	"bytes"
-	"careme/internal/ai"
-	"careme/internal/locations"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -14,6 +12,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/locations"
 
 	"github.com/samber/lo"
 )
@@ -30,13 +31,13 @@ type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
 	Date     time.Time           `json:"date,omitempty"`
 	// People       int
-	//per round instuctions
+	// per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
 	LastRecipes  []string `json:"last_recipes,omitempty"`
 	// UserID         string      `json:"user_id,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
-	//TODO Both should just be title and hash insread of full ai.Recipe
+	// TODO Both should just be title and hash insread of full ai.Recipe
 	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 }

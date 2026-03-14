@@ -1,15 +1,16 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/locations"
 	"context"
 	"slices"
 	"sync"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/locations"
 )
 
 type captureWineQuestionAIClient struct {

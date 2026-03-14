@@ -1,9 +1,10 @@
 package main
 
 import (
-	"careme/internal/kroger"
 	"reflect"
 	"testing"
+
+	"careme/internal/kroger"
 )
 
 func TestParseProduceList(t *testing.T) {

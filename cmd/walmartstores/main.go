@@ -1,14 +1,15 @@
 package main
 
 import (
-	"careme/internal/config"
-	"careme/internal/walmart"
 	"context"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
+
+	"careme/internal/config"
+	"careme/internal/walmart"
 )
 
 const defaultConsumerID = "52dae855-d02f-488b-b179-1df6700d7dcf"

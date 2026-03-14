@@ -1,14 +1,15 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
 
 	"github.com/samber/lo"
 )
@@ -92,7 +93,7 @@ func (s *server) saveRecipeSelection(ctx context.Context, userID, originHash str
 	if err != nil {
 		return fmt.Errorf("failed to marshal recipe selection: %w", err)
 	}
-	//good place for etags :)
+	// good place for etags :)
 	if err := s.Cache.Put(ctx, recipeSelectionKey(userID, originHash), string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("failed to save recipe selection: %w", err)
 	}

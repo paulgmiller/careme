@@ -1,14 +1,15 @@
 package publix
 
 import (
-	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
+
+	"careme/internal/cache"
+	locationtypes "careme/internal/locations/types"
 
 	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"

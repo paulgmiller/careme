@@ -1,9 +1,6 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -18,6 +15,10 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
 )
 
 type zipStoreCount struct {
@@ -84,7 +85,6 @@ func main() {
 			resultsChan <- zipQueryResult{
 				counts: countStoresByChain(mzc, stores),
 			}
-
 		}(code)
 	}
 	wg.Wait()

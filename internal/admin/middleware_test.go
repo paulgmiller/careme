@@ -1,13 +1,14 @@
 package admin
 
 import (
-	"careme/internal/auth"
-	"careme/internal/config"
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"careme/internal/auth"
+	"careme/internal/config"
 )
 
 type stubAuthClient struct {

@@ -1,12 +1,13 @@
 package locations
 
 import (
-	"careme/internal/aldi"
-	"careme/internal/cache"
-	"careme/internal/config"
 	"context"
 	"os"
 	"testing"
+
+	"careme/internal/aldi"
+	"careme/internal/cache"
+	"careme/internal/config"
 )
 
 func TestNewAddsALDIBackendWhenEnabled(t *testing.T) {

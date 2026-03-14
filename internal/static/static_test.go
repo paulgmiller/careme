@@ -1,8 +1,9 @@
 package static
 
 import (
-	"careme/internal/seasons"
 	"testing"
+
+	"careme/internal/seasons"
 )
 
 func TestFaviconBySeason(t *testing.T) {

@@ -1,12 +1,13 @@
 package locations
 
 import (
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/heb"
 	"context"
 	"os"
 	"testing"
+
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/heb"
 )
 
 func TestNewAddsHEBBackendWhenEnabled(t *testing.T) {

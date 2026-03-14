@@ -1,9 +1,10 @@
 package auth
 
 import (
-	"careme/internal/config"
 	"context"
 	"net/http"
+
+	"careme/internal/config"
 )
 
 // Client wraps Clerk SDK functionality

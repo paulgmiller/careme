@@ -1,12 +1,13 @@
 package nearby
 
 import (
-	"careme/internal/locations/geo"
-	locationtypes "careme/internal/locations/types"
 	"context"
 	"log/slog"
 	"sort"
 	"strings"
+
+	"careme/internal/locations/geo"
+	locationtypes "careme/internal/locations/types"
 )
 
 type CentroidLookup interface {

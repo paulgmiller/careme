@@ -1,15 +1,16 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/users"
-	utypes "careme/internal/users/types"
 	"context"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/users"
+	utypes "careme/internal/users/types"
 )
 
 func TestSaveRecipesToUserProfile(t *testing.T) {
@@ -72,7 +73,6 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 	if updatedUser.LastRecipes[0].Hash != savedRecipe.ComputeHash() {
 		t.Errorf("recipe hash mismatch: expected %q, got %q", savedRecipe.ComputeHash(), updatedUser.LastRecipes[0].Hash)
 	}
-
 }
 
 func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {

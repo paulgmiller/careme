@@ -1,12 +1,13 @@
 package users
 
 import (
-	utypes "careme/internal/users/types"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
+
+	utypes "careme/internal/users/types"
 )
 
 type adminUserView struct {

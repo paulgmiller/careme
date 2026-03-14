@@ -1,8 +1,9 @@
 package kroger
 
 import (
-	locationtypes "careme/internal/locations/types"
 	"testing"
+
+	locationtypes "careme/internal/locations/types"
 )
 
 func TestClientWithResponsesIsID(t *testing.T) {

@@ -96,7 +96,7 @@ func (c *HEBConfig) IsEnabled() bool {
 type WalmartConfig struct {
 	ConsumerID string
 	KeyVersion string
-	PrivateKey string //base 64 the ssh key you give to Walmart (eg bas64 -w0 keys/walmart_prod)
+	PrivateKey string // base 64 the ssh key you give to Walmart (eg bas64 -w0 keys/walmart_prod)
 	BaseURL    string
 	HTTPClient *http.Client
 }
@@ -105,8 +105,10 @@ func (c *WalmartConfig) IsEnabled() bool {
 	return c.ConsumerID != "" && c.PrivateKey != ""
 }
 
-var localhostSigninRedirect = "?redirect_url=http://localhost:8080/auth/establish"
-var localhostSignupRedirect = "?redirect_url=http://localhost:8080/auth/establish?signup=true"
+var (
+	localhostSigninRedirect = "?redirect_url=http://localhost:8080/auth/establish"
+	localhostSignupRedirect = "?redirect_url=http://localhost:8080/auth/establish?signup=true"
+)
 
 // move to auth pacakage?
 func (c *ClerkConfig) Signin() string {

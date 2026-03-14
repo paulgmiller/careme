@@ -1,30 +1,31 @@
 package main
 
 import (
-	"careme/internal/config"
-	"careme/internal/logsetup"
-	"careme/internal/mail"
-	"careme/internal/static"
-	"careme/internal/templates"
 	"context"
 	_ "embed"
 	"flag"
 	"log"
 	"log/slog"
 	"os"
+
+	"careme/internal/config"
+	"careme/internal/logsetup"
+	"careme/internal/mail"
+	"careme/internal/static"
+	"careme/internal/templates"
 )
 
 func main() {
 	var serve, mailer bool
 	var addr string
 
-	//left for back compat does noting
+	// left for back compat does noting
 	flag.BoolVar(&serve, "serve", false, "dead we always serve")
 	flag.BoolVar(&mailer, "mail", false, "Run one-shot mail sender and exit")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.Parse()
 
-	if err := os.MkdirAll("recipes", 0755); err != nil {
+	if err := os.MkdirAll("recipes", 0o755); err != nil {
 		log.Fatalf("failed to create recipes directory: %v", err)
 	}
 

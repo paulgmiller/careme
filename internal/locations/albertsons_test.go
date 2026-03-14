@@ -1,12 +1,13 @@
 package locations
 
 import (
-	"careme/internal/albertsons"
-	"careme/internal/cache"
-	"careme/internal/config"
 	"context"
 	"os"
 	"testing"
+
+	"careme/internal/albertsons"
+	"careme/internal/cache"
+	"careme/internal/config"
 )
 
 func TestNewAddsAlbertsonsBackendWhenEnabled(t *testing.T) {

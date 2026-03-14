@@ -13,10 +13,9 @@ import (
 const AppInsightsConnectionStringEnv = "APPLICATIONINSIGHTS_CONNECTION_STRING"
 
 func Configure(ctx context.Context) (func(), error) {
-
 	handlers := []slog.Handler{slog.NewTextHandler(os.Stdout, nil)}
 
-	closeFn := func() {} //can be a list if we have multiple
+	closeFn := func() {} // can be a list if we have multiple
 
 	if connectionString := os.Getenv(AppInsightsConnectionStringEnv); connectionString != "" {
 		handler, err := appinsights.NewHandler(connectionString, nil)

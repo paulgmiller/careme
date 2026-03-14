@@ -1,14 +1,15 @@
 package heb
 
 import (
-	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
-	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+
+	"careme/internal/cache"
+	locationtypes "careme/internal/locations/types"
+	"careme/internal/sitemapfetch"
 
 	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"

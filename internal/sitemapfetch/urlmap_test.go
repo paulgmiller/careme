@@ -1,9 +1,10 @@
 package sitemapfetch
 
 import (
-	"careme/internal/cache"
 	"context"
 	"testing"
+
+	"careme/internal/cache"
 )
 
 func TestURLMapRoundTrip(t *testing.T) {

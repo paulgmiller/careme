@@ -1,9 +1,6 @@
 package users
 
 import (
-	"careme/internal/cache"
-	"careme/internal/locations"
-	utypes "careme/internal/users/types"
 	"context"
 	"errors"
 	"html/template"
@@ -14,6 +11,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/locations"
+	utypes "careme/internal/users/types"
 )
 
 type testAuthClient struct{}
