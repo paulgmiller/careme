@@ -32,11 +32,11 @@ type generatorParams struct {
 	Date     time.Time           `json:"date,omitempty"`
 	// People       int
 	// per round instuctions
-	Instructions string   `json:"instructions,omitempty"`
-	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
-	LastRecipes  []string `json:"last_recipes,omitempty"`
-	// UserID         string      `json:"user_id,omitempty"`
-	ConversationID string `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
+	Instructions   string   `json:"instructions,omitempty"`
+	Directive      string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
+	LastRecipes    []string `json:"last_recipes,omitempty"`
+	UserID         string   `json:"user_id,omitempty"`
+	ConversationID string   `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
 	// TODO Both should just be title and hash insread of full ai.Recipe
 	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
@@ -65,6 +65,7 @@ func (g *generatorParams) Hash() string {
 	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
+	lo.Must(io.WriteString(fnv, g.UserID))
 	for _, saved := range g.Saved {
 		lo.Must(io.WriteString(fnv, "saved"+saved.ComputeHash()))
 	}

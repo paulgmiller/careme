@@ -819,9 +819,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
 		return
 	}
-	// what do we do with this?
-	// p.UserID = currentUser.ID
-
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
@@ -835,6 +832,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.Directive = currentUser.Directive
+	p.UserID = currentUser.ID
 	// if params are already saved redirect and assume someone kicks off genration
 
 	if err := s.SaveParams(ctx, p); err != nil {

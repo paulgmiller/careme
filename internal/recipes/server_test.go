@@ -151,6 +151,7 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 		t.Fatalf("failed to build expected params: %v", err)
 	}
 	baselineHash := expectedParams.Hash()
+	expectedParams.UserID = currentUser.ID
 	expectedParams.Directive = currentUser.Directive
 	expectedHash := expectedParams.Hash()
 	if expectedHash == baselineHash {

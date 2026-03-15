@@ -22,9 +22,9 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |
-| `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
+| `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash (includes user ID for signed-in recipe generations) | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
 | `ingredients/` | JSON `[]kroger.Ingredient` keyed by location hash (staples) or by wine style/date/location hash (wine candidate cache) | `internal/recipes/io.go` (`SaveIngredients`) via `internal/recipes/generator.go` (`GetStaples`, `PickAWine`) | `internal/recipes/io.go` (`IngredientsFromCache`) via `internal/recipes/generator.go` (`GetStaples`, `PickAWine`) |
-| `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
+| `params/` | JSON `generatorParams` keyed by shopping hash; hash includes signed-in user ID to keep conversations isolated across accounts, and params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
 | `recipe/` | JSON `ai.Recipe` (one recipe per hash) | `internal/recipes/io.go` (`SaveRecipes`) | `internal/recipes/io.go` (`SingleFromCache`) |
 | `wine_recommendations/` | Plain text wine recommendation keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
 | `recipe_selection/` | JSON `recipeSelection` (`saved_hashes`, `dismissed_hashes`, `updated_at`) keyed by `<user_id>/<origin_hash>` | `internal/recipes/selection.go` (`saveRecipeSelection`) via `internal/recipes/server.go` (`handleSaveRecipe`, `handleDismissRecipe`) | `internal/recipes/selection.go` (`loadRecipeSelection`) via `internal/recipes/server.go` (`handleRegenerate`, `handleFinalize`, `handleRecipes`) |
