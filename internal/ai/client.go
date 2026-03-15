@@ -118,9 +118,11 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 # Instructions
 - Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch is also good.
 - Recipes should use diverse cooking methods and represent a variety of cuisines.
-- Provide clear, step-by-step instructions and an ingredient list for each recipe. repeat amounts and prep for each recipe in instructions.
+- Provide clear, step-by-step instructions and an ingredient list for each recipe. Repeat amounts and prep for each recipe in instructions.
 - Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles. Really put your Sommielier hat on for this.
 - Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but but don't pay more for something on sale than a similar ingredient that isn't)
+- Use only ingredient prices that are explicitly present in the provided input. Never invent a price.
+- Calorie estimates must be reasonable for the stated ingredient quantities and servings. When unsure, give a conservative range.
 
 
 # Output Format
@@ -138,8 +140,11 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 
 # Planning & Verification
 - Reference your checklist to ensure variety in cooking methods and cuisines
-- confirm ingredient prioritization matches sale/seasonal data.
-- Check cooktime and cost match instructions and ingredient list`
+- Confirm ingredient prioritization matches sale/seasonal data.
+- Verify every ingredient line with a price uses the same product and price from input data.
+- Recalculate cost estimate from listed priced ingredients and ensure it aligns with cost_estimate.
+- Double-check calorie guidance in health against the ingredient list and portion size.
+- Read each instruction step in order and ensure the flow is realistic, non-contradictory, and fully cookable`
 
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
 	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
