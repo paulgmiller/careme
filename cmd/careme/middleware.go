@@ -1,7 +1,6 @@
 package main
 
 import (
-	"careme/internal/logsetup"
 	"context"
 	"errors"
 	"log/slog"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"careme/internal/logsetup"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/google/uuid"
