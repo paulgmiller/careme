@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/logsetup"
 	"context"
 	"errors"
 	"log/slog"
@@ -11,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"careme/internal/logsetup"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/google/uuid"
@@ -89,9 +88,6 @@ func (a *appInsightsTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func newAppInsightsTracker(next http.Handler, tracker requestTracker) http.Handler {
-	if tracker == nil {
-		return next
-	}
 	return &appInsightsTracker{
 		Handler: next,
 		tracker: tracker,
