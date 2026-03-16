@@ -9,7 +9,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -494,6 +496,100 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+type captureKickgenerationGenerator struct {
+	mu     sync.Mutex
+	last   *generatorParams
+	called chan struct{}
+}
+
+func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+	c.mu.Lock()
+	clone := *p
+	clone.LastRecipes = append([]string(nil), p.LastRecipes...)
+	c.last = &clone
+	c.mu.Unlock()
+	if c.called != nil {
+		select {
+		case c.called <- struct{}{}:
+		default:
+		}
+	}
+	return &ai.ShoppingList{}, nil
+}
+
+func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+	panic("unexpected call to AskQuestion")
+}
+
+func (c *captureKickgenerationGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+	panic("unexpected call to PickAWine")
+}
+
+func (c *captureKickgenerationGenerator) Ready(ctx context.Context) error {
+	return nil
+}
+
+func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.last == nil {
+		return nil
+	}
+	clone := *c.last
+	clone.LastRecipes = append([]string(nil), c.last.LastRecipes...)
+	return &clone
+}
+
+func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   storage,
+		generator: generator,
+	}
+	t.Cleanup(s.Wait)
+
+	now := time.Now()
+	cookedRecent := utypes.Recipe{Title: "Cooked Recently", Hash: "hash-cooked-recent", CreatedAt: now.Add(-48 * time.Hour)}
+	notCookedRecent := utypes.Recipe{Title: "Only Saved", Hash: "hash-saved-recent", CreatedAt: now.Add(-24 * time.Hour)}
+	tooOldCooked := utypes.Recipe{Title: "Cooked Too Old", Hash: "hash-cooked-old", CreatedAt: now.Add(-8 * 24 * time.Hour)}
+	currentUser := &utypes.User{
+		ID:          "user-1",
+		Email:       []string{"chef@example.com"},
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked},
+	}
+
+	if err := s.SaveFeedback(t.Context(), cookedRecent.Hash, RecipeFeedback{Cooked: true, UpdatedAt: now}); err != nil {
+		t.Fatalf("failed to seed cooked feedback: %v", err)
+	}
+	if err := s.SaveFeedback(t.Context(), notCookedRecent.Hash, RecipeFeedback{Cooked: false, UpdatedAt: now}); err != nil {
+		t.Fatalf("failed to seed uncooked feedback: %v", err)
+	}
+	if err := s.SaveFeedback(t.Context(), tooOldCooked.Hash, RecipeFeedback{Cooked: true, UpdatedAt: now}); err != nil {
+		t.Fatalf("failed to seed old cooked feedback: %v", err)
+	}
+
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
+	s.kickgeneration(t.Context(), params, currentUser)
+
+	select {
+	case <-generator.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for generator call")
+	}
+
+	captured := generator.LastParams()
+	if captured == nil {
+		t.Fatal("expected captured params")
+	}
+	if got, want := captured.LastRecipes, []string{"Cooked Recently"}; !slices.Equal(got, want) {
+		t.Fatalf("expected only recently cooked recipes in avoid list, got %v", got)
 	}
 }
 

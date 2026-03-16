@@ -857,8 +857,18 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
 	for _, last := range currentUser.LastRecipes {
-		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
+		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -7)) {
 			break
+		}
+		feedback, err := s.FeedbackFromCache(ctx, last.Hash)
+		if err != nil {
+			if !errors.Is(err, cache.ErrNotFound) {
+				slog.WarnContext(ctx, "failed to load recipe feedback while building avoid list", "recipe_hash", last.Hash, "error", err)
+			}
+			continue
+		}
+		if !feedback.Cooked {
+			continue
 		}
 		p.LastRecipes = append(p.LastRecipes, last.Title)
 	}
