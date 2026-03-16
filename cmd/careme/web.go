@@ -148,7 +148,8 @@ func runServer(cfg *config.Config, addr string) error {
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)
 
-	infraRoutes.Handle("/ready", ro)
+	//no logging for readyiness too noisy.
+	rootMux.Handle("/ready", &recoverer{ro})
 
 	server := &http.Server{
 		Addr:    addr,

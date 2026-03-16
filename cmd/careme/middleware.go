@@ -85,10 +85,6 @@ func (a *appInsightsTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	lrw := &loggingResponseWriter{w, http.StatusOK}
 	a.Handler.ServeHTTP(lrw, r)
 
-	if r.URL.Path == "/ready" {
-		return
-	}
-
 	a.tracker.TrackRequest(r.Context(), r.Method, r.URL.String(), time.Since(start), strconv.Itoa(lrw.statusCode))
 }
 
@@ -235,6 +231,7 @@ func withBaseMiddleware(h http.Handler) http.Handler {
 	return &operationIDHandler{h}
 }
 
+// session id cookies could break some cache garuntees.
 func WithMiddleware(h http.Handler) http.Handler {
 	h = withBaseMiddleware(h)
 	return &sessionIDHandler{h}
