@@ -19,6 +19,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -144,7 +145,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
-		FormatRecipeHTML(p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
+		FormatRecipeHTMLWithSessionID(p, *recipe, signedIn, thread, feedback, wineRecommendation, claritySessionID(ctx), w)
 		return
 	}
 	// we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
@@ -173,7 +174,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
+	FormatRecipeHTMLWithSessionID(p, *recipe, signedIn, thread, feedback, wineRecommendation, claritySessionID(ctx), w)
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
@@ -810,7 +811,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}(recipeHash)
 		}
 		wineWG.Wait()
-		FormatShoppingListHTMLForHash(p, *slist, wineRecommendations, signedIn, hashParam, w)
+		FormatShoppingListHTMLForHashWithSessionID(p, *slist, wineRecommendations, signedIn, hashParam, claritySessionID(ctx), w)
 		return
 	}
 
@@ -895,7 +896,7 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 		Style           seasons.Style
 		RefreshInterval string // seconds
 	}{
-		ClarityScript:   templates.ClarityScript(),
+		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
 		RefreshInterval: "10", // seconds
@@ -949,6 +950,11 @@ func loadConversationIDForRecipe(ctx context.Context, rio recipeio, originHash s
 		slog.ErrorContext(ctx, "failed to load shopping list for conversation", "hash", originHash, "error", err)
 	}
 	return ""
+}
+
+func claritySessionID(ctx context.Context) string {
+	sessionID, _ := logsetup.SessionIDFromContext(ctx)
+	return sessionID
 }
 
 func parseFeedbackBool(value string) (bool, error) {

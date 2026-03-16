@@ -356,7 +356,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		Locations:       locs,
 		Zip:             zip,
 		FavoriteStore:   favoriteStore,
-		ClarityScript:   templates.ClarityScript(),
+		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  serverSignedIn,

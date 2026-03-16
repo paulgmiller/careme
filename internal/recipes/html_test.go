@@ -117,6 +117,23 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingListHTML_IncludesClaritySessionID(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+
+	prev := templates.Clarityproject
+	t.Cleanup(func() {
+		templates.Clarityproject = prev
+	})
+	templates.Clarityproject = "test456"
+
+	w := httptest.NewRecorder()
+	FormatShoppingListHTMLForHashWithSessionID(p, list, nil, true, p.Hash(), "sess-123", w)
+	if !bytes.Contains(w.Body.Bytes(), []byte(`window.clarity("identify", "sess-123", "sess-123")`)) {
+		t.Error("HTML should include Clarity identify call with session id")
+	}
+}
+
 func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())

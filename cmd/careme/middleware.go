@@ -20,6 +20,11 @@ import (
 	"github.com/microsoft/ApplicationInsights-Go/appinsights/contracts"
 )
 
+const (
+	sessionCookieName   = "careme_session_id"
+	sessionCookieMaxAge = 30 * 60
+)
+
 type logger struct {
 	http.Handler
 }
@@ -68,8 +73,12 @@ type appInsightsTelemetryTracker struct {
 
 func (t *appInsightsTelemetryTracker) TrackRequest(ctx context.Context, method, url string, duration time.Duration, responseCode string) {
 	request := azureappinsights.NewRequestTelemetry(method, url, duration, responseCode)
+	tags := contracts.ContextTags(request.ContextTags())
 	if operationID, ok := logsetup.OperationIDFromContext(ctx); ok {
-		contracts.ContextTags(request.ContextTags()).Operation().SetId(operationID)
+		tags.Operation().SetId(operationID)
+	}
+	if sessionID, ok := logsetup.SessionIDFromContext(ctx); ok {
+		tags.Session().SetId(sessionID)
 	}
 	t.client.Track(request)
 }
@@ -188,9 +197,44 @@ func (h *operationIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Handler.ServeHTTP(w, r.WithContext(ctx))
 }
 
+type sessionIDHandler struct {
+	http.Handler
+}
+
+func (h *sessionIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	sessionID := readOrCreateSessionID(r)
+	ctx := logsetup.WithSessionID(r.Context(), sessionID)
+	http.SetCookie(w, sessionCookie(r, sessionID))
+	h.Handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func readOrCreateSessionID(r *http.Request) string {
+	cookie, err := r.Cookie(sessionCookieName)
+	if err != nil || cookie.Value == "" {
+		return uuid.NewString()
+	}
+	if _, err := uuid.Parse(cookie.Value); err != nil {
+		return uuid.NewString()
+	}
+	return cookie.Value
+}
+
+func sessionCookie(r *http.Request, sessionID string) *http.Cookie {
+	return &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    sessionID,
+		Path:     "/",
+		MaxAge:   sessionCookieMaxAge,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   r.TLS != nil,
+	}
+}
+
 func WithMiddleware(h http.Handler) http.Handler {
 	h = &recoverer{h}
 	h = newAppInsightsTrackerFromEnv(h)
 	h = &logger{h}
-	return &operationIDHandler{h}
+	h = &operationIDHandler{h}
+	return &sessionIDHandler{h}
 }
