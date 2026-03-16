@@ -19,6 +19,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -67,7 +68,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 	}
 }
 
-func (s *server) Register(mux *http.ServeMux) {
+func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)

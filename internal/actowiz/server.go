@@ -3,6 +3,8 @@ package actowiz
 import (
 	"encoding/json"
 	"net/http"
+
+	"careme/internal/routing"
 )
 
 const scrapeIntervalDays = 7
@@ -61,7 +63,7 @@ func NewServer() *server {
 	}
 }
 
-func (s *server) Register(mux *http.ServeMux) {
+func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /actowiz/stores.json", s.handleStores)
 }
 
