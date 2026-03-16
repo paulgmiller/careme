@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/logsetup"
 )
 
 type trackedRequest struct {
@@ -13,18 +16,21 @@ type trackedRequest struct {
 	url          string
 	duration     time.Duration
 	responseCode string
+	operationID  string
 }
 
 type fakeRequestTracker struct {
 	calls []trackedRequest
 }
 
-func (f *fakeRequestTracker) TrackRequest(method, url string, duration time.Duration, responseCode string) {
+func (f *fakeRequestTracker) TrackRequest(ctx context.Context, method, url string, duration time.Duration, responseCode string) {
+	operationID, _ := logsetup.OperationIDFromContext(ctx)
 	f.calls = append(f.calls, trackedRequest{
 		method:       method,
 		url:          url,
 		duration:     duration,
 		responseCode: responseCode,
+		operationID:  operationID,
 	})
 }
 
@@ -122,6 +128,28 @@ func TestAppInsightsTrackerTracksRecoveredPanicAs500(t *testing.T) {
 	}
 	if tracker.calls[0].responseCode != "500" {
 		t.Fatalf("expected response code 500, got %q", tracker.calls[0].responseCode)
+	}
+}
+
+func TestAppInsightsTrackerReusesOperationIDFromContext(t *testing.T) {
+	tracker := &fakeRequestTracker{}
+	mw := &appInsightsTracker{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+		}),
+		tracker: tracker,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/about", nil)
+	req = req.WithContext(logsetup.WithOperationID(req.Context(), "op-555"))
+	rec := httptest.NewRecorder()
+	mw.ServeHTTP(rec, req)
+
+	if len(tracker.calls) != 1 {
+		t.Fatalf("expected 1 tracked request, got %d", len(tracker.calls))
+	}
+	if tracker.calls[0].operationID != "op-555" {
+		t.Fatalf("expected tracker to receive operation id op-555, got %q", tracker.calls[0].operationID)
 	}
 }
 

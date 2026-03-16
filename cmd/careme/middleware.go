@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -14,7 +15,9 @@ import (
 	"careme/internal/logsetup"
 
 	"github.com/clerk/clerk-sdk-go/v2"
+	"github.com/google/uuid"
 	azureappinsights "github.com/microsoft/ApplicationInsights-Go/appinsights"
+	"github.com/microsoft/ApplicationInsights-Go/appinsights/contracts"
 )
 
 type logger struct {
@@ -45,11 +48,11 @@ func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "form", r.Form, "duration", time.Since(start))
+	slog.InfoContext(r.Context(), "request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "form", r.Form, "duration", time.Since(start))
 }
 
 type requestTracker interface {
-	TrackRequest(method, url string, duration time.Duration, responseCode string)
+	TrackRequest(ctx context.Context, method, url string, duration time.Duration, responseCode string)
 }
 
 type appInsightsTracker struct {
@@ -58,6 +61,18 @@ type appInsightsTracker struct {
 }
 
 const appInsightsIngestionPath = "/v2/track"
+
+type appInsightsTelemetryTracker struct {
+	client azureappinsights.TelemetryClient
+}
+
+func (t *appInsightsTelemetryTracker) TrackRequest(ctx context.Context, method, url string, duration time.Duration, responseCode string) {
+	request := azureappinsights.NewRequestTelemetry(method, url, duration, responseCode)
+	if operationID, ok := logsetup.OperationIDFromContext(ctx); ok {
+		contracts.ContextTags(request.ContextTags()).Operation().SetId(operationID)
+	}
+	t.client.Track(request)
+}
 
 func (a *appInsightsTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -68,7 +83,7 @@ func (a *appInsightsTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.tracker.TrackRequest(r.Method, r.URL.String(), time.Since(start), strconv.Itoa(lrw.statusCode))
+	a.tracker.TrackRequest(r.Context(), r.Method, r.URL.String(), time.Since(start), strconv.Itoa(lrw.statusCode))
 }
 
 func newAppInsightsTracker(next http.Handler, connectionString string) (http.Handler, error) {
@@ -78,7 +93,7 @@ func newAppInsightsTracker(next http.Handler, connectionString string) (http.Han
 	}
 	return &appInsightsTracker{
 		Handler: next,
-		tracker: client,
+		tracker: &appInsightsTelemetryTracker{client: client},
 	}, nil
 }
 
@@ -161,8 +176,21 @@ func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.Handler.ServeHTTP(w, req)
 }
 
+type operationIDHandler struct {
+	http.Handler
+}
+
+// extract or generate an operation ID for the request, add it to the context, and set it in the response header. The operation ID is used for correlating logs and telemetry.
+func (h *operationIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	operationID := uuid.NewString()
+	ctx := logsetup.WithOperationID(r.Context(), operationID)
+	w.Header().Set("X-Operation-ID", operationID)
+	h.Handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
 func WithMiddleware(h http.Handler) http.Handler {
 	h = &recoverer{h}
 	h = newAppInsightsTrackerFromEnv(h)
-	return &logger{h}
+	h = &logger{h}
+	return &operationIDHandler{h}
 }
