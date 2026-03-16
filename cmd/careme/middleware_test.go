@@ -1,13 +1,14 @@
 package main
 
 import (
-	"careme/internal/logsetup"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/logsetup"
 )
 
 type trackedRequest struct {

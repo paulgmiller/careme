@@ -1,14 +1,6 @@
 package main
 
 import (
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/recipes"
-	"careme/internal/routing"
-	"careme/internal/templates"
-	"careme/internal/users"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +10,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/recipes"
+	"careme/internal/routing"
+	"careme/internal/templates"
+	"careme/internal/users"
 
 	"golang.org/x/net/html"
 )
