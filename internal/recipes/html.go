@@ -10,7 +10,6 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
-	"careme/internal/logsetup"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 )
@@ -43,18 +42,12 @@ type shoppingRecipeWineView struct {
 }
 
 // FormatShoppingListHTML renders the multi-recipe shopping list view.
-func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
-	FormatShoppingListHTMLForHash(p, l, nil, signedIn, p.Hash(), writer)
+func FormatShoppingListHTML(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
+	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), writer)
 }
 
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
-func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
-	FormatShoppingListHTMLForHashWithSessionID(p, l, wineRecommendations, signedIn, hash, "", writer)
-}
-
-// FormatShoppingListHTMLForHashWithSessionID renders the multi-recipe shopping list view for a specific hash and browser session.
-func FormatShoppingListHTMLForHashWithSessionID(p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, sessionID string, writer http.ResponseWriter) {
-	ctx := clarityContext(sessionID)
+func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
 	dismissedHashes := make(map[string]bool, len(p.Dismissed))
 	for _, recipe := range p.Dismissed {
 		dismissedHashes[recipe.ComputeHash()] = true
@@ -118,14 +111,8 @@ func FormatShoppingListHTMLForHashWithSessionID(p *generatorParams, l ai.Shoppin
 	}
 }
 
-// FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
-	FormatRecipeHTMLWithSessionID(p, recipe, signedIn, thread, feedback, wineRecommendation, "", writer)
-}
-
-// FormatRecipeHTMLWithSessionID renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTMLWithSessionID(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, wineRecommendation *ai.WineSelection, sessionID string, writer http.ResponseWriter) {
-	ctx := clarityContext(sessionID)
+// FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
@@ -231,14 +218,6 @@ func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSel
 	if err := templates.ShoppingList.ExecuteTemplate(writer, templateName, data); err != nil {
 		http.Error(writer, "shopping list wine template error: "+err.Error(), http.StatusInternalServerError)
 	}
-}
-
-func clarityContext(sessionID string) context.Context {
-	ctx := context.Background()
-	if sessionID == "" {
-		return ctx
-	}
-	return logsetup.WithSessionID(ctx, sessionID)
 }
 
 func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, writer io.Writer) error {

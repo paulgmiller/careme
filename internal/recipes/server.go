@@ -19,7 +19,6 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
-	"careme/internal/logsetup"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -145,7 +144,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
-		FormatRecipeHTMLWithSessionID(p, *recipe, signedIn, thread, feedback, wineRecommendation, claritySessionID(ctx), w)
+		FormatRecipeHTML(ctx, p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
 		return
 	}
 	// we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
@@ -174,7 +173,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTMLWithSessionID(p, *recipe, signedIn, thread, feedback, wineRecommendation, claritySessionID(ctx), w)
+	FormatRecipeHTML(ctx, p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
@@ -811,7 +810,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}(recipeHash)
 		}
 		wineWG.Wait()
-		FormatShoppingListHTMLForHashWithSessionID(p, *slist, wineRecommendations, signedIn, hashParam, claritySessionID(ctx), w)
+		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, w)
 		return
 	}
 
@@ -950,11 +949,6 @@ func loadConversationIDForRecipe(ctx context.Context, rio recipeio, originHash s
 		slog.ErrorContext(ctx, "failed to load shopping list for conversation", "hash", originHash, "error", err)
 	}
 	return ""
-}
-
-func claritySessionID(ctx context.Context) string {
-	sessionID, _ := logsetup.SessionIDFromContext(ctx)
-	return sessionID
 }
 
 func parseFeedbackBool(value string) (bool, error) {
