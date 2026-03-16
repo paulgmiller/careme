@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/logsetup"
 )
 
 type trackedRequest struct {
@@ -13,18 +16,21 @@ type trackedRequest struct {
 	url          string
 	duration     time.Duration
 	responseCode string
+	operationID  string
 }
 
 type fakeRequestTracker struct {
 	calls []trackedRequest
 }
 
-func (f *fakeRequestTracker) TrackRequest(method, url string, duration time.Duration, responseCode string) {
+func (f *fakeRequestTracker) TrackRequest(ctx context.Context, method, url string, duration time.Duration, responseCode string) {
+	operationID, _ := logsetup.OperationIDFromContext(ctx)
 	f.calls = append(f.calls, trackedRequest{
 		method:       method,
 		url:          url,
 		duration:     duration,
 		responseCode: responseCode,
+		operationID:  operationID,
 	})
 }
 
@@ -122,6 +128,68 @@ func TestAppInsightsTrackerTracksRecoveredPanicAs500(t *testing.T) {
 	}
 	if tracker.calls[0].responseCode != "500" {
 		t.Fatalf("expected response code 500, got %q", tracker.calls[0].responseCode)
+	}
+}
+
+func TestAppInsightsTrackerReusesOperationIDFromContext(t *testing.T) {
+	tracker := &fakeRequestTracker{}
+	mw := &appInsightsTracker{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+		}),
+		tracker: tracker,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/about", nil)
+	req = req.WithContext(logsetup.WithOperationID(req.Context(), "op-555"))
+	rec := httptest.NewRecorder()
+	mw.ServeHTTP(rec, req)
+
+	if len(tracker.calls) != 1 {
+		t.Fatalf("expected 1 tracked request, got %d", len(tracker.calls))
+	}
+	if tracker.calls[0].operationID != "op-555" {
+		t.Fatalf("expected tracker to receive operation id op-555, got %q", tracker.calls[0].operationID)
+	}
+}
+
+func TestOperationIDHandlerUsesTraceparentTraceID(t *testing.T) {
+	var seenOperationID string
+	h := &operationIDHandler{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var ok bool
+		seenOperationID, ok = logsetup.OperationIDFromContext(r.Context())
+		if !ok {
+			t.Fatal("expected operation id in context")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})}
+
+	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/about", nil)
+	req.Header.Set("Traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if seenOperationID != "4bf92f3577b34da6a3ce929d0e0e4736" {
+		t.Fatalf("expected trace id from traceparent, got %q", seenOperationID)
+	}
+	if rec.Header().Get("X-Operation-ID") != seenOperationID {
+		t.Fatalf("expected response header operation id %q, got %q", seenOperationID, rec.Header().Get("X-Operation-ID"))
+	}
+}
+
+func TestOperationIDHandlerUsesRequestIDHeaderFallback(t *testing.T) {
+	var seenOperationID string
+	h := &operationIDHandler{Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seenOperationID, _ = logsetup.OperationIDFromContext(r.Context())
+	})}
+
+	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/about", nil)
+	req.Header.Set("X-Request-Id", "req-123")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if seenOperationID != "req-123" {
+		t.Fatalf("expected request id fallback, got %q", seenOperationID)
 	}
 }
 
