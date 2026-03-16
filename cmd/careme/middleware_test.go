@@ -1,13 +1,14 @@
 package main
 
 import (
-	"careme/internal/logsetup"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/logsetup"
 )
 
 type trackedRequest struct {
@@ -255,7 +256,7 @@ func TestWithMiddlewareProvidesBothIDs(t *testing.T) {
 		operationID, _ = logsetup.OperationIDFromContext(r.Context())
 		sessionID, _ = logsetup.SessionIDFromContext(r.Context())
 		w.WriteHeader(http.StatusNoContent)
-	}), nil)
+	}), &fakeRequestTracker{})
 
 	req := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)
 	rec := httptest.NewRecorder()
@@ -299,7 +300,7 @@ func TestRouteScopedMiddlewareSkipsSessionCookieForStaticRoutes(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	rootMux.Handle("/static/", BaseMiddleware(infraMux))
-	rootMux.Handle("/", AppMiddleWare(appMux, nil))
+	rootMux.Handle("/", AppMiddleWare(appMux, &fakeRequestTracker{}))
 
 	staticReq := httptest.NewRequest(http.MethodGet, "http://careme.cooking/static/app.js", nil)
 	staticRec := httptest.NewRecorder()
