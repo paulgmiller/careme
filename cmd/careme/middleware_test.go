@@ -306,6 +306,40 @@ func findCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Cookie 
 	return nil
 }
 
+func TestRouteScopedMiddlewareSkipsSessionCookieForStaticRoutes(t *testing.T) {
+	rootMux := http.NewServeMux()
+	appMux := http.NewServeMux()
+	infraMux := http.NewServeMux()
+	infraMux.HandleFunc("/static/app.js", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	appMux.HandleFunc("/about", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	rootMux.Handle("/static/", withBaseMiddleware(infraMux))
+	rootMux.Handle("/", WithMiddleware(appMux))
+
+	staticReq := httptest.NewRequest(http.MethodGet, "http://careme.cooking/static/app.js", nil)
+	staticRec := httptest.NewRecorder()
+	rootMux.ServeHTTP(staticRec, staticReq)
+
+	if got := staticRec.Header().Values("Set-Cookie"); len(got) != 0 {
+		t.Fatalf("expected no Set-Cookie on static route, got %v", got)
+	}
+	if staticRec.Header().Get("X-Operation-ID") == "" {
+		t.Fatal("expected static route to receive operation id from base middleware")
+	}
+
+	appReq := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)
+	appRec := httptest.NewRecorder()
+	rootMux.ServeHTTP(appRec, appReq)
+
+	if findCookie(t, appRec.Result().Cookies(), sessionCookieName).Value == "" {
+		t.Fatal("expected session cookie on app route")
+	}
+}
+
 func TestParseAppInsightsConnectionString(t *testing.T) {
 	connectionString := "InstrumentationKey=test-key;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=app-id"
 	cfg, err := parseAppInsightsConnectionString(connectionString)

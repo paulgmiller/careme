@@ -39,9 +39,12 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create auth client: %w", err)
 	}
 
-	mux := http.NewServeMux()
-	authClient.Register(mux)
-	static.Register(mux)
+	rootMux := http.NewServeMux()
+	appMux := http.NewServeMux()
+	infraMux := http.NewServeMux()
+
+	authClient.Register(appMux)
+	static.Register(infraMux)
 
 	userStorage := users.NewStorage(cache)
 
@@ -58,26 +61,26 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
-	userHandler.Register(mux)
+	userHandler.Register(appMux)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
-	locationServer.Register(mux, authClient)
+	locationServer.Register(appMux, authClient)
 
 	sitemapHandler := sitemap.New(cache)
-	sitemapHandler.Register(mux)
+	sitemapHandler.Register(infraMux)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
-	recipeHandler.Register(mux)
+	recipeHandler.Register(appMux)
 
-	actowiz.NewServer().Register(mux)
+	actowiz.NewServer().Register(infraMux)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
-	mux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
+	appMux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 
-	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
+	appMux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		data := struct {
 			ClarityScript   template.HTML
@@ -94,7 +97,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 	})
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	appMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		currentUser, err := userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
@@ -142,11 +145,22 @@ func runServer(cfg *config.Config, addr string) error {
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)
 
-	mux.Handle("/ready", ro)
+	infraMux.Handle("/ready", ro)
+
+	appHandler := WithMiddleware(appMux)
+	infraHandler := withBaseMiddleware(infraMux)
+
+	rootMux.Handle("/static/", infraHandler)
+	rootMux.Handle("/favicon.ico", infraHandler)
+	rootMux.Handle("/robots.txt", infraHandler)
+	rootMux.Handle("/sitemap.xml", infraHandler)
+	rootMux.Handle("GET /actowiz/stores.json", infraHandler)
+	rootMux.Handle("/ready", infraHandler)
+	rootMux.Handle("/", appHandler)
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: authClient.WithAuthHTTP(WithMiddleware(mux)),
+		Handler: authClient.WithAuthHTTP(rootMux),
 	}
 
 	// Channel to listen for errors coming from the server

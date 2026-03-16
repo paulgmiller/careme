@@ -49,9 +49,6 @@ func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	lrw := &loggingResponseWriter{w, http.StatusOK}
 	l.Handler.ServeHTTP(lrw, r)
-	if r.URL.Path == "/ready" {
-		return
-	}
 
 	slog.InfoContext(r.Context(), "request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "form", r.Form, "duration", time.Since(start))
 }
@@ -231,10 +228,14 @@ func sessionCookie(r *http.Request, sessionID string) *http.Cookie {
 	}
 }
 
-func WithMiddleware(h http.Handler) http.Handler {
+func withBaseMiddleware(h http.Handler) http.Handler {
 	h = &recoverer{h}
 	h = newAppInsightsTrackerFromEnv(h)
 	h = &logger{h}
-	h = &operationIDHandler{h}
+	return &operationIDHandler{h}
+}
+
+func WithMiddleware(h http.Handler) http.Handler {
+	h = withBaseMiddleware(h)
 	return &sessionIDHandler{h}
 }

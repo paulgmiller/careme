@@ -174,18 +174,22 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	mockAuth := auth.Mock(cfg)
 
-	mux := http.NewServeMux()
+	rootMux := http.NewServeMux()
+	appMux := http.NewServeMux()
+	infraMux := http.NewServeMux()
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
-	locationServer.Register(mux, mockAuth)
-	users.NewHandler(userStorage, locationStorage, mockAuth).Register(mux)
-	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(mux)
+	locationServer.Register(appMux, mockAuth)
+	users.NewHandler(userStorage, locationStorage, mockAuth).Register(appMux)
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(appMux)
 
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)
 
-	mux.Handle("/ready", ro)
+	infraMux.Handle("/ready", ro)
+	rootMux.Handle("/ready", withBaseMiddleware(infraMux))
+	rootMux.Handle("/", WithMiddleware(appMux))
 
-	return httptest.NewServer(WithMiddleware(mux))
+	return httptest.NewServer(mockAuth.WithAuthHTTP(rootMux))
 }
 
 func newTestClient(t *testing.T) *http.Client {
