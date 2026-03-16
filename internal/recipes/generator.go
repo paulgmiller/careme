@@ -28,6 +28,7 @@ type aiClient interface {
 	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error)
+	StartConversation(ctx context.Context) (string, error)
 	Ready(ctx context.Context) error
 }
 
@@ -168,6 +169,10 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 
 func (g *Generator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	return g.aiClient.AskQuestion(ctx, question, conversationID)
+}
+
+func (g *Generator) StartConversation(ctx context.Context) (string, error) {
+	return g.aiClient.StartConversation(ctx)
 }
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.

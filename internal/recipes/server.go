@@ -39,6 +39,7 @@ type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
+	StartConversation(ctx context.Context) (string, error)
 	Ready(ctx context.Context) error
 }
 
@@ -171,6 +172,15 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "failed to load conversation id", "hash", recipe.OriginHash, "error", err)
 		}
 	}
+	if signedIn {
+		if userID, userErr := s.clerk.GetUserIDFromRequest(r); userErr == nil {
+			if userConversationID, convErr := s.loadConversationForUser(ctx, userID, recipe.OriginHash); convErr == nil && userConversationID != "" {
+				p.ConversationID = userConversationID
+			} else if convErr != nil {
+				slog.ErrorContext(ctx, "failed to load user conversation id", "hash", recipe.OriginHash, "user_id", userID, "error", convErr)
+			}
+		}
+	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
 	FormatRecipeHTML(p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
@@ -187,7 +197,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	_, err := s.clerk.GetUserIDFromRequest(r)
+	userID, err := s.clerk.GetUserIDFromRequest(r)
 	if errors.Is(err, auth.ErrNoSession) {
 		w.Header().Set("HX-Redirect", "/sign-in")
 		http.Error(w, "must be logged in to ask a question", http.StatusUnauthorized)
@@ -209,11 +219,20 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		questionForModel = fmt.Sprintf("Regarding %s: %s", recipeTitle, question)
 	}
 
-	// TODO: conversation id is user-provided form input.
-	// Also still curious if we should fork conversation per recipe
-	conversationID := strings.TrimSpace(r.FormValue("conversation_id"))
+	originHash := ""
+	if recipe, recipeErr := s.SingleFromCache(ctx, hash); recipeErr == nil {
+		originHash = strings.TrimSpace(recipe.OriginHash)
+		if normalizedHash, ok := legacyHashToCurrent(originHash, legacyRecipeHashSeed); ok {
+			originHash = normalizedHash
+		}
+	}
+	conversationID := strings.TrimSpace(loadConversationIDForRecipe(ctx, s.recipeio, originHash))
 	if conversationID == "" {
-		slog.ErrorContext(ctx, "failed to load conversation id", "hash", hash)
+		conversationID = strings.TrimSpace(r.FormValue("conversation_id"))
+	}
+	conversationID, err = s.resolveConversationIDForUser(ctx, userID, originHash, conversationID)
+	if err != nil || conversationID == "" {
+		slog.ErrorContext(ctx, "failed to resolve conversation id", "hash", hash, "user_id", userID, "error", err)
 		http.Error(w, "conversation id not found", http.StatusInternalServerError)
 		return
 	}
@@ -598,6 +617,16 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	originHash := strings.TrimSpace(hash)
+	if normalizedHash, ok := legacyHashToCurrent(originHash, legacyRecipeHashSeed); ok {
+		originHash = normalizedHash
+	}
+	conversationID, convErr := s.resolveConversationIDForUser(ctx, currentUser.ID, originHash, p.ConversationID)
+	if convErr != nil || conversationID == "" {
+		http.Error(w, "failed to load conversation", http.StatusInternalServerError)
+		return
+	}
+	p.ConversationID = conversationID
 	newHash := p.Hash()
 
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
@@ -689,6 +718,15 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
 	if params.ConversationID == "" {
 		params.ConversationID = currentList.ConversationID
+	}
+	originHash := strings.TrimSpace(hash)
+	if normalizedHash, ok := legacyHashToCurrent(originHash, legacyRecipeHashSeed); ok {
+		originHash = normalizedHash
+	}
+	if userConversationID, convErr := s.loadConversationForUser(ctx, userID, originHash); convErr == nil && userConversationID != "" {
+		params.ConversationID = userConversationID
+	} else if convErr != nil {
+		return nil, fmt.Errorf("failed to load conversation")
 	}
 	return &params, nil
 }
@@ -832,7 +870,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.Directive = currentUser.Directive
-	p.UserID = currentUser.ID
 	// if params are already saved redirect and assume someone kicks off genration
 
 	if err := s.SaveParams(ctx, p); err != nil {

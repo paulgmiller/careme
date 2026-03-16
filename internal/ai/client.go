@@ -351,6 +351,15 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	return messages, nil
 }
 
+func (c *Client) StartConversation(ctx context.Context) (string, error) {
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	convo, err := client.Conversations.New(ctx, conversations.ConversationNewParams{})
+	if err != nil {
+		return "", fmt.Errorf("failed to create conversation: %w", err)
+	}
+	return strings.TrimSpace(convo.ID), nil
+}
+
 func (c *Client) Ready(ctx context.Context) error {
 	// more CORRECT to do a very simple response request with allowed tokens 1 but this seems cheaper
 	// https://chatgpt.com/share/6984da16-ff88-8009-8486-4e0479ac6a01

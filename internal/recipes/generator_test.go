@@ -50,6 +50,10 @@ func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, conversation
 	}, nil
 }
 
+func (c *captureWineQuestionAIClient) StartConversation(ctx context.Context) (string, error) {
+	return "conv-start", nil
+}
+
 func (c *captureWineQuestionAIClient) Ready(ctx context.Context) error {
 	return nil
 }

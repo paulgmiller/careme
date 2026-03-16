@@ -151,7 +151,6 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 		t.Fatalf("failed to build expected params: %v", err)
 	}
 	baselineHash := expectedParams.Hash()
-	expectedParams.UserID = currentUser.ID
 	expectedParams.Directive = currentUser.Directive
 	expectedHash := expectedParams.Hash()
 	if expectedHash == baselineHash {
@@ -532,6 +531,10 @@ func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID
 		return &ai.WineSelection{Commentary: c.wineRecommendation, Wines: []ai.Ingredient{}}, nil
 	}
 	return &ai.WineSelection{Commentary: "Try a chilled sauvignon blanc.", Wines: []ai.Ingredient{}}, nil
+}
+
+func (c *captureQuestionGenerator) StartConversation(ctx context.Context) (string, error) {
+	return "conv-start", nil
 }
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
@@ -1407,6 +1410,29 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 	}
 	if len(updated.Dismissed) != 1 || updated.Dismissed[0].ComputeHash() != savedRecipe.ComputeHash() {
 		t.Fatalf("expected selection to move saved recipe into dismissed, got %#v", updated.Dismissed)
+	}
+}
+
+func TestResolveConversationIDForUser_CreatesAndStoresConversationWhenMissing(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		generator: &captureQuestionGenerator{},
+	}
+
+	conversationID, err := s.resolveConversationIDForUser(t.Context(), "user-1", "origin-hash", "conv-shared")
+	if err != nil {
+		t.Fatalf("resolveConversationIDForUser failed: %v", err)
+	}
+	if got, want := conversationID, "conv-start"; got != want {
+		t.Fatalf("expected conversation %q, got %q", want, got)
+	}
+	stored, err := s.loadConversationForUser(t.Context(), "user-1", "origin-hash")
+	if err != nil {
+		t.Fatalf("failed to load user conversation: %v", err)
+	}
+	if got, want := stored, "conv-start"; got != want {
+		t.Fatalf("expected stored conversation %q, got %q", want, got)
 	}
 }
 
