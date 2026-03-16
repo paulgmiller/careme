@@ -72,7 +72,7 @@ func (r *Recipe) ComputeHash() string {
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
-	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
+	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 // intionally not including ConversationID to preserve old hashes

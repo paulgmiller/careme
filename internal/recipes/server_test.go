@@ -1537,3 +1537,57 @@ func TestHandleFeedback_RejectsNonHTMXRequest(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
 	}
 }
+
+func TestHandleSingle_RedirectsLegacyRecipeHashToCanonicalHash(t *testing.T) {
+	recipe := ai.Recipe{Title: "Hash Redirect Test"}
+	canonicalHash := recipe.ComputeHash()
+	decoded, err := base64.RawURLEncoding.DecodeString(canonicalHash)
+	if err != nil {
+		t.Fatalf("failed to decode canonical hash: %v", err)
+	}
+	legacyHash := base64.URLEncoding.EncodeToString(decoded)
+	if legacyHash == canonicalHash {
+		t.Fatalf("expected legacy hash to differ from canonical hash, got %q", legacyHash)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipe/"+legacyHash, nil)
+	req.SetPathValue("hash", legacyHash)
+	rr := httptest.NewRecorder()
+
+	s := &server{}
+	s.handleSingle(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "/recipe/"+canonicalHash {
+		t.Fatalf("expected redirect location %q, got %q", "/recipe/"+canonicalHash, got)
+	}
+}
+
+func TestSingleFromCache_FallsBackToLegacyRecipeHash(t *testing.T) {
+	ctx := t.Context()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	rio := recipeio{Cache: cacheStore}
+
+	recipe := ai.Recipe{Title: "Fallback Hash Test"}
+	canonicalHash := recipe.ComputeHash()
+	decoded, err := base64.RawURLEncoding.DecodeString(canonicalHash)
+	if err != nil {
+		t.Fatalf("failed to decode canonical hash: %v", err)
+	}
+	legacyHash := base64.URLEncoding.EncodeToString(decoded)
+
+	recipeJSON := `{"title":"Fallback Hash Test"}`
+	if err := cacheStore.Put(ctx, recipeCachePrefix+legacyHash, recipeJSON, cache.Unconditional()); err != nil {
+		t.Fatalf("failed to save legacy-key recipe: %v", err)
+	}
+
+	loaded, err := rio.SingleFromCache(ctx, canonicalHash)
+	if err != nil {
+		t.Fatalf("expected fallback read to succeed, got error: %v", err)
+	}
+	if loaded.Title != recipe.Title {
+		t.Fatalf("expected title %q, got %q", recipe.Title, loaded.Title)
+	}
+}

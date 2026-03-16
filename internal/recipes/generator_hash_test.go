@@ -107,3 +107,45 @@ func TestStaplesSignatureForLocation_PanicsForUnknownLocation(t *testing.T) {
 
 	_ = staplesSignatureForLocation("loc-unknown")
 }
+
+func TestNormalizeBase64URLHash(t *testing.T) {
+	raw := "YK2TFI6O3tGLPAxPjqMPEw"
+	legacy := "YK2TFI6O3tGLPAxPjqMPEw=="
+
+	normalized, ok := normalizeBase64URLHash(legacy)
+	if !ok {
+		t.Fatal("expected legacy hash to normalize")
+	}
+	if normalized != raw {
+		t.Fatalf("expected normalized hash %q, got %q", raw, normalized)
+	}
+
+	normalizedRaw, ok := normalizeBase64URLHash(raw)
+	if !ok {
+		t.Fatal("expected canonical hash to be considered valid")
+	}
+	if normalizedRaw != raw {
+		t.Fatalf("expected raw hash to remain unchanged, got %q", normalizedRaw)
+	}
+}
+
+func TestAlternateBase64URLHash(t *testing.T) {
+	raw := "YK2TFI6O3tGLPAxPjqMPEw"
+	legacy := "YK2TFI6O3tGLPAxPjqMPEw=="
+
+	altLegacy, ok := alternateBase64URLHash(raw)
+	if !ok {
+		t.Fatal("expected fallback legacy hash for raw hash")
+	}
+	if altLegacy != legacy {
+		t.Fatalf("expected legacy hash %q, got %q", legacy, altLegacy)
+	}
+
+	altRaw, ok := alternateBase64URLHash(legacy)
+	if !ok {
+		t.Fatal("expected fallback raw hash for legacy hash")
+	}
+	if altRaw != raw {
+		t.Fatalf("expected raw hash %q, got %q", raw, altRaw)
+	}
+}

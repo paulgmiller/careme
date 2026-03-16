@@ -90,6 +90,11 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
+	if normalizedHash, ok := normalizeBase64URLHash(hash); ok && normalizedHash != hash {
+		slog.InfoContext(ctx, "redirecting legacy recipe hash to canonical hash", "legacy_hash", hash, "hash", normalizedHash)
+		http.Redirect(w, r, "/recipe/"+normalizedHash, http.StatusSeeOther)
+		return
+	}
 
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {

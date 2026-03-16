@@ -83,6 +83,36 @@ func (g *generatorParams) LocationHash() string {
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
+func normalizeBase64URLHash(hash string) (string, bool) {
+	decoded, err := base64.URLEncoding.DecodeString(hash)
+	if err == nil {
+		return base64.RawURLEncoding.EncodeToString(decoded), true
+	}
+	decoded, err = base64.RawURLEncoding.DecodeString(hash)
+	if err != nil {
+		return hash, false
+	}
+	return hash, true
+}
+
+func alternateBase64URLHash(hash string) (string, bool) {
+	decoded, err := base64.RawURLEncoding.DecodeString(hash)
+	if err == nil {
+		alt := base64.URLEncoding.EncodeToString(decoded)
+		if alt != hash {
+			return alt, true
+		}
+	}
+	decoded, err = base64.URLEncoding.DecodeString(hash)
+	if err == nil {
+		alt := base64.RawURLEncoding.EncodeToString(decoded)
+		if alt != hash {
+			return alt, true
+		}
+	}
+	return hash, false
+}
+
 func legacyHashToCurrent(hash string, seed string) (string, bool) {
 	decoded, err := base64.URLEncoding.DecodeString(hash)
 	if err != nil {
