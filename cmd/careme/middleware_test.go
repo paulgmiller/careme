@@ -1,14 +1,13 @@
 package main
 
 import (
+	"careme/internal/logsetup"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	"careme/internal/logsetup"
 )
 
 type trackedRequest struct {
@@ -309,8 +308,8 @@ func TestRouteScopedMiddlewareSkipsSessionCookieForStaticRoutes(t *testing.T) {
 	if got := staticRec.Header().Values("Set-Cookie"); len(got) != 0 {
 		t.Fatalf("expected no Set-Cookie on static route, got %v", got)
 	}
-	if staticRec.Header().Get("X-Operation-ID") == "" {
-		t.Fatal("expected static route to receive operation id from base middleware")
+	if staticRec.Header().Get("X-Operation-ID") != "" {
+		t.Fatal("expected static route to NOT receive operation id from base middleware")
 	}
 
 	appReq := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)

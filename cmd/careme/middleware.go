@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/logsetup"
 	"context"
 	"errors"
 	"log/slog"
@@ -11,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"careme/internal/logsetup"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/google/uuid"
@@ -231,14 +230,16 @@ func sessionCookie(r *http.Request, sessionID string) *http.Cookie {
 	}
 }
 
+// just recover and log
 func BaseMiddleware(h http.Handler) http.Handler {
 	h = &recoverer{h}
-	h = &logger{h}
-	return &operationIDHandler{h}
+	return &logger{h}
 }
 
+// instrument with app insights and log with operation and session ids.
 func AppMiddleWare(h http.Handler, tracker requestTracker) http.Handler {
 	h = BaseMiddleware(h)
-	h = newAppInsightsTracker(h, tracker)
+	h = newAppInsightsTracker(h, tracker) // must be "inside" operatid and session handler.
+	h = &operationIDHandler{h}
 	return &sessionIDHandler{h}
 }
