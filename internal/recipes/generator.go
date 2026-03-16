@@ -25,8 +25,8 @@ import (
 
 type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
-	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
-	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
+	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error)
+	AskQuestion(ctx context.Context, question string, previousResponseID string) (string, string, error)
 	PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error)
 	Ready(ctx context.Context) error
 }
@@ -166,8 +166,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	return shoppingList, nil
 }
 
-func (g *Generator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
-	return g.aiClient.AskQuestion(ctx, question, conversationID)
+func (g *Generator) AskQuestion(ctx context.Context, question string, previousResponseID string) (string, string, error) {
+	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
 }
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.

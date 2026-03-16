@@ -393,9 +393,9 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	}, nil
 }
 
-func (m mock) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
-	_ = conversationID
-	return fmt.Sprintf("Mock answer: %s", question), nil
+func (m mock) AskQuestion(ctx context.Context, question string, previousResponseID string) (string, string, error) {
+	_ = previousResponseID
+	return fmt.Sprintf("Mock answer: %s", question), uuid.NewString(), nil
 }
 
 func (m mock) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {

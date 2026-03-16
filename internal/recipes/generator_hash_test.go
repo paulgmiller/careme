@@ -47,6 +47,18 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 	}
 }
 
+func TestGeneratorParamsHash_SameAcrossUsers(t *testing.T) {
+	loc := &locations.Location{ID: "loc-123", Name: "Test Loc", Address: "1 Test St", State: "TS"}
+	d := time.Date(2025, 9, 17, 1, 2, 3, 0, time.UTC)
+
+	p1 := DefaultParams(loc, d)
+	p2 := DefaultParams(loc, d)
+
+	if p1.Hash() != p2.Hash() {
+		t.Fatalf("expected same hashes for same request inputs: %s vs %s", p1.Hash(), p2.Hash())
+	}
+}
+
 func TestGeneratorParamsLocationHashStableForDifferentHours(t *testing.T) {
 	loc := &locations.Location{ID: "23456789", Name: "Another", Address: "2 Test Ave", State: "TS"}
 	d1 := time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC)

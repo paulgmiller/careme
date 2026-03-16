@@ -513,9 +513,10 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previousResponseID string) (string, string, error) {
 	c.lastQuestion = question
-	return "Try chicken thighs at the same cook time.", nil
+	_ = previousResponseID
+	return "Try chicken thighs at the same cook time.", "resp-next", nil
 }
 
 func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
@@ -1406,6 +1407,21 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 	}
 	if len(updated.Dismissed) != 1 || updated.Dismissed[0].ComputeHash() != savedRecipe.ComputeHash() {
 		t.Fatalf("expected selection to move saved recipe into dismissed, got %#v", updated.Dismissed)
+	}
+}
+
+func TestSaveAndLoadLastResponseIDForUser(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{recipeio: recipeio{Cache: cacheStore}}
+	if err := s.saveLastResponseIDForUser(t.Context(), "user-1", "origin-hash", "resp-123"); err != nil {
+		t.Fatalf("saveLastResponseIDForUser failed: %v", err)
+	}
+	stored, err := s.loadLastResponseIDForUser(t.Context(), "user-1", "origin-hash")
+	if err != nil {
+		t.Fatalf("loadLastResponseIDForUser failed: %v", err)
+	}
+	if got, want := stored, "resp-123"; got != want {
+		t.Fatalf("expected stored response id %q, got %q", want, got)
 	}
 }
 

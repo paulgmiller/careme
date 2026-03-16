@@ -37,7 +37,7 @@ type locServer interface {
 
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
-	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
+	AskQuestion(ctx context.Context, question string, previousResponseID string) (string, string, error)
 	PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 	Ready(ctx context.Context) error
 }
@@ -171,6 +171,15 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(ctx, "failed to load conversation id", "hash", recipe.OriginHash, "error", err)
 		}
 	}
+	if signedIn {
+		if userID, userErr := s.clerk.GetUserIDFromRequest(r); userErr == nil {
+			if userResponseID, respErr := s.loadLastResponseIDForUser(ctx, userID, recipe.OriginHash); respErr == nil && userResponseID != "" {
+				p.ConversationID = userResponseID
+			} else if respErr != nil {
+				slog.ErrorContext(ctx, "failed to load user last response id", "hash", recipe.OriginHash, "user_id", userID, "error", respErr)
+			}
+		}
+	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
 	FormatRecipeHTML(p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
@@ -187,7 +196,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	_, err := s.clerk.GetUserIDFromRequest(r)
+	userID, err := s.clerk.GetUserIDFromRequest(r)
 	if errors.Is(err, auth.ErrNoSession) {
 		w.Header().Set("HX-Redirect", "/sign-in")
 		http.Error(w, "must be logged in to ask a question", http.StatusUnauthorized)
@@ -209,11 +218,20 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		questionForModel = fmt.Sprintf("Regarding %s: %s", recipeTitle, question)
 	}
 
-	// TODO: conversation id is user-provided form input.
-	// Also still curious if we should fork conversation per recipe
-	conversationID := strings.TrimSpace(r.FormValue("conversation_id"))
-	if conversationID == "" {
-		slog.ErrorContext(ctx, "failed to load conversation id", "hash", hash)
+	originHash := ""
+	if recipe, recipeErr := s.SingleFromCache(ctx, hash); recipeErr == nil {
+		originHash = strings.TrimSpace(recipe.OriginHash)
+		if normalizedHash, ok := legacyHashToCurrent(originHash, legacyRecipeHashSeed); ok {
+			originHash = normalizedHash
+		}
+	}
+	previousResponseID := strings.TrimSpace(r.FormValue("conversation_id"))
+	if userResponseID, respErr := s.loadLastResponseIDForUser(ctx, userID, originHash); respErr == nil && userResponseID != "" {
+		previousResponseID = userResponseID
+	} else if respErr != nil {
+		slog.ErrorContext(ctx, "failed to load last response id", "hash", hash, "user_id", userID, "error", respErr)
+	}
+	if previousResponseID == "" {
 		http.Error(w, "conversation id not found", http.StatusInternalServerError)
 		return
 	}
@@ -222,7 +240,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	// can't use request context because it will be canceled when request finishes but we want to finish processing question and save it to cache.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 45*time.Second)
 	defer cancel()
-	answer, err := s.generator.AskQuestion(ctx, questionForModel, conversationID)
+	answer, responseID, err := s.generator.AskQuestion(ctx, questionForModel, previousResponseID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to answer question", "hash", hash, "error", err)
 		http.Error(w, "failed to answer question", http.StatusInternalServerError)
@@ -245,7 +263,13 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	FormatRecipeThreadHTML(thread, true, conversationID, w)
+	if saveErr := s.saveLastResponseIDForUser(ctx, userID, originHash, responseID); saveErr != nil {
+		slog.ErrorContext(ctx, "failed to save last response id", "hash", hash, "user_id", userID, "error", saveErr)
+	}
+	if strings.TrimSpace(responseID) == "" {
+		responseID = previousResponseID
+	}
+	FormatRecipeThreadHTML(thread, true, responseID, w)
 }
 
 func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
@@ -690,6 +714,15 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	if params.ConversationID == "" {
 		params.ConversationID = currentList.ConversationID
 	}
+	originHash := strings.TrimSpace(hash)
+	if normalizedHash, ok := legacyHashToCurrent(originHash, legacyRecipeHashSeed); ok {
+		originHash = normalizedHash
+	}
+	if userResponseID, respErr := s.loadLastResponseIDForUser(ctx, userID, originHash); respErr == nil && userResponseID != "" {
+		params.ConversationID = userResponseID
+	} else if respErr != nil {
+		return nil, fmt.Errorf("failed to load response")
+	}
 	return &params, nil
 }
 
@@ -819,9 +852,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
 		return
 	}
-	// what do we do with this?
-	// p.UserID = currentUser.ID
-
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
@@ -882,6 +912,9 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			return
+		}
+		if saveErr := s.saveLastResponseIDForUser(ctx, currentUser.ID, hash, shoppingList.LastResponseID); saveErr != nil {
+			slog.ErrorContext(ctx, "failed to save user last response id", "user_id", currentUser.ID, "hash", hash, "error", saveErr)
 		}
 	}()
 }
