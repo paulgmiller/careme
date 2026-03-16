@@ -1,14 +1,13 @@
 package main
 
 import (
+	"careme/internal/logsetup"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	"careme/internal/logsetup"
 )
 
 type trackedRequest struct {
@@ -252,11 +251,11 @@ func TestSessionIDHandlerReplacesInvalidCookie(t *testing.T) {
 func TestWithMiddlewareProvidesBothIDs(t *testing.T) {
 	var operationID string
 	var sessionID string
-	handler := WithMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AppMiddleWare(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		operationID, _ = logsetup.OperationIDFromContext(r.Context())
 		sessionID, _ = logsetup.SessionIDFromContext(r.Context())
 		w.WriteHeader(http.StatusNoContent)
-	}))
+	}), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)
 	rec := httptest.NewRecorder()
@@ -299,8 +298,8 @@ func TestRouteScopedMiddlewareSkipsSessionCookieForStaticRoutes(t *testing.T) {
 	appMux.HandleFunc("/about", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	rootMux.Handle("/static/", withBaseMiddleware(infraMux))
-	rootMux.Handle("/", WithMiddleware(appMux))
+	rootMux.Handle("/static/", BaseMiddleware(infraMux))
+	rootMux.Handle("/", AppMiddleWare(appMux, nil))
 
 	staticReq := httptest.NewRequest(http.MethodGet, "http://careme.cooking/static/app.js", nil)
 	staticRec := httptest.NewRecorder()

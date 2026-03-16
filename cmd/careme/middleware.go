@@ -1,6 +1,7 @@
 package main
 
 import (
+	"careme/internal/logsetup"
 	"context"
 	"errors"
 	"log/slog"
@@ -11,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"careme/internal/logsetup"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/google/uuid"
@@ -88,30 +87,37 @@ func (a *appInsightsTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.tracker.TrackRequest(r.Context(), r.Method, r.URL.String(), time.Since(start), strconv.Itoa(lrw.statusCode))
 }
 
-func newAppInsightsTracker(next http.Handler, connectionString string) (http.Handler, error) {
+func newAppInsightsTracker(next http.Handler, tracker requestTracker) http.Handler {
+	if tracker == nil {
+		return next
+	}
+	return &appInsightsTracker{
+		Handler: next,
+		tracker: tracker,
+	}
+}
+
+func newRequestTracker(connectionString string) (requestTracker, error) {
 	client, err := newAppInsightsTelemetryClient(connectionString)
 	if err != nil {
 		return nil, err
 	}
-	return &appInsightsTracker{
-		Handler: next,
-		tracker: &appInsightsTelemetryTracker{client: client},
-	}, nil
+	return &appInsightsTelemetryTracker{client: client}, nil
 }
 
-func newAppInsightsTrackerFromEnv(next http.Handler) http.Handler {
+func newRequestTrackerFromEnv() requestTracker {
 	connectionString := os.Getenv(logsetup.AppInsightsConnectionStringEnv)
 	if connectionString == "" {
-		return next
+		return nil
 	}
 
-	handler, err := newAppInsightsTracker(next, connectionString)
+	tracker, err := newRequestTracker(connectionString)
 	if err != nil {
 		slog.Error("failed to configure app insights request tracking", "error", err)
-		return next
+		return nil
 	}
 
-	return handler
+	return tracker
 }
 
 func newAppInsightsTelemetryClient(connectionString string) (azureappinsights.TelemetryClient, error) {
@@ -224,15 +230,14 @@ func sessionCookie(r *http.Request, sessionID string) *http.Cookie {
 	}
 }
 
-func withBaseMiddleware(h http.Handler) http.Handler {
+func BaseMiddleware(h http.Handler) http.Handler {
 	h = &recoverer{h}
-	h = newAppInsightsTrackerFromEnv(h)
 	h = &logger{h}
 	return &operationIDHandler{h}
 }
 
-// session id cookies could break some cache garuntees.
-func WithMiddleware(h http.Handler) http.Handler {
-	h = withBaseMiddleware(h)
+func AppMiddleWare(h http.Handler, tracker requestTracker) http.Handler {
+	h = BaseMiddleware(h)
+	h = newAppInsightsTracker(h, tracker)
 	return &sessionIDHandler{h}
 }

@@ -1,17 +1,6 @@
 package main
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"html/template"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
 	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/auth"
@@ -26,6 +15,17 @@ import (
 	"careme/internal/static"
 	"careme/internal/templates"
 	"careme/internal/users"
+	"context"
+	"errors"
+	"fmt"
+	"html/template"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	utypes "careme/internal/users/types"
 )
 
@@ -42,9 +42,9 @@ func runServer(cfg *config.Config, addr string) error {
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
-		return authClient.WithAuthHTTP(WithMiddleware(h))
+		return authClient.WithAuthHTTP(AppMiddleWare(h, newRequestTrackerFromEnv()))
 	})
-	infraRoutes := routing.Wrap(rootMux, withBaseMiddleware)
+	infraRoutes := routing.Wrap(rootMux, BaseMiddleware)
 
 	authClient.Register(appRoutes)
 	static.Register(infraRoutes)
@@ -148,7 +148,7 @@ func runServer(cfg *config.Config, addr string) error {
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)
 
-	//no logging for readyiness too noisy.
+	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
 
 	server := &http.Server{
