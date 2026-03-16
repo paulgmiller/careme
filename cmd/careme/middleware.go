@@ -180,41 +180,12 @@ type operationIDHandler struct {
 	http.Handler
 }
 
+// extract or generate an operation ID for the request, add it to the context, and set it in the response header. The operation ID is used for correlating logs and telemetry.
 func (h *operationIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	operationID := operationIDFromRequest(r)
+	operationID := uuid.NewString()
 	ctx := logsetup.WithOperationID(r.Context(), operationID)
 	w.Header().Set("X-Operation-ID", operationID)
 	h.Handler.ServeHTTP(w, r.WithContext(ctx))
-}
-
-func operationIDFromRequest(r *http.Request) string {
-	if traceID, ok := traceIDFromTraceparent(r.Header.Get("Traceparent")); ok {
-		return traceID
-	}
-	if requestID := strings.TrimSpace(r.Header.Get("X-Request-Id")); requestID != "" {
-		return requestID
-	}
-	return uuid.NewString()
-}
-
-func traceIDFromTraceparent(traceparent string) (string, bool) {
-	parts := strings.Split(strings.TrimSpace(traceparent), "-")
-	if len(parts) < 4 {
-		return "", false
-	}
-	traceID := parts[1]
-	if len(traceID) != 32 {
-		return "", false
-	}
-	for _, c := range traceID {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return "", false
-		}
-	}
-	if traceID == "00000000000000000000000000000000" {
-		return "", false
-	}
-	return traceID, true
 }
 
 func WithMiddleware(h http.Handler) http.Handler {

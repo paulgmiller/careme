@@ -153,46 +153,6 @@ func TestAppInsightsTrackerReusesOperationIDFromContext(t *testing.T) {
 	}
 }
 
-func TestOperationIDHandlerUsesTraceparentTraceID(t *testing.T) {
-	var seenOperationID string
-	h := &operationIDHandler{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var ok bool
-		seenOperationID, ok = logsetup.OperationIDFromContext(r.Context())
-		if !ok {
-			t.Fatal("expected operation id in context")
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})}
-
-	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/about", nil)
-	req.Header.Set("Traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if seenOperationID != "4bf92f3577b34da6a3ce929d0e0e4736" {
-		t.Fatalf("expected trace id from traceparent, got %q", seenOperationID)
-	}
-	if rec.Header().Get("X-Operation-ID") != seenOperationID {
-		t.Fatalf("expected response header operation id %q, got %q", seenOperationID, rec.Header().Get("X-Operation-ID"))
-	}
-}
-
-func TestOperationIDHandlerUsesRequestIDHeaderFallback(t *testing.T) {
-	var seenOperationID string
-	h := &operationIDHandler{Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		seenOperationID, _ = logsetup.OperationIDFromContext(r.Context())
-	})}
-
-	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/about", nil)
-	req.Header.Set("X-Request-Id", "req-123")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if seenOperationID != "req-123" {
-		t.Fatalf("expected request id fallback, got %q", seenOperationID)
-	}
-}
-
 func TestParseAppInsightsConnectionString(t *testing.T) {
 	connectionString := "InstrumentationKey=test-key;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=app-id"
 	cfg, err := parseAppInsightsConnectionString(connectionString)
