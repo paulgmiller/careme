@@ -25,6 +25,7 @@ import (
 	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 	"careme/internal/publix"
+	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -288,7 +289,7 @@ func (l *locationServer) Ready(ctx context.Context) error {
 	return err
 }
 
-func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient) {
+func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthClient) {
 	mux.HandleFunc("GET /locations/zip-from-coordinates", func(w http.ResponseWriter, r *http.Request) {
 		lat, err := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
 		if err != nil {
@@ -356,7 +357,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		Locations:       locs,
 		Zip:             zip,
 		FavoriteStore:   favoriteStore,
-		ClarityScript:   templates.ClarityScript(),
+		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  serverSignedIn,

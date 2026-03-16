@@ -1,11 +1,13 @@
 package templates
 
 import (
+	"context"
 	"embed"
 	"html/template"
 	"os"
 
 	"careme/internal/config"
+	"careme/internal/logsetup"
 )
 
 //go:embed *.html
@@ -62,11 +64,12 @@ var (
 	GoogleConversionLabel string
 )
 
-// ClarityScript generates the Microsoft Clarity tracking script HTML
-func ClarityScript() template.HTML {
+// ClarityScript generates the Microsoft Clarity tracking script HTML.
+func ClarityScript(ctx context.Context) template.HTML {
 	if Clarityproject == "" {
 		return ""
 	}
+	sessionID, _ := logsetup.SessionIDFromContext(ctx)
 
 	script := `<script type="text/javascript">
     (function(c,l,a,r,i,t,y){
@@ -74,6 +77,13 @@ func ClarityScript() template.HTML {
         t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
         y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
     })(window, document, "clarity", "script", "` + Clarityproject + `");
+`
+	if sessionID != "" {
+		script += `
+    window.clarity("identify", "` + template.JSEscapeString(sessionID) + `", "` + template.JSEscapeString(sessionID) + `");
+`
+	}
+	script += `
 </script>`
 
 	return template.HTML(script)
