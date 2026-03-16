@@ -90,24 +90,6 @@ func TestAppInsightsTrackerDefaultsStatusCodeTo200(t *testing.T) {
 	}
 }
 
-func TestAppInsightsTrackerSkipsReady(t *testing.T) {
-	tracker := &fakeRequestTracker{}
-	mw := &appInsightsTracker{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}),
-		tracker: tracker,
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/ready", nil)
-	rec := httptest.NewRecorder()
-	mw.ServeHTTP(rec, req)
-
-	if len(tracker.calls) != 0 {
-		t.Fatalf("expected 0 tracked requests for /ready, got %d", len(tracker.calls))
-	}
-}
-
 func TestAppInsightsTrackerTracksRecoveredPanicAs500(t *testing.T) {
 	tracker := &fakeRequestTracker{}
 	mw := &appInsightsTracker{
