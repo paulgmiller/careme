@@ -20,6 +20,7 @@ import (
 	"careme/internal/ingredients"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
 	"careme/internal/static"
@@ -40,11 +41,13 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 
 	rootMux := http.NewServeMux()
-	appMux := http.NewServeMux()
-	infraMux := http.NewServeMux()
+	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
+		return authClient.WithAuthHTTP(WithMiddleware(h))
+	})
+	infraRoutes := routing.Wrap(rootMux, withBaseMiddleware)
 
-	authClient.Register(appMux)
-	static.Register(infraMux)
+	authClient.Register(appRoutes)
+	static.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
 
@@ -61,26 +64,26 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
-	userHandler.Register(appMux)
+	userHandler.Register(appRoutes)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
-	locationServer.Register(appMux, authClient)
+	locationServer.Register(appRoutes, authClient)
 
 	sitemapHandler := sitemap.New(cache)
-	sitemapHandler.Register(infraMux)
+	sitemapHandler.Register(infraRoutes)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
-	recipeHandler.Register(appMux)
+	recipeHandler.Register(appRoutes)
 
-	actowiz.NewServer().Register(infraMux)
+	actowiz.NewServer().Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
-	appMux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
+	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 
-	appMux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
+	appRoutes.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		data := struct {
 			ClarityScript   template.HTML
@@ -97,7 +100,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 	})
 
-	appMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	appRoutes.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		currentUser, err := userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
@@ -145,22 +148,11 @@ func runServer(cfg *config.Config, addr string) error {
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)
 
-	infraMux.Handle("/ready", ro)
-
-	appHandler := WithMiddleware(appMux)
-	infraHandler := withBaseMiddleware(infraMux)
-
-	rootMux.Handle("/static/", infraHandler)
-	rootMux.Handle("/favicon.ico", infraHandler)
-	rootMux.Handle("/robots.txt", infraHandler)
-	rootMux.Handle("/sitemap.xml", infraHandler)
-	rootMux.Handle("GET /actowiz/stores.json", infraHandler)
-	rootMux.Handle("/ready", infraHandler)
-	rootMux.Handle("/", appHandler)
+	infraRoutes.Handle("/ready", ro)
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: authClient.WithAuthHTTP(rootMux),
+		Handler: rootMux,
 	}
 
 	// Channel to listen for errors coming from the server

@@ -16,6 +16,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/routing"
 	"careme/internal/templates"
 	"careme/internal/users"
 
@@ -175,21 +176,21 @@ func newTestServer(t *testing.T) *httptest.Server {
 	mockAuth := auth.Mock(cfg)
 
 	rootMux := http.NewServeMux()
-	appMux := http.NewServeMux()
-	infraMux := http.NewServeMux()
+	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
+		return mockAuth.WithAuthHTTP(WithMiddleware(h))
+	})
+	infraRoutes := routing.Wrap(rootMux, withBaseMiddleware)
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
-	locationServer.Register(appMux, mockAuth)
-	users.NewHandler(userStorage, locationStorage, mockAuth).Register(appMux)
-	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(appMux)
+	locationServer.Register(appRoutes, mockAuth)
+	users.NewHandler(userStorage, locationStorage, mockAuth).Register(appRoutes)
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(appRoutes)
 
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)
 
-	infraMux.Handle("/ready", ro)
-	rootMux.Handle("/ready", withBaseMiddleware(infraMux))
-	rootMux.Handle("/", WithMiddleware(appMux))
+	infraRoutes.Handle("/ready", ro)
 
-	return httptest.NewServer(mockAuth.WithAuthHTTP(rootMux))
+	return httptest.NewServer(rootMux)
 }
 
 func newTestClient(t *testing.T) *http.Client {

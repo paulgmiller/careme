@@ -14,6 +14,7 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/routing"
 	utypes "careme/internal/users/types"
 )
 
@@ -31,7 +32,7 @@ func (t testAuthClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	return handler
 }
 
-func (t testAuthClient) Register(_ *http.ServeMux) {}
+func (t testAuthClient) Register(_ routing.Registrar) {}
 
 type failingLocationGetter struct{}
 
