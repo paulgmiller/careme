@@ -57,7 +57,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
 
-	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
+	userHandler := users.NewHandler(userStorage, locationStorage, cache, authClient)
 	userHandler.Register(mux)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)

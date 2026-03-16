@@ -127,6 +127,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		Thread             []RecipeThreadEntry
 		Feedback           RecipeFeedback
 		RecipeHash         string
+		FeedbackWidgetID   string
 		Style              seasons.Style
 		ServerSignedIn     bool
 	}{
@@ -142,6 +143,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		Thread:             thread,
 		Feedback:           feedback,
 		RecipeHash:         recipe.ComputeHash(),
+		FeedbackWidgetID:   "recipe-feedback-" + templates.SafeDOMIDComponent(recipe.ComputeHash()),
 		Style:              seasons.GetCurrentStyle(),
 		ServerSignedIn:     signedIn,
 	}
@@ -327,7 +329,7 @@ func shoppingWineDetailDOMIDs(hash string) (containerID string, buttonID string)
 }
 
 func shoppingWineSafeHash(hash string) string {
-	return strings.TrimRight(strings.TrimSpace(hash), "=")
+	return templates.SafeDOMIDComponent(hash)
 }
 
 func winePreviewPicks(selection *ai.WineSelection) []ai.Ingredient {

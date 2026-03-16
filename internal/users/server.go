@@ -2,13 +2,16 @@ package users
 
 import (
 	"careme/internal/auth"
+	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"context"
+	"encoding/json"
 	"errors"
 	"html/template"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -23,17 +26,35 @@ type server struct {
 	storage   *Storage
 	userTmpl  *template.Template // just remove or is this useful?
 	locGetter locationGetter
+	cache     cache.Cache
 	clerk     auth.AuthClient // make an interface
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient) *server {
+func NewHandler(storage *Storage, locGetter locationGetter, feedbackCache cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
 		storage:   storage,
 		userTmpl:  templates.User,
 		locGetter: locGetter,
+		cache:     feedbackCache,
 		clerk:     clerkClient,
 	}
+}
+
+const recipeFeedbackPrefix = "recipe_feedback/"
+
+type savedRecipeFeedback struct {
+	Cooked    bool      `json:"cooked"`
+	Stars     int       `json:"stars,omitempty"`
+	Comment   string    `json:"comment,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type savedRecipeView struct {
+	utypes.Recipe
+	RecipeHash       string
+	Feedback         savedRecipeFeedback
+	FeedbackWidgetID string
 }
 
 func (s *server) Register(mux *http.ServeMux) {
@@ -168,10 +189,30 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	if len(userForTemplate.LastRecipes) > 14 {
 		userForTemplate.LastRecipes = userForTemplate.LastRecipes[0:14]
 	}
+	savedRecipes := make([]savedRecipeView, 0, len(userForTemplate.LastRecipes))
+	for _, recipe := range userForTemplate.LastRecipes {
+		view := savedRecipeView{
+			Recipe:           recipe,
+			RecipeHash:       recipe.Hash,
+			FeedbackWidgetID: "saved-recipe-feedback-" + templates.SafeDOMIDComponent(recipe.Hash),
+		}
+		if recipe.Hash != "" {
+			feedback, err := s.feedbackFromCache(ctx, recipe.Hash)
+			if err != nil {
+				if !errors.Is(err, cache.ErrNotFound) {
+					slog.ErrorContext(ctx, "failed to load saved recipe feedback", "hash", recipe.Hash, "error", err)
+				}
+			} else {
+				view.Feedback = feedback
+			}
+		}
+		savedRecipes = append(savedRecipes, view)
+	}
 	data := struct {
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
 		User              *utypes.User
+		SavedRecipes      []savedRecipeView
 		Success           bool
 		FavoriteStoreName string
 		ActiveTab         string
@@ -181,6 +222,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		ClarityScript:     templates.ClarityScript(),
 		GoogleTagScript:   templates.GoogleTagScript(),
 		User:              userForTemplate,
+		SavedRecipes:      savedRecipes,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
 		ActiveTab:         activeTab,
@@ -240,6 +282,30 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) feedbackFromCache(ctx context.Context, hash string) (savedRecipeFeedback, error) {
+	if s.cache == nil {
+		return savedRecipeFeedback{}, cache.ErrNotFound
+	}
+	feedbackBlob, err := s.cache.Get(ctx, recipeFeedbackPrefix+hash)
+	if err != nil {
+		return savedRecipeFeedback{}, err
+	}
+	defer func() {
+		if closeErr := feedbackBlob.Close(); closeErr != nil {
+			slog.ErrorContext(ctx, "failed to close saved recipe feedback", "hash", hash, "error", closeErr)
+		}
+	}()
+
+	var feedback savedRecipeFeedback
+	if err := json.NewDecoder(feedbackBlob).Decode(&feedback); err != nil {
+		if errors.Is(err, io.EOF) {
+			return savedRecipeFeedback{}, nil
+		}
+		return savedRecipeFeedback{}, err
+	}
+	return feedback, nil
 }
 
 func isHTMXRequest(r *http.Request) bool {
