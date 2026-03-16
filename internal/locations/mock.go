@@ -64,7 +64,7 @@ func (m mock) Register(mux *http.ServeMux, _ auth.AuthClient) {
 			Locations:       lo.Values(fakes),
 			Zip:             r.URL.Query().Get("zip"),
 			FavoriteStore:   "",
-			ClarityScript:   templates.ClarityScript(),
+			ClarityScript:   templates.ClarityScript(r.Context()),
 			GoogleTagScript: templates.GoogleTagScript(),
 			Style:           seasons.GetCurrentStyle(),
 		}

@@ -84,7 +84,7 @@ func runServer(cfg *config.Config, addr string) error {
 			GoogleTagScript template.HTML
 			Style           seasons.Style
 		}{
-			ClarityScript:   templates.ClarityScript(),
+			ClarityScript:   templates.ClarityScript(ctx),
 			GoogleTagScript: templates.GoogleTagScript(),
 			Style:           seasons.GetCurrentStyle(),
 		}
@@ -126,7 +126,7 @@ func runServer(cfg *config.Config, addr string) error {
 			Style             seasons.Style
 			ServerSignedIn    bool
 		}{
-			ClarityScript:     templates.ClarityScript(),
+			ClarityScript:     templates.ClarityScript(ctx),
 			GoogleTagScript:   templates.GoogleTagScript(),
 			User:              currentUser,
 			FavoriteStoreName: favoriteStoreName,

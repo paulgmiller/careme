@@ -179,7 +179,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Style             seasons.Style
 		ServerSignedIn    bool
 	}{
-		ClarityScript:     templates.ClarityScript(),
+		ClarityScript:     templates.ClarityScript(ctx),
 		GoogleTagScript:   templates.GoogleTagScript(),
 		User:              userForTemplate,
 		Success:           success,
