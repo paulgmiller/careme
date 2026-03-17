@@ -277,6 +277,37 @@ func TestWithMiddlewareProvidesBothIDs(t *testing.T) {
 	}
 }
 
+func TestWithMiddlewareProvidesIDsWithoutTracker(t *testing.T) {
+	var operationID string
+	var sessionID string
+	handler := AppMiddleWare(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		operationID, _ = logsetup.OperationIDFromContext(r.Context())
+		sessionID, _ = logsetup.SessionIDFromContext(r.Context())
+		w.WriteHeader(http.StatusNoContent)
+	}), nil)
+
+	req := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", rec.Code)
+	}
+	if operationID == "" {
+		t.Fatal("expected operation id in context")
+	}
+	if sessionID == "" {
+		t.Fatal("expected session id in context")
+	}
+	if rec.Header().Get("X-Operation-ID") != operationID {
+		t.Fatalf("expected X-Operation-ID %q, got %q", operationID, rec.Header().Get("X-Operation-ID"))
+	}
+	cookie := findCookie(t, rec.Result().Cookies(), sessionCookieName)
+	if cookie.Value != sessionID {
+		t.Fatalf("expected session cookie %q, got %q", sessionID, cookie.Value)
+	}
+}
+
 func findCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Cookie {
 	t.Helper()
 	for _, cookie := range cookies {
