@@ -131,12 +131,14 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		for _, dismissed := range p.Dismissed {
 			instructions = append(instructions, "Passed on "+dismissed.Title)
 		}
+		if savedInstruction := savedRecipesAvoidInstruction(p.Saved, p.PriorSavedHashes); savedInstruction != "" {
+			instructions = append(instructions, savedInstruction)
+		}
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		// want to add saved to insructions but only once. TODO
 		// Include saved recipes in the shopping list
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
@@ -224,4 +226,42 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
 	lo.Must(io.WriteString(fnv, normalizedStyle))
 	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
+}
+
+func savedRecipesAvoidInstruction(saved []ai.Recipe, priorSavedHashes []string) string {
+	if len(saved) == 0 {
+		return ""
+	}
+
+	prior := make(map[string]struct{}, len(priorSavedHashes))
+	for _, hash := range priorSavedHashes {
+		hash = strings.TrimSpace(hash)
+		if hash == "" {
+			continue
+		}
+		prior[hash] = struct{}{}
+	}
+
+	titles := make([]string, 0, len(saved))
+	seen := make(map[string]struct{}, len(saved))
+	for _, recipe := range saved {
+		hash := recipe.ComputeHash()
+		if _, ok := prior[hash]; ok {
+			continue
+		}
+		if _, ok := seen[hash]; ok {
+			continue
+		}
+		seen[hash] = struct{}{}
+
+		title := strings.TrimSpace(recipe.Title)
+		if title == "" {
+			title = "saved recipe " + hash
+		}
+		titles = append(titles, title)
+	}
+	if len(titles) == 0 {
+		return ""
+	}
+	return "Keep these already-saved recipes and do not repeat them: " + strings.Join(titles, "; ")
 }

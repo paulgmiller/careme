@@ -510,6 +510,9 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	c.mu.Lock()
 	clone := *p
 	clone.LastRecipes = append([]string(nil), p.LastRecipes...)
+	clone.PriorSavedHashes = append([]string(nil), p.PriorSavedHashes...)
+	clone.Saved = append([]ai.Recipe(nil), p.Saved...)
+	clone.Dismissed = append([]ai.Recipe(nil), p.Dismissed...)
 	c.last = &clone
 	c.mu.Unlock()
 	if c.called != nil {
@@ -541,6 +544,9 @@ func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
 	}
 	clone := *c.last
 	clone.LastRecipes = append([]string(nil), c.last.LastRecipes...)
+	clone.PriorSavedHashes = append([]string(nil), c.last.PriorSavedHashes...)
+	clone.Saved = append([]ai.Recipe(nil), c.last.Saved...)
+	clone.Dismissed = append([]ai.Recipe(nil), c.last.Dismissed...)
 	return &clone
 }
 
@@ -1354,6 +1360,77 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 	}
 	if len(updatedParams.Dismissed) != 1 || updatedParams.Dismissed[0].ComputeHash() != dismissedRecipe.ComputeHash() {
 		t.Fatalf("expected dismissed recipe selection to persist in params, got %#v", updatedParams.Dismissed)
+	}
+}
+
+func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := &server{
+		recipeio:  recipeio{Cache: cacheStore},
+		storage:   storage,
+		clerk:     auth.DefaultMock(),
+		generator: generator,
+	}
+	t.Cleanup(s.Wait)
+
+	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
+	newlySaved := ai.Recipe{Title: "Newly Saved", Description: "Saved now"}
+	available := ai.Recipe{Title: "Still Available", Description: "Fresh"}
+
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	p.ConversationID = "conv-123"
+	p.Saved = []ai.Recipe{alreadySaved}
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+
+	if err := s.SaveRecipes(t.Context(), []ai.Recipe{alreadySaved, newlySaved, available}, originHash); err != nil {
+		t.Fatalf("failed to save recipes: %v", err)
+	}
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{alreadySaved, newlySaved, available},
+		ConversationID: "conv-123",
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+
+	if err := s.saveRecipeSelection(t.Context(), "mock-clerk-user-id", originHash, recipeSelection{
+		SavedHashes: []string{alreadySaved.ComputeHash(), newlySaved.ComputeHash()},
+	}); err != nil {
+		t.Fatalf("failed to save selection: %v", err)
+	}
+
+	form := url.Values{"instructions": {"make it faster"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+originHash+"/regenerate", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", originHash)
+	rr := httptest.NewRecorder()
+
+	s.handleRegenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	select {
+	case <-generator.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for generator call")
+	}
+
+	captured := generator.LastParams()
+	if captured == nil {
+		t.Fatal("expected captured params")
+	}
+	if got, want := captured.PriorSavedHashes, []string{alreadySaved.ComputeHash()}; !slices.Equal(got, want) {
+		t.Fatalf("expected prior saved hashes %v, got %v", want, got)
+	}
+	if len(captured.Saved) != 2 {
+		t.Fatalf("expected both current saved recipes, got %#v", captured.Saved)
 	}
 }
 

@@ -688,6 +688,7 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 
 	params := *baseParams
 	params.Instructions = instructions
+	params.PriorSavedHashes = recipeHashes(baseParams.Saved)
 	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
 	if params.ConversationID == "" {
 		params.ConversationID = currentList.ConversationID
