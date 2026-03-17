@@ -21,6 +21,8 @@ import (
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
 
+	"github.com/samber/lo"
+	lop "github.com/samber/lo/parallel"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -135,12 +137,6 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 
 	p := recipes.DefaultParams(l, date)
 	// p.UserID = user.ID
-	for _, last := range user.LastRecipes {
-		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
-			continue
-		}
-		p.LastRecipes = append(p.LastRecipes, last.Title)
-	}
 
 	paramsHash := p.Hash()
 	sentKey := mailSentPrefix + paramsHash + "/" + user.ID
@@ -169,6 +165,28 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 			}
 		}
 
+		//TODO refactor with recipes/server.go
+		recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
+			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) //magic number. Should it be loner and shoul we use star rating?
+		})
+
+		keep := lop.Map(recent, func(r utypes.Recipe, _ int) bool {
+			feedback, err := rio.FeedbackFromCache(ctx, r.Hash)
+			if err != nil {
+				if !errors.Is(err, cache.ErrNotFound) {
+					slog.WarnContext(ctx, "failed to load recipe feedback while building avoid list", "recipe_hash", r.Hash, "error", err)
+				}
+				return false
+			}
+			return feedback.Cooked
+		})
+
+		for i, last := range recent {
+			if !keep[i] {
+				continue
+			}
+			p.LastRecipes = append(p.LastRecipes, last.Title)
+		}
 		// can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
