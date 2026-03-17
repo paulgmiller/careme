@@ -1,11 +1,12 @@
 package feedback
 
 import (
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"log/slog"
 	"time"
+
+	"careme/internal/cache"
 )
 
 type Feedback struct {

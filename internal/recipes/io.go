@@ -1,15 +1,16 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/recipes/feedback"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/recipes/feedback"
 
 	"github.com/samber/lo"
 )

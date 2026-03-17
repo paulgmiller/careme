@@ -2,13 +2,6 @@ package recipes
 
 import (
 	"bytes"
-	"careme/internal/ai"
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/locations"
-	"careme/internal/recipes/feedback"
-	"careme/internal/routing"
-	"careme/internal/users"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -21,6 +14,14 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 )
