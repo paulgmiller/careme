@@ -89,6 +89,10 @@ func (a *appInsightsTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func newAppInsightsTracker(next http.Handler, tracker requestTracker) http.Handler {
+	if tracker == nil {
+		return next
+	}
+
 	return &appInsightsTracker{
 		Handler: next,
 		tracker: tracker,
