@@ -12,6 +12,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"careme/internal/templates"
 
 	"golang.org/x/net/html"
@@ -59,7 +60,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, true, w)
+	FormatShoppingListHTML(t.Context(), p, list, true, w)
 	html := w.Body.String()
 	if w.Code != http.StatusOK {
 		t.Error("Want ok statuscode")
@@ -92,7 +93,7 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, true, w)
+	FormatShoppingListHTML(t.Context(), p, list, true, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -107,7 +108,7 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 
 	templates.Clarityproject = "test456"
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, true, w)
+	FormatShoppingListHTML(t.Context(), p, list, true, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.clarity.ms/tag/")) {
 		t.Error("HTML should contain Clarity script URL")
 	}
@@ -117,12 +118,31 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingListHTML_IncludesClaritySessionID(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+
+	prev := templates.Clarityproject
+	t.Cleanup(func() {
+		templates.Clarityproject = prev
+	})
+	templates.Clarityproject = "test456"
+
+	ctx := logsetup.WithSessionID(t.Context(), "sess-123")
+
+	w := httptest.NewRecorder()
+	FormatShoppingListHTMLForHash(ctx, p, list, nil, true, p.Hash(), w)
+	if !bytes.Contains(w.Body.Bytes(), []byte(`window.clarity("identify", "sess-123", "sess-123")`)) {
+		t.Error("HTML should include Clarity identify call with session id")
+	}
+}
+
 func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	templates.Clarityproject = ""
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, true, w)
+	FormatShoppingListHTML(t.Context(), p, list, true, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")
 	}
@@ -138,7 +158,7 @@ func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
 	})
 	templates.GoogleTagID = "AW-1234567890"
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, true, w)
+	FormatShoppingListHTML(t.Context(), p, list, true, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtag/js?id=AW-1234567890")) {
 		t.Error("HTML should contain Google tag script URL")
 	}
@@ -157,7 +177,7 @@ func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 	})
 	templates.GoogleTagID = ""
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, true, w)
+	FormatShoppingListHTML(t.Context(), p, list, true, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("googletagmanager.com")) {
 		t.Error("HTML should not contain Google tag script when tag ID is empty")
 	}
@@ -167,7 +187,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, list, true, w)
+	FormatShoppingListHTML(t.Context(), p, list, true, w)
 	html := w.Body.String()
 
 	// Verify "Careme Recipes" is a link to home page
@@ -184,7 +204,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -247,7 +267,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], false, []RecipeThreadEntry{}, RecipeFeedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, []RecipeThreadEntry{}, RecipeFeedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -265,7 +285,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, &ai.WineSelection{
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Oregon Pinot Noir", Price: "$14.99"},
 			{Name: "Backup Chardonnay", Price: "$11.99"},
@@ -322,7 +342,7 @@ func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *te
 	pickerPreviewID := shoppingWinePreviewDOMID(pickerHash)
 	pickerDetailID, pickerDetailButtonID := shoppingWineDetailDOMIDs(pickerHash)
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(p, multi, map[string]*ai.WineSelection{
+	FormatShoppingListHTMLForHash(t.Context(), p, multi, map[string]*ai.WineSelection{
 		wineHash: {
 			Wines: []ai.Ingredient{
 				{Name: "Cellar Red", Quantity: "1 bottle", Price: "$15"},

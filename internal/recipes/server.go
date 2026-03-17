@@ -19,12 +19,14 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
+	lop "github.com/samber/lo/parallel"
 )
 
 func setTextContent(w http.ResponseWriter) {
@@ -67,7 +69,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 	}
 }
 
-func (s *server) Register(mux *http.ServeMux) {
+func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
@@ -102,9 +104,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	var thread []RecipeThreadEntry
 	var wineRecommendation *ai.WineSelection
 	var loadWG sync.WaitGroup
-	loadWG.Add(3)
-	go func() {
-		defer loadWG.Done()
+	loadWG.Go(func() {
 		existing, err := s.FeedbackFromCache(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
@@ -113,9 +113,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		feedback = *existing
-	}()
-	go func() {
-		defer loadWG.Done()
+	})
+	loadWG.Go(func() {
 		existing, err := s.ThreadFromCache(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
@@ -124,9 +123,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		thread = existing
-	}()
-	go func() {
-		defer loadWG.Done()
+	})
+	loadWG.Go(func() {
 		selection, err := s.WineFromCache(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
@@ -135,7 +133,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		wineRecommendation = selection
-	}()
+	})
 	loadWG.Wait()
 
 	if recipe.OriginHash == "" {
@@ -144,7 +142,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
-		FormatRecipeHTML(p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
+		FormatRecipeHTML(ctx, p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
 		return
 	}
 	// we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
@@ -173,7 +171,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
+	FormatRecipeHTML(ctx, p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
@@ -686,6 +684,7 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 
 	params := *baseParams
 	params.Instructions = instructions
+	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
 	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
 	if params.ConversationID == "" {
 		params.ConversationID = currentList.ConversationID
@@ -810,7 +809,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}(recipeHash)
 		}
 		wineWG.Wait()
-		FormatShoppingListHTMLForHash(p, *slist, wineRecommendations, signedIn, hashParam, w)
+		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, w)
 		return
 	}
 
@@ -856,20 +855,34 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
-	for _, last := range currentUser.LastRecipes {
-		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
-			break
-		}
-		p.LastRecipes = append(p.LastRecipes, last.Title)
-	}
-
 	hash := p.Hash()
 
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		// copy over request id to new context? can't be same context because end of http request will cancel it.
 		ctx := context.WithoutCancel(ctx)
+
+		recent := lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
+			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
+		})
+
+		keep := lop.Map(recent, func(r utypes.Recipe, _ int) bool {
+			feedback, err := s.FeedbackFromCache(ctx, r.Hash)
+			if err != nil {
+				if !errors.Is(err, cache.ErrNotFound) {
+					slog.WarnContext(ctx, "failed to load recipe feedback while building avoid list", "recipe_hash", r.Hash, "error", err)
+				}
+				return false
+			}
+			return feedback.Cooked
+		})
+
+		for i, last := range recent {
+			if !keep[i] {
+				continue
+			}
+			p.LastRecipes = append(p.LastRecipes, last.Title)
+		}
+
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
@@ -883,7 +896,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 			slog.ErrorContext(ctx, "save error", "error", err)
 			return
 		}
-	}()
+	})
 }
 
 func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
@@ -895,7 +908,7 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 		Style           seasons.Style
 		RefreshInterval string // seconds
 	}{
-		ClarityScript:   templates.ClarityScript(),
+		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
 		RefreshInterval: "10", // seconds

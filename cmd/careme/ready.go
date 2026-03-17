@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 )
@@ -17,6 +18,7 @@ func (r *readyOnce) Ready(ctx context.Context) error {
 	}
 	for _, check := range r.checks {
 		if err := check.Ready(ctx); err != nil {
+			slog.ErrorContext(ctx, "check failed", "error", err, "check", fmt.Sprintf("%T", check))
 			return err
 		}
 	}

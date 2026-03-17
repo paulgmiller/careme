@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -131,12 +132,14 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		for _, dismissed := range p.Dismissed {
 			instructions = append(instructions, "Passed on "+dismissed.Title)
 		}
+		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
+			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
+		}
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		// want to add saved to insructions but only once. TODO
 		// Include saved recipes in the shopping list
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
@@ -224,4 +227,16 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
 	lo.Must(io.WriteString(fnv, normalizedStyle))
 	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
+}
+
+func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
+	titles := make([]string, 0, len(saved))
+	for _, recipe := range saved {
+		hash := recipe.ComputeHash()
+		if slices.Contains(priorSavedHashes, hash) {
+			continue
+		}
+		titles = append(titles, recipe.Title)
+	}
+	return lo.Uniq(titles)
 }

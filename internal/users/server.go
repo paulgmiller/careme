@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/locations"
+	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -37,7 +38,7 @@ func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.Aut
 	}
 }
 
-func (s *server) Register(mux *http.ServeMux) {
+func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
 	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
@@ -179,7 +180,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Style             seasons.Style
 		ServerSignedIn    bool
 	}{
-		ClarityScript:     templates.ClarityScript(),
+		ClarityScript:     templates.ClarityScript(ctx),
 		GoogleTagScript:   templates.GoogleTagScript(),
 		User:              userForTemplate,
 		Success:           success,

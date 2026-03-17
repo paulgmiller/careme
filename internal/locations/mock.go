@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"careme/internal/auth"
+	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 
@@ -51,7 +52,7 @@ func (m mock) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
 	return "", false
 }
 
-func (m mock) Register(mux *http.ServeMux, _ auth.AuthClient) {
+func (m mock) Register(mux routing.Registrar, _ auth.AuthClient) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		data := struct {
 			Locations       []Location
@@ -64,7 +65,7 @@ func (m mock) Register(mux *http.ServeMux, _ auth.AuthClient) {
 			Locations:       lo.Values(fakes),
 			Zip:             r.URL.Query().Get("zip"),
 			FavoriteStore:   "",
-			ClarityScript:   templates.ClarityScript(),
+			ClarityScript:   templates.ClarityScript(r.Context()),
 			GoogleTagScript: templates.GoogleTagScript(),
 			Style:           seasons.GetCurrentStyle(),
 		}
