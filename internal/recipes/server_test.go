@@ -133,7 +133,7 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 		ZipCode: "94105",
 	}
 	s := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   storage,
 		clerk:     auth.DefaultMock(),
 		generator: mock{},
@@ -205,7 +205,7 @@ func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *t
 		ZipCode: "94105",
 	}
 	s := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   storage,
 		clerk:     auth.DefaultMock(),
 		generator: mock{},
@@ -269,7 +269,7 @@ func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *t
 func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    auth.DefaultMock(),
 	}
@@ -330,7 +330,7 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 func TestHandleSingle_LegacyOriginHashDoesNotFailWhenParamsMissing(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    auth.DefaultMock(),
 	}
@@ -379,7 +379,7 @@ func TestHandleSingle_LegacyOriginHashDoesNotFailWhenParamsMissing(t *testing.T)
 func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    auth.DefaultMock(),
 	}
@@ -456,7 +456,7 @@ func (n noSessionAuth) Register(mux routing.Registrar) {}
 func TestHandleQuestion_RequiresSignedInUser(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    noSessionAuth{},
 	}
@@ -481,7 +481,7 @@ func TestHandleQuestion_RequiresSignedInUser(t *testing.T) {
 func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    auth.DefaultMock(),
 	}
@@ -557,7 +557,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	storage := users.NewStorage(cacheStore)
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		clerk:     auth.DefaultMock(),
 		storage:   storage,
 		generator: generator,
@@ -646,7 +646,7 @@ func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
 func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   users.NewStorage(cacheStore),
 		clerk:     auth.DefaultMock(),
 		generator: &captureQuestionGenerator{},
@@ -685,7 +685,7 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 func TestHandleQuestion_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    noSessionAuth{},
 	}
@@ -714,7 +714,7 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	g := &captureQuestionGenerator{}
 	s := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   users.NewStorage(cacheStore),
 		clerk:     auth.DefaultMock(),
 		generator: g,
@@ -744,7 +744,7 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 func TestHandleWine_RejectsNonHTMXRequest(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    auth.DefaultMock(),
 	}
@@ -764,7 +764,7 @@ func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	g := &captureQuestionGenerator{}
 	s := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   users.NewStorage(cacheStore),
 		clerk:     auth.DefaultMock(),
 		generator: g,
@@ -824,7 +824,7 @@ func TestHandleWine_ShoppingVariantReturnsShoppingFragment(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	g := &captureQuestionGenerator{}
 	s := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   users.NewStorage(cacheStore),
 		clerk:     auth.DefaultMock(),
 		generator: g,
@@ -878,7 +878,7 @@ func TestHandleWine_UsesCachedWineRecommendation(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	g1 := &captureQuestionGenerator{wineRecommendation: "Try a crisp riesling."}
 	s1 := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   users.NewStorage(cacheStore),
 		clerk:     auth.DefaultMock(),
 		generator: g1,
@@ -921,7 +921,7 @@ func TestHandleWine_UsesCachedWineRecommendation(t *testing.T) {
 
 	g2 := &captureQuestionGenerator{panicOnWine: true}
 	s2 := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   users.NewStorage(cacheStore),
 		clerk:     auth.DefaultMock(),
 		generator: g2,
@@ -948,7 +948,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  storage,
 		clerk:    auth.DefaultMock(),
 	}
@@ -1018,7 +1018,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    noSessionAuth{},
 	}
@@ -1042,7 +1042,7 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  storage,
 		clerk:    auth.DefaultMock(),
 	}
@@ -1098,7 +1098,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  storage,
 		clerk:    auth.DefaultMock(),
 	}
@@ -1191,7 +1191,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 func TestHandleDismissRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    noSessionAuth{},
 	}
@@ -1215,7 +1215,7 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  storage,
 		clerk:    auth.DefaultMock(),
 	}
@@ -1288,7 +1288,7 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   storage,
 		clerk:     auth.DefaultMock(),
 		generator: mock{},
@@ -1371,7 +1371,7 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	storage := users.NewStorage(cacheStore)
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := &server{
-		recipeio:  *IO(cacheStore),
+		recipeio:  IO(cacheStore),
 		storage:   storage,
 		clerk:     auth.DefaultMock(),
 		generator: generator,
@@ -1441,7 +1441,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  storage,
 		clerk:    auth.DefaultMock(),
 	}
@@ -1509,7 +1509,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 func TestParamsForAction_PreservesBaseSelectionWhenSelectionCacheEmpty(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 	}
 
 	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
@@ -1547,7 +1547,7 @@ func TestParamsForAction_PreservesBaseSelectionWhenSelectionCacheEmpty(t *testin
 func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 	}
 
 	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
@@ -1589,7 +1589,7 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    auth.DefaultMock(),
 	}
@@ -1630,7 +1630,7 @@ func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
 func TestHandleFeedback_SavesStarsAndComment(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    auth.DefaultMock(),
 	}
@@ -1670,7 +1670,7 @@ func TestHandleFeedback_SavesStarsAndComment(t *testing.T) {
 func TestHandleFeedback_InvalidStarsRejected(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    auth.DefaultMock(),
 	}
@@ -1695,7 +1695,7 @@ func TestHandleFeedback_InvalidStarsRejected(t *testing.T) {
 func TestHandleFeedback_RejectsNonHTMXRequest(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := &server{
-		recipeio: *IO(cacheStore),
+		recipeio: IO(cacheStore),
 		storage:  users.NewStorage(cacheStore),
 		clerk:    auth.DefaultMock(),
 	}

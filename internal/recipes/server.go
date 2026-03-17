@@ -62,7 +62,7 @@ type server struct {
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, clerkClient auth.AuthClient) *server {
 	io := IO(c)
 	return &server{
-		recipeio:  *io,
+		recipeio:  io,
 		cache:     c,
 		cfg:       cfg,
 		storage:   storage,

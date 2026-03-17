@@ -27,8 +27,8 @@ type recipeio struct {
 	feedback.FeedbackIO
 }
 
-func IO(c cache.Cache) *recipeio {
-	return &recipeio{
+func IO(c cache.Cache) recipeio {
+	return recipeio{
 		Cache:      c,
 		FeedbackIO: feedback.NewIO(c),
 	}
@@ -148,7 +148,7 @@ func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, origin
 
 var ErrAlreadyExists = errors.New("already exists")
 
-func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
+func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	paramsJSON := lo.Must(json.Marshal(p))
 	if err := rio.Cache.Put(ctx, paramsCachePrefix+p.Hash(), string(paramsJSON), cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
@@ -160,7 +160,7 @@ func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	return nil
 }
 
-func (rio *recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
+func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
 	// Save each recipe separately by its hash
 	if err := rio.SaveRecipes(ctx, shoppingList.Recipes, hash); err != nil {
 		return err
