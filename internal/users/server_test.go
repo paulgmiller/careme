@@ -206,13 +206,13 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	}
 
 	body := rr.Body.String()
-	if !strings.Contains(body, `Cooked Pasta</a> <span aria-label="Cooked">🍴</span>`) {
+	if !strings.Contains(body, `Cooked Pasta</a> <span aria-label="Cooked" title="Cooked">🍴</span>`) {
 		t.Fatalf("expected cooked recipe to render emoji, got body: %s", body)
 	}
-	if strings.Contains(body, `Saved Soup</a> <span aria-label="Cooked">🍴</span>`) {
+	if strings.Contains(body, `Saved Soup</a> <span aria-label="Cooked" title="Cooked">🍴</span>`) {
 		t.Fatalf("expected uncooked saved recipe not to render emoji, got body: %s", body)
 	}
-	if strings.Contains(body, `Manual Entry <span aria-label="Cooked">🍴</span>`) {
+	if strings.Contains(body, `Manual Entry <span aria-label="Cooked" title="Cooked">🍴</span>`) {
 		t.Fatalf("expected manual recipe without hash not to render emoji, got body: %s", body)
 	}
 }
