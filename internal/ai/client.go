@@ -78,6 +78,7 @@ func (r *Recipe) ComputeHash() string {
 // intionally not including ConversationID to preserve old hashes
 type ShoppingList struct {
 	ConversationID string   `json:"conversation_id,omitempty" jsonschema:"-"`
+	LastResponseID string   `json:"last_response_id,omitempty" jsonschema:"-"`
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
 }
 
@@ -166,6 +167,7 @@ func responseToShoppingList(ctx context.Context, resp *responses.Response) (*Sho
 		return nil, fmt.Errorf("failed to get conversation ID")
 	}
 	shoppingList.ConversationID = resp.Conversation.ID
+	shoppingList.LastResponseID = strings.TrimSpace(resp.ID)
 
 	return &shoppingList, nil
 }
@@ -181,9 +183,9 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *Client) Regenerate(ctx context.Context, instructions []string, conversationID string) (*ShoppingList, error) {
-	if conversationID == "" {
-		return nil, fmt.Errorf("conversation ID is required for regeneration")
+func (c *Client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*ShoppingList, error) {
+	if strings.TrimSpace(previousResponseID) == "" {
+		return nil, fmt.Errorf("previous response ID is required for regeneration")
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	messages := cleanInstuctions(instructions)
@@ -194,11 +196,9 @@ func (c *Client) Regenerate(ctx context.Context, instructions []string, conversa
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
-		Store: openai.Bool(true),
-		Conversation: responses.ResponseNewParamsConversationUnion{
-			OfString: openai.String(conversationID),
-		},
-		Text: scheme(c.schema),
+		Store:              openai.Bool(true),
+		PreviousResponseID: openai.String(strings.TrimSpace(previousResponseID)),
+		Text:               scheme(c.schema),
 	}
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
@@ -208,13 +208,13 @@ func (c *Client) Regenerate(ctx context.Context, instructions []string, conversa
 	return responseToShoppingList(ctx, resp)
 }
 
-func (c *Client) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+func (c *Client) AskQuestion(ctx context.Context, question string, previousResponseID string) (string, string, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
-		return "", fmt.Errorf("question is required")
+		return "", "", fmt.Errorf("question is required")
 	}
-	if conversationID == "" {
-		return "", fmt.Errorf("conversation ID is required for questions")
+	if strings.TrimSpace(previousResponseID) == "" {
+		return "", "", fmt.Errorf("previous response ID is required for questions")
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
@@ -224,20 +224,18 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(question)},
 		},
-		Store: openai.Bool(true),
-		Conversation: responses.ResponseNewParamsConversationUnion{
-			OfString: openai.String(conversationID),
-		},
+		Store:              openai.Bool(true),
+		PreviousResponseID: openai.String(strings.TrimSpace(previousResponseID)),
 	}
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
-		return "", fmt.Errorf("failed to answer question: %w", err)
+		return "", "", fmt.Errorf("failed to answer question: %w", err)
 	}
 	answer := strings.TrimSpace(resp.OutputText())
 	if answer == "" {
-		return "", fmt.Errorf("empty response from model")
+		return "", "", fmt.Errorf("empty response from model")
 	}
-	return answer, nil
+	return answer, strings.TrimSpace(resp.ID), nil
 }
 
 func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*WineSelection, error) {

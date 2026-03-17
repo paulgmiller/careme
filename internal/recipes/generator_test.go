@@ -34,9 +34,10 @@ func (c *captureWineQuestionAIClient) Regenerate(ctx context.Context, newinstruc
 	panic("unexpected call to Regenerate")
 }
 
-func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (string, string, error) {
 	c.question = question
-	return c.answer, nil
+	_ = previousResponseID
+	return c.answer, "resp-test", nil
 }
 
 func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error) {
