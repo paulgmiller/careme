@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -131,8 +132,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		for _, dismissed := range p.Dismissed {
 			instructions = append(instructions, "Passed on "+dismissed.Title)
 		}
-		if savedInstruction := savedRecipesAvoidInstruction(p.Saved, p.PriorSavedHashes); savedInstruction != "" {
-			instructions = append(instructions, savedInstruction)
+		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
+			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
 		}
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
@@ -228,40 +229,17 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-func savedRecipesAvoidInstruction(saved []ai.Recipe, priorSavedHashes []string) string {
-	if len(saved) == 0 {
-		return ""
-	}
-
-	prior := make(map[string]struct{}, len(priorSavedHashes))
-	for _, hash := range priorSavedHashes {
-		hash = strings.TrimSpace(hash)
-		if hash == "" {
-			continue
-		}
-		prior[hash] = struct{}{}
-	}
+func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 
 	titles := make([]string, 0, len(saved))
-	seen := make(map[string]struct{}, len(saved))
 	for _, recipe := range saved {
 		hash := recipe.ComputeHash()
-		if _, ok := prior[hash]; ok {
+		if slices.Contains(priorSavedHashes, hash) {
 			continue
 		}
-		if _, ok := seen[hash]; ok {
-			continue
-		}
-		seen[hash] = struct{}{}
 
-		title := strings.TrimSpace(recipe.Title)
-		if title == "" {
-			title = "saved recipe " + hash
-		}
-		titles = append(titles, title)
+		titles = append(titles, recipe.Title)
 	}
-	if len(titles) == 0 {
-		return ""
-	}
-	return "Keep these already-saved recipes and do not repeat them: " + strings.Join(titles, "; ")
+
+	return lo.Uniq(titles)
 }

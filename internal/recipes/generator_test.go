@@ -243,7 +243,7 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	wantInstructions := []string{
 		"make it vegetarian",
 		"Passed on Dismissed Recipe",
-		"Keep these already-saved recipes and do not repeat them: Newly Saved",
+		"Enjoyed and saved so don't repeat: Newly Saved",
 	}
 	if !slices.Equal(aiStub.instructions, wantInstructions) {
 		t.Fatalf("unexpected regenerate instructions: got %v want %v", aiStub.instructions, wantInstructions)
@@ -259,17 +259,18 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 }
 
-func TestSavedRecipesAvoidInstruction_DedupesAndFallsBackToHash(t *testing.T) {
-	blankTitle := ai.Recipe{Description: "No title"}
-	hash := blankTitle.ComputeHash()
+func TestNewlySaved(t *testing.T) {
+	foo := ai.Recipe{Title: "foo", Description: "blah"}
+	salmon := ai.Recipe{Title: "Salmon", Description: "previusly saved"}
+	hash := foo.ComputeHash()
 
-	got := savedRecipesAvoidInstruction(
-		[]ai.Recipe{blankTitle, blankTitle},
-		nil,
+	got := newlySaved(
+		[]ai.Recipe{foo, salmon, salmon},
+		[]string{hash},
 	)
 
-	want := "Keep these already-saved recipes and do not repeat them: saved recipe " + hash
-	if got != want {
+	want := []string{salmon.Title}
+	if !slices.Equal(got, want) {
 		t.Fatalf("unexpected saved avoid instruction: got %q want %q", got, want)
 	}
 }
