@@ -19,10 +19,12 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	"careme/internal/users"
+
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
@@ -59,7 +61,7 @@ type server struct {
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
-		recipeio:  recipeio{Cache: c},
+		recipeio:  IO(c),
 		cache:     c,
 		cfg:       cfg,
 		storage:   storage,
@@ -100,7 +102,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = s.clerk.GetUserIDFromRequest(r)
 	signedIn := !errors.Is(err, auth.ErrNoSession)
-	feedback := RecipeFeedback{}
+	feedback := feedback.Feedback{}
 	var thread []RecipeThreadEntry
 	var wineRecommendation *ai.WineSelection
 	var loadWG sync.WaitGroup
@@ -337,7 +339,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feedback := RecipeFeedback{}
+	feedback := feedback.Feedback{}
 	existing, err := s.FeedbackFromCache(ctx, hash)
 	if err != nil {
 		if !errors.Is(err, cache.ErrNotFound) {

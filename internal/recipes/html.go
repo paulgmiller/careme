@@ -10,6 +10,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 )
@@ -112,7 +113,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
@@ -127,7 +128,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ConversationID     string
 		WineRecommendation *ai.WineSelection
 		Thread             []RecipeThreadEntry
-		Feedback           RecipeFeedback
+		Feedback           feedback.Feedback
 		RecipeHash         string
 		Style              seasons.Style
 		ServerSignedIn     bool
@@ -142,7 +143,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ConversationID:     p.ConversationID,
 		WineRecommendation: wineRecommendation,
 		Thread:             thread,
-		Feedback:           feedback,
+		Feedback:           fb,
 		RecipeHash:         recipe.ComputeHash(),
 		Style:              seasons.GetCurrentStyle(),
 		ServerSignedIn:     signedIn,
