@@ -144,16 +144,16 @@
               </button>
             </form>
 
-            {{if .User.LastRecipes}}
+            {{if .PastRecipes}}
             <span class="text-xs uppercase tracking-wide text-gray-400">Recent history</span>
             <ul class="divide-y divide-brand-100 rounded-xl border border-brand-100 bg-white/60">
-              {{range .User.LastRecipes}}
+              {{range .PastRecipes}}
               <li class="px-5 py-4 text-sm text-gray-700">
                 <div class="font-semibold text-brand-700">
                   {{if .Hash}}
-                  <a href="/recipe/{{.Hash}}" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{.Title}}</a>
+                  <a href="/recipe/{{.Hash}}" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{.Title}}</a>{{if .Cooked}} <span aria-label="Cooked">🍴</span>{{end}}
                   {{else}}
-                  {{.Title}}
+                  {{.Title}}{{if .Cooked}} <span aria-label="Cooked">🍴</span>{{end}}
                   {{end}}
                 </div>
                 <p class="mt-1 text-xs text-gray-500">Added: {{.CreatedAt.Format "January 2, 2006"}}</p>

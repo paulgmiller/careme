@@ -1,6 +1,13 @@
 package users
 
 import (
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/seasons"
+	"careme/internal/templates"
 	"context"
 	"errors"
 	"html/template"
@@ -9,12 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/auth"
-	"careme/internal/locations"
-	"careme/internal/routing"
-	"careme/internal/seasons"
-	"careme/internal/templates"
 	utypes "careme/internal/users/types"
+
+	"github.com/samber/lo"
 )
 
 type locationGetter interface {
@@ -26,6 +30,11 @@ type server struct {
 	userTmpl  *template.Template // just remove or is this useful?
 	locGetter locationGetter
 	clerk     auth.AuthClient // make an interface
+}
+
+type pastRecipeView struct {
+	utypes.Recipe
+	Cooked bool
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
@@ -177,6 +186,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Success           bool
 		FavoriteStoreName string
 		ActiveTab         string
+		PastRecipes       []pastRecipeView
 		Style             seasons.Style
 		ServerSignedIn    bool
 	}{
@@ -186,6 +196,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
 		ActiveTab:         activeTab,
+		PastRecipes:       pastRecipeViews(ctx, s.storage.cache, userForTemplate.LastRecipes),
 		Style:             seasons.GetCurrentStyle(),
 		ServerSignedIn:    true,
 	}
@@ -193,6 +204,22 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
+}
+
+func pastRecipeViews(ctx context.Context, c cache.Cache, recipes []utypes.Recipe) []pastRecipeView {
+	feedbackIO := feedback.NewIO(c)
+	hashes := make([]string, 0, len(recipes))
+	for _, recipe := range recipes {
+		hashes = append(hashes, recipe.Hash)
+	}
+	cooked := feedbackIO.CookedHashes(ctx, hashes)
+
+	return lo.Map(recipes, func(recipe utypes.Recipe, _ int) pastRecipeView {
+		return pastRecipeView{
+			Recipe: recipe,
+			Cooked: cooked[recipe.Hash],
+		}
+	})
 }
 
 func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
