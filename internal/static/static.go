@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"careme/internal/routing"
 	"careme/internal/seasons"
 )
 
@@ -36,7 +37,7 @@ func Init() {
 }
 
 // Register serves static assets and wires template asset paths.
-func Register(mux *http.ServeMux) {
+func Register(mux routing.Registrar) {
 	mux.HandleFunc(TailwindAssetPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")

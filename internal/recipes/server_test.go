@@ -19,6 +19,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/routing"
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
 )
@@ -448,7 +449,7 @@ func (n noSessionAuth) WithAuthHTTP(handler http.Handler) http.Handler {
 	return handler
 }
 
-func (n noSessionAuth) Register(mux *http.ServeMux) {}
+func (n noSessionAuth) Register(mux routing.Registrar) {}
 
 func TestHandleQuestion_RequiresSignedInUser(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
