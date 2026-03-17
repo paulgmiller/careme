@@ -1,6 +1,7 @@
 package users
 
 import (
+	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"html/template"
@@ -8,6 +9,9 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	utypes "careme/internal/users/types"
 )
@@ -16,7 +20,7 @@ type adminUserView struct {
 	ID                string
 	Emails            []string
 	SavedRecipeCount  int
-	CookedRecipeCount int
+	CookedRecipeCount int32
 }
 
 var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doctype html>
@@ -92,7 +96,7 @@ func AdminUsersPage(storage *Storage) http.Handler {
 				ID:                user.ID,
 				Emails:            append([]string(nil), user.Email...),
 				SavedRecipeCount:  len(user.LastRecipes),
-				CookedRecipeCount: cookedRecipeCount(r.Context(), storage, user),
+				CookedRecipeCount: cookedRecipeCount(r.Context(), storage.cache, user),
 			})
 		}
 
@@ -142,31 +146,34 @@ type adminRecipeFeedback struct {
 	Cooked bool `json:"cooked"`
 }
 
-func cookedRecipeCount(ctx context.Context, storage *Storage, user utypes.User) int {
-	count := 0
+func cookedRecipeCount(ctx context.Context, c cache.Cache, user utypes.User) int32 {
+	var count atomic.Int32
+	var wg sync.WaitGroup
 	for _, recipe := range user.LastRecipes {
-		hash := strings.TrimSpace(recipe.Hash)
-		if hash == "" {
+		if time.Since(recipe.CreatedAt) > 30*time.Hour*24 {
 			continue
 		}
 
-		feedbackReader, err := storage.cache.Get(ctx, "recipe_feedback/"+hash)
-		if err != nil {
-			continue
-		}
+		wg.Go(func() {
+			feedbackReader, err := c.Get(ctx, "recipe_feedback/"+recipe.Hash)
+			if err != nil {
+				return
+			}
 
-		var feedback adminRecipeFeedback
-		decodeErr := json.NewDecoder(feedbackReader).Decode(&feedback)
-		closeErr := feedbackReader.Close()
-		if decodeErr != nil || closeErr != nil {
-			continue
-		}
+			var feedback adminRecipeFeedback
+			decodeErr := json.NewDecoder(feedbackReader).Decode(&feedback)
+			closeErr := feedbackReader.Close()
+			if decodeErr != nil || closeErr != nil {
+				return
+			}
 
-		if feedback.Cooked {
-			count++
-		}
+			if feedback.Cooked {
+				count.Add(1)
+			}
+		})
 	}
-	return count
+	wg.Wait()
+	return count.Load()
 }
 
 func renderAdminEmailsText(w http.ResponseWriter, users []utypes.User) {
