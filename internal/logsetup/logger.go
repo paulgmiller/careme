@@ -13,7 +13,7 @@ import (
 const AppInsightsConnectionStringEnv = "APPLICATIONINSIGHTS_CONNECTION_STRING"
 
 func Configure(ctx context.Context) (func(), error) {
-	handlers := []slog.Handler{slog.NewTextHandler(os.Stdout, nil)}
+	handlers := []slog.Handler{newContextHandler(slog.NewTextHandler(os.Stdout, nil))}
 
 	closeFn := func() {} // can be a list if we have multiple
 
@@ -22,7 +22,7 @@ func Configure(ctx context.Context) (func(), error) {
 		if err != nil {
 			return nil, fmt.Errorf("create app insights handler: %w", err)
 		}
-		handlers = append(handlers, handler)
+		handlers = append(handlers, newContextHandler(handler))
 		closeFn = handler.Close
 	}
 
