@@ -3,10 +3,14 @@ package feedback
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"time"
 
 	"careme/internal/cache"
+
+	"github.com/samber/lo"
+	lop "github.com/samber/lo/parallel"
 )
 
 type Feedback struct {
@@ -57,4 +61,28 @@ func (fio FeedbackIO) SaveFeedback(ctx context.Context, hash string, feedback Fe
 		return err
 	}
 	return nil
+}
+
+func (fio FeedbackIO) CookedHashes(ctx context.Context, hashes []string) map[string]bool {
+	cooked := lop.Map(hashes, func(hash string, _ int) string {
+		if hash == "" {
+			return ""
+		}
+
+		state, err := fio.FeedbackFromCache(ctx, hash)
+		if err != nil {
+			if !errors.Is(err, cache.ErrNotFound) {
+				slog.WarnContext(ctx, "failed to load recipe feedback", "hash", hash, "error", err)
+			}
+			return ""
+		}
+		if !state.Cooked {
+			return ""
+		}
+		return hash
+	})
+
+	return lo.SliceToMap(lo.Compact(cooked), func(hash string) (string, bool) {
+		return hash, true
+	})
 }

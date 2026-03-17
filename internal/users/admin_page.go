@@ -2,17 +2,15 @@ package users
 
 import (
 	"context"
-	"encoding/json"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/recipes/feedback"
 
 	utypes "careme/internal/users/types"
 )
@@ -21,7 +19,7 @@ type adminUserView struct {
 	ID                string
 	Emails            []string
 	SavedRecipeCount  int
-	CookedRecipeCount int32
+	CookedRecipeCount int
 }
 
 var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doctype html>
@@ -143,38 +141,15 @@ func filterAdminUsers(users []utypes.User) []utypes.User {
 	return filtered
 }
 
-type adminRecipeFeedback struct {
-	Cooked bool `json:"cooked"`
-}
-
-func cookedRecipeCount(ctx context.Context, c cache.Cache, user utypes.User) int32 {
-	var count atomic.Int32
-	var wg sync.WaitGroup
+func cookedRecipeCount(ctx context.Context, c cache.Cache, user utypes.User) int {
+	hashes := make([]string, 0, len(user.LastRecipes))
 	for _, recipe := range user.LastRecipes {
 		if time.Since(recipe.CreatedAt) > 30*time.Hour*24 {
 			continue
 		}
-
-		wg.Go(func() {
-			feedbackReader, err := c.Get(ctx, "recipe_feedback/"+recipe.Hash)
-			if err != nil {
-				return
-			}
-
-			var feedback adminRecipeFeedback
-			decodeErr := json.NewDecoder(feedbackReader).Decode(&feedback)
-			closeErr := feedbackReader.Close()
-			if decodeErr != nil || closeErr != nil {
-				return
-			}
-
-			if feedback.Cooked {
-				count.Add(1)
-			}
-		})
+		hashes = append(hashes, recipe.Hash)
 	}
-	wg.Wait()
-	return count.Load()
+	return len(feedback.NewIO(c).CookedHashes(ctx, hashes))
 }
 
 func renderAdminEmailsText(w http.ResponseWriter, users []utypes.User) {

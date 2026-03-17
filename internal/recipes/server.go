@@ -28,7 +28,6 @@ import (
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
-	lop "github.com/samber/lo/parallel"
 )
 
 func setTextContent(w http.ResponseWriter) {
@@ -866,24 +865,15 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 		recent := lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
 			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
 		})
-
-		keep := lop.Map(recent, func(r utypes.Recipe, _ int) bool {
-			feedback, err := s.FeedbackFromCache(ctx, r.Hash)
-			if err != nil {
-				if !errors.Is(err, cache.ErrNotFound) {
-					slog.WarnContext(ctx, "failed to load recipe feedback while building avoid list", "recipe_hash", r.Hash, "error", err)
-				}
-				return false
-			}
-			return feedback.Cooked
-		})
-
-		for i, last := range recent {
-			if !keep[i] {
-				continue
-			}
-			p.LastRecipes = append(p.LastRecipes, last.Title)
+		hashes := make([]string, 0, len(recent))
+		for _, recipe := range recent {
+			hashes = append(hashes, recipe.Hash)
 		}
+		cooked := s.CookedHashes(ctx, hashes)
+
+		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+			return r.Title, cooked[r.Hash]
+		})
 
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)

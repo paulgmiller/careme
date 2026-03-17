@@ -19,10 +19,10 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/users"
+
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
-	lop "github.com/samber/lo/parallel"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -169,20 +169,16 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
 			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
 		})
-
-		keep := lop.Map(recent, func(r utypes.Recipe, _ int) bool {
-			feedback, err := rio.FeedbackFromCache(ctx, r.Hash)
-			if err != nil {
-				if !errors.Is(err, cache.ErrNotFound) {
-					slog.WarnContext(ctx, "failed to load recipe feedback while building avoid list", "recipe_hash", r.Hash, "error", err)
-				}
-				return false
-			}
-			return feedback.Cooked
+		hashes := make([]string, 0, len(recent))
+		for _, recipe := range recent {
+			hashes = append(hashes, recipe.Hash)
+		}
+		cooked := rio.CookedHashes(ctx, hashes)
+		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+			return r.Title, cooked[r.Hash]
 		})
-
-		for i, last := range recent {
-			if !keep[i] {
+		for _, last := range recent {
+			if cooked[last.Hash] {
 				continue
 			}
 			p.LastRecipes = append(p.LastRecipes, last.Title)
