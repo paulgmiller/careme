@@ -2,6 +2,16 @@ package recipes
 
 import (
 	"bytes"
+	"careme/internal/ai"
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/seasons"
+	"careme/internal/templates"
+	"careme/internal/users"
 	"context"
 	"errors"
 	"fmt"
@@ -13,17 +23,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"careme/internal/ai"
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/recipes/feedback"
-	"careme/internal/routing"
-	"careme/internal/seasons"
-	"careme/internal/templates"
-	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 
@@ -60,9 +59,8 @@ type server struct {
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, clerkClient auth.AuthClient) *server {
-	io := IO(c)
 	return &server{
-		recipeio:  io,
+		recipeio:  IO(c),
 		cache:     c,
 		cfg:       cfg,
 		storage:   storage,
