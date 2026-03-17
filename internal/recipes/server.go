@@ -871,12 +871,9 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 		}
 		cooked := s.CookedHashes(ctx, hashes)
 
-		for _, last := range recent {
-			if _, ok := cooked[last.Hash]; !ok {
-				continue
-			}
-			p.LastRecipes = append(p.LastRecipes, last.Title)
-		}
+		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+			return r.Title, cooked[r.Hash]
+		})
 
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)

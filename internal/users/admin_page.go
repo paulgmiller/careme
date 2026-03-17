@@ -19,7 +19,7 @@ type adminUserView struct {
 	ID                string
 	Emails            []string
 	SavedRecipeCount  int
-	CookedRecipeCount int32
+	CookedRecipeCount int
 }
 
 var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doctype html>
@@ -141,7 +141,7 @@ func filterAdminUsers(users []utypes.User) []utypes.User {
 	return filtered
 }
 
-func cookedRecipeCount(ctx context.Context, c cache.Cache, user utypes.User) int32 {
+func cookedRecipeCount(ctx context.Context, c cache.Cache, user utypes.User) int {
 	hashes := make([]string, 0, len(user.LastRecipes))
 	for _, recipe := range user.LastRecipes {
 		if time.Since(recipe.CreatedAt) > 30*time.Hour*24 {
@@ -149,7 +149,7 @@ func cookedRecipeCount(ctx context.Context, c cache.Cache, user utypes.User) int
 		}
 		hashes = append(hashes, recipe.Hash)
 	}
-	return int32(len(feedback.NewIO(c).CookedHashes(ctx, hashes)))
+	return len(feedback.NewIO(c).CookedHashes(ctx, hashes))
 }
 
 func renderAdminEmailsText(w http.ResponseWriter, users []utypes.User) {

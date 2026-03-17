@@ -19,6 +19,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/users"
+
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
@@ -173,9 +174,11 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 			hashes = append(hashes, recipe.Hash)
 		}
 		cooked := rio.CookedHashes(ctx, hashes)
-
+		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+			return r.Title, cooked[r.Hash]
+		})
 		for _, last := range recent {
-			if _, ok := cooked[last.Hash]; !ok {
+			if cooked[last.Hash] {
 				continue
 			}
 			p.LastRecipes = append(p.LastRecipes, last.Title)
