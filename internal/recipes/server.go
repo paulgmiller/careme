@@ -855,7 +855,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
-
 	hash := p.Hash()
 
 	s.wg.Go(func() {
@@ -863,7 +862,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 		ctx := context.WithoutCancel(ctx)
 
 		recent := lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
-			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) //magic number. Should it be loner and shoul we use star rating?
+			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
 		})
 
 		keep := lop.Map(recent, func(r utypes.Recipe, _ int) bool {

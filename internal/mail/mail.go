@@ -165,9 +165,9 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 			}
 		}
 
-		//TODO refactor with recipes/server.go
+		// TODO refactor with recipes/server.go
 		recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
-			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) //magic number. Should it be loner and shoul we use star rating?
+			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
 		})
 
 		keep := lop.Map(recent, func(r utypes.Recipe, _ int) bool {
