@@ -2,18 +2,18 @@ package recipes
 
 import (
 	"bytes"
+	"careme/internal/ai"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/logsetup"
+	"careme/internal/recipes/feedback"
+	"careme/internal/templates"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
-
-	"careme/internal/ai"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/logsetup"
-	"careme/internal/templates"
 
 	"golang.org/x/net/html"
 )
@@ -204,7 +204,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -267,7 +267,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, []RecipeThreadEntry{}, RecipeFeedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -285,7 +285,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, []RecipeThreadEntry{}, RecipeFeedback{}, &ai.WineSelection{
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Oregon Pinot Noir", Price: "$14.99"},
 			{Name: "Backup Chardonnay", Price: "$11.99"},

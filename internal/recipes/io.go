@@ -1,15 +1,15 @@
 package recipes
 
 import (
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/recipes/feedback"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/kroger"
 
 	"github.com/samber/lo"
 )
@@ -23,10 +23,14 @@ const (
 
 type recipeio struct {
 	Cache cache.Cache
+	feedback.FeedbackIO
 }
 
 func IO(c cache.Cache) *recipeio {
-	return &recipeio{c}
+	return &recipeio{
+		Cache:      c,
+		FeedbackIO: feedback.NewIO(c),
+	}
 }
 
 func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
