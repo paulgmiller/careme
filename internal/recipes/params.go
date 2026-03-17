@@ -34,10 +34,10 @@ type generatorParams struct {
 	// per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
-	LastRecipes  []string `json:"last_recipes,omitempty"`
+	LastRecipes  []string `json:"-"`                   //this doesn't get populated until after save.
 	// UserID         string      `json:"user_id,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
-	// TODO Both should just be title and hash insread of full ai.Recipe
+	// TODO Both should just be title and hash instead of full ai.Recipe
 	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 
@@ -180,15 +180,4 @@ func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
 		localNow = localNow.AddDate(0, 0, -1)
 	}
 	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
-}
-
-func recipeHashes(recipes []ai.Recipe) []string {
-	if len(recipes) == 0 {
-		return nil
-	}
-	hashes := make([]string, 0, len(recipes))
-	for _, recipe := range recipes {
-		hashes = append(hashes, recipe.ComputeHash())
-	}
-	return hashes
 }

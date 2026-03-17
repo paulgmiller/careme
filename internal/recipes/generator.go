@@ -230,16 +230,13 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 }
 
 func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
-
 	titles := make([]string, 0, len(saved))
 	for _, recipe := range saved {
 		hash := recipe.ComputeHash()
 		if slices.Contains(priorSavedHashes, hash) {
 			continue
 		}
-
 		titles = append(titles, recipe.Title)
 	}
-
 	return lo.Uniq(titles)
 }
