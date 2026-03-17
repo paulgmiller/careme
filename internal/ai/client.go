@@ -337,7 +337,7 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	// Previously cooked recipes to avoid (if any).
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
-		prevRecipesMsg.WriteString("Avoid recipes similar to these cooked in the past week:\n")
+		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
 		for _, recipe := range lastRecipes {
 			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
 		}

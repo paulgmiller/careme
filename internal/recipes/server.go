@@ -25,6 +25,7 @@ import (
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
+	lop "github.com/samber/lo/parallel"
 )
 
 func setTextContent(w http.ResponseWriter) {
@@ -856,18 +857,23 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
-	for _, last := range currentUser.LastRecipes {
-		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -7)) {
-			break
-		}
-		feedback, err := s.FeedbackFromCache(ctx, last.Hash)
+	recent := lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
+		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14))
+	})
+
+	keep := lop.Map(recent, func(r utypes.Recipe, _ int) bool {
+		feedback, err := s.FeedbackFromCache(ctx, r.Hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
-				slog.WarnContext(ctx, "failed to load recipe feedback while building avoid list", "recipe_hash", last.Hash, "error", err)
+				slog.WarnContext(ctx, "failed to load recipe feedback while building avoid list", "recipe_hash", r.Hash, "error", err)
 			}
-			continue
+			return false
 		}
-		if !feedback.Cooked {
+		return feedback.Cooked
+	})
+
+	for i, last := range recent {
+		if !keep[i] {
 			continue
 		}
 		p.LastRecipes = append(p.LastRecipes, last.Title)
