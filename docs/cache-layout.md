@@ -32,6 +32,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `recipe_feedback/` | JSON `RecipeFeedback` (`cooked`, `stars`, `comment`, `updated_at`) per recipe hash | `internal/recipes/feedback.go` (`SaveFeedback`) via `internal/recipes/server.go` (`handleFeedback`) | `internal/recipes/feedback.go` (`FeedbackFromCache`) and `internal/recipes/server.go` (`handleSingle`, `handleFeedback`) |
 | `users/` | JSON `users/types.User` by user ID | `internal/users/storage.go` (`Update`) | `internal/users/storage.go` (`GetByID`, `List`) |
 | `email2user/` | Plain text user ID keyed by normalized email | `internal/users/storage.go` (`FindOrCreateFromClerk`) | `internal/users/storage.go` (`GetByEmail`) |
+| `location-store-requests/` | JSON `{store_id, zip, requested_at}` for stores present in location search but not yet supported for staples | `internal/locations/locations.go` (`POST /locations/request-store`) | Operational triage from shared cache/blob storage |
 | `aldi/stores/` | JSON `aldi.StoreSummary` keyed by prefixed ALDI location ID | `cmd/aldi` and `internal/aldi` cache helpers | `internal/aldi` location backend |
 | `albertsons/stores/` | JSON `albertsons.StoreSummary` keyed by prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `internal/albertsons` location backend |
 | `albertsons/store_url_map.json` | JSON object mapping store URL to prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `cmd/albertsons` incremental sync |

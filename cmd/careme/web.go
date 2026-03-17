@@ -60,7 +60,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
 	userHandler.Register(mux)
 
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, cache)
 	locationServer.Register(mux, authClient)
 
 	sitemapHandler := sitemap.New(cache)

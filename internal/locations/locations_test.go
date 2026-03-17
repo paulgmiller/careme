@@ -5,10 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
+	utypes "careme/internal/users/types"
 )
 
 func TestGetLocationByIDUsesCache(t *testing.T) {
@@ -301,6 +306,67 @@ func TestGetLocationsByZipSucceedsWhenAtLeastOneBackendSucceeds(t *testing.T) {
 	}
 }
 
+func TestSupportsStaplesLocation(t *testing.T) {
+	tests := []struct {
+		name     string
+		storeID  string
+		supports bool
+	}{
+		{name: "kroger", storeID: "70500874", supports: true},
+		{name: "wholefoods", storeID: "wholefoods_123", supports: true},
+		{name: "walmart", storeID: "walmart_123", supports: true},
+		{name: "unsupported", storeID: "publix_123", supports: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := supportsStaplesLocation(tt.storeID); got != tt.supports {
+				t.Fatalf("supportsStaplesLocation(%q) = %v, want %v", tt.storeID, got, tt.supports)
+			}
+		})
+	}
+}
+
+func TestRequestStoreWritesRequestBlob(t *testing.T) {
+	fc := cachepkg.NewInMemoryCache()
+	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{newFakeLocationClient()}, fc)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fc)
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodPost, "/locations/request-store", strings.NewReader("store_id=publix_123&zip=98101"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected status %d, got %d", http.StatusFound, rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "/locations?zip=98101" {
+		t.Fatalf("unexpected redirect location: %q", got)
+	}
+
+	raw := requireEventuallyCached(t, fc, storeRequestPrefix+"publix_123.json")
+	var payload struct {
+		StoreID     string    `json:"store_id"`
+		Zip         string    `json:"zip"`
+		RequestedAt time.Time `json:"requested_at"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("failed to decode request blob: %v", err)
+	}
+	if payload.StoreID != "publix_123" {
+		t.Fatalf("unexpected store id %q", payload.StoreID)
+	}
+	if payload.Zip != "98101" {
+		t.Fatalf("unexpected zip %q", payload.Zip)
+	}
+	if payload.RequestedAt.IsZero() {
+		t.Fatal("expected requested_at to be set")
+	}
+}
+
 type fakeLocationClient struct {
 	details map[string]Location
 	lists   map[string][]Location
@@ -406,4 +472,10 @@ func mustParseTime(t *testing.T, value string) time.Time {
 		t.Fatalf("failed to parse time %q: %v", value, err)
 	}
 	return ts
+}
+
+type fakeUserLookup struct{}
+
+func (fakeUserLookup) FromRequest(context.Context, *http.Request, auth.AuthClient) (*utypes.User, error) {
+	return nil, auth.ErrNoSession
 }

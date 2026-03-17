@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"careme/internal/actowiz"
 	"careme/internal/albertsons"
 	"careme/internal/aldi"
 	"careme/internal/auth"
@@ -46,12 +47,14 @@ type locationStorage struct {
 const (
 	maxLocationDistanceMiles = 20.0
 	locationCachePrefix      = "location/"
+	storeRequestPrefix       = "location-store-requests/"
 )
 
 type locationServer struct {
 	storage     locationGetter
 	zipFetcher  zipFetcher
 	userStorage userLookup
+	cache       cache.Cache
 }
 
 type locationGetter interface {
@@ -115,12 +118,30 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 	}, nil
 }
 
-func NewServer(storage locationGetter, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
+func NewServer(storage locationGetter, zipFetcher zipFetcher, userStorage userLookup, c cache.Cache) *locationServer {
 	return &locationServer{
 		storage:     storage,
 		zipFetcher:  zipFetcher,
 		userStorage: userStorage,
+		cache:       c,
 	}
+}
+
+func supportsStaplesLocation(locationID string) bool {
+	providers := []interface{ IsID(locationID string) bool }{
+		kroger.NewIdentityProvider(),
+		actowiz.NewIdentityProvider(),
+		wholefoods.NewIdentityProvider(),
+		walmart.NewIdentityProvider(),
+	}
+
+	for _, provider := range providers {
+		if provider.IsID(locationID) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
@@ -336,6 +357,52 @@ func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient
 			http.Error(w, "Failed to render locations page. ", http.StatusInternalServerError)
 		}
 	})
+
+	mux.HandleFunc("POST /locations/request-store", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+
+		storeID := r.FormValue("store_id")
+		if storeID == "" {
+			http.Error(w, "store_id is required", http.StatusBadRequest)
+			return
+		}
+
+		zip := r.FormValue("zip")
+		if zip == "" {
+			zip = r.URL.Query().Get("zip")
+		}
+
+		if l.cache != nil {
+			request := struct {
+				StoreID     string    `json:"store_id"`
+				Zip         string    `json:"zip,omitempty"`
+				RequestedAt time.Time `json:"requested_at"`
+			}{
+				StoreID:     storeID,
+				Zip:         zip,
+				RequestedAt: time.Now().UTC(),
+			}
+			raw, err := json.Marshal(request)
+			if err != nil {
+				http.Error(w, "failed to submit request", http.StatusInternalServerError)
+				return
+			}
+			requestKey := storeRequestPrefix + storeID + ".json"
+			if err := l.cache.Put(r.Context(), requestKey, string(raw), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
+				http.Error(w, "failed to submit request", http.StatusInternalServerError)
+				return
+			}
+		}
+
+		target := "/locations"
+		if zip != "" {
+			target = target + "?zip=" + url.QueryEscape(zip)
+		}
+		http.Redirect(w, r, target, http.StatusFound)
+	})
 }
 
 func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, zip string, favoriteStore string, serverSignedIn bool) error {
@@ -344,8 +411,18 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		return fmt.Errorf("failed to get locations for zip %s: %w", zip, err)
 	}
 
+	type locationRow struct {
+		Location
+		SupportsStaples bool
+	}
+
+	rows := make([]locationRow, 0, len(locs))
+	for _, loc := range locs {
+		rows = append(rows, locationRow{Location: loc, SupportsStaples: supportsStaplesLocation(loc.ID)})
+	}
+
 	data := struct {
-		Locations       []Location
+		Locations       []locationRow
 		Zip             string
 		FavoriteStore   string
 		ClarityScript   template.HTML
@@ -353,7 +430,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		Style           seasons.Style
 		ServerSignedIn  bool
 	}{
-		Locations:       locs,
+		Locations:       rows,
 		Zip:             zip,
 		FavoriteStore:   favoriteStore,
 		ClarityScript:   templates.ClarityScript(),
