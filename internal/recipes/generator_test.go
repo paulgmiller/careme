@@ -20,6 +20,12 @@ type captureWineQuestionAIClient struct {
 	selection   *ai.WineSelection
 }
 
+type captureRegenerateAIClient struct {
+	instructions   []string
+	conversationID string
+	shoppingList   *ai.ShoppingList
+}
+
 type captureWineStaplesProvider struct {
 	mu        sync.Mutex
 	searches  []string
@@ -51,6 +57,31 @@ func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, conversation
 }
 
 func (c *captureWineQuestionAIClient) Ready(ctx context.Context) error {
+	return nil
+}
+
+func (c *captureRegenerateAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
+	panic("unexpected call to GenerateRecipes")
+}
+
+func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error) {
+	c.instructions = append([]string(nil), newinstructions...)
+	c.conversationID = conversationID
+	if c.shoppingList != nil {
+		return c.shoppingList, nil
+	}
+	return &ai.ShoppingList{}, nil
+}
+
+func (c *captureRegenerateAIClient) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+	panic("unexpected call to AskQuestion")
+}
+
+func (c *captureRegenerateAIClient) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error) {
+	panic("unexpected call to PickWine")
+}
+
+func (c *captureRegenerateAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
@@ -177,5 +208,69 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 	}
 	if aiStub.recipeTitle != "Salmon" {
 		t.Fatalf("expected recipe title %q, got %q", "Salmon", aiStub.recipeTitle)
+	}
+}
+
+func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstruction(t *testing.T) {
+	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
+	newlySaved := ai.Recipe{Title: "Newly Saved", Description: "Saved now"}
+	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on"}
+	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea"}
+
+	aiStub := &captureRegenerateAIClient{
+		shoppingList: &ai.ShoppingList{
+			ConversationID: "conv-123",
+			Recipes:        []ai.Recipe{newResult},
+		},
+	}
+	g := &Generator{
+		io:       IO(cache.NewFileCache(t.TempDir())),
+		aiClient: aiStub,
+	}
+
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params.ConversationID = "conv-123"
+	params.Instructions = "make it vegetarian"
+	params.Saved = []ai.Recipe{alreadySaved, newlySaved}
+	params.Dismissed = []ai.Recipe{dismissed}
+	params.PriorSavedHashes = []string{alreadySaved.ComputeHash()}
+
+	got, err := g.GenerateRecipes(t.Context(), params)
+	if err != nil {
+		t.Fatalf("GenerateRecipes returned error: %v", err)
+	}
+
+	wantInstructions := []string{
+		"make it vegetarian",
+		"Passed on Dismissed Recipe",
+		"Enjoyed and saved so don't repeat: Newly Saved",
+	}
+	if !slices.Equal(aiStub.instructions, wantInstructions) {
+		t.Fatalf("unexpected regenerate instructions: got %v want %v", aiStub.instructions, wantInstructions)
+	}
+	if aiStub.conversationID != "conv-123" {
+		t.Fatalf("expected conversation ID %q, got %q", "conv-123", aiStub.conversationID)
+	}
+	if got == nil || len(got.Recipes) != 3 {
+		t.Fatalf("expected regenerated list plus saved recipes, got %+v", got)
+	}
+	if got.Recipes[0].Title != "Brand New Dinner" || got.Recipes[1].Title != "Already Saved" || got.Recipes[2].Title != "Newly Saved" {
+		t.Fatalf("unexpected recipe order after regenerate: %+v", got.Recipes)
+	}
+}
+
+func TestNewlySaved(t *testing.T) {
+	foo := ai.Recipe{Title: "foo", Description: "blah"}
+	salmon := ai.Recipe{Title: "Salmon", Description: "previusly saved"}
+	hash := foo.ComputeHash()
+
+	got := newlySaved(
+		[]ai.Recipe{foo, salmon, salmon},
+		[]string{hash},
+	)
+
+	want := []string{salmon.Title}
+	if !slices.Equal(got, want) {
+		t.Fatalf("unexpected saved avoid instruction: got %q want %q", got, want)
 	}
 }
