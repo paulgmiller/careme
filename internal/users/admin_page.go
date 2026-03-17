@@ -1,7 +1,6 @@
 package users
 
 import (
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"html/template"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"careme/internal/cache"
 
 	utypes "careme/internal/users/types"
 )
