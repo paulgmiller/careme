@@ -62,7 +62,7 @@ func TestNewAddsAlbertsonsBackendWhenEnabled(t *testing.T) {
 	}
 
 	var found bool
-	for _, backend := range locStorage.client {
+	for _, backend := range locStorage.clients {
 		if _, ok := backend.(*albertsons.LocationBackend); ok {
 			found = true
 			break
