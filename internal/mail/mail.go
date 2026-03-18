@@ -19,8 +19,10 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/users"
+
 	utypes "careme/internal/users/types"
 
+	"github.com/samber/lo"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -135,12 +137,6 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 
 	p := recipes.DefaultParams(l, date)
 	// p.UserID = user.ID
-	for _, last := range user.LastRecipes {
-		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
-			continue
-		}
-		p.LastRecipes = append(p.LastRecipes, last.Title)
-	}
 
 	paramsHash := p.Hash()
 	sentKey := mailSentPrefix + paramsHash + "/" + user.ID
@@ -169,6 +165,18 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 			}
 		}
 
+		// TODO refactor with recipes/server.go
+		recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
+			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
+		})
+		hashes := make([]string, 0, len(recent))
+		for _, recipe := range recent {
+			hashes = append(hashes, recipe.Hash)
+		}
+		cooked := rio.FeedbackByHash(ctx, hashes)
+		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+			return r.Title, cooked[r.Hash].Cooked
+		})
 		// can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)

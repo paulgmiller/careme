@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"careme/internal/config"
+	"careme/internal/routing"
 	"careme/internal/templates"
 
 	"github.com/clerk/clerk-sdk-go/v2"
@@ -26,7 +27,7 @@ type AuthClient interface {
 	GetUserEmail(ctx context.Context, clerkUserID string) (string, error)
 	GetUserIDFromRequest(r *http.Request) (string, error)
 	WithAuthHTTP(handler http.Handler) http.Handler
-	Register(mux *http.ServeMux)
+	Register(mux routing.Registrar)
 }
 
 // Client wraps Clerk SDK functionality
@@ -159,7 +160,7 @@ func clearCookie(w http.ResponseWriter, name string) {
 	})
 }
 
-func (c *clerkClient) Register(mux *http.ServeMux) {
+func (c *clerkClient) Register(mux routing.Registrar) {
 	mux.HandleFunc("/logout", c.logout)
 	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, c.cfg.Clerk.Signin(), http.StatusSeeOther)

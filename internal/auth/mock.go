@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"careme/internal/config"
+	"careme/internal/routing"
 )
 
 // Client wraps Clerk SDK functionality
@@ -48,6 +49,6 @@ func (c *mockClient) logout(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "not implemented in mock auth client", http.StatusNotImplemented)
 }
 
-func (c *mockClient) Register(mux *http.ServeMux) {
+func (c *mockClient) Register(mux routing.Registrar) {
 	mux.HandleFunc("/logout", c.logout)
 }

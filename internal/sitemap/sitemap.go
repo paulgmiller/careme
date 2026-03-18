@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/recipes"
+	"careme/internal/routing"
 )
 
 type Server struct {
@@ -30,7 +31,7 @@ func New(c cache.ListCache) *Server {
 	return &Server{cache: c}
 }
 
-func (s *Server) Register(mux *http.ServeMux) {
+func (s *Server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	mux.HandleFunc("GET /robots.txt", s.handleRobots)
 }

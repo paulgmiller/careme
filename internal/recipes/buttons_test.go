@@ -41,7 +41,7 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, multiRecipeList, true, w)
+	FormatShoppingListHTML(t.Context(), p, multiRecipeList, true, w)
 	html := w.Body.String()
 
 	// Verify HTML is valid
@@ -127,7 +127,7 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, listWithSavedRecipe, true, w)
+	FormatShoppingListHTML(t.Context(), p, listWithSavedRecipe, true, w)
 	html := w.Body.String()
 
 	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {

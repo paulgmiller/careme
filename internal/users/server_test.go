@@ -14,6 +14,10 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/templates"
+
 	utypes "careme/internal/users/types"
 )
 
@@ -31,7 +35,7 @@ func (t testAuthClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	return handler
 }
 
-func (t testAuthClient) Register(_ *http.ServeMux) {}
+func (t testAuthClient) Register(_ routing.Registrar) {}
 
 type failingLocationGetter struct{}
 
@@ -60,6 +64,9 @@ func TestHandleUser_SavesDirective(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if got := rr.Header().Get("Cache-Control"); got != "no-store, no-cache, must-revalidate" {
+		t.Fatalf("expected no-store cache header, got %q", got)
 	}
 
 	user, err := storage.GetByID("user-1")
@@ -157,5 +164,66 @@ func TestHandleUser_BlanksFavoriteStoreInHTMLWhenLocationLookupFails(t *testing.
 	}
 	if user.FavoriteStore != "70500874" {
 		t.Fatalf("expected persisted favorite store to stay unchanged, got %q", user.FavoriteStore)
+	}
+}
+
+func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := &server{
+		storage:  storage,
+		userTmpl: templates.User,
+		clerk:    testAuthClient{},
+	}
+
+	existing := &utypes.User{
+		ID:          "user-1",
+		Email:       []string{"user@example.com"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{
+			{Title: "Cooked Pasta", Hash: "hash-cooked", CreatedAt: time.Now().Add(-2 * time.Hour)},
+			{Title: "Cooked No Rating", Hash: "hash-cooked-unrated", CreatedAt: time.Now().Add(-90 * time.Minute)},
+			{Title: "Saved Soup", Hash: "hash-saved", CreatedAt: time.Now().Add(-1 * time.Hour)},
+			{Title: "Manual Entry", CreatedAt: time.Now()},
+		},
+	}
+	if err := storage.Update(existing); err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+
+	feedbackIO := feedback.NewIO(cacheStore)
+	if err := feedbackIO.SaveFeedback(t.Context(), "hash-cooked", feedback.Feedback{Cooked: true, Stars: 4, UpdatedAt: time.Now()}); err != nil {
+		t.Fatalf("failed to seed cooked feedback: %v", err)
+	}
+	if err := feedbackIO.SaveFeedback(t.Context(), "hash-cooked-unrated", feedback.Feedback{Cooked: true, UpdatedAt: time.Now()}); err != nil {
+		t.Fatalf("failed to seed unrated cooked feedback: %v", err)
+	}
+	if err := feedbackIO.SaveFeedback(t.Context(), "hash-saved", feedback.Feedback{Cooked: false, UpdatedAt: time.Now()}); err != nil {
+		t.Fatalf("failed to seed uncooked feedback: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/user?tab=past", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleUser(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, `Cooked Pasta</a> <span aria-label="Rated 4 stars" title="Rated 4 stars">⭐⭐⭐⭐</span>`) {
+		t.Fatalf("expected cooked recipe to render 4 stars, got body: %s", body)
+	}
+	if !strings.Contains(body, `Cooked No Rating</a> <span aria-label="Cooked" title="Cooked">🔪</span>`) {
+		t.Fatalf("expected unrated cooked recipe to render 1 star, got body: %s", body)
+	}
+	if strings.Contains(body, `Saved Soup</a> <span aria-label="Rated`) {
+		t.Fatalf("expected uncooked saved recipe not to render stars, got body: %s", body)
+	}
+	if strings.Contains(body, `Manual Entry <span aria-label="Rated`) {
+		t.Fatalf("expected manual recipe without hash not to render stars, got body: %s", body)
 	}
 }

@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"context"
 	"html/template"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 )
@@ -41,12 +43,12 @@ type shoppingRecipeWineView struct {
 }
 
 // FormatShoppingListHTML renders the multi-recipe shopping list view.
-func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
-	FormatShoppingListHTMLForHash(p, l, nil, signedIn, p.Hash(), writer)
+func FormatShoppingListHTML(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
+	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), writer)
 }
 
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
-func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
+func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
 	dismissedHashes := make(map[string]bool, len(p.Dismissed))
 	for _, recipe := range p.Dismissed {
 		dismissedHashes[recipe.ComputeHash()] = true
@@ -93,7 +95,7 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 	}{
 		Location:        *p.Location,
 		Date:            p.Date.Format("2006-01-02"),
-		ClarityScript:   templates.ClarityScript(),
+		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Instructions:    p.Instructions,
 		Hash:            hash,
@@ -110,8 +112,8 @@ func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRe
 	}
 }
 
-// FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
+// FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
@@ -126,14 +128,14 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		ConversationID     string
 		WineRecommendation *ai.WineSelection
 		Thread             []RecipeThreadEntry
-		Feedback           RecipeFeedback
+		Feedback           feedback.Feedback
 		RecipeHash         string
 		Style              seasons.Style
 		ServerSignedIn     bool
 	}{
 		Location:           *p.Location,
 		Date:               p.Date.Format("2006-01-02"),
-		ClarityScript:      templates.ClarityScript(),
+		ClarityScript:      templates.ClarityScript(ctx),
 		GoogleTagScript:    templates.GoogleTagScript(),
 		Recipe:             recipe,
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
@@ -141,7 +143,7 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		ConversationID:     p.ConversationID,
 		WineRecommendation: wineRecommendation,
 		Thread:             thread,
-		Feedback:           feedback,
+		Feedback:           fb,
 		RecipeHash:         recipe.ComputeHash(),
 		Style:              seasons.GetCurrentStyle(),
 		ServerSignedIn:     signedIn,

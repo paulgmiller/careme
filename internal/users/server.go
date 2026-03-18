@@ -6,14 +6,21 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"careme/internal/auth"
+	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
+
 	utypes "careme/internal/users/types"
+
+	"github.com/samber/lo"
 )
 
 type locationGetter interface {
@@ -27,6 +34,13 @@ type server struct {
 	clerk     auth.AuthClient // make an interface
 }
 
+type pastRecipeView struct {
+	utypes.Recipe
+	Cooked           bool
+	CookedStars      string
+	CookedStarsLabel string
+}
+
 // NewHandler returns an http.Handler that serves the user related routes under /user.
 func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient) *server {
 	return &server{
@@ -37,7 +51,7 @@ func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.Aut
 	}
 }
 
-func (s *server) Register(mux *http.ServeMux) {
+func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
 	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
@@ -94,6 +108,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ctx := r.Context()
 	activeTab := "customize"
 	if r.URL.Query().Get("tab") == "past" {
@@ -176,15 +191,17 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Success           bool
 		FavoriteStoreName string
 		ActiveTab         string
+		PastRecipes       []pastRecipeView
 		Style             seasons.Style
 		ServerSignedIn    bool
 	}{
-		ClarityScript:     templates.ClarityScript(),
+		ClarityScript:     templates.ClarityScript(ctx),
 		GoogleTagScript:   templates.GoogleTagScript(),
 		User:              userForTemplate,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,
 		ActiveTab:         activeTab,
+		PastRecipes:       pastRecipeViews(ctx, s.storage.cache, userForTemplate.LastRecipes),
 		Style:             seasons.GetCurrentStyle(),
 		ServerSignedIn:    true,
 	}
@@ -192,6 +209,50 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
+}
+
+func pastRecipeViews(ctx context.Context, c cache.Cache, recipes []utypes.Recipe) []pastRecipeView {
+	feedbackIO := feedback.NewIO(c)
+	hashes := make([]string, 0, len(recipes))
+	for _, recipe := range recipes {
+		hashes = append(hashes, recipe.Hash)
+	}
+	feedbackByHash := feedbackIO.FeedbackByHash(ctx, hashes)
+
+	return lo.Map(recipes, func(recipe utypes.Recipe, _ int) pastRecipeView {
+		state, ok := feedbackByHash[recipe.Hash]
+		return pastRecipeView{
+			Recipe:           recipe,
+			Cooked:           ok && state.Cooked,
+			CookedStars:      cookedStars(ok, state),
+			CookedStarsLabel: cookedStarsLabel(ok, state),
+		}
+	})
+}
+
+func cookedStars(ok bool, state feedback.Feedback) string {
+	if !ok || !state.Cooked {
+		return ""
+	}
+	stars := state.Stars
+	if stars < 1 {
+		return "🔪"
+	}
+	return strings.Repeat("⭐", stars)
+}
+
+func cookedStarsLabel(ok bool, state feedback.Feedback) string {
+	if !ok || !state.Cooked {
+		return ""
+	}
+	stars := state.Stars
+	if stars < 1 {
+		return "Cooked"
+	}
+	if stars == 1 {
+		return "Rated 1 star"
+	}
+	return "Rated " + strconv.Itoa(stars) + " stars"
 }
 
 func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {

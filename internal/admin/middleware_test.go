@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/config"
+	"careme/internal/routing"
 )
 
 type stubAuthClient struct {
@@ -36,7 +37,7 @@ func (s stubAuthClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	return handler
 }
 
-func (s stubAuthClient) Register(_ *http.ServeMux) {}
+func (s stubAuthClient) Register(_ routing.Registrar) {}
 
 func TestMiddlewareWrapRejectsNoSession(t *testing.T) {
 	t.Parallel()
