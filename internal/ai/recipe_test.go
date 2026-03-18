@@ -24,7 +24,7 @@ func TestRecipeComputeHash(t *testing.T) {
 	if hash1 == "" {
 		t.Fatal("hash should not be empty")
 	}
-	if hash1 != "YK2TFI6O3tGLPAxPjqMPEw==" {
+	if hash1 != "YK2TFI6O3tGLPAxPjqMPEw" {
 		t.Fatalf("Hash changed by json marshalling: %s", hash1)
 	}
 
@@ -52,8 +52,8 @@ func TestRecipeHashLength(t *testing.T) {
 	}
 
 	hash := recipe.ComputeHash()
-	// fnv 128 url encoded is 24
-	if len(hash) != 24 {
+	// fnv 128 raw-url encoded is 22
+	if len(hash) != 22 {
 		t.Fatalf("expected hash length of 24, got %d", len(hash))
 	}
 }
