@@ -132,12 +132,9 @@ func TestNormalizeBase64URLHash(t *testing.T) {
 		t.Fatalf("expected normalized hash %q, got %q", raw, normalized)
 	}
 
-	normalizedRaw, ok := normalizeBase64URLHash(raw)
-	if !ok {
-		t.Fatal("expected canonical hash to be considered valid")
-	}
-	if normalizedRaw != raw {
-		t.Fatalf("expected raw hash to remain unchanged, got %q", normalizedRaw)
+	_, ok = normalizeBase64URLHash(raw)
+	if ok {
+		t.Fatal("expected canonical hash to not normalize")
 	}
 }
 

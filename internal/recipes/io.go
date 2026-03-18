@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 
 	"careme/internal/ai"
@@ -31,13 +30,26 @@ func IO(c cache.Cache) *recipeio {
 }
 
 func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
-	recipe, resolvedHash, err := rio.recipeReaderFromCache(ctx, hash)
+	recipe, err := rio.Cache.Get(ctx, recipeCachePrefix+hash)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, cache.ErrNotFound) {
+			return nil, err
+		}
+		fallbackHash, ok := alternateBase64URLHash(hash)
+		if !ok {
+			return nil, err
+		}
+		recipe, err = rio.Cache.Get(ctx, recipeCachePrefix+fallbackHash)
+		if err != nil {
+			return nil, err
+		}
+		slog.InfoContext(ctx, "served recipe using fallback hash", "hash", hash, "fallback_hash", fallbackHash)	
 	}
+
+	
 	defer func() {
 		if err := recipe.Close(); err != nil {
-			slog.ErrorContext(ctx, "failed to close cached recipe", "hash", resolvedHash, "error", err)
+			slog.ErrorContext(ctx, "failed to close cached recipe", "hash", hash, "error", err)
 		}
 	}()
 
@@ -49,25 +61,6 @@ func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recip
 	return &singleRecipe, nil
 }
 
-func (rio recipeio) recipeReaderFromCache(ctx context.Context, hash string) (io.ReadCloser, string, error) {
-	recipe, err := rio.Cache.Get(ctx, recipeCachePrefix+hash)
-	if err == nil {
-		return recipe, hash, nil
-	}
-	if !errors.Is(err, cache.ErrNotFound) {
-		return nil, hash, err
-	}
-	fallbackHash, ok := alternateBase64URLHash(hash)
-	if !ok {
-		return nil, hash, err
-	}
-	recipe, fallbackErr := rio.Cache.Get(ctx, recipeCachePrefix+fallbackHash)
-	if fallbackErr != nil {
-		return nil, hash, err
-	}
-	slog.InfoContext(ctx, "served recipe using fallback hash", "hash", hash, "fallback_hash", fallbackHash)
-	return recipe, fallbackHash, nil
-}
 
 func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingList, error) {
 	primaryKey := ShoppingListCachePrefix + hash

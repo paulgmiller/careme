@@ -92,7 +92,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	if normalizedHash, ok := normalizeBase64URLHash(hash); ok && normalizedHash != hash {
+	if normalizedHash, ok := normalizeBase64URLHash(hash); ok  {
 		slog.InfoContext(ctx, "redirecting legacy recipe hash to canonical hash", "legacy_hash", hash, "hash", normalizedHash)
 		http.Redirect(w, r, "/recipe/"+normalizedHash, http.StatusSeeOther)
 		return
@@ -150,7 +150,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		FormatRecipeHTML(ctx, p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
 		return
 	}
-	// we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
+	// we didn't go back and update old recipes's  with new shoppinglist hash so have to handle that here. Could still backfill
 	if normalizedHash, ok := legacyHashToCurrent(recipe.OriginHash, legacyRecipeHashSeed); ok {
 		slog.InfoContext(ctx, "normalized legacy origin hash to current hash", "origin_hash", recipe.OriginHash, "hash", normalizedHash)
 		recipe.OriginHash = normalizedHash
@@ -264,6 +264,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
+	//normalize cache here?
 	if selection, err := s.WineFromCache(ctx, hash); err == nil {
 		if selection == nil {
 			http.Error(w, "failed to load wine recommendation", http.StatusInternalServerError)
@@ -278,6 +279,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
 	}
+
 
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
