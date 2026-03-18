@@ -51,6 +51,14 @@ func (m mock) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
 	return "", false
 }
 
+func (_ mock) HasInventory(locationID string) bool {
+	return true
+}
+
+func (_ mock) RequestStore(ctx context.Context, locationID string) error {
+	return nil
+}
+
 func (m mock) Register(mux *http.ServeMux, _ auth.AuthClient) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		data := struct {

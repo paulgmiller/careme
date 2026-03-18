@@ -13,6 +13,8 @@ import (
 
 	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 )
 
@@ -328,6 +330,50 @@ func TestSupportsStaplesLocation(t *testing.T) {
 }
 
 func TestRequestStoreWritesRequestBlob(t *testing.T) {
+	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+		t.Fatalf("failed to init templates: %v", err)
+	}
+
+	fc := cachepkg.NewInMemoryCache()
+	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{newFakeLocationClient()}, fc)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fc)
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodPost, "/locations/request-store", strings.NewReader("store_id=publix_123&zip=98101"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if rr.Header().Get("Location") != "" {
+		t.Fatalf("expected no redirect location, got %q", rr.Header().Get("Location"))
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "Request sent") {
+		t.Fatalf("expected success fragment, got %q", body)
+	}
+
+	raw := requireEventuallyCached(t, fc, storeRequestPrefix+"publix_123")
+	var payload struct {
+		StoreID     string    `json:"store_id"`
+		RequestedAt time.Time `json:"requested_at"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("failed to decode request blob: %v", err)
+	}
+	if payload.StoreID != "publix_123" {
+		t.Fatalf("unexpected store id %q", payload.StoreID)
+	}
+	if payload.RequestedAt.IsZero() {
+		t.Fatal("expected requested_at to be set")
+	}
+}
+
+func TestRequestStoreRedirectsWithoutHTMX(t *testing.T) {
 	fc := cachepkg.NewInMemoryCache()
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{newFakeLocationClient()}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fc)
@@ -345,25 +391,6 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	}
 	if got := rr.Header().Get("Location"); got != "/locations?zip=98101" {
 		t.Fatalf("unexpected redirect location: %q", got)
-	}
-
-	raw := requireEventuallyCached(t, fc, storeRequestPrefix+"publix_123.json")
-	var payload struct {
-		StoreID     string    `json:"store_id"`
-		Zip         string    `json:"zip"`
-		RequestedAt time.Time `json:"requested_at"`
-	}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		t.Fatalf("failed to decode request blob: %v", err)
-	}
-	if payload.StoreID != "publix_123" {
-		t.Fatalf("unexpected store id %q", payload.StoreID)
-	}
-	if payload.Zip != "98101" {
-		t.Fatalf("unexpected zip %q", payload.Zip)
-	}
-	if payload.RequestedAt.IsZero() {
-		t.Fatal("expected requested_at to be set")
 	}
 }
 
@@ -411,6 +438,10 @@ func (f *fakeLocationClient) GetLocationByID(_ context.Context, locationID strin
 
 func (f *fakeLocationClient) IsID(locationID string) bool {
 	return locationID != ""
+}
+
+func (f *fakeLocationClient) HasInventory(locationID string) bool {
+	return true
 }
 
 func newTestLocationServer(client locationBackend) *locationStorage {

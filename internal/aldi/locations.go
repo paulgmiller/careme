@@ -57,6 +57,10 @@ func (b *LocationBackend) IsID(locationID string) bool {
 	return IsID(locationID)
 }
 
+func (b *LocationBackend) HasInventory(locationID string) bool {
+	return false
+}
+
 func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
 	locationID = strings.TrimSpace(locationID)
 	if !IsID(locationID) {

@@ -63,14 +63,7 @@
                   Chef notes
                 </label>
                 {{else}}
-                <form method="POST" action="/locations/request-store">
-                  <input type="hidden" name="store_id" value="{{.ID}}" />
-                  <input type="hidden" name="zip" value="{{$.Zip}}" />
-                  <button type="submit"
-                    class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Request this store
-                  </button>
-                </form>
+                {{template "location_request_store" .}}
                 {{end}}
               </div>
             </div>

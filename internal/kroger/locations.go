@@ -21,6 +21,11 @@ func (c *ClientWithResponses) IsID(locationID string) bool {
 	return true
 }
 
+// we should hide ClientWithResponses
+func (_ *ClientWithResponses) HasInventory(locationID string) bool {
+	return true
+}
+
 func (c *ClientWithResponses) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	resp, err := c.LocationDetailsWithResponse(ctx, locationID)
 	if err != nil {

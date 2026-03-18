@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,7 +52,7 @@ const (
 )
 
 type locationServer struct {
-	storage     locationGetter
+	storage     locationStore
 	zipFetcher  zipFetcher
 	userStorage userLookup
 	cache       cache.Cache
@@ -69,6 +70,13 @@ type zipFetcher interface {
 type locationBackend interface {
 	locationGetter
 	IsID(locationID string) bool
+	HasInventory(locationID string) bool
+}
+
+// name is terrible conflicting with locationStorage. locationStorage should become locationAggregator.
+type locationStore interface {
+	locationGetter
+	RequestStore(ctx context.Context, locationID string) error
 }
 
 // Location is kept as an alias for compatibility with existing imports.
@@ -78,7 +86,7 @@ type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
-func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGetter, error) {
+func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationStore, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
 	}
@@ -118,7 +126,7 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 	}, nil
 }
 
-func NewServer(storage locationGetter, zipFetcher zipFetcher, userStorage userLookup, c cache.Cache) *locationServer {
+func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup, c cache.Cache) *locationServer {
 	return &locationServer{
 		storage:     storage,
 		zipFetcher:  zipFetcher,
@@ -142,6 +150,10 @@ func supportsStaplesLocation(locationID string) bool {
 	}
 
 	return false
+}
+
+func isHTMXRequest(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
 
 func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
@@ -281,6 +293,29 @@ func (l *locationStorage) storeLocationIfMissing(loc Location) error {
 	return nil
 }
 
+func (l *locationStorage) RequestStore(ctx context.Context, storeID string) error {
+	request := struct {
+		StoreID     string    `json:"store_id"`
+		Zip         string    `json:"zip,omitempty"`
+		RequestedAt time.Time `json:"requested_at"`
+	}{
+		StoreID:     storeID,
+		RequestedAt: time.Now().UTC(),
+	}
+	raw, err := json.Marshal(request)
+	if err != nil {
+		return nil
+	}
+	requestKey := storeRequestPrefix + storeID
+	if err := l.cache.Put(ctx, requestKey, string(raw), cache.IfNoneMatch()); err != nil {
+		if !errors.Is(err, cache.ErrAlreadyExists) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid locationtypes.ZipCentroid, zipCentroids centroidByZip) {
 	sort.SliceStable(locations, func(i, j int) bool {
 		leftDistance := locationDistanceTo(requestedCentroid, locations[i], zipCentroids)
@@ -375,26 +410,17 @@ func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient
 			zip = r.URL.Query().Get("zip")
 		}
 
-		if l.cache != nil {
-			request := struct {
-				StoreID     string    `json:"store_id"`
-				Zip         string    `json:"zip,omitempty"`
-				RequestedAt time.Time `json:"requested_at"`
-			}{
-				StoreID:     storeID,
-				Zip:         zip,
-				RequestedAt: time.Now().UTC(),
-			}
-			raw, err := json.Marshal(request)
-			if err != nil {
+		if err := l.storage.RequestStore(r.Context(), storeID); err != nil {
+			http.Error(w, "failed to submit request", http.StatusInternalServerError)
+			return
+		}
+
+		if isHTMXRequest(r) {
+			if err := templates.Location.ExecuteTemplate(w, "location_request_store_success", nil); err != nil {
+				slog.ErrorContext(r.Context(), "failed to render request-store success fragment", "store_id", storeID, "zip", zip, "error", err)
 				http.Error(w, "failed to submit request", http.StatusInternalServerError)
-				return
 			}
-			requestKey := storeRequestPrefix + storeID + ".json"
-			if err := l.cache.Put(r.Context(), requestKey, string(raw), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
-				http.Error(w, "failed to submit request", http.StatusInternalServerError)
-				return
-			}
+			return
 		}
 
 		target := "/locations"
@@ -414,11 +440,16 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	type locationRow struct {
 		Location
 		SupportsStaples bool
+		RequestedZip    string
 	}
 
 	rows := make([]locationRow, 0, len(locs))
 	for _, loc := range locs {
-		rows = append(rows, locationRow{Location: loc, SupportsStaples: supportsStaplesLocation(loc.ID)})
+		rows = append(rows, locationRow{
+			Location:        loc,
+			SupportsStaples: supportsStaplesLocation(loc.ID),
+			RequestedZip:    zip,
+		})
 	}
 
 	data := struct {
