@@ -24,6 +24,11 @@ type FeedbackIO struct {
 	c cache.Cache
 }
 
+type feedbackResult struct {
+	Hash     string
+	Feedback Feedback
+}
+
 func NewIO(c cache.Cache) FeedbackIO {
 	if c == nil {
 		panic("cache cannot be nil")
@@ -63,26 +68,22 @@ func (fio FeedbackIO) SaveFeedback(ctx context.Context, hash string, feedback Fe
 	return nil
 }
 
-func (fio FeedbackIO) CookedHashes(ctx context.Context, hashes []string) map[string]bool {
-	cooked := lop.Map(hashes, func(hash string, _ int) string {
-		if hash == "" {
-			return ""
-		}
-
+func (fio FeedbackIO) FeedbackByHash(ctx context.Context, hashes []string) map[string]Feedback {
+	results := lop.Map(hashes, func(hash string, _ int) feedbackResult {
 		state, err := fio.FeedbackFromCache(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
 				slog.WarnContext(ctx, "failed to load recipe feedback", "hash", hash, "error", err)
 			}
-			return ""
+			return feedbackResult{}
 		}
-		if !state.Cooked {
-			return ""
+		return feedbackResult{
+			Hash:     hash,
+			Feedback: *state,
 		}
-		return hash
 	})
-
-	return lo.SliceToMap(lo.Compact(cooked), func(hash string) (string, bool) {
-		return hash, true
+	results = lo.Compact(results)
+	return lo.SliceToMap(results, func(result feedbackResult) (string, Feedback) {
+		return result.Hash, result.Feedback
 	})
 }

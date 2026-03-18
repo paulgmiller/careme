@@ -173,11 +173,10 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		for _, recipe := range recent {
 			hashes = append(hashes, recipe.Hash)
 		}
-		cooked := rio.CookedHashes(ctx, hashes)
+		cooked := rio.FeedbackByHash(ctx, hashes)
 		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-			return r.Title, cooked[r.Hash]
+			return r.Title, cooked[r.Hash].Cooked
 		})
-
 		// can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)

@@ -149,7 +149,7 @@ func cookedRecipeCount(ctx context.Context, c cache.Cache, user utypes.User) int
 		}
 		hashes = append(hashes, recipe.Hash)
 	}
-	return len(feedback.NewIO(c).CookedHashes(ctx, hashes))
+	return len(feedback.NewIO(c).FeedbackByHash(ctx, hashes))
 }
 
 func renderAdminEmailsText(w http.ResponseWriter, users []utypes.User) {

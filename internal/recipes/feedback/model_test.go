@@ -33,22 +33,21 @@ func TestMarshalAndDecodeRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCookedHashes(t *testing.T) {
+func TestFeedbackByHash(t *testing.T) {
 	cache := cache.NewInMemoryCache()
 	io := NewIO(cache)
 
-	if err := io.SaveFeedback(t.Context(), "cooked", Feedback{Cooked: true, UpdatedAt: time.Now()}); err != nil {
-		t.Fatalf("failed to save cooked feedback: %v", err)
-	}
-	if err := io.SaveFeedback(t.Context(), "saved", Feedback{Cooked: false, UpdatedAt: time.Now()}); err != nil {
-		t.Fatalf("failed to save uncooked feedback: %v", err)
+	state := Feedback{Cooked: true, Stars: 4, UpdatedAt: time.Now()}
+	if err := io.SaveFeedback(t.Context(), "rated", state); err != nil {
+		t.Fatalf("failed to save feedback: %v", err)
 	}
 
-	got := io.CookedHashes(t.Context(), []string{"cooked", "saved", "missing", "", "cooked"})
+	got := io.FeedbackByHash(t.Context(), []string{"rated", "missing", "", "rated"})
 	if len(got) != 1 {
-		t.Fatalf("expected exactly one cooked hash, got %v", got)
+		t.Fatalf("expected one feedback entry, got %v", got)
 	}
-	if _, ok := got["cooked"]; !ok {
-		t.Fatalf("expected cooked hash in result, got %v", got)
+	rated := got["rated"]
+	if rated.Cooked != state.Cooked || rated.Stars != state.Stars || rated.Comment != state.Comment || !rated.UpdatedAt.Equal(state.UpdatedAt) {
+		t.Fatalf("unexpected feedback map contents: got %#v want %#v", rated, state)
 	}
 }
