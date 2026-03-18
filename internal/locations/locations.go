@@ -387,7 +387,7 @@ func (l *locationServer) Register(mux *http.ServeMux, authClient auth.AuthClient
 	})
 
 	mux.HandleFunc("POST /locations/request-store", func(w http.ResponseWriter, r *http.Request) {
-		if isHTMXRequest(r) {
+		if !isHTMXRequest(r) {
 			http.Error(w, "store requests must be made via HTMX", http.StatusBadRequest)
 			return
 		}
