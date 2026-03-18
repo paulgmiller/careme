@@ -34,12 +34,15 @@ type generatorParams struct {
 	// per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
-	LastRecipes  []string `json:"last_recipes,omitempty"`
+	LastRecipes  []string `json:"-"`                   // this doesn't get populated until after save.
 	// UserID         string      `json:"user_id,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
-	// TODO Both should just be title and hash insread of full ai.Recipe
+	// TODO Both should just be title and hash instead of full ai.Recipe
 	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
+
+	// regeneration-only context from the origin params; not persisted or hashed
+	PriorSavedHashes []string `json:"-"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {

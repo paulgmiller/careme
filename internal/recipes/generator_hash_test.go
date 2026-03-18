@@ -77,6 +77,18 @@ func TestGeneratorParamsLocationHash_DiffersAcrossStoreBackends(t *testing.T) {
 	}
 }
 
+func TestGeneratorParamsHash_IgnoresPriorSavedHashes(t *testing.T) {
+	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+
+	before := p.Hash()
+	p.PriorSavedHashes = []string{"saved-1", "saved-2"}
+	after := p.Hash()
+
+	if before != after {
+		t.Fatalf("expected prior saved hashes not to affect params hash: before=%s after=%s", before, after)
+	}
+}
+
 func TestNormalizeLegacyRecipeHash(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Legacy Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 	hash := p.Hash()
