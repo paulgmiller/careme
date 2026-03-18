@@ -1,6 +1,11 @@
 package users
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/templates"
 	"context"
 	"errors"
 	"html/template"
@@ -12,11 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"careme/internal/cache"
-	"careme/internal/locations"
-	"careme/internal/recipes/feedback"
-	"careme/internal/routing"
-	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 )
 
@@ -216,7 +216,7 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	if !strings.Contains(body, `Cooked Pasta</a> <span aria-label="Rated 4 stars" title="Rated 4 stars">⭐⭐⭐⭐</span>`) {
 		t.Fatalf("expected cooked recipe to render 4 stars, got body: %s", body)
 	}
-	if !strings.Contains(body, `Cooked No Rating</a> <span aria-label="Rated 1 star" title="Rated 1 star">⭐</span>`) {
+	if !strings.Contains(body, `Cooked No Rating</a> <span aria-label="Cooked" title="Cooked">🔪</span>`) {
 		t.Fatalf("expected unrated cooked recipe to render 1 star, got body: %s", body)
 	}
 	if strings.Contains(body, `Saved Soup</a> <span aria-label="Rated`) {

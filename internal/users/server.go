@@ -1,6 +1,13 @@
 package users
 
 import (
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/seasons"
+	"careme/internal/templates"
 	"context"
 	"errors"
 	"html/template"
@@ -9,14 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/locations"
-	"careme/internal/recipes/feedback"
-	"careme/internal/routing"
-	"careme/internal/seasons"
-	"careme/internal/templates"
 
 	utypes "careme/internal/users/types"
 
@@ -236,7 +235,7 @@ func cookedStars(ok bool, state feedback.Feedback) string {
 	}
 	stars := state.Stars
 	if stars < 1 {
-		stars = 1
+		return "🔪"
 	}
 	return strings.Repeat("⭐", stars)
 }
@@ -247,7 +246,7 @@ func cookedStarsLabel(ok bool, state feedback.Feedback) string {
 	}
 	stars := state.Stars
 	if stars < 1 {
-		stars = 1
+		return "Cooked"
 	}
 	if stars == 1 {
 		return "Rated 1 star"
