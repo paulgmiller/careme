@@ -293,12 +293,14 @@ func (l *locationStorage) storeLocationIfMissing(loc Location) error {
 	return nil
 }
 
+type locationRequest struct {
+	StoreID     string    `json:"store_id"`
+	Users       []string  `json:"users"`
+	RequestedAt time.Time `json:"requested_at"`
+}
+
 func (l *locationStorage) RequestStore(ctx context.Context, storeID string) error {
-	request := struct {
-		StoreID     string    `json:"store_id"`
-		Zip         string    `json:"zip,omitempty"`
-		RequestedAt time.Time `json:"requested_at"`
-	}{
+	request := locationRequest{
 		StoreID:     storeID,
 		RequestedAt: time.Now().UTC(),
 	}

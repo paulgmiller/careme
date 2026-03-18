@@ -358,10 +358,7 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	}
 
 	raw := requireEventuallyCached(t, fc, storeRequestPrefix+"publix_123")
-	var payload struct {
-		StoreID     string    `json:"store_id"`
-		RequestedAt time.Time `json:"requested_at"`
-	}
+	var payload locationRequest
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		t.Fatalf("failed to decode request blob: %v", err)
 	}
