@@ -1,13 +1,6 @@
 package users
 
 import (
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/locations"
-	"careme/internal/recipes/feedback"
-	"careme/internal/routing"
-	"careme/internal/seasons"
-	"careme/internal/templates"
 	"context"
 	"errors"
 	"html/template"
@@ -16,6 +9,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/seasons"
+	"careme/internal/templates"
 
 	utypes "careme/internal/users/types"
 
