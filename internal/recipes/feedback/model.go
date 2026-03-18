@@ -69,10 +69,6 @@ func (fio FeedbackIO) SaveFeedback(ctx context.Context, hash string, feedback Fe
 
 func (fio FeedbackIO) FeedbackByHash(ctx context.Context, hashes []string) map[string]Feedback {
 	results := lop.Map(hashes, func(hash string, _ int) feedbackResult {
-		if hash == "" {
-			return feedbackResult{}
-		}
-
 		state, err := fio.FeedbackFromCache(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
@@ -85,7 +81,7 @@ func (fio FeedbackIO) FeedbackByHash(ctx context.Context, hashes []string) map[s
 			Feedback: *state,
 		}
 	})
-
+	results = lo.Compact(results)
 	return lo.SliceToMap(results, func(result feedbackResult) (string, Feedback) {
 		return result.Hash, result.Feedback
 	})
