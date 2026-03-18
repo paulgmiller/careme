@@ -26,4 +26,5 @@ go run ./cmd/recipeeval -create
 go run ./cmd/recipeeval -run -eval-id eval_123
 ```
 
-The checked-in fixture data is intentionally small and synthetic. Replace or extend it with reviewed real generations as you build out the suite.
+ingredients_fixture.tv data is intentionally small and synthetic.
+belleueeast(qfc) and whole foods tsv are from real days.
