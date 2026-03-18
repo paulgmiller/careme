@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 )
 
 func TestGetLocationByIDUsesCache(t *testing.T) {
@@ -333,8 +338,26 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{newFakeLocationClient()}, fc)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{})
 
-	storage.RequestStore(t.Context(), "publix_123")
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodPost, "/locations/request-store", strings.NewReader("store_id=publix_123&zip=98101"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if rr.Header().Get("Location") != "" {
+		t.Fatalf("expected no redirect location, got %q", rr.Header().Get("Location"))
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "Request sent") {
+		t.Fatalf("expected success fragment, got %q", body)
+	}
 
 	raw := requireEventuallyCached(t, fc, storeRequestPrefix+"publix_123")
 	var payload locationRequest
@@ -458,4 +481,10 @@ func mustParseTime(t *testing.T, value string) time.Time {
 		t.Fatalf("failed to parse time %q: %v", value, err)
 	}
 	return ts
+}
+
+type fakeUserLookup struct{}
+
+func (fakeUserLookup) FromRequest(context.Context, *http.Request, auth.AuthClient) (*utypes.User, error) {
+	return nil, auth.ErrNoSession
 }
