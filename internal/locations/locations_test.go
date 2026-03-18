@@ -338,7 +338,7 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{newFakeLocationClient()}, fc)
-	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fc)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{})
 
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())

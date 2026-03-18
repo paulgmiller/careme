@@ -54,7 +54,6 @@ type locationServer struct {
 	storage     locationStore
 	zipFetcher  zipFetcher
 	userStorage userLookup
-	cache       cache.Cache
 }
 
 type locationGetter interface {
@@ -125,12 +124,11 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationSt
 	}, nil
 }
 
-func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup, c cache.Cache) *locationServer {
+func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
 	return &locationServer{
 		storage:     storage,
 		zipFetcher:  zipFetcher,
 		userStorage: userStorage,
-		cache:       c,
 	}
 }
 
