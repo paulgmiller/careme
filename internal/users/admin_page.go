@@ -1,8 +1,6 @@
 package users
 
 import (
-	"careme/internal/cache"
-	"careme/internal/recipes/feedback"
 	"context"
 	"html/template"
 	"log/slog"
@@ -10,6 +8,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/recipes/feedback"
 
 	utypes "careme/internal/users/types"
 )

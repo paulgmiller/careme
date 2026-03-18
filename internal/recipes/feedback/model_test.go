@@ -1,9 +1,10 @@
 package feedback
 
 import (
-	"careme/internal/cache"
 	"testing"
 	"time"
+
+	"careme/internal/cache"
 )
 
 func TestMarshalAndDecodeRoundTrip(t *testing.T) {
