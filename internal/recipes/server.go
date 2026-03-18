@@ -2,6 +2,16 @@ package recipes
 
 import (
 	"bytes"
+	"careme/internal/ai"
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/seasons"
+	"careme/internal/templates"
+	"careme/internal/users"
 	"context"
 	"errors"
 	"fmt"
@@ -13,17 +23,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"careme/internal/ai"
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/recipes/feedback"
-	"careme/internal/routing"
-	"careme/internal/seasons"
-	"careme/internal/templates"
-	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 
@@ -869,10 +868,10 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 		for _, recipe := range recent {
 			hashes = append(hashes, recipe.Hash)
 		}
-		cooked := s.CookedHashes(ctx, hashes)
+		cooked := s.FeedbackByHash(ctx, hashes)
 
 		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-			return r.Title, cooked[r.Hash]
+			return r.Title, cooked[r.Hash].Cooked
 		})
 
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)

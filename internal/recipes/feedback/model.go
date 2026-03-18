@@ -1,13 +1,12 @@
 package feedback
 
 import (
+	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"time"
-
-	"careme/internal/cache"
 
 	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"
@@ -87,17 +86,7 @@ func (fio FeedbackIO) FeedbackByHash(ctx context.Context, hashes []string) map[s
 		}
 	})
 
-	return lo.SliceToMap(lo.Filter(results, func(result feedbackResult, _ int) bool {
-		return result.Hash != ""
-	}), func(result feedbackResult) (string, Feedback) {
+	return lo.SliceToMap(results, func(result feedbackResult) (string, Feedback) {
 		return result.Hash, result.Feedback
-	})
-}
-
-func (fio FeedbackIO) CookedHashes(ctx context.Context, hashes []string) map[string]bool {
-	return lo.SliceToMap(lo.Filter(lo.Entries(fio.FeedbackByHash(ctx, hashes)), func(entry lo.Entry[string, Feedback], _ int) bool {
-		return entry.Value.Cooked
-	}), func(entry lo.Entry[string, Feedback]) (string, bool) {
-		return entry.Key, true
 	})
 }

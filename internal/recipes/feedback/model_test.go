@@ -1,10 +1,9 @@
 package feedback
 
 import (
+	"careme/internal/cache"
 	"testing"
 	"time"
-
-	"careme/internal/cache"
 )
 
 func TestMarshalAndDecodeRoundTrip(t *testing.T) {
@@ -30,26 +29,6 @@ func TestMarshalAndDecodeRoundTrip(t *testing.T) {
 
 	if *decoded != original {
 		t.Fatalf("round trip mismatch: got %#v want %#v", *decoded, original)
-	}
-}
-
-func TestCookedHashes(t *testing.T) {
-	cache := cache.NewInMemoryCache()
-	io := NewIO(cache)
-
-	if err := io.SaveFeedback(t.Context(), "cooked", Feedback{Cooked: true, UpdatedAt: time.Now()}); err != nil {
-		t.Fatalf("failed to save cooked feedback: %v", err)
-	}
-	if err := io.SaveFeedback(t.Context(), "saved", Feedback{Cooked: false, UpdatedAt: time.Now()}); err != nil {
-		t.Fatalf("failed to save uncooked feedback: %v", err)
-	}
-
-	got := io.CookedHashes(t.Context(), []string{"cooked", "saved", "missing", "", "cooked"})
-	if len(got) != 1 {
-		t.Fatalf("expected exactly one cooked hash, got %v", got)
-	}
-	if _, ok := got["cooked"]; !ok {
-		t.Fatalf("expected cooked hash in result, got %v", got)
 	}
 }
 

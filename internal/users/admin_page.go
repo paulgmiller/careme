@@ -1,6 +1,8 @@
 package users
 
 import (
+	"careme/internal/cache"
+	"careme/internal/recipes/feedback"
 	"context"
 	"html/template"
 	"log/slog"
@@ -8,9 +10,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"careme/internal/cache"
-	"careme/internal/recipes/feedback"
 
 	utypes "careme/internal/users/types"
 )
@@ -149,7 +148,7 @@ func cookedRecipeCount(ctx context.Context, c cache.Cache, user utypes.User) int
 		}
 		hashes = append(hashes, recipe.Hash)
 	}
-	return len(feedback.NewIO(c).CookedHashes(ctx, hashes))
+	return len(feedback.NewIO(c).FeedbackByHash(ctx, hashes))
 }
 
 func renderAdminEmailsText(w http.ResponseWriter, users []utypes.User) {
