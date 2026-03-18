@@ -24,6 +24,11 @@ type FeedbackIO struct {
 	c cache.Cache
 }
 
+type feedbackResult struct {
+	Hash     string
+	Feedback Feedback
+}
+
 func NewIO(c cache.Cache) FeedbackIO {
 	if c == nil {
 		panic("cache cannot be nil")
@@ -63,10 +68,10 @@ func (fio FeedbackIO) SaveFeedback(ctx context.Context, hash string, feedback Fe
 	return nil
 }
 
-func (fio FeedbackIO) CookedHashes(ctx context.Context, hashes []string) map[string]bool {
-	cooked := lop.Map(hashes, func(hash string, _ int) string {
+func (fio FeedbackIO) FeedbackByHash(ctx context.Context, hashes []string) map[string]Feedback {
+	results := lop.Map(hashes, func(hash string, _ int) feedbackResult {
 		if hash == "" {
-			return ""
+			return feedbackResult{}
 		}
 
 		state, err := fio.FeedbackFromCache(ctx, hash)
@@ -74,15 +79,25 @@ func (fio FeedbackIO) CookedHashes(ctx context.Context, hashes []string) map[str
 			if !errors.Is(err, cache.ErrNotFound) {
 				slog.WarnContext(ctx, "failed to load recipe feedback", "hash", hash, "error", err)
 			}
-			return ""
+			return feedbackResult{}
 		}
-		if !state.Cooked {
-			return ""
+		return feedbackResult{
+			Hash:     hash,
+			Feedback: *state,
 		}
-		return hash
 	})
 
-	return lo.SliceToMap(lo.Compact(cooked), func(hash string) (string, bool) {
-		return hash, true
+	return lo.SliceToMap(lo.Filter(results, func(result feedbackResult, _ int) bool {
+		return result.Hash != ""
+	}), func(result feedbackResult) (string, Feedback) {
+		return result.Hash, result.Feedback
+	})
+}
+
+func (fio FeedbackIO) CookedHashes(ctx context.Context, hashes []string) map[string]bool {
+	return lo.SliceToMap(lo.Filter(lo.Entries(fio.FeedbackByHash(ctx, hashes)), func(entry lo.Entry[string, Feedback], _ int) bool {
+		return entry.Value.Cooked
+	}), func(entry lo.Entry[string, Feedback]) (string, bool) {
+		return entry.Key, true
 	})
 }

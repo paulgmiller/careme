@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,7 +36,9 @@ type server struct {
 
 type pastRecipeView struct {
 	utypes.Recipe
-	Cooked bool
+	Cooked           bool
+	CookedStars      string
+	CookedStarsLabel string
 }
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
@@ -105,6 +108,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ctx := r.Context()
 	activeTab := "customize"
 	if r.URL.Query().Get("tab") == "past" {
@@ -213,14 +217,42 @@ func pastRecipeViews(ctx context.Context, c cache.Cache, recipes []utypes.Recipe
 	for _, recipe := range recipes {
 		hashes = append(hashes, recipe.Hash)
 	}
-	cooked := feedbackIO.CookedHashes(ctx, hashes)
+	feedbackByHash := feedbackIO.FeedbackByHash(ctx, hashes)
 
 	return lo.Map(recipes, func(recipe utypes.Recipe, _ int) pastRecipeView {
+		state, ok := feedbackByHash[recipe.Hash]
 		return pastRecipeView{
-			Recipe: recipe,
-			Cooked: cooked[recipe.Hash],
+			Recipe:           recipe,
+			Cooked:           ok && state.Cooked,
+			CookedStars:      cookedStars(ok, state),
+			CookedStarsLabel: cookedStarsLabel(ok, state),
 		}
 	})
+}
+
+func cookedStars(ok bool, state feedback.Feedback) string {
+	if !ok || !state.Cooked {
+		return ""
+	}
+	stars := state.Stars
+	if stars < 1 {
+		stars = 1
+	}
+	return strings.Repeat("⭐", stars)
+}
+
+func cookedStarsLabel(ok bool, state feedback.Feedback) string {
+	if !ok || !state.Cooked {
+		return ""
+	}
+	stars := state.Stars
+	if stars < 1 {
+		stars = 1
+	}
+	if stars == 1 {
+		return "Rated 1 star"
+	}
+	return "Rated " + strconv.Itoa(stars) + " stars"
 }
 
 func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
