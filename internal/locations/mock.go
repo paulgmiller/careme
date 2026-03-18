@@ -52,11 +52,11 @@ func (m mock) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
 	return "", false
 }
 
-func (_ mock) HasInventory(locationID string) bool {
+func (mock) HasInventory(locationID string) bool {
 	return true
 }
 
-func (_ mock) RequestStore(ctx context.Context, locationID string) error {
+func (mock) RequestStore(ctx context.Context, locationID string) error {
 	return nil
 }
 

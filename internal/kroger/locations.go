@@ -22,7 +22,7 @@ func (c *ClientWithResponses) IsID(locationID string) bool {
 }
 
 // we should hide ClientWithResponses
-func (_ *ClientWithResponses) HasInventory(locationID string) bool {
+func (*ClientWithResponses) HasInventory(locationID string) bool {
 	return true
 }
 

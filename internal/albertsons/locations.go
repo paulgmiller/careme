@@ -59,7 +59,7 @@ func (b *LocationBackend) IsID(locationID string) bool {
 	return IsID(locationID)
 }
 
-func (_ *LocationBackend) HasInventory(locationID string) bool {
+func (*LocationBackend) HasInventory(locationID string) bool {
 	return false
 }
 

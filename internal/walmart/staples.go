@@ -40,7 +40,7 @@ func (c identityProvider) IsID(locationID string) bool {
 	return true
 }
 
-func (_ *identityProvider) HasInventory(locationID string) bool {
+func (*identityProvider) HasInventory(locationID string) bool {
 	return false
 }
 

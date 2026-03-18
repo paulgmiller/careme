@@ -60,7 +60,7 @@ func (b *LocationBackend) IsID(locationID string) bool {
 	return strings.HasPrefix(locationID, LocationIDPrefix) && len(locationID) > len(LocationIDPrefix)
 }
 
-func (_ *LocationBackend) HasInventory(locationID string) bool {
+func (*LocationBackend) HasInventory(locationID string) bool {
 	return false
 }
 
