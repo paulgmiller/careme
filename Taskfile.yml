@@ -174,6 +174,26 @@ tasks:
     cmds:
       - go run ./cmd/producecheck -location {{.LOCATION}}
 
+  recipeeval-dry:
+    desc: Validate recipe eval cases and print the eval payloads
+    cmds:
+      - go run ./cmd/recipeeval -dry-run
+
+  recipeeval-create:
+    desc: Create the recipe regression eval definition
+    cmds:
+      - go run ./cmd/recipeeval -create
+
+  recipeeval-run:
+    desc: Run the recipe regression eval against an existing eval id
+    preconditions:
+      - sh: test -n "{{.EVAL_ID}}"
+        msg: EVAL_ID is required
+    vars:
+      EVAL_ID: '{{.EVAL_ID}}'
+    cmds:
+      - go run ./cmd/recipeeval -run -eval-id {{.EVAL_ID}}
+
   deploy:
     desc: Deploy the app using deploy/deploy.sh
     vars:
