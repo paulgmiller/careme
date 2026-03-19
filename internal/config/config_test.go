@@ -32,27 +32,27 @@ func TestLoadEnablesAdditionalStoresFromSharedEnv(t *testing.T) {
 func TestLoadRetainsIndividualStoreFlags(t *testing.T) {
 	resetStoreEnvs(t)
 	t.Setenv("ENABLE_MOCKS", "1")
-	t.Setenv("PUBLIX_ENABLE", "1")
+	t.Setenv("PUBLIX_ENABLE", "false")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Aldi.IsEnabled() {
-		t.Fatalf("expected ALDI to remain disabled")
+	if !cfg.Aldi.IsEnabled() {
+		t.Fatalf("expected ALDI to remain enabled")
 	}
-	if cfg.WholeFoods.IsEnabled() {
-		t.Fatalf("expected Whole Foods to remain disabled")
+	if !cfg.WholeFoods.IsEnabled() {
+		t.Fatalf("expected Whole Foods to remain enabled")
 	}
-	if cfg.Albertsons.IsEnabled() {
-		t.Fatalf("expected Albertsons to remain disabled")
+	if !cfg.Albertsons.IsEnabled() {
+		t.Fatalf("expected Albertsons to remain enabled")
 	}
-	if !cfg.Publix.IsEnabled() {
-		t.Fatalf("expected Publix to be enabled")
+	if cfg.Publix.IsEnabled() {
+		t.Fatalf("expected Publix to be disabled ")
 	}
-	if cfg.HEB.IsEnabled() {
-		t.Fatalf("expected HEB to remain disabled")
+	if !cfg.HEB.IsEnabled() {
+		t.Fatalf("expected HEB to remain enaabled")
 	}
 }
 

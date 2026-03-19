@@ -75,7 +75,7 @@ func (s *server) Register(mux routing.Registrar) {
 }
 
 type storesResponse struct {
-	StoreIDs           string `json:"store_ids"`
+	Id                 string `json:"d"`
 	ScrapeIntervalDays int    `json:"scrape_interval_days"`
 }
 
@@ -91,7 +91,7 @@ func (s *server) handleStores(w http.ResponseWriter, r *http.Request) {
 
 	response := lo.Map(storeIDs, func(id string, _ int) storesResponse {
 		return storesResponse{
-			StoreIDs:           id,
+			Id:                 id,
 			ScrapeIntervalDays: scrapeIntervalDays,
 		}
 	})

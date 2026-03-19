@@ -7,13 +7,15 @@ import (
 	"net/http/httptest"
 	"slices"
 	"testing"
+
+	"github.com/samber/lo"
 )
 
 func TestServerRegistersStoresJSON(t *testing.T) {
 	t.Parallel()
 
 	mux := http.NewServeMux()
-	NewServer(nil).Register(mux)
+	NewServer(fakeRequestedStoreProvider{storeIDs: []string{}}).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/actowiz/stores.json", nil)
 	rr := httptest.NewRecorder()
@@ -28,13 +30,13 @@ func TestServerRegistersStoresJSON(t *testing.T) {
 		t.Fatalf("content type = %q, want %q", got, "application/json; charset=utf-8")
 	}
 
-	var got storesResponse
+	var got []storesResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
 
-	if len(got.StoreIDs) < 30 {
-		t.Fatalf("store id count = %d, want 30", len(got.StoreIDs))
+	if len(got) < 30 {
+		t.Fatalf("store id count = %d, want 30", len(got))
 	}
 }
 
@@ -53,17 +55,20 @@ func TestServerAppendsRequestedStoresAndDedupes(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
 	}
 
-	var got storesResponse
+	var got []storesResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
 
-	if !slices.Contains(got.StoreIDs, "publix_123") {
-		t.Fatalf("requested store %q missing from response: %v", "publix_123", got.StoreIDs)
+	ids := lo.Map(got, func(r storesResponse, _ int) string {
+		return r.Id
+	})
+	if !slices.Contains(ids, "publix_123") {
+		t.Fatalf("requested store %q missing from response: %v", "publix_123", ids)
 	}
 
 	duplicateCount := 0
-	for _, storeID := range got.StoreIDs {
+	for _, storeID := range ids {
 		if storeID == "safeway_490" {
 			duplicateCount++
 		}
@@ -72,8 +77,8 @@ func TestServerAppendsRequestedStoresAndDedupes(t *testing.T) {
 		t.Fatalf("store %q count = %d, want 1", "safeway_490", duplicateCount)
 	}
 
-	if got.StoreIDs[len(got.StoreIDs)-1] != "publix_123" {
-		t.Fatalf("last store id = %q, want %q", got.StoreIDs[len(got.StoreIDs)-1], "publix_123")
+	if ids[len(ids)-1] != "publix_123" {
+		t.Fatalf("last store id = %q, want %q", ids[len(ids)-1], "publix_123")
 	}
 }
 
