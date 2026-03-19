@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"careme/internal/cache"
+
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -86,12 +87,9 @@ func TestLocationBackendReturnsAllWhenZipUnknown(t *testing.T) {
 		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
-	locs, err := backend.GetLocationsByZip(context.Background(), "unknown")
-	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
-	}
-	if len(locs) != 0 {
-		t.Fatalf("expected no locations when zip centroid is unknown, got %d", len(locs))
+	_, err = backend.GetLocationsByZip(context.Background(), "unknown")
+	if err == nil {
+		t.Fatalf("expected error when bad zip is passed")
 	}
 }
 

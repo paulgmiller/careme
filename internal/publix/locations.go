@@ -8,6 +8,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations/nearby"
+
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -84,5 +85,5 @@ func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string)
 	for _, loc := range b.byID {
 		candidates = append(candidates, loc)
 	}
-	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, nearby.MaxLocationDistanceMiles), nil
+	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, nearby.MaxLocationDistanceMiles)
 }

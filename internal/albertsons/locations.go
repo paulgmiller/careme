@@ -1,23 +1,27 @@
 package albertsons
 
 import (
-	"context"
-	"fmt"
-	"strings"
-
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/locations/geo"
 	"careme/internal/locations/nearby"
+	"careme/internal/locations/pointindex"
+	"careme/internal/parallelism"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+
 	locationtypes "careme/internal/locations/types"
 )
 
-type centroidByZip interface {
-	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
-}
+type centroidByZip = ZIPCentroidLookup
 
 type LocationBackend struct {
-	zipLookup centroidByZip
-	byID      map[string]locationtypes.Location
+	zipLookup  centroidByZip
+	cache      cache.ListCache
+	pointIndex map[string]pointindex.Point
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -38,20 +42,18 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 }
 
 func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	summaries, err := loadCachedStoreSummaries(ctx, c)
+	pointIndex, err := pointindex.LoadOrBuild(ctx, c, zipLookup, LoadCachedStoreSummaries)
 	if err != nil {
 		return nil, err
 	}
-
-	byID := make(map[string]locationtypes.Location, len(summaries))
-	for _, summary := range summaries {
-		loc := storeSummaryToLocation(*summary)
-		byID[loc.ID] = loc
-	}
+	// should we alert if this is ever zero or just get uptime robot ping on location?
+	// or a readiness probe thats only checked in prod
+	slog.InfoContext(ctx, "loaded pointmap for albertsons", "count", len(pointIndex))
 
 	return &LocationBackend{
-		zipLookup: zipLookup,
-		byID:      byID,
+		zipLookup:  zipLookup,
+		cache:      c,
+		pointIndex: pointIndex,
 	}, nil
 }
 
@@ -63,25 +65,58 @@ func (*LocationBackend) HasInventory(locationID string) bool {
 	return false
 }
 
-func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
+func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	locationID = strings.TrimSpace(locationID)
 	if !IsID(locationID) {
 		return nil, fmt.Errorf("albertsons location id %q is invalid", locationID)
 	}
 
-	loc, exists := b.byID[locationID]
-	if !exists {
-		return nil, fmt.Errorf("albertsons location %q not found", locationID)
-	}
-
-	copy := loc
-	return &copy, nil
+	return b.locationByID(ctx, locationID)
 }
 
 func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	candidates := make([]locationtypes.Location, 0, len(b.byID))
-	for _, loc := range b.byID {
-		candidates = append(candidates, loc)
+	requestedCentroid, ok := b.zipLookup.ZipCentroidByZIP(strings.TrimSpace(zipcode))
+	if !ok {
+		return nil, fmt.Errorf("requested zip %s has no centroid", zipcode)
 	}
-	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, nearby.MaxLocationDistanceMiles), nil
+
+	candidateIDs := b.candidateIDsForCentroid(requestedCentroid)
+	candidates, err := parallelism.MapWithError(candidateIDs, func(locationID string) (locationtypes.Location, error) {
+		l, err := b.locationByID(ctx, locationID)
+		return *l, err
+	})
+	if err != nil {
+		if len(candidates) == 0 {
+			return nil, fmt.Errorf("failed to load any locations for zip %s: %w", zipcode, err)
+		}
+		slog.WarnContext(ctx, "failed to load some albertsons locations for zip, returning partial results", "zip", zipcode, "error", err, "requested_centroid", requestedCentroid, "candidate_ids", candidateIDs)
+	}
+
+	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, nearby.MaxLocationDistanceMiles)
+}
+
+func (b *LocationBackend) locationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
+	summary, err := loadCachedStoreSummary(ctx, b.cache, locationID)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			return nil, fmt.Errorf("albertsons location %q not found", locationID)
+		}
+		return nil, fmt.Errorf("load albertsons location %q: %w", locationID, err)
+	}
+
+	loc := storeSummaryToLocation(*summary)
+	return &loc, nil
+}
+
+func (b *LocationBackend) candidateIDsForCentroid(requested locationtypes.ZipCentroid) []string {
+	ids := make([]string, 0, len(b.pointIndex))
+	for locationID, point := range b.pointIndex {
+		distance := geo.HaversineMiles(requested.Lat, requested.Lon, point.Lat, point.Lon)
+		if distance > nearby.MaxLocationDistanceMiles {
+			continue
+		}
+		ids = append(ids, locationID)
+	}
+
+	return ids
 }

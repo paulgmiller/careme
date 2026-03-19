@@ -12,6 +12,9 @@ import (
 
 	"careme/internal/albertsons"
 	"careme/internal/cache"
+	"careme/internal/locations/pointindex"
+
+	locationtypes "careme/internal/locations/types"
 )
 
 func TestSelectedChainsDefaultsToAll(t *testing.T) {
@@ -93,7 +96,7 @@ func TestSyncChainFromSitemapSkipsKnownURLsWithCachedSummaries(t *testing.T) {
 		IDPrefix:    "albertsons_",
 	}
 
-	synced, err := syncChainFromSitemap(context.Background(), cacheStore, httpClient, chain, baseURL+"/sitemap.xml", 0*time.Millisecond)
+	synced, err := syncChainFromSitemap(context.Background(), cacheStore, httpClient, chain, baseURL+"/sitemap.xml", 0*time.Millisecond, nil)
 	if err != nil {
 		t.Fatalf("syncChainFromSitemap returned error: %v", err)
 	}
@@ -102,6 +105,78 @@ func TestSyncChainFromSitemapSkipsKnownURLsWithCachedSummaries(t *testing.T) {
 	}
 	if pageRequests.Load() != 0 {
 		t.Fatalf("expected no page requests for cached url, got %d", pageRequests.Load())
+	}
+}
+
+func TestSyncChainFromSitemapRebuildsPointIndexFromZIPWhenKnownURLHasNoCoordinates(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	var pageRequests atomic.Int32
+	baseURL := "https://local.albertsons.test"
+
+	httpClient := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.String() {
+			case baseURL + "/sitemap.xml":
+				body := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/az/lake-havasu-city/1980-mcculloch-blvd.html</loc></url></urlset>`, baseURL)
+				return responseWithBody(http.StatusOK, body), nil
+			case baseURL + "/az/lake-havasu-city/1980-mcculloch-blvd.html":
+				pageRequests.Add(1)
+				return responseWithBody(http.StatusOK, `<html></html>`), nil
+			default:
+				return responseWithBody(http.StatusNotFound, "not found"), nil
+			}
+		}),
+	}
+
+	if err := albertsons.CacheStoreSummary(context.Background(), cacheStore, &albertsons.StoreSummary{
+		ID:      "albertsons_3204",
+		Brand:   "albertsons",
+		Domain:  "local.albertsons.com",
+		StoreID: "3204",
+		Name:    "Albertsons 1980 Mcculloch Blvd",
+		Address: "1980 Mcculloch Blvd",
+		State:   "AZ",
+		ZipCode: "86403",
+		URL:     baseURL + "/az/lake-havasu-city/1980-mcculloch-blvd.html",
+	}); err != nil {
+		t.Fatalf("CacheStoreSummary returned error: %v", err)
+	}
+	if err := albertsons.SaveStoreURLMap(context.Background(), cacheStore, map[string]string{
+		baseURL + "/az/lake-havasu-city/1980-mcculloch-blvd.html": "albertsons_3204",
+	}); err != nil {
+		t.Fatalf("SaveStoreURLMap returned error: %v", err)
+	}
+
+	chain := albertsons.Chain{
+		Brand:       "albertsons",
+		DisplayName: "Albertsons",
+		Domain:      strings.TrimPrefix(baseURL, "https://"),
+		IDPrefix:    "albertsons_",
+	}
+
+	synced, err := syncChainFromSitemap(context.Background(), cacheStore, httpClient, chain, baseURL+"/sitemap.xml", 0*time.Millisecond, staticZIPLookup{
+		"86403": {Lat: 34.4839, Lon: -114.3225},
+	})
+	if err != nil {
+		t.Fatalf("syncChainFromSitemap returned error: %v", err)
+	}
+	if synced != 0 {
+		t.Fatalf("expected 0 synced summaries, got %d", synced)
+	}
+	if pageRequests.Load() != 0 {
+		t.Fatalf("expected no page requests for cached url, got %d", pageRequests.Load())
+	}
+
+	pointIndex, err := pointindex.LoadOrBuild(context.Background(), cacheStore, staticZIPLookup{
+		"86403": {Lat: 34.4839, Lon: -114.3225},
+	}, albertsons.LoadCachedStoreSummaries)
+	if err != nil {
+		t.Fatalf("LoadStorePointIndex returned error: %v", err)
+	}
+	if got := pointIndex["albertsons_3204"]; got != (pointindex.Point{Lat: 34.4839, Lon: -114.3225}) {
+		t.Fatalf("unexpected rebuilt point: %+v", got)
 	}
 }
 
@@ -118,7 +193,7 @@ func TestSyncChainFromSitemapPreservesOtherChainURLMappings(t *testing.T) {
 				body := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/ar/texarkana/3710-state-line-ave.html</loc></url></urlset>`, baseURL)
 				return responseWithBody(http.StatusOK, body), nil
 			case baseURL + "/ar/texarkana/3710-state-line-ave.html":
-				return responseWithBody(http.StatusOK, `<!doctype html><html><head><script>window.Yext = (function(Yext){Yext.Profile = {"meta":{"id":"611"},"name":"Albertsons","address":{"city":"Texarkana","line1":"3710 State Line Ave","postalCode":"71854","region":"AR"}}; return Yext;})(window.Yext || {});</script></head><body></body></html>`), nil
+				return responseWithBody(http.StatusOK, `<!doctype html><html><head><meta name="geo.position" content="33.4593747;-94.0419186"><script>window.Yext = (function(Yext){Yext.Profile = {"meta":{"id":"611"},"name":"Albertsons","address":{"city":"Texarkana","line1":"3710 State Line Ave","postalCode":"71854","region":"AR"}}; return Yext;})(window.Yext || {});</script></head><body></body></html>`), nil
 			default:
 				return responseWithBody(http.StatusNotFound, "not found"), nil
 			}
@@ -138,7 +213,7 @@ func TestSyncChainFromSitemapPreservesOtherChainURLMappings(t *testing.T) {
 		IDPrefix:    "albertsons_",
 	}
 
-	synced, err := syncChainFromSitemap(context.Background(), cacheStore, httpClient, chain, baseURL+"/sitemap.xml", 0*time.Millisecond)
+	synced, err := syncChainFromSitemap(context.Background(), cacheStore, httpClient, chain, baseURL+"/sitemap.xml", 0*time.Millisecond, nil)
 	if err != nil {
 		t.Fatalf("syncChainFromSitemap returned error: %v", err)
 	}
@@ -159,6 +234,73 @@ func TestSyncChainFromSitemapPreservesOtherChainURLMappings(t *testing.T) {
 	if got := urlMap[baseURL+"/ar/texarkana/3710-state-line-ave.html"]; got != "albertsons_611" {
 		t.Fatalf("expected albertsons mapping to be added, got %q", got)
 	}
+
+	pointIndex, err := pointindex.LoadOrBuild(context.Background(), cacheStore, nil, albertsons.LoadCachedStoreSummaries)
+	if err != nil {
+		t.Fatalf("LoadStorePointIndex returned error: %v", err)
+	}
+	point, ok := pointIndex["albertsons_611"]
+	if !ok {
+		t.Fatal("expected albertsons point to be added")
+	}
+	if point.Lat != 33.4593747 || point.Lon != -94.0419186 {
+		t.Fatalf("unexpected point: %+v", point)
+	}
+}
+
+func TestSyncChainFromSitemapFallsBackToZIPCentroidForPointIndex(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	baseURL := "https://local.albertsons.test"
+
+	httpClient := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.String() {
+			case baseURL + "/sitemap.xml":
+				body := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/ar/texarkana/3710-state-line-ave.html</loc></url></urlset>`, baseURL)
+				return responseWithBody(http.StatusOK, body), nil
+			case baseURL + "/ar/texarkana/3710-state-line-ave.html":
+				return responseWithBody(http.StatusOK, `<!doctype html><html><head><script>window.Yext = (function(Yext){Yext.Profile = {"meta":{"id":"611"},"name":"Albertsons","address":{"city":"Texarkana","line1":"3710 State Line Ave","postalCode":"71854","region":"AR"}}; return Yext;})(window.Yext || {});</script></head><body></body></html>`), nil
+			default:
+				return responseWithBody(http.StatusNotFound, "not found"), nil
+			}
+		}),
+	}
+
+	chain := albertsons.Chain{
+		Brand:       "albertsons",
+		DisplayName: "Albertsons",
+		Domain:      strings.TrimPrefix(baseURL, "https://"),
+		IDPrefix:    "albertsons_",
+	}
+
+	synced, err := syncChainFromSitemap(context.Background(), cacheStore, httpClient, chain, baseURL+"/sitemap.xml", 0*time.Millisecond, staticZIPLookup{
+		"71854": {Lat: 33.4593747, Lon: -94.0419186},
+	})
+	if err != nil {
+		t.Fatalf("syncChainFromSitemap returned error: %v", err)
+	}
+	if synced != 1 {
+		t.Fatalf("expected 1 synced summary, got %d", synced)
+	}
+
+	pointIndex, err := pointindex.LoadOrBuild(context.Background(), cacheStore, staticZIPLookup{
+		"71854": {Lat: 33.4593747, Lon: -94.0419186},
+	}, albertsons.LoadCachedStoreSummaries)
+	if err != nil {
+		t.Fatalf("LoadStorePointIndex returned error: %v", err)
+	}
+	if got := pointIndex["albertsons_611"]; got != (pointindex.Point{Lat: 33.4593747, Lon: -94.0419186}) {
+		t.Fatalf("unexpected point fallback: %+v", got)
+	}
+}
+
+type staticZIPLookup map[string]locationtypes.ZipCentroid
+
+func (s staticZIPLookup) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
+	centroid, ok := s[zip]
+	return centroid, ok
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)

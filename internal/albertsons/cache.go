@@ -1,25 +1,29 @@
 package albertsons
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations/pointindex"
+	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 
-	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
-	"careme/internal/sitemapfetch"
 
 	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"
 )
 
 const (
-	Container           = "albertsons"
-	StoreCachePrefix    = "albertsons/stores/"
-	StoreURLMapCacheKey = "albertsons/store_url_map.json"
+	Container               = "albertsons"
+	StoreCachePrefix        = "albertsons/stores/"
+	StoreURLMapCacheKey     = "albertsons/store_url_map.json"
+	StorePointIndexCacheKey = "albertsons/store_points.json"
 )
+
+type ZIPCentroidLookup = pointindex.ZIPCentroidLookup
 
 func SaveStoreURLMap(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
 	return sitemapfetch.SaveURLMap(ctx, c, StoreURLMapCacheKey, urlMap)
@@ -45,7 +49,7 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 	return nil
 }
 
-func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreSummary, error) {
+func LoadCachedStoreSummaries(ctx context.Context, c cache.ListCache, zipLookup ZIPCentroidLookup) ([]locationtypes.Location, error) {
 	keys, err := c.List(ctx, StoreCachePrefix, "")
 	if err != nil {
 		return nil, fmt.Errorf("list cached store summaries: %w", err)
@@ -71,12 +75,28 @@ func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 	})
 
 	summaries = lo.Compact(summaries)
-	if len(summaries) == 0 {
-		return nil, fmt.Errorf("failed to load albertsons locations")
-	}
-	slog.InfoContext(ctx, "loaded albertsons locations", "count", len(summaries))
+	slog.InfoContext(ctx, "loaded albertsons locations from cache", "count", len(summaries))
 
-	return summaries, nil
+	locations := lo.Map(summaries, func(summary *StoreSummary, _ int) locationtypes.Location {
+		return storeSummaryToLocationWithZIPFallback(*summary, zipLookup)
+	})
+	return locations, nil
+}
+
+func loadCachedStoreSummary(ctx context.Context, c cache.Cache, locationID string) (*StoreSummary, error) {
+	reader, err := c.Get(ctx, StoreCachePrefix+locationID)
+	if err != nil {
+		return nil, fmt.Errorf("read cached albertsons store summary: %w", err)
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	var summary StoreSummary
+	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+		return nil, fmt.Errorf("decode cached albertsons store summary: %w", err)
+	}
+	return &summary, nil
 }
 
 func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
@@ -90,4 +110,25 @@ func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
 		Lon:     summary.Lon,
 		Chain:   Container,
 	}
+}
+
+func storeSummaryToLocationWithZIPFallback(summary StoreSummary, zipLookup ZIPCentroidLookup) locationtypes.Location {
+	loc := storeSummaryToLocation(summary)
+	if loc.Lat != nil && loc.Lon != nil {
+		return loc
+	}
+	if zipLookup == nil {
+		return loc
+	}
+
+	centroid, ok := zipLookup.ZipCentroidByZIP(summary.ZipCode)
+	if !ok {
+		return loc
+	}
+
+	lat := centroid.Lat
+	lon := centroid.Lon
+	loc.Lat = &lat
+	loc.Lon = &lon
+	return loc
 }

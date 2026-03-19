@@ -2,10 +2,11 @@ package albertsons
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"careme/internal/cache"
+	"careme/internal/locations/pointindex"
+
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -73,17 +74,30 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	}
 }
 
-func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
+func TestNewLocationBackendRebuildsPointIndexUsingZIPFallback(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
-
-	_, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
-	if err == nil {
-		t.Fatal("expected NewLocationBackend to return an error")
+	summary := nearbySummary()
+	summary.Lat = nil
+	summary.Lon = nil
+	if err := CacheStoreSummary(context.Background(), cacheStore, summary); err != nil {
+		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "failed to load albertsons locations") {
-		t.Fatalf("expected missing summaries error, got %v", err)
+
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+		"98006": {Lat: 47.5765527, Lon: -122.1381125},
+	})
+	if err != nil {
+		t.Fatalf("newLocationBackend returned error: %v", err)
+	}
+
+	point, ok := backend.pointIndex["safeway_1444"]
+	if !ok {
+		t.Fatal("expected point index entry to be rebuilt")
+	}
+	if point != (pointindex.Point{Lat: 47.5765527, Lon: -122.1381125}) {
+		t.Fatalf("unexpected rebuilt point: %+v", point)
 	}
 }
 

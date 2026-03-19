@@ -1,6 +1,11 @@
 package main
 
 import (
+	"careme/internal/albertsons"
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/locations/pointindex"
+	"careme/internal/logsetup"
 	"context"
 	"errors"
 	"flag"
@@ -10,11 +15,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"careme/internal/albertsons"
-	"careme/internal/cache"
-	"careme/internal/logsetup"
 )
+
+type centroidByZip = albertsons.ZIPCentroidLookup
 
 func main() {
 	var (
@@ -47,10 +50,11 @@ func main() {
 
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	delay := time.Duration(delayMS) * time.Millisecond
+	zipLookup := locations.LoadCentroids()
 
 	var synced int
 	for _, chain := range chains {
-		chainSynced, err := syncChainFromSitemap(ctx, cacheStore, httpClient, chain, chain.SitemapURL(), delay)
+		chainSynced, err := syncChainFromSitemap(ctx, cacheStore, httpClient, chain, chain.SitemapURL(), delay, zipLookup)
 		if err != nil {
 			slog.Warn("failed to sync albertsons-family chain", "brand", chain.Brand, "domain", chain.Domain, "error", err)
 			continue
@@ -62,9 +66,13 @@ func main() {
 }
 
 // not concurrent safe because url map is shared. Could fix that with etags or seperate maps.
-func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpClient *http.Client, chain albertsons.Chain, sitemapURL string, delay time.Duration) (int, error) {
+func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpClient *http.Client, chain albertsons.Chain, sitemapURL string, delay time.Duration, zipLookup centroidByZip) (int, error) {
 	urlMap, err := albertsons.LoadStoreURLMap(ctx, cacheStore)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		return 0, err
+	}
+	pointIndex, err := pointindex.LoadOrBuild(ctx, cacheStore, zipLookup, albertsons.LoadCachedStoreSummaries)
+	if err != nil {
 		return 0, err
 	}
 
@@ -79,9 +87,13 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 	if urlMap == nil {
 		urlMap = make(map[string]string, len(pages))
 	}
+	if pointIndex == nil {
+		pointIndex = make(map[string]pointindex.Point)
+	}
 
 	var synced int
-	var updated bool
+	var updatedURLMap bool
+	var updatedPointIndex bool
 	for _, page := range pages {
 		locationID := strings.TrimSpace(urlMap[page.URL])
 		if locationID != "" {
@@ -103,18 +115,47 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 
 		if urlMap[page.URL] != summary.ID {
 			urlMap[page.URL] = summary.ID
-			updated = true
+			updatedURLMap = true
+		}
+		if point, ok := pointForSummary(summary, zipLookup); ok {
+			if existing, ok := pointIndex[summary.ID]; !ok || existing != point {
+				pointIndex[summary.ID] = point
+				updatedPointIndex = true
+			}
 		}
 		synced++
 		time.Sleep(delay)
 	}
 
-	if updated {
+	if updatedURLMap {
 		if err := albertsons.SaveStoreURLMap(ctx, cacheStore, urlMap); err != nil {
 			return synced, err
 		}
 	}
+	if updatedPointIndex {
+		if err := pointindex.Save(ctx, cacheStore, pointIndex); err != nil {
+			return synced, err
+		}
+	}
 	return synced, nil
+}
+
+func pointForSummary(summary *albertsons.StoreSummary, zipLookup centroidByZip) (pointindex.Point, bool) {
+	if summary == nil {
+		return pointindex.Point{}, false
+	}
+	if summary.Lat != nil && summary.Lon != nil {
+		return pointindex.Point{Lat: *summary.Lat, Lon: *summary.Lon}, true
+	}
+	if zipLookup == nil {
+		return pointindex.Point{}, false
+	}
+
+	centroid, ok := zipLookup.ZipCentroidByZIP(summary.ZipCode)
+	if !ok {
+		return pointindex.Point{}, false
+	}
+	return pointindex.Point{Lat: centroid.Lat, Lon: centroid.Lon}, true
 }
 
 func selectedChains(raw string) ([]albertsons.Chain, error) {
