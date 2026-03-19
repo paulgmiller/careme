@@ -2,11 +2,15 @@ package albertsons
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"sort"
 	"strings"
 
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/locations/geo"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 )
@@ -16,8 +20,9 @@ type centroidByZip interface {
 }
 
 type LocationBackend struct {
-	zipLookup centroidByZip
-	byID      map[string]locationtypes.Location
+	zipLookup  centroidByZip
+	cache      cache.ListCache
+	pointIndex map[string]StorePoint
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -38,20 +43,23 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 }
 
 func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	summaries, err := loadCachedStoreSummaries(ctx, c)
+	pointIndex, err := LoadOrBuildStorePointIndex(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 
-	byID := make(map[string]locationtypes.Location, len(summaries))
-	for _, summary := range summaries {
-		loc := storeSummaryToLocation(*summary)
-		byID[loc.ID] = loc
+	keys, err := c.List(ctx, StoreCachePrefix, "")
+	if err != nil {
+		return nil, fmt.Errorf("list cached store summaries: %w", err)
+	}
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("failed to load albertsons locations")
 	}
 
 	return &LocationBackend{
-		zipLookup: zipLookup,
-		byID:      byID,
+		zipLookup:  zipLookup,
+		cache:      c,
+		pointIndex: pointIndex,
 	}, nil
 }
 
@@ -63,25 +71,58 @@ func (*LocationBackend) HasInventory(locationID string) bool {
 	return false
 }
 
-func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
+func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	locationID = strings.TrimSpace(locationID)
 	if !IsID(locationID) {
 		return nil, fmt.Errorf("albertsons location id %q is invalid", locationID)
 	}
 
-	loc, exists := b.byID[locationID]
-	if !exists {
-		return nil, fmt.Errorf("albertsons location %q not found", locationID)
-	}
-
-	copy := loc
-	return &copy, nil
+	return b.locationByID(ctx, locationID)
 }
 
 func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	candidates := make([]locationtypes.Location, 0, len(b.byID))
-	for _, loc := range b.byID {
-		candidates = append(candidates, loc)
+	requestedCentroid, ok := b.zipLookup.ZipCentroidByZIP(strings.TrimSpace(zipcode))
+	if !ok {
+		return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, nil, nearby.MaxLocationDistanceMiles), nil
 	}
+
+	candidateIDs := b.candidateIDsForCentroid(requestedCentroid)
+	candidates := make([]locationtypes.Location, 0, len(candidateIDs))
+	for _, locationID := range candidateIDs {
+		loc, err := b.locationByID(ctx, locationID)
+		if err != nil {
+			slog.WarnContext(ctx, "failed to load cached albertsons location for zip query", "location_id", locationID, "zip", zipcode, "error", err)
+			continue
+		}
+		candidates = append(candidates, *loc)
+	}
+
 	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, nearby.MaxLocationDistanceMiles), nil
+}
+
+func (b *LocationBackend) locationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
+	summary, err := loadCachedStoreSummary(ctx, b.cache, locationID)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			return nil, fmt.Errorf("albertsons location %q not found", locationID)
+		}
+		return nil, fmt.Errorf("load albertsons location %q: %w", locationID, err)
+	}
+
+	loc := storeSummaryToLocation(*summary)
+	return &loc, nil
+}
+
+func (b *LocationBackend) candidateIDsForCentroid(requested locationtypes.ZipCentroid) []string {
+	ids := make([]string, 0, len(b.pointIndex))
+	for locationID, point := range b.pointIndex {
+		distance := geo.HaversineMiles(requested.Lat, requested.Lon, point.Lat, point.Lon)
+		if distance > nearby.MaxLocationDistanceMiles {
+			continue
+		}
+		ids = append(ids, locationID)
+	}
+
+	sort.Strings(ids)
+	return ids
 }

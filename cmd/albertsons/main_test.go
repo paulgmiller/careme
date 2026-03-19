@@ -118,7 +118,7 @@ func TestSyncChainFromSitemapPreservesOtherChainURLMappings(t *testing.T) {
 				body := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/ar/texarkana/3710-state-line-ave.html</loc></url></urlset>`, baseURL)
 				return responseWithBody(http.StatusOK, body), nil
 			case baseURL + "/ar/texarkana/3710-state-line-ave.html":
-				return responseWithBody(http.StatusOK, `<!doctype html><html><head><script>window.Yext = (function(Yext){Yext.Profile = {"meta":{"id":"611"},"name":"Albertsons","address":{"city":"Texarkana","line1":"3710 State Line Ave","postalCode":"71854","region":"AR"}}; return Yext;})(window.Yext || {});</script></head><body></body></html>`), nil
+				return responseWithBody(http.StatusOK, `<!doctype html><html><head><meta name="geo.position" content="33.4593747;-94.0419186"><script>window.Yext = (function(Yext){Yext.Profile = {"meta":{"id":"611"},"name":"Albertsons","address":{"city":"Texarkana","line1":"3710 State Line Ave","postalCode":"71854","region":"AR"}}; return Yext;})(window.Yext || {});</script></head><body></body></html>`), nil
 			default:
 				return responseWithBody(http.StatusNotFound, "not found"), nil
 			}
@@ -158,6 +158,18 @@ func TestSyncChainFromSitemapPreservesOtherChainURLMappings(t *testing.T) {
 	}
 	if got := urlMap[baseURL+"/ar/texarkana/3710-state-line-ave.html"]; got != "albertsons_611" {
 		t.Fatalf("expected albertsons mapping to be added, got %q", got)
+	}
+
+	pointIndex, err := albertsons.LoadStorePointIndex(context.Background(), cacheStore)
+	if err != nil {
+		t.Fatalf("LoadStorePointIndex returned error: %v", err)
+	}
+	point, ok := pointIndex["albertsons_611"]
+	if !ok {
+		t.Fatal("expected albertsons point to be added")
+	}
+	if point.Lat != 33.4593747 || point.Lon != -94.0419186 {
+		t.Fatalf("unexpected point: %+v", point)
 	}
 }
 

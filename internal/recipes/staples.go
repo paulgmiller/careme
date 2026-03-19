@@ -1,15 +1,13 @@
 package recipes
 
 import (
-	"context"
-	"fmt"
-	"testing"
-
-	"careme/internal/actowiz"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
+	"context"
+	"fmt"
+	"testing"
 )
 
 // todo make this a indepenedent ingredient object not kroger.
@@ -85,7 +83,7 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 func defaultStaplesBackends(krogerClient kroger.ClientWithResponsesInterface) []backendStaplesProvider {
 	return []backendStaplesProvider{
 		kroger.NewStaplesProvider(krogerClient),
-		actowiz.NewStaplesProvider(),
+		// actowiz.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(nil)),
 		walmart.NewStaplesProvider(),
 	}
@@ -94,7 +92,7 @@ func defaultStaplesBackends(krogerClient kroger.ClientWithResponsesInterface) []
 func defaultIdentityProviders() []identityProvider {
 	return []identityProvider{
 		kroger.NewIdentityProvider(),
-		actowiz.NewIdentityProvider(),
+		// actowiz.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),
 	}

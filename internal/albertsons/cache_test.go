@@ -34,3 +34,59 @@ func TestSaveStoreURLMapRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected safeway mapping: %+v", got)
 	}
 }
+
+func TestSaveStorePointIndexRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	pointIndex := map[string]StorePoint{
+		"albertsons_611": {Lat: 33.4593747, Lon: -94.0419186},
+		"safeway_1444":   {Lat: 47.5765527, Lon: -122.1381125},
+	}
+
+	if err := SaveStorePointIndex(context.Background(), cacheStore, pointIndex); err != nil {
+		t.Fatalf("SaveStorePointIndex returned error: %v", err)
+	}
+
+	got, err := LoadStorePointIndex(context.Background(), cacheStore)
+	if err != nil {
+		t.Fatalf("LoadStorePointIndex returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 point mappings, got %d", len(got))
+	}
+	if got["albertsons_611"] != pointIndex["albertsons_611"] {
+		t.Fatalf("unexpected albertsons point: %+v", got["albertsons_611"])
+	}
+	if got["safeway_1444"] != pointIndex["safeway_1444"] {
+		t.Fatalf("unexpected safeway point: %+v", got["safeway_1444"])
+	}
+}
+
+func TestLoadOrBuildStorePointIndexBuildsFromCachedSummaries(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	if err := CacheStoreSummary(context.Background(), cacheStore, nearbySummary()); err != nil {
+		t.Fatalf("CacheStoreSummary returned error: %v", err)
+	}
+	if err := CacheStoreSummary(context.Background(), cacheStore, farSummary()); err != nil {
+		t.Fatalf("CacheStoreSummary returned error: %v", err)
+	}
+
+	pointIndex, err := LoadOrBuildStorePointIndex(context.Background(), cacheStore)
+	if err != nil {
+		t.Fatalf("LoadOrBuildStorePointIndex returned error: %v", err)
+	}
+	if len(pointIndex) != 2 {
+		t.Fatalf("expected 2 points, got %d", len(pointIndex))
+	}
+
+	savedPointIndex, err := LoadStorePointIndex(context.Background(), cacheStore)
+	if err != nil {
+		t.Fatalf("LoadStorePointIndex returned error: %v", err)
+	}
+	if len(savedPointIndex) != 2 {
+		t.Fatalf("expected 2 saved points, got %d", len(savedPointIndex))
+	}
+}

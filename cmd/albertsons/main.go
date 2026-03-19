@@ -67,6 +67,10 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return 0, err
 	}
+	pointIndex, err := albertsons.LoadOrBuildStorePointIndex(ctx, cacheStore)
+	if err != nil {
+		return 0, err
+	}
 
 	urls, err := albertsons.FetchSitemap(ctx, httpClient, sitemapURL)
 	if err != nil {
@@ -79,9 +83,13 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 	if urlMap == nil {
 		urlMap = make(map[string]string, len(pages))
 	}
+	if pointIndex == nil {
+		pointIndex = make(map[string]albertsons.StorePoint)
+	}
 
 	var synced int
-	var updated bool
+	var updatedURLMap bool
+	var updatedPointIndex bool
 	for _, page := range pages {
 		locationID := strings.TrimSpace(urlMap[page.URL])
 		if locationID != "" {
@@ -103,14 +111,26 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 
 		if urlMap[page.URL] != summary.ID {
 			urlMap[page.URL] = summary.ID
-			updated = true
+			updatedURLMap = true
+		}
+		if summary.Lat != nil && summary.Lon != nil {
+			point := albertsons.StorePoint{Lat: *summary.Lat, Lon: *summary.Lon}
+			if existing, ok := pointIndex[summary.ID]; !ok || existing != point {
+				pointIndex[summary.ID] = point
+				updatedPointIndex = true
+			}
 		}
 		synced++
 		time.Sleep(delay)
 	}
 
-	if updated {
+	if updatedURLMap {
 		if err := albertsons.SaveStoreURLMap(ctx, cacheStore, urlMap); err != nil {
+			return synced, err
+		}
+	}
+	if updatedPointIndex {
+		if err := albertsons.SaveStorePointIndex(ctx, cacheStore, pointIndex); err != nil {
 			return synced, err
 		}
 	}
