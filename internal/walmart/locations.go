@@ -31,7 +31,7 @@ func storeToLocation(store Store) locationtypes.Location {
 	lon := store.Coordinates.Longitude
 	return locationtypes.Location{
 		ID:      "walmart_" + strconv.Itoa(store.No),
-		Name:    store.Name,
+		Name:    "Walmart " + store.Name,
 		Address: store.StreetAddress,
 		State:   store.StateProvCode,
 		ZipCode: store.Zip,
