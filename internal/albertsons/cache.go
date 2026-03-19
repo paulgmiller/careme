@@ -72,9 +72,6 @@ func LoadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]locatio
 	})
 
 	summaries = lo.Compact(summaries)
-	if len(summaries) == 0 {
-		return nil, fmt.Errorf("failed to load albertsons locations")
-	}
 	slog.InfoContext(ctx, "loaded albertsons locations", "count", len(summaries))
 
 	locations := lo.Map(summaries, func(summary *StoreSummary, _ int) locationtypes.Location {

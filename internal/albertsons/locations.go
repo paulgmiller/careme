@@ -48,6 +48,8 @@ func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centro
 	if err != nil {
 		return nil, err
 	}
+	// should we alert if this is ever zero or just get uptime robot ping on location?
+	slog.InfoContext(ctx, "loaded pointmap for albertsons", "count", len(pointIndex))
 
 	keys, err := c.List(ctx, StoreCachePrefix, "")
 	if err != nil {
