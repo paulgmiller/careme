@@ -1,12 +1,11 @@
 package actowiz
 
 import (
+	"careme/internal/routing"
 	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
-
-	"careme/internal/routing"
 
 	"github.com/samber/lo"
 )
@@ -76,7 +75,7 @@ func (s *server) Register(mux routing.Registrar) {
 }
 
 type storesResponse struct {
-	Id                 string `json:"d"`
+	Id                 string `json:"id"`
 	ScrapeIntervalDays int    `json:"scrape_interval_days"`
 }
 

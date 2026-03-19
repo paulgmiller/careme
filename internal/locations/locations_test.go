@@ -3,6 +3,7 @@ package locations
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -337,7 +338,10 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	}
 
 	fc := cachepkg.NewInMemoryCache()
-	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{newFakeLocationClient()}, fc)
+	client := newFakeLocationClient()
+	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setHasInventory("publix_123", false)
+	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{})
 
 	mux := http.NewServeMux()
@@ -372,6 +376,71 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	}
 }
 
+func TestRequestStoreIsIdempotent(t *testing.T) {
+	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+		t.Fatalf("failed to init templates: %v", err)
+	}
+
+	fc := cachepkg.NewInMemoryCache()
+	client := newFakeLocationClient()
+	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setHasInventory("publix_123", false)
+	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/locations/request-store", strings.NewReader("store_id=publix_123"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("HX-Request", "true")
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("request %d status = %d, want %d; body=%q", i+1, rr.Code, http.StatusOK, rr.Body.String())
+		}
+	}
+}
+
+func TestRequestStoreRejectsSupportedStore(t *testing.T) {
+	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+		t.Fatalf("failed to init templates: %v", err)
+	}
+
+	fc := cachepkg.NewInMemoryCache()
+	client := newFakeLocationClient()
+	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setHasInventory("publix_123", true)
+	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodPost, "/locations/request-store", strings.NewReader("store_id=publix_123"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestRequestStoreReturnsWriteErrors(t *testing.T) {
+	storage := &locationStorage{
+		cache: failingListCache{putErr: errors.New("boom")},
+	}
+
+	err := storage.RequestStore(context.Background(), "publix_123")
+	if err == nil {
+		t.Fatal("RequestStore error = nil, want error")
+	}
+}
+
 func TestRequestedStoreIDsListsStoredRequests(t *testing.T) {
 	fc := cachepkg.NewInMemoryCache()
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{newFakeLocationClient()}, fc)
@@ -392,6 +461,7 @@ func TestRequestedStoreIDsListsStoredRequests(t *testing.T) {
 type fakeLocationClient struct {
 	details map[string]Location
 	lists   map[string][]Location
+	inv     map[string]bool
 	err     error
 }
 
@@ -399,6 +469,7 @@ func newFakeLocationClient() *fakeLocationClient {
 	return &fakeLocationClient{
 		details: make(map[string]Location),
 		lists:   make(map[string][]Location),
+		inv:     make(map[string]bool),
 	}
 }
 
@@ -408,6 +479,10 @@ func (f *fakeLocationClient) setDetailResponse(locationID string, location Locat
 
 func (f *fakeLocationClient) setListResponse(zip string, locations []Location) {
 	f.lists[zip] = locations
+}
+
+func (f *fakeLocationClient) setHasInventory(locationID string, hasInventory bool) {
+	f.inv[locationID] = hasInventory
 }
 
 func (f *fakeLocationClient) GetLocationsByZip(_ context.Context, zipcode string) ([]Location, error) {
@@ -436,7 +511,30 @@ func (f *fakeLocationClient) IsID(locationID string) bool {
 }
 
 func (f *fakeLocationClient) HasInventory(locationID string) bool {
+	if hasInventory, ok := f.inv[locationID]; ok {
+		return hasInventory
+	}
 	return true
+}
+
+type failingListCache struct {
+	putErr error
+}
+
+func (f failingListCache) Get(context.Context, string) (io.ReadCloser, error) {
+	return nil, cachepkg.ErrNotFound
+}
+
+func (f failingListCache) Exists(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+func (f failingListCache) Put(context.Context, string, string, cachepkg.PutOptions) error {
+	return f.putErr
+}
+
+func (f failingListCache) List(context.Context, string, string) ([]string, error) {
+	return nil, nil
 }
 
 func newTestLocationServer(client locationBackend) *locationStorage {

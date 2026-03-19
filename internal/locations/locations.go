@@ -313,11 +313,8 @@ func (l *locationStorage) RequestStore(ctx context.Context, storeID string) erro
 		return nil
 	}
 	requestKey := storeRequestPrefix + storeID
-	if err := l.cache.Put(ctx, requestKey, string(raw), cache.IfNoneMatch()); err != nil {
-		if !errors.Is(err, cache.ErrAlreadyExists) {
-			return nil
-		}
-		return err
+	if err := l.cache.Put(ctx, requestKey, string(raw), cache.Unconditional()); err != nil {
+		return fmt.Errorf("store request put: %w", err)
 	}
 	return nil
 }
@@ -424,13 +421,23 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 			return
 		}
 
-		if err := l.storage.RequestStore(r.Context(), storeID); err != nil {
+		ctx := r.Context()
+		if _, err := l.storage.GetLocationByID(ctx, storeID); err != nil {
+			http.Error(w, "invalid store_id", http.StatusBadRequest)
+			return
+		}
+		if l.storage.HasInventory(storeID) {
+			http.Error(w, "store already supported", http.StatusBadRequest)
+			return
+		}
+
+		if err := l.storage.RequestStore(ctx, storeID); err != nil {
 			http.Error(w, "failed to submit request", http.StatusInternalServerError)
 			return
 		}
 
 		if err := templates.Location.ExecuteTemplate(w, "location_request_store_success", nil); err != nil {
-			slog.ErrorContext(r.Context(), "failed to render request-store success fragment", "store_id", storeID, "error", err)
+			slog.ErrorContext(ctx, "failed to render request-store success fragment", "store_id", storeID, "error", err)
 			http.Error(w, "failed to submit request", http.StatusInternalServerError)
 			return
 		}
