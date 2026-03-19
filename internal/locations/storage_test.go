@@ -7,9 +7,138 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	cachepkg "careme/internal/cache"
 )
+
+type namedBackend struct {
+	id string
+}
+
+func (b namedBackend) GetLocationByID(context.Context, string) (*Location, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (b namedBackend) GetLocationsByZip(context.Context, string) ([]Location, error) {
+	return nil, nil
+}
+
+func (b namedBackend) IsID(string) bool {
+	return false
+}
+
+func (b namedBackend) HasInventory(string) bool {
+	return false
+}
+
+func TestInitializeLocationBackendsRunsFactoriesInParallelAndCollectsBackends(t *testing.T) {
+	started := make(chan string, 2)
+	release := make(chan struct{})
+
+	factories := []locationBackendFactory{
+		func(context.Context) (locationBackend, error) {
+			started <- "first"
+			<-release
+			return namedBackend{id: "first"}, nil
+		},
+		func(context.Context) (locationBackend, error) {
+			started <- "second"
+			<-release
+			return namedBackend{id: "second"}, nil
+		},
+	}
+
+	type result struct {
+		backends []locationBackend
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		backends, err := initializeLocationBackends(context.Background(), factories)
+		done <- result{backends: backends, err: err}
+	}()
+
+	for i := 0; i < len(factories); i++ {
+		select {
+		case <-started:
+		case <-time.After(200 * time.Millisecond):
+			t.Fatal("expected all backend factories to start before any finished")
+		}
+	}
+
+	close(release)
+
+	select {
+	case result := <-done:
+		if result.err != nil {
+			t.Fatalf("initializeLocationBackends returned error: %v", result.err)
+		}
+		if len(result.backends) != 2 {
+			t.Fatalf("expected 2 backends, got %d", len(result.backends))
+		}
+
+		gotIDs := make(map[string]bool, len(result.backends))
+		for _, backend := range result.backends {
+			named, ok := backend.(namedBackend)
+			if !ok {
+				t.Fatalf("expected backend type namedBackend, got %T", backend)
+			}
+			gotIDs[named.id] = true
+		}
+		if !gotIDs["first"] || !gotIDs["second"] {
+			t.Fatalf("expected both backends to be returned, got %v", gotIDs)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("initializeLocationBackends did not finish")
+	}
+}
+
+func TestInitializeLocationBackendsCancelsOtherFactoriesOnError(t *testing.T) {
+	started := make(chan struct{})
+	releaseErr := make(chan struct{})
+	canceled := make(chan struct{}, 1)
+
+	factories := []locationBackendFactory{
+		func(context.Context) (locationBackend, error) {
+			close(started)
+			<-releaseErr
+			return nil, errors.New("boom")
+		},
+		func(ctx context.Context) (locationBackend, error) {
+			<-started
+			<-ctx.Done()
+			canceled <- struct{}{}
+			return nil, ctx.Err()
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := initializeLocationBackends(context.Background(), factories)
+		done <- err
+	}()
+
+	close(releaseErr)
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("initializeLocationBackends error = nil, want error")
+		}
+		if got, want := err.Error(), "failed to initialize location backend 0: boom"; got != want {
+			t.Fatalf("initializeLocationBackends error = %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("initializeLocationBackends did not return after error")
+	}
+
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("expected sibling factory context to be canceled")
+	}
+}
 
 func TestGetLocationByIDUsesCache(t *testing.T) {
 	client := newFakeLocationClient()
