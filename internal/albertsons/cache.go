@@ -8,8 +8,9 @@ import (
 	"log/slog"
 
 	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
 	"careme/internal/sitemapfetch"
+
+	locationtypes "careme/internal/locations/types"
 
 	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"
@@ -52,6 +53,7 @@ func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreS
 	}
 
 	// expensive. Just save a smaller map of centroids
+	// see branch cachezipcodes. Maybe time for a real db instead of blob
 	summaries := lop.Map(keys, func(key string, _ int) *StoreSummary {
 		reader, err := c.Get(ctx, StoreCachePrefix+key)
 		if err != nil {

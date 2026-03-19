@@ -7,9 +7,92 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	cachepkg "careme/internal/cache"
 )
+
+type namedBackend struct {
+	id string
+}
+
+func (b namedBackend) GetLocationByID(context.Context, string) (*Location, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (b namedBackend) GetLocationsByZip(context.Context, string) ([]Location, error) {
+	return nil, nil
+}
+
+func (b namedBackend) IsID(string) bool {
+	return false
+}
+
+func (b namedBackend) HasInventory(string) bool {
+	return false
+}
+
+func TestInitializeLocationBackendsRunsFactoriesInParallelAndPreservesOrder(t *testing.T) {
+	started := make(chan string, 2)
+	release := make(chan struct{})
+
+	factories := []locationBackendFactory{
+		func() (locationBackend, error) {
+			started <- "first"
+			<-release
+			return namedBackend{id: "first"}, nil
+		},
+		func() (locationBackend, error) {
+			started <- "second"
+			<-release
+			return namedBackend{id: "second"}, nil
+		},
+	}
+
+	type result struct {
+		backends []locationBackend
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		backends, err := initializeLocationBackends(context.Background(), factories)
+		done <- result{backends: backends, err: err}
+	}()
+
+	for i := 0; i < len(factories); i++ {
+		select {
+		case <-started:
+		case <-time.After(200 * time.Millisecond):
+			t.Fatal("expected all backend factories to start before any finished")
+		}
+	}
+
+	close(release)
+
+	select {
+	case result := <-done:
+		if result.err != nil {
+			t.Fatalf("initializeLocationBackends returned error: %v", result.err)
+		}
+		if len(result.backends) != 2 {
+			t.Fatalf("expected 2 backends, got %d", len(result.backends))
+		}
+
+		first, ok := result.backends[0].(namedBackend)
+		if !ok {
+			t.Fatalf("expected first backend type namedBackend, got %T", result.backends[0])
+		}
+		second, ok := result.backends[1].(namedBackend)
+		if !ok {
+			t.Fatalf("expected second backend type namedBackend, got %T", result.backends[1])
+		}
+		if first.id != "first" || second.id != "second" {
+			t.Fatalf("unexpected backend order: got %q then %q", first.id, second.id)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("initializeLocationBackends did not finish")
+	}
+}
 
 func TestGetLocationByIDUsesCache(t *testing.T) {
 	client := newFakeLocationClient()
