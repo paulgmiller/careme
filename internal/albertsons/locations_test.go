@@ -1,11 +1,12 @@
 package albertsons
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations/pointindex"
 	"context"
 	"strings"
 	"testing"
 
-	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -70,6 +71,38 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	}
 	if locs[0].Chain != "albertsons" {
 		t.Fatalf("unexpected location chain: %q", locs[0].Chain)
+	}
+}
+
+func TestLocationBackendGetLocationByIDUsesPointIndexWhenSummaryCoordinatesMissing(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	summary := nearbySummary()
+	summary.Lat = nil
+	summary.Lon = nil
+	if err := CacheStoreSummary(context.Background(), cacheStore, summary); err != nil {
+		t.Fatalf("CacheStoreSummary returned error: %v", err)
+	}
+	if err := pointindex.Save(context.Background(), cacheStore, map[string]pointindex.Point{
+		"safeway_1444": {Lat: 47.5765527, Lon: -122.1381125},
+	}); err != nil {
+		t.Fatalf("SaveStorePointIndex returned error: %v", err)
+	}
+
+	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+		"98006": {Lat: 47.5750, Lon: -122.1400},
+	})
+	if err != nil {
+		t.Fatalf("newLocationBackend returned error: %v", err)
+	}
+
+	loc, err := backend.GetLocationByID(context.Background(), "safeway_1444")
+	if err != nil {
+		t.Fatalf("GetLocationByID returned error: %v", err)
+	}
+	if loc.Lat == nil || loc.Lon == nil {
+		t.Fatalf("expected coordinates from point index fallback, got %+v", loc)
 	}
 }
 

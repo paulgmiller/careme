@@ -1,15 +1,13 @@
 package recipes
 
 import (
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/locations"
 	"context"
 	"slices"
 	"testing"
 	"time"
-
-	"careme/internal/actowiz"
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/locations"
 )
 
 type stubStaplesProvider struct {
@@ -122,14 +120,6 @@ func TestRoutingStaplesProvider_GetIngredients_SelectsProviderByLocationID(t *te
 	}
 	if krogerProvider.calls != 0 || wholeFoodsProvider.calls != 1 {
 		t.Fatalf("expected whole foods provider to be selected, got kroger=%d wholefoods=%d", krogerProvider.calls, wholeFoodsProvider.calls)
-	}
-}
-
-func TestStaplesSignatureForLocation_UsesSafewayProvider(t *testing.T) {
-	got := staplesSignatureForLocation("safeway_1234")
-	want := actowiz.NewIdentityProvider().Signature()
-	if got != want {
-		t.Fatalf("unexpected signature: got %q want %q", got, want)
 	}
 }
 

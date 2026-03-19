@@ -1,6 +1,11 @@
 package albertsons
 
 import (
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations/geo"
+	"careme/internal/locations/nearby"
+	"careme/internal/locations/pointindex"
 	"context"
 	"errors"
 	"fmt"
@@ -8,10 +13,6 @@ import (
 	"sort"
 	"strings"
 
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations/geo"
-	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -22,7 +23,7 @@ type centroidByZip interface {
 type LocationBackend struct {
 	zipLookup  centroidByZip
 	cache      cache.ListCache
-	pointIndex map[string]StorePoint
+	pointIndex map[string]pointindex.Point
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -43,7 +44,7 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 }
 
 func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	pointIndex, err := LoadOrBuildStorePointIndex(ctx, c)
+	pointIndex, err := pointindex.LoadOrBuild(ctx, c, LoadCachedStoreSummaries)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +109,7 @@ func (b *LocationBackend) locationByID(ctx context.Context, locationID string) (
 		}
 		return nil, fmt.Errorf("load albertsons location %q: %w", locationID, err)
 	}
+	b.applyPointFallback(summary)
 
 	loc := storeSummaryToLocation(*summary)
 	return &loc, nil
@@ -125,4 +127,19 @@ func (b *LocationBackend) candidateIDsForCentroid(requested locationtypes.ZipCen
 
 	sort.Strings(ids)
 	return ids
+}
+
+func (b *LocationBackend) applyPointFallback(summary *StoreSummary) {
+	if summary == nil || summary.ID == "" || (summary.Lat != nil && summary.Lon != nil) {
+		return
+	}
+
+	point, ok := b.pointIndex[summary.ID]
+	if !ok {
+		return
+	}
+	lat := point.Lat
+	lon := point.Lon
+	summary.Lat = &lat
+	summary.Lon = &lon
 }

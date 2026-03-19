@@ -1,12 +1,12 @@
 package pointindex
 
 import (
+	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 
-	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -17,7 +17,9 @@ type Point struct {
 
 type LocationLoader func(ctx context.Context, c cache.ListCache) ([]locationtypes.Location, error)
 
-func Save(ctx context.Context, c cache.Cache, cacheKey string, index map[string]Point) error {
+const cacheKey = "point_index"
+
+func Save(ctx context.Context, c cache.Cache, index map[string]Point) error {
 	if index == nil {
 		index = map[string]Point{}
 	}
@@ -33,7 +35,7 @@ func Save(ctx context.Context, c cache.Cache, cacheKey string, index map[string]
 	return nil
 }
 
-func Load(ctx context.Context, c cache.Cache, cacheKey string) (map[string]Point, error) {
+func load(ctx context.Context, c cache.Cache) (map[string]Point, error) {
 	reader, err := c.Get(ctx, cacheKey)
 	if err != nil {
 		return nil, err
@@ -49,8 +51,8 @@ func Load(ctx context.Context, c cache.Cache, cacheKey string) (map[string]Point
 	return index, nil
 }
 
-func LoadOrBuild(ctx context.Context, c cache.ListCache, cacheKey, storePrefix string, loadLocations LocationLoader) (map[string]Point, error) {
-	index, err := Load(ctx, c, cacheKey)
+func LoadOrBuild(ctx context.Context, c cache.ListCache, loadLocations LocationLoader) (map[string]Point, error) {
+	index, err := load(ctx, c)
 	if err == nil {
 		return index, nil
 	}
@@ -58,27 +60,19 @@ func LoadOrBuild(ctx context.Context, c cache.ListCache, cacheKey, storePrefix s
 		return nil, fmt.Errorf("read point index cache: %w", err)
 	}
 
-	keys, err := c.List(ctx, storePrefix, "")
-	if err != nil {
-		return nil, fmt.Errorf("list cached store summaries: %w", err)
-	}
-	if len(keys) == 0 {
-		return map[string]Point{}, nil
-	}
-
 	locations, err := loadLocations(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 
-	index = BuildFromLocations(locations)
-	if err := Save(ctx, c, cacheKey, index); err != nil {
+	index = buildFromLocations(locations)
+	if err := Save(ctx, c, index); err != nil {
 		return nil, err
 	}
 	return index, nil
 }
 
-func BuildFromLocations(locations []locationtypes.Location) map[string]Point {
+func buildFromLocations(locations []locationtypes.Location) map[string]Point {
 	index := make(map[string]Point, len(locations))
 	for _, loc := range locations {
 		if loc.ID == "" || loc.Lat == nil || loc.Lon == nil {

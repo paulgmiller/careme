@@ -1,26 +1,27 @@
 package albertsons
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations/pointindex"
+	locationtypes "careme/internal/locations/types"
 	"context"
 	"testing"
-
-	"careme/internal/cache"
 )
 
 func TestSaveStoreURLMapRoundTrip(t *testing.T) {
 	t.Parallel()
-
+	ctx := t.Context()
 	cacheStore := cache.NewInMemoryCache()
 	urlMap := map[string]string{
 		"https://local.albertsons.com/ar/texarkana/3710-state-line-ave.html":  "albertsons_611",
 		"https://local.safeway.com/safeway/wa/bellevue/15100-se-38th-st.html": "safeway_1444",
 	}
 
-	if err := SaveStoreURLMap(context.Background(), cacheStore, urlMap); err != nil {
+	if err := SaveStoreURLMap(ctx, cacheStore, urlMap); err != nil {
 		t.Fatalf("SaveStoreURLMapEntries returned error: %v", err)
 	}
 
-	got, err := LoadStoreURLMap(context.Background(), cacheStore)
+	got, err := LoadStoreURLMap(ctx, cacheStore)
 	if err != nil {
 		t.Fatalf("LoadStoreURLMap returned error: %v", err)
 	}
@@ -37,18 +38,23 @@ func TestSaveStoreURLMapRoundTrip(t *testing.T) {
 
 func TestSaveStorePointIndexRoundTrip(t *testing.T) {
 	t.Parallel()
-
+	ctx := t.Context()
 	cacheStore := cache.NewInMemoryCache()
-	pointIndex := map[string]StorePoint{
+	pointIndex := map[string]pointindex.Point{
 		"albertsons_611": {Lat: 33.4593747, Lon: -94.0419186},
 		"safeway_1444":   {Lat: 47.5765527, Lon: -122.1381125},
 	}
 
-	if err := SaveStorePointIndex(context.Background(), cacheStore, pointIndex); err != nil {
+	if err := pointindex.Save(ctx, cacheStore, pointIndex); err != nil {
 		t.Fatalf("SaveStorePointIndex returned error: %v", err)
 	}
 
-	got, err := LoadStorePointIndex(context.Background(), cacheStore)
+	failingloader := func(ctx context.Context, c cache.ListCache) ([]locationtypes.Location, error) {
+		t.Fatalf("location loader should not be called")
+		return nil, nil
+	}
+
+	got, err := pointindex.LoadOrBuild(ctx, cacheStore, failingloader)
 	if err != nil {
 		t.Fatalf("LoadStorePointIndex returned error: %v", err)
 	}
@@ -65,16 +71,17 @@ func TestSaveStorePointIndexRoundTrip(t *testing.T) {
 
 func TestLoadOrBuildStorePointIndexBuildsFromCachedSummaries(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 
 	cacheStore := cache.NewInMemoryCache()
-	if err := CacheStoreSummary(context.Background(), cacheStore, nearbySummary()); err != nil {
+	if err := CacheStoreSummary(ctx, cacheStore, nearbySummary()); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
-	if err := CacheStoreSummary(context.Background(), cacheStore, farSummary()); err != nil {
+	if err := CacheStoreSummary(ctx, cacheStore, farSummary()); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
 
-	pointIndex, err := LoadOrBuildStorePointIndex(context.Background(), cacheStore)
+	pointIndex, err := pointindex.LoadOrBuild(ctx, cacheStore, LoadCachedStoreSummaries)
 	if err != nil {
 		t.Fatalf("LoadOrBuildStorePointIndex returned error: %v", err)
 	}
@@ -82,7 +89,12 @@ func TestLoadOrBuildStorePointIndexBuildsFromCachedSummaries(t *testing.T) {
 		t.Fatalf("expected 2 points, got %d", len(pointIndex))
 	}
 
-	savedPointIndex, err := LoadStorePointIndex(context.Background(), cacheStore)
+	failingloader := func(ctx context.Context, c cache.ListCache) ([]locationtypes.Location, error) {
+		t.Fatalf("location loader should not be called")
+		return nil, nil
+	}
+
+	savedPointIndex, err := pointindex.LoadOrBuild(ctx, cacheStore, failingloader)
 	if err != nil {
 		t.Fatalf("LoadStorePointIndex returned error: %v", err)
 	}

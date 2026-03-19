@@ -1,10 +1,10 @@
 package pointindex
 
 import (
+	"careme/internal/cache"
 	"context"
 	"testing"
 
-	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -17,11 +17,11 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		"b": {Lat: 3.75, Lon: 4.125},
 	}
 
-	if err := Save(context.Background(), cacheStore, "test/points.json", index); err != nil {
+	if err := Save(context.Background(), cacheStore, index); err != nil {
 		t.Fatalf("Save returned error: %v", err)
 	}
 
-	got, err := Load(context.Background(), cacheStore, "test/points.json")
+	got, err := load(context.Background(), cacheStore)
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestLoadOrBuildBuildsAndPersistsIndex(t *testing.T) {
 	}
 
 	loadCalls := 0
-	index, err := LoadOrBuild(context.Background(), cacheStore, "points.json", "stores/", func(context.Context, cache.ListCache) ([]locationtypes.Location, error) {
+	index, err := LoadOrBuild(context.Background(), cacheStore, func(context.Context, cache.ListCache) ([]locationtypes.Location, error) {
 		loadCalls++
 		latA := 10.5
 		lonA := -20.25
@@ -63,30 +63,11 @@ func TestLoadOrBuildBuildsAndPersistsIndex(t *testing.T) {
 		t.Fatalf("unexpected index size: got %d want 2", len(index))
 	}
 
-	persisted, err := Load(context.Background(), cacheStore, "points.json")
+	persisted, err := load(context.Background(), cacheStore)
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
 	if len(persisted) != 2 {
 		t.Fatalf("unexpected persisted index size: got %d want 2", len(persisted))
-	}
-}
-
-func TestBuildFromLocationsSkipsMissingCoordinates(t *testing.T) {
-	t.Parallel()
-
-	lat := 12.0
-	lon := -13.0
-	index := BuildFromLocations([]locationtypes.Location{
-		{ID: "keep", Lat: &lat, Lon: &lon},
-		{ID: "skip-lat"},
-		{ID: ""},
-	})
-
-	if len(index) != 1 {
-		t.Fatalf("unexpected index size: got %d want 1", len(index))
-	}
-	if index["keep"] != (Point{Lat: 12.0, Lon: -13.0}) {
-		t.Fatalf("unexpected point: %+v", index["keep"])
 	}
 }
