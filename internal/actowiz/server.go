@@ -1,10 +1,13 @@
 package actowiz
 
 import (
+	"careme/internal/routing"
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
-	"careme/internal/routing"
+	"github.com/samber/lo"
 )
 
 const scrapeIntervalDays = 7
@@ -48,18 +51,22 @@ var defaultStoreIDs = []string{
 	"safeway_2781",     // 11201 georgia ave DC
 }
 
-type storesResponse struct {
-	StoreIDs           []string `json:"store_ids"`
-	ScrapeIntervalDays int      `json:"scrape_interval_days"`
-}
-
 type server struct {
-	storeIDs []string
+	storeIDs          []string
+	requestedStoreIDs requestedStoreIDProvider
 }
 
-func NewServer() *server {
+type requestedStoreIDProvider interface {
+	RequestedStoreIDs(ctx context.Context) ([]string, error)
+}
+
+func NewServer(provider requestedStoreIDProvider) *server {
+	if provider == nil {
+		panic("must give provider")
+	}
 	return &server{
-		storeIDs: append([]string(nil), defaultStoreIDs...),
+		storeIDs:          append([]string(nil), defaultStoreIDs...),
+		requestedStoreIDs: provider,
 	}
 }
 
@@ -67,12 +74,36 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /actowiz/stores.json", s.handleStores)
 }
 
-func (s *server) handleStores(w http.ResponseWriter, _ *http.Request) {
+type storesResponse struct {
+	Id                 string `json:"id"`
+	ScrapeIntervalDays int    `json:"scrape_interval_days"`
+}
+
+func (s *server) handleStores(w http.ResponseWriter, r *http.Request) {
+	storeIDs, err := s.mergedStoreIDs(r.Context())
+	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to list requested Actowiz stores", "error", err)
+		http.Error(w, "failed to list stores", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if err := json.NewEncoder(w).Encode(storesResponse{
-		StoreIDs:           s.storeIDs,
-		ScrapeIntervalDays: scrapeIntervalDays,
-	}); err != nil {
+
+	response := lo.Map(storeIDs, func(id string, _ int) storesResponse {
+		return storesResponse{
+			Id:                 id,
+			ScrapeIntervalDays: scrapeIntervalDays,
+		}
+	})
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "failed to encode stores", http.StatusInternalServerError)
 	}
+}
+
+func (s *server) mergedStoreIDs(ctx context.Context) ([]string, error) {
+	requestedStoreIDs, err := s.requestedStoreIDs.RequestedStoreIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return lo.Uniq(append(s.storeIDs, requestedStoreIDs...)), nil
 }

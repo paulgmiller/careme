@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,14 +23,19 @@ import (
 	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/locations/geo"
-	locationtypes "careme/internal/locations/types"
+	"careme/internal/logsetup"
 	"careme/internal/publix"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
-	utypes "careme/internal/users/types"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
+
+	locationtypes "careme/internal/locations/types"
+
+	utypes "careme/internal/users/types"
+
+	"github.com/samber/lo"
 )
 
 type userLookup interface {
@@ -38,19 +43,20 @@ type userLookup interface {
 }
 
 type locationStorage struct {
-	client       []locationBackend
+	clients      []locationBackend
 	zipCentroids centroidByZip
-	cache        cache.Cache
+	cache        cache.ListCache
 }
 
 // bad for rural areas if zip code is huge?
 const (
 	maxLocationDistanceMiles = 20.0
 	locationCachePrefix      = "location/"
+	storeRequestPrefix       = "location-store-requests/"
 )
 
 type locationServer struct {
-	storage     locationGetter
+	storage     locationStore
 	zipFetcher  zipFetcher
 	userStorage userLookup
 }
@@ -58,6 +64,7 @@ type locationServer struct {
 type locationGetter interface {
 	GetLocationByID(ctx context.Context, locationID string) (*Location, error)
 	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
+	HasInventory(locationID string) bool
 }
 
 type zipFetcher interface {
@@ -69,6 +76,13 @@ type locationBackend interface {
 	IsID(locationID string) bool
 }
 
+// name is terrible conflicting with locationStorage. locationStorage should become locationAggregator.
+type locationStore interface {
+	locationGetter
+	RequestStore(ctx context.Context, locationID string) error
+	RequestedStoreIDs(ctx context.Context) ([]string, error)
+}
+
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
 
@@ -76,7 +90,7 @@ type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
-func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGetter, error) {
+func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locationStore, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
 	}
@@ -110,13 +124,13 @@ func New(cfg *config.Config, c cache.Cache, centroids centroidByZip) (locationGe
 	}
 
 	return &locationStorage{
-		client:       backends,
+		clients:      backends,
 		zipCentroids: centroids,
 		cache:        c,
 	}, nil
 }
 
-func NewServer(storage locationGetter, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
+func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
 	return &locationServer{
 		storage:     storage,
 		zipFetcher:  zipFetcher,
@@ -124,12 +138,23 @@ func NewServer(storage locationGetter, zipFetcher zipFetcher, userStorage userLo
 	}
 }
 
+func isHTMXRequest(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
+}
+
+func (l *locationStorage) HasInventory(locationID string) bool {
+	_, found := lo.Find(l.clients, func(backend locationBackend) bool {
+		return backend.IsID(locationID) && backend.HasInventory(locationID)
+	})
+	return found
+}
+
 func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
 		return &cachedLoc, nil
 	}
 
-	for _, backend := range l.client {
+	for _, backend := range l.clients {
 		if !backend.IsID(locationID) {
 			continue
 		}
@@ -150,10 +175,10 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 }
 
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
-	results := make(chan []Location, len(l.client))
-	errors := make(chan error, len(l.client))
+	results := make(chan []Location, len(l.clients))
+	errors := make(chan error, len(l.clients))
 	var wg sync.WaitGroup
-	for _, backend := range l.client {
+	for _, backend := range l.clients {
 		wg.Add(1)
 		go func(backend locationBackend) {
 			defer wg.Done()
@@ -171,7 +196,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 	wg.Wait()
 	close(results)
 	close(errors)
-	if len(errors) == len(l.client) {
+	if len(errors) == len(l.clients) {
 		return nil, fmt.Errorf("all backends failed to get locations for zip %s", zipcode)
 	}
 	var allLocations []Location
@@ -223,13 +248,8 @@ func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID str
 		_ = blob.Close()
 	}()
 
-	raw, err := io.ReadAll(blob)
-	if err != nil {
-		slog.WarnContext(ctx, "failed to read cached location blob", "location_id", locationID, "error", err)
-		return Location{}, false
-	}
 	var loc Location
-	if err := json.Unmarshal(raw, &loc); err != nil {
+	if err := json.NewDecoder(blob).Decode(&loc); err != nil {
 		slog.WarnContext(ctx, "failed to parse cached location blob", "location_id", locationID, "error", err)
 		return Location{}, false
 	}
@@ -259,6 +279,52 @@ func (l *locationStorage) storeLocationIfMissing(loc Location) error {
 		return err
 	}
 	return nil
+}
+
+type locationRequest struct {
+	StoreID     string    `json:"store_id"`
+	Users       []string  `json:"users"`
+	RequestedAt time.Time `json:"requested_at"`
+}
+
+func (l *locationStorage) RequestStore(ctx context.Context, storeID string) error {
+	request := locationRequest{
+		StoreID:     storeID,
+		RequestedAt: time.Now().UTC(),
+	}
+	if current, err := l.cache.Get(ctx, storeRequestPrefix+storeID); err == nil {
+		defer func() {
+			_ = current.Close()
+		}()
+		var existingRequest locationRequest
+		if err := json.NewDecoder(current).Decode(&existingRequest); err != nil {
+			return fmt.Errorf("parse existing store request: %w", err)
+		}
+		request = existingRequest
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		return fmt.Errorf("fetch existing store request: %w", err)
+	}
+	if sessionID, ok := logsetup.SessionIDFromContext(ctx); ok {
+		request.Users = append(request.Users, sessionID)
+	}
+
+	raw, err := json.Marshal(request)
+	if err != nil {
+		return nil
+	}
+	requestKey := storeRequestPrefix + storeID
+	if err := l.cache.Put(ctx, requestKey, string(raw), cache.Unconditional()); err != nil {
+		return fmt.Errorf("store request put: %w", err)
+	}
+	return nil
+}
+
+func (l *locationStorage) RequestedStoreIDs(ctx context.Context) ([]string, error) {
+	storeIDs, err := l.cache.List(ctx, storeRequestPrefix, "")
+	if err != nil {
+		return nil, fmt.Errorf("list requested stores: %w", err)
+	}
+	return storeIDs, nil
 }
 
 func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid locationtypes.ZipCentroid, zipCentroids centroidByZip) {
@@ -337,6 +403,45 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 			http.Error(w, "Failed to render locations page. ", http.StatusInternalServerError)
 		}
 	})
+
+	mux.HandleFunc("POST /locations/request-store", func(w http.ResponseWriter, r *http.Request) {
+		if !isHTMXRequest(r) {
+			http.Error(w, "store requests must be made via HTMX", http.StatusBadRequest)
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+
+		storeID := r.FormValue("store_id")
+		if storeID == "" {
+			http.Error(w, "store_id is required", http.StatusBadRequest)
+			return
+		}
+
+		ctx := r.Context()
+		if _, err := l.storage.GetLocationByID(ctx, storeID); err != nil {
+			http.Error(w, "invalid store_id", http.StatusBadRequest)
+			return
+		}
+		if l.storage.HasInventory(storeID) {
+			http.Error(w, "store already supported", http.StatusBadRequest)
+			return
+		}
+
+		if err := l.storage.RequestStore(ctx, storeID); err != nil {
+			http.Error(w, "failed to submit request", http.StatusInternalServerError)
+			return
+		}
+
+		if err := templates.Location.ExecuteTemplate(w, "location_request_store_success", nil); err != nil {
+			slog.ErrorContext(ctx, "failed to render request-store success fragment", "store_id", storeID, "error", err)
+			http.Error(w, "failed to submit request", http.StatusInternalServerError)
+			return
+		}
+	})
 }
 
 func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, zip string, favoriteStore string, serverSignedIn bool) error {
@@ -345,8 +450,21 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		return fmt.Errorf("failed to get locations for zip %s: %w", zip, err)
 	}
 
+	type locationRow struct {
+		Location
+		SupportsStaples bool
+	}
+
+	rows := make([]locationRow, 0, len(locs))
+	for _, loc := range locs {
+		rows = append(rows, locationRow{
+			Location:        loc,
+			SupportsStaples: l.storage.HasInventory(loc.ID),
+		})
+	}
+
 	data := struct {
-		Locations       []Location
+		Locations       []locationRow
 		Zip             string
 		FavoriteStore   string
 		ClarityScript   template.HTML
@@ -354,7 +472,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		Style           seasons.Style
 		ServerSignedIn  bool
 	}{
-		Locations:       locs,
+		Locations:       rows,
 		Zip:             zip,
 		FavoriteStore:   favoriteStore,
 		ClarityScript:   templates.ClarityScript(ctx),

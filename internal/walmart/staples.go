@@ -40,6 +40,10 @@ func (c identityProvider) IsID(locationID string) bool {
 	return true
 }
 
+func (*identityProvider) HasInventory(locationID string) bool {
+	return false
+}
+
 func (p identityProvider) Signature() string {
 	return UnsupportedStaplesSignature
 }

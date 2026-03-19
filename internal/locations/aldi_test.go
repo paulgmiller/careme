@@ -62,7 +62,7 @@ func TestNewAddsALDIBackendWhenEnabled(t *testing.T) {
 	}
 
 	var found bool
-	for _, backend := range locStorage.client {
+	for _, backend := range locStorage.clients {
 		if _, ok := backend.(*aldi.LocationBackend); ok {
 			found = true
 			break

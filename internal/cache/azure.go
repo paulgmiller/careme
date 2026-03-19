@@ -23,7 +23,7 @@ type BlobCache struct {
 var _ ListCache = (*BlobCache)(nil)
 
 func NewBlobCache(container string) (*BlobCache, error) {
-	// Your account name and key can be obtained from the Azure Portal.
+	// Should come from config
 	accountName, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if !ok {
 		return nil, fmt.Errorf("AZURE_STORAGE_ACCOUNT_NAME could not be found")
