@@ -1,6 +1,20 @@
 package locations
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html/template"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
 	"careme/internal/albertsons"
 	"careme/internal/aldi"
 	"careme/internal/auth"
@@ -16,19 +30,6 @@ import (
 	"careme/internal/templates"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"html/template"
-	"log/slog"
-	"net/http"
-	"net/url"
-	"sort"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 
 	locationtypes "careme/internal/locations/types"
 
