@@ -16,7 +16,7 @@
   - `export GOCACHE=/tmp/go-build`
   - `export GOMODCACHE=/tmp/go-modcache`
   - Alternative persistent path inside repo: `export GOCACHE=$PWD/.cache/go-build && export GOMODCACHE=$PWD/.cache/go-modcache`
-- `gofumpt -l -w .` then `go vet ./...`: Baseline formatting and static checks.
+- `task fmt` (preferred) or `gofumpt -l -w .`, then `go vet ./...`: Baseline formatting and static checks.
 - From the repo root, run `golangci-lint run ./...`: Expanded Go linters.
 - `export ENABLE_MOCKS=1`: to test without kroger, openai credentials
 - `go test ./...`: Run unit tests across all packages; add `-cover` when changing core logic.
@@ -26,7 +26,7 @@
 - `tailwind\generate.sh`: run when ever you change css or html
 
 ## Coding Style & Naming Conventions
-- Go 1.24; keep code `gofumpt`-clean before review. Favor small, focused functions and table-driven tests.
+- Go 1.24; always format Go changes with `task fmt` or `gofumpt`, and keep code `gofumpt`-clean before review. Favor small, focused functions and table-driven tests.
 - Exported identifiers in `CamelCase`; package-private helpers in `lowerCamel`. Template names mirror file names in `internal/templates`.
 - Prefer standard library first; add dependencies sparingly and record rationale in PR description if new.
 - Prefer simple html to javascript frameworks
