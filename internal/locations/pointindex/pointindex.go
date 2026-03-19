@@ -1,11 +1,12 @@
 package pointindex
 
 import (
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"careme/internal/cache"
 
 	locationtypes "careme/internal/locations/types"
 )
@@ -15,9 +16,13 @@ type Point struct {
 	Lon float64 `json:"lon"`
 }
 
-type LocationLoader func(ctx context.Context, c cache.ListCache) ([]locationtypes.Location, error)
+type ZIPCentroidLookup interface {
+	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
+}
 
-const cacheKey = "point_index"
+type LocationLoader func(ctx context.Context, c cache.ListCache, zipLookup ZIPCentroidLookup) ([]locationtypes.Location, error)
+
+const cacheKey = "point_index/index"
 
 func Save(ctx context.Context, c cache.Cache, index map[string]Point) error {
 	if index == nil {
@@ -51,7 +56,7 @@ func load(ctx context.Context, c cache.Cache) (map[string]Point, error) {
 	return index, nil
 }
 
-func LoadOrBuild(ctx context.Context, c cache.ListCache, loadLocations LocationLoader) (map[string]Point, error) {
+func LoadOrBuild(ctx context.Context, c cache.ListCache, zipLookup ZIPCentroidLookup, loadLocations LocationLoader) (map[string]Point, error) {
 	index, err := load(ctx, c)
 	if err == nil {
 		return index, nil
@@ -60,7 +65,7 @@ func LoadOrBuild(ctx context.Context, c cache.ListCache, loadLocations LocationL
 		return nil, fmt.Errorf("read point index cache: %w", err)
 	}
 
-	locations, err := loadLocations(ctx, c)
+	locations, err := loadLocations(ctx, c, zipLookup)
 	if err != nil {
 		return nil, err
 	}

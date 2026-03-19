@@ -1,13 +1,14 @@
 package recipes
 
 import (
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/locations"
 	"context"
 	"slices"
 	"testing"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/locations"
 )
 
 type stubStaplesProvider struct {

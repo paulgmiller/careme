@@ -2,11 +2,12 @@ package nearby
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
 	"sort"
 	"strings"
 
 	"careme/internal/locations/geo"
+
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -14,13 +15,12 @@ type CentroidLookup interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
-const MaxLocationDistanceMiles = 20.0
+const MaxLocationDistanceMiles = 15.0
 
-func FilterAndSortByZip(ctx context.Context, zipLookup CentroidLookup, zipcode string, candidates []locationtypes.Location, maxDistanceMiles float64) []locationtypes.Location {
+func FilterAndSortByZip(ctx context.Context, zipLookup CentroidLookup, zipcode string, candidates []locationtypes.Location, maxDistanceMiles float64) ([]locationtypes.Location, error) {
 	centroid, ok := zipLookup.ZipCentroidByZIP(strings.TrimSpace(zipcode))
 	if !ok {
-		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode)
-		return nil
+		return nil, fmt.Errorf("requested zip %s has no centroid", zipcode)
 	}
 
 	type ranked struct {
@@ -49,5 +49,5 @@ func FilterAndSortByZip(ctx context.Context, zipLookup CentroidLookup, zipcode s
 	for _, item := range rankedLocations {
 		out = append(out, item.location)
 	}
-	return out
+	return out, nil
 }

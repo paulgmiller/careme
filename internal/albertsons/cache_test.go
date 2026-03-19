@@ -1,11 +1,12 @@
 package albertsons
 
 import (
+	"context"
+	"testing"
+
 	"careme/internal/cache"
 	"careme/internal/locations/pointindex"
 	locationtypes "careme/internal/locations/types"
-	"context"
-	"testing"
 )
 
 func TestSaveStoreURLMapRoundTrip(t *testing.T) {
@@ -49,12 +50,12 @@ func TestSaveStorePointIndexRoundTrip(t *testing.T) {
 		t.Fatalf("SaveStorePointIndex returned error: %v", err)
 	}
 
-	failingloader := func(ctx context.Context, c cache.ListCache) ([]locationtypes.Location, error) {
+	failingloader := func(ctx context.Context, c cache.ListCache, zipLookup pointindex.ZIPCentroidLookup) ([]locationtypes.Location, error) {
 		t.Fatalf("location loader should not be called")
 		return nil, nil
 	}
 
-	got, err := pointindex.LoadOrBuild(ctx, cacheStore, failingloader)
+	got, err := pointindex.LoadOrBuild(ctx, cacheStore, nil, failingloader)
 	if err != nil {
 		t.Fatalf("LoadStorePointIndex returned error: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestLoadOrBuildStorePointIndexBuildsFromCachedSummaries(t *testing.T) {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
 
-	pointIndex, err := pointindex.LoadOrBuild(ctx, cacheStore, LoadCachedStoreSummaries)
+	pointIndex, err := pointindex.LoadOrBuild(ctx, cacheStore, staticZIPLookup{}, LoadCachedStoreSummaries)
 	if err != nil {
 		t.Fatalf("LoadOrBuildStorePointIndex returned error: %v", err)
 	}
@@ -89,12 +90,12 @@ func TestLoadOrBuildStorePointIndexBuildsFromCachedSummaries(t *testing.T) {
 		t.Fatalf("expected 2 points, got %d", len(pointIndex))
 	}
 
-	failingloader := func(ctx context.Context, c cache.ListCache) ([]locationtypes.Location, error) {
+	failingloader := func(ctx context.Context, c cache.ListCache, zipLookup pointindex.ZIPCentroidLookup) ([]locationtypes.Location, error) {
 		t.Fatalf("location loader should not be called")
 		return nil, nil
 	}
 
-	savedPointIndex, err := pointindex.LoadOrBuild(ctx, cacheStore, failingloader)
+	savedPointIndex, err := pointindex.LoadOrBuild(ctx, cacheStore, nil, failingloader)
 	if err != nil {
 		t.Fatalf("LoadStorePointIndex returned error: %v", err)
 	}

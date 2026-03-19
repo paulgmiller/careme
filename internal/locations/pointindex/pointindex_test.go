@@ -1,9 +1,10 @@
 package pointindex
 
 import (
-	"careme/internal/cache"
 	"context"
 	"testing"
+
+	"careme/internal/cache"
 
 	locationtypes "careme/internal/locations/types"
 )
@@ -42,7 +43,7 @@ func TestLoadOrBuildBuildsAndPersistsIndex(t *testing.T) {
 	}
 
 	loadCalls := 0
-	index, err := LoadOrBuild(context.Background(), cacheStore, func(context.Context, cache.ListCache) ([]locationtypes.Location, error) {
+	index, err := LoadOrBuild(context.Background(), cacheStore, nil, func(context.Context, cache.ListCache, ZIPCentroidLookup) ([]locationtypes.Location, error) {
 		loadCalls++
 		latA := 10.5
 		lonA := -20.25

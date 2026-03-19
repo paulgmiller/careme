@@ -1,11 +1,11 @@
 package albertsons
 
 import (
+	"context"
+	"testing"
+
 	"careme/internal/cache"
 	"careme/internal/locations/pointindex"
-	"context"
-	"strings"
-	"testing"
 
 	locationtypes "careme/internal/locations/types"
 )
@@ -74,7 +74,7 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	}
 }
 
-func TestLocationBackendGetLocationByIDUsesPointIndexWhenSummaryCoordinatesMissing(t *testing.T) {
+func TestNewLocationBackendRebuildsPointIndexUsingZIPFallback(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
@@ -84,39 +84,20 @@ func TestLocationBackendGetLocationByIDUsesPointIndexWhenSummaryCoordinatesMissi
 	if err := CacheStoreSummary(context.Background(), cacheStore, summary); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
-	if err := pointindex.Save(context.Background(), cacheStore, map[string]pointindex.Point{
-		"safeway_1444": {Lat: 47.5765527, Lon: -122.1381125},
-	}); err != nil {
-		t.Fatalf("SaveStorePointIndex returned error: %v", err)
-	}
 
 	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
-		"98006": {Lat: 47.5750, Lon: -122.1400},
+		"98006": {Lat: 47.5765527, Lon: -122.1381125},
 	})
 	if err != nil {
 		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
-	loc, err := backend.GetLocationByID(context.Background(), "safeway_1444")
-	if err != nil {
-		t.Fatalf("GetLocationByID returned error: %v", err)
+	point, ok := backend.pointIndex["safeway_1444"]
+	if !ok {
+		t.Fatal("expected point index entry to be rebuilt")
 	}
-	if loc.Lat == nil || loc.Lon == nil {
-		t.Fatalf("expected coordinates from point index fallback, got %+v", loc)
-	}
-}
-
-func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
-	t.Parallel()
-
-	cacheStore := cache.NewInMemoryCache()
-
-	_, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
-	if err == nil {
-		t.Fatal("expected NewLocationBackend to return an error")
-	}
-	if !strings.Contains(err.Error(), "failed to load albertsons locations") {
-		t.Fatalf("expected missing summaries error, got %v", err)
+	if point != (pointindex.Point{Lat: 47.5765527, Lon: -122.1381125}) {
+		t.Fatalf("unexpected rebuilt point: %+v", point)
 	}
 }
 

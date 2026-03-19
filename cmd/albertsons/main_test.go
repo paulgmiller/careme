@@ -1,9 +1,6 @@
 package main
 
 import (
-	"careme/internal/albertsons"
-	"careme/internal/cache"
-	"careme/internal/locations/pointindex"
 	"context"
 	"fmt"
 	"io"
@@ -12,6 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"careme/internal/albertsons"
+	"careme/internal/cache"
+	"careme/internal/locations/pointindex"
 
 	locationtypes "careme/internal/locations/types"
 )
@@ -107,6 +108,78 @@ func TestSyncChainFromSitemapSkipsKnownURLsWithCachedSummaries(t *testing.T) {
 	}
 }
 
+func TestSyncChainFromSitemapRebuildsPointIndexFromZIPWhenKnownURLHasNoCoordinates(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	var pageRequests atomic.Int32
+	baseURL := "https://local.albertsons.test"
+
+	httpClient := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.String() {
+			case baseURL + "/sitemap.xml":
+				body := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/az/lake-havasu-city/1980-mcculloch-blvd.html</loc></url></urlset>`, baseURL)
+				return responseWithBody(http.StatusOK, body), nil
+			case baseURL + "/az/lake-havasu-city/1980-mcculloch-blvd.html":
+				pageRequests.Add(1)
+				return responseWithBody(http.StatusOK, `<html></html>`), nil
+			default:
+				return responseWithBody(http.StatusNotFound, "not found"), nil
+			}
+		}),
+	}
+
+	if err := albertsons.CacheStoreSummary(context.Background(), cacheStore, &albertsons.StoreSummary{
+		ID:      "albertsons_3204",
+		Brand:   "albertsons",
+		Domain:  "local.albertsons.com",
+		StoreID: "3204",
+		Name:    "Albertsons 1980 Mcculloch Blvd",
+		Address: "1980 Mcculloch Blvd",
+		State:   "AZ",
+		ZipCode: "86403",
+		URL:     baseURL + "/az/lake-havasu-city/1980-mcculloch-blvd.html",
+	}); err != nil {
+		t.Fatalf("CacheStoreSummary returned error: %v", err)
+	}
+	if err := albertsons.SaveStoreURLMap(context.Background(), cacheStore, map[string]string{
+		baseURL + "/az/lake-havasu-city/1980-mcculloch-blvd.html": "albertsons_3204",
+	}); err != nil {
+		t.Fatalf("SaveStoreURLMap returned error: %v", err)
+	}
+
+	chain := albertsons.Chain{
+		Brand:       "albertsons",
+		DisplayName: "Albertsons",
+		Domain:      strings.TrimPrefix(baseURL, "https://"),
+		IDPrefix:    "albertsons_",
+	}
+
+	synced, err := syncChainFromSitemap(context.Background(), cacheStore, httpClient, chain, baseURL+"/sitemap.xml", 0*time.Millisecond, staticZIPLookup{
+		"86403": {Lat: 34.4839, Lon: -114.3225},
+	})
+	if err != nil {
+		t.Fatalf("syncChainFromSitemap returned error: %v", err)
+	}
+	if synced != 0 {
+		t.Fatalf("expected 0 synced summaries, got %d", synced)
+	}
+	if pageRequests.Load() != 0 {
+		t.Fatalf("expected no page requests for cached url, got %d", pageRequests.Load())
+	}
+
+	pointIndex, err := pointindex.LoadOrBuild(context.Background(), cacheStore, staticZIPLookup{
+		"86403": {Lat: 34.4839, Lon: -114.3225},
+	}, albertsons.LoadCachedStoreSummaries)
+	if err != nil {
+		t.Fatalf("LoadStorePointIndex returned error: %v", err)
+	}
+	if got := pointIndex["albertsons_3204"]; got != (pointindex.Point{Lat: 34.4839, Lon: -114.3225}) {
+		t.Fatalf("unexpected rebuilt point: %+v", got)
+	}
+}
+
 func TestSyncChainFromSitemapPreservesOtherChainURLMappings(t *testing.T) {
 	t.Parallel()
 
@@ -162,7 +235,7 @@ func TestSyncChainFromSitemapPreservesOtherChainURLMappings(t *testing.T) {
 		t.Fatalf("expected albertsons mapping to be added, got %q", got)
 	}
 
-	pointIndex, err := pointindex.LoadOrBuild(context.Background(), cacheStore, albertsons.LoadCachedStoreSummaries)
+	pointIndex, err := pointindex.LoadOrBuild(context.Background(), cacheStore, nil, albertsons.LoadCachedStoreSummaries)
 	if err != nil {
 		t.Fatalf("LoadStorePointIndex returned error: %v", err)
 	}
@@ -212,7 +285,9 @@ func TestSyncChainFromSitemapFallsBackToZIPCentroidForPointIndex(t *testing.T) {
 		t.Fatalf("expected 1 synced summary, got %d", synced)
 	}
 
-	pointIndex, err := pointindex.LoadOrBuild(context.Background(), cacheStore, albertsons.LoadCachedStoreSummaries)
+	pointIndex, err := pointindex.LoadOrBuild(context.Background(), cacheStore, staticZIPLookup{
+		"71854": {Lat: 33.4593747, Lon: -94.0419186},
+	}, albertsons.LoadCachedStoreSummaries)
 	if err != nil {
 		t.Fatalf("LoadStorePointIndex returned error: %v", err)
 	}

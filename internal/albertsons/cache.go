@@ -2,6 +2,7 @@ package albertsons
 
 import (
 	"careme/internal/cache"
+	"careme/internal/locations/pointindex"
 	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
@@ -21,6 +22,8 @@ const (
 	StoreURLMapCacheKey     = "albertsons/store_url_map.json"
 	StorePointIndexCacheKey = "albertsons/store_points.json"
 )
+
+type ZIPCentroidLookup = pointindex.ZIPCentroidLookup
 
 func SaveStoreURLMap(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
 	return sitemapfetch.SaveURLMap(ctx, c, StoreURLMapCacheKey, urlMap)
@@ -46,7 +49,7 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 	return nil
 }
 
-func LoadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]locationtypes.Location, error) {
+func LoadCachedStoreSummaries(ctx context.Context, c cache.ListCache, zipLookup ZIPCentroidLookup) ([]locationtypes.Location, error) {
 	keys, err := c.List(ctx, StoreCachePrefix, "")
 	if err != nil {
 		return nil, fmt.Errorf("list cached store summaries: %w", err)
@@ -72,10 +75,10 @@ func LoadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]locatio
 	})
 
 	summaries = lo.Compact(summaries)
-	slog.InfoContext(ctx, "loaded albertsons locations", "count", len(summaries))
+	slog.InfoContext(ctx, "loaded albertsons locations from cache", "count", len(summaries))
 
 	locations := lo.Map(summaries, func(summary *StoreSummary, _ int) locationtypes.Location {
-		return storeSummaryToLocation(*summary)
+		return storeSummaryToLocationWithZIPFallback(*summary, zipLookup)
 	})
 	return locations, nil
 }
@@ -107,4 +110,25 @@ func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
 		Lon:     summary.Lon,
 		Chain:   Container,
 	}
+}
+
+func storeSummaryToLocationWithZIPFallback(summary StoreSummary, zipLookup ZIPCentroidLookup) locationtypes.Location {
+	loc := storeSummaryToLocation(summary)
+	if loc.Lat != nil && loc.Lon != nil {
+		return loc
+	}
+	if zipLookup == nil {
+		return loc
+	}
+
+	centroid, ok := zipLookup.ZipCentroidByZIP(summary.ZipCode)
+	if !ok {
+		return loc
+	}
+
+	lat := centroid.Lat
+	lon := centroid.Lon
+	loc.Lat = &lat
+	loc.Lon = &lon
+	return loc
 }

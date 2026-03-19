@@ -15,13 +15,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	locationtypes "careme/internal/locations/types"
 )
 
-type centroidByZip interface {
-	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
-}
+type centroidByZip = albertsons.ZIPCentroidLookup
 
 func main() {
 	var (
@@ -75,7 +71,7 @@ func syncChainFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpC
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return 0, err
 	}
-	pointIndex, err := pointindex.LoadOrBuild(ctx, cacheStore, albertsons.LoadCachedStoreSummaries)
+	pointIndex, err := pointindex.LoadOrBuild(ctx, cacheStore, zipLookup, albertsons.LoadCachedStoreSummaries)
 	if err != nil {
 		return 0, err
 	}
