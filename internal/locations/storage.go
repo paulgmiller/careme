@@ -25,6 +25,7 @@ import (
 	locationtypes "careme/internal/locations/types"
 
 	"github.com/samber/lo"
+	"golang.org/x/sync/errgroup"
 )
 
 type locationStorage struct {
@@ -58,7 +59,7 @@ type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
-type locationBackendFactory func() (locationBackend, error)
+type locationBackendFactory func(context.Context) (locationBackend, error)
 
 // bad for rural areas if zip code is huge?
 const (
@@ -78,13 +79,23 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 
 	ctx := context.Background()
 	backendfactories := []locationBackendFactory{
-		func() (locationBackend, error) { return kroger.FromConfig(cfg) },
-		func() (locationBackend, error) { return walmart.NewClient(cfg.Walmart) },
-		func() (locationBackend, error) { return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids) },
-		func() (locationBackend, error) { return wholefoods.NewLocationBackendFromConfig(ctx, cfg, centroids) },
-		func() (locationBackend, error) { return albertsons.NewLocationBackendFromConfig(ctx, cfg, centroids) },
-		func() (locationBackend, error) { return publix.NewLocationBackendFromConfig(ctx, cfg, centroids) },
-		func() (locationBackend, error) { return heb.NewLocationBackendFromConfig(ctx, cfg, centroids) },
+		func(context.Context) (locationBackend, error) { return kroger.FromConfig(cfg) },
+		func(context.Context) (locationBackend, error) { return walmart.NewClient(cfg.Walmart) },
+		func(ctx context.Context) (locationBackend, error) {
+			return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids)
+		},
+		func(ctx context.Context) (locationBackend, error) {
+			return wholefoods.NewLocationBackendFromConfig(ctx, cfg, centroids)
+		},
+		func(ctx context.Context) (locationBackend, error) {
+			return albertsons.NewLocationBackendFromConfig(ctx, cfg, centroids)
+		},
+		func(ctx context.Context) (locationBackend, error) {
+			return publix.NewLocationBackendFromConfig(ctx, cfg, centroids)
+		},
+		func(ctx context.Context) (locationBackend, error) {
+			return heb.NewLocationBackendFromConfig(ctx, cfg, centroids)
+		},
 	}
 
 	backends, err := initializeLocationBackends(ctx, backendfactories)
@@ -100,38 +111,30 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 }
 
 func initializeLocationBackends(ctx context.Context, factories []locationBackendFactory) ([]locationBackend, error) {
-	type backendInitResult struct {
-		backend locationBackend
-		err     error
-	}
-
-	results := make([]backendInitResult, len(factories))
-	var wg sync.WaitGroup
+	g, ctx := errgroup.WithContext(ctx)
+	results := make(chan locationBackend, len(factories))
 	for i, factory := range factories {
-		wg.Go(func() {
+		i, factory := i, factory
+		g.Go(func() error {
 			start := time.Now()
-			backend, err := factory()
-			slog.InfoContext(ctx, "initialized location backend", "backend", fmt.Sprintf("%T", backend), "latencyMS", time.Since(start).Milliseconds())
-			results[i] = backendInitResult{
-				backend: backend,
-				err:     err,
+			backend, err := factory(ctx)
+			if err != nil {
+				if locationtypes.IsDisabledBackendError(err) {
+					return nil
+				}
+				return fmt.Errorf("failed to initialize location backend %d: %w", i, err)
 			}
+			slog.InfoContext(ctx, "initialized location backend", "backend", fmt.Sprintf("%T", backend), "latencyMS", time.Since(start).Milliseconds())
+			results <- backend
+			return nil
 		})
 	}
-	wg.Wait()
-
-	backends := make([]locationBackend, 0, len(factories))
-	for i, result := range results {
-		if result.err != nil {
-			if locationtypes.IsDisabledBackendError(result.err) {
-				continue
-			}
-			return nil, fmt.Errorf("failed to initialize location backend %d: %w", i, result.err)
-		}
-		backends = append(backends, result.backend)
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
+	close(results)
 
-	return backends, nil
+	return lo.ChannelToSlice(results), nil
 }
 
 func (l *locationStorage) HasInventory(locationID string) bool {

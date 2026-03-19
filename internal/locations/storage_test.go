@@ -32,17 +32,17 @@ func (b namedBackend) HasInventory(string) bool {
 	return false
 }
 
-func TestInitializeLocationBackendsRunsFactoriesInParallelAndPreservesOrder(t *testing.T) {
+func TestInitializeLocationBackendsRunsFactoriesInParallelAndCollectsBackends(t *testing.T) {
 	started := make(chan string, 2)
 	release := make(chan struct{})
 
 	factories := []locationBackendFactory{
-		func() (locationBackend, error) {
+		func(context.Context) (locationBackend, error) {
 			started <- "first"
 			<-release
 			return namedBackend{id: "first"}, nil
 		},
-		func() (locationBackend, error) {
+		func(context.Context) (locationBackend, error) {
 			started <- "second"
 			<-release
 			return namedBackend{id: "second"}, nil
@@ -78,19 +78,65 @@ func TestInitializeLocationBackendsRunsFactoriesInParallelAndPreservesOrder(t *t
 			t.Fatalf("expected 2 backends, got %d", len(result.backends))
 		}
 
-		first, ok := result.backends[0].(namedBackend)
-		if !ok {
-			t.Fatalf("expected first backend type namedBackend, got %T", result.backends[0])
+		gotIDs := make(map[string]bool, len(result.backends))
+		for _, backend := range result.backends {
+			named, ok := backend.(namedBackend)
+			if !ok {
+				t.Fatalf("expected backend type namedBackend, got %T", backend)
+			}
+			gotIDs[named.id] = true
 		}
-		second, ok := result.backends[1].(namedBackend)
-		if !ok {
-			t.Fatalf("expected second backend type namedBackend, got %T", result.backends[1])
-		}
-		if first.id != "first" || second.id != "second" {
-			t.Fatalf("unexpected backend order: got %q then %q", first.id, second.id)
+		if !gotIDs["first"] || !gotIDs["second"] {
+			t.Fatalf("expected both backends to be returned, got %v", gotIDs)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("initializeLocationBackends did not finish")
+	}
+}
+
+func TestInitializeLocationBackendsCancelsOtherFactoriesOnError(t *testing.T) {
+	started := make(chan struct{})
+	releaseErr := make(chan struct{})
+	canceled := make(chan struct{}, 1)
+
+	factories := []locationBackendFactory{
+		func(context.Context) (locationBackend, error) {
+			close(started)
+			<-releaseErr
+			return nil, errors.New("boom")
+		},
+		func(ctx context.Context) (locationBackend, error) {
+			<-started
+			<-ctx.Done()
+			canceled <- struct{}{}
+			return nil, ctx.Err()
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := initializeLocationBackends(context.Background(), factories)
+		done <- err
+	}()
+
+	close(releaseErr)
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("initializeLocationBackends error = nil, want error")
+		}
+		if got, want := err.Error(), "failed to initialize location backend 0: boom"; got != want {
+			t.Fatalf("initializeLocationBackends error = %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("initializeLocationBackends did not return after error")
+	}
+
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("expected sibling factory context to be canceled")
 	}
 }
 
