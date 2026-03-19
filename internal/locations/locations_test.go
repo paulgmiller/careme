@@ -372,6 +372,23 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	}
 }
 
+func TestRequestedStoreIDsListsStoredRequests(t *testing.T) {
+	fc := cachepkg.NewInMemoryCache()
+	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{newFakeLocationClient()}, fc)
+
+	mustPutJSONInCache(t, fc, storeRequestPrefix+"publix_123", locationRequest{StoreID: "publix_123"})
+	mustPutJSONInCache(t, fc, storeRequestPrefix+"walmart_456", locationRequest{StoreID: "walmart_456"})
+
+	got, err := storage.RequestedStoreIDs(context.Background())
+	if err != nil {
+		t.Fatalf("RequestedStoreIDs returned error: %v", err)
+	}
+
+	if got, want := strings.Join(got, ","), "publix_123,walmart_456"; got != want {
+		t.Fatalf("RequestedStoreIDs = %q, want %q", got, want)
+	}
+}
+
 type fakeLocationClient struct {
 	details map[string]Location
 	lists   map[string][]Location
@@ -430,7 +447,7 @@ func newTestLocationServerWithBackends(backends []locationBackend) *locationStor
 	return newTestLocationServerWithBackendsAndCache(backends, cachepkg.NewInMemoryCache())
 }
 
-func newTestLocationServerWithBackendsAndCache(backends []locationBackend, c cachepkg.Cache) *locationStorage {
+func newTestLocationServerWithBackendsAndCache(backends []locationBackend, c cachepkg.ListCache) *locationStorage {
 	zipCentroids := LoadCentroids()
 	return &locationStorage{
 		clients:      backends,

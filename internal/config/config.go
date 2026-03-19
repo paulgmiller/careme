@@ -128,8 +128,6 @@ func (c *ClerkConfig) Signup() string {
 }
 
 func Load() (*Config, error) {
-	additionalStoresEnabled := envEnabled(additionalStoresEnableEnv)
-
 	config := &Config{
 		AI: AIConfig{
 			APIKey: os.Getenv("AI_API_KEY"),
@@ -151,19 +149,19 @@ func Load() (*Config, error) {
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
 		},
 		Aldi: AldiConfig{
-			Enable: additionalStoresEnabled || envEnabled("ALDI_ENABLE"),
+			Enable: envEnabled("ALDI_ENABLE"),
 		},
 		WholeFoods: WholeFoodsConfig{
-			Enable: additionalStoresEnabled || envEnabled("WHOLEFOODS_ENABLE"),
+			Enable: envEnabled("WHOLEFOODS_ENABLE"),
 		},
 		Albertsons: AlbertsonsConfig{
-			Enable: additionalStoresEnabled || envEnabled("ALBERTSONS_ENABLE"),
+			Enable: envEnabled("ALBERTSONS_ENABLE"),
 		},
 		Publix: PublixConfig{
-			Enable: additionalStoresEnabled || envEnabled("PUBLIX_ENABLE"),
+			Enable: envEnabled("PUBLIX_ENABLE"),
 		},
 		HEB: HEBConfig{
-			Enable: additionalStoresEnabled || envEnabled("HEB_ENABLE"),
+			Enable: envEnabled("HEB_ENABLE"),
 		},
 		Walmart: WalmartConfig{
 			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),
@@ -180,7 +178,7 @@ func Load() (*Config, error) {
 }
 
 func envEnabled(name string) bool {
-	return os.Getenv(name) != ""
+	return os.Getenv(name) != "false"
 }
 
 func validate(cfg *Config) error {

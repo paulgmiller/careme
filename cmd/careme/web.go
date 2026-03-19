@@ -76,7 +76,7 @@ func runServer(cfg *config.Config, addr string) error {
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
 	recipeHandler.Register(appRoutes)
 
-	actowiz.NewServer().Register(infraRoutes)
+	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
