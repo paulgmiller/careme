@@ -309,28 +309,40 @@ func TestGetLocationsByZipSucceedsWhenAtLeastOneBackendSucceeds(t *testing.T) {
 	}
 }
 
-/* TODO change this to test locations storage's haveInventory method
-func TestSupportsStaplesLocation(t *testing.T) {
+func TestHasInventory(t *testing.T) {
+	server := newTestLocationServerWithBackends([]locationBackend{
+		inventoryBackend{
+			supported: map[string]bool{
+				"70500874":       true,
+				"wholefoods_123": true,
+			},
+		},
+		inventoryBackend{
+			supported: map[string]bool{
+				"walmart_123": true,
+			},
+		},
+	})
+
 	tests := []struct {
-		name     string
-		storeID  string
-		supports bool
+		name         string
+		storeID      string
+		hasInventory bool
 	}{
-		{name: "kroger", storeID: "70500874", supports: true},
-		{name: "wholefoods", storeID: "wholefoods_123", supports: true},
-		{name: "walmart", storeID: "walmart_123", supports: true},
-		{name: "unsupported", storeID: "publix_123", supports: false},
+		{name: "kroger", storeID: "70500874", hasInventory: true},
+		{name: "wholefoods", storeID: "wholefoods_123", hasInventory: true},
+		{name: "walmart", storeID: "walmart_123", hasInventory: true},
+		{name: "unsupported", storeID: "publix_123", hasInventory: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := supportsStaplesLocation(tt.storeID); got != tt.supports {
-				t.Fatalf("supportsStaplesLocation(%q) = %v, want %v", tt.storeID, got, tt.supports)
+			if got := server.HasInventory(tt.storeID); got != tt.hasInventory {
+				t.Fatalf("HasInventory(%q) = %v, want %v", tt.storeID, got, tt.hasInventory)
 			}
 		})
 	}
 }
-*/
 
 func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
@@ -515,6 +527,27 @@ func (f *fakeLocationClient) HasInventory(locationID string) bool {
 		return hasInventory
 	}
 	return true
+}
+
+type inventoryBackend struct {
+	supported map[string]bool
+}
+
+func (b inventoryBackend) GetLocationByID(context.Context, string) (*Location, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (b inventoryBackend) GetLocationsByZip(context.Context, string) ([]Location, error) {
+	return nil, nil
+}
+
+func (b inventoryBackend) IsID(locationID string) bool {
+	_, ok := b.supported[locationID]
+	return ok
+}
+
+func (b inventoryBackend) HasInventory(locationID string) bool {
+	return b.supported[locationID]
 }
 
 type failingListCache struct {
