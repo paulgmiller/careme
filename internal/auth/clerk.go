@@ -1,9 +1,6 @@
 package auth
 
 import (
-	"careme/internal/config"
-	"careme/internal/routing"
-	"careme/internal/templates"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -14,6 +11,10 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"careme/internal/config"
+	"careme/internal/routing"
+	"careme/internal/templates"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
