@@ -48,7 +48,6 @@ type ClerkConfig struct {
 	SecretKey      string
 	PublishableKey string
 	Domain         string
-	Prod           bool
 }
 
 func (c *ClerkConfig) IsEnabled() bool {
@@ -121,14 +120,8 @@ func (c *ClerkConfig) Signup() string {
 }
 
 func (c *Config) ResolvedPublicOrigin() string {
-	if c == nil {
-		return defaultLocalOrigin
-	}
 	if origin := strings.TrimRight(strings.TrimSpace(c.PublicOrigin), "/"); origin != "" {
 		return origin
-	}
-	if c.Clerk.Prod {
-		return defaultPublicOrigin
 	}
 	return defaultLocalOrigin
 }
@@ -176,9 +169,6 @@ func Load() (*Config, error) {
 			PrivateKey: os.Getenv("WALMART_PRIVATE_KEY"),
 			BaseURL:    os.Getenv("WALMART_BASE_URL"),
 		},
-	}
-	if strings.HasSuffix(config.Clerk.Domain, "careme.cooking") {
-		config.Clerk.Prod = true
 	}
 
 	return config, validate(config)

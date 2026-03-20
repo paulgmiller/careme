@@ -81,13 +81,6 @@ func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
 	}
 }
 
-func TestResolvedPublicOriginDefaultsToProductionOriginInProd(t *testing.T) {
-	cfg := &Config{Clerk: ClerkConfig{Prod: true}}
-	if got, want := cfg.ResolvedPublicOrigin(), "https://careme.cooking"; got != want {
-		t.Fatalf("expected default prod origin %q, got %q", want, got)
-	}
-}
-
 func TestValidate_RejectsInvalidConfiguredPublicOrigin(t *testing.T) {
 	cfg := &Config{
 		Mocks:        MockConfig{Enable: true},
