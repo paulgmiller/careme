@@ -5,11 +5,6 @@ package mail
 
 import (
 	"bytes"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/recipes"
-	"careme/internal/users"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +13,12 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/recipes"
+	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 

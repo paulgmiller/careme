@@ -1,17 +1,18 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/locations"
-	"careme/internal/recipes/feedback"
-	"careme/internal/seasons"
-	"careme/internal/templates"
 	"context"
 	"html/template"
 	"io"
 	"net/http"
 	"slices"
 	"strings"
+
+	"careme/internal/ai"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/seasons"
+	"careme/internal/templates"
 )
 
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.

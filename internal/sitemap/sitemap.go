@@ -1,14 +1,15 @@
 package sitemap
 
 import (
-	"careme/internal/cache"
-	"careme/internal/recipes"
-	"careme/internal/routing"
 	"encoding/xml"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"careme/internal/cache"
+	"careme/internal/recipes"
+	"careme/internal/routing"
 )
 
 type Server struct {
