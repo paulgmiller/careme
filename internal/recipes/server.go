@@ -58,8 +58,8 @@ func signInPath(returnTo string) string {
 	return "/sign-in?return_to_b64=" + url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(returnTo)))
 }
 
-func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int, returnTo string) {
-	target := signInPath(returnTo)
+func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int) {
+	target := signInPath(requestURIOrPath(r))
 	if isHTMXRequest(r) {
 		w.Header().Set("HX-Redirect", target)
 	}
@@ -220,7 +220,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.clerk.GetUserIDFromRequest(r)
 	if errors.Is(err, auth.ErrNoSession) {
-		redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
+		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	}
 
@@ -292,7 +292,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
-		redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
+		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	} else if err != nil {
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -372,7 +372,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
-		redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
+		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	} else if err != nil {
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -457,7 +457,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
+			redirectToSignIn(w, r, http.StatusUnauthorized)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load user for recipe save", "error", err)
@@ -547,7 +547,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
+			redirectToSignIn(w, r, http.StatusUnauthorized)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load user for recipe dismiss", "error", err)
@@ -621,7 +621,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
+			redirectToSignIn(w, r, http.StatusUnauthorized)
 			return
 		}
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -664,7 +664,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	userid, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
+			redirectToSignIn(w, r, http.StatusUnauthorized)
 			return
 		}
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
