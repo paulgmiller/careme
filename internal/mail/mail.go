@@ -5,6 +5,11 @@ package mail
 
 import (
 	"bytes"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/recipes"
+	"careme/internal/users"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,14 +17,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 	"time"
-
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/recipes"
-	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 
@@ -202,10 +200,6 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"
 
-	publicOrigin := strings.TrimRight(strings.TrimSpace(m.publicOrigin), "/")
-	if publicOrigin == "" {
-		publicOrigin = "https://careme.cooking"
-	}
 	plainTextContent := "Check out your new recipes at " + publicOrigin + "/recipes?h=" + paramsHash
 
 	to := mail.NewEmail(user.Email[0], user.Email[0])

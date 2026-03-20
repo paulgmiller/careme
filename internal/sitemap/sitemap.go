@@ -29,7 +29,7 @@ Sitemap: %s/sitemap.xml
 func New(c cache.ListCache, publicOrigin string) *Server {
 	return &Server{
 		cache:        c,
-		publicOrigin: strings.TrimRight(strings.TrimSpace(publicOrigin), "/"),
+		publicOrigin: publicOrigin,
 	}
 }
 
