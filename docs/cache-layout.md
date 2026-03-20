@@ -5,6 +5,7 @@ This project stores cache entries in:
 - Local filesystem under `aldi/` (ALDI cache)
 - Local filesystem under `albertsons/` (Albertsons-family cache)
 - Local filesystem under `publix/` (Publix cache)
+- Local filesystem under `wegmans/` (Wegmans cache)
 - Local filesystem under `heb/` (HEB cache)
 - Local filesystem under `publix/` (Publix cache)
 - Local filesystem under `wholefoods/` (Whole Foods cache)
@@ -12,6 +13,7 @@ This project stores cache entries in:
 - Azure Blob container `aldi` (ALDI cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `albertsons` (Albertsons-family cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `publix` (Publix cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
+- Azure Blob container `wegmans` (Wegmans cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `heb` (HEB cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `publix` (Publix cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `wholefoods` (Whole Foods cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
@@ -41,6 +43,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `publix/stores/` | JSON `publix.StoreSummary` keyed by numeric Publix store ID | `cmd/publix` and `internal/publix` cache helpers | `internal/publix` location backend |
 | `publix/store_url_map.json` | JSON object mapping numeric Publix store ID to canonical location URL | `cmd/publix` and `internal/publix` cache helpers | `cmd/publix` incremental sync |
 | `publix/missing_store_ids.json` | JSON array of numeric Publix store IDs known to redirect back to `/locations` | `cmd/publix` and `internal/publix` cache helpers | `cmd/publix` incremental sync |
+| `wegmans/stores/` | JSON `wegmans.StoreSummary` keyed by numeric Wegmans store ID | `cmd/wegmans` and `internal/wegmans` cache helpers | `internal/wegmans` location backend |
 | `wholefoods/stores/` | JSON `wholefoods.StoreSummaryResponse` keyed by Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `internal/wholefoods` location backend |
 | `wholefoods/store_url_map.json` | JSON object mapping store URL to Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `cmd/wholefoods` when `-stores` is not provided |
 
@@ -50,10 +53,11 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 - Most app caches use the default cache created via `cache.MakeCache()` / `cache.EnsureCache("recipes")`.
 - ALDI locations use a separate cache created via `cache.EnsureCache("aldi")`.
 - Albertsons-family locations use a separate cache created via `cache.EnsureCache("albertsons")`.
+- Wegmans locations use a separate cache created via `cache.EnsureCache("wegmans")`.
 - HEB locations use a separate cache created via `cache.EnsureCache("heb")`.
 - Publix uses a separate cache created via `cache.EnsureCache("publix")`; it does not share the `recipes` container/directory.
 - Whole Foods uses a separate cache created via `cache.EnsureCache("wholefoods")`; it does not share the `recipes` container/directory.
-- Local cache paths are `recipes/` for most app data, `aldi/` for ALDI data, `albertsons/` for Albertsons-family data, `heb/` for HEB data, `publix/` for Publix data, and `wholefoods/` for Whole Foods data when filesystem backend is used.
+- Local cache paths are `recipes/` for most app data, `aldi/` for ALDI data, `albertsons/` for Albertsons-family data, `heb/` for HEB data, `publix/` for Publix data, `wegmans/` for Wegmans data, and `wholefoods/` for Whole Foods data when filesystem backend is used.
 - Blob names in Azure match the same key strings listed above inside their respective containers.
 - Staple `ingredients/` cache keys derive from location ID, date, and a versioned backend staple signature (for example `kroger-staples-v1` or `wholefoods-staples-v1`), so Kroger and Whole Foods locations do not share staple caches and staple-definition changes can invalidate caches intentionally.
 - Do not create nested keys under `recipe/<hash>` (for example `recipe/<hash>/wine`) because `FileCache` stores `recipe/<hash>` as a file path.

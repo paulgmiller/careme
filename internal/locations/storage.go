@@ -1,15 +1,6 @@
 package locations
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log/slog"
-	"sort"
-	"sync"
-	"time"
-
 	"careme/internal/albertsons"
 	"careme/internal/aldi"
 	"careme/internal/cache"
@@ -20,7 +11,16 @@ import (
 	"careme/internal/logsetup"
 	"careme/internal/publix"
 	"careme/internal/walmart"
+	"careme/internal/wegmans"
 	"careme/internal/wholefoods"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sort"
+	"sync"
+	"time"
 
 	locationtypes "careme/internal/locations/types"
 
@@ -95,6 +95,9 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 		},
 		func(ctx context.Context) (locationBackend, error) {
 			return heb.NewLocationBackendFromConfig(ctx, cfg, centroids)
+		},
+		func(ctx context.Context) (locationBackend, error) {
+			return wegmans.NewLocationBackend(ctx, cfg, centroids)
 		},
 	}
 
