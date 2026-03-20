@@ -18,20 +18,22 @@
         url.searchParams.delete("__clerk_db_jwt");
         history.replaceState({}, "", url.toString());
 
-        const redirectHome = () => location.replace("/");
+        const redirectHome = () => location.replace({{.ReturnToJS}});
+        const redirectDefault = () => location.replace("/");
+        const finishRedirect = {{if .ReturnTo}}redirectHome{{else}}redirectDefault{{end}};
 
         if ({{.Signup}} &&
             "{{.GoogleConversionTag}}" !== "" &&
             typeof gtag === "function") {
           gtag("event", "conversion", {
             send_to: "{{.GoogleConversionTag}}",
-            event_callback: redirectHome,
+            event_callback: finishRedirect,
           });
-          setTimeout(redirectHome, 1500);
+          setTimeout(finishRedirect, 1500);
           return;
         }
 
-        redirectHome();
+        finishRedirect();
       });
     </script>
   </body>

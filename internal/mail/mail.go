@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"careme/internal/cache"
@@ -45,11 +46,12 @@ type emailClient interface {
 }
 
 type mailer struct {
-	cache       cache.Cache
-	userStorage *users.Storage
-	generator   *recipes.Generator // interface requires making params public
-	locServer   locServer
-	client      emailClient
+	cache        cache.Cache
+	userStorage  *users.Storage
+	generator    *recipes.Generator // interface requires making params public
+	locServer    locServer
+	client       emailClient
+	publicOrigin string
 }
 
 // TODO share some of this with web.go? good for mocking?
@@ -80,11 +82,12 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	return &mailer{
-		cache:       cache,
-		userStorage: userStorage,
-		generator:   generator.(*recipes.Generator), // TODO do better
-		locServer:   locationserver,
-		client:      sendgrid.NewSendClient(sendgridkey),
+		cache:        cache,
+		userStorage:  userStorage,
+		generator:    generator.(*recipes.Generator), // TODO do better
+		locServer:    locationserver,
+		client:       sendgrid.NewSendClient(sendgridkey),
+		publicOrigin: cfg.ResolvedPublicOrigin(),
 	}, nil
 }
 
@@ -191,7 +194,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	}
 
 	var buf bytes.Buffer
-	if err := recipes.FormatMail(p, *shoppingList, &buf); err != nil {
+	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, &buf); err != nil {
 		slog.ErrorContext(ctx, "failed to format mail", "error", err)
 		return
 	}
@@ -199,7 +202,11 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"
 
-	plainTextContent := "Check out your new recipes at https://careme.cooking/recipes?h=" + paramsHash
+	publicOrigin := strings.TrimRight(strings.TrimSpace(m.publicOrigin), "/")
+	if publicOrigin == "" {
+		publicOrigin = "https://careme.cooking"
+	}
+	plainTextContent := "Check out your new recipes at " + publicOrigin + "/recipes?h=" + paramsHash
 
 	to := mail.NewEmail(user.Email[0], user.Email[0])
 	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())

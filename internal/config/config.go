@@ -9,18 +9,24 @@ import (
 
 const additionalStoresEnableEnv = "EXTRA_STORES_ENABLE"
 
+const (
+	defaultPublicOrigin = "https://careme.cooking"
+	defaultLocalOrigin  = "http://localhost:8080"
+)
+
 type Config struct {
-	AI         AIConfig         `json:"ai"`
-	Kroger     KrogerConfig     `json:"kroger"`
-	Walmart    WalmartConfig    `json:"walmart"`
-	Aldi       AldiConfig       `json:"aldi"`
-	WholeFoods WholeFoodsConfig `json:"wholefoods"`
-	Albertsons AlbertsonsConfig `json:"albertsons"`
-	Publix     PublixConfig     `json:"publix"`
-	HEB        HEBConfig        `json:"heb"`
-	Mocks      MockConfig       `json:"mocks"`
-	Clerk      ClerkConfig      `json:"clerk"`
-	Admin      AdminConfig      `json:"admin"`
+	AI           AIConfig         `json:"ai"`
+	Kroger       KrogerConfig     `json:"kroger"`
+	Walmart      WalmartConfig    `json:"walmart"`
+	Aldi         AldiConfig       `json:"aldi"`
+	WholeFoods   WholeFoodsConfig `json:"wholefoods"`
+	Albertsons   AlbertsonsConfig `json:"albertsons"`
+	Publix       PublixConfig     `json:"publix"`
+	HEB          HEBConfig        `json:"heb"`
+	Mocks        MockConfig       `json:"mocks"`
+	Clerk        ClerkConfig      `json:"clerk"`
+	Admin        AdminConfig      `json:"admin"`
+	PublicOrigin string           `json:"public_origin"`
 }
 
 type AIConfig struct {
@@ -105,26 +111,25 @@ func (c *WalmartConfig) IsEnabled() bool {
 	return c.ConsumerID != "" && c.PrivateKey != ""
 }
 
-var (
-	localhostSigninRedirect = "?redirect_url=http://localhost:8080/auth/establish"
-	localhostSignupRedirect = "?redirect_url=http://localhost:8080/auth/establish?signup=true"
-)
-
-// move to auth pacakage?
 func (c *ClerkConfig) Signin() string {
-	url := fmt.Sprintf("https://%s/sign-in", c.Domain)
-	if !c.Prod {
-		url += localhostSigninRedirect
-	}
-	return url
+	return fmt.Sprintf("https://%s/sign-in", c.Domain)
 }
 
 func (c *ClerkConfig) Signup() string {
-	url := fmt.Sprintf("https://%s/sign-up", c.Domain)
-	if !c.Prod {
-		url += localhostSignupRedirect
+	return fmt.Sprintf("https://%s/sign-up", c.Domain)
+}
+
+func (c *Config) ResolvedPublicOrigin() string {
+	if c == nil {
+		return defaultLocalOrigin
 	}
-	return url
+	if origin := strings.TrimRight(strings.TrimSpace(c.PublicOrigin), "/"); origin != "" {
+		return origin
+	}
+	if c.Clerk.Prod {
+		return defaultPublicOrigin
+	}
+	return defaultLocalOrigin
 }
 
 func Load() (*Config, error) {
@@ -148,6 +153,7 @@ func Load() (*Config, error) {
 		Admin: AdminConfig{
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
 		},
+		PublicOrigin: os.Getenv("PUBLIC_ORIGIN"),
 		Aldi: AldiConfig{
 			Enable: envEnabled("ALDI_ENABLE"),
 		},

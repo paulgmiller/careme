@@ -196,6 +196,75 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 	}
 }
 
+func TestHandleRecipes_GuestRedirectsToSignInWhenCacheMisses(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: IO(cacheStore),
+		storage:  users.NewStorage(cacheStore),
+		clerk:    noSessionAuth{},
+		locServer: staticLocationLookup{location: &locations.Location{
+			ID:      "70001001",
+			Name:    "Test Store",
+			ZipCode: "94105",
+		}},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&instructions=make+it+vegetarian", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+	if got, want := rr.Header().Get("Location"), signInPath("/recipes?location=70001001&instructions=make+it+vegetarian"); got != want {
+		t.Fatalf("expected redirect location %q, got %q", want, got)
+	}
+}
+
+func TestHandleRecipes_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: IO(cacheStore),
+		storage:  users.NewStorage(cacheStore),
+		clerk:    noSessionAuth{},
+		locServer: staticLocationLookup{location: &locations.Location{
+			ID:      "70001001",
+			Name:    "Test Store",
+			ZipCode: "94105",
+		}},
+	}
+
+	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 0, 0, 0, 0, time.FixedZone("PST", -8*60*60)))
+	p.Instructions = "make it vegetarian"
+	hash := p.Hash()
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes: []ai.Recipe{{Title: "Cached Recipe", Description: "Already made"}},
+	}, hash); err != nil {
+		t.Fatalf("failed to seed shopping list: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+	location := rr.Header().Get("Location")
+	u, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("failed to parse redirect location %q: %v", location, err)
+	}
+	if got := u.Query().Get("h"); got != hash {
+		t.Fatalf("expected redirect hash %q, got %q", hash, got)
+	}
+	if u.Query().Has("start") {
+		t.Fatalf("expected guest cache hit redirect without start param, got %q", location)
+	}
+}
+
 func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -705,8 +774,8 @@ func TestHandleQuestion_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
-	if got := rr.Header().Get("HX-Redirect"); got != "/sign-in" {
-		t.Fatalf("expected HX-Redirect to /, got %q", got)
+	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/question"); got != want {
+		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }
 
@@ -757,6 +826,29 @@ func TestHandleWine_RejectsNonHTMXRequest(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+func TestHandleWine_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: IO(cacheStore),
+		storage:  users.NewStorage(cacheStore),
+		clerk:    noSessionAuth{},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/wine?view=shopping", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleWine(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/wine?view=shopping"); got != want {
+		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }
 
@@ -1033,8 +1125,8 @@ func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
-	if got := rr.Header().Get("HX-Redirect"); got != "/sign-in" {
-		t.Fatalf("expected HX-Redirect to /sign-in, got %q", got)
+	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/save"); got != want {
+		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }
 
@@ -1206,8 +1298,8 @@ func TestHandleDismissRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
-	if got := rr.Header().Get("HX-Redirect"); got != "/sign-in" {
-		t.Fatalf("expected HX-Redirect to /sign-in, got %q", got)
+	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/dismiss"); got != want {
+		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }
 
@@ -1664,6 +1756,33 @@ func TestHandleFeedback_SavesStarsAndComment(t *testing.T) {
 	}
 	if feedback.Comment != "Great flavor and easy cleanup." {
 		t.Fatalf("unexpected comment: %q", feedback.Comment)
+	}
+}
+
+func TestHandleFeedback_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: IO(cacheStore),
+		storage:  users.NewStorage(cacheStore),
+		clerk:    noSessionAuth{},
+	}
+
+	form := url.Values{
+		"cooked": {"true"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/feedback", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleFeedback(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/feedback"); got != want {
+		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }
 

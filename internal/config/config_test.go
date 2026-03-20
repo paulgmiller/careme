@@ -56,11 +56,41 @@ func TestLoadRetainsIndividualStoreFlags(t *testing.T) {
 	}
 }
 
+func TestLoadUsesConfiguredPublicOrigin(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("PUBLIC_ORIGIN", "https://staging.careme.test/")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got, want := cfg.ResolvedPublicOrigin(), "https://staging.careme.test"; got != want {
+		t.Fatalf("expected resolved public origin %q, got %q", want, got)
+	}
+}
+
+func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
+	cfg := &Config{}
+	if got, want := cfg.ResolvedPublicOrigin(), "http://localhost:8080"; got != want {
+		t.Fatalf("expected default local origin %q, got %q", want, got)
+	}
+}
+
+func TestResolvedPublicOriginDefaultsToProductionOriginInProd(t *testing.T) {
+	cfg := &Config{Clerk: ClerkConfig{Prod: true}}
+	if got, want := cfg.ResolvedPublicOrigin(), "https://careme.cooking"; got != want {
+		t.Fatalf("expected default prod origin %q, got %q", want, got)
+	}
+}
+
 func resetStoreEnvs(t *testing.T) {
 	t.Helper()
 
 	for _, name := range []string{
 		"ENABLE_MOCKS",
+		"PUBLIC_ORIGIN",
 		additionalStoresEnableEnv,
 		"ALDI_ENABLE",
 		"WHOLEFOODS_ENABLE",

@@ -1,18 +1,20 @@
 package auth
 
 import (
+	"careme/internal/config"
+	"careme/internal/routing"
+	"careme/internal/templates"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
-
-	"careme/internal/config"
-	"careme/internal/routing"
-	"careme/internal/templates"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
@@ -163,10 +165,10 @@ func clearCookie(w http.ResponseWriter, name string) {
 func (c *clerkClient) Register(mux routing.Registrar) {
 	mux.HandleFunc("/logout", c.logout)
 	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, c.cfg.Clerk.Signin(), http.StatusSeeOther)
+		http.Redirect(w, r, c.signInURL(r, false), http.StatusSeeOther)
 	})
 	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, c.cfg.Clerk.Signup(), http.StatusSeeOther)
+		http.Redirect(w, r, c.signInURL(r, true), http.StatusSeeOther)
 	})
 	mux.HandleFunc("/auth/establish", func(w http.ResponseWriter, r *http.Request) {
 		if c.cfg.Clerk.PublishableKey == "" {
@@ -179,17 +181,107 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 			GoogleTagScript     template.HTML
 			GoogleConversionTag string
 			Signup              bool
+			ReturnTo            string
+			ReturnToJS          template.JS
 		}{
 			PublishableKey:      c.cfg.Clerk.PublishableKey,
 			GoogleTagScript:     templates.GoogleTagScript(),
 			GoogleConversionTag: templates.GoogleConversionTag(),
 			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"),
+			ReturnTo:            returnToFromRequest(r),
+			ReturnToJS:          template.JS(strconv.Quote(returnToFromRequest(r))),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
 			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
+}
+
+func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
+	base := c.cfg.Clerk.Signin()
+	if signup {
+		base = c.cfg.Clerk.Signup()
+	}
+
+	redirectURL := authEstablishURL(c.cfg, r, signup, sanitizeReturnTo(r.URL.Query().Get("return_to")))
+	if redirectURL == "" {
+		return base
+	}
+
+	u, err := url.Parse(base)
+	if err != nil {
+		return base
+	}
+	q := u.Query()
+	q.Set("redirect_url", redirectURL)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func authEstablishURL(cfg *config.Config, r *http.Request, signup bool, returnTo string) string {
+	if cfg != nil {
+		if origin := cfg.ResolvedPublicOrigin(); origin != "" {
+			u, err := url.Parse(origin + "/auth/establish")
+			if err == nil {
+				q := u.Query()
+				if signup {
+					q.Set("signup", "true")
+				}
+				if returnTo != "" {
+					q.Set("return_to_b64", base64.RawURLEncoding.EncodeToString([]byte(returnTo)))
+				}
+				u.RawQuery = q.Encode()
+				return u.String()
+			}
+		}
+	}
+
+	scheme := "https"
+	if forwardedProto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); forwardedProto != "" {
+		scheme = forwardedProto
+	} else if r.TLS == nil && strings.HasPrefix(r.Host, "localhost") {
+		scheme = "http"
+	}
+	if r.Host == "" {
+		return ""
+	}
+
+	u := url.URL{
+		Scheme: scheme,
+		Host:   r.Host,
+		Path:   "/auth/establish",
+	}
+	q := u.Query()
+	if signup {
+		q.Set("signup", "true")
+	}
+	if returnTo != "" {
+		q.Set("return_to_b64", base64.RawURLEncoding.EncodeToString([]byte(returnTo)))
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func returnToFromRequest(r *http.Request) string {
+	if encoded := strings.TrimSpace(r.URL.Query().Get("return_to_b64")); encoded != "" {
+		decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+		if err == nil {
+			return sanitizeReturnTo(string(decoded))
+		}
+	}
+	return sanitizeReturnTo(r.URL.Query().Get("return_to"))
+}
+
+func sanitizeReturnTo(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || !strings.HasPrefix(raw, "/") {
+		return ""
+	}
+	if strings.HasPrefix(raw, "//") {
+		return ""
+	}
+	return raw
 }
 
 // Toss this in if you're confused :)

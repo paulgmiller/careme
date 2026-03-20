@@ -15,6 +15,8 @@ import (
 	"careme/internal/recipes"
 )
 
+const testPublicOrigin = "https://example.careme.test"
+
 func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
 	t.Chdir(t.TempDir())
 
@@ -36,7 +38,7 @@ func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
 		hashes = append(hashes, hash)
 	}
 
-	server := New(cacheStore)
+	server := New(cacheStore, testPublicOrigin)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -58,12 +60,12 @@ func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
 		t.Fatalf("expected %d sitemap urls, got %d", expectedCount, len(parsed.URLs))
 	}
 
-	if !containsSitemapURL(parsed.URLs, "https://careme.cooking/about") {
-		t.Fatalf("missing expected static URL %q in sitemap body: %s", "https://careme.cooking/about", rr.Body.String())
+	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/about") {
+		t.Fatalf("missing expected static URL %q in sitemap body: %s", testPublicOrigin+"/about", rr.Body.String())
 	}
 
 	for _, hash := range hashes {
-		wantURL := "https://careme.cooking/recipes?h=" + hash
+		wantURL := testPublicOrigin + "/recipes?h=" + hash
 		if !containsSitemapURL(parsed.URLs, wantURL) {
 			t.Fatalf("missing expected URL %q in sitemap body: %s", wantURL, rr.Body.String())
 		}
@@ -81,7 +83,7 @@ func TestHandleSitemapNormalizesLegacyShoppingListHashToCanonical(t *testing.T) 
 		t.Fatalf("failed to save prefixed key: %v", err)
 	}
 
-	server := New(cacheStore)
+	server := New(cacheStore, testPublicOrigin)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -97,10 +99,10 @@ func TestHandleSitemapNormalizesLegacyShoppingListHashToCanonical(t *testing.T) 
 	if len(parsed.URLs) != 2 {
 		t.Fatalf("expected two URLs (about + recipe), got %d", len(parsed.URLs))
 	}
-	if !containsSitemapURL(parsed.URLs, "https://careme.cooking/about") {
-		t.Fatalf("missing expected static URL %q in sitemap body: %s", "https://careme.cooking/about", rr.Body.String())
+	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/about") {
+		t.Fatalf("missing expected static URL %q in sitemap body: %s", testPublicOrigin+"/about", rr.Body.String())
 	}
-	wantURL := "https://careme.cooking/recipes?h=" + hash
+	wantURL := testPublicOrigin + "/recipes?h=" + hash
 	if !containsSitemapURL(parsed.URLs, wantURL) {
 		t.Fatalf("missing expected URL %q in sitemap body: %s", wantURL, rr.Body.String())
 	}
@@ -117,7 +119,7 @@ func TestHandleSitemap_IgnoresNonShoppingListKeys(t *testing.T) {
 		t.Fatalf("failed to save legacy root key: %v", err)
 	}
 
-	server := New(cacheStore)
+	server := New(cacheStore, testPublicOrigin)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -133,13 +135,13 @@ func TestHandleSitemap_IgnoresNonShoppingListKeys(t *testing.T) {
 	if len(parsed.URLs) != 1 {
 		t.Fatalf("expected one URL (about) with no shoppinglist keys, got %d", len(parsed.URLs))
 	}
-	if parsed.URLs[0].Loc != "https://careme.cooking/about" {
-		t.Fatalf("expected only URL %q, got %q", "https://careme.cooking/about", parsed.URLs[0].Loc)
+	if parsed.URLs[0].Loc != testPublicOrigin+"/about" {
+		t.Fatalf("expected only URL %q, got %q", testPublicOrigin+"/about", parsed.URLs[0].Loc)
 	}
 }
 
 func TestHandleRobotsReturnsExpectedContent(t *testing.T) {
-	server := &Server{}
+	server := New(nil, testPublicOrigin)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
 
@@ -151,7 +153,7 @@ func TestHandleRobotsReturnsExpectedContent(t *testing.T) {
 	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "text/plain") {
 		t.Fatalf("expected text content type, got %q", got)
 	}
-	if rr.Body.String() != fmt.Sprintf(robots, domain) {
+	if rr.Body.String() != fmt.Sprintf(robots, testPublicOrigin) {
 		t.Fatalf("unexpected robots.txt body:\n%s", rr.Body.String())
 	}
 }

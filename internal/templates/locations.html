@@ -17,6 +17,9 @@
         <div class="border-b border-brand-100 p-8">
           <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Nearby Stores</h1>
           <p class="mt-2 text-gray-600">Showing results near ZIP <span class="font-semibold text-brand-700">{{.Zip}}</span>.</p>
+          {{if not .ServerSignedIn}}
+          <p class="mt-2 text-sm text-gray-500">You can browse stores now. Sign in before making new recipe plans.</p>
+          {{end}}
         </div>
 
         <ul id="locations-list" class="divide-y divide-brand-100">
@@ -40,6 +43,7 @@
 
               <div class="flex flex-wrap items-center gap-2 sm:justify-end">
                 {{if .SupportsStaples}}
+                {{if $.ServerSignedIn}}
                 <form
                   method="POST"
                   action="/user/favorite"
@@ -54,9 +58,10 @@
                     </span>
                   </button>
                 </form>
+                {{end}}
                 <a href="/recipes?location={{.ID}}"
                   class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Recipes!
+                  {{if $.ServerSignedIn}}Recipes!{{else}}See recipes{{end}}
                 </a>
                 <label for="instructions-{{.ID}}"
                   class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -73,10 +78,13 @@
                 <input type="hidden" name="location" value="{{.ID}}" />
                 <textarea name="instructions" rows="3" aria-label="Recipe instructions" placeholder="Example: No seafood, focus on quick weeknight meals."
                   class="w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300"></textarea>
+                {{if not $.ServerSignedIn}}
+                <p class="text-xs text-gray-500">If this exact plan already exists, you can view it. Otherwise you will sign in before Careme cooks up a new one.</p>
+                {{end}}
                 <div class="flex flex-wrap items-center gap-2">
                   <button type="submit"
                     class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Build Recipes
+                    {{if $.ServerSignedIn}}Build Recipes{{else}}Check Recipes{{end}}
                   </button>
                 </div>
               </form>

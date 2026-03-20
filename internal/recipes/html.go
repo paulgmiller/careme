@@ -23,7 +23,13 @@ import (
 // should not own.
 type shoppingRecipeView struct {
 	ai.Recipe
-	Hash               string
+	// RecipeHash identifies the individual recipe card and backs recipe-scoped
+	// links and HTMX endpoints like /recipe/{hash}/save or /recipe/{hash}/wine.
+	RecipeHash string
+	// ShoppingListHash identifies the surrounding /recipes?h=... page and is
+	// used anywhere the card needs to refer back to the full list state.
+	ShoppingListHash   string
+	ServerSignedIn     bool
 	DisplayIngredients []ai.Ingredient // merged food and wine
 	Dismissed          bool            // saved already in recipe
 	Wine               shoppingRecipeWineView
@@ -63,7 +69,9 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
-			Hash:               recipeHash,
+			RecipeHash:         recipeHash,
+			ShoppingListHash:   hash,
+			ServerSignedIn:     signedIn,
 			DisplayIngredients: displayIngredients,
 			Dismissed:          dismissedHashes[recipeHash],
 			Wine: shoppingRecipeWineView{
@@ -196,10 +204,18 @@ func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSel
 	winePreviewID := shoppingWinePreviewDOMID(recipeHash)
 	wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 	data := struct {
-		Hash string
-		Wine shoppingRecipeWineView
+		// RecipeHash is used for recipe-scoped DOM IDs and /recipe/{hash}/wine endpoints.
+		RecipeHash string
+		// ShoppingListHash is used for links or page-level refresh markers that need
+		// to point back to the surrounding /recipes?h=... page. Fragment-only renders
+		// do not know that page hash, so they fall back to the recipe hash.
+		ShoppingListHash string
+		ServerSignedIn   bool
+		Wine             shoppingRecipeWineView
 	}{
-		Hash: recipeHash,
+		RecipeHash:       recipeHash,
+		ShoppingListHash: recipeHash,
+		ServerSignedIn:   true,
 		Wine: shoppingRecipeWineView{
 			ActionID:       wineActionID,
 			ActionButtonID: wineButtonID,
@@ -225,17 +241,23 @@ func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, write
 	data := struct {
 		Hash            string
 		HasSavedRecipes bool
+		ServerSignedIn  bool
 	}{
 		Hash:            hash,
 		HasSavedRecipes: hasSavedRecipes,
+		ServerSignedIn:  true,
 	}
 
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_finalize_controls_response", data)
 }
 
 // drops clarity, instructions and most of shoppinglist
-func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
+func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, writer io.Writer) error {
 	// TODO just put params into shopping list and pass that up?
+	publicOrigin = strings.TrimRight(strings.TrimSpace(publicOrigin), "/")
+	if publicOrigin == "" {
+		publicOrigin = "https://careme.cooking"
+	}
 
 	data := struct {
 		Location locations.Location
@@ -249,7 +271,7 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
 		Date:     p.Date.Format("2006-01-02"),
 		Hash:     p.Hash(),
 		Recipes:  l.Recipes,
-		Domain:   "https://careme.cooking",
+		Domain:   publicOrigin,
 		Style:    seasons.GetCurrentStyle(),
 	}
 

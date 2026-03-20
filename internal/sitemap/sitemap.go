@@ -13,12 +13,13 @@ import (
 )
 
 type Server struct {
-	cache cache.ListCache
+	cache        cache.ListCache
+	publicOrigin string
 }
 
 const (
-	domain = "https://careme.cooking"
-	robots = `# Allow all search engines to crawl the site
+	defaultPublicOrigin = "https://careme.cooking"
+	robots              = `# Allow all search engines to crawl the site
 User-agent: *
 Allow: /
 
@@ -27,8 +28,18 @@ Sitemap: %s/sitemap.xml
 `
 )
 
-func New(c cache.ListCache) *Server {
-	return &Server{cache: c}
+func New(c cache.ListCache, publicOrigin string) *Server {
+	return &Server{
+		cache:        c,
+		publicOrigin: strings.TrimRight(strings.TrimSpace(publicOrigin), "/"),
+	}
+}
+
+func (s *Server) origin() string {
+	if s == nil || strings.TrimSpace(s.publicOrigin) == "" {
+		return defaultPublicOrigin
+	}
+	return s.publicOrigin
 }
 
 func (s *Server) Register(mux routing.Registrar) {
@@ -55,13 +66,13 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entries := make([]urlEntry, 0, len(hashes)+1)
-	entries = append(entries, urlEntry{Loc: domain + "/about"})
+	entries = append(entries, urlEntry{Loc: s.origin() + "/about"})
 
 	// this is going to get too  big.  at some point we need a real db to find latest
 	// or we track new entries and expire a lsit.
 	for _, key := range hashes {
 		hash := strings.TrimPrefix(key, recipes.ShoppingListCachePrefix)
-		entries = append(entries, urlEntry{Loc: domain + "/recipes?h=" + hash})
+		entries = append(entries, urlEntry{Loc: s.origin() + "/recipes?h=" + hash})
 	}
 	slog.InfoContext(r.Context(), "serving sitemap with recipe urls", "count", len(entries), "blobcount", len(hashes))
 
@@ -80,7 +91,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	full := fmt.Sprintf(robots, domain)
+	full := fmt.Sprintf(robots, s.origin())
 	if _, err := w.Write([]byte(full)); err != nil {
 		slog.ErrorContext(r.Context(), "failed to write robots.txt", "error", err)
 	}

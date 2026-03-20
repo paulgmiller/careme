@@ -27,6 +27,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	funcs := template.FuncMap{
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
+		"PublicOrigin":        func() string { return config.ResolvedPublicOrigin() },
 		"TailwindAssetPath":   func() string { return tailwindAssetPath },
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")

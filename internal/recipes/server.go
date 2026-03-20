@@ -34,6 +34,35 @@ func setTextContent(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 }
 
+func requestURIOrPath(r *http.Request) string {
+	if r == nil {
+		return "/"
+	}
+	if uri := strings.TrimSpace(r.URL.RequestURI()); uri != "" {
+		return uri
+	}
+	if path := strings.TrimSpace(r.URL.Path); path != "" {
+		return path
+	}
+	return "/"
+}
+
+func signInPath(returnTo string) string {
+	returnTo = strings.TrimSpace(returnTo)
+	if returnTo == "" {
+		return "/sign-in"
+	}
+	return "/sign-in?return_to=" + url.QueryEscape(returnTo)
+}
+
+func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int, returnTo string) {
+	target := signInPath(returnTo)
+	if isHTMXRequest(r) {
+		w.Header().Set("HX-Redirect", target)
+	}
+	http.Error(w, "must be logged in", status)
+}
+
 type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
@@ -188,8 +217,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.clerk.GetUserIDFromRequest(r)
 	if errors.Is(err, auth.ErrNoSession) {
-		w.Header().Set("HX-Redirect", "/sign-in")
-		http.Error(w, "must be logged in to ask a question", http.StatusUnauthorized)
+		redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
 		return
 	}
 
@@ -258,6 +286,13 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 	hash := strings.TrimSpace(r.PathValue("hash"))
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
+		redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
+		return
+	} else if err != nil {
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 	if selection, err := s.WineFromCache(ctx, hash); err == nil {
@@ -331,6 +366,13 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	hash := r.PathValue("hash")
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
+		redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
+		return
+	} else if err != nil {
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -412,8 +454,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			w.Header().Set("HX-Redirect", "/sign-in")
-			http.Error(w, "must be logged in to save recipes", http.StatusUnauthorized)
+			redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load user for recipe save", "error", err)
@@ -503,8 +544,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			w.Header().Set("HX-Redirect", "/sign-in")
-			http.Error(w, "must be logged in to dismiss recipes", http.StatusUnauthorized)
+			redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load user for recipe dismiss", "error", err)
@@ -578,10 +618,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			if isHTMXRequest(r) {
-				w.Header().Set("HX-Redirect", "/sign-in")
-			}
-			http.Error(w, "must be logged in to regenerate recipes", http.StatusUnauthorized)
+			redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
 			return
 		}
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -624,10 +661,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	userid, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			if isHTMXRequest(r) {
-				w.Header().Set("HX-Redirect", "/sign-in")
-			}
-			http.Error(w, "must be logged in to finalize recipes", http.StatusUnauthorized)
+			redirectToSignIn(w, r, http.StatusUnauthorized, requestURIOrPath(r))
 			return
 		}
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -771,7 +805,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.URL.Query().Get("mail") == "true" {
-			if err := FormatMail(p, *slist, w); err != nil {
+			if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), w); err != nil {
 				slog.ErrorContext(ctx, "failed to render mail template", "error", err)
 				http.Error(w, "failed to render mail template", http.StatusInternalServerError)
 			}
@@ -829,8 +863,15 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
-		slog.InfoContext(ctx, "failed got no sesion from request", "error", err, "url", r.URL.String())
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		if _, cacheErr := s.FromCache(ctx, p.Hash()); cacheErr == nil {
+			redirectToHash(w, r, p.Hash(), false /*useStart*/)
+			return
+		} else if !errors.Is(cacheErr, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to load recipe list for guest query", "hash", p.Hash(), "error", cacheErr)
+			http.Error(w, "failed to load recipe list", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
 		return
 	}
 

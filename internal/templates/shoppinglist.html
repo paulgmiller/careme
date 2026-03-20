@@ -9,7 +9,7 @@
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
   <meta property="og:title" content="{{(index .Recipes 0).Title}}" />
   <meta property="og:description" content="{{(index .Recipes 0).Description}}" />
-  <meta property="og:image" content="https://careme.cooking/favicon.ico" />
+  <meta property="og:image" content="{{PublicOrigin}}/favicon.ico" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Careme" />
 
@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="{{(index .Recipes 0).Title}}" />
   <meta name="twitter:description" content="{{(index .Recipes 0).Description}}" />
-  <meta name="twitter:image" content="https://careme.cooking/favicon.ico" />
+  <meta name="twitter:image" content="{{PublicOrigin}}/favicon.ico" />
   {{end}}
 
   {{template "tailwind_head" .Style}}
@@ -40,16 +40,17 @@
         </div>
 
         <div class="p-8">
-          <form id="regenerateForm"
-                method="POST"
-                action="/recipes/{{.Hash}}/regenerate"
-                hx-post="/recipes/{{.Hash}}/regenerate"
-                hx-params="instructions"
-                hx-swap="none">
-
-            <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
-              <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
-                <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
+          <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
+            <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
+              <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
+              {{if .ServerSignedIn}}
+              <form id="regenerateForm"
+                    method="POST"
+                    action="/recipes/{{.Hash}}/regenerate"
+                    hx-post="/recipes/{{.Hash}}/regenerate"
+                    hx-params="instructions"
+                    hx-swap="none"
+                    class="flex w-full flex-1 flex-col gap-3 sm:flex-row sm:items-center">
                 <input id="instructions"
                        type="text"
                        name="instructions"
@@ -60,30 +61,46 @@
                         class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Try again, chef
                 </button>
+              </form>
+              {{else}}
+              <div class="flex w-full flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                <input id="instructions"
+                       type="text"
+                       name="instructions"
+                       value="{{.Instructions}}"
+                       placeholder="e.g. make it vegetarian"
+                       readonly
+                       class="w-full flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-ink-700 shadow-sm" />
+                <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .Hash)}}"
+                   class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Sign in to try again
+                </a>
               </div>
+              {{end}}
             </div>
-          </form>
+          </div>
 
           <div class="mt-8 space-y-8">
             {{range .Recipes}}
             <article class="shopping-recipe-card space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
               <header class="space-y-4">
                 <div>
-                  <a href="/recipe/{{.Hash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  <a href="/recipe/{{.RecipeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     {{.Title}}
                   </a>
                   <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
+                  {{if .ServerSignedIn}}
                   <input type="radio"
                          {{if .Saved}}checked{{end}}
-                         name="recipe-{{.Hash}}"
+                         name="recipe-{{.RecipeHash}}"
                          value="save"
-                         id="save-{{.Hash}}"
+                         id="save-{{.RecipeHash}}"
                          class="peer/save hidden" />
-                  <label for="save-{{.Hash}}"
-                         hx-post="/recipe/{{.Hash}}/save"
-                         hx-vals='{"h":"{{$.Hash}}"}'
+                  <label for="save-{{.RecipeHash}}"
+                         hx-post="/recipe/{{.RecipeHash}}/save"
+                                 hx-vals='{"h":"{{.ShoppingListHash}}"}'
                          hx-trigger="click"
                          hx-target="next .profile-status"
                          hx-swap="innerHTML"
@@ -93,13 +110,13 @@
                   </label>
                   <input type="radio"
                          {{if .Dismissed}}checked{{end}}
-                         name="recipe-{{.Hash}}"
+                         name="recipe-{{.RecipeHash}}"
                          value="dismiss"
-                         id="dismiss-{{.Hash}}"
+                         id="dismiss-{{.RecipeHash}}"
                          class="peer/dismiss hidden" />
-                  <label for="dismiss-{{.Hash}}"
-                         hx-post="/recipe/{{.Hash}}/dismiss"
-                         hx-vals='{"h":"{{$.Hash}}"}'
+                  <label for="dismiss-{{.RecipeHash}}"
+                         hx-post="/recipe/{{.RecipeHash}}/dismiss"
+                                 hx-vals='{"h":"{{.ShoppingListHash}}"}'
                          hx-trigger="click"
                          hx-target="next .profile-status"
                          hx-swap="innerHTML"
@@ -114,6 +131,18 @@
                   </button>
                   {{template "shopping_recipe_wine_action" .}}
                   <span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>
+                  {{else}}
+                  <button type="button"
+                          onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
+                          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Details
+                  </button>
+                  {{template "shopping_recipe_wine_action" .}}
+                  <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .ShoppingListHash)}}"
+                     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Sign in to save
+                  </a>
+                  {{end}}
                 </div>
               </header>
 
@@ -227,6 +256,7 @@
 {{end}}
 
 {{define "shopping_finalize_controls_content"}}
+  {{if .ServerSignedIn}}
   <span class="inline-flex" {{if not .HasSavedRecipes}}title="Save at least one recipe to assemble your shopping list."{{end}}>
     <button type="button"
             id="finalizeButton"
@@ -242,6 +272,13 @@
   <p id="finalize-help" class="text-sm text-ink-600">
     Save at least one recipe to assemble your shopping list.
   </p>
+  {{end}}
+  {{else}}
+  <p class="text-sm text-ink-600">You are viewing a shared recipe plan. Sign in to save picks or assemble a shopping list.</p>
+  <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .Hash)}}"
+     class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    Sign in to keep cooking
+  </a>
   {{end}}
 {{end}}
 
@@ -263,20 +300,29 @@
 
 {{define "shopping_recipe_wine_action_content"}}
   {{if not .Wine.Recommendation}}
+  {{if .ServerSignedIn}}
   <button type="button"
           id="{{.Wine.ActionButtonID}}"
-          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=action"
+          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=action"
           hx-target="#{{.Wine.ActionID}}"
           hx-swap="outerHTML"
           hx-disabled-elt="#{{.Wine.ActionButtonID}}"
           hx-on::before-request="this.textContent='🍷🔄';"
           hx-on::response-error="this.textContent='😞';"
-          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{$.Hash}}','1');}"
+          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{.ShoppingListHash}}','1');}"
           aria-label="Choose wine"
           title="Choose wine"
           class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     🍷
   </button>
+  {{else}}
+  <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .ShoppingListHash)}}"
+     aria-label="Sign in for wine"
+     title="Sign in for wine"
+     class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    🍷
+  </a>
+  {{end}}
   {{end}}
 {{end}}
 
@@ -346,18 +392,25 @@
     {{end}}
   </div>
   {{else}}
+  {{if .ServerSignedIn}}
   <button type="button"
           id="{{.Wine.DetailButtonID}}"
-          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=details"
+          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=details"
           hx-target="#{{.Wine.DetailID}}"
           hx-swap="outerHTML"
           hx-disabled-elt="#{{.Wine.DetailButtonID}}"
           hx-on::before-request="this.textContent='Choosing 🍷 ...';"
           hx-on::response-error="this.textContent='wine failure 😞';"
-          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{$.Hash}}','1');}"
+          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{.ShoppingListHash}}','1');}"
           class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     🍷 Choose a wine
   </button>
+  {{else}}
+  <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .ShoppingListHash)}}"
+     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    Sign in for wine picks
+  </a>
+  {{end}}
   {{end}}
 {{end}}
 

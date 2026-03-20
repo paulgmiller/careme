@@ -279,6 +279,61 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	if !strings.Contains(html, "Sign in to ask follow-up questions.") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
 	}
+	if strings.Contains(html, `hx-post="/recipe/`) && strings.Contains(html, `/wine"`) {
+		t.Error("recipe HTML should not expose wine picker htmx endpoint when signed out")
+	}
+	if !strings.Contains(html, "Sign in for wine picks") {
+		t.Error("recipe HTML should prompt signed-out users to sign in for wine picks")
+	}
+	if strings.Contains(html, `name="feedback"`) {
+		t.Error("recipe HTML should not contain feedback form when signed out")
+	}
+}
+
+func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	multiRecipeList := ai.ShoppingList{
+		Recipes: []ai.Recipe{
+			{
+				Title:       "Recipe One",
+				Description: "First recipe",
+				Ingredients: []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+				Instructions: []string{
+					"Step 1",
+				},
+				Health:       "Healthy",
+				DrinkPairing: "Water",
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	FormatShoppingListHTML(t.Context(), p, multiRecipeList, false, w)
+	html := w.Body.String()
+
+	isValidHTML(t, html)
+	if strings.Contains(html, `/recipes/`) && strings.Contains(html, `/regenerate"`) {
+		t.Error("shopping list HTML should not expose regenerate endpoint when signed out")
+	}
+	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/save"`) {
+		t.Error("shopping list HTML should not expose save endpoint when signed out")
+	}
+	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/dismiss"`) {
+		t.Error("shopping list HTML should not expose dismiss endpoint when signed out")
+	}
+	if strings.Contains(html, `/recipes/`) && strings.Contains(html, `/finalize"`) {
+		t.Error("shopping list HTML should not expose finalize endpoint when signed out")
+	}
+	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/wine?view=shopping`) {
+		t.Error("shopping list HTML should not expose shopping wine endpoint when signed out")
+	}
+	if !strings.Contains(html, "Sign in to save") {
+		t.Error("shopping list HTML should prompt signed-out users to sign in to save picks")
+	}
+	if !strings.Contains(html, "Sign in to keep cooking") {
+		t.Error("shopping list HTML should prompt signed-out users to sign in before finalizing")
+	}
 }
 
 func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
