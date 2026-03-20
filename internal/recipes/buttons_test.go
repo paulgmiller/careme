@@ -162,15 +162,15 @@ func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
 		t.Error("HTML should not contain save/dismiss radio inputs when signed out")
 	}
 	if strings.Contains(html, `Try again, chef`) {
-		t.Error("HTML should not contain regenerate button when signed out")
+		t.Error("HTML should not contain regenerate action text when signed out")
 	}
 	if strings.Contains(html, `Assemble Shopping List`) {
-		t.Error("HTML should not contain finalize button when signed out")
+		t.Error("HTML should not contain finalize action text when signed out")
 	}
-	if !strings.Contains(html, `Sign in to try again`) {
-		t.Error("HTML should prompt signed-out users to sign in to regenerate")
+	if strings.Contains(html, `Save`) {
+		t.Error("HTML should not contain save action text when signed out")
 	}
-	if !strings.Contains(html, `Sign in to save`) {
-		t.Error("HTML should prompt signed-out users to sign in to save picks")
+	if strings.Contains(html, `Dismiss`) {
+		t.Error("HTML should not contain dismiss action text when signed out")
 	}
 }

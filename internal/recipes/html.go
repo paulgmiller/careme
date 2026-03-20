@@ -205,10 +205,12 @@ func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSel
 	wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 	data := struct {
 		// Hash is used for recipe-scoped DOM IDs and /recipe/{hash}/wine endpoints.
-		Hash string
-		Wine shoppingRecipeWineView
+		Hash           string
+		ServerSignedIn bool
+		Wine           shoppingRecipeWineView
 	}{
-		Hash: recipeHash,
+		Hash:           recipeHash,
+		ServerSignedIn: true,
 		Wine: shoppingRecipeWineView{
 			ActionID:       wineActionID,
 			ActionButtonID: wineButtonID,

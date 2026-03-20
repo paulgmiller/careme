@@ -273,7 +273,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should not contain question input when signed out")
 	}
-	if !strings.Contains(html, "Sign in to ask follow-up questions.") {
+	if !strings.Contains(html, "Sign in to ask follow-up questions") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
 	}
 	if strings.Contains(html, `hx-post="/recipe/`) && strings.Contains(html, `/wine"`) {
@@ -325,11 +325,17 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/wine?view=shopping`) {
 		t.Error("shopping list HTML should not expose shopping wine endpoint when signed out")
 	}
-	if !strings.Contains(html, "Sign in to save") {
-		t.Error("shopping list HTML should prompt signed-out users to sign in to save picks")
+	if strings.Contains(html, "Try again, chef") {
+		t.Error("shopping list HTML should hide regenerate action when signed out")
 	}
-	if !strings.Contains(html, "Sign in to keep cooking") {
-		t.Error("shopping list HTML should prompt signed-out users to sign in before finalizing")
+	if strings.Contains(html, "Assemble Shopping List") {
+		t.Error("shopping list HTML should hide finalize action when signed out")
+	}
+	if strings.Contains(html, `id="save-`) {
+		t.Error("shopping list HTML should hide save controls when signed out")
+	}
+	if strings.Contains(html, `id="dismiss-`) {
+		t.Error("shopping list HTML should hide dismiss controls when signed out")
 	}
 }
 

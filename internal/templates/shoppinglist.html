@@ -40,17 +40,16 @@
         </div>
 
         <div class="p-8">
-          <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
-            <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
-              <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
-              {{if .ServerSignedIn}}
-              <form id="regenerateForm"
-                    method="POST"
-                    action="/recipes/{{.Hash}}/regenerate"
-                    hx-post="/recipes/{{.Hash}}/regenerate"
-                    hx-params="instructions"
-                    hx-swap="none"
-                    class="flex w-full flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+          {{if .ServerSignedIn}}
+          <form id="regenerateForm"
+                method="POST"
+                action="/recipes/{{.Hash}}/regenerate"
+                hx-post="/recipes/{{.Hash}}/regenerate"
+                hx-params="instructions"
+                hx-swap="none">
+            <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
+              <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
+                <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
                 <input id="instructions"
                        type="text"
                        name="instructions"
@@ -61,24 +60,22 @@
                         class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Try again, chef
                 </button>
-              </form>
-              {{else}}
-              <div class="flex w-full flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-                <input id="instructions"
-                       type="text"
-                       name="instructions"
-                       value="{{.Instructions}}"
-                       placeholder="e.g. make it vegetarian"
-                       readonly
-                       class="w-full flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-ink-700 shadow-sm" />
-                <a href="{{SignInPath (print "/recipes?h=" .Hash)}}"
-                   class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Sign in to try again
-                </a>
               </div>
-              {{end}}
+            </div>
+          </form>
+          {{else if .Instructions}}
+          <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
+            <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
+              <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
+              <input id="instructions"
+                     type="text"
+                     name="instructions"
+                     value="{{.Instructions}}"
+                     readonly
+                     class="w-full flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-ink-700 shadow-sm" />
             </div>
           </div>
+          {{end}}
 
           <div class="mt-8 space-y-8">
             {{range .Recipes}}
@@ -100,7 +97,7 @@
                          class="peer/save hidden" />
                   <label for="save-{{.Hash}}"
                          hx-post="/recipe/{{.Hash}}/save"
-                                 hx-vals='{"h":"{{.ShoppingListHash}}"}'
+                         hx-vals='{"h":"{{$.Hash}}"}'
                          hx-trigger="click"
                          hx-target="next .profile-status"
                          hx-swap="innerHTML"
@@ -116,7 +113,7 @@
                          class="peer/dismiss hidden" />
                   <label for="dismiss-{{.Hash}}"
                          hx-post="/recipe/{{.Hash}}/dismiss"
-                                 hx-vals='{"h":"{{.ShoppingListHash}}"}'
+                         hx-vals='{"h":"{{$.Hash}}"}'
                          hx-trigger="click"
                          hx-target="next .profile-status"
                          hx-swap="innerHTML"
@@ -124,25 +121,14 @@
                          class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
                     Dismiss
                   </label>
-                  <button type="button"
-                          onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
-                          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Details
-                  </button>
-                  {{template "shopping_recipe_wine_action" .}}
-                  <span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>
-                  {{else}}
-                  <button type="button"
-                          onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
-                          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Details
-                  </button>
-                  {{template "shopping_recipe_wine_action" .}}
-                  <a href="{{SignInPath (print "/recipes?h=" .ShoppingListHash)}}"
-                     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Sign in to save
-                  </a>
                   {{end}}
+                  <button type="button"
+                          onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
+                          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Details
+                  </button>
+                  {{template "shopping_recipe_wine_action" .}}
+                  {{if .ServerSignedIn}}<span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>{{end}}
                 </div>
               </header>
 
@@ -240,12 +226,6 @@
 {{define "shopping_finalize_controls_content"}}
   {{if .ServerSignedIn}}
   {{template "shopping_finalize_controls_signed_in_content" .}}
-  {{else}}
-  <p class="text-sm text-ink-600">You are viewing a shared recipe plan. Sign in to save picks or assemble a shopping list.</p>
-  <a href="{{SignInPath (print "/recipes?h=" .Hash)}}"
-     class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    Sign in to keep cooking
-  </a>
   {{end}}
 {{end}}
 
@@ -280,6 +260,12 @@
 </div>
 {{end}}
 
+{{define "shopping_recipe_wine_action_oob"}}
+<div id="{{.Wine.ActionID}}" hx-swap-oob="outerHTML" class="shopping-wine-action">
+  {{template "shopping_recipe_wine_action_content" .}}
+</div>
+{{end}}
+
 {{define "shopping_recipe_wine_action_content"}}
   {{if not .Wine.Recommendation}}
   {{if .ServerSignedIn}}
@@ -296,13 +282,6 @@
           class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     🍷
   </button>
-  {{else}}
-  <a href="{{SignInPath (print "/recipes?h=" .ShoppingListHash)}}"
-     aria-label="Sign in for wine"
-     title="Sign in for wine"
-     class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    🍷
-  </a>
   {{end}}
   {{end}}
 {{end}}
@@ -344,6 +323,12 @@
 </div>
 {{end}}
 
+{{define "shopping_recipe_wine_details_oob"}}
+<div id="{{.Wine.DetailID}}" hx-swap-oob="outerHTML" class="shopping-wine-details pt-2">
+  {{template "shopping_recipe_wine_details_content" .}}
+</div>
+{{end}}
+
 {{define "shopping_recipe_wine_details_content"}}
   {{if .Wine.Recommendation}}
   <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
@@ -379,86 +364,18 @@
           class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     🍷 Choose a wine
   </button>
-  {{else}}
-  <a href="{{SignInPath (print "/recipes?h=" .ShoppingListHash)}}"
-     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    Sign in for wine picks
-  </a>
   {{end}}
   {{end}}
 {{end}}
 
 {{define "shopping_recipe_wine_action_response"}}
-<div id="{{.Wine.ActionID}}" class="shopping-wine-action">
-  {{template "shopping_recipe_wine_action_signed_in_content" .}}
-</div>
+{{template "shopping_recipe_wine_action" .}}
 {{template "shopping_recipe_wine_preview_oob" .}}
-<div id="{{.Wine.DetailID}}" hx-swap-oob="outerHTML" class="shopping-wine-details pt-2">
-  {{template "shopping_recipe_wine_details_signed_in_content" .}}
-</div>
+{{template "shopping_recipe_wine_details_oob" .}}
 {{end}}
 
 {{define "shopping_recipe_wine_details_response"}}
-<div id="{{.Wine.ActionID}}" hx-swap-oob="outerHTML" class="shopping-wine-action">
-  {{template "shopping_recipe_wine_action_signed_in_content" .}}
-</div>
+{{template "shopping_recipe_wine_action_oob" .}}
 {{template "shopping_recipe_wine_preview_oob" .}}
-<div id="{{.Wine.DetailID}}" class="shopping-wine-details pt-2">
-  {{template "shopping_recipe_wine_details_signed_in_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_wine_action_signed_in_content"}}
-  {{if not .Wine.Recommendation}}
-  <button type="button"
-          id="{{.Wine.ActionButtonID}}"
-          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=action"
-          hx-target="#{{.Wine.ActionID}}"
-          hx-swap="outerHTML"
-          hx-disabled-elt="#{{.Wine.ActionButtonID}}"
-          hx-on::before-request="this.textContent='🍷🔄';"
-          hx-on::response-error="this.textContent='😞';"
-          aria-label="Choose wine"
-          title="Choose wine"
-          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    🍷
-  </button>
-  {{end}}
-{{end}}
-
-{{define "shopping_recipe_wine_details_signed_in_content"}}
-  {{if .Wine.Recommendation}}
-  <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
-    {{if .Wine.Recommendation.Wines}}
-    <p class="font-semibold text-brand-700">Wine picks:</p>
-    <ul class="mt-1 space-y-1">
-      {{range .Wine.Recommendation.Wines}}
-      <li class="flex flex-wrap items-baseline gap-x-2">
-        <span class="font-medium text-brand-800">{{.Name}}</span>
-        {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
-        {{if .Quantity}}<span class="text-brand-600">{{.Quantity}}</span>{{end}}
-      </li>
-      {{end}}
-    </ul>
-    {{end}}
-    {{if .Wine.Recommendation.Commentary}}
-    <p class="{{if .Wine.Recommendation.Wines}}mt-2{{end}}">
-      <span class="font-semibold text-brand-700">Why it works:</span>
-      <span class="whitespace-pre-line">{{.Wine.Recommendation.Commentary}}</span>
-    </p>
-    {{end}}
-  </div>
-  {{else}}
-  <button type="button"
-          id="{{.Wine.DetailButtonID}}"
-          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=details"
-          hx-target="#{{.Wine.DetailID}}"
-          hx-swap="outerHTML"
-          hx-disabled-elt="#{{.Wine.DetailButtonID}}"
-          hx-on::before-request="this.textContent='Choosing 🍷 ...';"
-          hx-on::response-error="this.textContent='wine failure 😞';"
-          class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    🍷 Choose a wine
-  </button>
-  {{end}}
+{{template "shopping_recipe_wine_details" .}}
 {{end}}
