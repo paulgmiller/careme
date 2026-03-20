@@ -21,7 +21,7 @@ spec:
         runAsGroup: 65532
       containers:
         - name: safewayads-backfill
-          image: ghcr.io/paulgmiller/careme-safewayads:${IMAGE_TAG}
+          image: dockerhub.io/paulgmiller/careme-safewayads:${IMAGE_TAG}
           imagePullPolicy: IfNotPresent
           args:
             - -start-store=1

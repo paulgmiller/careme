@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 )
@@ -108,5 +109,40 @@ func TestNormalizeWeeklyAdIngredients(t *testing.T) {
 
 	if !slices.Equal(got, want) {
 		t.Fatalf("unexpected normalized weekly ad ingredients: got %#v want %#v", got, want)
+	}
+}
+
+func TestWeeklyAdSchemaRequiresAllIngredientFields(t *testing.T) {
+	client := NewClient("test-key", "")
+
+	properties, ok := client.adSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema properties missing or wrong type: %#v", client.adSchema["properties"])
+	}
+	ingredients, ok := properties["ingredients"].(map[string]any)
+	if !ok {
+		t.Fatalf("ingredients schema missing or wrong type: %#v", properties["ingredients"])
+	}
+	items, ok := ingredients["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("ingredient item schema missing or wrong type: %#v", ingredients["items"])
+	}
+	itemProperties, ok := items["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("ingredient item properties missing or wrong type: %#v", items["properties"])
+	}
+	required, ok := items["required"].([]any)
+	if !ok {
+		t.Fatalf("ingredient item required missing or wrong type: %#v", items["required"])
+	}
+
+	requiredSet := make(map[string]struct{}, len(required))
+	for _, entry := range required {
+		requiredSet[fmt.Sprint(entry)] = struct{}{}
+	}
+	for key := range itemProperties {
+		if _, ok := requiredSet[key]; !ok {
+			t.Fatalf("ingredient item schema does not require %q", key)
+		}
 	}
 }

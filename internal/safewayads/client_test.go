@@ -56,3 +56,13 @@ func TestPageImageKey(t *testing.T) {
 		t.Fatalf("PageImageKey() = %q, want %q", got, want)
 	}
 }
+
+func TestIsInvalidStoreResponse(t *testing.T) {
+	body := []byte(`{"message":"Invalid store_code","code":"422"}`)
+	if !isInvalidStoreResponse(422, body) {
+		t.Fatal("expected invalid store response to be recognized")
+	}
+	if isInvalidStoreResponse(500, body) {
+		t.Fatal("unexpected invalid store response match for non-422 status")
+	}
+}

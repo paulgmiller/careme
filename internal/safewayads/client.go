@@ -251,6 +251,9 @@ func (c *Client) getPublications(ctx context.Context, storeCode, postalCode stri
 	}()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		if isInvalidStoreResponse(resp.StatusCode, body) {
+			return nil, ErrInvalidStore
+		}
 		return nil, fmt.Errorf("publication status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var publications []Publication
@@ -258,6 +261,13 @@ func (c *Client) getPublications(ctx context.Context, storeCode, postalCode stri
 		return nil, fmt.Errorf("decode publications: %w", err)
 	}
 	return publications, nil
+}
+
+func isInvalidStoreResponse(statusCode int, body []byte) bool {
+	if statusCode != http.StatusUnprocessableEntity {
+		return false
+	}
+	return strings.Contains(strings.ToLower(string(body)), "invalid store_code")
 }
 
 func (c *Client) downloadBytes(ctx context.Context, assetURL string) ([]byte, string, error) {
@@ -390,3 +400,4 @@ func fileExtension(rawURL, contentType string, imageBytes []byte) string {
 }
 
 var ErrNoAd = fmt.Errorf("no weekly ad publication found")
+var ErrInvalidStore = fmt.Errorf("invalid store code")

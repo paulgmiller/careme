@@ -61,7 +61,7 @@ func main() {
 
 		if resume {
 			status, err := loadStatus(ctx, storage, storeID)
-			if err == nil && status.Status == "success" {
+			if err == nil && shouldResumeSkip(status.Status) {
 				log.Printf("skipping store %s due to resume", storeID)
 				continue
 			}
@@ -91,6 +91,11 @@ func processStore(ctx context.Context, storage safewayads.Storage, client *safew
 	if err != nil {
 		if errors.Is(err, safewayads.ErrNoAd) {
 			status.Status = "no_ad"
+			status.Error = err.Error()
+			return saveStatus(ctx, storage, status)
+		}
+		if errors.Is(err, safewayads.ErrInvalidStore) {
+			status.Status = "invalid_store"
 			status.Error = err.Error()
 			return saveStatus(ctx, storage, status)
 		}
@@ -205,4 +210,13 @@ func loadStatus(ctx context.Context, storage safewayads.Storage, storeID string)
 func saveStatus(ctx context.Context, storage safewayads.Storage, status safewayads.RunStatus) error {
 	status.UpdatedAt = time.Now().UTC()
 	return storage.PutJSON(ctx, safewayads.StatusKey(status.StoreID), status)
+}
+
+func shouldResumeSkip(status string) bool {
+	switch status {
+	case "success", "invalid_store":
+		return true
+	default:
+		return false
+	}
 }

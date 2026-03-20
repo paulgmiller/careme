@@ -39,12 +39,12 @@ type Ingredient struct {
 }
 
 type WeeklyAdIngredient struct {
-	PageNumber int    `json:"page_number,omitempty"`
-	Name       string `json:"name"`
-	Brand      string `json:"brand,omitempty"`
-	Size       string `json:"size,omitempty"`
-	Price      string `json:"price,omitempty"`
-	SaleNotes  string `json:"sale_notes,omitempty"`
+	PageNumber int    `json:"page_number" jsonschema:"required"`
+	Name       string `json:"name" jsonschema:"required"`
+	Brand      string `json:"brand" jsonschema:"required"`
+	Size       string `json:"size" jsonschema:"required"`
+	Price      string `json:"price" jsonschema:"required"`
+	SaleNotes  string `json:"sale_notes" jsonschema:"required"`
 }
 
 type WeeklyAdIngredients struct {

@@ -40,7 +40,7 @@ go run ./cmd/safewayads -start-store 490 -end-store 492 -limit 1
 
 Useful flags:
 - `-delay 5s` to slow the crawl between stores
-- `-resume=true` to skip stores already marked `success`
+- `-resume=true` to skip stores already marked `success` or `invalid_store`
 - `-extract=false` to archive all rendered ad pages and run metadata without calling OpenAI
 - `SAFEWAYADS_STORAGE_CONTAINER=safewayads` to write weekly-ad artifacts into the dedicated Azure blob container instead of `recipes`
 
