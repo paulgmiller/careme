@@ -257,6 +257,17 @@
 
 {{define "shopping_finalize_controls_content"}}
   {{if .ServerSignedIn}}
+  {{template "shopping_finalize_controls_signed_in_content" .}}
+  {{else}}
+  <p class="text-sm text-ink-600">You are viewing a shared recipe plan. Sign in to save picks or assemble a shopping list.</p>
+  <a href="{{SignInPath (print "/recipes?h=" .Hash)}}"
+     class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    Sign in to keep cooking
+  </a>
+  {{end}}
+{{end}}
+
+{{define "shopping_finalize_controls_signed_in_content"}}
   <span class="inline-flex" {{if not .HasSavedRecipes}}title="Save at least one recipe to assemble your shopping list."{{end}}>
     <button type="button"
             id="finalizeButton"
@@ -273,27 +284,16 @@
     Save at least one recipe to assemble your shopping list.
   </p>
   {{end}}
-  {{else}}
-  <p class="text-sm text-ink-600">You are viewing a shared recipe plan. Sign in to save picks or assemble a shopping list.</p>
-  <a href="{{SignInPath (print "/recipes?h=" .Hash)}}"
-     class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    Sign in to keep cooking
-  </a>
-  {{end}}
 {{end}}
 
 {{define "shopping_finalize_controls_response"}}
-{{template "shopping_finalize_controls_oob" .}}
+<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" class="mt-10 flex flex-wrap items-center gap-4">
+  {{template "shopping_finalize_controls_signed_in_content" .}}
+</div>
 {{end}}
 
 {{define "shopping_recipe_wine_action"}}
 <div id="{{.Wine.ActionID}}" class="shopping-wine-action">
-  {{template "shopping_recipe_wine_action_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_wine_action_oob"}}
-<div id="{{.Wine.ActionID}}" hx-swap-oob="outerHTML" class="shopping-wine-action">
   {{template "shopping_recipe_wine_action_content" .}}
 </div>
 {{end}}
@@ -303,7 +303,7 @@
   {{if .ServerSignedIn}}
   <button type="button"
           id="{{.Wine.ActionButtonID}}"
-          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=action"
+          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=action&h={{.ShoppingListHash}}"
           hx-target="#{{.Wine.ActionID}}"
           hx-swap="outerHTML"
           hx-disabled-elt="#{{.Wine.ActionButtonID}}"
@@ -363,12 +363,6 @@
 </div>
 {{end}}
 
-{{define "shopping_recipe_wine_details_oob"}}
-<div id="{{.Wine.DetailID}}" hx-swap-oob="outerHTML" class="shopping-wine-details pt-2">
-  {{template "shopping_recipe_wine_details_content" .}}
-</div>
-{{end}}
-
 {{define "shopping_recipe_wine_details_content"}}
   {{if .Wine.Recommendation}}
   <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
@@ -395,7 +389,7 @@
   {{if .ServerSignedIn}}
   <button type="button"
           id="{{.Wine.DetailButtonID}}"
-          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=details"
+          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=details&h={{.ShoppingListHash}}"
           hx-target="#{{.Wine.DetailID}}"
           hx-swap="outerHTML"
           hx-disabled-elt="#{{.Wine.DetailButtonID}}"
@@ -415,13 +409,78 @@
 {{end}}
 
 {{define "shopping_recipe_wine_action_response"}}
-{{template "shopping_recipe_wine_action" .}}
+<div id="{{.Wine.ActionID}}" class="shopping-wine-action">
+  {{template "shopping_recipe_wine_action_signed_in_content" .}}
+</div>
 {{template "shopping_recipe_wine_preview_oob" .}}
-{{template "shopping_recipe_wine_details_oob" .}}
+<div id="{{.Wine.DetailID}}" hx-swap-oob="outerHTML" class="shopping-wine-details pt-2">
+  {{template "shopping_recipe_wine_details_signed_in_content" .}}
+</div>
 {{end}}
 
 {{define "shopping_recipe_wine_details_response"}}
-{{template "shopping_recipe_wine_action_oob" .}}
+<div id="{{.Wine.ActionID}}" hx-swap-oob="outerHTML" class="shopping-wine-action">
+  {{template "shopping_recipe_wine_action_signed_in_content" .}}
+</div>
 {{template "shopping_recipe_wine_preview_oob" .}}
-{{template "shopping_recipe_wine_details" .}}
+<div id="{{.Wine.DetailID}}" class="shopping-wine-details pt-2">
+  {{template "shopping_recipe_wine_details_signed_in_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_action_signed_in_content"}}
+  {{if not .Wine.Recommendation}}
+  <button type="button"
+          id="{{.Wine.ActionButtonID}}"
+          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=action&h={{.ShoppingListHash}}"
+          hx-target="#{{.Wine.ActionID}}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="#{{.Wine.ActionButtonID}}"
+          hx-on::before-request="this.textContent='🍷🔄';"
+          hx-on::response-error="this.textContent='😞';"
+          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{.ShoppingListHash}}','1');}"
+          aria-label="Choose wine"
+          title="Choose wine"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    🍷
+  </button>
+  {{end}}
+{{end}}
+
+{{define "shopping_recipe_wine_details_signed_in_content"}}
+  {{if .Wine.Recommendation}}
+  <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
+    {{if .Wine.Recommendation.Wines}}
+    <p class="font-semibold text-brand-700">Wine picks:</p>
+    <ul class="mt-1 space-y-1">
+      {{range .Wine.Recommendation.Wines}}
+      <li class="flex flex-wrap items-baseline gap-x-2">
+        <span class="font-medium text-brand-800">{{.Name}}</span>
+        {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
+        {{if .Quantity}}<span class="text-brand-600">{{.Quantity}}</span>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+    {{if .Wine.Recommendation.Commentary}}
+    <p class="{{if .Wine.Recommendation.Wines}}mt-2{{end}}">
+      <span class="font-semibold text-brand-700">Why it works:</span>
+      <span class="whitespace-pre-line">{{.Wine.Recommendation.Commentary}}</span>
+    </p>
+    {{end}}
+  </div>
+  {{else}}
+  <button type="button"
+          id="{{.Wine.DetailButtonID}}"
+          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=details&h={{.ShoppingListHash}}"
+          hx-target="#{{.Wine.DetailID}}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="#{{.Wine.DetailButtonID}}"
+          hx-on::before-request="this.textContent='Choosing 🍷 ...';"
+          hx-on::response-error="this.textContent='wine failure 😞';"
+          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{.ShoppingListHash}}','1');}"
+          class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    🍷 Choose a wine
+  </button>
+  {{end}}
 {{end}}

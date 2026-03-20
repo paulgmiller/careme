@@ -837,7 +837,7 @@ func TestHandleWine_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 		clerk:    noSessionAuth{},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/wine?view=shopping", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/wine?view=shopping&h=shopping-hash", nil)
 	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("hash", "hash")
 	rr := httptest.NewRecorder()
@@ -847,8 +847,31 @@ func TestHandleWine_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
-	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/wine?view=shopping"); got != want {
+	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/wine?view=shopping&h=shopping-hash"); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
+	}
+}
+
+func TestHandleWine_ShoppingVariantRequiresShoppingListHash(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := &server{
+		recipeio: IO(cacheStore),
+		storage:  users.NewStorage(cacheStore),
+		clerk:    auth.DefaultMock(),
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/wine?view=shopping", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "hash")
+	rr := httptest.NewRecorder()
+
+	s.handleWine(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "missing shopping list hash") {
+		t.Fatalf("expected missing shopping list hash error, got body: %s", body)
 	}
 }
 
@@ -941,7 +964,7 @@ func TestHandleWine_ShoppingVariantReturnsShoppingFragment(t *testing.T) {
 		t.Fatalf("failed to save recipe: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine?view=shopping", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine?view=shopping&h=shopping-hash", nil)
 	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()

@@ -2,6 +2,16 @@ package recipes
 
 import (
 	"bytes"
+	"careme/internal/ai"
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/seasons"
+	"careme/internal/templates"
+	"careme/internal/users"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -14,17 +24,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"careme/internal/ai"
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/recipes/feedback"
-	"careme/internal/routing"
-	"careme/internal/seasons"
-	"careme/internal/templates"
-	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 
@@ -286,9 +285,14 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 	}
 	renderShoppingVariant := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("view")), "shopping")
 	shoppingSlot := strings.TrimSpace(r.URL.Query().Get("slot"))
+	shoppingListHash := strings.TrimSpace(r.FormValue("h"))
 	hash := strings.TrimSpace(r.PathValue("hash"))
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+	if renderShoppingVariant && shoppingListHash == "" {
+		http.Error(w, "missing shopping list hash", http.StatusBadRequest)
 		return
 	}
 	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
@@ -304,7 +308,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if renderShoppingVariant {
-			FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
+			FormatShoppingRecipeWineHTML(hash, shoppingListHash, shoppingSlot, selection, w)
 		} else {
 			FormatRecipeWineHTML(hash, selection, w)
 		}
@@ -354,7 +358,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if renderShoppingVariant {
-		FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
+		FormatShoppingRecipeWineHTML(hash, shoppingListHash, shoppingSlot, selection, w)
 		return
 	}
 	FormatRecipeWineHTML(hash, selection, w)
