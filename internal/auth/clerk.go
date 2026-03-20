@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/clerk/clerk-sdk-go/v2/jwks"
 	"github.com/clerk/clerk-sdk-go/v2/session"
 	"github.com/clerk/clerk-sdk-go/v2/user"
+	"github.com/samber/lo"
 )
 
 var ErrNoSession = errors.New("no valid session found")
@@ -181,15 +181,13 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 			GoogleTagScript     template.HTML
 			GoogleConversionTag string
 			Signup              bool
-			ReturnTo            string
-			ReturnToJS          template.JS
+			ReturnTo            string // read from a data- attribute in the template to avoid JS-string escaping concerns
 		}{
 			PublishableKey:      c.cfg.Clerk.PublishableKey,
 			GoogleTagScript:     templates.GoogleTagScript(),
 			GoogleConversionTag: templates.GoogleConversionTag(),
-			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"),
+			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"), // used for ad conversions
 			ReturnTo:            returnToFromRequest(r),
-			ReturnToJS:          template.JS(strconv.Quote(returnToFromRequest(r))),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
 			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)
@@ -203,55 +201,17 @@ func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
 	if signup {
 		base = c.cfg.Clerk.Signup()
 	}
-
-	redirectURL := authEstablishURL(c.cfg, r, signup, sanitizeReturnTo(r.URL.Query().Get("return_to")))
-	if redirectURL == "" {
-		return base
-	}
-
-	u, err := url.Parse(base)
-	if err != nil {
-		return base
-	}
+	redirectURL := c.authEstablishURL(signup, sanitizeReturnTo(r.URL.Query().Get("return_to")))
+	u := lo.Must(url.Parse(base))
 	q := u.Query()
 	q.Set("redirect_url", redirectURL)
 	u.RawQuery = q.Encode()
 	return u.String()
 }
 
-func authEstablishURL(cfg *config.Config, r *http.Request, signup bool, returnTo string) string {
-	if cfg != nil {
-		if origin := cfg.ResolvedPublicOrigin(); origin != "" {
-			u, err := url.Parse(origin + "/auth/establish")
-			if err == nil {
-				q := u.Query()
-				if signup {
-					q.Set("signup", "true")
-				}
-				if returnTo != "" {
-					q.Set("return_to_b64", base64.RawURLEncoding.EncodeToString([]byte(returnTo)))
-				}
-				u.RawQuery = q.Encode()
-				return u.String()
-			}
-		}
-	}
-
-	scheme := "https"
-	if forwardedProto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); forwardedProto != "" {
-		scheme = forwardedProto
-	} else if r.TLS == nil && strings.HasPrefix(r.Host, "localhost") {
-		scheme = "http"
-	}
-	if r.Host == "" {
-		return ""
-	}
-
-	u := url.URL{
-		Scheme: scheme,
-		Host:   r.Host,
-		Path:   "/auth/establish",
-	}
+func (c *clerkClient) authEstablishURL(signup bool, returnTo string) string {
+	origin := c.cfg.ResolvedPublicOrigin() // can never be emptpy
+	u := lo.Must(url.Parse(origin + "/auth/establish"))
 	q := u.Query()
 	if signup {
 		q.Set("signup", "true")

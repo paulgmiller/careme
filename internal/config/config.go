@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -188,6 +189,19 @@ func envEnabled(name string) bool {
 }
 
 func validate(cfg *Config) error {
+	if err := validateAbsoluteURL("public origin", cfg.ResolvedPublicOrigin()); err != nil {
+		return err
+	}
+
+	if cfg.Clerk.IsEnabled() {
+		if err := validateAbsoluteURL("clerk sign-in URL", cfg.Clerk.Signin()); err != nil {
+			return err
+		}
+		if err := validateAbsoluteURL("clerk sign-up URL", cfg.Clerk.Signup()); err != nil {
+			return err
+		}
+	}
+
 	if cfg.Mocks.Enable {
 		return nil
 	}
@@ -200,6 +214,20 @@ func validate(cfg *Config) error {
 	}
 	if cfg.AI.APIKey == "" {
 		return fmt.Errorf("AI API  key must be set")
+	}
+	return nil
+}
+
+func validateAbsoluteURL(name, raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("%s is invalid: %w", name, err)
+	}
+	if parsed == nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%s must be an absolute URL", name)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("%s must use http or https", name)
 	}
 	return nil
 }

@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestLoadEnablesAdditionalStoresFromSharedEnv(t *testing.T) {
 	resetStoreEnvs(t)
@@ -85,6 +88,34 @@ func TestResolvedPublicOriginDefaultsToProductionOriginInProd(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsInvalidConfiguredPublicOrigin(t *testing.T) {
+	cfg := &Config{
+		Mocks:        MockConfig{Enable: true},
+		PublicOrigin: "://bad-origin",
+	}
+
+	err := validate(cfg)
+	if err == nil || !contains(err.Error(), "public origin") {
+		t.Fatalf("expected public origin validation error, got %v", err)
+	}
+}
+
+func TestValidate_RejectsInvalidDerivedClerkURLs(t *testing.T) {
+	cfg := &Config{
+		Mocks: MockConfig{Enable: true},
+		Clerk: ClerkConfig{
+			SecretKey:      "sk_test",
+			PublishableKey: "pk_test",
+			Domain:         "bad host with spaces",
+		},
+	}
+
+	err := validate(cfg)
+	if err == nil || !contains(err.Error(), "clerk sign-in URL") {
+		t.Fatalf("expected clerk sign-in validation error, got %v", err)
+	}
+}
+
 func resetStoreEnvs(t *testing.T) {
 	t.Helper()
 
@@ -100,4 +131,8 @@ func resetStoreEnvs(t *testing.T) {
 	} {
 		t.Setenv(name, "")
 	}
+}
+
+func contains(got, want string) bool {
+	return strings.Contains(got, want)
 }
