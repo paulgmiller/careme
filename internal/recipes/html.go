@@ -22,9 +22,9 @@ import (
 // should not own.
 type shoppingRecipeView struct {
 	ai.Recipe
-	// RecipeHash identifies the individual recipe card and backs recipe-scoped
+	// Hash identifies the individual recipe card and backs recipe-scoped
 	// links and HTMX endpoints like /recipe/{hash}/save or /recipe/{hash}/wine.
-	RecipeHash string
+	Hash string
 	// ShoppingListHash identifies the surrounding /recipes?h=... page and is
 	// used anywhere the card needs to refer back to the full list state.
 	ShoppingListHash   string
@@ -68,7 +68,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
-			RecipeHash:         recipeHash,
+			Hash:               recipeHash,
 			ShoppingListHash:   hash,
 			ServerSignedIn:     signedIn,
 			DisplayIngredients: displayIngredients,
@@ -198,20 +198,16 @@ func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer
 }
 
 // FormatShoppingRecipeWineHTML renders the signed-in shopping list wine fragment for HTMX swaps.
-func FormatShoppingRecipeWineHTML(recipeHash, shoppingListHash, slot string, selection *ai.WineSelection, writer http.ResponseWriter) {
+func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSelection, writer http.ResponseWriter) {
 	wineActionID, wineButtonID := shoppingWineDOMIDs(recipeHash)
 	winePreviewID := shoppingWinePreviewDOMID(recipeHash)
 	wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 	data := struct {
-		// RecipeHash is used for recipe-scoped DOM IDs and /recipe/{hash}/wine endpoints.
-		RecipeHash string
-		// ShoppingListHash identifies the surrounding /recipes?h=... page so the
-		// HTMX wine response can mark that page dirty for a back/forward refresh.
-		ShoppingListHash string
-		Wine             shoppingRecipeWineView
+		// Hash is used for recipe-scoped DOM IDs and /recipe/{hash}/wine endpoints.
+		Hash string
+		Wine shoppingRecipeWineView
 	}{
-		RecipeHash:       recipeHash,
-		ShoppingListHash: shoppingListHash,
+		Hash: recipeHash,
 		Wine: shoppingRecipeWineView{
 			ActionID:       wineActionID,
 			ActionButtonID: wineButtonID,

@@ -85,7 +85,7 @@
             <article class="shopping-recipe-card space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
               <header class="space-y-4">
                 <div>
-                  <a href="/recipe/{{.RecipeHash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  <a href="/recipe/{{.Hash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     {{.Title}}
                   </a>
                   <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
@@ -94,12 +94,12 @@
                   {{if .ServerSignedIn}}
                   <input type="radio"
                          {{if .Saved}}checked{{end}}
-                         name="recipe-{{.RecipeHash}}"
+                         name="recipe-{{.Hash}}"
                          value="save"
-                         id="save-{{.RecipeHash}}"
+                         id="save-{{.Hash}}"
                          class="peer/save hidden" />
-                  <label for="save-{{.RecipeHash}}"
-                         hx-post="/recipe/{{.RecipeHash}}/save"
+                  <label for="save-{{.Hash}}"
+                         hx-post="/recipe/{{.Hash}}/save"
                                  hx-vals='{"h":"{{.ShoppingListHash}}"}'
                          hx-trigger="click"
                          hx-target="next .profile-status"
@@ -110,12 +110,12 @@
                   </label>
                   <input type="radio"
                          {{if .Dismissed}}checked{{end}}
-                         name="recipe-{{.RecipeHash}}"
+                         name="recipe-{{.Hash}}"
                          value="dismiss"
-                         id="dismiss-{{.RecipeHash}}"
+                         id="dismiss-{{.Hash}}"
                          class="peer/dismiss hidden" />
-                  <label for="dismiss-{{.RecipeHash}}"
-                         hx-post="/recipe/{{.RecipeHash}}/dismiss"
+                  <label for="dismiss-{{.Hash}}"
+                         hx-post="/recipe/{{.Hash}}/dismiss"
                                  hx-vals='{"h":"{{.ShoppingListHash}}"}'
                          hx-trigger="click"
                          hx-target="next .profile-status"
@@ -221,24 +221,6 @@
     </section>
   </main>
   <script src="/static/htmx@2.0.8.js"></script>
-  <script>
-    (() => {
-      // After an HTMX wine pick, browser Back/Forward can restore a stale shopping-list
-      // DOM from history instead of refetching the page. We mark the page as dirty in
-      // sessionStorage and force one reload on pageshow so the restored page matches the
-      // latest server-rendered wine state, then clear the flag immediately.
-      const key = "shopping-wine-refresh:{{.Hash}}";
-      window.addEventListener("pageshow", (event) => {
-        if (sessionStorage.getItem(key) !== "1") return;
-        if (event.persisted) {
-          sessionStorage.removeItem(key);
-          location.reload();
-          return;
-        }
-        sessionStorage.removeItem(key);
-      });
-    })();
-  </script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
@@ -303,13 +285,12 @@
   {{if .ServerSignedIn}}
   <button type="button"
           id="{{.Wine.ActionButtonID}}"
-          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=action&h={{.ShoppingListHash}}"
+          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=action"
           hx-target="#{{.Wine.ActionID}}"
           hx-swap="outerHTML"
           hx-disabled-elt="#{{.Wine.ActionButtonID}}"
           hx-on::before-request="this.textContent='🍷🔄';"
           hx-on::response-error="this.textContent='😞';"
-          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{.ShoppingListHash}}','1');}"
           aria-label="Choose wine"
           title="Choose wine"
           class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -389,13 +370,12 @@
   {{if .ServerSignedIn}}
   <button type="button"
           id="{{.Wine.DetailButtonID}}"
-          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=details&h={{.ShoppingListHash}}"
+          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=details"
           hx-target="#{{.Wine.DetailID}}"
           hx-swap="outerHTML"
           hx-disabled-elt="#{{.Wine.DetailButtonID}}"
           hx-on::before-request="this.textContent='Choosing 🍷 ...';"
           hx-on::response-error="this.textContent='wine failure 😞';"
-          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{.ShoppingListHash}}','1');}"
           class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     🍷 Choose a wine
   </button>
@@ -432,13 +412,12 @@
   {{if not .Wine.Recommendation}}
   <button type="button"
           id="{{.Wine.ActionButtonID}}"
-          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=action&h={{.ShoppingListHash}}"
+          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=action"
           hx-target="#{{.Wine.ActionID}}"
           hx-swap="outerHTML"
           hx-disabled-elt="#{{.Wine.ActionButtonID}}"
           hx-on::before-request="this.textContent='🍷🔄';"
           hx-on::response-error="this.textContent='😞';"
-          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{.ShoppingListHash}}','1');}"
           aria-label="Choose wine"
           title="Choose wine"
           class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -472,13 +451,12 @@
   {{else}}
   <button type="button"
           id="{{.Wine.DetailButtonID}}"
-          hx-post="/recipe/{{.RecipeHash}}/wine?view=shopping&slot=details&h={{.ShoppingListHash}}"
+          hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=details"
           hx-target="#{{.Wine.DetailID}}"
           hx-swap="outerHTML"
           hx-disabled-elt="#{{.Wine.DetailButtonID}}"
           hx-on::before-request="this.textContent='Choosing 🍷 ...';"
           hx-on::response-error="this.textContent='wine failure 😞';"
-          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{.ShoppingListHash}}','1');}"
           class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     🍷 Choose a wine
   </button>

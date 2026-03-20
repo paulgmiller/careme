@@ -285,14 +285,9 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 	}
 	renderShoppingVariant := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("view")), "shopping")
 	shoppingSlot := strings.TrimSpace(r.URL.Query().Get("slot"))
-	shoppingListHash := strings.TrimSpace(r.FormValue("h"))
 	hash := strings.TrimSpace(r.PathValue("hash"))
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
-		return
-	}
-	if renderShoppingVariant && shoppingListHash == "" {
-		http.Error(w, "missing shopping list hash", http.StatusBadRequest)
 		return
 	}
 	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
@@ -308,7 +303,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if renderShoppingVariant {
-			FormatShoppingRecipeWineHTML(hash, shoppingListHash, shoppingSlot, selection, w)
+			FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
 		} else {
 			FormatRecipeWineHTML(hash, selection, w)
 		}
@@ -358,7 +353,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if renderShoppingVariant {
-		FormatShoppingRecipeWineHTML(hash, shoppingListHash, shoppingSlot, selection, w)
+		FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
 		return
 	}
 	FormatRecipeWineHTML(hash, selection, w)

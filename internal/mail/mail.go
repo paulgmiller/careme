@@ -200,7 +200,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"
 
-	plainTextContent := "Check out your new recipes at " + publicOrigin + "/recipes?h=" + paramsHash
+	plainTextContent := "Check out your new recipes at " + m.publicOrigin + "/recipes?h=" + paramsHash
 
 	to := mail.NewEmail(user.Email[0], user.Email[0])
 	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())

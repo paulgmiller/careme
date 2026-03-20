@@ -76,9 +76,6 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("shopping list HTML should include htmx script")
 	}
-	if !strings.Contains(html, "shopping-wine-refresh:") {
-		t.Error("shopping list HTML should include wine refresh history handling")
-	}
 	if !strings.Contains(html, "Shopping list") {
 		t.Error("shopping list HTML should render the shopping list section for a single recipe")
 	}
@@ -451,7 +448,7 @@ func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *te
 
 func TestFormatShoppingRecipeWineHTML_RendersPicker(t *testing.T) {
 	w := httptest.NewRecorder()
-	FormatShoppingRecipeWineHTML("recipe-hash", "shopping-hash", "action", nil, w)
+	FormatShoppingRecipeWineHTML("recipe-hash", "action", nil, w)
 	body := w.Body.String()
 	actionID, _ := shoppingWineDOMIDs("recipe-hash")
 	previewID := shoppingWinePreviewDOMID("recipe-hash")
@@ -466,11 +463,8 @@ func TestFormatShoppingRecipeWineHTML_RendersPicker(t *testing.T) {
 	if !strings.Contains(body, `aria-label="Choose wine"`) {
 		t.Fatalf("expected accessible wine picker in response, got body: %s", body)
 	}
-	if !strings.Contains(body, `hx-post="/recipe/recipe-hash/wine?view=shopping&slot=action&h=shopping-hash"`) {
+	if !strings.Contains(body, `hx-post="/recipe/recipe-hash/wine?view=shopping&slot=action"`) {
 		t.Fatalf("expected shopping wine endpoint in response, got body: %s", body)
-	}
-	if !strings.Contains(body, `sessionStorage.setItem('shopping-wine-refresh:shopping-hash','1');`) {
-		t.Fatalf("expected shopping wine picker to mark the page for refresh after browser back, got body: %s", body)
 	}
 }
 
