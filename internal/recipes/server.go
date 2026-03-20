@@ -291,11 +291,8 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
+	if _, err := s.clerk.GetUserIDFromRequest(r); err != nil {
 		redirectToSignIn(w, r, http.StatusUnauthorized)
-		return
-	} else if err != nil {
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 	if selection, err := s.WineFromCache(ctx, hash); err == nil {
@@ -373,9 +370,6 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
 		redirectToSignIn(w, r, http.StatusUnauthorized)
-		return
-	} else if err != nil {
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -868,10 +862,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, cacheErr := s.FromCache(ctx, p.Hash()); cacheErr == nil {
 			redirectToHash(w, r, p.Hash(), false /*useStart*/)
-			return
-		} else if !errors.Is(cacheErr, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load recipe list for guest query", "hash", p.Hash(), "error", cacheErr)
-			http.Error(w, "failed to load recipe list", http.StatusInternalServerError)
 			return
 		}
 		http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
