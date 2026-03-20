@@ -11,8 +11,7 @@ import (
 const additionalStoresEnableEnv = "EXTRA_STORES_ENABLE"
 
 const (
-	defaultPublicOrigin = "https://careme.cooking"
-	defaultLocalOrigin  = "http://localhost:8080"
+	defaultLocalOrigin = "http://localhost:8080"
 )
 
 type Config struct {
