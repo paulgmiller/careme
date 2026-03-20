@@ -9,7 +9,7 @@
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
   <meta property="og:title" content="{{.Recipe.Title}}" />
   <meta property="og:description" content="{{.Recipe.Description}}" />
-  <meta property="og:image" content="https://careme.cooking/favicon.ico" />
+  <meta property="og:image" content="{{PublicOrigin}}/favicon.ico" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Careme" />
 
@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="{{.Recipe.Title}}" />
   <meta name="twitter:description" content="{{.Recipe.Description}}" />
-  <meta name="twitter:image" content="https://careme.cooking/favicon.ico" />
+  <meta name="twitter:image" content="{{PublicOrigin}}/favicon.ico" />
   {{end}}
 
   {{template "tailwind_head" .Style}}
@@ -146,7 +146,10 @@
               </button>
             </div>
             {{else}}
-            <p class="text-sm text-gray-500">Sign in to ask follow-up questions.</p>
+            <a href="{{SignInPath (print "/recipe/" .RecipeHash)}}"
+               class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+              Sign in to ask follow-up questions
+            </a>
             {{end}}
 
             {{if .ServerSignedIn}}
@@ -282,6 +285,7 @@
     {{end}}
   </div>
   {{else}}
+  {{if .ServerSignedIn}}
   <button type="button"
           id="wine-picker-button"
           hx-post="/recipe/{{.RecipeHash}}/wine"
@@ -293,6 +297,12 @@
           class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     🍷 Choose a wine
   </button>
+  {{else}}
+  <a href="{{SignInPath (print "/recipe/" .RecipeHash)}}"
+     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    Sign in for wine picks
+  </a>
+  {{end}}
   {{end}}
 </div>
 {{end}}

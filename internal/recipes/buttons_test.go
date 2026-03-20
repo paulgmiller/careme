@@ -137,3 +137,40 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 		t.Error("HTML should not render finalize helper text when button is enabled")
 	}
 }
+
+func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
+	list := ai.ShoppingList{
+		Recipes: []ai.Recipe{
+			{
+				Title:        "Shared Recipe",
+				Description:  "Read-only recipe",
+				Ingredients:  []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+				Instructions: []string{"Step 1"},
+				Health:       "Healthy",
+				DrinkPairing: "Water",
+			},
+		},
+	}
+
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+	FormatShoppingListHTML(t.Context(), p, list, false, w)
+	html := w.Body.String()
+
+	if strings.Contains(html, `type="radio"`) {
+		t.Error("HTML should not contain save/dismiss radio inputs when signed out")
+	}
+	if strings.Contains(html, `Try again, chef`) {
+		t.Error("HTML should not contain regenerate action text when signed out")
+	}
+	if strings.Contains(html, `Assemble Shopping List`) {
+		t.Error("HTML should not contain finalize action text when signed out")
+	}
+	if strings.Contains(html, `Save`) {
+		t.Error("HTML should not contain save action text when signed out")
+	}
+	if strings.Contains(html, `Dismiss`) {
+		t.Error("HTML should not contain dismiss action text when signed out")
+	}
+}

@@ -6,7 +6,7 @@
     <title>Signing In</title>
     {{.GoogleTagScript}}
   </head>
-  <body>
+  <body data-return-to="{{.ReturnTo}}">
     <script
       crossorigin="anonymous"
       data-clerk-publishable-key="{{.PublishableKey}}"
@@ -18,20 +18,21 @@
         url.searchParams.delete("__clerk_db_jwt");
         history.replaceState({}, "", url.toString());
 
-        const redirectHome = () => location.replace("/");
+        const returnTo = document.body.dataset.returnTo || "/";
+        const finishRedirect = () => location.replace(returnTo);
 
         if ({{.Signup}} &&
             "{{.GoogleConversionTag}}" !== "" &&
             typeof gtag === "function") {
           gtag("event", "conversion", {
             send_to: "{{.GoogleConversionTag}}",
-            event_callback: redirectHome,
+            event_callback: finishRedirect,
           });
-          setTimeout(redirectHome, 1500);
+          setTimeout(finishRedirect, 1500);
           return;
         }
 
-        redirectHome();
+        finishRedirect();
       });
     </script>
   </body>

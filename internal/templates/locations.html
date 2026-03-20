@@ -17,6 +17,9 @@
         <div class="border-b border-brand-100 p-8">
           <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Nearby Stores</h1>
           <p class="mt-2 text-gray-600">Showing results near ZIP <span class="font-semibold text-brand-700">{{.Zip}}</span>.</p>
+          {{if not .ServerSignedIn}}
+          <p class="mt-2 text-sm text-gray-500">You can browse stores now, but building recipes requires signing in.</p>
+          {{end}}
         </div>
 
         <ul id="locations-list" class="divide-y divide-brand-100">
@@ -40,6 +43,7 @@
 
               <div class="flex flex-wrap items-center gap-2 sm:justify-end">
                 {{if .SupportsStaples}}
+                {{if $.ServerSignedIn}}
                 <form
                   method="POST"
                   action="/user/favorite"
@@ -54,6 +58,7 @@
                     </span>
                   </button>
                 </form>
+                {{end}}
                 <a href="/recipes?location={{.ID}}"
                   class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Recipes!

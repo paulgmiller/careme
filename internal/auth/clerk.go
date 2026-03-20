@@ -2,11 +2,13 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/clerk/clerk-sdk-go/v2/jwks"
 	"github.com/clerk/clerk-sdk-go/v2/session"
 	"github.com/clerk/clerk-sdk-go/v2/user"
+	"github.com/samber/lo"
 )
 
 var ErrNoSession = errors.New("no valid session found")
@@ -163,10 +166,10 @@ func clearCookie(w http.ResponseWriter, name string) {
 func (c *clerkClient) Register(mux routing.Registrar) {
 	mux.HandleFunc("/logout", c.logout)
 	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, c.cfg.Clerk.Signin(), http.StatusSeeOther)
+		http.Redirect(w, r, c.signInURL(r, false), http.StatusSeeOther)
 	})
 	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, c.cfg.Clerk.Signup(), http.StatusSeeOther)
+		http.Redirect(w, r, c.signInURL(r, true), http.StatusSeeOther)
 	})
 	mux.HandleFunc("/auth/establish", func(w http.ResponseWriter, r *http.Request) {
 		if c.cfg.Clerk.PublishableKey == "" {
@@ -179,17 +182,69 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 			GoogleTagScript     template.HTML
 			GoogleConversionTag string
 			Signup              bool
+			ReturnTo            string // read from a data- attribute in the template to avoid JS-string escaping concerns
 		}{
 			PublishableKey:      c.cfg.Clerk.PublishableKey,
 			GoogleTagScript:     templates.GoogleTagScript(),
 			GoogleConversionTag: templates.GoogleConversionTag(),
-			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"),
+			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"), // used for ad conversions
+			ReturnTo:            returnToFromRequest(r),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
 			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
+}
+
+func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
+	base := c.cfg.Clerk.Signin()
+	if signup {
+		base = c.cfg.Clerk.Signup()
+	}
+	redirectURL := c.authEstablishURL(signup, returnToFromRequest(r))
+	u := lo.Must(url.Parse(base))
+	q := u.Query()
+	q.Set("redirect_url", redirectURL)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func (c *clerkClient) authEstablishURL(signup bool, returnTo string) string {
+	origin := c.cfg.ResolvedPublicOrigin() // can never be emptpy
+	u := lo.Must(url.Parse(origin + "/auth/establish"))
+	q := u.Query()
+	if signup {
+		q.Set("signup", "true")
+	}
+	if returnTo != "" {
+		// Keep the entire relative return target in one opaque query value so
+		// nested ?a=1&b=2 segments are not broken apart during Clerk redirects.
+		q.Set("return_to_b64", base64.RawURLEncoding.EncodeToString([]byte(returnTo)))
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func returnToFromRequest(r *http.Request) string {
+	encoded := strings.TrimSpace(r.URL.Query().Get("return_to_b64"))
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return ""
+	}
+	return sanitizeReturnTo(string(decoded))
+}
+
+// only allow redirects to relative paths in our app.
+func sanitizeReturnTo(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || !strings.HasPrefix(raw, "/") {
+		return ""
+	}
+	if strings.HasPrefix(raw, "//") {
+		return ""
+	}
+	return raw
 }
 
 // Toss this in if you're confused :)

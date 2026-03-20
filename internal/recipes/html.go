@@ -23,7 +23,13 @@ import (
 // should not own.
 type shoppingRecipeView struct {
 	ai.Recipe
-	Hash               string
+	// Hash identifies the individual recipe card and backs recipe-scoped
+	// links and HTMX endpoints like /recipe/{hash}/save or /recipe/{hash}/wine.
+	Hash string
+	// ShoppingListHash identifies the surrounding /recipes?h=... page and is
+	// used anywhere the card needs to refer back to the full list state.
+	ShoppingListHash   string
+	ServerSignedIn     bool
 	DisplayIngredients []ai.Ingredient // merged food and wine
 	Dismissed          bool            // saved already in recipe
 	Wine               shoppingRecipeWineView
@@ -64,6 +70,8 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
 			Hash:               recipeHash,
+			ShoppingListHash:   hash,
+			ServerSignedIn:     signedIn,
 			DisplayIngredients: displayIngredients,
 			Dismissed:          dismissedHashes[recipeHash],
 			Wine: shoppingRecipeWineView{
@@ -190,16 +198,19 @@ func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer
 	}
 }
 
-// FormatShoppingRecipeWineHTML renders the shopping list wine recommendation fragment for HTMX swaps.
+// FormatShoppingRecipeWineHTML renders the signed-in shopping list wine fragment for HTMX swaps.
 func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSelection, writer http.ResponseWriter) {
 	wineActionID, wineButtonID := shoppingWineDOMIDs(recipeHash)
 	winePreviewID := shoppingWinePreviewDOMID(recipeHash)
 	wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 	data := struct {
-		Hash string
-		Wine shoppingRecipeWineView
+		// Hash is used for recipe-scoped DOM IDs and /recipe/{hash}/wine endpoints.
+		Hash           string
+		ServerSignedIn bool
+		Wine           shoppingRecipeWineView
 	}{
-		Hash: recipeHash,
+		Hash:           recipeHash,
+		ServerSignedIn: true,
 		Wine: shoppingRecipeWineView{
 			ActionID:       wineActionID,
 			ActionButtonID: wineButtonID,
@@ -234,9 +245,7 @@ func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, write
 }
 
 // drops clarity, instructions and most of shoppinglist
-func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
-	// TODO just put params into shopping list and pass that up?
-
+func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, writer io.Writer) error {
 	data := struct {
 		Location locations.Location
 		Date     string
@@ -249,7 +258,7 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
 		Date:     p.Date.Format("2006-01-02"),
 		Hash:     p.Hash(),
 		Recipes:  l.Recipes,
-		Domain:   "https://careme.cooking",
+		Domain:   publicOrigin,
 		Style:    seasons.GetCurrentStyle(),
 	}
 

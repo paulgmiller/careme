@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestLoadEnablesAdditionalStoresFromSharedEnv(t *testing.T) {
 	resetStoreEnvs(t)
@@ -56,11 +59,62 @@ func TestLoadRetainsIndividualStoreFlags(t *testing.T) {
 	}
 }
 
+func TestLoadUsesConfiguredPublicOrigin(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("PUBLIC_ORIGIN", "https://staging.careme.test/")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got, want := cfg.ResolvedPublicOrigin(), "https://staging.careme.test"; got != want {
+		t.Fatalf("expected resolved public origin %q, got %q", want, got)
+	}
+}
+
+func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
+	cfg := &Config{}
+	if got, want := cfg.ResolvedPublicOrigin(), "http://localhost:8080"; got != want {
+		t.Fatalf("expected default local origin %q, got %q", want, got)
+	}
+}
+
+func TestValidate_RejectsInvalidConfiguredPublicOrigin(t *testing.T) {
+	cfg := &Config{
+		Mocks:        MockConfig{Enable: true},
+		PublicOrigin: "://bad-origin",
+	}
+
+	err := validate(cfg)
+	if err == nil || !contains(err.Error(), "public origin") {
+		t.Fatalf("expected public origin validation error, got %v", err)
+	}
+}
+
+func TestValidate_RejectsInvalidDerivedClerkURLs(t *testing.T) {
+	cfg := &Config{
+		Mocks: MockConfig{Enable: true},
+		Clerk: ClerkConfig{
+			SecretKey:      "sk_test",
+			PublishableKey: "pk_test",
+			Domain:         "bad host with spaces",
+		},
+	}
+
+	err := validate(cfg)
+	if err == nil || !contains(err.Error(), "clerk sign-in URL") {
+		t.Fatalf("expected clerk sign-in validation error, got %v", err)
+	}
+}
+
 func resetStoreEnvs(t *testing.T) {
 	t.Helper()
 
 	for _, name := range []string{
 		"ENABLE_MOCKS",
+		"PUBLIC_ORIGIN",
 		additionalStoresEnableEnv,
 		"ALDI_ENABLE",
 		"WHOLEFOODS_ENABLE",
@@ -70,4 +124,8 @@ func resetStoreEnvs(t *testing.T) {
 	} {
 		t.Setenv(name, "")
 	}
+}
+
+func contains(got, want string) bool {
+	return strings.Contains(got, want)
 }

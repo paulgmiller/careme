@@ -3,8 +3,11 @@ package templates
 import (
 	"context"
 	"embed"
+	"encoding/base64"
 	"html/template"
+	"net/url"
 	"os"
+	"strings"
 
 	"careme/internal/config"
 	"careme/internal/logsetup"
@@ -27,6 +30,8 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	funcs := template.FuncMap{
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
+		"PublicOrigin":        func() string { return config.ResolvedPublicOrigin() },
+		"SignInPath":          signInPath,
 		"TailwindAssetPath":   func() string { return tailwindAssetPath },
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
@@ -56,6 +61,15 @@ func ensure(templates *template.Template, name string) *template.Template {
 		panic("template " + name + " not found")
 	}
 	return tmpl
+}
+
+func signInPath(returnTo string) string {
+	returnTo = strings.TrimSpace(returnTo)
+	if returnTo == "" {
+		return "/sign-in"
+	}
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(returnTo))
+	return "/sign-in?return_to_b64=" + url.QueryEscape(encoded)
 }
 
 var (

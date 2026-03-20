@@ -3,24 +3,30 @@ package config
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
 
 const additionalStoresEnableEnv = "EXTRA_STORES_ENABLE"
 
+const (
+	defaultLocalOrigin = "http://localhost:8080"
+)
+
 type Config struct {
-	AI         AIConfig         `json:"ai"`
-	Kroger     KrogerConfig     `json:"kroger"`
-	Walmart    WalmartConfig    `json:"walmart"`
-	Aldi       AldiConfig       `json:"aldi"`
-	WholeFoods WholeFoodsConfig `json:"wholefoods"`
-	Albertsons AlbertsonsConfig `json:"albertsons"`
-	Publix     PublixConfig     `json:"publix"`
-	HEB        HEBConfig        `json:"heb"`
-	Mocks      MockConfig       `json:"mocks"`
-	Clerk      ClerkConfig      `json:"clerk"`
-	Admin      AdminConfig      `json:"admin"`
+	AI           AIConfig         `json:"ai"`
+	Kroger       KrogerConfig     `json:"kroger"`
+	Walmart      WalmartConfig    `json:"walmart"`
+	Aldi         AldiConfig       `json:"aldi"`
+	WholeFoods   WholeFoodsConfig `json:"wholefoods"`
+	Albertsons   AlbertsonsConfig `json:"albertsons"`
+	Publix       PublixConfig     `json:"publix"`
+	HEB          HEBConfig        `json:"heb"`
+	Mocks        MockConfig       `json:"mocks"`
+	Clerk        ClerkConfig      `json:"clerk"`
+	Admin        AdminConfig      `json:"admin"`
+	PublicOrigin string           `json:"public_origin"`
 }
 
 type AIConfig struct {
@@ -41,7 +47,6 @@ type ClerkConfig struct {
 	SecretKey      string
 	PublishableKey string
 	Domain         string
-	Prod           bool
 }
 
 func (c *ClerkConfig) IsEnabled() bool {
@@ -105,26 +110,19 @@ func (c *WalmartConfig) IsEnabled() bool {
 	return c.ConsumerID != "" && c.PrivateKey != ""
 }
 
-var (
-	localhostSigninRedirect = "?redirect_url=http://localhost:8080/auth/establish"
-	localhostSignupRedirect = "?redirect_url=http://localhost:8080/auth/establish?signup=true"
-)
-
-// move to auth pacakage?
 func (c *ClerkConfig) Signin() string {
-	url := fmt.Sprintf("https://%s/sign-in", c.Domain)
-	if !c.Prod {
-		url += localhostSigninRedirect
-	}
-	return url
+	return fmt.Sprintf("https://%s/sign-in", c.Domain)
 }
 
 func (c *ClerkConfig) Signup() string {
-	url := fmt.Sprintf("https://%s/sign-up", c.Domain)
-	if !c.Prod {
-		url += localhostSignupRedirect
+	return fmt.Sprintf("https://%s/sign-up", c.Domain)
+}
+
+func (c *Config) ResolvedPublicOrigin() string {
+	if origin := strings.TrimRight(strings.TrimSpace(c.PublicOrigin), "/"); origin != "" {
+		return origin
 	}
-	return url
+	return defaultLocalOrigin
 }
 
 func Load() (*Config, error) {
@@ -148,6 +146,7 @@ func Load() (*Config, error) {
 		Admin: AdminConfig{
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
 		},
+		PublicOrigin: os.Getenv("PUBLIC_ORIGIN"),
 		Aldi: AldiConfig{
 			Enable: envEnabled("ALDI_ENABLE"),
 		},
@@ -170,9 +169,6 @@ func Load() (*Config, error) {
 			BaseURL:    os.Getenv("WALMART_BASE_URL"),
 		},
 	}
-	if strings.HasSuffix(config.Clerk.Domain, "careme.cooking") {
-		config.Clerk.Prod = true
-	}
 
 	return config, validate(config)
 }
@@ -182,6 +178,19 @@ func envEnabled(name string) bool {
 }
 
 func validate(cfg *Config) error {
+	if err := validateAbsoluteURL("public origin", cfg.ResolvedPublicOrigin()); err != nil {
+		return err
+	}
+
+	if cfg.Clerk.IsEnabled() {
+		if err := validateAbsoluteURL("clerk sign-in URL", cfg.Clerk.Signin()); err != nil {
+			return err
+		}
+		if err := validateAbsoluteURL("clerk sign-up URL", cfg.Clerk.Signup()); err != nil {
+			return err
+		}
+	}
+
 	if cfg.Mocks.Enable {
 		return nil
 	}
@@ -194,6 +203,20 @@ func validate(cfg *Config) error {
 	}
 	if cfg.AI.APIKey == "" {
 		return fmt.Errorf("AI API  key must be set")
+	}
+	return nil
+}
+
+func validateAbsoluteURL(name, raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("%s is invalid: %w", name, err)
+	}
+	if parsed == nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%s must be an absolute URL", name)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("%s must use http or https", name)
 	}
 	return nil
 }

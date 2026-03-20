@@ -9,7 +9,7 @@
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
   <meta property="og:title" content="{{(index .Recipes 0).Title}}" />
   <meta property="og:description" content="{{(index .Recipes 0).Description}}" />
-  <meta property="og:image" content="https://careme.cooking/favicon.ico" />
+  <meta property="og:image" content="{{PublicOrigin}}/favicon.ico" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Careme" />
 
@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="{{(index .Recipes 0).Title}}" />
   <meta name="twitter:description" content="{{(index .Recipes 0).Description}}" />
-  <meta name="twitter:image" content="https://careme.cooking/favicon.ico" />
+  <meta name="twitter:image" content="{{PublicOrigin}}/favicon.ico" />
   {{end}}
 
   {{template "tailwind_head" .Style}}
@@ -40,13 +40,13 @@
         </div>
 
         <div class="p-8">
+          {{if .ServerSignedIn}}
           <form id="regenerateForm"
                 method="POST"
                 action="/recipes/{{.Hash}}/regenerate"
                 hx-post="/recipes/{{.Hash}}/regenerate"
                 hx-params="instructions"
                 hx-swap="none">
-
             <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
               <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
                 <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
@@ -63,6 +63,19 @@
               </div>
             </div>
           </form>
+          {{else if .Instructions}}
+          <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
+            <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
+              <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
+              <input id="instructions"
+                     type="text"
+                     name="instructions"
+                     value="{{.Instructions}}"
+                     readonly
+                     class="w-full flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-ink-700 shadow-sm" />
+            </div>
+          </div>
+          {{end}}
 
           <div class="mt-8 space-y-8">
             {{range .Recipes}}
@@ -75,6 +88,7 @@
                   <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
+                  {{if .ServerSignedIn}}
                   <input type="radio"
                          {{if .Saved}}checked{{end}}
                          name="recipe-{{.Hash}}"
@@ -107,13 +121,14 @@
                          class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
                     Dismiss
                   </label>
+                  {{end}}
                   <button type="button"
                           onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
                           class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     Details
                   </button>
                   {{template "shopping_recipe_wine_action" .}}
-                  <span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>
+                  {{if .ServerSignedIn}}<span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>{{end}}
                 </div>
               </header>
 
@@ -192,24 +207,6 @@
     </section>
   </main>
   <script src="/static/htmx@2.0.8.js"></script>
-  <script>
-    (() => {
-      // After an HTMX wine pick, browser Back/Forward can restore a stale shopping-list
-      // DOM from history instead of refetching the page. We mark the page as dirty in
-      // sessionStorage and force one reload on pageshow so the restored page matches the
-      // latest server-rendered wine state, then clear the flag immediately.
-      const key = "shopping-wine-refresh:{{.Hash}}";
-      window.addEventListener("pageshow", (event) => {
-        if (sessionStorage.getItem(key) !== "1") return;
-        if (event.persisted) {
-          sessionStorage.removeItem(key);
-          location.reload();
-          return;
-        }
-        sessionStorage.removeItem(key);
-      });
-    })();
-  </script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
@@ -227,6 +224,12 @@
 {{end}}
 
 {{define "shopping_finalize_controls_content"}}
+  {{if .ServerSignedIn}}
+  {{template "shopping_finalize_controls_signed_in_content" .}}
+  {{end}}
+{{end}}
+
+{{define "shopping_finalize_controls_signed_in_content"}}
   <span class="inline-flex" {{if not .HasSavedRecipes}}title="Save at least one recipe to assemble your shopping list."{{end}}>
     <button type="button"
             id="finalizeButton"
@@ -246,7 +249,9 @@
 {{end}}
 
 {{define "shopping_finalize_controls_response"}}
-{{template "shopping_finalize_controls_oob" .}}
+<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" class="mt-10 flex flex-wrap items-center gap-4">
+  {{template "shopping_finalize_controls_signed_in_content" .}}
+</div>
 {{end}}
 
 {{define "shopping_recipe_wine_action"}}
@@ -263,6 +268,7 @@
 
 {{define "shopping_recipe_wine_action_content"}}
   {{if not .Wine.Recommendation}}
+  {{if .ServerSignedIn}}
   <button type="button"
           id="{{.Wine.ActionButtonID}}"
           hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=action"
@@ -271,12 +277,12 @@
           hx-disabled-elt="#{{.Wine.ActionButtonID}}"
           hx-on::before-request="this.textContent='🍷🔄';"
           hx-on::response-error="this.textContent='😞';"
-          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{$.Hash}}','1');}"
           aria-label="Choose wine"
           title="Choose wine"
           class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     🍷
   </button>
+  {{end}}
   {{end}}
 {{end}}
 
@@ -346,6 +352,7 @@
     {{end}}
   </div>
   {{else}}
+  {{if .ServerSignedIn}}
   <button type="button"
           id="{{.Wine.DetailButtonID}}"
           hx-post="/recipe/{{.Hash}}/wine?view=shopping&slot=details"
@@ -354,10 +361,10 @@
           hx-disabled-elt="#{{.Wine.DetailButtonID}}"
           hx-on::before-request="this.textContent='Choosing 🍷 ...';"
           hx-on::response-error="this.textContent='wine failure 😞';"
-          hx-on::after-request="if(event.detail.successful){sessionStorage.setItem('shopping-wine-refresh:{{$.Hash}}','1');}"
           class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     🍷 Choose a wine
   </button>
+  {{end}}
   {{end}}
 {{end}}
 

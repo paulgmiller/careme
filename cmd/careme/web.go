@@ -70,7 +70,7 @@ func runServer(cfg *config.Config, addr string) error {
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
 	locationServer.Register(appRoutes, authClient)
 
-	sitemapHandler := sitemap.New(cache)
+	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
 	sitemapHandler.Register(infraRoutes)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)

@@ -76,9 +76,6 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("shopping list HTML should include htmx script")
 	}
-	if !strings.Contains(html, "shopping-wine-refresh:") {
-		t.Error("shopping list HTML should include wine refresh history handling")
-	}
 	if !strings.Contains(html, "Shopping list") {
 		t.Error("shopping list HTML should render the shopping list section for a single recipe")
 	}
@@ -276,8 +273,69 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should not contain question input when signed out")
 	}
-	if !strings.Contains(html, "Sign in to ask follow-up questions.") {
+	if !strings.Contains(html, "Sign in to ask follow-up questions") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
+	}
+	if strings.Contains(html, `hx-post="/recipe/`) && strings.Contains(html, `/wine"`) {
+		t.Error("recipe HTML should not expose wine picker htmx endpoint when signed out")
+	}
+	if !strings.Contains(html, "Sign in for wine picks") {
+		t.Error("recipe HTML should prompt signed-out users to sign in for wine picks")
+	}
+	if strings.Contains(html, `name="feedback"`) {
+		t.Error("recipe HTML should not contain feedback form when signed out")
+	}
+}
+
+func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	multiRecipeList := ai.ShoppingList{
+		Recipes: []ai.Recipe{
+			{
+				Title:       "Recipe One",
+				Description: "First recipe",
+				Ingredients: []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+				Instructions: []string{
+					"Step 1",
+				},
+				Health:       "Healthy",
+				DrinkPairing: "Water",
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	FormatShoppingListHTML(t.Context(), p, multiRecipeList, false, w)
+	html := w.Body.String()
+
+	isValidHTML(t, html)
+	if strings.Contains(html, `/recipes/`) && strings.Contains(html, `/regenerate"`) {
+		t.Error("shopping list HTML should not expose regenerate endpoint when signed out")
+	}
+	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/save"`) {
+		t.Error("shopping list HTML should not expose save endpoint when signed out")
+	}
+	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/dismiss"`) {
+		t.Error("shopping list HTML should not expose dismiss endpoint when signed out")
+	}
+	if strings.Contains(html, `/recipes/`) && strings.Contains(html, `/finalize"`) {
+		t.Error("shopping list HTML should not expose finalize endpoint when signed out")
+	}
+	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/wine?view=shopping`) {
+		t.Error("shopping list HTML should not expose shopping wine endpoint when signed out")
+	}
+	if strings.Contains(html, "Try again, chef") {
+		t.Error("shopping list HTML should hide regenerate action when signed out")
+	}
+	if strings.Contains(html, "Assemble Shopping List") {
+		t.Error("shopping list HTML should hide finalize action when signed out")
+	}
+	if strings.Contains(html, `id="save-`) {
+		t.Error("shopping list HTML should hide save controls when signed out")
+	}
+	if strings.Contains(html, `id="dismiss-`) {
+		t.Error("shopping list HTML should hide dismiss controls when signed out")
 	}
 }
 
@@ -413,9 +471,6 @@ func TestFormatShoppingRecipeWineHTML_RendersPicker(t *testing.T) {
 	}
 	if !strings.Contains(body, `hx-post="/recipe/recipe-hash/wine?view=shopping&slot=action"`) {
 		t.Fatalf("expected shopping wine endpoint in response, got body: %s", body)
-	}
-	if !strings.Contains(body, `sessionStorage.setItem('shopping-wine-refresh:`) {
-		t.Fatalf("expected shopping wine picker to mark the page for refresh after browser back, got body: %s", body)
 	}
 }
 
