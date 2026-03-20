@@ -474,6 +474,36 @@ func TestFormatShoppingRecipeWineHTML_RendersPicker(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingRecipeWineHTML_RendersDetailsMode(t *testing.T) {
+	w := httptest.NewRecorder()
+	FormatShoppingRecipeWineHTML("recipe-hash", "details", &ai.WineSelection{
+		Wines: []ai.Ingredient{
+			{Name: "Crisp White", Quantity: "1 bottle", Price: "$16"},
+		},
+		Commentary: "Cuts through the richness.",
+	}, w)
+	body := w.Body.String()
+	actionID, _ := shoppingWineDOMIDs("recipe-hash")
+	previewID := shoppingWinePreviewDOMID("recipe-hash")
+	detailContainerID, _ := shoppingWineDetailDOMIDs("recipe-hash")
+
+	if !strings.Contains(body, `id="`+actionID+`" hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected action fragment to update out-of-band in details mode, got body: %s", body)
+	}
+	if !strings.Contains(body, `id="`+previewID+`" hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected preview fragment to update out-of-band in details mode, got body: %s", body)
+	}
+	if strings.Contains(body, `id="`+detailContainerID+`" hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected details fragment to be in-band in details mode, got body: %s", body)
+	}
+	if !strings.Contains(body, `id="`+detailContainerID+`"`) {
+		t.Fatalf("expected details fragment container in response, got body: %s", body)
+	}
+	if !strings.Contains(body, "Crisp White") || !strings.Contains(body, "Cuts through the richness.") {
+		t.Fatalf("expected details mode to render wine content, got body: %s", body)
+	}
+}
+
 func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	w := httptest.NewRecorder()
 	now := time.Now()

@@ -1,0 +1,102 @@
+{{define "shopping_recipe_wine_action"}}
+{{template "shopping_recipe_wine_region" shopping_wine_region_data .Wine.ActionID "shopping-wine-action" "action" false .}}
+{{end}}
+
+{{define "shopping_recipe_wine_action_oob"}}
+{{template "shopping_recipe_wine_region" shopping_wine_region_data .Wine.ActionID "shopping-wine-action" "action" true .}}
+{{end}}
+
+{{define "shopping_recipe_wine_preview"}}
+{{template "shopping_recipe_wine_region" shopping_wine_region_data .Wine.PreviewID "shopping-wine-preview" "preview" false .}}
+{{end}}
+
+{{define "shopping_recipe_wine_preview_oob"}}
+{{template "shopping_recipe_wine_region" shopping_wine_region_data .Wine.PreviewID "shopping-wine-preview" "preview" true .}}
+{{end}}
+
+{{define "shopping_recipe_wine_details"}}
+{{template "shopping_recipe_wine_region" shopping_wine_region_data .Wine.DetailID "shopping-wine-details pt-2" "details" false .}}
+{{end}}
+
+{{define "shopping_recipe_wine_details_oob"}}
+{{template "shopping_recipe_wine_region" shopping_wine_region_data .Wine.DetailID "shopping-wine-details pt-2" "details" true .}}
+{{end}}
+
+{{define "shopping_recipe_wine_region"}}
+<div id="{{.ID}}"{{if .OOB}} hx-swap-oob="outerHTML"{{end}} class="{{.Class}}">
+  {{if eq .Kind "action"}}
+  {{if not .Recipe.Wine.Recommendation}}
+  {{if .Recipe.ServerSignedIn}}
+  <button type="button"
+          id="{{.Recipe.Wine.ActionButtonID}}"
+          hx-post="/recipe/{{.Recipe.Hash}}/wine?view=shopping&slot=action"
+          hx-target="#{{.Recipe.Wine.ActionID}}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="#{{.Recipe.Wine.ActionButtonID}}"
+          hx-on::before-request="this.textContent='🍷🔄';"
+          hx-on::response-error="this.textContent='😞';"
+          aria-label="Choose wine"
+          title="Choose wine"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    🍷
+  </button>
+  {{end}}
+  {{end}}
+  {{else if eq .Kind "preview"}}
+  {{if .Recipe.Wine.Recommendation}}
+  {{template "shopping_recipe_wine_card" shopping_wine_card_data .Recipe.Wine.Preview "" true}}
+  {{end}}
+  {{else if eq .Kind "details"}}
+  {{if .Recipe.Wine.Recommendation}}
+  {{template "shopping_recipe_wine_card" shopping_wine_card_data .Recipe.Wine.Recommendation.Wines .Recipe.Wine.Recommendation.Commentary false}}
+  {{else if .Recipe.ServerSignedIn}}
+  <button type="button"
+          id="{{.Recipe.Wine.DetailButtonID}}"
+          hx-post="/recipe/{{.Recipe.Hash}}/wine?view=shopping&slot=details"
+          hx-target="#{{.Recipe.Wine.DetailID}}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="#{{.Recipe.Wine.DetailButtonID}}"
+          hx-on::before-request="this.textContent='Choosing 🍷 ...';"
+          hx-on::response-error="this.textContent='wine failure 😞';"
+          class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    🍷 Choose a wine
+  </button>
+  {{end}}
+  {{end}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_card"}}
+<div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 {{if .Compact}}text-xs{{else}}text-sm{{end}} text-brand-900">
+  {{if .Items}}
+  <p class="font-semibold text-brand-700">Wine picks:</p>
+  <ul class="mt-1 space-y-1">
+    {{range .Items}}
+    <li class="flex flex-wrap items-baseline gap-x-2">
+      <span class="font-medium text-brand-800">{{.Name}}</span>
+      {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
+      {{if .Quantity}}<span class="text-brand-600">{{.Quantity}}</span>{{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+  {{if .Commentary}}
+  <p class="{{if .Items}}mt-2{{end}}">
+    <span class="font-semibold text-brand-700">Why it works:</span>
+    <span class="whitespace-pre-line">{{.Commentary}}</span>
+  </p>
+  {{end}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_action_response"}}
+{{template "shopping_recipe_wine_action" .}}
+{{template "shopping_recipe_wine_preview_oob" .}}
+{{template "shopping_recipe_wine_details_oob" .}}
+{{end}}
+
+{{define "shopping_recipe_wine_details_response"}}
+{{template "shopping_recipe_wine_action_oob" .}}
+{{template "shopping_recipe_wine_preview_oob" .}}
+{{template "shopping_recipe_wine_details" .}}
+{{end}}

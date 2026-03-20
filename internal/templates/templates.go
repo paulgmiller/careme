@@ -33,6 +33,32 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 		"PublicOrigin":        func() string { return config.ResolvedPublicOrigin() },
 		"SignInPath":          signInPath,
 		"TailwindAssetPath":   func() string { return tailwindAssetPath },
+		"shopping_wine_region_data": func(id, class, kind string, oob bool, recipe any) any {
+			return struct {
+				ID     string
+				Class  string
+				Kind   string
+				OOB    bool
+				Recipe any
+			}{
+				ID:     id,
+				Class:  class,
+				Kind:   kind,
+				OOB:    oob,
+				Recipe: recipe,
+			}
+		},
+		"shopping_wine_card_data": func(items any, commentary string, compact bool) any {
+			return struct {
+				Items      any
+				Commentary string
+				Compact    bool
+			}{
+				Items:      items,
+				Commentary: commentary,
+				Compact:    compact,
+			}
+		},
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {
