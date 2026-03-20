@@ -106,10 +106,21 @@
             </div>
           </div>
           {{else}}
-          <div class="grid gap-6 lg:grid-cols-3">
+          <div class="mx-auto max-w-xl space-y-6">
+            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
+              <h2 class="text-lg font-semibold text-brand-700">Careme will:</h2>
+              <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-700">
+                <li>Check your local store's inventory for fresh meat and seasonal produce.</li>
+                <li>Generate a weekly recipe plan from a variety of cuisines and cooking styles.</li>
+              </ul>
+              <a href="/about"
+                 class="mt-4 inline-flex w-full items-center justify-center rounded-lg border-2 border-brand-300 bg-white/90 px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                About Careme
+              </a>
+            </div>
+
             <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
               <h2 class="text-lg font-semibold text-brand-700">Find a store</h2>
-              <p class="mt-2 text-sm text-ink-600">Browse nearby stores now. Sign in when you are ready to build recipes.</p>
               <form method="GET" action="/locations" class="mt-4 space-y-2">
                 <label for="zip" class="block text-sm font-medium text-ink-700">
                   Enter ZIP code:
@@ -132,18 +143,7 @@
             </div>
 
             <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
-              <h2 class="text-lg font-semibold text-brand-700">Cook with Careme</h2>
-              <p class="mt-2 whitespace-pre-line text-sm text-ink-700">Careme will:
-
-Find your local grocery stores.
-Check the store's inventory for fresh meat and seasonal produce.
-Generate a weekly recipe plan from a variety of cuisines and cooking styles.</p>
-            </div>
-
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
-              <p class="mb-3 block text-sm font-medium text-ink-700">
-                Sign in or create an account before building recipes:
-              </p>
+              <p class="mb-3 block text-sm font-medium text-ink-700">Sign in or create an account before building recipes:</p>
               <div class="flex flex-col gap-3">
                 <a href="/sign-in"
                    class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -152,10 +152,6 @@ Generate a weekly recipe plan from a variety of cuisines and cooking styles.</p>
                 <a href="/sign-up"
                    class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Sign Up
-                </a>
-                <a href="/about"
-                   class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white/90 px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  About Careme
                 </a>
               </div>
             </div>
