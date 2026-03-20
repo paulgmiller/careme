@@ -3,6 +3,7 @@ package recipes
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
@@ -52,7 +53,9 @@ func signInPath(returnTo string) string {
 	if returnTo == "" {
 		return "/sign-in"
 	}
-	return "/sign-in?return_to=" + url.QueryEscape(returnTo)
+	// We base64-url encode the full relative target so nested query strings survive
+	// Clerk's redirect_url handoff without splitting into separate top-level params.
+	return "/sign-in?return_to_b64=" + url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(returnTo)))
 }
 
 func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int, returnTo string) {

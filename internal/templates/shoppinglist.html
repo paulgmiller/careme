@@ -71,7 +71,7 @@
                        placeholder="e.g. make it vegetarian"
                        readonly
                        class="w-full flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-ink-700 shadow-sm" />
-                <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .Hash)}}"
+                <a href="{{SignInPath (print "/recipes?h=" .Hash)}}"
                    class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Sign in to try again
                 </a>
@@ -138,7 +138,7 @@
                     Details
                   </button>
                   {{template "shopping_recipe_wine_action" .}}
-                  <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .ShoppingListHash)}}"
+                  <a href="{{SignInPath (print "/recipes?h=" .ShoppingListHash)}}"
                      class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     Sign in to save
                   </a>
@@ -275,7 +275,7 @@
   {{end}}
   {{else}}
   <p class="text-sm text-ink-600">You are viewing a shared recipe plan. Sign in to save picks or assemble a shopping list.</p>
-  <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .Hash)}}"
+  <a href="{{SignInPath (print "/recipes?h=" .Hash)}}"
      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     Sign in to keep cooking
   </a>
@@ -316,7 +316,7 @@
     🍷
   </button>
   {{else}}
-  <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .ShoppingListHash)}}"
+  <a href="{{SignInPath (print "/recipes?h=" .ShoppingListHash)}}"
      aria-label="Sign in for wine"
      title="Sign in for wine"
      class="inline-flex items-center justify-center rounded-lg border-2 border-brand-300 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -406,7 +406,7 @@
     🍷 Choose a wine
   </button>
   {{else}}
-  <a href="/sign-in?return_to={{urlquery (print "/recipes?h=" .ShoppingListHash)}}"
+  <a href="{{SignInPath (print "/recipes?h=" .ShoppingListHash)}}"
      class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
     Sign in for wine picks
   </a>

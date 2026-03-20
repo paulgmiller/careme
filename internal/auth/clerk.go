@@ -201,7 +201,7 @@ func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
 	if signup {
 		base = c.cfg.Clerk.Signup()
 	}
-	redirectURL := c.authEstablishURL(signup, sanitizeReturnTo(r.URL.Query().Get("return_to")))
+	redirectURL := c.authEstablishURL(signup, returnToFromRequest(r))
 	u := lo.Must(url.Parse(base))
 	q := u.Query()
 	q.Set("redirect_url", redirectURL)
@@ -217,6 +217,8 @@ func (c *clerkClient) authEstablishURL(signup bool, returnTo string) string {
 		q.Set("signup", "true")
 	}
 	if returnTo != "" {
+		// Keep the entire relative return target in one opaque query value so
+		// nested ?a=1&b=2 segments are not broken apart during Clerk redirects.
 		q.Set("return_to_b64", base64.RawURLEncoding.EncodeToString([]byte(returnTo)))
 	}
 	u.RawQuery = q.Encode()
@@ -224,15 +226,15 @@ func (c *clerkClient) authEstablishURL(signup bool, returnTo string) string {
 }
 
 func returnToFromRequest(r *http.Request) string {
-	if encoded := strings.TrimSpace(r.URL.Query().Get("return_to_b64")); encoded != "" {
-		decoded, err := base64.RawURLEncoding.DecodeString(encoded)
-		if err == nil {
-			return sanitizeReturnTo(string(decoded))
-		}
+	encoded := strings.TrimSpace(r.URL.Query().Get("return_to_b64"))
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return ""
 	}
-	return sanitizeReturnTo(r.URL.Query().Get("return_to"))
+	return sanitizeReturnTo(string(decoded))
 }
 
+// only allow redirects to relative paths in our app.
 func sanitizeReturnTo(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || !strings.HasPrefix(raw, "/") {
