@@ -18,6 +18,9 @@ const LocationIDPrefix = "safeway_"
 //go:embed safeway_products.json
 var safewayProductsJSON []byte
 
+//go:embed safeway_wine.json
+var safewayWineJSON []byte
+
 var (
 	embeddedSafewayProducts = mustLoadSafewayProducts()
 	defaultStaplesSignature = "everything" // no filtering yet"
@@ -162,7 +165,12 @@ func mustLoadSafewayProducts() []SafewayProduct {
 	if err := json.Unmarshal(safewayProductsJSON, &products); err != nil {
 		panic(fmt.Errorf("decode safeway products: %w", err))
 	}
-	return products
+	var wine []SafewayProduct
+	if err := json.Unmarshal(safewayWineJSON, &wine); err != nil {
+		panic(fmt.Errorf("decode safeway wine: %w", err))
+	}
+	slog.Info("Loaded safeway products", "product_count", len(products), "wine_count", len(wine))
+	return append(products, wine...)
 }
 
 func stringValue(value *string) string {
