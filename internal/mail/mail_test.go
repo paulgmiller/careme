@@ -75,6 +75,14 @@ func (c *fakeMailCache) Put(_ context.Context, key, value string, opts cache.Put
 	return nil
 }
 
+func (c *fakeMailCache) PutWriter(_ context.Context, key string, opts cache.PutOptions, write func(io.Writer) error) error {
+	var buf strings.Builder
+	if err := write(&buf); err != nil {
+		return err
+	}
+	return c.Put(context.Background(), key, buf.String(), opts)
+}
+
 type fakeMailLocServer struct {
 	location *locations.Location
 }

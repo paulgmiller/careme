@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -396,6 +397,20 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 func (m mock) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	_ = conversationID
 	return fmt.Sprintf("Mock answer: %s", question), nil
+}
+
+func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+	_ = ctx
+	_ = recipe
+	const tinyPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN2kAAAAASUVORK5CYII="
+	body, err := base64.StdEncoding.DecodeString(tinyPNG)
+	if err != nil {
+		return nil, err
+	}
+	return &ai.GeneratedImage{
+		Bytes:       body,
+		ContentType: "image/png",
+	}, nil
 }
 
 func (m mock) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {

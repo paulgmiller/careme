@@ -30,6 +30,11 @@ type Client struct {
 	model      string
 }
 
+type GeneratedImage struct {
+	Bytes       []byte
+	ContentType string
+}
+
 // todo collapse closer to
 type Ingredient struct {
 	Name     string `json:"name"`
@@ -149,10 +154,42 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Verify technical terms are used correctly.
 - Verify the dish have a good appearance after plating`
 
+const recipeImagePromptInstructions = `
+Generate a realistic food photograph of the finished dish for a recipe page.
+
+Requirements:
+- Show the completed dish described in the recipe JSON.
+- Make it look like a strong home cook prepared it in a real home kitchen.
+- Keep plating simple and believable. No tweezers, foam, edible flowers, microgreens, or luxury restaurant flourishes unless the recipe clearly calls for them.
+- Use a simple kitchen counter, stovetop, sheet pan, wooden table, or casual dining table setting that matches the dish.
+- Focus on the food and serving vessel.
+- Use natural colors, ordinary cookware or tableware, and realistic portions for a meal cooked at home.
+- Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes not implied by the recipe.
+- If the recipe has multiple components, show them plated together as the meal a home cook would serve.
+`
+
+const (
+	recipeImageContentType  = "image/png"
+	recipeImageModel        = openai.ImageModelGPTImage1
+	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatPNG
+	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
+	recipeImageSize         = openai.ImageGenerateParamsSize1536x1024
+)
+
 func PromptSignature() []byte {
 	fnv := fnv.New32a()
 	lo.Must(io.WriteString(fnv, systemMessage))
 	return fnv.Sum(nil)
+}
+
+func RecipeImageSignature() string {
+	fnv := fnv.New64a()
+	lo.Must(io.WriteString(fnv, recipeImagePromptInstructions))
+	lo.Must(io.WriteString(fnv, string(recipeImageModel)))
+	lo.Must(io.WriteString(fnv, string(recipeImageOutputFormat)))
+	lo.Must(io.WriteString(fnv, string(recipeImageQuality)))
+	lo.Must(io.WriteString(fnv, string(recipeImageSize)))
+	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
@@ -238,6 +275,43 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 		return "", fmt.Errorf("empty response from model")
 	}
 	return answer, nil
+}
+
+func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*GeneratedImage, error) {
+	prompt, err := buildRecipeImagePrompt(recipe)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
+	}
+
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	resp, err := client.Images.Generate(ctx, openai.ImageGenerateParams{
+		Prompt:       prompt,
+		Model:        recipeImageModel,
+		N:            openai.Int(1),
+		Background:   openai.ImageGenerateParamsBackgroundOpaque,
+		OutputFormat: recipeImageOutputFormat,
+		Quality:      recipeImageQuality,
+		Size:         recipeImageSize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
+	}
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("image generation returned no images")
+	}
+	imageBody := strings.TrimSpace(resp.Data[0].B64JSON)
+	if imageBody == "" {
+		return nil, fmt.Errorf("image generation returned empty image data")
+	}
+
+	imageBytes, err := base64.StdEncoding.DecodeString(imageBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode generated image: %w", err)
+	}
+	return &GeneratedImage{
+		Bytes:       imageBytes,
+		ContentType: recipeImageContentType,
+	}, nil
 }
 
 func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*WineSelection, error) {
@@ -328,6 +402,14 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 
 func user(msg string) responses.ResponseInputItemUnionParam {
 	return responses.ResponseInputItemParamOfMessage(msg, responses.EasyInputMessageRoleUser)
+}
+
+func buildRecipeImagePrompt(recipe Recipe) (string, error) {
+	recipeJSON, err := json.MarshalIndent(recipe, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(recipeImagePromptInstructions) + "\n\nRecipe JSON:\n" + string(recipeJSON), nil
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently

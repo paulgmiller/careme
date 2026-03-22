@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"sort"
@@ -42,7 +43,19 @@ func (c *InMemoryCache) Exists(_ context.Context, key string) (bool, error) {
 	return ok, nil
 }
 
-func (c *InMemoryCache) Put(_ context.Context, key, value string, opts PutOptions) error {
+func (c *InMemoryCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
+	return c.PutWriter(ctx, key, opts, func(w io.Writer) error {
+		_, err := io.WriteString(w, value)
+		return err
+	})
+}
+
+func (c *InMemoryCache) PutWriter(_ context.Context, key string, opts PutOptions, write func(io.Writer) error) error {
+	var buf bytes.Buffer
+	if err := write(&buf); err != nil {
+		return err
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -52,7 +65,7 @@ func (c *InMemoryCache) Put(_ context.Context, key, value string, opts PutOption
 		}
 	}
 
-	c.data[key] = value
+	c.data[key] = buf.String()
 	return nil
 }
 

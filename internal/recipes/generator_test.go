@@ -45,6 +45,10 @@ func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question 
 	return c.answer, nil
 }
 
+func (c *captureWineQuestionAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+	panic("unexpected call to GenerateRecipeImage")
+}
+
 func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error) {
 	c.recipeTitle = recipeTitle
 	if c.selection != nil {
@@ -75,6 +79,10 @@ func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructi
 
 func (c *captureRegenerateAIClient) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	panic("unexpected call to AskQuestion")
+}
+
+func (c *captureRegenerateAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+	panic("unexpected call to GenerateRecipeImage")
 }
 
 func (c *captureRegenerateAIClient) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error) {

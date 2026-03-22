@@ -73,6 +73,7 @@ type locServer interface {
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
+	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 	Ready(ctx context.Context) error
 }
@@ -107,6 +108,8 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
+	mux.HandleFunc("GET /recipe/{hash}/image", s.handleRecipeImage)
+	mux.HandleFunc("POST /recipe/{hash}/image", s.handleGenerateRecipeImage)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
 	mux.HandleFunc("POST /recipe/{hash}/wine", s.handleWine)
 	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
@@ -136,6 +139,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	feedback := feedback.Feedback{}
 	var thread []RecipeThreadEntry
 	var wineRecommendation *ai.WineSelection
+	var hasRecipeImage bool
 	var loadWG sync.WaitGroup
 	loadWG.Go(func() {
 		existing, err := s.FeedbackFromCache(ctx, hash)
@@ -167,6 +171,14 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		}
 		wineRecommendation = selection
 	})
+	loadWG.Go(func() {
+		exists, err := s.RecipeImageExists(ctx, hash)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", hash, "error", err)
+			return
+		}
+		hasRecipeImage = exists
+	})
 	loadWG.Wait()
 
 	if recipe.OriginHash == "" {
@@ -175,7 +187,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
-		FormatRecipeHTML(ctx, p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
+		FormatRecipeHTML(ctx, p, *recipe, signedIn, hasRecipeImage, thread, feedback, wineRecommendation, w)
 		return
 	}
 	// we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
@@ -204,7 +216,84 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(ctx, p, *recipe, signedIn, thread, feedback, wineRecommendation, w)
+	FormatRecipeHTML(ctx, p, *recipe, signedIn, hasRecipeImage, thread, feedback, wineRecommendation, w)
+}
+
+func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+
+	imageBody, err := s.RecipeImageFromCache(ctx, hash)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			http.Error(w, "recipe image not found", http.StatusNotFound)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load cached recipe image", "hash", hash, "error", err)
+		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeContent(w, r, hash+".png", time.Time{}, bytes.NewReader(imageBody))
+}
+
+func (s *server) handleGenerateRecipeImage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.clerk.GetUserIDFromRequest(r); err != nil {
+		redirectToSignIn(w, r, http.StatusUnauthorized)
+		return
+	}
+
+	hasRecipeImage, err := s.RecipeImageExists(ctx, hash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", hash, "error", err)
+		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
+		return
+	}
+	if !hasRecipeImage {
+		recipe, err := s.SingleFromCache(ctx, hash)
+		if err != nil {
+			if errors.Is(err, cache.ErrNotFound) {
+				http.Error(w, "recipe not found", http.StatusNotFound)
+				return
+			}
+			slog.ErrorContext(ctx, "failed to load recipe for image generation", "hash", hash, "error", err)
+			http.Error(w, "failed to load recipe", http.StatusInternalServerError)
+			return
+		}
+
+		generationCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
+		defer cancel()
+		image, err := s.generator.GenerateRecipeImage(generationCtx, *recipe)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to generate recipe image", "hash", hash, "error", err)
+			http.Error(w, "failed to generate recipe image", http.StatusInternalServerError)
+			return
+		}
+		if err := s.SaveRecipeImage(generationCtx, hash, image); err != nil {
+			slog.ErrorContext(ctx, "failed to save recipe image", "hash", hash, "error", err)
+			http.Error(w, "failed to cache recipe image", http.StatusInternalServerError)
+			return
+		}
+		hasRecipeImage = true
+	}
+
+	FormatRecipeImageActionResponseHTML(hash, true, hasRecipeImage, w)
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {

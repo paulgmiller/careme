@@ -2,6 +2,7 @@ package ai
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -90,5 +91,25 @@ func TestNormalizeRecipeWineStyles(t *testing.T) {
 	want := []string{"Pinot Noir", "Sauvignon Blanc"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("unexpected normalized wine styles: got %#v want %#v", got, want)
+	}
+}
+
+func TestBuildRecipeImagePrompt(t *testing.T) {
+	recipe := Recipe{
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []Ingredient{{Name: "Chicken", Quantity: "1 whole"}},
+		Instructions: []string{"Roast until golden."},
+	}
+
+	prompt, err := buildRecipeImagePrompt(recipe)
+	if err != nil {
+		t.Fatalf("buildRecipeImagePrompt returned error: %v", err)
+	}
+	if !strings.Contains(prompt, "realistic food photograph") {
+		t.Fatalf("expected image prompt instructions in prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, `"title": "Roast Chicken"`) {
+		t.Fatalf("expected recipe JSON in prompt: %s", prompt)
 	}
 }

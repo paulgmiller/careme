@@ -41,6 +41,7 @@ type Cache interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
 	Exists(ctx context.Context, key string) (bool, error)
 	Put(ctx context.Context, key, value string, opts PutOptions) error
+	PutWriter(ctx context.Context, key string, opts PutOptions, write func(io.Writer) error) error
 }
 
 type ListCache interface {
@@ -112,7 +113,14 @@ func (fc *FileCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
 	return data, nil
 }
 
-func (fc *FileCache) Put(_ context.Context, key, value string, opts PutOptions) error {
+func (fc *FileCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
+	return fc.PutWriter(ctx, key, opts, func(w io.Writer) error {
+		_, err := io.WriteString(w, value)
+		return err
+	})
+}
+
+func (fc *FileCache) PutWriter(_ context.Context, key string, opts PutOptions, write func(io.Writer) error) error {
 	fullPath := filepath.Join(fc.Dir, key)
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -120,14 +128,14 @@ func (fc *FileCache) Put(_ context.Context, key, value string, opts PutOptions) 
 	}
 
 	if opts.Condition == PutIfNoneMatch {
-		return writeIfNoneMatchAtomic(dir, fullPath, value)
+		return writeIfNoneMatchAtomic(dir, fullPath, write)
 	}
 
 	// TODO: IfMatch support (write only if etag matches).
-	return writeAtomic(dir, fullPath, value)
+	return writeAtomic(dir, fullPath, write)
 }
 
-func writeAtomic(dir, targetPath, value string) error {
+func writeAtomic(dir, targetPath string, write func(io.Writer) error) error {
 	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
@@ -137,7 +145,7 @@ func writeAtomic(dir, targetPath, value string) error {
 		_ = os.Remove(tmpPath)
 	}()
 
-	if _, err := tmpFile.WriteString(value); err != nil {
+	if err := write(tmpFile); err != nil {
 		if closeErr := tmpFile.Close(); closeErr != nil {
 			return errors.Join(err, closeErr)
 		}
@@ -150,7 +158,7 @@ func writeAtomic(dir, targetPath, value string) error {
 	return os.Rename(tmpPath, targetPath)
 }
 
-func writeIfNoneMatchAtomic(dir, targetPath, value string) error {
+func writeIfNoneMatchAtomic(dir, targetPath string, write func(io.Writer) error) error {
 	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
@@ -160,7 +168,7 @@ func writeIfNoneMatchAtomic(dir, targetPath, value string) error {
 		_ = os.Remove(tmpPath)
 	}()
 
-	if _, err := tmpFile.WriteString(value); err != nil {
+	if err := write(tmpFile); err != nil {
 		if closeErr := tmpFile.Close(); closeErr != nil {
 			return errors.Join(err, closeErr)
 		}

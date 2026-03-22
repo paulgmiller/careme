@@ -202,7 +202,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -237,6 +237,12 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, "Choose a wine") {
 		t.Error("recipe HTML should include choose a wine button")
 	}
+	if !strings.Contains(html, "Make dish image") {
+		t.Error("recipe HTML should include make dish image button")
+	}
+	if !strings.Contains(html, "htmx-indicator") {
+		t.Error("recipe HTML should include button spinners for async actions")
+	}
 	if !strings.Contains(html, "Cook time:") {
 		t.Error("recipe HTML should contain cook time")
 	}
@@ -265,7 +271,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -273,14 +279,11 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should not contain question input when signed out")
 	}
-	if !strings.Contains(html, "Sign in to ask follow-up questions") {
+	if !strings.Contains(html, "Sign in to ask questions, get wine picks, and make dish images") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
 	}
-	if strings.Contains(html, `hx-post="/recipe/`) && strings.Contains(html, `/wine"`) {
+	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/wine"`) {
 		t.Error("recipe HTML should not expose wine picker htmx endpoint when signed out")
-	}
-	if !strings.Contains(html, "Sign in for wine picks") {
-		t.Error("recipe HTML should prompt signed-out users to sign in for wine picks")
 	}
 	if strings.Contains(html, `name="feedback"`) {
 		t.Error("recipe HTML should not contain feedback form when signed out")
@@ -344,7 +347,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Oregon Pinot Noir", Price: "$14.99"},
 			{Name: "Backup Chardonnay", Price: "$11.99"},
@@ -367,8 +370,32 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	if got := strings.Count(html, "Backup Chardonnay"); got != 1 {
 		t.Errorf("recipe HTML should only show backup wine in recommendation, got count %d", got)
 	}
-	if strings.Contains(html, "choose a wine") {
-		t.Error("recipe HTML should not render choose a wine button when recommendation exists")
+	if !strings.Contains(html, "Show wine pick") {
+		t.Error("recipe HTML should keep the wine action available when recommendation exists")
+	}
+}
+
+func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.ConversationID = "convo123"
+	w := httptest.NewRecorder()
+	recipe := list.Recipes[0]
+	recipeHash := recipe.ComputeHash()
+
+	FormatRecipeHTML(t.Context(), p, recipe, true, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := w.Body.String()
+
+	isValidHTML(t, html)
+
+	if !strings.Contains(html, `id="recipe-image-panel"`) {
+		t.Fatal("recipe HTML should render the recipe image panel")
+	}
+	if !strings.Contains(html, "/recipe/"+recipeHash+"/image?v="+ai.RecipeImageSignature()) {
+		t.Fatalf("recipe HTML should render the cached recipe image URL, got body: %s", html)
+	}
+	if !strings.Contains(html, "View dish image") {
+		t.Fatalf("recipe HTML should render the image action when an image exists, got body: %s", html)
 	}
 }
 
