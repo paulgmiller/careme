@@ -22,6 +22,7 @@ func TestAdminUsersPageRendersEmailsAndRecipes(t *testing.T) {
 	if err := storage.Update(&utypes.User{
 		ID:          "2b190b35-10c6-4d6f-9858-3dd73c4155a0",
 		Email:       []string{"legacy@example.com"},
+		CreatedAt:   now.AddDate(0, 0, -10),
 		ShoppingDay: time.Monday.String(),
 	}); err != nil {
 		t.Fatalf("update legacy user: %v", err)
@@ -30,6 +31,7 @@ func TestAdminUsersPageRendersEmailsAndRecipes(t *testing.T) {
 	if err := storage.Update(&utypes.User{
 		ID:          "user_1",
 		Email:       []string{"alice@example.com"},
+		CreatedAt:   time.Date(2026, time.March, 1, 15, 4, 5, 0, time.UTC),
 		ShoppingDay: time.Monday.String(),
 		LastRecipes: []utypes.Recipe{
 			{Title: "Tomato Soup", Hash: "hash-1", CreatedAt: now},
@@ -42,6 +44,7 @@ func TestAdminUsersPageRendersEmailsAndRecipes(t *testing.T) {
 	if err := storage.Update(&utypes.User{
 		ID:          "user_2",
 		Email:       []string{"bob@example.com", "bobby@example.com"},
+		CreatedAt:   time.Date(2026, time.March, 2, 9, 30, 0, 0, time.UTC),
 		ShoppingDay: time.Tuesday.String(),
 		LastRecipes: []utypes.Recipe{
 			{Title: "Pasta", Hash: "hash-3", CreatedAt: now},
@@ -91,6 +94,14 @@ func TestAdminUsersPageRendersEmailsAndRecipes(t *testing.T) {
 	}
 	if !regexp.MustCompile(`<td>\s*user_2\s*</td>[\s\S]*?<td>\s*1\s*</td>[\s\S]*?<td>\s*1\s*</td>`).MatchString(body) {
 		t.Fatalf("response body missing user_2 row with saved/cooked counts: %s", body)
+	}
+	for _, want := range []string{"2026-03-01", "2026-03-02"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("response body missing created date %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "0001-01-01") {
+		t.Fatalf("response body should not include zero created date: %s", body)
 	}
 	if strings.Index(body, "user_1") > strings.Index(body, "user_2") {
 		t.Fatalf("expected users sorted by saved recipe count descending: %s", body)
