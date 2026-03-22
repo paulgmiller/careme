@@ -44,15 +44,12 @@ func (c *InMemoryCache) Exists(_ context.Context, key string) (bool, error) {
 }
 
 func (c *InMemoryCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
-	return c.PutWriter(ctx, key, opts, func(w io.Writer) error {
-		_, err := io.WriteString(w, value)
-		return err
-	})
+	return c.PutReader(ctx, key, strings.NewReader(value), opts)
 }
 
-func (c *InMemoryCache) PutWriter(_ context.Context, key string, opts PutOptions, write func(io.Writer) error) error {
+func (c *InMemoryCache) PutReader(_ context.Context, key string, reader io.Reader, opts PutOptions) error {
 	var buf bytes.Buffer
-	if err := write(&buf); err != nil {
+	if _, err := io.Copy(&buf, reader); err != nil {
 		return err
 	}
 

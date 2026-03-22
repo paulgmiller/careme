@@ -31,7 +31,7 @@ type Client struct {
 }
 
 type GeneratedImage struct {
-	Bytes       []byte
+	Body        io.Reader
 	ContentType string
 }
 
@@ -169,12 +169,17 @@ Requirements:
 `
 
 const (
-	recipeImageContentType  = "image/png"
-	recipeImageModel        = openai.ImageModelGPTImage1
-	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatPNG
+	recipeImageContentType = "image/webp"
+	recipeImageModel       = openai.ImageModelGPTImage1
+	// WebP is usually much smaller for these generated food photos on mobile; PNG would preserve lossless pixels but costs meaningfully more bandwidth.
+	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
 	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
-	recipeImageSize         = openai.ImageGenerateParamsSize1536x1024
+	recipeImageSize         = openai.ImageGenerateParamsSize1024x1536
 )
+
+func RecipeImageContentType() string {
+	return recipeImageContentType
+}
 
 func PromptSignature() []byte {
 	fnv := fnv.New32a()
@@ -304,12 +309,8 @@ func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("image generation returned empty image data")
 	}
 
-	imageBytes, err := base64.StdEncoding.DecodeString(imageBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode generated image: %w", err)
-	}
 	return &GeneratedImage{
-		Bytes:       imageBytes,
+		Body:        base64.NewDecoder(base64.StdEncoding, strings.NewReader(imageBody)),
 		ContentType: recipeImageContentType,
 	}, nil
 }

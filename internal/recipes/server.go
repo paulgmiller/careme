@@ -238,9 +238,9 @@ func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Type", ai.RecipeImageContentType())
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	http.ServeContent(w, r, hash+".png", time.Time{}, bytes.NewReader(imageBody))
+	http.ServeContent(w, r, hash+"."+recipeImageExtension(ai.RecipeImageContentType()), time.Time{}, bytes.NewReader(imageBody))
 }
 
 func (s *server) handleGenerateRecipeImage(w http.ResponseWriter, r *http.Request) {

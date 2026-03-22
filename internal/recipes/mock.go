@@ -1,8 +1,8 @@
 package recipes
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -402,14 +402,9 @@ func (m mock) AskQuestion(ctx context.Context, question string, conversationID s
 func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
 	_ = ctx
 	_ = recipe
-	const tinyPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN2kAAAAASUVORK5CYII="
-	body, err := base64.StdEncoding.DecodeString(tinyPNG)
-	if err != nil {
-		return nil, err
-	}
 	return &ai.GeneratedImage{
-		Bytes:       body,
-		ContentType: "image/png",
+		Body:        bytes.NewReader([]byte("mock-webp")),
+		ContentType: "image/webp",
 	}, nil
 }
 

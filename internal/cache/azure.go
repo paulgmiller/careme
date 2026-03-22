@@ -2,10 +2,8 @@ package cache
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"log/slog"
 	"os"
@@ -100,13 +98,10 @@ func (fc *BlobCache) Get(ctx context.Context, key string) (io.ReadCloser, error)
 }
 
 func (fc *BlobCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
-	return fc.PutWriter(ctx, key, opts, func(w io.Writer) error {
-		_, err := io.WriteString(w, value)
-		return err
-	})
+	return fc.PutReader(ctx, key, strings.NewReader(value), opts)
 }
 
-func (fc *BlobCache) PutWriter(ctx context.Context, key string, opts PutOptions, write func(io.Writer) error) error {
+func (fc *BlobCache) PutReader(ctx context.Context, key string, reader io.Reader, opts PutOptions) error {
 	var access *blob.AccessConditions
 	if opts.Condition == PutIfNoneMatch {
 		access = &blob.AccessConditions{}
@@ -116,24 +111,10 @@ func (fc *BlobCache) PutWriter(ctx context.Context, key string, opts PutOptions,
 		// TODO: IfMatch support.
 	}
 
-	reader, writerPipe := io.Pipe()
-	writeErrCh := make(chan error, 1)
-	go func() {
-		err := write(writerPipe)
-		if err != nil {
-			_ = writerPipe.CloseWithError(err)
-			writeErrCh <- err
-			return
-		}
-		writeErrCh <- writerPipe.Close()
-	}()
-
 	_, err := fc.container.NewBlockBlobClient(key).UploadStream(ctx, reader, &azblob.UploadStreamOptions{
 		AccessConditions: access,
 	})
-	writeErr := <-writeErrCh
 	if err != nil {
-		_ = reader.Close()
 		if bloberror.HasCode(err, bloberror.BlobAlreadyExists, bloberror.ResourceAlreadyExists) {
 			return ErrAlreadyExists
 		}
@@ -141,9 +122,6 @@ func (fc *BlobCache) PutWriter(ctx context.Context, key string, opts PutOptions,
 			return ErrAlreadyExists
 		}
 		return err
-	}
-	if writeErr != nil && !errors.Is(writeErr, fs.ErrClosed) {
-		return writeErr
 	}
 	return nil
 }

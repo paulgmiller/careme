@@ -111,7 +111,7 @@ func (f failingListCache) Put(context.Context, string, string, cachepkg.PutOptio
 	return f.putErr
 }
 
-func (f failingListCache) PutWriter(_ context.Context, _ string, _ cachepkg.PutOptions, _ func(io.Writer) error) error {
+func (f failingListCache) PutReader(_ context.Context, _ string, _ io.Reader, _ cachepkg.PutOptions) error {
 	return f.putErr
 }
 
