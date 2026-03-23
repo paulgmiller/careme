@@ -164,13 +164,12 @@ Generate a realistic overhead food photograph of a single finished plate.
 `
 
 const (
-	recipeImageContentType = "image/png"
-	recipeImageModel       = openai.ImageModelDallE3
-	// DALL-E 3 returns PNG image bytes; response_format controls transport, not the image mime type.
-	recipeImageResponseFormat = openai.ImageGenerateParamsResponseFormatB64JSON
-	recipeImageQuality        = openai.ImageGenerateParamsQualityHD
-	recipeImageSize           = openai.ImageGenerateParamsSize1024x1024
-	recipeImageStyle          = openai.ImageGenerateParamsStyleNatural
+	recipeImageContentType = "image/webp"
+	recipeImageModel       = openai.ImageModelGPTImage1_5 // dalle-3 is getting deprecated. 1.5 seems way better than 1.
+	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
+	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
+	recipeImageQuality      = openai.ImageGenerateParamsQualityHigh
+	recipeImageSize         = openai.ImageGenerateParamsSize1024x1024
 )
 
 func RecipeImageContentType() string {
@@ -270,13 +269,12 @@ func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	resp, err := client.Images.Generate(ctx, openai.ImageGenerateParams{
-		Prompt:         prompt,
-		Model:          recipeImageModel,
-		N:              openai.Int(1),
-		Quality:        recipeImageQuality,
-		ResponseFormat: recipeImageResponseFormat,
-		Size:           recipeImageSize,
-		Style:          recipeImageStyle,
+		Prompt:       prompt,
+		Model:        recipeImageModel,
+		N:            openai.Int(1),
+		OutputFormat: recipeImageOutputFormat,
+		Quality:      recipeImageQuality,
+		Size:         recipeImageSize,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
