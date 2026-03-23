@@ -9,7 +9,7 @@
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
   <meta property="og:title" content="{{.Recipe.Title}}" />
   <meta property="og:description" content="{{.Recipe.Description}}" />
-  <meta property="og:image" content="{{PublicOrigin}}/favicon.ico" />
+  <meta property="og:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Careme" />
 
@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="{{.Recipe.Title}}" />
   <meta name="twitter:description" content="{{.Recipe.Description}}" />
-  <meta name="twitter:image" content="{{PublicOrigin}}/favicon.ico" />
+  <meta name="twitter:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
   {{end}}
 
   {{template "tailwind_head" .Style}}
@@ -39,6 +39,9 @@
             {{if .Location.Address}}<span class="text-sm text-gray-500">({{.Location.Address}})</span>{{end}}
           </p>
           {{end}}
+          {{if .OriginHash}}
+          <a href="/recipes?h={{.OriginHash}}" class="mt-2 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back to shopping list</a>
+          {{end}}
         </div>
 
         <div class="p-8 space-y-8">
@@ -46,10 +49,10 @@
             <header class="space-y-2">
               <h2 class="text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
               <p class="text-sm text-gray-500">{{.Recipe.Description}}</p>
-              {{if .OriginHash}}
-              <a href="/recipes?h={{.OriginHash}}" class="text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back to full list</a>
-              {{end}}
+              {{template "recipe_image_action" .}}
             </header>
+
+            {{template "recipe_image_panel" .}}
 
             <div class="grid gap-6 md:grid-cols-2">
               <div>
@@ -305,4 +308,48 @@
   {{end}}
   {{end}}
 </div>
+{{end}}
+
+{{define "recipe_image_panel"}}
+<div id="recipe-image-panel" {{if .RecipeImage.OutOfBand}}hx-swap-oob="outerHTML" {{end}}class="{{if not .RecipeImage.HasImage}}hidden {{end}}overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
+  {{if .RecipeImage.HasImage}}
+  <img src="/recipe/{{.RecipeImage.Hash}}/image"
+       alt="Generated image of the dish"
+       class="h-auto w-full object-cover"
+       loading="lazy" />
+  {{end}}
+</div>
+{{end}}
+
+{{define "recipe_image_action"}}
+<div id="recipe-image-action">
+  {{if .RecipeImage.HasImage}}
+  {{else if .ServerSignedIn}}
+  <button type="button"
+          id="recipe-image-generate-button"
+          hx-post="/recipe/{{.RecipeHash}}/image"
+          hx-target="#recipe-image-action"
+          hx-swap="outerHTML"
+          hx-disabled-elt="#recipe-image-generate-button"
+          class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-brand-400">
+    <span class="htmx-indicator mr-2" aria-hidden="true">
+      <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+      </svg>
+    </span>
+    <span>See plated dish</span>
+  </button>
+  {{else}}
+  <a href="{{SignInPath (print "/recipe/" .RecipeHash)}}"
+     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    Sign in to see plated dish
+  </a>
+  {{end}}
+</div>
+{{end}}
+
+{{define "recipe_image_action_response"}}
+{{template "recipe_image_action" .}}
+{{template "recipe_image_panel" .}}
 {{end}}

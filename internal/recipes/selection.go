@@ -68,8 +68,8 @@ func recipeSelectionFromParams(p *generatorParams) recipeSelection {
 	return selection
 }
 
-func (s *server) loadRecipeSelection(ctx context.Context, userID, originHash string) (recipeSelection, error) {
-	reader, err := s.Cache.Get(ctx, recipeSelectionKey(userID, originHash))
+func (rio recipeio) loadRecipeSelection(ctx context.Context, userID, originHash string) (recipeSelection, error) {
+	reader, err := rio.Cache.Get(ctx, recipeSelectionKey(userID, originHash))
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			return recipeSelection{}, nil
@@ -87,14 +87,14 @@ func (s *server) loadRecipeSelection(ctx context.Context, userID, originHash str
 	return selection, nil
 }
 
-func (s *server) saveRecipeSelection(ctx context.Context, userID, originHash string, selection recipeSelection) error {
+func (rio recipeio) saveRecipeSelection(ctx context.Context, userID, originHash string, selection recipeSelection) error {
 	selection.UpdatedAt = time.Now()
 	body, err := json.Marshal(selection)
 	if err != nil {
 		return fmt.Errorf("failed to marshal recipe selection: %w", err)
 	}
 	// good place for etags :)
-	if err := s.Cache.Put(ctx, recipeSelectionKey(userID, originHash), string(body), cache.Unconditional()); err != nil {
+	if err := rio.Cache.Put(ctx, recipeSelectionKey(userID, originHash), string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("failed to save recipe selection: %w", err)
 	}
 	return nil

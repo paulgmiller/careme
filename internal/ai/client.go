@@ -30,6 +30,10 @@ type Client struct {
 	model      string
 }
 
+type GeneratedImage struct {
+	Body io.Reader
+}
+
 // todo collapse closer to
 type Ingredient struct {
 	Name     string `json:"name"`
@@ -149,11 +153,23 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Verify technical terms are used correctly.
 - Verify the dish have a good appearance after plating`
 
-func PromptSignature() []byte {
-	fnv := fnv.New32a()
-	lo.Must(io.WriteString(fnv, systemMessage))
-	return fnv.Sum(nil)
-}
+const recipeImagePromptInstructions = `
+Generate a realistic overhead food photograph of a single finished plate.
+- Home cooked by a above average cook, not a restaurant or food stylist.
+- Keep plating simple and believable. No tweezers, foam, edible flowers, microgreens, or luxury flourishes unless in recipe instructions.
+- Use a simple kitchen counter, stovetop, sheet pan, wooden table, or casual dining table backdrop.
+- Use natural colors, ordinary cookware or tableware, and realistic portions 
+- Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes 
+- If the recipe has multiple components, show them plated together
+`
+
+const (
+	recipeImageModel = openai.ImageModelGPTImage1_5 // dalle-3 is getting deprecated. 1.5 seems way better than 1.
+	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
+	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
+	recipeImageQuality      = openai.ImageGenerateParamsQualityHigh
+	recipeImageSize         = openai.ImageGenerateParamsSize1024x1024
+)
 
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
 	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
@@ -238,6 +254,39 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 		return "", fmt.Errorf("empty response from model")
 	}
 	return answer, nil
+}
+
+func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*GeneratedImage, error) {
+	prompt, err := buildRecipeImagePrompt(recipe)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
+	}
+
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	resp, err := client.Images.Generate(ctx, openai.ImageGenerateParams{
+		Prompt:       prompt,
+		Model:        recipeImageModel,
+		N:            openai.Int(1),
+		OutputFormat: recipeImageOutputFormat,
+		Quality:      recipeImageQuality,
+		Size:         recipeImageSize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
+	}
+
+	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("image generation returned no images")
+	}
+	imageBody := strings.TrimSpace(resp.Data[0].B64JSON)
+	if imageBody == "" {
+		return nil, fmt.Errorf("image generation returned empty image data")
+	}
+
+	return &GeneratedImage{
+		Body: base64.NewDecoder(base64.StdEncoding, strings.NewReader(imageBody)),
+	}, nil
 }
 
 func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*WineSelection, error) {
@@ -328,6 +377,20 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 
 func user(msg string) responses.ResponseInputItemUnionParam {
 	return responses.ResponseInputItemParamOfMessage(msg, responses.EasyInputMessageRoleUser)
+}
+
+func buildRecipeImagePrompt(recipe Recipe) (string, error) {
+	var promptBuilder strings.Builder
+	fmt.Fprintf(&promptBuilder, "%s\n", recipeImagePromptInstructions)
+	fmt.Fprintf(&promptBuilder, "\n")
+	fmt.Fprintf(&promptBuilder, "Recipe:\n")
+	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Title)
+	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Description)
+	fmt.Fprintf(&promptBuilder, "Instructions:\n")
+	for _, ins := range recipe.Instructions {
+		fmt.Fprintf(&promptBuilder, "%s\n", ins)
+	}
+	return promptBuilder.String(), nil
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently

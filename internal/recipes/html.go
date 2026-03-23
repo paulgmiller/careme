@@ -15,6 +15,14 @@ import (
 	"careme/internal/templates"
 )
 
+type recipeImageView struct {
+	HasImage bool
+	Hash     string
+	// OutOfBand lets the shared panel template opt into the HTMX outerHTML swap
+	// used by the image-generation response without duplicating the panel markup.
+	OutOfBand bool
+}
+
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
 //
 // We keep ingredient expansion in Go instead of the template because the same derived
@@ -121,10 +129,11 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, hasRecipeImage bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
+	recipeHash := recipe.ComputeHash()
 	data := struct {
 		Location           locations.Location
 		Date               string
@@ -138,6 +147,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		Thread             []RecipeThreadEntry
 		Feedback           feedback.Feedback
 		RecipeHash         string
+		RecipeImage        recipeImageView
 		Style              seasons.Style
 		ServerSignedIn     bool
 	}{
@@ -152,13 +162,54 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		WineRecommendation: wineRecommendation,
 		Thread:             thread,
 		Feedback:           fb,
-		RecipeHash:         recipe.ComputeHash(),
+		RecipeHash:         recipeHash,
+		RecipeImage:        recipeImageData(recipeHash, hasRecipeImage, false),
 		Style:              seasons.GetCurrentStyle(),
 		ServerSignedIn:     signedIn,
 	}
 
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeImageView {
+	return recipeImageView{
+		HasImage:  hasImage,
+		Hash:      recipeHash,
+		OutOfBand: outOfBand,
+	}
+}
+
+func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
+	data := struct {
+		RecipeHash     string
+		RecipeImage    recipeImageView
+		ServerSignedIn bool
+	}{
+		RecipeHash:     recipeHash,
+		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, false),
+		ServerSignedIn: signedIn,
+	}
+
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action", data); err != nil {
+		http.Error(writer, "recipe image action template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
+	data := struct {
+		RecipeHash     string
+		RecipeImage    recipeImageView
+		ServerSignedIn bool
+	}{
+		RecipeHash:     recipeHash,
+		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, true),
+		ServerSignedIn: signedIn,
+	}
+
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action_response", data); err != nil {
+		http.Error(writer, "recipe image response template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
