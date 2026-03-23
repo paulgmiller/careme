@@ -1,8 +1,6 @@
 package ai
 
 import (
-	"careme/internal/kroger"
-	"careme/internal/locations"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -12,6 +10,9 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"careme/internal/kroger"
+	"careme/internal/locations"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/conversations"
