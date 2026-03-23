@@ -105,25 +105,6 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 	}
 }
 
-func (s *server) recipeImageIO() imageio {
-	if s.imageio.Cache != nil {
-		return s.imageio
-	}
-	return imageio{Cache: s.recipeio.Cache}
-}
-
-func (s *server) RecipeImageExists(ctx context.Context, hash string) (bool, error) {
-	return s.recipeImageIO().RecipeImageExists(ctx, hash)
-}
-
-func (s *server) RecipeImageFromCache(ctx context.Context, hash string) (io.ReadCloser, error) {
-	return s.recipeImageIO().RecipeImageFromCache(ctx, hash)
-}
-
-func (s *server) SaveRecipeImage(ctx context.Context, hash string, image *ai.GeneratedImage) error {
-	return s.recipeImageIO().SaveRecipeImage(ctx, hash, image)
-}
-
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
@@ -973,7 +954,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := s.ParseQueryArgs(ctx, r)
+	p, err := ParseQueryArgs(ctx, r, s.locServer)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
 		return

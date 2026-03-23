@@ -2,31 +2,17 @@ package recipes
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/users"
 	utypes "careme/internal/users/types"
 )
 
 func TestSaveRecipesToUserProfile(t *testing.T) {
-	// Create temporary cache
-	tmpDir, err := os.MkdirTemp("", "careme-test-user-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			t.Fatalf("failed to remove temp dir: %v", err)
-		}
-	})
-
-	tmpCache := cache.NewFileCache(tmpDir)
-	storage := users.NewStorage(tmpCache)
+	srv := newTestServer(t)
+	storage := srv.storage
 
 	// Create a test user
 	testUser := &utypes.User{
@@ -38,11 +24,6 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 	}
 	if err := storage.Update(testUser); err != nil {
 		t.Fatalf("failed to create test user: %v", err)
-	}
-
-	// Create server instance
-	srv := &server{
-		storage: storage,
 	}
 
 	// Create test recipes
@@ -76,19 +57,8 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 }
 
 func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
-	// Create temporary cache
-	tmpDir, err := os.MkdirTemp("", "careme-test-user-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			t.Fatalf("failed to remove temp dir: %v", err)
-		}
-	})
-
-	tmpCache := cache.NewFileCache(tmpDir)
-	storage := users.NewStorage(tmpCache)
+	srv := newTestServer(t)
+	storage := srv.storage
 
 	// Try to save the same recipe again (case-insensitive)
 	savedRecipe := ai.Recipe{
@@ -110,11 +80,6 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 	}
 	if err := storage.Update(testUser); err != nil {
 		t.Fatalf("failed to create test user: %v", err)
-	}
-
-	// Create server instance
-	srv := &server{
-		storage: storage,
 	}
 
 	// Save recipes to user profile
@@ -146,18 +111,8 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 }
 
 func TestRemoveRecipeFromUserProfile(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "careme-test-user-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			t.Fatalf("failed to remove temp dir: %v", err)
-		}
-	})
-
-	tmpCache := cache.NewFileCache(tmpDir)
-	storage := users.NewStorage(tmpCache)
+	srv := newTestServer(t)
+	storage := srv.storage
 
 	keep := utypes.Recipe{
 		Title:     "Keep Recipe",
@@ -178,10 +133,6 @@ func TestRemoveRecipeFromUserProfile(t *testing.T) {
 	}
 	if err := storage.Update(testUser); err != nil {
 		t.Fatalf("failed to create test user: %v", err)
-	}
-
-	srv := &server{
-		storage: storage,
 	}
 
 	if err := srv.removeRecipeFromUserProfile(context.Background(), *testUser, remove.Hash); err != nil {
