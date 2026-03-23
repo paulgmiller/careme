@@ -1,12 +1,11 @@
 package recipes
 
 import (
+	"careme/internal/ai"
+	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"careme/internal/ai"
-	"careme/internal/cache"
 )
 
 const wineRecommendationsCachePrefix = "wine_recommendations/"
@@ -20,6 +19,9 @@ func (rio recipeio) WineFromCache(ctx context.Context, hash string) (*ai.WineSel
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		_ = wineReader.Close()
+	}()
 	var selection ai.WineSelection
 	err = json.NewDecoder(wineReader).Decode(&selection)
 	return &selection, err
