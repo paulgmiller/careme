@@ -183,7 +183,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
 	locationServer.Register(appRoutes, mockAuth)
 	users.NewHandler(userStorage, locationStorage, mockAuth).Register(appRoutes)
-	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(appRoutes)
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth).Register(appRoutes)
 
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)

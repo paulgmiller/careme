@@ -9,21 +9,28 @@ import (
 	"careme/internal/cache"
 )
 
-const recipeImagesCachePrefix = "recipe_images/"
+const (
+	RecipeImagesContainer   = "images"
+	recipeImagesCachePrefix = "recipes/"
+)
 
 func recipeImageCacheKey(hash string) string {
 	return recipeImagesCachePrefix + hash
 }
 
-func (rio recipeio) RecipeImageExists(ctx context.Context, hash string) (bool, error) {
-	return rio.Cache.Exists(ctx, recipeImageCacheKey(hash))
+type imageio struct {
+	Cache cache.Cache
 }
 
-func (rio recipeio) RecipeImageFromCache(ctx context.Context, hash string) (io.ReadCloser, error) {
-	return rio.Cache.Get(ctx, recipeImageCacheKey(hash))
+func (iio imageio) RecipeImageExists(ctx context.Context, hash string) (bool, error) {
+	return iio.Cache.Exists(ctx, recipeImageCacheKey(hash))
 }
 
-func (rio recipeio) SaveRecipeImage(ctx context.Context, hash string, image *ai.GeneratedImage) error {
+func (iio imageio) RecipeImageFromCache(ctx context.Context, hash string) (io.ReadCloser, error) {
+	return iio.Cache.Get(ctx, recipeImageCacheKey(hash))
+}
+
+func (iio imageio) SaveRecipeImage(ctx context.Context, hash string, image *ai.GeneratedImage) error {
 	if image == nil {
 		return fmt.Errorf("recipe image is required")
 	}
@@ -31,5 +38,5 @@ func (rio recipeio) SaveRecipeImage(ctx context.Context, hash string, image *ai.
 		return fmt.Errorf("recipe image body is required")
 	}
 	// TODO store content meta data somewher?
-	return rio.Cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
+	return iio.Cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
 }

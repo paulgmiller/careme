@@ -23,8 +23,8 @@ const (
 )
 
 type recipeio struct {
-	Cache cache.Cache
-	feedback.FeedbackIO
+	Cache               cache.Cache
+	feedback.FeedbackIO // should this be pulled out?
 }
 
 func IO(c cache.Cache) recipeio {

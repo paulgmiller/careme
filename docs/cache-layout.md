@@ -8,7 +8,9 @@ This project stores cache entries in:
 - Local filesystem under `heb/` (HEB cache)
 - Local filesystem under `publix/` (Publix cache)
 - Local filesystem under `wholefoods/` (Whole Foods cache)
+- Local filesystem under `recipe-images/` (recipe image cache)
 - Azure Blob container `recipes` (default app cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
+- Azure Blob container `recipe-images` (recipe image cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `aldi` (ALDI cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `albertsons` (Albertsons-family cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `publix` (Publix cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
@@ -26,7 +28,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `ingredients/` | JSON `[]kroger.Ingredient` keyed by location hash (staples) or by wine style/date/location hash (wine candidate cache) | `internal/recipes/io.go` (`SaveIngredients`) via `internal/recipes/generator.go` (`GetStaples`, `PickAWine`) | `internal/recipes/io.go` (`IngredientsFromCache`) via `internal/recipes/generator.go` (`GetStaples`, `PickAWine`) |
 | `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
 | `recipe/` | JSON `ai.Recipe` (one recipe per hash) | `internal/recipes/io.go` (`SaveRecipes`) | `internal/recipes/io.go` (`SingleFromCache`) |
-| `recipe_images/` | WebP bytes for single-recipe dish images keyed by recipe hash | `internal/recipes/image.go` (`SaveRecipeImage`) via `internal/recipes/server.go` (`POST /recipe/{hash}/image`) | `internal/recipes/image.go` (`RecipeImageFromCache`, `RecipeImageExists`) via `internal/recipes/server.go` (`GET /recipe/{hash}/image`, `handleSingle`) |
+| `recipe_images/` | WebP bytes for single-recipe dish images keyed by recipe hash in the dedicated `recipe-images` cache backend | `internal/recipes/image.go` (`SaveRecipeImage`) via `internal/recipes/server.go` (`POST /recipe/{hash}/image`) | `internal/recipes/image.go` (`RecipeImageFromCache`, `RecipeImageExists`) via `internal/recipes/server.go` (`GET /recipe/{hash}/image`, `handleSingle`) |
 | `wine_recommendations/` | Plain text wine recommendation keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
 | `recipe_selection/` | JSON `recipeSelection` (`saved_hashes`, `dismissed_hashes`, `updated_at`) keyed by `<user_id>/<origin_hash>` | `internal/recipes/selection.go` (`saveRecipeSelection`) via `internal/recipes/server.go` (`handleSaveRecipe`, `handleDismissRecipe`) | `internal/recipes/selection.go` (`loadRecipeSelection`) via `internal/recipes/server.go` (`handleRegenerate`, `handleFinalize`, `handleRecipes`) |
 | `recipe_thread/` | JSON `[]RecipeThreadEntry` (Q/A thread for a recipe hash) | `internal/recipes/thread.go` (`SaveThread`) | `internal/recipes/thread.go` (`ThreadFromCache`) |
@@ -53,8 +55,9 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 - Albertsons-family locations use a separate cache created via `cache.EnsureCache("albertsons")`.
 - HEB locations use a separate cache created via `cache.EnsureCache("heb")`.
 - Publix uses a separate cache created via `cache.EnsureCache("publix")`; it does not share the `recipes` container/directory.
+- Recipe images use a separate cache created via `cache.EnsureCache("recipe-images")`; they do not share the main `recipes` container/directory.
 - Whole Foods uses a separate cache created via `cache.EnsureCache("wholefoods")`; it does not share the `recipes` container/directory.
-- Local cache paths are `recipes/` for most app data, `aldi/` for ALDI data, `albertsons/` for Albertsons-family data, `heb/` for HEB data, `publix/` for Publix data, and `wholefoods/` for Whole Foods data when filesystem backend is used.
+- Local cache paths are `recipes/` for most app data, `recipe-images/` for recipe images, `aldi/` for ALDI data, `albertsons/` for Albertsons-family data, `heb/` for HEB data, `publix/` for Publix data, and `wholefoods/` for Whole Foods data when filesystem backend is used.
 - Blob names in Azure match the same key strings listed above inside their respective containers.
 - Staple `ingredients/` cache keys derive from location ID, date, and a versioned backend staple signature (for example `kroger-staples-v1` or `wholefoods-staples-v1`), so Kroger and Whole Foods locations do not share staple caches and staple-definition changes can invalidate caches intentionally.
 - Recipe image cache keys are stable per recipe hash, so prompt or model changes do not orphan previously generated images.

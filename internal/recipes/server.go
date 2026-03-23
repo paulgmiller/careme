@@ -3,6 +3,16 @@ package recipes
 import (
 	"bufio"
 	"bytes"
+	"careme/internal/ai"
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
+	"careme/internal/seasons"
+	"careme/internal/templates"
+	"careme/internal/users"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -16,17 +26,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"careme/internal/ai"
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/recipes/feedback"
-	"careme/internal/routing"
-	"careme/internal/seasons"
-	"careme/internal/templates"
-	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 
@@ -82,9 +81,9 @@ type generator interface {
 
 type server struct {
 	recipeio
+	imageio
 	cfg       *config.Config
 	storage   *users.Storage
-	cache     cache.Cache
 	generator generator
 	locServer locServer
 	wg        sync.WaitGroup
@@ -93,16 +92,35 @@ type server struct {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, clerkClient auth.AuthClient) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, imageCache cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
 		recipeio:  IO(c),
-		cache:     c,
+		imageio:   imageio{Cache: imageCache},
 		cfg:       cfg,
 		storage:   storage,
 		generator: generator,
 		locServer: locServer,
 		clerk:     clerkClient,
 	}
+}
+
+func (s *server) recipeImageIO() imageio {
+	if s.imageio.Cache != nil {
+		return s.imageio
+	}
+	return imageio{Cache: s.recipeio.Cache}
+}
+
+func (s *server) RecipeImageExists(ctx context.Context, hash string) (bool, error) {
+	return s.recipeImageIO().RecipeImageExists(ctx, hash)
+}
+
+func (s *server) RecipeImageFromCache(ctx context.Context, hash string) (io.ReadCloser, error) {
+	return s.recipeImageIO().RecipeImageFromCache(ctx, hash)
+}
+
+func (s *server) SaveRecipeImage(ctx context.Context, hash string, image *ai.GeneratedImage) error {
+	return s.recipeImageIO().SaveRecipeImage(ctx, hash, image)
 }
 
 func (s *server) Register(mux routing.Registrar) {
