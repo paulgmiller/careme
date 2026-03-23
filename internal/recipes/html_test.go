@@ -237,8 +237,8 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, "Choose a wine") {
 		t.Error("recipe HTML should include choose a wine button")
 	}
-	if !strings.Contains(html, "Make dish image") {
-		t.Error("recipe HTML should include make dish image button")
+	if !strings.Contains(html, "See plated dish") {
+		t.Error("recipe HTML should include see plated dish button")
 	}
 	if !strings.Contains(html, "htmx-indicator") {
 		t.Error("recipe HTML should include button spinners for async actions")
@@ -279,7 +279,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should not contain question input when signed out")
 	}
-	if !strings.Contains(html, "Sign in to ask questions, get wine picks, and make dish images") {
+	if !strings.Contains(html, "Sign in to ask follow-up questions") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
 	}
 	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/wine"`) {
@@ -370,8 +370,8 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	if got := strings.Count(html, "Backup Chardonnay"); got != 1 {
 		t.Errorf("recipe HTML should only show backup wine in recommendation, got count %d", got)
 	}
-	if !strings.Contains(html, "Show wine pick") {
-		t.Error("recipe HTML should keep the wine action available when recommendation exists")
+	if strings.Contains(html, "Choose a wine") {
+		t.Error("recipe HTML should not render the wine picker when recommendation exists")
 	}
 }
 

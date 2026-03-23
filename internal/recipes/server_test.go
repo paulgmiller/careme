@@ -501,8 +501,8 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 	if !strings.Contains(body, "Balances the rich chicken skin.") {
 		t.Fatalf("expected cached wine commentary in response, got body: %s", body)
 	}
-	if !strings.Contains(body, "Show wine pick") {
-		t.Fatalf("expected wine action to remain available when cached recommendation exists, got body: %s", body)
+	if strings.Contains(body, "Choose a wine") {
+		t.Fatalf("expected cached recommendation to replace the wine picker, got body: %s", body)
 	}
 }
 
