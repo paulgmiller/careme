@@ -187,6 +187,8 @@ func PromptSignature() []byte {
 	return fnv.Sum(nil)
 }
 
+// this is used both in storage and as part of image url to redo image generation
+// its a little scary becuase chaning this will cause all recipes to lose existing images.
 func RecipeImageSignature() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, recipeImagePromptInstructions))
