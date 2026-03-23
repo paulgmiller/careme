@@ -16,8 +16,11 @@ import (
 )
 
 type recipeImageView struct {
-	HasImage bool
-	Hash     string
+	HasImage  bool
+	Hash      string
+	// OutOfBand lets the shared panel template opt into the HTMX outerHTML swap
+	// used by the image-generation response without duplicating the panel markup.
+	OutOfBand bool
 }
 
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
@@ -160,7 +163,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		Thread:             thread,
 		Feedback:           fb,
 		RecipeHash:         recipeHash,
-		RecipeImage:        recipeImageData(recipeHash, hasRecipeImage),
+		RecipeImage:        recipeImageData(recipeHash, hasRecipeImage, false),
 		Style:              seasons.GetCurrentStyle(),
 		ServerSignedIn:     signedIn,
 	}
@@ -170,10 +173,11 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 	}
 }
 
-func recipeImageData(recipeHash string, hasImage bool) recipeImageView {
+func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeImageView {
 	return recipeImageView{
-		HasImage: hasImage,
-		Hash:     recipeHash,
+		HasImage:  hasImage,
+		Hash:      recipeHash,
+		OutOfBand: outOfBand,
 	}
 }
 
@@ -184,7 +188,7 @@ func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImag
 		ServerSignedIn bool
 	}{
 		RecipeHash:     recipeHash,
-		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage),
+		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, false),
 		ServerSignedIn: signedIn,
 	}
 
@@ -200,7 +204,7 @@ func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRe
 		ServerSignedIn bool
 	}{
 		RecipeHash:     recipeHash,
-		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage),
+		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, true),
 		ServerSignedIn: signedIn,
 	}
 

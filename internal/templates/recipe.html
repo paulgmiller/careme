@@ -315,10 +315,10 @@
 {{end}}
 
 {{define "recipe_image_panel"}}
-<div id="recipe-image-panel" class="{{if not .RecipeImage.HasImage}}hidden {{end}}overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
+<div id="recipe-image-panel" {{if .RecipeImage.OutOfBand}}hx-swap-oob="outerHTML" {{end}}class="{{if not .RecipeImage.HasImage}}hidden {{end}}overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
   {{if .RecipeImage.HasImage}}
   <img src="/recipe/{{.RecipeImage.Hash}}/image"
-       alt="Generated image of {{.Recipe.Title}}"
+       alt="Generated image of the dish"
        class="h-auto w-full object-cover"
        loading="lazy" />
   {{end}}
@@ -355,12 +355,5 @@
 
 {{define "recipe_image_action_response"}}
 {{template "recipe_image_action" .}}
-<div id="recipe-image-panel" hx-swap-oob="outerHTML" class="{{if not .RecipeImage.HasImage}}hidden {{end}}overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
-  {{if .RecipeImage.HasImage}}
-  <img src="/recipe/{{.RecipeImage.Hash}}/image"
-       alt="Generated image of {{.RecipeHash}}"
-       class="h-auto w-full object-cover"
-       loading="lazy" />
-  {{end}}
-</div>
+{{template "recipe_image_panel" .}}
 {{end}}
