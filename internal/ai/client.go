@@ -1,6 +1,8 @@
 package ai
 
 import (
+	"careme/internal/kroger"
+	"careme/internal/locations"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -10,9 +12,6 @@ import (
 	"log/slog"
 	"strings"
 	"time"
-
-	"careme/internal/kroger"
-	"careme/internal/locations"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/conversations"
@@ -155,26 +154,23 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 - Verify the dish have a good appearance after plating`
 
 const recipeImagePromptInstructions = `
-Generate a realistic food photograph of the finished dish for a recipe page.
-
-Requirements:
-- Show the completed dish described in the recipe JSON.
-- Make it look like a strong home cook prepared it in a real home kitchen.
-- Keep plating simple and believable. No tweezers, foam, edible flowers, microgreens, or luxury restaurant flourishes unless the recipe clearly calls for them.
-- Use a simple kitchen counter, stovetop, sheet pan, wooden table, or casual dining table setting that matches the dish.
-- Focus on the food and serving vessel.
-- Use natural colors, ordinary cookware or tableware, and realistic portions for a meal cooked at home.
-- Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes not implied by the recipe.
-- If the recipe has multiple components, show them plated together as the meal a home cook would serve.
+Generate a realistic overhead food photograph of a single finished plate.
+- Home cooked by a above average cook, not a restaurant or food stylist.
+- Keep plating simple and believable. No tweezers, foam, edible flowers, microgreens, or luxury flourishes unless in recipe instructions.
+- Use a simple kitchen counter, stovetop, sheet pan, wooden table, or casual dining table backdrop.
+- Use natural colors, ordinary cookware or tableware, and realistic portions 
+- Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes 
+- If the recipe has multiple components, show them plated together
 `
 
 const (
-	recipeImageContentType = "image/webp"
-	recipeImageModel       = openai.ImageModelGPTImage1
-	// WebP is usually much smaller for these generated food photos on mobile; PNG would preserve lossless pixels but costs meaningfully more bandwidth.
-	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
-	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
-	recipeImageSize         = openai.ImageGenerateParamsSize1024x1536
+	recipeImageContentType = "image/png"
+	recipeImageModel       = openai.ImageModelDallE3
+	// DALL-E 3 returns PNG image bytes; response_format controls transport, not the image mime type.
+	recipeImageResponseFormat = openai.ImageGenerateParamsResponseFormatB64JSON
+	recipeImageQuality        = openai.ImageGenerateParamsQualityHD
+	recipeImageSize           = openai.ImageGenerateParamsSize1024x1024
+	recipeImageStyle          = openai.ImageGenerateParamsStyleNatural
 )
 
 func RecipeImageContentType() string {
@@ -193,9 +189,10 @@ func RecipeImageSignature() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, recipeImagePromptInstructions))
 	lo.Must(io.WriteString(fnv, string(recipeImageModel)))
-	lo.Must(io.WriteString(fnv, string(recipeImageOutputFormat)))
+	lo.Must(io.WriteString(fnv, string(recipeImageResponseFormat)))
 	lo.Must(io.WriteString(fnv, string(recipeImageQuality)))
 	lo.Must(io.WriteString(fnv, string(recipeImageSize)))
+	lo.Must(io.WriteString(fnv, string(recipeImageStyle)))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
@@ -292,13 +289,13 @@ func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	resp, err := client.Images.Generate(ctx, openai.ImageGenerateParams{
-		Prompt:       prompt,
-		Model:        recipeImageModel,
-		N:            openai.Int(1),
-		Background:   openai.ImageGenerateParamsBackgroundOpaque,
-		OutputFormat: recipeImageOutputFormat,
-		Quality:      recipeImageQuality,
-		Size:         recipeImageSize,
+		Prompt:         prompt,
+		Model:          recipeImageModel,
+		N:              openai.Int(1),
+		Quality:        recipeImageQuality,
+		ResponseFormat: recipeImageResponseFormat,
+		Size:           recipeImageSize,
+		Style:          recipeImageStyle,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
@@ -410,11 +407,16 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 }
 
 func buildRecipeImagePrompt(recipe Recipe) (string, error) {
-	recipeJSON, err := json.MarshalIndent(recipe, "", "  ")
-	if err != nil {
-		return "", err
+	var promptBuilder strings.Builder
+	promptBuilder.WriteString(recipeImagePromptInstructions)
+	promptBuilder.WriteString("\n\nRecipe:\n")
+	promptBuilder.WriteString(fmt.Sprintf("%s\n", recipe.Title))
+	promptBuilder.WriteString(fmt.Sprintf("%s\n", recipe.Description))
+	promptBuilder.WriteString("Instructions:\n")
+	for _, ins := range recipe.Instructions {
+		promptBuilder.WriteString(fmt.Sprintf("%s\n", ins))
 	}
-	return strings.TrimSpace(recipeImagePromptInstructions) + "\n\nRecipe JSON:\n" + string(recipeJSON), nil
+	return promptBuilder.String(), nil
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
