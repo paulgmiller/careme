@@ -17,7 +17,21 @@
 - Missing produce for location safeway_01: alfalfa sprout, aloe vera leaf, anaheim pepper, apple, arugula, baby arugula, baby bok choy, baby spinach, baby spring mix, banana, bean sprout, blackberry, blueberry, bok choy, broccolini, butterhead lettuce, cantaloupe, celery root, curly kale, daikon radish, golden beet, green bean, green chili pepper, habanero pepper, honeydew melon, horseradish root, italian parsley, jalapeno pepper, jicama, king trumpet mushroom, kiwi, lemongrass, little gem lettuce, mango, mixed sprout, napa cabbage, orange bell pepper, parsnip, pear, pineapple, poblano pepper, portabella mushroom, radicchio, rainbow chard, raspberry, red chili pepper, romaine lettuce, rutabaga, sage, seedless cucumber, serrano pepper, sliced mushroom blend, spring mix, strawberry, sweet corn, tomatillo, turnip, watermelon, yuca
 - Produce score  0.448598: 48/107 with 272 ingredients
 
-## Other stors
+
+### 
+
+% go run . -l safeway_123 
+2026/03/23 15:47:22 INFO Loaded safeway products product_count=600 wine_count=150
+2026/03/23 15:47:22 INFO Filtered safeway products total_count=600 unavailable_count=159 salami_count=125 packaged_produce_count=0 final_count=316
+2026/03/23 15:47:22 INFO Filtered safeway products total_count=150 unavailable_count=83 salami_count=0 packaged_produce_count=0 final_count=67
+2026/03/23 15:47:22 INFO Loaded safeway staples_count=600 wine_count=150 filtered_staples=316 filtered_wines=67
+2026/03/23 15:47:22 INFO Filtered safeway products total_count=600 unavailable_count=159 salami_count=125 packaged_produce_count=0 final_count=316
+- * -> 316 ingredients, 48/107 produce terms, 114 matches, 0 unique-only products
+missing produce for location safeway_123: alfalfa sprout, aloe vera leaf, anaheim pepper, apple, arugula, baby arugula, baby bok choy, baby spinach, baby spring mix, banana, bean sprout, blackberry, blueberry, bok choy, broccolini, butterhead lettuce, cantaloupe, celery root, curly kale, daikon radish, golden beet, green bean, green chili pepper, habanero pepper, honeydew melon, horseradish root, italian parsley, jalapeno pepper, jicama, king trumpet mushroom, kiwi, lemongrass, little gem lettuce, mango, mixed sprout, napa cabbage, orange bell pepper, parsnip, pear, pineapple, poblano pepper, portabella mushroom, radicchio, rainbow chard, raspberry, red chili pepper, romaine lettuce, rutabaga, sage, seedless cucumber, serrano pepper, sliced mushroom blend, spring mix, strawberry, sweet corn, tomatillo, turnip, watermelon, yuca
+Produce score  0.448598: 48/107 with 316 ingredients
+
+
+## Other stores
 
 ### QFC 70500874
 - * -> 776 ingredients, 86/107 produce terms, 373 matches
