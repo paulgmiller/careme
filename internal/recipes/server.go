@@ -1,12 +1,14 @@
 package recipes
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -237,10 +239,25 @@ func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
 		return
 	}
+	defer func() {
+		if err := imageBody.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close cached recipe image", "hash", hash, "error", err)
+		}
+	}()
 
-	w.Header().Set("Content-Type", ai.RecipeImageContentType())
+	imageReader := bufio.NewReader(imageBody)
+	header, err := imageReader.Peek(512)
+	if err != nil && !errors.Is(err, bufio.ErrBufferFull) && !errors.Is(err, io.EOF) {
+		slog.ErrorContext(ctx, "failed to sniff cached recipe image", "hash", hash, "error", err)
+		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", http.DetectContentType(header))
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	http.ServeContent(w, r, hash+"."+recipeImageExtension(ai.RecipeImageContentType()), time.Time{}, bytes.NewReader(imageBody))
+	if _, err := io.Copy(w, imageReader); err != nil {
+		slog.ErrorContext(ctx, "failed to stream cached recipe image", "hash", hash, "error", err)
+	}
 }
 
 func (s *server) handleGenerateRecipeImage(w http.ResponseWriter, r *http.Request) {

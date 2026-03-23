@@ -1077,7 +1077,7 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 		Instructions: []string{"Roast until done."},
 	}
 	recipeHash := recipe.ComputeHash()
-	imageBody := []byte{0x89, 'P', 'N', 'G'}
+	imageBody := []byte{'R', 'I', 'F', 'F', 0x24, 0x00, 0x00, 0x00, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '}
 	if err := s.SaveRecipeImage(t.Context(), recipeHash, &ai.GeneratedImage{Body: bytes.NewReader(imageBody), ContentType: ai.RecipeImageContentType()}); err != nil {
 		t.Fatalf("failed to seed recipe image: %v", err)
 	}
@@ -1091,8 +1091,8 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr.Code, rr.Body.String())
 	}
-	if got := rr.Header().Get("Content-Type"); got != ai.RecipeImageContentType() {
-		t.Fatalf("expected %q content type, got %q", ai.RecipeImageContentType(), got)
+	if got, want := rr.Header().Get("Content-Type"), http.DetectContentType(imageBody); got != want {
+		t.Fatalf("expected %q content type, got %q", want, got)
 	}
 	if got := rr.Body.Bytes(); !bytes.Equal(got, imageBody) {
 		t.Fatalf("expected cached image bytes %v, got %v", imageBody, got)
