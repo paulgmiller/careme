@@ -45,18 +45,14 @@ func TestParseQueryArgs_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 		nowFn = oldNowFn
 	}()
 
-	s := &server{
-		locServer: staticLocationLookup{
-			location: &locations.Location{
-				ID:      "store-1",
-				Name:    "Test Store",
-				ZipCode: "10001",
-			},
-		},
+	location := &locations.Location{
+		ID:      "store-1",
+		Name:    "Test Store",
+		ZipCode: "10001",
 	}
 
 	req := httptest.NewRequest("GET", "/recipes?location=store-1", nil)
-	p, err := s.ParseQueryArgs(context.Background(), req)
+	p, err := ParseQueryArgs(context.Background(), req, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("ParseQueryArgs returned error: %v", err)
 	}

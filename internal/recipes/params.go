@@ -98,17 +98,19 @@ func legacyHashToCurrent(hash string, seed string) (string, bool) {
 	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
 }
 
-func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generatorParams, error) {
+func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*generatorParams, error) {
 	loc := r.URL.Query().Get("location")
 	if loc == "" {
 		return nil, errors.New("must provide location id")
 	}
+	if ls == nil {
+		return nil, errors.New("location lookup is required")
+	}
 
-	l, err := s.locServer.GetLocationByID(ctx, loc)
+	l, err := ls.GetLocationByID(ctx, loc)
 	if err != nil {
 		return nil, err
 	}
-
 	storeLoc, err := resolveStoreTimeLocation(ctx, l)
 	if err != nil {
 		return nil, err
