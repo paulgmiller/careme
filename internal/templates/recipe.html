@@ -39,6 +39,9 @@
             {{if .Location.Address}}<span class="text-sm text-gray-500">({{.Location.Address}})</span>{{end}}
           </p>
           {{end}}
+          {{if .OriginHash}}
+          <a href="/recipes?h={{.OriginHash}}" class="mt-2 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back to shopping list</a>
+          {{end}}
         </div>
 
         <div class="p-8 space-y-8">
@@ -47,9 +50,6 @@
               <h2 class="text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
               <p class="text-sm text-gray-500">{{.Recipe.Description}}</p>
               {{template "recipe_image_action" .}}
-              {{if .OriginHash}}
-              <a href="/recipes?h={{.OriginHash}}" class="text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back to full list</a>
-              {{end}}
             </header>
 
             {{template "recipe_image_panel" .}}
@@ -328,10 +328,6 @@
 {{define "recipe_image_action"}}
 <div id="recipe-image-action">
   {{if .RecipeImage.HasImage}}
-  <a href="#recipe-image-panel"
-     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-brand-50 px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    View dish image
-  </a>
   {{else if .ServerSignedIn}}
   <button type="button"
           id="recipe-image-generate-button"

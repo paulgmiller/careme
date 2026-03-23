@@ -394,8 +394,8 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	if !strings.Contains(html, "/recipe/"+recipeHash+"/image?v="+ai.RecipeImageSignature()) {
 		t.Fatalf("recipe HTML should render the cached recipe image URL, got body: %s", html)
 	}
-	if !strings.Contains(html, "View dish image") {
-		t.Fatalf("recipe HTML should render the image action when an image exists, got body: %s", html)
+	if strings.Contains(html, "View dish image") || strings.Contains(html, "See plated dish") {
+		t.Fatalf("recipe HTML should not render an image action when an image exists, got body: %s", html)
 	}
 }
 
