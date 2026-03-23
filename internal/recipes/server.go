@@ -277,6 +277,9 @@ func (s *server) handleGenerateRecipeImage(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		//this like wine is slow should we kick it into a go routine and poll? https://htmx.org/docs/#load_polling same for wine?
+		s.wg.Add(1)
+		defer s.wg.Done()
 		generationCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
 		defer cancel()
 		image, err := s.generator.GenerateRecipeImage(generationCtx, *recipe)

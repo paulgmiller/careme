@@ -12,7 +12,7 @@ import (
 // InMemoryCache stores cache entries in process memory.
 type InMemoryCache struct {
 	mu   sync.RWMutex
-	data map[string]string
+	data map[string][]byte
 }
 
 var (
@@ -22,7 +22,7 @@ var (
 
 func NewInMemoryCache() *InMemoryCache {
 	return &InMemoryCache{
-		data: make(map[string]string),
+		data: make(map[string][]byte),
 	}
 }
 
@@ -33,7 +33,7 @@ func (c *InMemoryCache) Get(_ context.Context, key string) (io.ReadCloser, error
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return io.NopCloser(strings.NewReader(value)), nil
+	return io.NopCloser(bytes.NewReader(value)), nil
 }
 
 func (c *InMemoryCache) Exists(_ context.Context, key string) (bool, error) {
@@ -62,7 +62,7 @@ func (c *InMemoryCache) PutReader(_ context.Context, key string, reader io.Reade
 		}
 	}
 
-	c.data[key] = buf.String()
+	c.data[key] = buf.Bytes()
 	return nil
 }
 
