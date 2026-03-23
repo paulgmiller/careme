@@ -381,13 +381,14 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 
 func buildRecipeImagePrompt(recipe Recipe) (string, error) {
 	var promptBuilder strings.Builder
-	promptBuilder.WriteString(recipeImagePromptInstructions)
-	promptBuilder.WriteString("\n\nRecipe:\n")
-	promptBuilder.WriteString(fmt.Sprintf("%s\n", recipe.Title))
-	promptBuilder.WriteString(fmt.Sprintf("%s\n", recipe.Description))
-	promptBuilder.WriteString("Instructions:\n")
+	fmt.Fprintf(&promptBuilder, "%s\n", recipeImagePromptInstructions)
+	fmt.Fprintf(&promptBuilder, "\n")
+	fmt.Fprintf(&promptBuilder, "Recipe:\n")
+	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Title)
+	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Description)
+	fmt.Fprintf(&promptBuilder, "Instructions:\n")
 	for _, ins := range recipe.Instructions {
-		promptBuilder.WriteString(fmt.Sprintf("%s\n", ins))
+		fmt.Fprintf(&promptBuilder, "%s\n", ins)
 	}
 	return promptBuilder.String(), nil
 }
