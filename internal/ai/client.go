@@ -31,8 +31,7 @@ type Client struct {
 }
 
 type GeneratedImage struct {
-	Body        io.Reader
-	ContentType string
+	Body io.Reader
 }
 
 // todo collapse closer to
@@ -165,17 +164,12 @@ Generate a realistic overhead food photograph of a single finished plate.
 `
 
 const (
-	recipeImageContentType = "image/webp"
-	recipeImageModel       = openai.ImageModelGPTImage1_5 // dalle-3 is getting deprecated. 1.5 seems way better than 1.
+	recipeImageModel = openai.ImageModelGPTImage1_5 // dalle-3 is getting deprecated. 1.5 seems way better than 1.
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
 	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
 	recipeImageQuality      = openai.ImageGenerateParamsQualityHigh
 	recipeImageSize         = openai.ImageGenerateParamsSize1024x1024
 )
-
-func RecipeImageContentType() string {
-	return recipeImageContentType
-}
 
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
 	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
@@ -291,8 +285,7 @@ func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 	}
 
 	return &GeneratedImage{
-		Body:        base64.NewDecoder(base64.StdEncoding, strings.NewReader(imageBody)),
-		ContentType: recipeImageContentType,
+		Body: base64.NewDecoder(base64.StdEncoding, strings.NewReader(imageBody)),
 	}, nil
 }
 

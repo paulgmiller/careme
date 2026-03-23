@@ -1,11 +1,12 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
 )
 
 const wineRecommendationsCachePrefix = "wine_recommendations/"

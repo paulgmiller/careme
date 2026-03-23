@@ -712,8 +712,7 @@ func (c *captureQuestionGenerator) GenerateRecipeImage(ctx context.Context, reci
 		body = []byte("webp-bytes")
 	}
 	return &ai.GeneratedImage{
-		Body:        bytes.NewReader(body),
-		ContentType: ai.RecipeImageContentType(),
+		Body: bytes.NewReader(body),
 	}, nil
 }
 
@@ -1078,7 +1077,7 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	}
 	recipeHash := recipe.ComputeHash()
 	imageBody := []byte{'R', 'I', 'F', 'F', 0x24, 0x00, 0x00, 0x00, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '}
-	if err := s.SaveRecipeImage(t.Context(), recipeHash, &ai.GeneratedImage{Body: bytes.NewReader(imageBody), ContentType: ai.RecipeImageContentType()}); err != nil {
+	if err := s.SaveRecipeImage(t.Context(), recipeHash, &ai.GeneratedImage{Body: bytes.NewReader(imageBody)}); err != nil {
 		t.Fatalf("failed to seed recipe image: %v", err)
 	}
 

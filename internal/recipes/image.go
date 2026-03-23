@@ -1,11 +1,12 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
 	"context"
 	"fmt"
 	"io"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
 )
 
 const recipeImagesCachePrefix = "recipe_images/"

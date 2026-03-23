@@ -403,8 +403,7 @@ func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.Ge
 	_ = ctx
 	_ = recipe
 	return &ai.GeneratedImage{
-		Body:        bytes.NewReader([]byte("mock-png")),
-		ContentType: ai.RecipeImageContentType(),
+		Body: bytes.NewReader([]byte("mock-png")),
 	}, nil
 }
 
