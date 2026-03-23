@@ -1,14 +1,15 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
 
 	"github.com/samber/lo"
 )

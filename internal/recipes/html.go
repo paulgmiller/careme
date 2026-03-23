@@ -16,8 +16,8 @@ import (
 )
 
 type recipeImageView struct {
-	HasImage  bool
-	Hash      string
+	HasImage bool
+	Hash     string
 	// OutOfBand lets the shared panel template opt into the HTMX outerHTML swap
 	// used by the image-generation response without duplicating the panel markup.
 	OutOfBand bool
