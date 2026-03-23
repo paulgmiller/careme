@@ -9,7 +9,7 @@
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
   <meta property="og:title" content="{{.Recipe.Title}}" />
   <meta property="og:description" content="{{.Recipe.Description}}" />
-  <meta property="og:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image?v={{.RecipeImage.Version}}{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
+  <meta property="og:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Careme" />
 
@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="{{.Recipe.Title}}" />
   <meta name="twitter:description" content="{{.Recipe.Description}}" />
-  <meta name="twitter:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image?v={{.RecipeImage.Version}}{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
+  <meta name="twitter:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
   {{end}}
 
   {{template "tailwind_head" .Style}}
@@ -317,7 +317,7 @@
 {{define "recipe_image_panel"}}
 <div id="recipe-image-panel" class="{{if not .RecipeImage.HasImage}}hidden {{end}}overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
   {{if .RecipeImage.HasImage}}
-  <img src="/recipe/{{.RecipeImage.Hash}}/image?v={{.RecipeImage.Version}}"
+  <img src="/recipe/{{.RecipeImage.Hash}}/image"
        alt="Generated image of {{.Recipe.Title}}"
        class="h-auto w-full object-cover"
        loading="lazy" />
@@ -357,7 +357,7 @@
 {{template "recipe_image_action" .}}
 <div id="recipe-image-panel" hx-swap-oob="outerHTML" class="{{if not .RecipeImage.HasImage}}hidden {{end}}overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
   {{if .RecipeImage.HasImage}}
-  <img src="/recipe/{{.RecipeImage.Hash}}/image?v={{.RecipeImage.Version}}"
+  <img src="/recipe/{{.RecipeImage.Hash}}/image"
        alt="Generated image of {{.RecipeHash}}"
        class="h-auto w-full object-cover"
        loading="lazy" />

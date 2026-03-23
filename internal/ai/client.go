@@ -177,25 +177,6 @@ func RecipeImageContentType() string {
 	return recipeImageContentType
 }
 
-func PromptSignature() []byte {
-	fnv := fnv.New32a()
-	lo.Must(io.WriteString(fnv, systemMessage))
-	return fnv.Sum(nil)
-}
-
-// this is used both in storage and as part of image url to redo image generation
-// its a little scary becuase chaning this will cause all recipes to lose existing images.
-func RecipeImageSignature() string {
-	fnv := fnv.New64a()
-	lo.Must(io.WriteString(fnv, recipeImagePromptInstructions))
-	lo.Must(io.WriteString(fnv, string(recipeImageModel)))
-	lo.Must(io.WriteString(fnv, string(recipeImageResponseFormat)))
-	lo.Must(io.WriteString(fnv, string(recipeImageQuality)))
-	lo.Must(io.WriteString(fnv, string(recipeImageSize)))
-	lo.Must(io.WriteString(fnv, string(recipeImageStyle)))
-	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
-}
-
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
 	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
 	var shoppingList ShoppingList

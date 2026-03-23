@@ -1140,7 +1140,7 @@ func TestHandleGenerateRecipeImage_GeneratesAndCachesOnMiss(t *testing.T) {
 	if !strings.Contains(body, `id="recipe-image-panel"`) || !strings.Contains(body, `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected recipe image panel out-of-band update, got body: %s", body)
 	}
-	if !strings.Contains(body, "/recipe/"+recipeHash+"/image?v="+ai.RecipeImageSignature()) {
+	if !strings.Contains(body, "/recipe/"+recipeHash+"/image") {
 		t.Fatalf("expected recipe image URL in response, got body: %s", body)
 	}
 	if got, want := g.imageCalls, 1; got != want {

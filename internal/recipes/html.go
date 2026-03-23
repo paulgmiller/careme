@@ -18,7 +18,6 @@ import (
 type recipeImageView struct {
 	HasImage bool
 	Hash     string
-	Version  string
 }
 
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
@@ -175,7 +174,6 @@ func recipeImageData(recipeHash string, hasImage bool) recipeImageView {
 	return recipeImageView{
 		HasImage: hasImage,
 		Hash:     recipeHash,
-		Version:  ai.RecipeImageSignature(),
 	}
 }
 

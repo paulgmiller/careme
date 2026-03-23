@@ -106,10 +106,10 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRecipeImagePrompt returned error: %v", err)
 	}
-	if !strings.Contains(prompt, "realistic food photograph") {
+	if !strings.Contains(prompt, "realistic overhead food photograph") {
 		t.Fatalf("expected image prompt instructions in prompt: %s", prompt)
 	}
-	if !strings.Contains(prompt, `"title": "Roast Chicken"`) {
-		t.Fatalf("expected recipe JSON in prompt: %s", prompt)
+	if !strings.Contains(prompt, "Recipe:\nRoast Chicken\nCrisp skin and herbs.\nInstructions:\nRoast until golden.\n") {
+		t.Fatalf("expected recipe summary in prompt: %s", prompt)
 	}
 }

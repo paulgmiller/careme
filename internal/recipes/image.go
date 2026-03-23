@@ -12,7 +12,7 @@ import (
 const recipeImagesCachePrefix = "recipe_images/"
 
 func recipeImageCacheKey(hash string) string {
-	return recipeImagesCachePrefix + ai.RecipeImageSignature() + "/" + hash + "." + recipeImageExtension(ai.RecipeImageContentType())
+	return recipeImagesCachePrefix + hash + "." + recipeImageExtension(ai.RecipeImageContentType())
 }
 
 func (rio recipeio) RecipeImageExists(ctx context.Context, hash string) (bool, error) {
