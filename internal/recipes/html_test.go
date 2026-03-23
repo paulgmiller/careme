@@ -235,7 +235,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 		t.Error("recipe HTML should include wine picker htmx endpoint")
 	}
 	if !strings.Contains(html, "Choose a wine") {
-		t.Error("recipe HTML should include choose a wine button")
+		t.Error("recipe HTML should include choose wine button")
 	}
 	if !strings.Contains(html, "See plated dish") {
 		t.Error("recipe HTML should include see plated dish button")
