@@ -2,13 +2,12 @@ package storeindex
 
 import (
 	"bytes"
+	"careme/internal/cache"
+	"careme/internal/parallelism"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-
-	"careme/internal/cache"
-	"careme/internal/parallelism"
 
 	locationtypes "careme/internal/locations/types"
 )
@@ -104,13 +103,15 @@ func RebuildFromStoreSummaries[T any](ctx context.Context, c cache.ListCache, st
 		if err != nil {
 			return nil, fmt.Errorf("read cached store summary: %w", err)
 		}
+		defer func() {
+			_ = reader.Close()
+		}()
 
 		var summary T
 		decodeErr := json.NewDecoder(reader).Decode(&summary)
 		if decodeErr != nil {
 			return nil, fmt.Errorf("decode cached store summary: %w", decodeErr)
 		}
-		_ = reader.Close()
 
 		entries = append(entries, toEntry(summary))
 	}
