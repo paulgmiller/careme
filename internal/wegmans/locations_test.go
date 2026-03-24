@@ -17,10 +17,14 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if err := CacheStoreSummary(t.Context(), cacheStore, nearbySummary()); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
-
-	backend, err := newLocationBackend(t.Context(), cacheStore, staticZIPLookup{
+	zipLookup := staticZIPLookup{
 		"16506": {Lat: 42.0817, Lon: -80.1753},
-	})
+	}
+	if err := RebuildLocationIndex(t.Context(), cacheStore, zipLookup); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
+
+	backend, err := newLocationBackend(t.Context(), cacheStore, zipLookup)
 	if err != nil {
 		t.Fatalf("NewLocationBackend returned error: %v", err)
 	}
@@ -36,6 +40,11 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if loc.Name != "Wegmans Erie West" || loc.ZipCode != "16506" || loc.Chain != "wegmans" {
 		t.Fatalf("unexpected location: %+v", loc)
 	}
+	reader, err := cacheStore.Get(t.Context(), LocationIndexCacheKey)
+	if err != nil {
+		t.Fatalf("expected compact location index to be cached: %v", err)
+	}
+	_ = reader.Close()
 }
 
 func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
@@ -48,10 +57,14 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	if err := CacheStoreSummary(t.Context(), cacheStore, farSummary()); err != nil {
 		t.Fatalf("cache far summary: %v", err)
 	}
-
-	backend, err := newLocationBackend(t.Context(), cacheStore, staticZIPLookup{
+	zipLookup := staticZIPLookup{
 		"16506": {Lat: 42.0817, Lon: -80.1753},
-	})
+	}
+	if err := RebuildLocationIndex(t.Context(), cacheStore, zipLookup); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
+
+	backend, err := newLocationBackend(t.Context(), cacheStore, zipLookup)
 	if err != nil {
 		t.Fatalf("NewLocationBackend returned error: %v", err)
 	}
@@ -77,8 +90,8 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected NewLocationBackend to return an error")
 	}
-	if !strings.Contains(err.Error(), "failed to load wegmans locations") {
-		t.Fatalf("expected missing summaries error, got %v", err)
+	if !strings.Contains(err.Error(), "load wegmans locations index") {
+		t.Fatalf("expected missing index error, got %v", err)
 	}
 }
 

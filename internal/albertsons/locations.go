@@ -7,7 +7,10 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/locations/hydrator"
 	"careme/internal/locations/nearby"
+	"careme/internal/locations/storeindex"
+
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -17,7 +20,8 @@ type centroidByZip interface {
 
 type LocationBackend struct {
 	zipLookup centroidByZip
-	byID      map[string]locationtypes.Location
+	spatial   []locationtypes.Location
+	hydrator  *hydrator.LazyHydrator
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -38,20 +42,20 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 }
 
 func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	summaries, err := loadCachedStoreSummaries(ctx, c)
+	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load albertsons locations index: %w", err)
 	}
 
-	byID := make(map[string]locationtypes.Location, len(summaries))
-	for _, summary := range summaries {
-		loc := storeSummaryToLocation(*summary)
-		byID[loc.ID] = loc
+	spatial := make([]locationtypes.Location, 0, len(entries))
+	for _, entry := range entries {
+		spatial = append(spatial, entry.ToLocation())
 	}
 
 	return &LocationBackend{
 		zipLookup: zipLookup,
-		byID:      byID,
+		spatial:   spatial,
+		hydrator:  hydrator.NewLazyHydrator(&loader{c}),
 	}, nil
 }
 
@@ -63,25 +67,21 @@ func (*LocationBackend) HasInventory(locationID string) bool {
 	return false
 }
 
-func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
+func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	locationID = strings.TrimSpace(locationID)
 	if !IsID(locationID) {
 		return nil, fmt.Errorf("albertsons location id %q is invalid", locationID)
 	}
 
-	loc, exists := b.byID[locationID]
-	if !exists {
-		return nil, fmt.Errorf("albertsons location %q not found", locationID)
+	loc, err := b.hydrator.Hydrate(ctx, locationID)
+	if err != nil {
+		return nil, err
 	}
-
 	copy := loc
 	return &copy, nil
 }
 
 func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	candidates := make([]locationtypes.Location, 0, len(b.byID))
-	for _, loc := range b.byID {
-		candidates = append(candidates, loc)
-	}
-	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, nearby.MaxLocationDistanceMiles), nil
+	candidates := nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, b.spatial, nearby.MaxLocationDistanceMiles)
+	return storeindex.HydrateLocations(ctx, candidates, b.hydrator.Hydrate)
 }

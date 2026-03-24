@@ -48,6 +48,13 @@ func TestSyncStoresCachesSummariesAndTracksMissing(t *testing.T) {
 	if len(keys) != 1 || keys[0] != "1" {
 		t.Fatalf("unexpected cached keys: %v", keys)
 	}
+	exists, err := cacheStore.Exists(context.Background(), wegmans.LocationIndexCacheKey)
+	if err != nil {
+		t.Fatalf("expected compact location index: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected compact location index to exist")
+	}
 }
 
 func TestSyncStoresSkipsCachedSummaries(t *testing.T) {

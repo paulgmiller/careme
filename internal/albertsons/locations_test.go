@@ -2,6 +2,8 @@ package albertsons
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -16,10 +18,14 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if err := CacheStoreSummary(context.Background(), cacheStore, nearbySummary()); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
-
-	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	zipLookup := staticZIPLookup{
 		"98006": {Lat: 47.5750, Lon: -122.1400},
-	})
+	}
+	if err := RebuildLocationIndex(context.Background(), cacheStore, zipLookup); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
+
+	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
 	if err != nil {
 		t.Fatalf("NewLocationBackend returned error: %v", err)
 	}
@@ -38,6 +44,29 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if loc.Name != "Safeway 15100 SE 38th St" || loc.ZipCode != "98006" || loc.Chain != "albertsons" {
 		t.Fatalf("unexpected location: %+v", loc)
 	}
+	reader, err := cacheStore.Get(context.Background(), LocationIndexCacheKey)
+	if err != nil {
+		t.Fatalf("expected compact location index to be cached: %v", err)
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("ReadAll returned error: %v", err)
+	}
+
+	var entries []map[string]any
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		t.Fatalf("Unmarshal returned error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry in compact location index, got %d", len(entries))
+	}
+	if _, ok := entries[0]["name"]; ok {
+		t.Fatalf("expected compact location index to omit hydrated fields, got %v", entries[0])
+	}
 }
 
 func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
@@ -50,10 +79,14 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	if err := CacheStoreSummary(context.Background(), cacheStore, farSummary()); err != nil {
 		t.Fatalf("cache far summary: %v", err)
 	}
-
-	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	zipLookup := staticZIPLookup{
 		"98006": {Lat: 47.5750, Lon: -122.1400},
-	})
+	}
+	if err := RebuildLocationIndex(context.Background(), cacheStore, zipLookup); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
+
+	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
 	if err != nil {
 		t.Fatalf("NewLocationBackend returned error: %v", err)
 	}
@@ -71,6 +104,40 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	if locs[0].Chain != "albertsons" {
 		t.Fatalf("unexpected location chain: %q", locs[0].Chain)
 	}
+	if locs[0].Name != "Safeway 15100 SE 38th St" || locs[0].Address != "15100 SE 38th St" {
+		t.Fatalf("expected hydrated location details, got %+v", locs[0])
+	}
+}
+
+func TestLocationBackendUsesZipCentroidWhenCoordinatesMissing(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	if err := CacheStoreSummary(context.Background(), cacheStore, noCoordsSummary()); err != nil {
+		t.Fatalf("cache no-coords summary: %v", err)
+	}
+	zipLookup := staticZIPLookup{
+		"98006": {Lat: 47.5750, Lon: -122.1400},
+	}
+	if err := RebuildLocationIndex(context.Background(), cacheStore, zipLookup); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
+
+	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
+	if err != nil {
+		t.Fatalf("NewLocationBackend returned error: %v", err)
+	}
+
+	locs, err := backend.GetLocationsByZip(context.Background(), "98006")
+	if err != nil {
+		t.Fatalf("GetLocationsByZip returned error: %v", err)
+	}
+	if len(locs) != 1 {
+		t.Fatalf("expected 1 nearby location, got %d", len(locs))
+	}
+	if locs[0].ID != "safeway_1444" {
+		t.Fatalf("unexpected location id: %q", locs[0].ID)
+	}
 }
 
 func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
@@ -82,8 +149,8 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected NewLocationBackend to return an error")
 	}
-	if !strings.Contains(err.Error(), "failed to load albertsons locations") {
-		t.Fatalf("expected missing summaries error, got %v", err)
+	if !strings.Contains(err.Error(), "load albertsons locations index") {
+		t.Fatalf("expected missing index error, got %v", err)
 	}
 }
 
@@ -133,5 +200,18 @@ func farSummary() *StoreSummary {
 		ZipCode: "71854",
 		Lat:     &lat,
 		Lon:     &lon,
+	}
+}
+
+func noCoordsSummary() *StoreSummary {
+	return &StoreSummary{
+		ID:      "safeway_1444",
+		Brand:   "safeway",
+		Domain:  "local.safeway.com",
+		StoreID: "1444",
+		Name:    "Safeway 15100 SE 38th St",
+		Address: "15100 SE 38th St",
+		State:   "WA",
+		ZipCode: "98006",
 	}
 }

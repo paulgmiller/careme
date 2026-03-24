@@ -12,6 +12,7 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/heb"
+	"careme/internal/locations"
 	"careme/internal/sitemapfetch"
 )
 
@@ -92,6 +93,9 @@ func syncFromSitemap(ctx context.Context, cacheStore cache.ListCache, httpClient
 		if err := heb.SaveStoreURLMap(ctx, cacheStore, urlMap); err != nil {
 			return synced, err
 		}
+	}
+	if err := heb.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
+		return synced, err
 	}
 	return synced, nil
 }

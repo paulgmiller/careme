@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
+	"careme/internal/locations/storeindex"
 	"careme/internal/sitemapfetch"
 
-	"github.com/samber/lo"
-	lop "github.com/samber/lo/parallel"
+	locationtypes "careme/internal/locations/types"
 )
 
 const (
@@ -21,6 +19,7 @@ const (
 	StoreURLMapCacheKey    = "heb/store_url_map.json"
 	LocationIDPrefix       = "heb_"
 	DefaultStoreSitemapURL = "https://www.heb.com/sitemap/storeSitemap.xml"
+	LocationIndexCacheKey  = "heb/store_locations.json"
 )
 
 func SaveStoreURLMap(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
@@ -47,40 +46,35 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 	return nil
 }
 
-func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreSummary, error) {
-	keys, err := c.List(ctx, StoreCachePrefix, "")
-	if err != nil {
-		return nil, fmt.Errorf("list cached store summaries: %w", err)
-	}
-
-	summaries := lop.Map(keys, func(key string, _ int) *StoreSummary {
-		reader, err := c.Get(ctx, StoreCachePrefix+key)
-		if err != nil {
-			slog.WarnContext(ctx, "failed to read cached heb store summary", "key", key, "error", err)
-			return nil
+func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
+	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey, func(summary StoreSummary) storeindex.Entry {
+		lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
+		return storeindex.Entry{
+			ID:  summary.ID,
+			Lat: lat,
+			Lon: lon,
 		}
-		defer func() {
-			_ = reader.Close()
-		}()
-
-		var summary StoreSummary
-		if err := json.NewDecoder(reader).Decode(&summary); err != nil {
-			slog.WarnContext(ctx, "failed to decode cached heb store summary", "key", key, "error", err)
-			return nil
-		}
-		return &summary
 	})
-
-	summaries = lo.Compact(summaries)
-	if len(summaries) == 0 {
-		return nil, fmt.Errorf("failed to load heb locations")
-	}
-	slog.InfoContext(ctx, "loaded heb locations", "count", len(summaries))
-
-	return summaries, nil
+	return err
 }
 
-func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
+type loader struct {
+	cache cache.Cache
+}
+
+func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Location, error) {
+	reader, err := l.cache.Get(ctx, StoreCachePrefix+locationID)
+	if err != nil {
+		return locationtypes.Location{}, err
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	var summary StoreSummary
+	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+		return locationtypes.Location{}, fmt.Errorf("decode heb store summary: %w", err)
+	}
 	return locationtypes.Location{
 		ID:      summary.ID,
 		Name:    summary.Name,
@@ -90,5 +84,5 @@ func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
 		Lat:     summary.Lat,
 		Lon:     summary.Lon,
 		Chain:   Container,
-	}
+	}, nil
 }

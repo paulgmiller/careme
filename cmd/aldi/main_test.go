@@ -42,6 +42,13 @@ func TestSyncLocationsCachesSummaries(t *testing.T) {
 	if len(keys) != 1 || keys[0] != "aldi_F100" {
 		t.Fatalf("unexpected cached keys: %v", keys)
 	}
+	exists, err := cacheStore.Exists(context.Background(), aldi.LocationIndexCacheKey)
+	if err != nil {
+		t.Fatalf("expected compact location index: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected compact location index to exist")
+	}
 }
 
 type fakeSummaryClient struct {

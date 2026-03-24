@@ -41,7 +41,7 @@ func TestSelectedChainsRejectsUnknownBrand(t *testing.T) {
 	}
 }
 
-func TestSyncChainFromSitemapSkipsKnownURLsWithCachedSummaries(t *testing.T) {
+func TestSyncChainsSkipsKnownURLsWithCachedSummaries(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
@@ -93,15 +93,22 @@ func TestSyncChainFromSitemapSkipsKnownURLsWithCachedSummaries(t *testing.T) {
 		IDPrefix:    "albertsons_",
 	}
 
-	synced, err := syncChainFromSitemap(context.Background(), cacheStore, httpClient, chain, baseURL+"/sitemap.xml", 0*time.Millisecond)
+	synced, err := syncChains(context.Background(), cacheStore, httpClient, []albertsons.Chain{chain}, 0*time.Millisecond)
 	if err != nil {
-		t.Fatalf("syncChainFromSitemap returned error: %v", err)
+		t.Fatalf("syncChains returned error: %v", err)
 	}
 	if synced != 0 {
 		t.Fatalf("expected 0 synced summaries, got %d", synced)
 	}
 	if pageRequests.Load() != 0 {
 		t.Fatalf("expected no page requests for cached url, got %d", pageRequests.Load())
+	}
+	exists, err := cacheStore.Exists(context.Background(), albertsons.LocationIndexCacheKey)
+	if err != nil {
+		t.Fatalf("expected compact location index: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected compact location index to exist")
 	}
 }
 

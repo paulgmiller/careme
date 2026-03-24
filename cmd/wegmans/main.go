@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/wegmans"
 )
@@ -128,6 +129,10 @@ func syncStores(ctx context.Context, cacheStore cache.ListCache, client storeCli
 		if cfg.delay > 0 && storeNumber < cfg.endID {
 			time.Sleep(cfg.delay)
 		}
+	}
+
+	if err := wegmans.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
+		return stats, err
 	}
 
 	return stats, nil

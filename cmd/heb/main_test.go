@@ -68,6 +68,13 @@ func TestSyncFromSitemapSkipsKnownURLs(t *testing.T) {
 	if pageRequests.Load() != 0 {
 		t.Fatalf("expected no page requests for cached url, got %d", pageRequests.Load())
 	}
+	exists, err := cacheStore.Exists(context.Background(), heb.LocationIndexCacheKey)
+	if err != nil {
+		t.Fatalf("expected compact location index: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected compact location index to exist")
+	}
 }
 
 func TestSyncFromSitemapAddsNewURLMappings(t *testing.T) {

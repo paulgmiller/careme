@@ -13,6 +13,7 @@ import (
 
 	"careme/internal/albertsons"
 	"careme/internal/cache"
+	"careme/internal/locations"
 	"careme/internal/logsetup"
 )
 
@@ -48,6 +49,15 @@ func main() {
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	delay := time.Duration(delayMS) * time.Millisecond
 
+	synced, err := syncChains(ctx, cacheStore, httpClient, chains, delay)
+	if err != nil {
+		log.Fatalf("failed to sync Albertsons-family store summaries: %v", err)
+	}
+
+	fmt.Printf("synced %d Albertsons-family store summaries\n", synced)
+}
+
+func syncChains(ctx context.Context, cacheStore cache.ListCache, httpClient *http.Client, chains []albertsons.Chain, delay time.Duration) (int, error) {
 	var synced int
 	for _, chain := range chains {
 		chainSynced, err := syncChainFromSitemap(ctx, cacheStore, httpClient, chain, chain.SitemapURL(), delay)
@@ -58,7 +68,11 @@ func main() {
 		synced += chainSynced
 	}
 
-	fmt.Printf("synced %d Albertsons-family store summaries\n", synced)
+	if err := albertsons.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
+		return synced, fmt.Errorf("rebuild location index: %w", err)
+	}
+
+	return synced, nil
 }
 
 // not concurrent safe because url map is shared. Could fix that with etags or seperate maps.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/wholefoods"
 )
@@ -64,6 +65,10 @@ func main() {
 		}
 		time.Sleep(5 * time.Second) // be nice to the server no rush here
 		synced++
+	}
+
+	if err := wholefoods.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
+		log.Fatalf("failed to rebuild Whole Foods location index: %v", err)
 	}
 
 	fmt.Printf("synced %d Whole Foods store summaries\n", synced)
