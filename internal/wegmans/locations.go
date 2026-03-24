@@ -22,6 +22,9 @@ type LocationBackend struct {
 
 func NewLocationBackend(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
 	// check enabled
+	if !cfg.Wegmans.IsEnabled() {
+		return nil, locationtypes.DisabledBackendError("Wegmans")
+	}
 
 	if zipLookup == nil {
 		return nil, fmt.Errorf("zip centroid lookup is required")
@@ -32,7 +35,11 @@ func NewLocationBackend(ctx context.Context, cfg *config.Config, zipLookup centr
 		return nil, fmt.Errorf("create HEB list cache: %w", err)
 	}
 
-	summaries, err := loadCachedStoreSummaries(ctx, listCache)
+	return newLocationBackend(ctx, listCache, zipLookup)
+}
+
+func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
+	summaries, err := loadCachedStoreSummaries(ctx, c)
 	if err != nil {
 		return nil, err
 	}

@@ -23,6 +23,7 @@ type Config struct {
 	Albertsons   AlbertsonsConfig `json:"albertsons"`
 	Publix       PublixConfig     `json:"publix"`
 	HEB          HEBConfig        `json:"heb"`
+	Wegmans      WegmansConfig    `json:"wegmans"`
 	Mocks        MockConfig       `json:"mocks"`
 	Clerk        ClerkConfig      `json:"clerk"`
 	Admin        AdminConfig      `json:"admin"`
@@ -97,6 +98,14 @@ func (c *HEBConfig) IsEnabled() bool {
 	return c.Enable
 }
 
+type WegmansConfig struct {
+	Enable bool `json:"enable"`
+}
+
+func (c *WegmansConfig) IsEnabled() bool {
+	return c.Enable
+}
+
 // Config defines the required Walmart affiliate credentials and client options.
 type WalmartConfig struct {
 	ConsumerID string
@@ -161,6 +170,9 @@ func Load() (*Config, error) {
 		},
 		HEB: HEBConfig{
 			Enable: envEnabled("HEB_ENABLE"),
+		},
+		Wegmans: WegmansConfig{
+			Enable: envEnabled("WEGMANS_ENABLE"),
 		},
 		Walmart: WalmartConfig{
 			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),

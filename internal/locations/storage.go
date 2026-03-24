@@ -1,6 +1,15 @@
 package locations
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sort"
+	"sync"
+	"time"
+
 	"careme/internal/albertsons"
 	"careme/internal/aldi"
 	"careme/internal/cache"
@@ -13,14 +22,6 @@ import (
 	"careme/internal/walmart"
 	"careme/internal/wegmans"
 	"careme/internal/wholefoods"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log/slog"
-	"sort"
-	"sync"
-	"time"
 
 	locationtypes "careme/internal/locations/types"
 

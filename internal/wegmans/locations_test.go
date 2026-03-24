@@ -1,11 +1,11 @@
 package wegmans
 
 import (
+	"careme/internal/cache"
 	"context"
 	"strings"
 	"testing"
 
-	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -13,11 +13,11 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
-	if err := CacheStoreSummary(context.Background(), cacheStore, nearbySummary()); err != nil {
+	if err := CacheStoreSummary(t.Context(), cacheStore, nearbySummary()); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(t.Context(), cacheStore, staticZIPLookup{
 		"16506": {Lat: 42.0817, Lon: -80.1753},
 	})
 	if err != nil {
@@ -28,7 +28,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 		t.Fatalf("expected Wegmans id to be recognized")
 	}
 
-	loc, err := backend.GetLocationByID(context.Background(), "wegmans_69")
+	loc, err := backend.GetLocationByID(t.Context(), "wegmans_69")
 	if err != nil {
 		t.Fatalf("GetLocationByID returned error: %v", err)
 	}
@@ -41,14 +41,14 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
-	if err := CacheStoreSummary(context.Background(), cacheStore, nearbySummary()); err != nil {
+	if err := CacheStoreSummary(t.Context(), cacheStore, nearbySummary()); err != nil {
 		t.Fatalf("cache nearby summary: %v", err)
 	}
-	if err := CacheStoreSummary(context.Background(), cacheStore, farSummary()); err != nil {
+	if err := CacheStoreSummary(t.Context(), cacheStore, farSummary()); err != nil {
 		t.Fatalf("cache far summary: %v", err)
 	}
 
-	backend, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	backend, err := newLocationBackend(t.Context(), cacheStore, staticZIPLookup{
 		"16506": {Lat: 42.0817, Lon: -80.1753},
 	})
 	if err != nil {
@@ -72,7 +72,7 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 
 	cacheStore := cache.NewInMemoryCache()
 
-	_, err := NewLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
+	_, err := newLocationBackend(t.Context(), cacheStore, staticZIPLookup{})
 	if err == nil {
 		t.Fatal("expected NewLocationBackend to return an error")
 	}
