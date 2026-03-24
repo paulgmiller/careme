@@ -91,18 +91,15 @@ func loadCachedStoreSummaryByID(ctx context.Context, c cache.Cache, locationID s
 	return &summary, nil
 }
 
-func storeSummaryToIndexEntry(summary StoreSummaryResponse, zipLookup storeindex.ZipCentroidLookup) storeindex.Entry {
-	lat, lon := storeindex.Coordinates(&summary.PrimaryLocation.Latitude, &summary.PrimaryLocation.Longitude, summary.PrimaryLocation.Address.ZipCode, zipLookup)
-	return storeindex.Entry{
-		ID:  LocationIDPrefix + strconv.Itoa(summary.StoreID),
-		Lat: lat,
-		Lon: lon,
-	}
+type loader struct {
+	cache cache.Cache
 }
 
-// StoreSummaryToLocation converts a whole food type intoa  generic locaitn.
-// Mostly vanilla except for prefixing name
-func storeSummaryToLocation(summary StoreSummaryResponse) locationtypes.Location {
+func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Location, error) {
+	summary, err := loadCachedStoreSummaryByID(ctx, l.cache, locationID)
+	if err != nil {
+		return locationtypes.Location{}, err
+	}
 	lat := summary.PrimaryLocation.Latitude
 	lon := summary.PrimaryLocation.Longitude
 
@@ -115,5 +112,14 @@ func storeSummaryToLocation(summary StoreSummaryResponse) locationtypes.Location
 		Lat:     &lat,
 		Lon:     &lon,
 		Chain:   "wholefoods",
+	}, nil
+}
+
+func storeSummaryToIndexEntry(summary StoreSummaryResponse, zipLookup storeindex.ZipCentroidLookup) storeindex.Entry {
+	lat, lon := storeindex.Coordinates(&summary.PrimaryLocation.Latitude, &summary.PrimaryLocation.Longitude, summary.PrimaryLocation.Address.ZipCode, zipLookup)
+	return storeindex.Entry{
+		ID:  LocationIDPrefix + strconv.Itoa(summary.StoreID),
+		Lat: lat,
+		Lon: lon,
 	}
 }

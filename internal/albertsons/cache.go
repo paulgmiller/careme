@@ -55,10 +55,14 @@ func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup stor
 	return err
 }
 
-func loadCachedStoreSummaryByID(ctx context.Context, c cache.Cache, locationID string) (*StoreSummary, error) {
-	reader, err := c.Get(ctx, StoreCachePrefix+locationID)
+type loader struct {
+	cache cache.Cache
+}
+
+func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Location, error) {
+	reader, err := l.cache.Get(ctx, StoreCachePrefix+locationID)
 	if err != nil {
-		return nil, err
+		return locationtypes.Location{}, err
 	}
 	defer func() {
 		_ = reader.Close()
@@ -66,12 +70,8 @@ func loadCachedStoreSummaryByID(ctx context.Context, c cache.Cache, locationID s
 
 	var summary StoreSummary
 	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
-		return nil, fmt.Errorf("decode albertsons store summary: %w", err)
+		return locationtypes.Location{}, fmt.Errorf("decode albertsons store summary: %w", err)
 	}
-	return &summary, nil
-}
-
-func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
 	return locationtypes.Location{
 		ID:      summary.ID,
 		Name:    summary.Name,
@@ -81,5 +81,5 @@ func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
 		Lat:     summary.Lat,
 		Lon:     summary.Lon,
 		Chain:   Container,
-	}
+	}, nil
 }

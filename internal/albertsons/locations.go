@@ -3,12 +3,12 @@ package albertsons
 import (
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/locations/hydrator"
 	"careme/internal/locations/nearby"
 	"careme/internal/locations/storeindex"
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	locationtypes "careme/internal/locations/types"
 )
@@ -18,11 +18,9 @@ type centroidByZip interface {
 }
 
 type LocationBackend struct {
-	zipLookup    centroidByZip
-	storeCache   cache.Cache
-	spatial      []locationtypes.Location
-	hydratedByID map[string]locationtypes.Location
-	mu           sync.RWMutex
+	zipLookup centroidByZip
+	spatial   []locationtypes.Location
+	hydrator  *hydrator.LazyHydrator
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -54,10 +52,9 @@ func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centro
 	}
 
 	return &LocationBackend{
-		zipLookup:    zipLookup,
-		storeCache:   c,
-		spatial:      spatial,
-		hydratedByID: make(map[string]locationtypes.Location),
+		zipLookup: zipLookup,
+		spatial:   spatial,
+		hydrator:  hydrator.NewLazyHydrator(&loader{c}),
 	}, nil
 }
 
@@ -75,7 +72,7 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 		return nil, fmt.Errorf("albertsons location id %q is invalid", locationID)
 	}
 
-	loc, err := b.hydrateLocation(ctx, locationID)
+	loc, err := b.hydrator.Hydrate(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,25 +82,5 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 
 func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
 	candidates := nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, b.spatial, nearby.MaxLocationDistanceMiles)
-	return storeindex.HydrateLocations(ctx, candidates, b.hydrateLocation)
-}
-
-func (b *LocationBackend) hydrateLocation(ctx context.Context, locationID string) (locationtypes.Location, error) {
-	b.mu.RLock()
-	loc, ok := b.hydratedByID[locationID]
-	b.mu.RUnlock()
-	if ok {
-		return loc, nil
-	}
-
-	summary, err := loadCachedStoreSummaryByID(ctx, b.storeCache, locationID)
-	if err != nil {
-		return locationtypes.Location{}, fmt.Errorf("albertsons location %q not found: %w", locationID, err)
-	}
-	loc = storeSummaryToLocation(*summary)
-
-	b.mu.Lock()
-	b.hydratedByID[locationID] = loc
-	b.mu.Unlock()
-	return loc, nil
+	return storeindex.HydrateLocations(ctx, candidates, b.hydrator.Hydrate)
 }
