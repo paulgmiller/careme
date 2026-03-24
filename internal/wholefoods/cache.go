@@ -65,7 +65,12 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 
 func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
 	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey, func(summary StoreSummaryResponse) storeindex.Entry {
-		return storeSummaryToIndexEntry(summary, zipLookup)
+		lat, lon := storeindex.Coordinates(&summary.PrimaryLocation.Latitude, &summary.PrimaryLocation.Longitude, summary.PrimaryLocation.Address.ZipCode, zipLookup)
+		return storeindex.Entry{
+			ID:  LocationIDPrefix + strconv.Itoa(summary.StoreID),
+			Lat: lat,
+			Lon: lon,
+		}
 	})
 	return err
 }
@@ -114,13 +119,4 @@ func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Loc
 		Lon:     &lon,
 		Chain:   "wholefoods",
 	}, nil
-}
-
-func storeSummaryToIndexEntry(summary StoreSummaryResponse, zipLookup storeindex.ZipCentroidLookup) storeindex.Entry {
-	lat, lon := storeindex.Coordinates(&summary.PrimaryLocation.Latitude, &summary.PrimaryLocation.Longitude, summary.PrimaryLocation.Address.ZipCode, zipLookup)
-	return storeindex.Entry{
-		ID:  LocationIDPrefix + strconv.Itoa(summary.StoreID),
-		Lat: lat,
-		Lon: lon,
-	}
 }
