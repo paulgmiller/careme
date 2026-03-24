@@ -178,6 +178,7 @@ func TestWriteTable_PivotsChainsAndTotals(t *testing.T) {
 		"metro_name  zip_code  kroger  walmart  wholefoods  total",
 		"Boston      02169     0       0        3           3",
 		"Seattle     98032     2       1        0           3",
+		"total                 2       1        3           6",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected table output: got=%q want=%q", got, want)
@@ -205,6 +206,7 @@ func TestWriteMarkdownTable_PivotsChainsAndEscapesCells(t *testing.T) {
 		"| --- | --- | --- | --- | --- | --- |",
 		"| Boston \\| Cambridge | 02169 | 0 | 0 | 3 | 3 |",
 		"| Seattle | 98032 | 2 | 1 | 0 | 3 |",
+		"| total |  | 2 | 1 | 3 | 6 |",
 		"",
 	}, "\n")
 	if buf.String() != want {

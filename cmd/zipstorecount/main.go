@@ -211,6 +211,8 @@ func writeTable(w io.Writer, counts []zipStoreCount, metroZipCodes []metroZipCod
 		return fmt.Errorf("write table header: %w", err)
 	}
 
+	columnTotals := make(map[string]int, len(chains))
+	grandTotal := 0
 	for _, row := range rows {
 		key := rowKey(row)
 		line := []string{row.Metro, row.Zip}
@@ -219,11 +221,22 @@ func writeTable(w io.Writer, counts []zipStoreCount, metroZipCodes []metroZipCod
 			count := countsByRow[key][chain]
 			line = append(line, strconv.Itoa(count))
 			total += count
+			columnTotals[chain] += count
 		}
 		line = append(line, strconv.Itoa(total))
+		grandTotal += total
 		if _, err := fmt.Fprintln(tw, strings.Join(line, "\t")); err != nil {
 			return fmt.Errorf("write table row: %w", err)
 		}
+	}
+
+	totalLine := []string{"total", ""}
+	for _, chain := range chains {
+		totalLine = append(totalLine, strconv.Itoa(columnTotals[chain]))
+	}
+	totalLine = append(totalLine, strconv.Itoa(grandTotal))
+	if _, err := fmt.Fprintln(tw, strings.Join(totalLine, "\t")); err != nil {
+		return fmt.Errorf("write table total row: %w", err)
 	}
 
 	if err := tw.Flush(); err != nil {
@@ -250,6 +263,8 @@ func writeMarkdownTable(w io.Writer, counts []zipStoreCount, metroZipCodes []met
 		return fmt.Errorf("write markdown separator: %w", err)
 	}
 
+	columnTotals := make(map[string]int, len(chains))
+	grandTotal := 0
 	for _, row := range rows {
 		key := rowKey(row)
 		line := []string{escapeMarkdownCell(row.Metro), escapeMarkdownCell(row.Zip)}
@@ -258,11 +273,22 @@ func writeMarkdownTable(w io.Writer, counts []zipStoreCount, metroZipCodes []met
 			count := countsByRow[key][chain]
 			line = append(line, strconv.Itoa(count))
 			total += count
+			columnTotals[chain] += count
 		}
 		line = append(line, strconv.Itoa(total))
+		grandTotal += total
 		if _, err := fmt.Fprintf(w, "| %s |\n", strings.Join(line, " | ")); err != nil {
 			return fmt.Errorf("write markdown row: %w", err)
 		}
+	}
+
+	totalLine := []string{"total", ""}
+	for _, chain := range chains {
+		totalLine = append(totalLine, strconv.Itoa(columnTotals[chain]))
+	}
+	totalLine = append(totalLine, strconv.Itoa(grandTotal))
+	if _, err := fmt.Fprintf(w, "| %s |\n", strings.Join(totalLine, " | ")); err != nil {
+		return fmt.Errorf("write markdown total row: %w", err)
 	}
 
 	return nil
