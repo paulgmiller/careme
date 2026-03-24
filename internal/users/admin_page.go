@@ -18,6 +18,7 @@ import (
 type adminUserView struct {
 	ID                string
 	Emails            []string
+	CreatedDate       string
 	SavedRecipeCount  int
 	CookedRecipeCount int
 }
@@ -37,6 +38,7 @@ var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doct
       <tr>
         <th>User ID</th>
         <th>Emails</th>
+        <th>Created</th>
         <th>Saved Recipe Count</th>
         <th>Cooked Click Count</th>
       </tr>
@@ -56,6 +58,7 @@ var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doct
           none
           {{end}}
         </td>
+        <td>{{.CreatedDate}}</td>
         <td>
           {{.SavedRecipeCount}}
         </td>
@@ -91,9 +94,14 @@ func AdminUsersPage(storage *Storage) http.Handler {
 
 		views := make([]adminUserView, 0, len(filtered))
 		for _, user := range filtered {
+			createdDate := ""
+			if !user.CreatedAt.IsZero() {
+				createdDate = user.CreatedAt.Format("2006-01-02")
+			}
 			views = append(views, adminUserView{
 				ID:                user.ID,
 				Emails:            append([]string(nil), user.Email...),
+				CreatedDate:       createdDate,
 				SavedRecipeCount:  len(user.LastRecipes),
 				CookedRecipeCount: cookedRecipeCount(r.Context(), storage.cache, user),
 			})

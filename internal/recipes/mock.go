@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,18 @@ import (
 )
 
 type mock struct{}
+
+var mockRecipeImage = []byte{
+	0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n',
+	0x00, 0x00, 0x00, 0x0d, 'I', 'H', 'D', 'R',
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+	0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+	0x89, 0x00, 0x00, 0x00, 0x0d, 'I', 'D', 'A',
+	'T', 0x78, 0x9c, 0x63, 0xf8, 0xff, 0xff, 0x3f,
+	0x00, 0x05, 0xfe, 0x02, 0xfe, 0xa7, 0x35, 0x81,
+	0x84, 0x00, 0x00, 0x00, 0x00, 'I', 'E', 'N',
+	'D', 0xae, 'B', 0x60, 0x82,
+}
 
 var mockRecipes = []ai.Recipe{
 	{
@@ -396,6 +409,14 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 func (m mock) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	_ = conversationID
 	return fmt.Sprintf("Mock answer: %s", question), nil
+}
+
+func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+	_ = ctx
+	_ = recipe
+	return &ai.GeneratedImage{
+		Body: bytes.NewReader(mockRecipeImage),
+	}, nil
 }
 
 func (m mock) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {

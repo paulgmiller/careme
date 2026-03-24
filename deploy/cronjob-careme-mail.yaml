@@ -44,6 +44,8 @@ spec:
               env:
                 - name: APPLICATIONINSIGHTS_CONNECTION_STRING
                   value: "InstrumentationKey=a532fcc7-5098-4f44-8dde-ff2f32d6a59b;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=fdc94780-6135-4a29-980e-ab114a402e58"
+                - name: PUBLIC_ORIGIN
+                  value: "https://careme.cooking"
               resources:
                 requests:
                   cpu: 50m

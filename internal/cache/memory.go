@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"sort"
@@ -11,7 +12,7 @@ import (
 // InMemoryCache stores cache entries in process memory.
 type InMemoryCache struct {
 	mu   sync.RWMutex
-	data map[string]string
+	data map[string][]byte
 }
 
 var (
@@ -21,7 +22,7 @@ var (
 
 func NewInMemoryCache() *InMemoryCache {
 	return &InMemoryCache{
-		data: make(map[string]string),
+		data: make(map[string][]byte),
 	}
 }
 
@@ -32,7 +33,7 @@ func (c *InMemoryCache) Get(_ context.Context, key string) (io.ReadCloser, error
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return io.NopCloser(strings.NewReader(value)), nil
+	return io.NopCloser(bytes.NewReader(value)), nil
 }
 
 func (c *InMemoryCache) Exists(_ context.Context, key string) (bool, error) {
@@ -42,7 +43,16 @@ func (c *InMemoryCache) Exists(_ context.Context, key string) (bool, error) {
 	return ok, nil
 }
 
-func (c *InMemoryCache) Put(_ context.Context, key, value string, opts PutOptions) error {
+func (c *InMemoryCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
+	return c.PutReader(ctx, key, strings.NewReader(value), opts)
+}
+
+func (c *InMemoryCache) PutReader(_ context.Context, key string, reader io.Reader, opts PutOptions) error {
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, reader); err != nil {
+		return err
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -52,7 +62,7 @@ func (c *InMemoryCache) Put(_ context.Context, key, value string, opts PutOption
 		}
 	}
 
-	c.data[key] = value
+	c.data[key] = buf.Bytes()
 	return nil
 }
 

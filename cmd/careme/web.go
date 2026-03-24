@@ -15,7 +15,7 @@ import (
 	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/auth"
-	"careme/internal/cache"
+	cachepkg "careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/ingredients"
 	"careme/internal/locations"
@@ -31,9 +31,13 @@ import (
 )
 
 func runServer(cfg *config.Config, addr string) error {
-	cache, err := cache.MakeCache()
+	cache, err := cachepkg.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
+	}
+	imageCache, err := cachepkg.EnsureCache(recipes.RecipeImagesContainer)
+	if err != nil {
+		return fmt.Errorf("failed to create recipe image cache: %w", err)
 	}
 
 	authClient, err := auth.NewFromConfig(cfg)
@@ -73,7 +77,7 @@ func runServer(cfg *config.Config, addr string) error {
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
 	sitemapHandler.Register(infraRoutes)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient)
 	recipeHandler.Register(appRoutes)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
