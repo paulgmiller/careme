@@ -56,11 +56,13 @@ func TestSyncStoresCachesSuccessesAndMisses(t *testing.T) {
 	if _, ok := missingIDs["1084"]; !ok {
 		t.Fatalf("expected missing store id 1084 to be cached")
 	}
-	indexReader, err := cacheStore.Get(context.Background(), publix.LocationIndexCacheKey)
+	exists, err := cacheStore.Exists(context.Background(), publix.LocationIndexCacheKey)
 	if err != nil {
 		t.Fatalf("expected compact location index: %v", err)
 	}
-	_ = indexReader.Close()
+	if !exists {
+		t.Fatal("expected compact location index to exist")
+	}
 }
 
 func TestSyncStoresSkipsKnownMissingAndCachedSuccesses(t *testing.T) {

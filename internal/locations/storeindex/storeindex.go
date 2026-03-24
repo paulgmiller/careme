@@ -2,18 +2,18 @@ package storeindex
 
 import (
 	"bytes"
+	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-
-	"careme/internal/cache"
 
 	locationtypes "careme/internal/locations/types"
 
 	"golang.org/x/sync/errgroup"
 )
 
+// TODO should we just embed zip centroid?
 type Entry struct {
 	ID  string   `json:"id"`
 	Lat *float64 `json:"lat,omitempty"`
@@ -34,22 +34,16 @@ func (e Entry) ToLocation() locationtypes.Location {
 
 func Coordinates(lat, lon *float64, zipCode string, zipLookup ZipCentroidLookup) (*float64, *float64) {
 	if lat != nil && lon != nil {
-		latValue := *lat
-		lonValue := *lon
-		return &latValue, &lonValue
-	}
-	if zipLookup == nil {
-		return nil, nil
+		return lat, lon
 	}
 
 	centroid, ok := zipLookup.ZipCentroidByZIP(zipCode)
 	if !ok {
-		return nil, nil
+		// panic("missing zip centroid for zip code: " + zipCode)
+		return nil, nil // boo what will location.go do with this?
 	}
 
-	latValue := centroid.Lat
-	lonValue := centroid.Lon
-	return &latValue, &lonValue
+	return &centroid.Lat, &centroid.Lon
 }
 
 func HydrateLocations(ctx context.Context, candidates []locationtypes.Location, hydrate func(context.Context, string) (locationtypes.Location, error)) ([]locationtypes.Location, error) {
@@ -61,7 +55,6 @@ func HydrateLocations(ctx context.Context, candidates []locationtypes.Location, 
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(8)
 	for i, candidate := range candidates {
-		i, candidate := i, candidate
 		g.Go(func() error {
 			loc, err := hydrate(ctx, candidate.ID)
 			if err != nil {
@@ -114,6 +107,7 @@ func RebuildFromStoreSummaries[T any](ctx context.Context, c cache.ListCache, st
 		return nil, fmt.Errorf("list cached store summaries: %w", err)
 	}
 
+	// could parallize but less important now that its in scrapers
 	entries := make([]Entry, 0, len(keys))
 	for _, key := range keys {
 		reader, err := c.Get(ctx, storePrefix+key)

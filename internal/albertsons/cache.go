@@ -1,14 +1,13 @@
 package albertsons
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations/storeindex"
+	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"careme/internal/cache"
-	"careme/internal/locations/storeindex"
-	"careme/internal/sitemapfetch"
 
 	locationtypes "careme/internal/locations/types"
 )
@@ -54,7 +53,12 @@ func loadLocationIndex(ctx context.Context, c cache.Cache) ([]storeindex.Entry, 
 
 func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
 	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey, func(summary StoreSummary) storeindex.Entry {
-		return storeSummaryToIndexEntry(summary, zipLookup)
+		lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
+		return storeindex.Entry{
+			ID:  summary.ID,
+			Lat: lat,
+			Lon: lon,
+		}
 	})
 	return err
 }
@@ -73,15 +77,6 @@ func loadCachedStoreSummaryByID(ctx context.Context, c cache.Cache, locationID s
 		return nil, fmt.Errorf("decode albertsons store summary: %w", err)
 	}
 	return &summary, nil
-}
-
-func storeSummaryToIndexEntry(summary StoreSummary, zipLookup storeindex.ZipCentroidLookup) storeindex.Entry {
-	lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
-	return storeindex.Entry{
-		ID:  summary.ID,
-		Lat: lat,
-		Lon: lon,
-	}
 }
 
 func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
