@@ -35,7 +35,7 @@ func Flatten[T any, T2 any](items []T, fn func(T) ([]T2, error)) ([]T2, error) {
 	return merged, errors.Join(errs...)
 }
 
-// MapWithErrors collects erros but doesn't cancel anything
+// MapWithErrors collects errors but doesn't cancel anything.
 func MapWithErrors[T any, T2 any](items []T, fn func(T) (T2, error)) ([]T2, error) {
 	if len(items) == 0 {
 		return []T2{}, nil
