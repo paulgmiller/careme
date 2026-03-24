@@ -2,16 +2,14 @@ package storeindex
 
 import (
 	"bytes"
+	"careme/internal/cache"
+	"careme/internal/parallelism"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 
-	"careme/internal/cache"
-
 	locationtypes "careme/internal/locations/types"
-
-	"golang.org/x/sync/errgroup"
 )
 
 // TODO should we just embed zip centroid?
@@ -52,22 +50,12 @@ func HydrateLocations(ctx context.Context, candidates []locationtypes.Location, 
 		return nil, nil
 	}
 
-	out := make([]locationtypes.Location, len(candidates))
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(8)
-	for i, candidate := range candidates {
-		g.Go(func() error {
-			loc, err := hydrate(ctx, candidate.ID)
-			if err != nil {
-				return err
-			}
-			out[i] = loc
-			return nil
-		})
-	}
+	out, err := parallelism.MapWithErrors(candidates, func(candidate locationtypes.Location) (locationtypes.Location, error) {
+		return hydrate(ctx, candidate.ID)
+	})
 
-	if err := g.Wait(); err != nil {
-		return nil, err
+	if len(out) == 0 {
+		return nil, fmt.Errorf("zero hydrated locations: %w", err)
 	}
 	return out, nil
 }
