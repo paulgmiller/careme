@@ -1,14 +1,15 @@
 package albertsons
 
 import (
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations/nearby"
-	"careme/internal/locations/storeindex"
 	"context"
 	"fmt"
 	"strings"
 	"sync"
+
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations/nearby"
+	"careme/internal/locations/storeindex"
 
 	locationtypes "careme/internal/locations/types"
 )

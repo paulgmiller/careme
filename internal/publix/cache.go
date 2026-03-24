@@ -1,14 +1,15 @@
 package publix
 
 import (
-	"careme/internal/cache"
-	"careme/internal/locations/storeindex"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
+
+	"careme/internal/cache"
+	"careme/internal/locations/storeindex"
 
 	locationtypes "careme/internal/locations/types"
 )

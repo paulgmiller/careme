@@ -1,15 +1,16 @@
 package wholefoods
 
 import (
-	"careme/internal/cache"
-	"careme/internal/locations/storeindex"
-	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"careme/internal/cache"
+	"careme/internal/locations/storeindex"
+	"careme/internal/sitemapfetch"
 
 	locationtypes "careme/internal/locations/types"
 )
