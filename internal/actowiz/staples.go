@@ -1,16 +1,15 @@
 package actowiz
 
 import (
+	"careme/internal/kroger"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strconv"
 	"strings"
-
-	"careme/internal/kroger"
+	"sync"
 )
 
 const LocationIDPrefix = "safeway_"
@@ -19,7 +18,7 @@ const LocationIDPrefix = "safeway_"
 var safewayProductsJSON []byte
 
 var (
-	embeddedSafewayProducts = mustLoadSafewayProducts()
+	staples, wines          = mustLoadSafewayProducts()
 	defaultStaplesSignature = "everything" // no filtering yet"
 )
 
@@ -33,8 +32,13 @@ func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
+var once sync.Once
+
 func NewStaplesProvider() StaplesProvider {
-	slog.Info("Loaded safeway", "safeway_count", len(embeddedSafewayProducts), "filtered_count", len(all()))
+	once.Do(func() {
+		slog.Info("Loaded safeway", "staples_count", len(staples), "wine_count", len(wines),
+			"filtered_staples", len(all(staples)), "filtered_wines", len(all(wines)))
+	})
 	return StaplesProvider{}
 }
 
@@ -47,24 +51,35 @@ func (p identityProvider) IsID(locationID string) bool {
 	return storeID != "" && storeID != locationID
 }
 
-func all() []kroger.Ingredient {
+func all(products []SafewayProduct) []kroger.Ingredient {
 	// do this once instead of every time?
-	ingredients := make([]kroger.Ingredient, 0, len(embeddedSafewayProducts))
-	for _, product := range embeddedSafewayProducts {
+	ingredients := make([]kroger.Ingredient, 0, len(products))
+	var unavailableCount int
+	var salamiCount int
+	var packagedProduceCount int
+	for _, product := range products {
 		if !product.Availability {
+			unavailableCount++
 			continue
 		}
 		if product.ProductName == "N/A" {
+			panic("no name")
+		}
+		// another option but dropped produce score.
+		if product.SubCategory == "Packaged Produce" {
+			packagedProduceCount++
 			continue
 		}
-		//another option but dropped produce score.
-		//||	product.SubCategory == "Packaged Produce"
 		if product.SubCategory == "Salami & Lunch Meats" {
+			salamiCount++
 			continue
 		}
 
 		ingredients = append(ingredients, productToIngredient(product))
 	}
+	slog.Info("Filtered safeway products", "total_count", len(products),
+		"unavailable_count", unavailableCount, "salami_count", salamiCount,
+		"packaged_produce_count", packagedProduceCount, "final_count", len(ingredients))
 	return ingredients
 }
 
@@ -72,7 +87,7 @@ func (p StaplesProvider) FetchStaples(_ context.Context, locationID string) ([]k
 	if !p.IsID(locationID) {
 		return nil, fmt.Errorf("invalid safeway location id %q", locationID)
 	}
-	return all(), nil
+	return all(staples), nil
 }
 
 func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, searchTerm string, _ int) ([]kroger.Ingredient, error) {
@@ -80,22 +95,7 @@ func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, se
 		return nil, fmt.Errorf("invalid safeway location id %q", locationID)
 	}
 
-	return filterIngredients(all(), searchTerm), nil
-}
-
-func filterIngredients(ingredients []kroger.Ingredient, searchTerm string) []kroger.Ingredient {
-	searchTerm = strings.TrimSpace(strings.ToLower(searchTerm))
-	if searchTerm == "" {
-		return slices.Clone(ingredients)
-	}
-
-	filtered := make([]kroger.Ingredient, 0, len(ingredients))
-	for _, ingredient := range ingredients {
-		if ingredientMatches(ingredient, searchTerm) {
-			filtered = append(filtered, ingredient)
-		}
-	}
-	return filtered
+	return all(wines), nil
 }
 
 func ingredientMatches(ingredient kroger.Ingredient, searchTerm string) bool {
@@ -157,12 +157,25 @@ func compactStrings(values []string) []string {
 	return out
 }
 
-func mustLoadSafewayProducts() []SafewayProduct {
-	var products []SafewayProduct
-	if err := json.Unmarshal(safewayProductsJSON, &products); err != nil {
+func mustLoadSafewayProducts() ([]SafewayProduct, []SafewayProduct) {
+	var allProducts []SafewayProduct
+	if err := json.Unmarshal(safewayProductsJSON, &allProducts); err != nil {
 		panic(fmt.Errorf("decode safeway products: %w", err))
 	}
-	return products
+
+	var wines []SafewayProduct
+	var staples []SafewayProduct
+	for _, product := range allProducts {
+		if strings.HasPrefix(product.Category, "Wine") {
+			wines = append(wines, product)
+		} else {
+			// this is a bit hacky but we want to keep the wine products separate for now since they have different filtering needs and we want to be able to easily exclude them from staples.
+			staples = append(staples, product)
+		}
+	}
+	slog.Info("Loaded safeway products", "product_count", len(staples), "wine_count", len(wines))
+
+	return staples, wines
 }
 
 func stringValue(value *string) string {

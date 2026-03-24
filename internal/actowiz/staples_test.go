@@ -62,3 +62,18 @@ func TestStaplesProvider_GetIngredientsFiltersAndSkips(t *testing.T) {
 		t.Fatalf("missing description: %+v", got[0])
 	}
 }
+
+func TestTotalCount(t *testing.T) {
+	t.Parallel()
+
+	got, err := NewStaplesProvider().FetchStaples(t.Context(), "safeway_1234")
+	if err != nil {
+		t.Fatalf("FetchStaples returned error: %v", err)
+	}
+	if len(got) == 0 {
+		t.Fatal("expected ingredients, got none")
+	}
+	if len(got) < 300 {
+		t.Fatalf("expected at least 300 ingredients, got %d", len(got))
+	}
+}
