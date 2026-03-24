@@ -1,14 +1,15 @@
 package wegmans
 
 import (
-	"careme/internal/cache"
-	"careme/internal/locations/storeindex"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"careme/internal/cache"
+	"careme/internal/locations/storeindex"
 
 	locationtypes "careme/internal/locations/types"
 )

@@ -2,11 +2,12 @@ package storeindex
 
 import (
 	"bytes"
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+
+	"careme/internal/cache"
 
 	locationtypes "careme/internal/locations/types"
 

@@ -1,14 +1,15 @@
 package wholefoods
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations/hydrator"
 	"careme/internal/locations/nearby"
 	"careme/internal/locations/storeindex"
-	"context"
-	"fmt"
-	"strings"
 
 	locationtypes "careme/internal/locations/types"
 )
