@@ -1,6 +1,10 @@
 package main
 
 import (
+	"careme/internal/albertsons"
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"context"
 	"errors"
 	"flag"
@@ -10,10 +14,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"careme/internal/albertsons"
-	"careme/internal/cache"
-	"careme/internal/logsetup"
 )
 
 func main() {
@@ -56,6 +56,10 @@ func main() {
 			continue
 		}
 		synced += chainSynced
+	}
+
+	if err := albertsons.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
+		log.Fatalf("failed to rebuild location index")
 	}
 
 	fmt.Printf("synced %d Albertsons-family store summaries\n", synced)

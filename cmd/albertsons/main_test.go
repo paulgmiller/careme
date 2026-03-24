@@ -103,6 +103,11 @@ func TestSyncChainFromSitemapSkipsKnownURLsWithCachedSummaries(t *testing.T) {
 	if pageRequests.Load() != 0 {
 		t.Fatalf("expected no page requests for cached url, got %d", pageRequests.Load())
 	}
+	indexReader, err := cacheStore.Get(context.Background(), albertsons.LocationIndexCacheKey)
+	if err != nil {
+		t.Fatalf("expected compact location index: %v", err)
+	}
+	_ = indexReader.Close()
 }
 
 func TestSyncChainFromSitemapPreservesOtherChainURLMappings(t *testing.T) {

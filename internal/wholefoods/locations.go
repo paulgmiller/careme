@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations/nearby"
+	"careme/internal/locations/storeindex"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -16,8 +18,11 @@ type centroidByZip interface {
 }
 
 type LocationBackend struct {
-	zipLookup centroidByZip
-	byID      map[string]locationtypes.Location
+	zipLookup    centroidByZip
+	storeCache   cache.Cache
+	spatial      []locationtypes.Location
+	hydratedByID map[string]locationtypes.Location
+	mu           sync.RWMutex
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -37,22 +42,23 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 	return newLocationBackend(ctx, listCache, zipLookup)
 }
 
-func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
+func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {
 	// Is this too much? should we just fetch a single blob that is all coordinates -> store ids and lazily fetch stores?
-	summaries, err := loadCachedStoreSummaries(ctx, c)
+	entries, err := loadLocationIndex(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 
-	byID := make(map[string]locationtypes.Location, len(summaries))
-	for _, summary := range summaries {
-		loc := storeSummaryToLocation(*summary)
-		byID[loc.ID] = loc
+	spatial := make([]locationtypes.Location, 0, len(entries))
+	for _, entry := range entries {
+		spatial = append(spatial, entry.ToLocation())
 	}
 
 	return &LocationBackend{
-		zipLookup: zipLookup,
-		byID:      byID,
+		zipLookup:    zipLookup,
+		storeCache:   c,
+		spatial:      spatial,
+		hydratedByID: make(map[string]locationtypes.Location),
 	}, nil
 }
 
@@ -65,15 +71,15 @@ func (*LocationBackend) HasInventory(locationID string) bool {
 	return true
 }
 
-func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
+func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	normalized, ok := parseLocationID(locationID)
 	if !ok {
 		return nil, fmt.Errorf("whole foods location id %q is invalid", locationID)
 	}
 
-	loc, exists := b.byID[normalized]
-	if !exists {
-		return nil, fmt.Errorf("whole foods location %q not found", locationID)
+	loc, err := b.hydrateLocation(ctx, normalized)
+	if err != nil {
+		return nil, err
 	}
 
 	copy := loc
@@ -81,11 +87,8 @@ func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) 
 }
 
 func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	candidates := make([]locationtypes.Location, 0, len(b.byID))
-	for _, loc := range b.byID {
-		candidates = append(candidates, loc)
-	}
-	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, candidates, nearby.MaxLocationDistanceMiles), nil
+	candidates := nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, b.spatial, nearby.MaxLocationDistanceMiles)
+	return storeindex.HydrateLocations(ctx, candidates, b.hydrateLocation)
 }
 
 func parseLocationID(locationID string) (string, bool) {
@@ -95,4 +98,24 @@ func parseLocationID(locationID string) (string, bool) {
 
 	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
 	return LocationIDPrefix + storeID, true
+}
+
+func (b *LocationBackend) hydrateLocation(ctx context.Context, locationID string) (locationtypes.Location, error) {
+	b.mu.RLock()
+	loc, ok := b.hydratedByID[locationID]
+	b.mu.RUnlock()
+	if ok {
+		return loc, nil
+	}
+
+	summary, err := loadCachedStoreSummaryByID(ctx, b.storeCache, locationID)
+	if err != nil {
+		return locationtypes.Location{}, fmt.Errorf("whole foods location %q not found: %w", locationID, err)
+	}
+	loc = storeSummaryToLocation(*summary)
+
+	b.mu.Lock()
+	b.hydratedByID[locationID] = loc
+	b.mu.Unlock()
+	return loc, nil
 }

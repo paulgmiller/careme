@@ -1,25 +1,22 @@
 package albertsons
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations/storeindex"
+	"careme/internal/sitemapfetch"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-
-	"careme/internal/cache"
-	"careme/internal/sitemapfetch"
 
 	locationtypes "careme/internal/locations/types"
-
-	"github.com/samber/lo"
-	lop "github.com/samber/lo/parallel"
 )
 
 const (
-	Container           = "albertsons"
-	StoreCachePrefix    = "albertsons/stores/"
-	StoreURLMapCacheKey = "albertsons/store_url_map.json"
+	Container             = "albertsons"
+	StoreCachePrefix      = "albertsons/stores/"
+	StoreURLMapCacheKey   = "albertsons/store_url_map.json"
+	LocationIndexCacheKey = "albertsons/store_locations.json"
 )
 
 func SaveStoreURLMap(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
@@ -46,39 +43,44 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 	return nil
 }
 
-func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreSummary, error) {
-	keys, err := c.List(ctx, StoreCachePrefix, "")
+func loadLocationIndex(ctx context.Context, c cache.Cache) ([]storeindex.Entry, error) {
+	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
-		return nil, fmt.Errorf("list cached store summaries: %w", err)
+		return nil, fmt.Errorf("load albertsons locations index: %w", err)
 	}
+	return entries, nil
+}
 
-	// expensive. Just save a smaller map of centroids
-	// see branch cachezipcodes. Maybe time for a real db instead of blob
-	summaries := lop.Map(keys, func(key string, _ int) *StoreSummary {
-		reader, err := c.Get(ctx, StoreCachePrefix+key)
-		if err != nil {
-			slog.WarnContext(ctx, "failed to read cached albertsons store summary", "key", key, "error", err)
-			return nil
-		}
-		defer func() {
-			_ = reader.Close()
-		}()
-
-		var summary StoreSummary
-		if err := json.NewDecoder(reader).Decode(&summary); err != nil {
-			slog.WarnContext(ctx, "failed to decode cached albertsons store summary", "key", key, "error", err)
-			return nil
-		}
-		return &summary
+func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
+	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey, func(summary StoreSummary) storeindex.Entry {
+		return storeSummaryToIndexEntry(summary, zipLookup)
 	})
+	return err
+}
 
-	summaries = lo.Compact(summaries)
-	if len(summaries) == 0 {
-		return nil, fmt.Errorf("failed to load albertsons locations")
+func loadCachedStoreSummaryByID(ctx context.Context, c cache.Cache, locationID string) (*StoreSummary, error) {
+	reader, err := c.Get(ctx, StoreCachePrefix+locationID)
+	if err != nil {
+		return nil, err
 	}
-	slog.InfoContext(ctx, "loaded albertsons locations", "count", len(summaries))
+	defer func() {
+		_ = reader.Close()
+	}()
 
-	return summaries, nil
+	var summary StoreSummary
+	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+		return nil, fmt.Errorf("decode albertsons store summary: %w", err)
+	}
+	return &summary, nil
+}
+
+func storeSummaryToIndexEntry(summary StoreSummary, zipLookup storeindex.ZipCentroidLookup) storeindex.Entry {
+	lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
+	return storeindex.Entry{
+		ID:  summary.ID,
+		Lat: lat,
+		Lon: lon,
+	}
 }
 
 func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {

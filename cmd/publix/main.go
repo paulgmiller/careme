@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/publix"
 )
@@ -165,6 +166,10 @@ func syncStores(ctx context.Context, cacheStore cache.ListCache, client *publix.
 		if err := publix.SaveMissingStoreIDs(ctx, cacheStore, missingStoreIDs); err != nil {
 			return stats, err
 		}
+	}
+
+	if err := publix.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
+		return stats, err
 	}
 
 	return stats, nil

@@ -48,6 +48,9 @@ func TestNewAddsAlbertsonsBackendWhenEnabled(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
+	if err := albertsons.RebuildLocationIndex(context.Background(), listCache, LoadCentroids()); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
 
 	storage, err := New(&config.Config{
 		Albertsons: config.AlbertsonsConfig{Enable: true},

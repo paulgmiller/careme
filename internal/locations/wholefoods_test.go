@@ -46,6 +46,9 @@ func TestNewAddsWholeFoodsBackendWhenEnabled(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
+	if err := wholefoods.RebuildLocationIndex(context.Background(), listCache, LoadCentroids()); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
 
 	storage, err := New(&config.Config{
 		WholeFoods: config.WholeFoodsConfig{Enable: true},

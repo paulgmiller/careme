@@ -1,18 +1,16 @@
 package publix
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations/storeindex"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
+	"strings"
 
-	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
-
-	"github.com/samber/lo"
-	lop "github.com/samber/lo/parallel"
 )
 
 const (
@@ -21,6 +19,7 @@ const (
 	StoreURLMapCacheKey     = "publix/store_url_map.json"
 	MissingStoreIDsCacheKey = "publix/missing_store_ids.json"
 	LocationIDPrefix        = "publix_"
+	LocationIndexCacheKey   = "publix/store_locations.json"
 )
 
 func SaveMissingStoreIDs(ctx context.Context, c cache.Cache, ids map[string]struct{}) error {
@@ -86,36 +85,50 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 	return nil
 }
 
-func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreSummary, error) {
-	keys, err := c.List(ctx, StoreCachePrefix, "")
+func loadLocationIndex(ctx context.Context, c cache.Cache) ([]storeindex.Entry, error) {
+	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
-		return nil, fmt.Errorf("list cached store summaries: %w", err)
+		return nil, fmt.Errorf("load publix locations index: %w", err)
+	}
+	return entries, nil
+}
+
+func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
+	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey,
+		func(summary StoreSummary) storeindex.Entry {
+			return storeSummaryToIndexEntry(summary, zipLookup)
+		})
+	return err
+}
+
+func loadCachedStoreSummaryByID(ctx context.Context, c cache.Cache, locationID string) (*StoreSummary, error) {
+	storeID := strings.TrimPrefix(strings.TrimSpace(locationID), LocationIDPrefix)
+	if storeID == "" {
+		return nil, fmt.Errorf("publix location %q not found", locationID)
 	}
 
-	summaries := lop.Map(keys, func(key string, _ int) *StoreSummary {
-		reader, err := c.Get(ctx, StoreCachePrefix+key)
-		if err != nil {
-			slog.WarnContext(ctx, "failed to read cached publix store summary", "key", key, "error", err)
-			return nil
-		}
-		defer func() {
-			_ = reader.Close()
-		}()
-
-		var summary StoreSummary
-		if err := json.NewDecoder(reader).Decode(&summary); err != nil {
-			slog.WarnContext(ctx, "failed to decode cached publix store summary", "key", key, "error", err)
-			return nil
-		}
-		return &summary
-	})
-
-	summaries = lo.Compact(summaries)
-	if len(summaries) == 0 {
-		return nil, fmt.Errorf("failed to load publix locations")
+	reader, err := c.Get(ctx, StoreCachePrefix+storeID)
+	if err != nil {
+		return nil, err
 	}
+	defer func() {
+		_ = reader.Close()
+	}()
 
-	return summaries, nil
+	var summary StoreSummary
+	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+		return nil, fmt.Errorf("decode publix store summary: %w", err)
+	}
+	return &summary, nil
+}
+
+func storeSummaryToIndexEntry(summary StoreSummary, zipLookup storeindex.ZipCentroidLookup) storeindex.Entry {
+	lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
+	return storeindex.Entry{
+		ID:  summary.ID,
+		Lat: lat,
+		Lon: lon,
+	}
 }
 
 func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {

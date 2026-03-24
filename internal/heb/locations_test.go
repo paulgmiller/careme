@@ -16,10 +16,14 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if err := CacheStoreSummary(context.Background(), cacheStore, robstownSummary()); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
-
-	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	zipLookup := staticZIPLookup{
 		"78380": {Lat: 27.8000, Lon: -97.6700},
-	})
+	}
+	if err := RebuildLocationIndex(context.Background(), cacheStore, zipLookup); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
+
+	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
 	if err != nil {
 		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
@@ -35,6 +39,11 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if loc.Name != "Robstown H-E-B" || loc.ZipCode != "78380" || loc.Chain != "heb" {
 		t.Fatalf("unexpected location: %+v", loc)
 	}
+	reader, err := cacheStore.Get(context.Background(), LocationIndexCacheKey)
+	if err != nil {
+		t.Fatalf("expected compact location index to be cached: %v", err)
+	}
+	_ = reader.Close()
 }
 
 func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
@@ -47,10 +56,14 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	if err := CacheStoreSummary(context.Background(), cacheStore, farStoreSummary()); err != nil {
 		t.Fatalf("cache far store summary: %v", err)
 	}
-
-	backend, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{
+	zipLookup := staticZIPLookup{
 		"78380": {Lat: 27.8000, Lon: -97.6700},
-	})
+	}
+	if err := RebuildLocationIndex(context.Background(), cacheStore, zipLookup); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
+
+	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
 	if err != nil {
 		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
@@ -76,8 +89,8 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected newLocationBackend to return an error")
 	}
-	if !strings.Contains(err.Error(), "failed to load heb locations") {
-		t.Fatalf("expected missing summaries error, got %v", err)
+	if !strings.Contains(err.Error(), "load heb locations index") {
+		t.Fatalf("expected missing index error, got %v", err)
 	}
 }
 

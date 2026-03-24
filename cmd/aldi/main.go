@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/aldi"
 	"careme/internal/cache"
+	"careme/internal/locations"
 	"careme/internal/logsetup"
 )
 
@@ -53,7 +54,7 @@ func main() {
 	fmt.Printf("synced %d ALDI store summaries\n", synced)
 }
 
-func syncLocations(ctx context.Context, cacheStore cache.Cache, client summaryClient) (int, error) {
+func syncLocations(ctx context.Context, cacheStore cache.ListCache, client summaryClient) (int, error) {
 	summaries, err := client.StoreSummaries(ctx)
 	if err != nil {
 		return 0, err
@@ -66,6 +67,10 @@ func syncLocations(ctx context.Context, cacheStore cache.Cache, client summaryCl
 			continue
 		}
 		synced++
+	}
+
+	if err := aldi.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
+		return synced, err
 	}
 	return synced, nil
 }

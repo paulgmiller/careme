@@ -1,18 +1,17 @@
 package aldi
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations/storeindex"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 
-	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
-
-	"github.com/samber/lo"
-	lop "github.com/samber/lo/parallel"
 )
+
+const LocationIndexCacheKey = "aldi/store_locations.json"
 
 func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary) error {
 	if summary == nil {
@@ -30,37 +29,45 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 	return nil
 }
 
-func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreSummary, error) {
-	keys, err := c.List(ctx, StoreCachePrefix, "")
+func loadLocationIndex(ctx context.Context, c cache.Cache) ([]storeindex.Entry, error) {
+	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
-		return nil, fmt.Errorf("list cached store summaries: %w", err)
+		return nil, fmt.Errorf("load aldi locations index: %w", err)
 	}
+	return entries, nil
+}
 
-	summaries := lop.Map(keys, func(key string, _ int) *StoreSummary {
-		reader, err := c.Get(ctx, StoreCachePrefix+key)
-		if err != nil {
-			slog.WarnContext(ctx, "failed to read cached ALDI store summary", "key", key, "error", err)
-			return nil
-		}
-		defer func() {
-			_ = reader.Close()
-		}()
+func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
+	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey,
+		func(summary StoreSummary) storeindex.Entry {
+			return storeSummaryToIndexEntry(summary, zipLookup)
+		})
+	return err
+}
 
-		var summary StoreSummary
-		if err := json.NewDecoder(reader).Decode(&summary); err != nil {
-			slog.WarnContext(ctx, "failed to decode cached ALDI store summary", "key", key, "error", err)
-			return nil
-		}
-		return &summary
-	})
-
-	summaries = lo.Compact(summaries)
-	if len(summaries) == 0 {
-		return nil, fmt.Errorf("failed to load aldi locations")
+func loadCachedStoreSummaryByID(ctx context.Context, c cache.Cache, locationID string) (*StoreSummary, error) {
+	reader, err := c.Get(ctx, StoreCachePrefix+locationID)
+	if err != nil {
+		return nil, err
 	}
-	slog.InfoContext(ctx, "loaded ALDI locations", "count", len(summaries))
+	defer func() {
+		_ = reader.Close()
+	}()
 
-	return summaries, nil
+	var summary StoreSummary
+	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+		return nil, fmt.Errorf("decode ALDI store summary: %w", err)
+	}
+	return &summary, nil
+}
+
+func storeSummaryToIndexEntry(summary StoreSummary, zipLookup storeindex.ZipCentroidLookup) storeindex.Entry {
+	lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
+	return storeindex.Entry{
+		ID:  summary.ID,
+		Lat: lat,
+		Lon: lon,
+	}
 }
 
 func storeSummaryToLocation(summary StoreSummary) locationtypes.Location {
