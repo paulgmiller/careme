@@ -1,12 +1,13 @@
 package wegmans
 
 import (
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations/nearby"
 	"context"
 	"fmt"
 	"strings"
+
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations/nearby"
 
 	locationtypes "careme/internal/locations/types"
 )
