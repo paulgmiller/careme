@@ -1,15 +1,15 @@
 package heb
 
 import (
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations/nearby"
+	"careme/internal/locations/storeindex"
 	"context"
 	"fmt"
 	"strings"
 	"sync"
 
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations/nearby"
-	"careme/internal/locations/storeindex"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -47,9 +47,9 @@ func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidBy
 		return nil, fmt.Errorf("cache is required")
 	}
 
-	entries, err := loadLocationIndex(ctx, c)
+	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load heb locations index: %w", err)
 	}
 
 	spatial := make([]locationtypes.Location, 0, len(entries))

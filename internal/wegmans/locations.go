@@ -1,15 +1,14 @@
 package wegmans
 
 import (
-	"context"
-	"fmt"
-	"strings"
-	"sync"
-
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations/nearby"
 	"careme/internal/locations/storeindex"
+	"context"
+	"fmt"
+	"strings"
+	"sync"
 
 	locationtypes "careme/internal/locations/types"
 )
@@ -45,9 +44,9 @@ func NewLocationBackend(ctx context.Context, cfg *config.Config, zipLookup centr
 }
 
 func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {
-	entries, err := loadLocationIndex(ctx, c)
+	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load wegmans locations index: %w", err)
 	}
 
 	spatial := make([]locationtypes.Location, 0, len(entries))

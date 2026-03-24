@@ -1,13 +1,12 @@
 package aldi
 
 import (
+	"careme/internal/cache"
+	"careme/internal/locations/storeindex"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"careme/internal/cache"
-	"careme/internal/locations/storeindex"
 
 	locationtypes "careme/internal/locations/types"
 )
@@ -28,14 +27,6 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 		return fmt.Errorf("write store summary cache: %w", err)
 	}
 	return nil
-}
-
-func loadLocationIndex(ctx context.Context, c cache.Cache) ([]storeindex.Entry, error) {
-	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
-	if err != nil {
-		return nil, fmt.Errorf("load aldi locations index: %w", err)
-	}
-	return entries, nil
 }
 
 func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {

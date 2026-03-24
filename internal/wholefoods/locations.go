@@ -1,15 +1,15 @@
 package wholefoods
 
 import (
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations/nearby"
+	"careme/internal/locations/storeindex"
 	"context"
 	"fmt"
 	"strings"
 	"sync"
 
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations/nearby"
-	"careme/internal/locations/storeindex"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -43,10 +43,9 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 }
 
 func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {
-	// Is this too much? should we just fetch a single blob that is all coordinates -> store ids and lazily fetch stores?
-	entries, err := loadLocationIndex(ctx, c)
+	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load wholefoods locations index: %w", err)
 	}
 
 	spatial := make([]locationtypes.Location, 0, len(entries))

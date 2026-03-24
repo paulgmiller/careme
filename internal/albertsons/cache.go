@@ -43,14 +43,6 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 	return nil
 }
 
-func loadLocationIndex(ctx context.Context, c cache.Cache) ([]storeindex.Entry, error) {
-	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
-	if err != nil {
-		return nil, fmt.Errorf("load albertsons locations index: %w", err)
-	}
-	return entries, nil
-}
-
 func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
 	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey, func(summary StoreSummary) storeindex.Entry {
 		lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
