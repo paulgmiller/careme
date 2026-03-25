@@ -124,7 +124,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
 # Instructions
 - Each meal must feature a protein and at least one side of either a vegetable and/or a starch. Include pastas, noodles, stir fry's, stews, braises, curries, casserole and other compositions.
 - Recipes should use diverse cooking methods and represent a variety of cuisines.
-- Provide clear, step-by-step instructions and an ingredient list for each recipe. Repeat amounts and prep for each recipe in instructions. Details on how ingredients are cut and plated.
+- Provide clear, step-by-step instructions and an ingredient list for each recipe. Repeat amounts and prep for each recipe in instructions. Details on how ingredients are cut and plated. No prices or wine paring in instructions.
 - include a optional wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles. Really put your Sommielier hat on for this.
 - Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but be willing to pay for better ingredients). Only use prices given don't invent prices.
 - Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated ingredient quantities and servings.
@@ -141,7 +141,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
   - ingredients:  should include quantities and price if in input. Can include widely availble pantry items not explicitly listed in user input.
   - instructions: Step-by-step starting with prep and ending with plating. Don't prefix with numbers.
   - health: Estimated Calorie count and other macro nutrient details.
-  - drink_pairing: the wine pairing suggestion mentioned in instructions
+  - drink_pairing: the wine pairing sommielier details.
   - wine_styles: Two or fewer consumer-recognizable wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc", "Cabernet Sauvignon"). Must only contain searchable style names: no regions, no parenthetical notes, no commas, no "or", no "*-style blend" phrasing.
 
 # Planning & Verification
@@ -169,7 +169,7 @@ const winePrompt = `
 Act as a sommelier for the recipe provided below
 Select 1 to 2 wines from the provided TSV that best match the dish
 Return JSON with wines (ingredient array) and concise commentary explaining why those specific bottles work.
-Only choose wines present in the TSV. For each wine include name and optionally quantity/price when available from TSV.
+Only choose wines present in the TSV. For each wine include name and optionally quantity/single price when available from TSV .
 Be creative not always the same safe picks. Consider the specific ingredients, cooking method, and flavor profile of the dish when making your selection.
 Also for fancier/more expensive dishes consider more expensive wines.
 `
