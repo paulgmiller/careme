@@ -1,10 +1,11 @@
 package ai
 
 import (
-	"careme/internal/kroger"
 	"slices"
 	"strings"
 	"testing"
+
+	"careme/internal/kroger"
 )
 
 func TestRecipeComputeHash(t *testing.T) {
