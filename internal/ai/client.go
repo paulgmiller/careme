@@ -141,7 +141,7 @@ Generate distinct, practical recipes using the provided constraints to maximize 
   - ingredients:  should include quantities and price if in input. Can include widely availble pantry items not explicitly listed in user input.
   - instructions: Step-by-step starting with prep and ending with plating. Don't prefix with numbers.
   - health: Estimated Calorie count and other macro nutrient details.
-  - drink_pairing: the wine pairing suggestion mentioned in instructions
+  - drink_pairing: the wine pairing sommielier details.
   - wine_styles: Two or fewer consumer-recognizable wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc", "Cabernet Sauvignon"). Must only contain searchable style names: no regions, no parenthetical notes, no commas, no "or", no "*-style blend" phrasing.
 
 # Planning & Verification
