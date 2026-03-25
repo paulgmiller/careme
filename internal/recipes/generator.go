@@ -29,7 +29,7 @@ type aiClient interface {
 	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
-	PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error)
+	PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error)
 	Ready(ctx context.Context) error
 }
 
@@ -63,7 +63,7 @@ func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
 	}, nil
 }
 
-func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (g *Generator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
@@ -115,7 +115,7 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 	}
 	wines = uniqueByDescription(wines)
 
-	selection, err := g.aiClient.PickWine(ctx, conversationID, recipe.Title, wines)
+	selection, err := g.aiClient.PickWine(ctx, recipe, wines)
 	if err != nil {
 		return nil, err
 	}

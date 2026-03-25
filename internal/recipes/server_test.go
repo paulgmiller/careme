@@ -577,7 +577,7 @@ func (c *captureKickgenerationGenerator) GenerateRecipeImage(ctx context.Context
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *captureKickgenerationGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (c *captureKickgenerationGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	panic("unexpected call to PickAWine")
 }
 
@@ -652,9 +652,8 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 type captureQuestionGenerator struct {
 	lastQuestion string
 	lastWinePick struct {
-		conversationID string
-		recipeTitle    string
-		date           time.Time
+		recipeTitle string
+		date        time.Time
 	}
 	wineRecommendation string
 	winePickCalls      int
@@ -689,13 +688,12 @@ func (c *captureQuestionGenerator) GenerateRecipeImage(ctx context.Context, reci
 	}, nil
 }
 
-func (c *captureQuestionGenerator) PickAWine(ctx context.Context, conversationID, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (c *captureQuestionGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	if c.panicOnWine {
 		panic("unexpected call to PickAWine")
 	}
 	_ = location
 	c.winePickCalls++
-	c.lastWinePick.conversationID = conversationID
 	c.lastWinePick.recipeTitle = recipe.Title
 	c.lastWinePick.date = date
 	if c.wineRecommendation != "" {
@@ -841,7 +839,6 @@ func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
 	)
 
 	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Wine Test Store"}, time.Now())
-	p.ConversationID = "conv-wine"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
@@ -876,9 +873,6 @@ func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
 	if !strings.Contains(body, "Try a chilled sauvignon blanc.") {
 		t.Fatalf("expected wine recommendation in response, got body: %s", body)
 	}
-	if got, want := g.lastWinePick.conversationID, "conv-wine"; got != want {
-		t.Fatalf("expected conversation id %q, got %q", want, got)
-	}
 	if got, want := g.lastWinePick.recipeTitle, "Roast Chicken"; got != want {
 		t.Fatalf("expected recipe title %q, got %q", want, got)
 	}
@@ -899,7 +893,6 @@ func TestHandleWine_ShoppingVariantReturnsShoppingFragment(t *testing.T) {
 	)
 
 	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Wine Test Store"}, time.Now())
-	p.ConversationID = "conv-wine"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
@@ -951,7 +944,6 @@ func TestHandleWine_UsesCachedWineRecommendation(t *testing.T) {
 	)
 
 	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Wine Test Store"}, time.Now())
-	p.ConversationID = "conv-wine"
 	originHash := p.Hash()
 	if err := s1.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)

@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"careme/internal/kroger"
 )
 
 func TestRecipeComputeHash(t *testing.T) {
@@ -112,4 +114,52 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 	if !strings.Contains(prompt, "Recipe:\nRoast Chicken\nCrisp skin and herbs.\nInstructions:\nRoast until golden.\n") {
 		t.Fatalf("expected recipe summary in prompt: %s", prompt)
 	}
+}
+
+func TestBuildWineSelectionPrompt(t *testing.T) {
+	recipe := Recipe{
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		CookTime:     "45 minutes",
+		CostEstimate: "$18-24",
+		Ingredients: []Ingredient{
+			{Name: "Chicken", Quantity: "1 whole", Price: "$12"},
+			{Name: "Lemon", Quantity: "1", Price: "$1"},
+		},
+		Instructions: []string{"Roast until golden.", "Finish with lemon juice."},
+		Health:       "Balanced dinner",
+		DrinkPairing: "Pinot Noir",
+		WineStyles:   []string{"Pinot Noir", "Chardonnay"},
+	}
+	wines := []kroger.Ingredient{
+		{Description: strPtr("Pinot Noir"), Size: strPtr("750mL"), PriceRegular: float32Ptr(13.99)},
+	}
+
+	prompt, err := buildWineSelectionPrompt(recipe, wines)
+	if err != nil {
+		t.Fatalf("buildWineSelectionPrompt returned error: %v", err)
+	}
+	if !strings.Contains(prompt, "Title: Roast Chicken\nDescription: Crisp skin and herbs.\nCook time: 45 minutes\nCost estimate: $18-24\n") {
+		t.Fatalf("expected recipe summary in prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Existing drink pairing note: Pinot Noir\nSuggested wine styles: Pinot Noir, Chardonnay\nHealth notes: Balanced dinner\n") {
+		t.Fatalf("expected pairing hints in prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, "- 1 whole Chicken ($12)\n- 1 Lemon ($1)\n") {
+		t.Fatalf("expected ingredient replay in prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, "- Roast until golden.\n- Finish with lemon juice.\n") {
+		t.Fatalf("expected instructions replay in prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\n\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
+		t.Fatalf("expected candidate wines TSV in prompt: %s", prompt)
+	}
+}
+
+func strPtr(s string) *string {
+	return &s
+}
+
+func float32Ptr(v float32) *float32 {
+	return &v
 }

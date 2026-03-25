@@ -28,6 +28,7 @@ type Client struct {
 	schema     map[string]any
 	wineSchema map[string]any
 	model      string
+	wineModel  string
 }
 
 type GeneratedImage struct {
@@ -110,6 +111,7 @@ func NewClient(apiKey, _ string) *Client {
 		schema:     m,
 		wineSchema: wine,
 		model:      openai.ChatModelGPT5_4,
+		wineModel:  openai.ChatModelGPT5Mini,
 	}
 }
 
@@ -289,40 +291,22 @@ func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 	}, nil
 }
 
-func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*WineSelection, error) {
-	conversationID = strings.TrimSpace(conversationID)
-	recipeTitle = strings.TrimSpace(recipeTitle)
-	if conversationID == "" {
-		return nil, fmt.Errorf("conversation ID is required for wine picks")
-	}
-	if recipeTitle == "" {
-		return nil, fmt.Errorf("recipe title is required for wine picks")
-	}
-	if len(wines) == 0 {
-		return nil, fmt.Errorf("wines are required for wine picks")
-	}
-	var wineTSV strings.Builder
-	err := kroger.ToTSV(wines, &wineTSV)
+func (c *Client) PickWine(ctx context.Context, recipe Recipe, wines []kroger.Ingredient) (*WineSelection, error) {
+	prompt, err := buildWineSelectionPrompt(recipe, wines)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to convert wines to TSV", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to build wine selection prompt: %w", err)
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
-	input := []responses.ResponseInputItemUnionParam{user(fmt.Sprintf("Candidate wines:\n%s", wineTSV.String()))}
 	params := responses.ResponseNewParams{
-		Model: c.model,
+		Model: c.wineModel,
 		Instructions: openai.String(
-			"Act as a sommelier. Select 1 to 2 wines from the provided TSV that pair well with the recipe " + recipeTitle + "." +
-				"Return JSON with wines (ingredient array) and commentary about why those particular wines work well" +
-				"Pick wine sizes appropriate to number of people. Price according to the meal fanciness" +
-				"For each wine include name and optionally quantity/price when available from TSV.",
+			"Act as a sommelier. Use only the recipe details included in this request, not any prior conversation." +
+				" Select 1 to 2 wines from the provided TSV that best match the dish." +
+				" Return JSON with wines (ingredient array) and concise commentary explaining why those specific bottles work." +
+				" Only choose wines present in the TSV. For each wine include name and optionally quantity/price when available from TSV.",
 		),
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: input,
-		},
-		Store: openai.Bool(true),
-		Conversation: responses.ResponseNewParamsConversationUnion{
-			OfString: openai.String(conversationID),
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
 		},
 		Text: scheme(c.wineSchema),
 	}
@@ -390,6 +374,77 @@ func buildRecipeImagePrompt(recipe Recipe) (string, error) {
 	for _, ins := range recipe.Instructions {
 		fmt.Fprintf(&promptBuilder, "%s\n", ins)
 	}
+	return promptBuilder.String(), nil
+}
+
+func buildWineSelectionPrompt(recipe Recipe, wines []kroger.Ingredient) (string, error) {
+	recipe.Title = strings.TrimSpace(recipe.Title)
+	if recipe.Title == "" {
+		return "", fmt.Errorf("recipe title is required for wine picks")
+	}
+	if len(wines) == 0 {
+		return "", fmt.Errorf("wines are required for wine picks")
+	}
+
+	var wineTSV strings.Builder
+	if err := kroger.ToTSV(wines, &wineTSV); err != nil {
+		return "", fmt.Errorf("failed to convert wines to TSV: %w", err)
+	}
+
+	var promptBuilder strings.Builder
+	fmt.Fprintf(&promptBuilder, "Recipe:\n")
+	fmt.Fprintf(&promptBuilder, "Title: %s\n", recipe.Title)
+	if description := strings.TrimSpace(recipe.Description); description != "" {
+		fmt.Fprintf(&promptBuilder, "Description: %s\n", description)
+	}
+	if cookTime := strings.TrimSpace(recipe.CookTime); cookTime != "" {
+		fmt.Fprintf(&promptBuilder, "Cook time: %s\n", cookTime)
+	}
+	if costEstimate := strings.TrimSpace(recipe.CostEstimate); costEstimate != "" {
+		fmt.Fprintf(&promptBuilder, "Cost estimate: %s\n", costEstimate)
+	}
+	if pairing := strings.TrimSpace(recipe.DrinkPairing); pairing != "" {
+		fmt.Fprintf(&promptBuilder, "Existing drink pairing note: %s\n", pairing)
+	}
+	if len(recipe.WineStyles) > 0 {
+		fmt.Fprintf(&promptBuilder, "Suggested wine styles: %s\n", strings.Join(recipe.WineStyles, ", "))
+	}
+	if health := strings.TrimSpace(recipe.Health); health != "" {
+		fmt.Fprintf(&promptBuilder, "Health notes: %s\n", health)
+	}
+
+	fmt.Fprintf(&promptBuilder, "\nIngredients:\n")
+	for _, ingredient := range recipe.Ingredients {
+		var parts []string
+		if quantity := strings.TrimSpace(ingredient.Quantity); quantity != "" {
+			parts = append(parts, quantity)
+		}
+		if name := strings.TrimSpace(ingredient.Name); name != "" {
+			parts = append(parts, name)
+		}
+		line := strings.Join(parts, " ")
+		if price := strings.TrimSpace(ingredient.Price); price != "" {
+			if line != "" {
+				line += " "
+			}
+			line += "(" + price + ")"
+		}
+		if line == "" {
+			continue
+		}
+		fmt.Fprintf(&promptBuilder, "- %s\n", line)
+	}
+
+	fmt.Fprintf(&promptBuilder, "\nInstructions:\n")
+	for _, instruction := range recipe.Instructions {
+		instruction = strings.TrimSpace(instruction)
+		if instruction == "" {
+			continue
+		}
+		fmt.Fprintf(&promptBuilder, "- %s\n", instruction)
+	}
+
+	fmt.Fprintf(&promptBuilder, "\nCandidate wines TSV:\n%s", wineTSV.String())
 	return promptBuilder.String(), nil
 }
 

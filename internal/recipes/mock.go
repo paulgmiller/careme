@@ -419,9 +419,8 @@ func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.Ge
 	}, nil
 }
 
-func (m mock) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (m mock) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	_ = ctx
-	_ = conversationID
 	_ = location
 	_ = date
 	return &ai.WineSelection{
