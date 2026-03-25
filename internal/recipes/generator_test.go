@@ -14,10 +14,10 @@ import (
 )
 
 type captureWineQuestionAIClient struct {
-	question    string
-	answer      string
-	recipeTitle string
-	selection   *ai.WineSelection
+	question  string
+	answer    string
+	recipe    ai.Recipe
+	selection *ai.WineSelection
 }
 
 type captureRegenerateAIClient struct {
@@ -49,8 +49,8 @@ func (c *captureWineQuestionAIClient) GenerateRecipeImage(ctx context.Context, r
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error) {
-	c.recipeTitle = recipeTitle
+func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error) {
+	c.recipe = recipe
 	if c.selection != nil {
 		return c.selection, nil
 	}
@@ -85,7 +85,7 @@ func (c *captureRegenerateAIClient) GenerateRecipeImage(ctx context.Context, rec
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *captureRegenerateAIClient) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error) {
+func (c *captureRegenerateAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error) {
 	panic("unexpected call to PickWine")
 }
 
@@ -120,9 +120,8 @@ func TestWineIngredientsCacheKey_UsesStyleDateAndLocation(t *testing.T) {
 
 func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	const (
-		location     = "70500874"
-		conversation = "conv-1"
-		style        = "Pinot Noir"
+		location = "70500874"
+		style    = "Pinot Noir"
 	)
 	cacheDate := time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC)
 
@@ -150,7 +149,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 		aiClient: aiStub,
 	}
 
-	got, err := g.PickAWine(t.Context(), conversation, location, ai.Recipe{
+	got, err := g.PickAWine(t.Context(), location, ai.Recipe{
 		Title:      "Roast Chicken",
 		WineStyles: []string{style},
 	}, cacheDate)
@@ -167,8 +166,8 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	if got.Wines == nil || len(got.Wines) != 1 || got.Wines[0].Name != "Cached Pinot Noir" {
 		t.Fatalf("unexpected wine selection payload: %+v", got.Wines)
 	}
-	if aiStub.recipeTitle != "Roast Chicken" {
-		t.Fatalf("expected recipe title %q, got %q", "Roast Chicken", aiStub.recipeTitle)
+	if aiStub.recipe.Title != "Roast Chicken" {
+		t.Fatalf("expected recipe title %q, got %q", "Roast Chicken", aiStub.recipe.Title)
 	}
 }
 
@@ -197,7 +196,7 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 		staplesProvider: staplesStub,
 	}
 
-	got, err := g.PickAWine(t.Context(), "conv-wholefoods", "wholefoods_10216", ai.Recipe{
+	got, err := g.PickAWine(t.Context(), "wholefoods_10216", ai.Recipe{
 		Title:      "Salmon",
 		WineStyles: []string{"Pinot Noir"},
 	}, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC))
@@ -214,8 +213,8 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 	if got == nil || len(got.Wines) != 3 {
 		t.Fatalf("unexpected wine selection: %+v", got)
 	}
-	if aiStub.recipeTitle != "Salmon" {
-		t.Fatalf("expected recipe title %q, got %q", "Salmon", aiStub.recipeTitle)
+	if aiStub.recipe.Title != "Salmon" {
+		t.Fatalf("expected recipe title %q, got %q", "Salmon", aiStub.recipe.Title)
 	}
 }
 

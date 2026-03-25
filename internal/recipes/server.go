@@ -76,7 +76,7 @@ type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
-	PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
+	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 	Ready(ctx context.Context) error
 }
 
@@ -437,17 +437,11 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conversationID := strings.TrimSpace(loadConversationIDForRecipe(ctx, s.recipeio, recipe.OriginHash))
-	if conversationID == "" {
-		http.Error(w, "conversation id not found", http.StatusUnprocessableEntity)
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
 	defer cancel()
-	selection, err := s.generator.PickAWine(ctx, conversationID, p.Location.ID, *recipe, p.Date)
+	selection, err := s.generator.PickAWine(ctx, p.Location.ID, *recipe, p.Date)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to pick wine", "hash", hash, "conversation_id", conversationID, "error", err)
+		slog.ErrorContext(ctx, "failed to pick wine", "hash", hash, "error", err)
 		http.Error(w, "failed to pick wine", http.StatusInternalServerError)
 		return
 	}
@@ -1073,30 +1067,6 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStar
 
 func isHTMXRequest(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
-}
-
-func loadConversationIDForRecipe(ctx context.Context, rio recipeio, originHash string) string {
-	originHash = strings.TrimSpace(originHash)
-	if originHash == "" {
-		return ""
-	}
-	if normalizedHash, ok := legacyHashToCurrent(originHash, legacyRecipeHashSeed); ok {
-		originHash = normalizedHash
-	}
-	if p, err := rio.ParamsFromCache(ctx, originHash); err == nil {
-		if conversationID := strings.TrimSpace(p.ConversationID); conversationID != "" {
-			return conversationID
-		}
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load recipe params for conversation", "hash", originHash, "error", err)
-	}
-
-	if slist, err := rio.FromCache(ctx, originHash); err == nil {
-		return strings.TrimSpace(slist.ConversationID)
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load shopping list for conversation", "hash", originHash, "error", err)
-	}
-	return ""
 }
 
 func parseFeedbackBool(value string) (bool, error) {
