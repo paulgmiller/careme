@@ -31,7 +31,6 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 	var (
 		baseURL         string
 		storeID         string
-		zipCode         string
 		subscriptionKey string
 		reese84         string
 		searchQuery     string
@@ -42,7 +41,6 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 
 	fs.StringVar(&baseURL, "base-url", query.DefaultSearchBaseURL, "Albertsons-family search base URL")
 	fs.StringVar(&storeID, "store-id", "806", "store id to search against")
-	fs.StringVar(&zipCode, "zip", "19711", "ZIP code for the store context")
 	fs.StringVar(&subscriptionKey, "subscription-key", envOrDefault("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY", "e914eec9448c4d5eb672debf5011cf8f"), "Albertsons pathway subscription key")
 	fs.StringVar(&reese84, "reese84", envOrDefault("ALBERTSONS_SEARCH_REESE84", ""), "optional reese84 cookie value")
 	fs.StringVar(&searchQuery, "query", "", "search query, default empty string")
@@ -55,9 +53,6 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 	}
 	if storeID == "" {
 		return errors.New("store-id is required")
-	}
-	if zipCode == "" {
-		return errors.New("zip is required")
 	}
 	if subscriptionKey == "" {
 		return errors.New("subscription-key is required")
@@ -76,7 +71,7 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		return fmt.Errorf("create search client: %w", err)
 	}
 
-	resp, err := client.Search(ctx, storeID, zipCode, query.SearchOptions{
+	resp, err := client.Search(ctx, storeID, query.SearchOptions{
 		Query: searchQuery,
 		Start: start,
 		Rows:  rows,

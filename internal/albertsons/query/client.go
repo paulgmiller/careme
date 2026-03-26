@@ -25,7 +25,7 @@ const (
 const (
 	DefaultSearchBaseURL = "https://www.safeway.com"
 	defaultSearchPath    = "/abs/pub/xapi/wcax/pathway/search"
-	defaultSearchRows    = 60   // how high can we go.
+	defaultSearchRows    = 60   // how high can we go. Shoudl we paginate just to
 	defaultSearchWidget  = meat // need to get more categories.
 	defaultSearchChannel = "instore"
 	defaultSearchUser    = "G"
@@ -103,15 +103,10 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 	}, nil
 }
 
-func (c *SearchClient) Search(ctx context.Context, storeID, zipCode string, opts SearchOptions) (*SearchResponse, error) {
+func (c *SearchClient) Search(ctx context.Context, storeID string, opts SearchOptions) (*SearchResponse, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
-	}
-
-	zipCode = strings.TrimSpace(zipCode)
-	if zipCode == "" {
-		return nil, errors.New("zip code is required")
 	}
 
 	endpoint, err := url.Parse(c.baseURL + defaultSearchPath)
