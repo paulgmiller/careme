@@ -16,10 +16,17 @@ import (
 )
 
 const (
+	vegatables = "GR-C-categ-8c62c848"
+	fruit      = "GR-C-categ-a8eea474"
+	seafood    = "GR-C-Categ-6090cd27"
+	meat       = "GR-MeatF-fffc8662"
+)
+
+const (
 	DefaultSearchBaseURL = "https://www.safeway.com"
 	defaultSearchPath    = "/abs/pub/xapi/wcax/pathway/search"
-	defaultSearchRows    = 60                    // how high can we go.
-	defaultSearchWidget  = "GR-C-Categ-6090cd27" // need to get more categories.
+	defaultSearchRows    = 60   // how high can we go.
+	defaultSearchWidget  = meat // need to get more categories.
 	defaultSearchChannel = "instore"
 	defaultSearchUser    = "G"
 )
