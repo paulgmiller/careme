@@ -71,7 +71,7 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		return fmt.Errorf("create search client: %w", err)
 	}
 
-	resp, err := client.Search(ctx, storeID, query.SearchOptions{
+	resp, err := client.Search(ctx, storeID, query.Category_Vegatables, query.SearchOptions{
 		Query: searchQuery,
 		Start: start,
 		Rows:  rows,
@@ -85,10 +85,11 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		return fmt.Errorf("decode search response: %w", err)
 	}
 
-	_, err = fmt.Fprintln(stdout, len(payload.Response.Docs))
 	for i, doc := range payload.Response.Docs {
 		_, _ = fmt.Fprintf(stdout, "%d: %s (price: %.2f)\n", i+1, doc.Name, doc.Price)
 	}
+	_, err = fmt.Fprintf(stdout, "total products: %d\n", len(payload.Response.Docs))
+
 	return err
 }
 

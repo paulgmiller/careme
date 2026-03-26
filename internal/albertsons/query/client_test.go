@@ -2,7 +2,6 @@ package query
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -45,10 +44,7 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	resp, err := client.Search(context.Background(), "806", "19711", SearchOptions{
-		HouseID:  "729022287633",
-		ClubCard: "49549812729",
-	})
+	resp, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -63,19 +59,12 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 	query := capturedReq.URL.Query()
 	assertQueryValue(t, query, "url", "https://www.acmemarkets.com")
 	assertQueryValue(t, query, "q", "")
-	assertQueryValue(t, query, "rows", "30")
+	assertQueryValue(t, query, "rows", "60")
 	assertQueryValue(t, query, "start", "0")
 	assertQueryValue(t, query, "channel", "instore")
 	assertQueryValue(t, query, "storeid", "806")
 	assertQueryValue(t, query, "sort", "")
-	assertQueryValue(t, query, "widget-id", "GR-C-Categ-6090cd27")
-	assertQueryValue(t, query, "dvid", "web-4.1search")
-	assertQueryValue(t, query, "visitorId", "visitor-123")
-	assertQueryValue(t, query, "uuid", "null")
-	assertQueryValue(t, query, "pgm", "abs")
-	assertQueryValue(t, query, "includeOffer", "true")
-	assertQueryValue(t, query, "banner", "acmemarkets")
-	assertQueryValue(t, query, "facet", "false")
+	assertQueryValue(t, query, "widget-id", Category_Vegatables)
 
 	if got := capturedReq.Header.Get("Accept"); got != "application/json, text/plain, */*" {
 		t.Fatalf("unexpected accept header: %q", got)
@@ -85,37 +74,6 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 	}
 	if got := capturedReq.Header.Get("Ocp-Apim-Subscription-Key"); got != "test-subscription-key" {
 		t.Fatalf("unexpected subscription header: %q", got)
-	}
-
-	previousLoginValue, err := capturedReq.Cookie("ACI_S_abs_previouslogin")
-	if err != nil {
-		t.Fatalf("expected ACI_S_abs_previouslogin cookie: %v", err)
-	}
-
-	decodedCookie, err := url.QueryUnescape(previousLoginValue.Value)
-	if err != nil {
-		t.Fatalf("QueryUnescape returned error: %v", err)
-	}
-
-	var previousLogin previousLoginCookie
-	if err := json.Unmarshal([]byte(decodedCookie), &previousLogin); err != nil {
-		t.Fatalf("Unmarshal returned error: %v", err)
-	}
-	common := previousLogin.Info.Common
-	if common.HouseID != "729022287633" {
-		t.Fatalf("unexpected houseId: %q", common.HouseID)
-	}
-	if common.ClubCard != "49549812729" {
-		t.Fatalf("unexpected clubCard: %q", common.ClubCard)
-	}
-	if common.UserType != "G" {
-		t.Fatalf("unexpected userType: %q", common.UserType)
-	}
-	if common.StoreID != "806" {
-		t.Fatalf("unexpected storeId: %q", common.StoreID)
-	}
-	if common.ZipCode != "19711" {
-		t.Fatalf("unexpected zipcode: %q", common.ZipCode)
 	}
 
 	reese84Cookie, err := capturedReq.Cookie("reese84")
@@ -151,13 +109,10 @@ func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	if _, err := client.Search(context.Background(), "1444", "98006", SearchOptions{}); err != nil {
+	if _, err := client.Search(context.Background(), "1444", Category_Vegatables, SearchOptions{}); err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
 
-	if got := capturedReq.URL.Query().Get("banner"); got != "safeway" {
-		t.Fatalf("unexpected banner: %q", got)
-	}
 	if got := capturedReq.URL.Query().Get("url"); got != DefaultSearchBaseURL {
 		t.Fatalf("unexpected url query value: %q", got)
 	}

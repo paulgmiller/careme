@@ -16,17 +16,16 @@ import (
 )
 
 const (
-	vegatables = "GR-C-categ-8c62c848"
-	fruit      = "GR-C-categ-a8eea474"
-	seafood    = "GR-C-Categ-6090cd27"
-	meat       = "GR-MeatF-fffc8662"
+	Category_Vegatables = "GR-C-categ-8c62c848"
+	Category_Fruit      = "GR-C-categ-a8eea474"
+	Category_Seafood    = "GR-C-Categ-6090cd27"
+	Category_Meat       = "GR-MeatF-fffc8662"
 )
 
 const (
 	DefaultSearchBaseURL = "https://www.safeway.com"
 	defaultSearchPath    = "/abs/pub/xapi/wcax/pathway/search"
-	defaultSearchRows    = 60   // how high can we go. Shoudl we paginate just to
-	defaultSearchWidget  = meat // need to get more categories.
+	defaultSearchRows    = 60 // how high can we go. Shoudl we paginate just to
 	defaultSearchChannel = "instore"
 	defaultSearchUser    = "G"
 )
@@ -48,11 +47,10 @@ type SearchClientConfig struct {
 }
 
 type SearchOptions struct {
-	Query    string
-	Start    int
-	Rows     int
-	Sort     string
-	WidgetID string // category
+	Query string
+	Start int
+	Rows  int
+	Sort  string
 }
 
 type SearchResponse struct {
@@ -103,7 +101,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 	}, nil
 }
 
-func (c *SearchClient) Search(ctx context.Context, storeID string, opts SearchOptions) (*SearchResponse, error) {
+func (c *SearchClient) Search(ctx context.Context, storeID, category string, opts SearchOptions) (*SearchResponse, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
@@ -122,7 +120,7 @@ func (c *SearchClient) Search(ctx context.Context, storeID string, opts SearchOp
 	query.Set("channel", defaultSearchChannel)
 	query.Set("storeid", storeID)
 	query.Set("sort", strings.TrimSpace(opts.Sort))
-	query.Set("widget-id", defaultString(opts.WidgetID, defaultSearchWidget))
+	query.Set("widget-id", category)
 	endpoint.RawQuery = query.Encode()
 
 	log.Printf("search endpoint: %s", endpoint.String())
