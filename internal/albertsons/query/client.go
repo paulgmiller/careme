@@ -21,7 +21,6 @@ const (
 	defaultSearchRows    = 30                    // how high can we go.
 	defaultSearchWidget  = "GR-C-Categ-6090cd27" // need to get
 	defaultSearchDVID    = "web-4.1search"
-	defaultSearchPGM     = "abs"
 	defaultSearchUUID    = "null"
 	defaultSearchChannel = "instore"
 	defaultSearchUser    = "G"
@@ -29,7 +28,6 @@ const (
 
 type SearchClient struct {
 	baseURL         string
-	banner          string
 	subscriptionKey string
 	reese84         string
 	visitorID       string
@@ -38,7 +36,6 @@ type SearchClient struct {
 
 type SearchClientConfig struct {
 	BaseURL         string
-	Banner          string
 	SubscriptionKey string
 	Reese84         string
 	VisitorID       string
@@ -104,15 +101,6 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
 
-	banner := strings.TrimSpace(cfg.Banner)
-	if banner == "" {
-		var err error
-		banner, err = inferBanner(baseURL)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 20 * time.Second}
@@ -125,7 +113,6 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 
 	return &SearchClient{
 		baseURL:         baseURL,
-		banner:          banner,
 		subscriptionKey: subscriptionKey,
 		reese84:         strings.TrimSpace(cfg.Reese84),
 		visitorID:       visitorID,
@@ -161,10 +148,6 @@ func (c *SearchClient) Search(ctx context.Context, storeID, zipCode string, opts
 	query.Set("dvid", defaultString(opts.DVID, defaultSearchDVID))
 	query.Set("visitorId", defaultString(opts.VisitorID, c.visitorID))
 	query.Set("uuid", defaultString(opts.UUID, defaultSearchUUID))
-	query.Set("pgm", defaultSearchPGM)
-	query.Set("includeOffer", "true")
-	query.Set("banner", c.banner)
-	query.Set("facet", "false")
 	endpoint.RawQuery = query.Encode()
 
 	log.Printf("search endpoint: %s", endpoint.String())
@@ -224,26 +207,6 @@ func encodePreviousLoginCookie(storeID, zipCode string, opts SearchOptions) (str
 		return "", fmt.Errorf("encode previous login cookie: %w", err)
 	}
 	return url.QueryEscape(string(raw)), nil
-}
-
-func inferBanner(baseURL string) (string, error) {
-	parsed, err := url.Parse(baseURL)
-	if err != nil {
-		return "", fmt.Errorf("parse base URL %q: %w", baseURL, err)
-	}
-
-	host := strings.TrimSpace(strings.ToLower(parsed.Hostname()))
-	host = strings.TrimPrefix(host, "www.")
-	if host == "" {
-		return "", fmt.Errorf("base URL %q is missing host", baseURL)
-	}
-
-	parts := strings.Split(host, ".")
-	if len(parts) < 2 || parts[0] == "" {
-		return "", fmt.Errorf("cannot infer banner from base URL %q", baseURL)
-	}
-
-	return parts[0], nil
 }
 
 func normalizedRows(rows int) int {

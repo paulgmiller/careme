@@ -30,7 +30,6 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 
 	var (
 		baseURL         string
-		banner          string
 		storeID         string
 		zipCode         string
 		subscriptionKey string
@@ -45,7 +44,6 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 	)
 
 	fs.StringVar(&baseURL, "base-url", query.DefaultSearchBaseURL, "Albertsons-family search base URL")
-	fs.StringVar(&banner, "banner", envOrDefault("ALBERTSONS_SEARCH_BANNER", ""), "banner override, for example safeway or acmemarkets")
 	fs.StringVar(&storeID, "store-id", "", "store id to search against")
 	fs.StringVar(&zipCode, "zip", "", "ZIP code for the store context")
 	fs.StringVar(&subscriptionKey, "subscription-key", envOrDefault("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY", "e914eec9448c4d5eb672debf5011cf8f"), "Albertsons pathway subscription key")
@@ -76,7 +74,6 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 	}
 	client, err := query.NewSearchClient(query.SearchClientConfig{
 		BaseURL:         baseURL,
-		Banner:          banner,
 		SubscriptionKey: subscriptionKey,
 		Reese84:         reese84,
 		HTTPClient:      httpClient,
@@ -103,6 +100,9 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 	}
 
 	_, err = fmt.Fprintln(stdout, len(payload.Response.Docs))
+	for i, doc := range payload.Response.Docs {
+		_, _ = fmt.Fprintf(stdout, "%d: %s (price: %.2f)\n", i+1, doc.Name, doc.Price)
+	}
 	return err
 }
 
