@@ -35,24 +35,18 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		subscriptionKey string
 		reese84         string
 		searchQuery     string
-		houseID         string
-		clubCard        string
-		userType        string
 		rows            int
 		start           int
 		timeoutSec      int
 	)
 
 	fs.StringVar(&baseURL, "base-url", query.DefaultSearchBaseURL, "Albertsons-family search base URL")
-	fs.StringVar(&storeID, "store-id", "", "store id to search against")
-	fs.StringVar(&zipCode, "zip", "", "ZIP code for the store context")
+	fs.StringVar(&storeID, "store-id", "806", "store id to search against")
+	fs.StringVar(&zipCode, "zip", "19711", "ZIP code for the store context")
 	fs.StringVar(&subscriptionKey, "subscription-key", envOrDefault("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY", "e914eec9448c4d5eb672debf5011cf8f"), "Albertsons pathway subscription key")
 	fs.StringVar(&reese84, "reese84", envOrDefault("ALBERTSONS_SEARCH_REESE84", ""), "optional reese84 cookie value")
 	fs.StringVar(&searchQuery, "query", "", "search query, default empty string")
-	fs.StringVar(&houseID, "house-id", envOrDefault("ALBERTSONS_SEARCH_HOUSE_ID", ""), "optional house id for ACI_S_abs_previouslogin")
-	fs.StringVar(&clubCard, "club-card", envOrDefault("ALBERTSONS_SEARCH_CLUB_CARD", ""), "optional club card for ACI_S_abs_previouslogin")
-	fs.StringVar(&userType, "user-type", "G", "user type for ACI_S_abs_previouslogin")
-	fs.IntVar(&rows, "rows", 30, "number of rows to request")
+	fs.IntVar(&rows, "rows", 60, "number of rows to request")
 	fs.IntVar(&start, "start", 0, "pagination start offset")
 	fs.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
 
@@ -83,12 +77,9 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 	}
 
 	resp, err := client.Search(ctx, storeID, zipCode, query.SearchOptions{
-		Query:    searchQuery,
-		Start:    start,
-		Rows:     rows,
-		HouseID:  houseID,
-		ClubCard: clubCard,
-		UserType: userType,
+		Query: searchQuery,
+		Start: start,
+		Rows:  rows,
 	})
 	if err != nil {
 		return fmt.Errorf("run search: %w", err)

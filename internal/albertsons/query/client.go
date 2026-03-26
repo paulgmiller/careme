@@ -18,10 +18,8 @@ import (
 const (
 	DefaultSearchBaseURL = "https://www.safeway.com"
 	defaultSearchPath    = "/abs/pub/xapi/wcax/pathway/search"
-	defaultSearchRows    = 30                    // how high can we go.
-	defaultSearchWidget  = "GR-C-Categ-6090cd27" // need to get
-	defaultSearchDVID    = "web-4.1search"
-	defaultSearchUUID    = "null"
+	defaultSearchRows    = 60                    // how high can we go.
+	defaultSearchWidget  = "GR-C-Categ-6090cd27" // need to get more categories.
 	defaultSearchChannel = "instore"
 	defaultSearchUser    = "G"
 )
@@ -43,17 +41,11 @@ type SearchClientConfig struct {
 }
 
 type SearchOptions struct {
-	Query     string
-	Start     int
-	Rows      int
-	Sort      string
-	WidgetID  string
-	DVID      string
-	VisitorID string
-	UUID      string
-	HouseID   string
-	ClubCard  string
-	UserType  string
+	Query    string
+	Start    int
+	Rows     int
+	Sort     string
+	WidgetID string // category
 }
 
 type SearchResponse struct {
@@ -71,22 +63,6 @@ func (r *SearchResponse) DecodeJSON(dest any) error {
 		return fmt.Errorf("decode json response: %w", err)
 	}
 	return nil
-}
-
-type previousLoginCookie struct {
-	Info previousLoginInfo `json:"info"`
-}
-
-type previousLoginInfo struct {
-	Common previousLoginCommon `json:"COMMON"`
-}
-
-type previousLoginCommon struct {
-	HouseID  string `json:"houseId,omitempty"`
-	ClubCard string `json:"clubCard,omitempty"`
-	UserType string `json:"userType,omitempty"`
-	StoreID  string `json:"storeId"`
-	ZipCode  string `json:"zipcode"`
 }
 
 func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
@@ -145,9 +121,6 @@ func (c *SearchClient) Search(ctx context.Context, storeID, zipCode string, opts
 	query.Set("storeid", storeID)
 	query.Set("sort", strings.TrimSpace(opts.Sort))
 	query.Set("widget-id", defaultString(opts.WidgetID, defaultSearchWidget))
-	query.Set("dvid", defaultString(opts.DVID, defaultSearchDVID))
-	query.Set("visitorId", defaultString(opts.VisitorID, c.visitorID))
-	query.Set("uuid", defaultString(opts.UUID, defaultSearchUUID))
 	endpoint.RawQuery = query.Encode()
 
 	log.Printf("search endpoint: %s", endpoint.String())
@@ -160,11 +133,6 @@ func (c *SearchClient) Search(ctx context.Context, storeID, zipCode string, opts
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("ocp-apim-subscription-key", c.subscriptionKey)
 
-	previousLogin, err := encodePreviousLoginCookie(storeID, zipCode, opts)
-	if err != nil {
-		return nil, err
-	}
-	req.AddCookie(&http.Cookie{Name: "ACI_S_abs_previouslogin", Value: previousLogin})
 	req.AddCookie(&http.Cookie{Name: "reese84", Value: c.reese84})
 
 	resp, err := c.httpClient.Do(req)
@@ -189,24 +157,6 @@ func (c *SearchClient) Search(ctx context.Context, storeID, zipCode string, opts
 		Header:      resp.Header.Clone(),
 		Body:        body,
 	}, nil
-}
-
-func encodePreviousLoginCookie(storeID, zipCode string, opts SearchOptions) (string, error) {
-	raw, err := json.Marshal(previousLoginCookie{
-		Info: previousLoginInfo{
-			Common: previousLoginCommon{
-				HouseID:  strings.TrimSpace(opts.HouseID),
-				ClubCard: strings.TrimSpace(opts.ClubCard),
-				UserType: defaultString(opts.UserType, defaultSearchUser),
-				StoreID:  storeID,
-				ZipCode:  zipCode,
-			},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("encode previous login cookie: %w", err)
-	}
-	return url.QueryEscape(string(raw)), nil
 }
 
 func normalizedRows(rows int) int {
