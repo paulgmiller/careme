@@ -3,12 +3,6 @@ package query
 // PathwaySearchPayload matches the Albertsons/Safeway pathway search response.
 type PathwaySearchPayload struct {
 	Response PathwaySearchResponse `json:"response"`
-	//don't actually care about any of this just comment it out?
-	OffersData     PathwaySearchOffersData         `json:"offersData"`
-	Facet          PathwaySearchFacet              `json:"facet"`
-	AppCode        string                          `json:"appCode"`
-	AppMsg         string                          `json:"appMsg"`
-	DynamicFilters map[string]PathwayDynamicFilter `json:"dynamic_filters"`
 }
 
 type PathwayDynamicFilter struct{}
@@ -147,77 +141,4 @@ type PathwaySearchBadge struct {
 
 type PathwaySearchLabel struct {
 	LabelName string `json:"labelName"`
-}
-
-type PathwaySearchOffersData struct {
-	Departments map[string]PathwayDepartmentOffers `json:"departments"`
-	UPCs        map[string]PathwayUPCOffers        `json:"upcs"`
-}
-
-type PathwayDepartmentOffers struct {
-	Offers map[string]PathwayOffer `json:"offers"`
-}
-
-type PathwayUPCOffers struct {
-	WeeklyAdBadge bool                    `json:"weeklyAdBadge"`
-	Offers        map[string]PathwayOffer `json:"offers,omitempty"`
-}
-
-type PathwayOffer struct {
-	Deleted          bool    `json:"deleted"`
-	DeliveryChannel  string  `json:"deliveryChannel"`
-	EcomDescription  string  `json:"ecomDescription"`
-	EndDate          string  `json:"endDate"`
-	ExtlOfferID      string  `json:"extlOfferId"`
-	IsClippable      bool    `json:"isClippable"`
-	IsDisplayable    bool    `json:"isDisplayable"`
-	MaxPurchaseQty   int     `json:"maxPurchaseQty"`
-	MinPurchaseQty   int     `json:"minPurchaseQty"`
-	OfferID          string  `json:"offerId"`
-	OfferPGM         string  `json:"offerPgm"`
-	OfferProgramType string  `json:"offerProgramType"`
-	OfferProtoType   string  `json:"offerProtoType"`
-	OfferSubPGM      string  `json:"offerSubPgm"`
-	OfferTS          string  `json:"offerTs"`
-	Price            float64 `json:"price"`
-	PurchaseInd      string  `json:"purchaseInd"`
-	StartDate        string  `json:"startDate"`
-}
-
-type PathwaySearchFacet struct {
-	Ranges        []PathwayFacetRange   `json:"ranges"`
-	Fields        []PathwayFacetField   `json:"fields"`
-	DynamicFacets []PathwayDynamicFacet `json:"dynamic_facets"`
-}
-
-type PathwayFacetRange struct {
-	Key   string                  `json:"key"`
-	Value []PathwayFacetRangeBand `json:"value"`
-}
-
-type PathwayFacetRangeBand struct {
-	Count int    `json:"count"`
-	Start string `json:"start"`
-	End   string `json:"end"`
-}
-
-type PathwayFacetField struct {
-	Key   string                  `json:"key"`
-	Value []PathwayFacetFieldItem `json:"value"`
-}
-
-type PathwayFacetFieldItem struct {
-	Count string `json:"count"`
-	Name  string `json:"name"`
-}
-
-type PathwayDynamicFacet struct {
-	FacetID     string                   `json:"facetId"`
-	DisplayText string                   `json:"displayText"`
-	Filters     []PathwayDynamicFacetHit `json:"filters"`
-}
-
-type PathwayDynamicFacetHit struct {
-	Count string `json:"count"`
-	Name  string `json:"name"`
 }

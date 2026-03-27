@@ -33,16 +33,5 @@ func TestPathwaySearchPayloadUnmarshalFixture(t *testing.T) {
 	if payload.Response.Docs[0].ChannelEligibility.Delivery != true {
 		t.Fatalf("expected first doc delivery eligibility to be true")
 	}
-	if len(payload.OffersData.Departments) == 0 {
-		t.Fatal("expected department offers to be populated")
-	}
-	if len(payload.OffersData.UPCs) == 0 {
-		t.Fatal("expected upc offers to be populated")
-	}
-	if len(payload.Facet.DynamicFacets) == 0 {
-		t.Fatal("expected dynamic facets to be populated")
-	}
-	if payload.AppCode == "" || payload.AppMsg == "" {
-		t.Fatalf("expected appCode and appMsg to be populated: %+v", payload)
-	}
+
 }
