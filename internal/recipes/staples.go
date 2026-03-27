@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"careme/internal/albertsons"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/walmart"
@@ -38,7 +39,7 @@ func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 		return nil, err
 	}
 	return routingStaplesProvider{
-		backends: defaultStaplesBackends(kclient),
+		backends: defaultStaplesBackends(cfg, kclient),
 	}, nil
 }
 
@@ -81,12 +82,13 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
-func defaultStaplesBackends(krogerClient kroger.ClientWithResponsesInterface) []backendStaplesProvider {
+func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) []backendStaplesProvider {
 	return []backendStaplesProvider{
 		kroger.NewStaplesProvider(krogerClient),
 		// actowiz.NewStaplesProvider(),
-		wholefoods.NewStaplesProvider(wholefoods.NewClient(nil)),
 		walmart.NewStaplesProvider(),
+		wholefoods.NewStaplesProvider(wholefoods.NewClient(nil)),
+		albertsons.NewStaplesProvider(cfg.Albertsons),
 	}
 }
 
@@ -94,6 +96,7 @@ func defaultIdentityProviders() []identityProvider {
 	return []identityProvider{
 		kroger.NewIdentityProvider(),
 		// actowiz.NewIdentityProvider(),
+		albertsons.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),
 	}
