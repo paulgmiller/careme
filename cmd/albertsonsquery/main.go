@@ -36,8 +36,8 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		subscriptionKey string
 		reese84         string
 		searchQuery     string
-		rows            int
-		start           int
+		rows            uint
+		start           uint
 		timeoutSec      int
 	)
 
@@ -46,8 +46,8 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 	fs.StringVar(&subscriptionKey, "subscription-key", envOrDefault("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY", "e914eec9448c4d5eb672debf5011cf8f"), "Albertsons pathway subscription key")
 	fs.StringVar(&reese84, "reese84", envOrDefault("ALBERTSONS_SEARCH_REESE84", ""), "optional reese84 cookie value")
 	fs.StringVar(&searchQuery, "query", "", "search query, default empty string")
-	fs.IntVar(&rows, "rows", 60, "number of rows to request")
-	fs.IntVar(&start, "start", 0, "pagination start offset")
+	fs.UintVar(&rows, "rows", 60, "number of rows to request")
+	fs.UintVar(&start, "start", 0, "pagination start offset")
 	fs.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
 
 	if err := fs.Parse(args); err != nil {

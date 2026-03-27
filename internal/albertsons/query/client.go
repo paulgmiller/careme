@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -53,8 +52,8 @@ type SearchClientConfig struct {
 
 type SearchOptions struct {
 	Query string
-	Start int
-	Rows  int
+	Start uint
+	Rows  uint
 	Sort  string
 }
 
@@ -93,19 +92,20 @@ func (c *SearchClient) Search(ctx context.Context, storeID, category string, opt
 	if err != nil {
 		return nil, fmt.Errorf("parse search URL: %w", err)
 	}
+	if opts.Rows == 0 {
+		opts.Rows = defaultSearchRows
+	}
 
 	query := endpoint.Query()
 	query.Set("url", c.baseURL)
 	query.Set("q", strings.TrimSpace(opts.Query))
-	query.Set("rows", fmt.Sprintf("%d", normalizedRows(opts.Rows)))
-	query.Set("start", fmt.Sprintf("%d", normalizedStart(opts.Start)))
+	query.Set("rows", fmt.Sprintf("%d", opts.Rows))
+	query.Set("start", fmt.Sprintf("%d", opts.Start))
 	query.Set("channel", defaultSearchChannel)
 	query.Set("storeid", storeID)
 	query.Set("sort", strings.TrimSpace(opts.Sort))
 	query.Set("widget-id", category)
 	endpoint.RawQuery = query.Encode()
-
-	log.Printf("search endpoint: %s", endpoint.String())
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
@@ -135,18 +135,4 @@ func (c *SearchClient) Search(ctx context.Context, storeID, category string, opt
 		return nil, fmt.Errorf("decode json response: %w", err)
 	}
 	return &payload, nil
-}
-
-func normalizedRows(rows int) int {
-	if rows <= 0 {
-		return defaultSearchRows
-	}
-	return rows
-}
-
-func normalizedStart(start int) int {
-	if start < 0 {
-		return 0
-	}
-	return start
 }
