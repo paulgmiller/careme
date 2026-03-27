@@ -69,7 +69,7 @@ func (b *LocationBackend) IsID(locationID string) bool {
 }
 
 func (l *LocationBackend) HasInventory(locationID string) bool {
-	//do we want to make this dynamic
+	// do we want to make this dynamic
 	return l.hasInventory
 }
 

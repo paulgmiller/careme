@@ -61,7 +61,7 @@ func (p identityProvider) IsID(locationID string) bool {
 }
 
 var stapleRows = map[string]int{
-	query.Category_Vegatables: 150, //do we need way more of this?
+	query.Category_Vegatables: 150, // do we need way more of this?
 	query.Category_Fruit:      100,
 	query.Category_Meat:       100,
 	query.Category_Seafood:    60,
@@ -75,7 +75,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 
 	return parallelism.Flatten(query.StapleCategories(), func(category string) ([]kroger.Ingredient, error) {
 		payload, err := client.Search(ctx, storeID, category, query.SearchOptions{
-			//how many rows? different per category? Should we paginate
+			// how many rows? different per category? Should we paginate
 		})
 		if err != nil {
 			return nil, err
@@ -96,7 +96,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 		return nil, err
 	}
 
-	//should we just resturn all instead of search term? how many is this?
+	// should we just resturn all instead of search term? how many is this?
 	payload, err := client.Search(ctx, storeID, query.Category_Wine, query.SearchOptions{
 		Query: searchTerm, Rows: 100,
 	})
@@ -115,7 +115,6 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 
 // clientForLocation takes a prefixed store id and looks up chaing base url and returnes unprefixed id.
 func (p StaplesProvider) clientForLocation(locationID string) (searchClient, string, error) {
-
 	baseURL, storeID, ok := searchBaseURLAndStoreID(locationID)
 	if !ok {
 		return nil, "", fmt.Errorf("invalid albertsons location id %q", locationID)
@@ -135,7 +134,7 @@ func searchBaseURLAndStoreID(locationID string) (string, string, bool) {
 		if storeID == "" || storeID == locationID {
 			continue
 		}
-		//should we append local elsewhere instead of trimming here?
+		// should we append local elsewhere instead of trimming here?
 		host := strings.TrimPrefix(chain.Domain, "local.")
 		return "https://www." + host, storeID, true
 	}

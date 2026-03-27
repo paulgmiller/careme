@@ -26,7 +26,6 @@ func run(ctx context.Context, stdout io.Writer, args []string) error {
 
 // exists just for UT
 func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, httpClient *http.Client) error {
-
 	fs := flag.NewFlagSet("albertsonsquery", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -60,7 +59,7 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		return errors.New("subscription-key is required")
 	}
 
-	//todo proxy through bright data ? timeout with context instead of http client?
+	// todo proxy through bright data ? timeout with context instead of http client?
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	}

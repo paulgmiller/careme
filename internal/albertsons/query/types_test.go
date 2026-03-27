@@ -31,5 +31,4 @@ func TestPathwaySearchPayloadUnmarshalFixture(t *testing.T) {
 	if payload.Response.Docs[0].ChannelEligibility.Delivery != true {
 		t.Fatalf("expected first doc delivery eligibility to be true")
 	}
-
 }

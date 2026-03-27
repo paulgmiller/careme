@@ -34,7 +34,7 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 					Header: http.Header{
 						"Content-Type": []string{"application/json"},
 					},
-					//this is going to fail
+					// this is going to fail
 					Body: io.NopCloser(strings.NewReader(`{"response":{"numFound":3,"disableTracking":false,"start":0,"miscInfo":{"attributionToken":"","query":"","sort":"","filter":"","nextPageToken":""},"isExactMatch":true,"docs":[{"id":"1","name":"Apples","price":1.99},{"id":"2","name":"Bananas","price":2.49},{"id":"3","name":"Carrots","price":3.99}]}}`)),
 				}, nil
 			}),
@@ -86,7 +86,6 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 	if reese84Cookie.Value != "reese-cookie" {
 		t.Fatalf("unexpected reese84 cookie: %q", reese84Cookie.Value)
 	}
-
 }
 
 func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
