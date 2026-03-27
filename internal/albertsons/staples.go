@@ -60,7 +60,7 @@ func (p identityProvider) IsID(locationID string) bool {
 	return IsID(locationID)
 }
 
-var stapleRows = map[string]int{
+var stapleRows = map[string]uint{
 	query.Category_Vegatables: 150, // do we need way more of this?
 	query.Category_Fruit:      100,
 	query.Category_Meat:       100,
@@ -76,6 +76,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	return parallelism.Flatten(query.StapleCategories(), func(category string) ([]kroger.Ingredient, error) {
 		payload, err := client.Search(ctx, storeID, category, query.SearchOptions{
 			// how many rows? different per category? Should we paginate
+			Rows: stapleRows[category],
 		})
 		if err != nil {
 			return nil, err
