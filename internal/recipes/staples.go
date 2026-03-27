@@ -3,8 +3,11 @@ package recipes
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
+	"careme/internal/albertsons"
+	albertsonsquery "careme/internal/albertsons/query"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/walmart"
@@ -38,7 +41,7 @@ func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 		return nil, err
 	}
 	return routingStaplesProvider{
-		backends: defaultStaplesBackends(kclient),
+		backends: defaultStaplesBackends(cfg, kclient),
 	}, nil
 }
 
@@ -81,19 +84,29 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
-func defaultStaplesBackends(krogerClient kroger.ClientWithResponsesInterface) []backendStaplesProvider {
-	return []backendStaplesProvider{
+func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) []backendStaplesProvider {
+	backends := []backendStaplesProvider{
 		kroger.NewStaplesProvider(krogerClient),
 		// actowiz.NewStaplesProvider(),
-		wholefoods.NewStaplesProvider(wholefoods.NewClient(nil)),
 		walmart.NewStaplesProvider(),
+		wholefoods.NewStaplesProvider(wholefoods.NewClient(nil)),
 	}
+
+	if cfg != nil && cfg.Albertsons.IsEnabled() && strings.TrimSpace(cfg.Albertsons.SearchSubscriptionKey) != "" {
+		backends = append(backends, albertsons.NewStaplesProvider(albertsonsquery.SearchClientConfig{
+			SubscriptionKey: cfg.Albertsons.SearchSubscriptionKey,
+			Reese84:         cfg.Albertsons.SearchReese84,
+		}))
+	}
+
+	return backends
 }
 
 func defaultIdentityProviders() []identityProvider {
 	return []identityProvider{
 		kroger.NewIdentityProvider(),
 		// actowiz.NewIdentityProvider(),
+		albertsons.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),
 	}

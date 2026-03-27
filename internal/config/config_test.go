@@ -74,6 +74,25 @@ func TestLoadUsesConfiguredPublicOrigin(t *testing.T) {
 	}
 }
 
+func TestLoadReadsAlbertsonsSearchCredentials(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY", "sub-key")
+	t.Setenv("ALBERTSONS_SEARCH_REESE84", "cookie-value")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got, want := cfg.Albertsons.SearchSubscriptionKey, "sub-key"; got != want {
+		t.Fatalf("expected Albertsons subscription key %q, got %q", want, got)
+	}
+	if got, want := cfg.Albertsons.SearchReese84, "cookie-value"; got != want {
+		t.Fatalf("expected Albertsons reese84 %q, got %q", want, got)
+	}
+}
+
 func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
 	cfg := &Config{}
 	if got, want := cfg.ResolvedPublicOrigin(), "http://localhost:8080"; got != want {
@@ -119,6 +138,8 @@ func resetStoreEnvs(t *testing.T) {
 		"ALDI_ENABLE",
 		"WHOLEFOODS_ENABLE",
 		"ALBERTSONS_ENABLE",
+		"ALBERTSONS_SEARCH_SUBSCRIPTION_KEY",
+		"ALBERTSONS_SEARCH_REESE84",
 		"PUBLIX_ENABLE",
 		"HEB_ENABLE",
 	} {

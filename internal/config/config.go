@@ -75,7 +75,9 @@ func (c *AldiConfig) IsEnabled() bool {
 }
 
 type AlbertsonsConfig struct {
-	Enable bool `json:"enable"`
+	Enable                bool   `json:"enable"`
+	SearchSubscriptionKey string `json:"search_subscription_key"`
+	SearchReese84         string `json:"search_reese84"`
 }
 
 func (c *AlbertsonsConfig) IsEnabled() bool {
@@ -163,7 +165,9 @@ func Load() (*Config, error) {
 			Enable: envEnabled("WHOLEFOODS_ENABLE"),
 		},
 		Albertsons: AlbertsonsConfig{
-			Enable: envEnabled("ALBERTSONS_ENABLE"),
+			Enable:                envEnabled("ALBERTSONS_ENABLE"),
+			SearchSubscriptionKey: os.Getenv("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY"),
+			SearchReese84:         os.Getenv("ALBERTSONS_SEARCH_REESE84"),
 		},
 		Publix: PublixConfig{
 			Enable: envEnabled("PUBLIX_ENABLE"),

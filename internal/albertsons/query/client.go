@@ -22,6 +22,15 @@ const (
 	Category_Meat       = "GR-MeatF-fffc8662"
 )
 
+func StapleCategories() []string {
+	return []string{
+		Category_Vegatables,
+		Category_Fruit,
+		Category_Seafood,
+		Category_Meat,
+	}
+}
+
 const (
 	DefaultSearchBaseURL = "https://www.safeway.com"
 	defaultSearchPath    = "/abs/pub/xapi/wcax/pathway/search"
@@ -171,12 +180,4 @@ func normalizedStart(start int) int {
 		return 0
 	}
 	return start
-}
-
-func defaultString(value, fallback string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fallback
-	}
-	return value
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/albertsons"
 	"careme/internal/cache"
 	"careme/internal/kroger"
 	"careme/internal/locations"
@@ -121,6 +122,16 @@ func TestRoutingStaplesProvider_GetIngredients_SelectsProviderByLocationID(t *te
 	}
 	if krogerProvider.calls != 0 || wholeFoodsProvider.calls != 1 {
 		t.Fatalf("expected whole foods provider to be selected, got kroger=%d wholefoods=%d", krogerProvider.calls, wholeFoodsProvider.calls)
+	}
+}
+
+func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T) {
+	t.Parallel()
+
+	got := staplesSignatureForLocation("safeway_1142")
+	want := albertsons.NewIdentityProvider().Signature()
+	if got != want {
+		t.Fatalf("unexpected signature: got %q want %q", got, want)
 	}
 }
 
