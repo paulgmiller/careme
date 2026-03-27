@@ -24,7 +24,9 @@ func run(ctx context.Context, stdout io.Writer, args []string) error {
 	return runWithHTTPClient(ctx, stdout, args, nil)
 }
 
+// exists just for UT
 func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, httpClient *http.Client) error {
+
 	fs := flag.NewFlagSet("albertsonsquery", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -58,6 +60,7 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		return errors.New("subscription-key is required")
 	}
 
+	//todo proxy through bright data ? timeout with context instead of http client?
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	}
@@ -71,18 +74,13 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		return fmt.Errorf("create search client: %w", err)
 	}
 
-	resp, err := client.Search(ctx, storeID, query.Category_Vegatables, query.SearchOptions{
+	payload, err := client.Search(ctx, storeID, query.Category_Vegatables, query.SearchOptions{
 		Query: searchQuery,
 		Start: start,
 		Rows:  rows,
 	})
 	if err != nil {
 		return fmt.Errorf("run search: %w", err)
-	}
-
-	var payload query.PathwaySearchPayload
-	if err := resp.DecodeJSON(&payload); err != nil {
-		return fmt.Errorf("decode search response: %w", err)
 	}
 
 	for i, doc := range payload.Response.Docs {

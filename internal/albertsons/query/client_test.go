@@ -26,7 +26,6 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 		BaseURL:         "https://www.acmemarkets.com",
 		SubscriptionKey: "test-subscription-key",
 		Reese84:         "reese-cookie",
-		VisitorID:       "visitor-123",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				capturedReq = r
@@ -35,7 +34,8 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 					Header: http.Header{
 						"Content-Type": []string{"application/json"},
 					},
-					Body: io.NopCloser(strings.NewReader(`{"ok":true}`)),
+					//this is going to fail
+					Body: io.NopCloser(strings.NewReader(`{"response":{"numFound":3,"disableTracking":false,"start":0,"miscInfo":{"attributionToken":"","query":"","sort":"","filter":"","nextPageToken":""},"isExactMatch":true,"docs":[{"id":"1","name":"Apples","price":1.99},{"id":"2","name":"Bananas","price":2.49},{"id":"3","name":"Carrots","price":3.99}]}}`)),
 				}, nil
 			}),
 		},
@@ -44,7 +44,7 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	resp, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	payload, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -54,6 +54,9 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 	}
 	if capturedReq.URL.Path != defaultSearchPath {
 		t.Fatalf("unexpected path: %s", capturedReq.URL.Path)
+	}
+	if payload.Response.NumFound != 3 {
+		t.Fatalf("expected 3 docs")
 	}
 
 	query := capturedReq.URL.Query()
@@ -84,9 +87,6 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 		t.Fatalf("unexpected reese84 cookie: %q", reese84Cookie.Value)
 	}
 
-	if string(resp.Body) != `{"ok":true}` {
-		t.Fatalf("unexpected body: %s", resp.Body)
-	}
 }
 
 func TestSearchInfersSafewayBannerByDefault(t *testing.T) {

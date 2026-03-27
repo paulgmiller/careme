@@ -2,7 +2,8 @@ package query
 
 // PathwaySearchPayload matches the Albertsons/Safeway pathway search response.
 type PathwaySearchPayload struct {
-	Response       PathwaySearchResponse           `json:"response"`
+	Response PathwaySearchResponse `json:"response"`
+	//don't actually care about any of this just comment it out?
 	OffersData     PathwaySearchOffersData         `json:"offersData"`
 	Facet          PathwaySearchFacet              `json:"facet"`
 	AppCode        string                          `json:"appCode"`

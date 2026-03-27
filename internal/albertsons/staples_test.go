@@ -29,17 +29,13 @@ type stubSearchClient struct {
 	calls   []string
 }
 
-func (s *stubSearchClient) Search(_ context.Context, storeID, category string, opts query.SearchOptions) (*query.SearchResponse, error) {
+func (s *stubSearchClient) Search(_ context.Context, storeID, category string, opts query.SearchOptions) (*query.PathwaySearchPayload, error) {
 	s.mu.Lock()
 	s.calls = append(s.calls, storeID+":"+category+":"+opts.Query)
 	s.mu.Unlock()
 
 	payload := s.results[category]
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	return &query.SearchResponse{Body: body}, nil
+	return &payload, nil
 }
 
 func (s *stubSearchClient) hasCall(want string) bool {

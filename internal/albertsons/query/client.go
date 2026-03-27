@@ -11,8 +11,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -43,7 +41,6 @@ type SearchClient struct {
 	baseURL         string
 	subscriptionKey string
 	reese84         string
-	visitorID       string
 	httpClient      *http.Client
 }
 
@@ -51,7 +48,6 @@ type SearchClientConfig struct {
 	BaseURL         string
 	SubscriptionKey string
 	Reese84         string
-	VisitorID       string
 	HTTPClient      *http.Client
 }
 
@@ -60,23 +56,6 @@ type SearchOptions struct {
 	Start int
 	Rows  int
 	Sort  string
-}
-
-type SearchResponse struct {
-	StatusCode  int
-	ContentType string
-	Header      http.Header
-	Body        []byte
-}
-
-func (r *SearchResponse) DecodeJSON(dest any) error {
-	if len(r.Body) == 0 {
-		return errors.New("response body is empty")
-	}
-	if err := json.Unmarshal(r.Body, dest); err != nil {
-		return fmt.Errorf("decode json response: %w", err)
-	}
-	return nil
 }
 
 func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
@@ -96,21 +75,15 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 		httpClient = &http.Client{Timeout: 20 * time.Second}
 	}
 
-	visitorID := strings.TrimSpace(cfg.VisitorID)
-	if visitorID == "" {
-		visitorID = uuid.NewString()
-	}
-
 	return &SearchClient{
 		baseURL:         baseURL,
 		subscriptionKey: subscriptionKey,
 		reese84:         strings.TrimSpace(cfg.Reese84),
-		visitorID:       visitorID,
 		httpClient:      httpClient,
 	}, nil
 }
 
-func (c *SearchClient) Search(ctx context.Context, storeID, category string, opts SearchOptions) (*SearchResponse, error) {
+func (c *SearchClient) Search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
@@ -152,20 +125,16 @@ func (c *SearchClient) Search(ctx context.Context, storeID, category string, opt
 		_ = resp.Body.Close()
 	}()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("search request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		errbody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("search request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(errbody)))
 	}
 
-	return &SearchResponse{
-		StatusCode:  resp.StatusCode,
-		ContentType: resp.Header.Get("Content-Type"),
-		Header:      resp.Header.Clone(),
-		Body:        body,
-	}, nil
+	var payload PathwaySearchPayload
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode json response: %w", err)
+	}
+	return &payload, nil
 }
 
 func normalizedRows(rows int) int {

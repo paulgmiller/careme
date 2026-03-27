@@ -17,7 +17,7 @@ import (
 var defaultStaplesSignature = mustJSONSignature(query.StapleCategories())
 
 type searchClient interface {
-	Search(ctx context.Context, storeID, category string, opts query.SearchOptions) (*query.SearchResponse, error)
+	Search(ctx context.Context, storeID, category string, opts query.SearchOptions) (*query.PathwaySearchPayload, error)
 }
 
 type searchClientFactory func(baseURL string) (searchClient, error)
@@ -61,13 +61,8 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	}
 
 	return parallelism.Flatten(query.StapleCategories(), func(category string) ([]kroger.Ingredient, error) {
-		resp, err := client.Search(ctx, storeID, category, query.SearchOptions{})
+		payload, err := client.Search(ctx, storeID, category, query.SearchOptions{})
 		if err != nil {
-			return nil, err
-		}
-
-		var payload query.PathwaySearchPayload
-		if err := resp.DecodeJSON(&payload); err != nil {
 			return nil, err
 		}
 
@@ -86,15 +81,10 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	}
 
 	ingredients, err := parallelism.Flatten(query.StapleCategories(), func(category string) ([]kroger.Ingredient, error) {
-		resp, err := client.Search(ctx, storeID, category, query.SearchOptions{
+		payload, err := client.Search(ctx, storeID, category, query.SearchOptions{
 			Query: searchTerm,
 		})
 		if err != nil {
-			return nil, err
-		}
-
-		var payload query.PathwaySearchPayload
-		if err := resp.DecodeJSON(&payload); err != nil {
 			return nil, err
 		}
 
