@@ -14,7 +14,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var defaultStaplesSignature = mustJSONSignature(query.StapleCategories())
+var defaultStaplesSignature = lo.Must(json.Marshal(query.StapleCategories()))
 
 type searchClient interface {
 	Search(ctx context.Context, storeID, category string, opts query.SearchOptions) (*query.PathwaySearchPayload, error)
@@ -40,6 +40,7 @@ func NewStaplesProvider(cfg query.SearchClientConfig) StaplesProvider {
 	})
 }
 
+// only used for testing
 func newStaplesProviderWithFactory(factory searchClientFactory) StaplesProvider {
 	return StaplesProvider{
 		newClient: factory,
@@ -47,7 +48,7 @@ func newStaplesProviderWithFactory(factory searchClientFactory) StaplesProvider 
 }
 
 func (p identityProvider) Signature() string {
-	return defaultStaplesSignature
+	return string(defaultStaplesSignature)
 }
 
 func (p identityProvider) IsID(locationID string) bool {
@@ -61,7 +62,9 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	}
 
 	return parallelism.Flatten(query.StapleCategories(), func(category string) ([]kroger.Ingredient, error) {
-		payload, err := client.Search(ctx, storeID, category, query.SearchOptions{})
+		payload, err := client.Search(ctx, storeID, category, query.SearchOptions{
+			//how many rows? different per category? Should we paginate
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -74,33 +77,31 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
+// since this is mostly used by wine it isn't actuallyt they helpful.
 func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
 	client, storeID, err := p.clientForLocation(locationID)
 	if err != nil {
 		return nil, err
 	}
 
-	ingredients, err := parallelism.Flatten(query.StapleCategories(), func(category string) ([]kroger.Ingredient, error) {
-		payload, err := client.Search(ctx, storeID, category, query.SearchOptions{
-			Query: searchTerm,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return lo.Map(payload.Response.Docs, func(product query.PathwaySearchProduct, _ int) kroger.Ingredient {
-			return productToIngredient(product)
-		}), nil
+	//should we just resturn all instead of search term? how many is this?
+	payload, err := client.Search(ctx, storeID, query.Category_Wine, query.SearchOptions{
+		Query: searchTerm, Rows: 100,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	ingredients := lo.Map(payload.Response.Docs, func(product query.PathwaySearchProduct, _ int) kroger.Ingredient {
+		return productToIngredient(product)
+	})
 	if skip >= len(ingredients) {
 		return []kroger.Ingredient{}, nil
 	}
 	return ingredients[skip:], nil
 }
 
+// clientForLocation takes a prefixed store id and looks up chaing base url and returnes unprefixed id.
 func (p StaplesProvider) clientForLocation(locationID string) (searchClient, string, error) {
 	if p.newClient == nil {
 		return nil, "", fmt.Errorf("albertsons query client is required")
@@ -125,6 +126,7 @@ func searchBaseURLAndStoreID(locationID string) (string, string, bool) {
 		if storeID == "" || storeID == locationID {
 			continue
 		}
+		//should we append local elsewhere instead of trimming here?
 		host := strings.TrimPrefix(chain.Domain, "local.")
 		return "https://www." + host, storeID, true
 	}
@@ -137,7 +139,7 @@ func productToIngredient(product query.PathwaySearchProduct) kroger.Ingredient {
 	size := sizeText(product)
 	regularPrice := float32Ptr(product.BasePrice)
 	salePrice := float32Ptr(product.Price)
-	categories := compactStrings([]string{product.DepartmentName, product.ShelfName})
+	categories := lo.Compact([]string{product.DepartmentName, product.ShelfName})
 
 	var categoryPtr *[]string
 	if len(categories) > 0 {
@@ -154,25 +156,14 @@ func productToIngredient(product query.PathwaySearchProduct) kroger.Ingredient {
 	}
 }
 
+// this is a bit squirely shouldn't we take one ratehr than joiing both?
 func sizeText(product query.PathwaySearchProduct) *string {
-	sizeParts := compactStrings([]string{product.ItemSizeQty, product.UnitOfMeasure})
+	sizeParts := lo.Compact([]string{product.ItemSizeQty, product.UnitOfMeasure})
 	if len(sizeParts) == 0 {
 		return nil
 	}
 	size := strings.Join(sizeParts, " ")
 	return &size
-}
-
-func compactStrings(values []string) []string {
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		out = append(out, value)
-	}
-	return out
 }
 
 func stringPtr(value string) *string {
@@ -189,12 +180,4 @@ func float32Ptr(value float64) *float32 {
 	}
 	out := float32(value)
 	return &out
-}
-
-func mustJSONSignature(value any) string {
-	signature, err := json.Marshal(value)
-	if err != nil {
-		panic(fmt.Errorf("marshal staples signature: %w", err))
-	}
-	return string(signature)
 }

@@ -3,17 +3,15 @@ package query
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestPathwaySearchPayloadUnmarshalFixture(t *testing.T) {
 	t.Parallel()
 
-	fixturePath := filepath.Join("..", "..", "brightdata", "acmeresp.json")
-	raw, err := os.ReadFile(fixturePath)
+	raw, err := os.ReadFile("acmeresp.json")
 	if err != nil {
-		t.Fatalf("ReadFile(%q) returned error: %v", fixturePath, err)
+		t.Fatalf("ReadFile(acmeresp.json) returned error: %v", err)
 	}
 
 	var payload PathwaySearchPayload

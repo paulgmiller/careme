@@ -17,6 +17,7 @@ const (
 	Category_Fruit      = "GR-C-categ-a8eea474"
 	Category_Seafood    = "GR-C-Categ-6090cd27"
 	Category_Meat       = "GR-MeatF-fffc8662"
+	Category_Wine       = "GR-S-Searc-db592d50"
 )
 
 func StapleCategories() []string {

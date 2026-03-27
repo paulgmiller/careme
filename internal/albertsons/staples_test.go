@@ -134,7 +134,7 @@ func TestStaplesProvider_GetIngredients_UsesSearchTermAndSkip(t *testing.T) {
 
 	client := &stubSearchClient{
 		results: map[string]query.PathwaySearchPayload{
-			query.Category_Vegatables: {
+			query.Category_Wine: {
 				Response: query.PathwaySearchResponse{
 					Docs: []query.PathwaySearchProduct{
 						{ID: "veg-1", Name: "Pinot Tomatoes", Price: 1.99},
@@ -155,7 +155,7 @@ func TestStaplesProvider_GetIngredients_UsesSearchTermAndSkip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetIngredients returned error: %v", err)
 	}
-	if !client.hasCall("806:" + query.Category_Vegatables + ":pinot") {
+	if !client.hasCall("806:" + query.Category_Wine + ":pinot") {
 		t.Fatalf("missing expected search call")
 	}
 	if len(got) != 1 {
