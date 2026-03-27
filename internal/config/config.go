@@ -84,6 +84,11 @@ func (c *AlbertsonsConfig) IsEnabled() bool {
 	return c.Enable
 }
 
+// can we dynamically disable if our key  expires
+func (c *AlbertsonsConfig) HasInventory() bool {
+	return c.SearchReese84 != ""
+}
+
 type PublixConfig struct {
 	Enable bool `json:"enable"`
 }

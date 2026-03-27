@@ -3,11 +3,9 @@ package recipes
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	"careme/internal/albertsons"
-	albertsonsquery "careme/internal/albertsons/query"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/walmart"
@@ -85,21 +83,13 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 }
 
 func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) []backendStaplesProvider {
-	backends := []backendStaplesProvider{
+	return []backendStaplesProvider{
 		kroger.NewStaplesProvider(krogerClient),
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(nil)),
+		albertsons.NewStaplesProvider(cfg.Albertsons),
 	}
-
-	if cfg != nil && cfg.Albertsons.IsEnabled() && strings.TrimSpace(cfg.Albertsons.SearchSubscriptionKey) != "" {
-		backends = append(backends, albertsons.NewStaplesProvider(albertsonsquery.SearchClientConfig{
-			SubscriptionKey: cfg.Albertsons.SearchSubscriptionKey,
-			Reese84:         cfg.Albertsons.SearchReese84,
-		}))
-	}
-
-	return backends
 }
 
 func defaultIdentityProviders() []identityProvider {

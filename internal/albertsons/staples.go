@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"careme/internal/albertsons/query"
+	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/parallelism"
 
@@ -33,10 +34,14 @@ func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
-func NewStaplesProvider(cfg query.SearchClientConfig) StaplesProvider {
+func NewStaplesProvider(cfg config.AlbertsonsConfig) StaplesProvider {
 	return newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
-		cfg.BaseURL = baseURL
-		return query.NewSearchClient(cfg)
+		querycfg := query.SearchClientConfig{
+			SubscriptionKey: cfg.SearchSubscriptionKey,
+			Reese84:         cfg.SearchReese84,
+			BaseURL:         baseURL,
+		}
+		return query.NewSearchClient(querycfg)
 	})
 }
 
@@ -53,6 +58,13 @@ func (p identityProvider) Signature() string {
 
 func (p identityProvider) IsID(locationID string) bool {
 	return IsID(locationID)
+}
+
+var stapleRows = map[string]int{
+	query.Category_Vegatables: 150, //do we need way more of this?
+	query.Category_Fruit:      100,
+	query.Category_Meat:       100,
+	query.Category_Seafood:    60,
 }
 
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
@@ -103,9 +115,6 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 
 // clientForLocation takes a prefixed store id and looks up chaing base url and returnes unprefixed id.
 func (p StaplesProvider) clientForLocation(locationID string) (searchClient, string, error) {
-	if p.newClient == nil {
-		return nil, "", fmt.Errorf("albertsons query client is required")
-	}
 
 	baseURL, storeID, ok := searchBaseURLAndStoreID(locationID)
 	if !ok {

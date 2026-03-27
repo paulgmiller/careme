@@ -25,7 +25,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 		t.Fatalf("RebuildLocationIndex returned error: %v", err)
 	}
 
-	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
+	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup, false)
 	if err != nil {
 		t.Fatalf("NewLocationBackend returned error: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 		t.Fatalf("RebuildLocationIndex returned error: %v", err)
 	}
 
-	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
+	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup, false)
 	if err != nil {
 		t.Fatalf("NewLocationBackend returned error: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestLocationBackendUsesZipCentroidWhenCoordinatesMissing(t *testing.T) {
 		t.Fatalf("RebuildLocationIndex returned error: %v", err)
 	}
 
-	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
+	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup, false)
 	if err != nil {
 		t.Fatalf("NewLocationBackend returned error: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 
 	cacheStore := cache.NewInMemoryCache()
 
-	_, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
+	_, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{}, false)
 	if err == nil {
 		t.Fatal("expected NewLocationBackend to return an error")
 	}
