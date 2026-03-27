@@ -42,7 +42,7 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 
 	fs.StringVar(&baseURL, "base-url", query.DefaultSearchBaseURL, "Albertsons-family search base URL")
 	fs.StringVar(&storeID, "store-id", "806", "store id to search against")
-	fs.StringVar(&subscriptionKey, "subscription-key", envOrDefault("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY", "e914eec9448c4d5eb672debf5011cf8f"), "Albertsons pathway subscription key")
+	fs.StringVar(&subscriptionKey, "subscription-key", envOrDefault("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY", ""), "Albertsons pathway subscription key")
 	fs.StringVar(&reese84, "reese84", envOrDefault("ALBERTSONS_SEARCH_REESE84", ""), "optional reese84 cookie value")
 	fs.StringVar(&searchQuery, "query", "", "search query, default empty string")
 	fs.UintVar(&rows, "rows", 60, "number of rows to request")
