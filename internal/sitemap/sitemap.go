@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"careme/internal/cache"
 	"careme/internal/recipes"
+	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
 )
 
@@ -51,22 +51,40 @@ type urlEntry struct {
 }
 
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
-	hashes, err := s.cache.List(r.Context(), recipes.ShoppingListCachePrefix, "")
+	shoppingListHashes, err := s.cache.List(r.Context(), recipes.ShoppingListCachePrefix, "")
 	if err != nil {
 		http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
 		slog.ErrorContext(r.Context(), "failed to read sitemap urls", "error", err)
 		return
 	}
-	entries := make([]urlEntry, 0, len(hashes)+1)
+	feedbackHashes, err := s.cache.List(r.Context(), feedback.RecipeFeedbackPrefix(), "")
+	if err != nil {
+		http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "failed to read feedback urls", "error", err)
+		return
+	}
+
+	entries := make([]urlEntry, 0, len(shoppingListHashes)+len(feedbackHashes)+1)
 	entries = append(entries, urlEntry{Loc: s.publicOrigin + "/about"})
 
 	// this is going to get too  big.  at some point we need a real db to find latest
 	// or we track new entries and expire a lsit.
-	for _, key := range hashes {
-		hash := strings.TrimPrefix(key, recipes.ShoppingListCachePrefix)
+	for _, hash := range shoppingListHashes {
 		entries = append(entries, urlEntry{Loc: s.publicOrigin + "/recipes?h=" + hash})
 	}
-	slog.InfoContext(r.Context(), "serving sitemap with recipe urls", "count", len(entries), "blobcount", len(hashes))
+	for _, hash := range feedbackHashes {
+		exists, err := s.cache.Exists(r.Context(), recipes.SingleRecipeCacheKey(hash))
+		if err != nil {
+			http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
+			slog.ErrorContext(r.Context(), "failed to check recipe for feedback url", "hash", hash, "error", err)
+			return
+		}
+		if !exists {
+			continue
+		}
+		entries = append(entries, urlEntry{Loc: s.publicOrigin + "/recipe/" + hash})
+	}
+	slog.InfoContext(r.Context(), "serving sitemap with recipe urls", "count", len(entries), "shoppinglist_count", len(shoppingListHashes), "feedback_count", len(feedbackHashes))
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	if _, err := w.Write([]byte(xml.Header)); err != nil {
