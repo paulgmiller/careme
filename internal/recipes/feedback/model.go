@@ -38,6 +38,10 @@ func NewIO(c cache.Cache) FeedbackIO {
 
 const recipeFeedbackPrefix = "recipe_feedback/"
 
+func RecipeFeedbackPrefix() string {
+	return recipeFeedbackPrefix
+}
+
 func (fio FeedbackIO) FeedbackFromCache(ctx context.Context, hash string) (*Feedback, error) {
 	feedbackBlob, err := fio.c.Get(ctx, recipeFeedbackPrefix+hash)
 	if err != nil {
