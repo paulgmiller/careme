@@ -62,8 +62,8 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 
 	// this is going to get too  big.  at some point we need a real db to find latest
 	for _, hash := range feedbackHashes {
-		//would be really strange if recipe had feedback but didn't exist.
-		//exists, err := s.cache.Exists(r.Context(), recipes.SingleRecipeCacheKey(hash))
+		// would be really strange if recipe had feedback but didn't exist.
+		// exists, err := s.cache.Exists(r.Context(), recipes.SingleRecipeCacheKey(hash))
 		entries = append(entries, urlEntry{Loc: s.publicOrigin + "/recipe/" + hash})
 	}
 	slog.InfoContext(r.Context(), "serving sitemap with recipe urls", "count", len(entries), "feedback_count", len(feedbackHashes))
