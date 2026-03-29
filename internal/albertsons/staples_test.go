@@ -3,11 +3,15 @@ package albertsons
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
 	"careme/internal/albertsons/query"
+	"careme/internal/config"
 )
 
 func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
@@ -164,4 +168,57 @@ func TestStaplesProvider_GetIngredients_UsesSearchTermAndSkip(t *testing.T) {
 	if got[0].Description == nil || *got[0].Description != "Rose Radishes" {
 		t.Fatalf("unexpected description: %+v", got[0].Description)
 	}
+}
+
+func TestNewStaplesProvider_UsesInjectedHTTPClient(t *testing.T) {
+	t.Parallel()
+
+	var sawRequest bool
+	httpClient := &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			sawRequest = true
+			if got, want := r.URL.Host, "www.acmemarkets.com"; got != want {
+				t.Fatalf("unexpected host: got %q want %q", got, want)
+			}
+			if got, want := r.Header.Get("Ocp-Apim-Subscription-Key"), "test-sub-key"; got != want {
+				t.Fatalf("unexpected subscription key: got %q want %q", got, want)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Content-Type": []string{"application/json"},
+				},
+				Body: io.NopCloser(strings.NewReader(`{
+					"response":{"docs":[
+						{"id":"wine-1","name":"Pinot Noir","price":10.99},
+						{"id":"wine-2","name":"Rose","price":8.99}
+					]}
+				}`)),
+			}, nil
+		}),
+	}
+
+	provider := NewStaplesProvider(config.AlbertsonsConfig{
+		SearchSubscriptionKey: "test-sub-key",
+	}, httpClient)
+
+	got, err := provider.GetIngredients(t.Context(), "acmemarkets_806", "pinot", 1)
+	if err != nil {
+		t.Fatalf("GetIngredients returned error: %v", err)
+	}
+	if !sawRequest {
+		t.Fatal("expected injected HTTP client to be used")
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 ingredient after skip, got %d", len(got))
+	}
+	if got[0].Description == nil || *got[0].Description != "Rose" {
+		t.Fatalf("unexpected description: %+v", got[0].Description)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }

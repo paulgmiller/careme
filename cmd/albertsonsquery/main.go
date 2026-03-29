@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"careme/internal/albertsons/query"
+	"careme/internal/brightdata"
+	"careme/internal/config"
 )
 
 func main() {
@@ -59,9 +61,12 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		return errors.New("subscription-key is required")
 	}
 
-	// todo proxy through bright data ? timeout with context instead of http client?
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
+		var clientErr error
+		httpClient, clientErr = brightdata.NewProxyAwareHTTPClient(time.Duration(timeoutSec)*time.Second, config.LoadBrightDataProxyConfigFromEnv())
+		if clientErr != nil {
+			return fmt.Errorf("create HTTP client: %w", clientErr)
+		}
 	}
 	client, err := query.NewSearchClient(query.SearchClientConfig{
 		BaseURL:         baseURL,

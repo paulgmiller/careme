@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"careme/internal/albertsons/query"
@@ -34,12 +35,13 @@ func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
-func NewStaplesProvider(cfg config.AlbertsonsConfig) StaplesProvider {
+func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) StaplesProvider {
 	return newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
 		querycfg := query.SearchClientConfig{
 			SubscriptionKey: cfg.SearchSubscriptionKey,
 			Reese84:         cfg.SearchReese84,
 			BaseURL:         baseURL,
+			HTTPClient:      httpClient,
 		}
 		return query.NewSearchClient(querycfg)
 	})
