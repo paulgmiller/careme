@@ -22,10 +22,6 @@ const (
 	paramsCachePrefix       = "params/"
 )
 
-func SingleRecipeCacheKey(hash string) string {
-	return recipeCachePrefix + hash
-}
-
 type recipeio struct {
 	Cache               cache.Cache
 	feedback.FeedbackIO // should this be pulled out?
