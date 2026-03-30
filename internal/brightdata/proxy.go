@@ -1,6 +1,7 @@
 package brightdata
 
 import (
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -36,14 +37,17 @@ func (c ProxyConfig) proxyURL() *url.URL {
 }
 
 // should this take a http client?
-func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
+func NewProxyAwareHTTPClient(cfg ProxyConfig) *http.Client {
 	client := &http.Client{}
 	if !cfg.Enabled() {
-		return client, nil
+		return client
 	}
 
+	purl := cfg.proxyURL()
+	slog.Info("Configuring HTTP client to use BrightData proxy", "url", purl.String())
+
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = http.ProxyURL(cfg.proxyURL())
+	transport.Proxy = http.ProxyURL(purl)
 	client.Transport = transport
-	return client, nil
+	return client
 }

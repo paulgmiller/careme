@@ -39,12 +39,9 @@ func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	backends, err := defaultStaplesBackends(cfg, kclient)
-	if err != nil {
-		return nil, err
-	}
+
 	return routingStaplesProvider{
-		backends: backends,
+		backends: defaultStaplesBackends(cfg, kclient),
 	}, nil
 }
 
@@ -87,11 +84,8 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
-func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) ([]backendStaplesProvider, error) {
-	httpClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
-	if err != nil {
-		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
-	}
+func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) []backendStaplesProvider {
+	httpClient := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 
 	return []backendStaplesProvider{
 		kroger.NewStaplesProvider(krogerClient),
@@ -99,7 +93,7 @@ func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithRe
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(httpClient)),
 		albertsons.NewStaplesProvider(cfg.Albertsons, httpClient),
-	}, nil
+	}
 }
 
 func defaultIdentityProviders() []identityProvider {

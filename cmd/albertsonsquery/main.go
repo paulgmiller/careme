@@ -57,16 +57,11 @@ func run(ctx context.Context, args []string) error {
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 		defer cancel()
 	}
-	bdcfg := brightdata.LoadConfig()
-	httpClient, err := brightdata.NewProxyAwareHTTPClient(bdcfg)
-	if err != nil {
-		return fmt.Errorf("create HTTP client: %w", err)
-	}
 	client, err := query.NewSearchClient(query.SearchClientConfig{
 		BaseURL:         baseURL,
 		SubscriptionKey: subscriptionKey,
 		Reese84:         reese84,
-		HTTPClient:      httpClient,
+		HTTPClient:      brightdata.NewProxyAwareHTTPClient(brightdata.LoadConfig()),
 	})
 	if err != nil {
 		return fmt.Errorf("create search client: %w", err)

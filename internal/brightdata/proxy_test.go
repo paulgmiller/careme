@@ -43,15 +43,12 @@ func TestProxyConfigProxyURL_BuildsProxyURL(t *testing.T) {
 func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 	t.Parallel()
 
-	client, err := NewProxyAwareHTTPClient(ProxyConfig{
+	client := NewProxyAwareHTTPClient(ProxyConfig{
 		Host:     "brd.superproxy.io",
 		Port:     "33335",
 		Username: "user-name",
 		Password: "secret-pass",
 	})
-	if err != nil {
-		t.Fatalf("NewProxyAwareHTTPClient() error = %v", err)
-	}
 
 	if client.Timeout != 0 {
 		t.Fatalf("expected no client timeout, got %s", client.Timeout)
@@ -81,10 +78,7 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	t.Parallel()
 
-	client, err := NewProxyAwareHTTPClient(ProxyConfig{})
-	if err != nil {
-		t.Fatalf("NewProxyAwareHTTPClient() error = %v", err)
-	}
+	client := NewProxyAwareHTTPClient(ProxyConfig{})
 	if client.Timeout != 0 {
 		t.Fatalf("expected no client timeout, got %s", client.Timeout)
 	}
