@@ -17,7 +17,7 @@ import (
 const (
 	Reese84LatestCacheKey   = "albertsons/reese84/latest.json"
 	Reese84HistoryPrefix    = "albertsons/reese84/history/"
-	DefaultReese84MaxAge    = 6 * time.Hour
+	DefaultReese84MaxAge    = 24 * time.Hour // first token lasted several days so this is a guess.
 	brightDataBrowserSource = "brightdata-browser-api"
 )
 

@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	// should we rotate between chains?
 	defaultTargetURL       = "https://www.acmemarkets.com/aisle-vs/meat-seafood/seafood-favorites.html"
 	defaultCookieName      = "reese84"
 	brightDataBrowserWSEnv = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
@@ -25,13 +26,6 @@ const (
 
 type browserCookieFetcher interface {
 	Cookies(ctx context.Context, targetURL string, opts brightdata.BrowserOptions) ([]brightdata.BrowserCookie, error)
-}
-
-type dependencies struct {
-	newBrowser func(wsEndpoint string) (browserCookieFetcher, error)
-	newCache   func() (cache.Cache, error)
-	now        func() time.Time
-	getenv     func(string) string
 }
 
 func main() {
@@ -42,24 +36,13 @@ func main() {
 	}
 	defer closeLogger()
 
-	if err := runWithDeps(ctx, os.Stdout, os.Args[1:], dependencies{
-		newBrowser: func(wsEndpoint string) (browserCookieFetcher, error) {
-			return brightdata.NewBrowserClient(brightdata.BrowserClientConfig{
-				WSEndpoint: wsEndpoint,
-			})
-		},
-		newCache: func() (cache.Cache, error) {
-			return cache.EnsureCache(albertsons.Container)
-		},
-		now:    time.Now,
-		getenv: os.Getenv,
-	}); err != nil {
+	if err := runWithDeps(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps dependencies) error {
+func runWithDeps(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("albertsonsreese84", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -74,22 +57,13 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 
 	fs.StringVar(&targetURL, "url", defaultTargetURL, "page to navigate before reading cookies")
 	fs.StringVar(&cookieName, "cookie-name", defaultCookieName, "cookie name to store")
-	fs.StringVar(&wsEndpoint, "ws-endpoint", strings.TrimSpace(deps.getenv(brightDataBrowserWSEnv)), "Bright Data Browser API websocket endpoint including credentials")
+	fs.StringVar(&wsEndpoint, "ws-endpoint", strings.TrimSpace(os.Getenv(brightDataBrowserWSEnv)), "Bright Data Browser API websocket endpoint including credentials")
 	fs.IntVar(&waitMS, "wait-ms", int((5*time.Second)/time.Millisecond), "wait after initial navigation before reading cookies")
 	fs.IntVar(&timeoutSec, "timeout", 120, "overall timeout in seconds")
 	fs.IntVar(&ttlHours, "ttl-hours", int(albertsons.DefaultReese84MaxAge/time.Hour), "freshness window recorded with the cookie")
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-	if deps.newBrowser == nil {
-		return errors.New("browser factory is required")
-	}
-	if deps.newCache == nil {
-		return errors.New("cache factory is required")
-	}
-	if deps.now == nil {
-		deps.now = time.Now
 	}
 	if strings.TrimSpace(cookieName) == "" {
 		return errors.New("cookie-name is required")
@@ -105,17 +79,17 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	cookieValue, expiresAt, provider, err := fetchCookie(fetchCtx, targetURL, cookieName, wsEndpoint, time.Duration(waitMS)*time.Millisecond, deps)
+	cookieValue, expiresAt, provider, err := fetchCookie(fetchCtx, targetURL, cookieName, wsEndpoint, time.Duration(waitMS)*time.Millisecond)
 	if err != nil {
 		return err
 	}
 
-	cacheStore, err := deps.newCache()
+	cacheStore, err := cache.EnsureCache(albertsons.Container)
 	if err != nil {
 		return fmt.Errorf("create albertsons cache: %w", err)
 	}
 
-	fetchedAt := deps.now().UTC()
+	fetchedAt := time.Now().UTC()
 	if err := albertsons.SaveReese84Record(fetchCtx, cacheStore, albertsons.Reese84Record{
 		Cookie:    cookieValue,
 		FetchedAt: fetchedAt,
@@ -127,18 +101,18 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 		return fmt.Errorf("cache reese84 cookie: %w", err)
 	}
 
-	_, err = fmt.Fprintf(stdout, "cached %s at %s from %s\n", cookieName, fetchedAt.Format(time.RFC3339), targetURL)
-	return err
+	fmt.Printf("cached %s at %s from %s\n", cookieName, fetchedAt.Format(time.RFC3339), targetURL)
+	return nil
 }
 
-func fetchCookie(ctx context.Context, targetURL, cookieName, wsEndpoint string,
-	browserWait time.Duration, deps dependencies,
-) (string, *time.Time, string, error) {
+func fetchCookie(ctx context.Context, targetURL, cookieName, wsEndpoint string, browserWait time.Duration) (string, *time.Time, string, error) {
 	if wsEndpoint == "" {
 		return "", nil, "", fmt.Errorf("%s is required", brightDataBrowserWSEnv)
 	}
 
-	browser, err := deps.newBrowser(wsEndpoint)
+	browser, err := brightdata.NewBrowserClient(brightdata.BrowserClientConfig{
+		WSEndpoint: wsEndpoint,
+	})
 	if err != nil {
 		return "", nil, "", fmt.Errorf("create Bright Data browser client: %w", err)
 	}
