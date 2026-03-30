@@ -19,10 +19,8 @@ The application is configured via environment variables:
 - `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
 - `ALBERTSONS_SEARCH_SUBSCRIPTION_KEY` - Albertsons-family pathway search subscription key
 - `ALBERTSONS_SEARCH_REESE84` - fallback Albertsons-family `reese84` cookie when cache is empty or stale
-- `BRIGHTDATA_API_KEY` - Bright Data API key for Web Unlocker requests in `cmd/albertsonsreese84`
-- `BRIGHTDATA_ZONE` - Bright Data Web Unlocker zone name for `cmd/albertsonsreese84`
-- `BRIGHTDATA_BROWSER_AUTH` - optional Bright Data Browser API auth in `USER:PASS` format used only as fallback by `cmd/albertsonsreese84`
-- `BRIGHTDATA_BROWSER_WS_ENDPOINT` - optional Bright Data Browser API websocket endpoint override for fallback
+- `BRIGHTDATA_BROWSER_AUTH` - Bright Data Browser API auth in `USER:PASS` format for `cmd/albertsonsreese84`
+- `BRIGHTDATA_BROWSER_WS_ENDPOINT` - Bright Data Browser API websocket endpoint for `cmd/albertsonsreese84`; may include embedded credentials
 - `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY` - enable Azure Blob-backed cache storage
 
 if you're
