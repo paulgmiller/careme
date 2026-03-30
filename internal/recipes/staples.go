@@ -9,6 +9,7 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/config"
 	"careme/internal/kroger"
+	"careme/internal/logsetup"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 )
@@ -93,13 +94,15 @@ func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithRe
 	if err != nil {
 		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
 	}
+	wholeFoodsHTTPClient := logsetup.InstrumentHTTPClient(httpClient, "wholefoods")
+	albertsonsHTTPClient := logsetup.InstrumentHTTPClient(httpClient, "albertsons")
 
 	return []backendStaplesProvider{
 		kroger.NewStaplesProvider(krogerClient),
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
-		wholefoods.NewStaplesProvider(wholefoods.NewClient(httpClient)),
-		albertsons.NewStaplesProvider(cfg.Albertsons, httpClient),
+		wholefoods.NewStaplesProvider(wholefoods.NewClient(wholeFoodsHTTPClient)),
+		albertsons.NewStaplesProvider(cfg.Albertsons, albertsonsHTTPClient),
 	}, nil
 }
 

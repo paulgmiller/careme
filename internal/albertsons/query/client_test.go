@@ -1,8 +1,11 @@
 package query
 
 import (
+	"bytes"
+	"careme/internal/logsetup"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -114,6 +117,87 @@ func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
 
 	if got := capturedReq.URL.Query().Get("url"); got != DefaultSearchBaseURL {
 		t.Fatalf("unexpected url query value: %q", got)
+	}
+}
+
+func TestSearchLogsOutboundHTTPResponse(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	body := `{"response":{"numFound":1,"disableTracking":false,"start":0,"miscInfo":{"attributionToken":"","query":"","sort":"","filter":"","nextPageToken":""},"isExactMatch":true,"docs":[{"id":"1","name":"Apples","price":1.99}]}}`
+
+	httpClient := logsetup.InstrumentHTTPClientWithLogger(&http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}, "albertsons", logger)
+
+	client, err := NewSearchClient(SearchClientConfig{
+		BaseURL:         "https://www.acmemarkets.com",
+		SubscriptionKey: "test-subscription-key",
+		HTTPClient:      httpClient,
+	})
+	if err != nil {
+		t.Fatalf("NewSearchClient returned error: %v", err)
+	}
+
+	if _, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+
+	output := logs.String()
+	if !strings.Contains(output, "provider=albertsons") {
+		t.Fatalf("expected provider in log output, got %q", output)
+	}
+	if !strings.Contains(output, "status_code=200") {
+		t.Fatalf("expected status code in log output, got %q", output)
+	}
+	if !strings.Contains(output, "url=\"https://www.acmemarkets.com/abs/pub/xapi/wcax/pathway/search?") {
+		t.Fatalf("expected request url in log output, got %q", output)
+	}
+	if !strings.Contains(output, "response_bytes=217") {
+		t.Fatalf("expected response size in log output, got %q", output)
+	}
+}
+
+func TestSearchLogsOutboundHTTPResponseForStatusErrors(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+
+	httpClient := logsetup.InstrumentHTTPClientWithLogger(&http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusForbidden,
+				Body:       io.NopCloser(strings.NewReader("nope")),
+			}, nil
+		}),
+	}, "albertsons", logger)
+
+	client, err := NewSearchClient(SearchClientConfig{
+		BaseURL:         "https://www.acmemarkets.com",
+		SubscriptionKey: "test-subscription-key",
+		HTTPClient:      httpClient,
+	})
+	if err != nil {
+		t.Fatalf("NewSearchClient returned error: %v", err)
+	}
+
+	if _, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err == nil {
+		t.Fatal("expected error")
+	}
+
+	output := logs.String()
+	if !strings.Contains(output, "status_code=403") {
+		t.Fatalf("expected status code in log output, got %q", output)
+	}
+	if !strings.Contains(output, "response_bytes=4") {
+		t.Fatalf("expected response size in log output, got %q", output)
 	}
 }
 
