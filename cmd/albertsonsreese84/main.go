@@ -18,10 +18,9 @@ import (
 )
 
 const (
-	defaultTargetURL         = "https://www.acmemarkets.com/aisle-vs/meat-seafood/seafood-favorites.html"
-	defaultCookieName        = "reese84"
-	brightDataBrowserAuthEnv = "BRIGHTDATA_BROWSER_AUTH"
-	brightDataBrowserWSEnv   = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
+	defaultTargetURL       = "https://www.acmemarkets.com/aisle-vs/meat-seafood/seafood-favorites.html"
+	defaultCookieName      = "reese84"
+	brightDataBrowserWSEnv = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
 )
 
 type browserCookieFetcher interface {
@@ -29,7 +28,7 @@ type browserCookieFetcher interface {
 }
 
 type dependencies struct {
-	newBrowser func(auth, wsEndpoint string) (browserCookieFetcher, error)
+	newBrowser func(wsEndpoint string) (browserCookieFetcher, error)
 	newCache   func() (cache.Cache, error)
 	now        func() time.Time
 	getenv     func(string) string
@@ -44,9 +43,8 @@ func main() {
 	defer closeLogger()
 
 	if err := runWithDeps(ctx, os.Stdout, os.Args[1:], dependencies{
-		newBrowser: func(auth, wsEndpoint string) (browserCookieFetcher, error) {
+		newBrowser: func(wsEndpoint string) (browserCookieFetcher, error) {
 			return brightdata.NewBrowserClient(brightdata.BrowserClientConfig{
-				Auth:       auth,
 				WSEndpoint: wsEndpoint,
 			})
 		},
@@ -68,7 +66,6 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 	var (
 		targetURL  string
 		cookieName string
-		auth       string
 		wsEndpoint string
 		waitMS     int
 		timeoutSec int
@@ -77,8 +74,7 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 
 	fs.StringVar(&targetURL, "url", defaultTargetURL, "page to navigate before reading cookies")
 	fs.StringVar(&cookieName, "cookie-name", defaultCookieName, "cookie name to store")
-	fs.StringVar(&auth, "auth", strings.TrimSpace(deps.getenv(brightDataBrowserAuthEnv)), "Bright Data Browser API auth in USER:PASS format")
-	fs.StringVar(&wsEndpoint, "ws-endpoint", strings.TrimSpace(deps.getenv(brightDataBrowserWSEnv)), "Bright Data Browser API websocket endpoint")
+	fs.StringVar(&wsEndpoint, "ws-endpoint", strings.TrimSpace(deps.getenv(brightDataBrowserWSEnv)), "Bright Data Browser API websocket endpoint including credentials")
 	fs.IntVar(&waitMS, "wait-ms", int((5*time.Second)/time.Millisecond), "wait after initial navigation before reading cookies")
 	fs.IntVar(&timeoutSec, "timeout", 120, "overall timeout in seconds")
 	fs.IntVar(&ttlHours, "ttl-hours", int(albertsons.DefaultReese84MaxAge/time.Hour), "freshness window recorded with the cookie")
@@ -101,16 +97,15 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 	if ttlHours <= 0 {
 		return errors.New("ttl-hours must be positive")
 	}
-	auth = strings.TrimSpace(auth)
 	wsEndpoint = strings.TrimSpace(wsEndpoint)
-	if auth == "" && wsEndpoint == "" {
-		return fmt.Errorf("%s or %s is required", brightDataBrowserAuthEnv, brightDataBrowserWSEnv)
+	if wsEndpoint == "" {
+		return fmt.Errorf("%s is required", brightDataBrowserWSEnv)
 	}
 
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	cookieValue, expiresAt, provider, err := fetchCookie(fetchCtx, targetURL, cookieName, auth, wsEndpoint, time.Duration(waitMS)*time.Millisecond, deps)
+	cookieValue, expiresAt, provider, err := fetchCookie(fetchCtx, targetURL, cookieName, wsEndpoint, time.Duration(waitMS)*time.Millisecond, deps)
 	if err != nil {
 		return err
 	}
@@ -136,14 +131,14 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 	return err
 }
 
-func fetchCookie(ctx context.Context, targetURL, cookieName, auth, wsEndpoint string,
+func fetchCookie(ctx context.Context, targetURL, cookieName, wsEndpoint string,
 	browserWait time.Duration, deps dependencies,
 ) (string, *time.Time, string, error) {
-	if auth == "" && wsEndpoint == "" {
-		return "", nil, "", fmt.Errorf("%s or %s is required", brightDataBrowserAuthEnv, brightDataBrowserWSEnv)
+	if wsEndpoint == "" {
+		return "", nil, "", fmt.Errorf("%s is required", brightDataBrowserWSEnv)
 	}
 
-	browser, err := deps.newBrowser(auth, wsEndpoint)
+	browser, err := deps.newBrowser(wsEndpoint)
 	if err != nil {
 		return "", nil, "", fmt.Errorf("create Bright Data browser client: %w", err)
 	}

@@ -45,10 +45,7 @@ func TestRunWithDepsCachesLatestCookieFromBrowser(t *testing.T) {
 		"-ws-endpoint", "wss://user:pass@brd.superproxy.io:9222",
 		"-wait-ms", "2500",
 	}, dependencies{
-		newBrowser: func(auth, wsEndpoint string) (browserCookieFetcher, error) {
-			if auth != "" {
-				t.Fatalf("unexpected auth: %q", auth)
-			}
+		newBrowser: func(wsEndpoint string) (browserCookieFetcher, error) {
 			if wsEndpoint != "wss://user:pass@brd.superproxy.io:9222" {
 				t.Fatalf("unexpected websocket endpoint: %q", wsEndpoint)
 			}
@@ -83,9 +80,9 @@ func TestRunWithDepsErrorsWhenBrowserFails(t *testing.T) {
 	t.Parallel()
 
 	err := runWithDeps(context.Background(), &bytes.Buffer{}, []string{
-		"-auth", "user:pass",
+		"-ws-endpoint", "wss://user:pass@brd.superproxy.io:9222",
 	}, dependencies{
-		newBrowser: func(auth, wsEndpoint string) (browserCookieFetcher, error) {
+		newBrowser: func(wsEndpoint string) (browserCookieFetcher, error) {
 			return &stubBrowserFetcher{err: errors.New("boom")}, nil
 		},
 		newCache: func() (cache.Cache, error) {
@@ -104,7 +101,7 @@ func TestRunWithDepsRequiresBrowserConfig(t *testing.T) {
 	t.Parallel()
 
 	err := runWithDeps(context.Background(), &bytes.Buffer{}, nil, dependencies{
-		newBrowser: func(auth, wsEndpoint string) (browserCookieFetcher, error) {
+		newBrowser: func(wsEndpoint string) (browserCookieFetcher, error) {
 			t.Fatalf("unexpected browser creation")
 			return nil, nil
 		},

@@ -30,7 +30,6 @@ type BrowserClient struct {
 }
 
 type BrowserClientConfig struct {
-	Auth       string
 	WSEndpoint string
 }
 
@@ -76,7 +75,7 @@ type cdpClient struct {
 }
 
 func NewBrowserClient(cfg BrowserClientConfig) (*BrowserClient, error) {
-	wsEndpoint, authHeader, err := browserWSEndpoint(cfg.WSEndpoint, cfg.Auth)
+	wsEndpoint, authHeader, err := browserWSEndpoint(cfg.WSEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +152,7 @@ func CookieNamed(cookies []BrowserCookie, name string) (BrowserCookie, bool) {
 	return BrowserCookie{}, false
 }
 
-func browserWSEndpoint(rawEndpoint, auth string) (string, string, error) {
+func browserWSEndpoint(rawEndpoint string) (string, string, error) {
 	endpoint := strings.TrimSpace(rawEndpoint)
 	if endpoint == "" {
 		endpoint = DefaultBrowserWSEndpoint
@@ -170,7 +169,7 @@ func browserWSEndpoint(rawEndpoint, auth string) (string, string, error) {
 		return "", "", errors.New("bright data browser endpoint must use ws or wss")
 	}
 
-	headerValue, err := browserAuthHeader(parsed, auth)
+	headerValue, err := browserAuthHeader(parsed)
 	if err != nil {
 		return "", "", err
 	}
@@ -182,7 +181,7 @@ func browserWSEndpoint(rawEndpoint, auth string) (string, string, error) {
 	return parsed.String(), headerValue, nil
 }
 
-func browserAuthHeader(parsed *url.URL, auth string) (string, error) {
+func browserAuthHeader(parsed *url.URL) (string, error) {
 	if parsed == nil {
 		return "", errors.New("browser endpoint is required")
 	}
@@ -194,10 +193,7 @@ func browserAuthHeader(parsed *url.URL, auth string) (string, error) {
 		pass, _ = parsed.User.Password()
 	}
 	if user == "" || pass == "" {
-		user, pass, _ = strings.Cut(strings.TrimSpace(auth), ":")
-	}
-	if user == "" || pass == "" {
-		return "", errors.New("bright data browser auth must be in USER:PASS format")
+		return "", errors.New("bright data browser endpoint must include USER:PASS credentials")
 	}
 
 	token := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
