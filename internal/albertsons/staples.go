@@ -81,6 +81,8 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			Rows: stapleRows[category],
 		})
 		if err != nil {
+			// do we want to retry with different  reese token?
+			slog.WarnContext(ctx, "Failed to fetch category", "category", category, "location", locationID, "error", err)
 			return nil, err
 		}
 

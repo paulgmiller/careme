@@ -57,8 +57,12 @@ func NewStaplesProvider(client ClientWithResponsesInterface) StaplesProvider {
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]Ingredient, error) {
 	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]Ingredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
+		if err != nil {
+			slog.WarnContext(ctx, "Failed to fetch category", "category", category.Term, "location", locationID, "error", err)
+			return nil, err
+		}
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category.Term, "location", locationID)
-		return ingredients, err
+		return ingredients, nil
 	})
 }
 
