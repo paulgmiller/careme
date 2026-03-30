@@ -10,9 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"careme/internal/brightdata"
 	"careme/internal/cache"
-	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/wholefoods"
@@ -42,10 +40,7 @@ func main() {
 		log.Fatalf("failed to create cache: %v", err)
 	}
 
-	httpClient, err := brightdata.NewProxyAwareHTTPClient(time.Duration(timeoutSec)*time.Second, config.LoadBrightDataProxyConfigFromEnv())
-	if err != nil {
-		log.Fatalf("failed to create HTTP client: %v", err)
-	}
+	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	client := wholefoods.NewClientWithBaseURL(baseURL, httpClient)
 
 	refs, err := resolveStoreReferences(ctx, cacheStore, httpClient, sitemapURL)
