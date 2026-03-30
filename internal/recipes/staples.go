@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"careme/internal/albertsons"
 	"careme/internal/brightdata"
@@ -89,7 +88,7 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 }
 
 func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) ([]backendStaplesProvider, error) {
-	httpClient, err := brightdata.NewProxyAwareHTTPClient(20*time.Second, cfg.BrightDataProxy)
+	httpClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 	if err != nil {
 		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
 	}

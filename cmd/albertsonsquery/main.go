@@ -53,8 +53,13 @@ func run(ctx context.Context, args []string) error {
 	if subscriptionKey == "" {
 		return errors.New("subscription-key is required")
 	}
+	if timeoutSec > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+		defer cancel()
+	}
 
-	httpClient, err := brightdata.NewProxyAwareHTTPClient(time.Duration(timeoutSec)*time.Second, config.LoadBrightDataProxyConfigFromEnv())
+	httpClient, err := brightdata.NewProxyAwareHTTPClient(config.LoadBrightDataProxyConfigFromEnv())
 	if err != nil {
 		return fmt.Errorf("create HTTP client: %w", err)
 	}

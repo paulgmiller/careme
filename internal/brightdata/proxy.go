@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 type ProxyConfig struct {
@@ -65,12 +64,12 @@ func (c ProxyConfig) ProxyURL() (*url.URL, error) {
 	}, nil
 }
 
-func NewProxyAwareHTTPClient(timeout time.Duration, cfg ProxyConfig) (*http.Client, error) {
+func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
-	client := &http.Client{Timeout: timeout}
+	client := &http.Client{}
 	if !cfg.Enabled() {
 		return client, nil
 	}
