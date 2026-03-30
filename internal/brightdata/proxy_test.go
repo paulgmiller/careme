@@ -43,12 +43,15 @@ func TestProxyConfigProxyURL_BuildsProxyURL(t *testing.T) {
 func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 	t.Parallel()
 
-	client := NewProxyAwareHTTPClient(ProxyConfig{
+	client, err := NewProxyAwareHTTPClient(ProxyConfig{
 		Host:     "brd.superproxy.io",
 		Port:     "33335",
 		Username: "user-name",
 		Password: "secret-pass",
 	})
+	if err != nil {
+		t.Fatalf("NewProxyAwareHTTPClient() error = %v", err)
+	}
 
 	if client.Timeout != 0 {
 		t.Fatalf("expected no client timeout, got %s", client.Timeout)
@@ -73,12 +76,18 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 	if got, want := proxyURL.String(), "http://user-name:secret-pass@brd.superproxy.io:33335"; got != want {
 		t.Fatalf("unexpected proxy URL: got %q want %q", got, want)
 	}
+	if transport.TLSClientConfig == nil || transport.TLSClientConfig.RootCAs == nil {
+		t.Fatal("expected embedded BrightData CA pool to be configured")
+	}
 }
 
 func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	t.Parallel()
 
-	client := NewProxyAwareHTTPClient(ProxyConfig{})
+	client, err := NewProxyAwareHTTPClient(ProxyConfig{})
+	if err != nil {
+		t.Fatalf("NewProxyAwareHTTPClient() error = %v", err)
+	}
 	if client.Timeout != 0 {
 		t.Fatalf("expected no client timeout, got %s", client.Timeout)
 	}
