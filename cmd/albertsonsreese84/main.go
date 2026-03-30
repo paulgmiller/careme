@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -18,21 +19,28 @@ import (
 )
 
 const (
-	defaultTargetURL            = "https://www.acmemarkets.com/aisle-vs/meat-seafood/seafood-favorites.html"
-	defaultCookieName           = "reese84"
-	brightDataBrowserAuthEnv    = "BRIGHTDATA_BROWSER_AUTH"
-	brightDataBrowserWSEndpoint = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
+	defaultTargetURL         = "https://www.acmemarkets.com/aisle-vs/meat-seafood/seafood-favorites.html"
+	defaultCookieName        = "reese84"
+	brightDataAPIKeyEnv      = "BRIGHTDATA_API_KEY"
+	brightDataZoneEnv        = "BRIGHTDATA_ZONE"
+	brightDataBrowserAuthEnv = "BRIGHTDATA_BROWSER_AUTH"
+	brightDataBrowserWSEnv   = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
 )
 
-type cookieFetcher interface {
+type browserCookieFetcher interface {
 	Cookies(ctx context.Context, targetURL string, opts brightdata.BrowserOptions) ([]brightdata.BrowserCookie, error)
 }
 
+type unlockerRequester interface {
+	Request(ctx context.Context, req brightdata.UnlockerRequest) (*brightdata.UnlockerResponse, error)
+}
+
 type dependencies struct {
-	newFetcher func(auth, wsEndpoint string) (cookieFetcher, error)
-	newCache   func() (cache.Cache, error)
-	now        func() time.Time
-	getenv     func(string) string
+	newUnlocker func(apiKey string) (unlockerRequester, error)
+	newBrowser  func(auth, wsEndpoint string) (browserCookieFetcher, error)
+	newCache    func() (cache.Cache, error)
+	now         func() time.Time
+	getenv      func(string) string
 }
 
 func main() {
@@ -44,7 +52,10 @@ func main() {
 	defer closeLogger()
 
 	if err := runWithDeps(ctx, os.Stdout, os.Args[1:], dependencies{
-		newFetcher: func(auth, wsEndpoint string) (cookieFetcher, error) {
+		newUnlocker: func(apiKey string) (unlockerRequester, error) {
+			return brightdata.NewUnlockerClient(apiKey, &http.Client{Timeout: 60 * time.Second})
+		},
+		newBrowser: func(auth, wsEndpoint string) (browserCookieFetcher, error) {
 			return brightdata.NewBrowserClient(brightdata.BrowserClientConfig{
 				Auth:       auth,
 				WSEndpoint: wsEndpoint,
@@ -68,6 +79,8 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 	var (
 		targetURL  string
 		cookieName string
+		apiKey     string
+		zone       string
 		auth       string
 		wsEndpoint string
 		waitMS     int
@@ -77,8 +90,10 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 
 	fs.StringVar(&targetURL, "url", defaultTargetURL, "page to navigate before reading cookies")
 	fs.StringVar(&cookieName, "cookie-name", defaultCookieName, "cookie name to store")
-	fs.StringVar(&auth, "auth", strings.TrimSpace(deps.getenv(brightDataBrowserAuthEnv)), "Bright Data browser auth in USER:PASS format")
-	fs.StringVar(&wsEndpoint, "ws-endpoint", strings.TrimSpace(deps.getenv(brightDataBrowserWSEndpoint)), "Bright Data browser websocket endpoint")
+	fs.StringVar(&apiKey, "api-key", strings.TrimSpace(deps.getenv(brightDataAPIKeyEnv)), "Bright Data API key for Web Unlocker")
+	fs.StringVar(&zone, "zone", strings.TrimSpace(deps.getenv(brightDataZoneEnv)), "Bright Data Web Unlocker zone")
+	fs.StringVar(&auth, "auth", strings.TrimSpace(deps.getenv(brightDataBrowserAuthEnv)), "Bright Data Browser API auth in USER:PASS format")
+	fs.StringVar(&wsEndpoint, "ws-endpoint", strings.TrimSpace(deps.getenv(brightDataBrowserWSEnv)), "Bright Data Browser API websocket endpoint")
 	fs.IntVar(&waitMS, "wait-ms", int((5*time.Second)/time.Millisecond), "wait after initial navigation before reading cookies")
 	fs.IntVar(&timeoutSec, "timeout", 120, "overall timeout in seconds")
 	fs.IntVar(&ttlHours, "ttl-hours", int(albertsons.DefaultReese84MaxAge/time.Hour), "freshness window recorded with the cookie")
@@ -86,8 +101,11 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if deps.newFetcher == nil {
-		return errors.New("fetcher factory is required")
+	if deps.newUnlocker == nil {
+		return errors.New("unlocker factory is required")
+	}
+	if deps.newBrowser == nil {
+		return errors.New("browser factory is required")
 	}
 	if deps.newCache == nil {
 		return errors.New("cache factory is required")
@@ -95,33 +113,26 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 	if deps.now == nil {
 		deps.now = time.Now
 	}
-	if strings.TrimSpace(auth) == "" {
-		return fmt.Errorf("%s is required", brightDataBrowserAuthEnv)
-	}
 	if strings.TrimSpace(cookieName) == "" {
 		return errors.New("cookie-name is required")
 	}
 	if ttlHours <= 0 {
 		return errors.New("ttl-hours must be positive")
 	}
+	apiKey = strings.TrimSpace(apiKey)
+	zone = strings.TrimSpace(zone)
+	auth = strings.TrimSpace(auth)
+	wsEndpoint = strings.TrimSpace(wsEndpoint)
+	if apiKey == "" && auth == "" && wsEndpoint == "" {
+		return fmt.Errorf("%s or %s/%s is required", brightDataAPIKeyEnv, brightDataBrowserAuthEnv, brightDataBrowserWSEnv)
+	}
 
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	fetcher, err := deps.newFetcher(auth, wsEndpoint)
+	cookieValue, expiresAt, provider, err := fetchCookie(fetchCtx, targetURL, cookieName, apiKey, zone, auth, wsEndpoint, time.Duration(waitMS)*time.Millisecond, deps)
 	if err != nil {
-		return fmt.Errorf("create Bright Data browser client: %w", err)
-	}
-	cookies, err := fetcher.Cookies(fetchCtx, targetURL, brightdata.BrowserOptions{
-		WaitAfterNavigation: time.Duration(waitMS) * time.Millisecond,
-	})
-	if err != nil {
-		return fmt.Errorf("fetch cookies: %w", err)
-	}
-
-	cookie, ok := brightdata.CookieNamed(cookies, cookieName)
-	if !ok {
-		return fmt.Errorf("cookie %q not found after navigating to %s", cookieName, targetURL)
+		return err
 	}
 
 	cacheStore, err := deps.newCache()
@@ -131,16 +142,94 @@ func runWithDeps(ctx context.Context, stdout io.Writer, args []string, deps depe
 
 	fetchedAt := deps.now().UTC()
 	if err := albertsons.SaveReese84Record(fetchCtx, cacheStore, albertsons.Reese84Record{
-		Cookie:    cookie.Value,
+		Cookie:    cookieValue,
 		FetchedAt: fetchedAt,
 		SourceURL: targetURL,
-		Provider:  "brightdata-browser-api",
+		Provider:  provider,
 		TTLHours:  ttlHours,
-		ExpiresAt: cookie.Expires,
+		ExpiresAt: expiresAt,
 	}); err != nil {
 		return fmt.Errorf("cache reese84 cookie: %w", err)
 	}
 
 	_, err = fmt.Fprintf(stdout, "cached %s at %s from %s\n", cookieName, fetchedAt.Format(time.RFC3339), targetURL)
 	return err
+}
+
+func fetchCookie(ctx context.Context, targetURL, cookieName, apiKey, zone, auth, wsEndpoint string,
+	browserWait time.Duration, deps dependencies,
+) (string, *time.Time, string, error) {
+	if apiKey != "" {
+		if zone == "" {
+			return "", nil, "", fmt.Errorf("%s is required when %s is set", brightDataZoneEnv, brightDataAPIKeyEnv)
+		}
+
+		unlocker, err := deps.newUnlocker(apiKey)
+		if err != nil {
+			return "", nil, "", fmt.Errorf("create Bright Data unlocker client: %w", err)
+		}
+
+		resp, err := unlocker.Request(ctx, brightdata.UnlockerRequest{
+			Zone:   zone,
+			URL:    targetURL,
+			Format: "json",
+			Method: http.MethodGet,
+		})
+		if err != nil {
+			return "", nil, "", fmt.Errorf("unlocker request: %w", err)
+		}
+
+		for key, values := range resp.Headers {
+			log.Printf("unlocker response header: %s: %v", key, values)
+		}
+
+		cookie, ok := cookieFromHeader(resp.Headers.HTTPHeader(), cookieName)
+		if ok {
+			expires := cookie.Expires
+			var expiresAt *time.Time
+			if !expires.IsZero() {
+				expiresAt = &expires
+			}
+			return cookie.Value, expiresAt, "brightdata-unlocker-api", nil
+		}
+
+		log.Printf("unlocker did not return %q; falling back to Bright Data Browser API", cookieName)
+	}
+
+	if auth == "" && wsEndpoint == "" {
+		return "", nil, "", fmt.Errorf("cookie %q not found in unlocker response and %s is not configured for browser fallback", cookieName, brightDataBrowserAuthEnv)
+	}
+
+	browser, err := deps.newBrowser(auth, wsEndpoint)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("create Bright Data browser client: %w", err)
+	}
+
+	cookies, err := browser.Cookies(ctx, targetURL, brightdata.BrowserOptions{
+		WaitAfterNavigation: browserWait,
+	})
+	if err != nil {
+		return "", nil, "", fmt.Errorf("browser cookie fetch: %w", err)
+	}
+
+	cookie, ok := brightdata.CookieNamed(cookies, cookieName)
+	if !ok {
+		return "", nil, "", fmt.Errorf("cookie %q not found in browser session", cookieName)
+	}
+
+	if cookie.Expires != nil {
+		expiresAt := *cookie.Expires
+		return cookie.Value, &expiresAt, "brightdata-browser-api", nil
+	}
+	return cookie.Value, nil, "brightdata-browser-api", nil
+}
+
+func cookieFromHeader(header http.Header, name string) (*http.Cookie, bool) {
+	resp := &http.Response{Header: header}
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == name {
+			return cookie, true
+		}
+	}
+	return nil, false
 }
