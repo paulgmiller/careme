@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"careme/internal/albertsons/query"
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/parallelism"
@@ -36,10 +37,14 @@ func NewIdentityProvider() identityProvider {
 }
 
 func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) StaplesProvider {
+	reese84Source := NewCachedReese84Source(cfg.SearchReese84, DefaultReese84MaxAge, func() (cache.Cache, error) {
+		return cache.EnsureCache(Container)
+	})
 	return newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
 		querycfg := query.SearchClientConfig{
 			SubscriptionKey: cfg.SearchSubscriptionKey,
 			Reese84:         cfg.SearchReese84,
+			Reese84Provider: reese84Source.Value,
 			BaseURL:         baseURL,
 			HTTPClient:      httpClient,
 		}

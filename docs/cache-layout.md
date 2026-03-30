@@ -42,6 +42,8 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `albertsons/stores/` | JSON `albertsons.StoreSummary` keyed by prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `internal/albertsons` location backend |
 | `albertsons/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Albertsons-family stores (`id`, `lat`, `lon`) | `cmd/albertsons` rebuilds after sync | `internal/albertsons` location backend |
 | `albertsons/store_url_map.json` | JSON object mapping store URL to prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `cmd/albertsons` incremental sync |
+| `albertsons/reese84/latest.json` | JSON `albertsons.Reese84Record` containing the freshest ACME/Albertsons-family `reese84` cookie plus metadata | `cmd/albertsonsreese84` | `internal/albertsons` staples/search cookie resolver |
+| `albertsons/reese84/history/` | JSON `albertsons.Reese84Record` append-only history keyed by fetch timestamp | `cmd/albertsonsreese84` | Operational debugging and manual rollback/reference |
 | `aldi/store_locations.json` | JSON `[]storeindex.Entry` spatial index for ALDI stores (`id`, `lat`, `lon`) | `cmd/aldi` rebuilds after sync | `internal/aldi` location backend |
 | `heb/stores/` | JSON `heb.StoreSummary` keyed by prefixed HEB location ID | `cmd/heb` and `internal/heb` cache helpers | `internal/heb` location backend |
 | `heb/store_locations.json` | JSON `[]storeindex.Entry` spatial index for HEB stores (`id`, `lat`, `lon`) | `cmd/heb` rebuilds after sync | `internal/heb` location backend |
@@ -62,6 +64,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 - Most app caches use the default cache created via `cache.MakeCache()` / `cache.EnsureCache("recipes")`.
 - ALDI locations use a separate cache created via `cache.EnsureCache("aldi")`.
 - Albertsons-family locations use a separate cache created via `cache.EnsureCache("albertsons")`.
+- Albertsons-family `reese84` cookie refresh also uses `cache.EnsureCache("albertsons")`; the latest record is overwritten while timestamped history remains append-only.
 - Wegmans locations use a separate cache created via `cache.EnsureCache("wegmans")`.
 - HEB locations use a separate cache created via `cache.EnsureCache("heb")`.
 - Publix uses a separate cache created via `cache.EnsureCache("publix")`; it does not share the `recipes` container/directory.

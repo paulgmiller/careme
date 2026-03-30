@@ -17,6 +17,11 @@ The application is configured via environment variables:
 - `GOOGLE_TAG_ID` - Google Ads/gtag ID for web analytics (optional)
 - `GOOGLE_CONVERSION_LABEL` - Google Ads conversion label used on `/auth/establish?signup=true` (optional)
 - `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
+- `ALBERTSONS_SEARCH_SUBSCRIPTION_KEY` - Albertsons-family pathway search subscription key
+- `ALBERTSONS_SEARCH_REESE84` - fallback Albertsons-family `reese84` cookie when cache is empty or stale
+- `BRIGHTDATA_BROWSER_AUTH` - Bright Data Browser API auth in `USER:PASS` format for `cmd/albertsonsreese84`
+- `BRIGHTDATA_BROWSER_WS_ENDPOINT` - optional Bright Data Browser API websocket endpoint override
+- `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY` - enable Azure Blob-backed cache storage
 
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above

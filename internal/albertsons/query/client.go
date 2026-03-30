@@ -41,6 +41,7 @@ type SearchClient struct {
 	baseURL         string
 	subscriptionKey string
 	reese84         string
+	reese84Provider func(context.Context) (string, error)
 	httpClient      *http.Client
 }
 
@@ -48,6 +49,7 @@ type SearchClientConfig struct {
 	BaseURL         string
 	SubscriptionKey string
 	Reese84         string
+	Reese84Provider func(context.Context) (string, error)
 	HTTPClient      *http.Client
 }
 
@@ -79,6 +81,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 		baseURL:         baseURL,
 		subscriptionKey: subscriptionKey,
 		reese84:         strings.TrimSpace(cfg.Reese84),
+		reese84Provider: cfg.Reese84Provider,
 		httpClient:      httpClient,
 	}, nil
 }
@@ -116,7 +119,17 @@ func (c *SearchClient) Search(ctx context.Context, storeID, category string, opt
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("ocp-apim-subscription-key", c.subscriptionKey)
 
-	req.AddCookie(&http.Cookie{Name: "reese84", Value: c.reese84})
+	reese84 := c.reese84
+	if c.reese84Provider != nil {
+		resolved, err := c.reese84Provider(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("resolve reese84: %w", err)
+		}
+		reese84 = strings.TrimSpace(resolved)
+	}
+	if reese84 != "" {
+		req.AddCookie(&http.Cookie{Name: "reese84", Value: reese84})
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
