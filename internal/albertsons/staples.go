@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"careme/internal/albertsons/query"
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/parallelism"
@@ -35,16 +36,25 @@ func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
-func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) StaplesProvider {
+func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) (StaplesProvider, error) {
+	c, err := cache.EnsureCache(Container)
+	if err != nil {
+		return StaplesProvider{}, fmt.Errorf("create albertsons cache: %w", err)
+	}
+
 	return newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
 		querycfg := query.SearchClientConfig{
 			SubscriptionKey: cfg.SearchSubscriptionKey,
-			Reese84:         cfg.SearchReese84,
-			BaseURL:         baseURL,
-			HTTPClient:      httpClient,
+			Reese84Provider: func(ctx context.Context) (string, error) {
+				// umm we should cache this and rotate on failure?
+				cookie, err := LoadLatestReese84(ctx, c)
+				return cookie.Cookie, err
+			},
+			BaseURL:    baseURL,
+			HTTPClient: httpClient,
 		}
 		return query.NewSearchClient(querycfg)
-	})
+	}), nil
 }
 
 // only used for testing

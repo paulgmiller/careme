@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: albertsons-reese84
+  labels:
+    app: albertsons-reese84
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: albertsons-reese84
+            job: albertsons-reese84
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          containers:
+            - name: albertsons-reese84
+              image: ghcr.io/paulgmiller/careme-albertsonsreese84:${IMAGE_TAG}
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - secretRef:
+                    name: storage
+                - secretRef:
+                    name: brightdata
+              env:
+                - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+                  value: "InstrumentationKey=a532fcc7-5098-4f44-8dde-ff2f32d6a59b;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=fdc94780-6135-4a29-980e-ab114a402e58"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi

@@ -94,12 +94,18 @@ func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithRe
 		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
 	}
 
+	// only returns an err because it ensures a cache for reese84 tokens.
+	albertsonsProvider, err := albertsons.NewStaplesProvider(cfg.Albertsons, httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
+	}
+
 	return []backendStaplesProvider{
 		kroger.NewStaplesProvider(krogerClient),
+		albertsonsProvider,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(httpClient)),
-		albertsons.NewStaplesProvider(cfg.Albertsons, httpClient),
 	}, nil
 }
 

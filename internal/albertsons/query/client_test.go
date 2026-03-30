@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -25,7 +26,7 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 	client, err := NewSearchClient(SearchClientConfig{
 		BaseURL:         "https://www.acmemarkets.com",
 		SubscriptionKey: "test-subscription-key",
-		Reese84:         "reese-cookie",
+		Reese84Provider: func(context.Context) (string, error) { return "reese-cookie", nil },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				capturedReq = r
@@ -94,6 +95,7 @@ func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
 	var capturedReq *http.Request
 	client, err := NewSearchClient(SearchClientConfig{
 		SubscriptionKey: "test-subscription-key",
+		Reese84Provider: func(context.Context) (string, error) { return "test-reese84", nil },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				capturedReq = r
@@ -114,6 +116,67 @@ func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
 
 	if got := capturedReq.URL.Query().Get("url"); got != DefaultSearchBaseURL {
 		t.Fatalf("unexpected url query value: %q", got)
+	}
+}
+
+func TestSearchUsesReese84ProviderWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	var capturedReq *http.Request
+	client, err := NewSearchClient(SearchClientConfig{
+		SubscriptionKey: "test-subscription-key",
+		Reese84Provider: func(context.Context) (string, error) {
+			return "fresh-cookie", nil
+		},
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				capturedReq = r
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader(`{}`)),
+				}, nil
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewSearchClient returned error: %v", err)
+	}
+
+	if _, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+
+	reese84Cookie, err := capturedReq.Cookie("reese84")
+	if err != nil {
+		t.Fatalf("expected reese84 cookie: %v", err)
+	}
+	if reese84Cookie.Value != "fresh-cookie" {
+		t.Fatalf("unexpected reese84 cookie: %q", reese84Cookie.Value)
+	}
+}
+
+func TestSearchReturnsProviderError(t *testing.T) {
+	t.Parallel()
+
+	client, err := NewSearchClient(SearchClientConfig{
+		SubscriptionKey: "test-subscription-key",
+		Reese84Provider: func(context.Context) (string, error) {
+			return "", errors.New("boom")
+		},
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				t.Fatalf("unexpected HTTP call")
+				return nil, nil
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewSearchClient returned error: %v", err)
+	}
+
+	_, err = client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	if err == nil || !strings.Contains(err.Error(), "resolve reese84") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

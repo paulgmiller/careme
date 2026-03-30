@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"careme/internal/albertsons/query"
-	"careme/internal/config"
 )
 
 func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
@@ -198,9 +197,15 @@ func TestNewStaplesProvider_UsesInjectedHTTPClient(t *testing.T) {
 		}),
 	}
 
-	provider := NewStaplesProvider(config.AlbertsonsConfig{
-		SearchSubscriptionKey: "test-sub-key",
-	}, httpClient)
+	provider := newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
+		querycfg := query.SearchClientConfig{
+			SubscriptionKey: "test-sub-key",
+			Reese84Provider: func(_ context.Context) (string, error) { return "test-reese84", nil },
+			BaseURL:         baseURL,
+			HTTPClient:      httpClient,
+		}
+		return query.NewSearchClient(querycfg)
+	})
 
 	got, err := provider.GetIngredients(t.Context(), "acmemarkets_806", "pinot", 1)
 	if err != nil {
