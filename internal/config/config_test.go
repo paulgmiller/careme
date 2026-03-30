@@ -93,6 +93,33 @@ func TestLoadReadsAlbertsonsSearchCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadReadsBrightDataProxyConfig(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("BRIGHTDATA_PROXY_HOST", "brd.superproxy.io")
+	t.Setenv("BRIGHTDATA_PROXY_PORT", "33335")
+	t.Setenv("BRIGHTDATA_PROXY_USERNAME", "brd-customer-test-zone-residential")
+	t.Setenv("BRIGHTDATA_PROXY_PASSWORD", "secret")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got, want := cfg.BrightDataProxy.Host, "brd.superproxy.io"; got != want {
+		t.Fatalf("expected bright data host %q, got %q", want, got)
+	}
+	if got, want := cfg.BrightDataProxy.Port, "33335"; got != want {
+		t.Fatalf("expected bright data port %q, got %q", want, got)
+	}
+	if got, want := cfg.BrightDataProxy.Username, "brd-customer-test-zone-residential"; got != want {
+		t.Fatalf("expected bright data username %q, got %q", want, got)
+	}
+	if got, want := cfg.BrightDataProxy.Password, "secret"; got != want {
+		t.Fatalf("expected bright data password %q, got %q", want, got)
+	}
+}
+
 func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
 	cfg := &Config{}
 	if got, want := cfg.ResolvedPublicOrigin(), "http://localhost:8080"; got != want {
@@ -140,6 +167,10 @@ func resetStoreEnvs(t *testing.T) {
 		"ALBERTSONS_ENABLE",
 		"ALBERTSONS_SEARCH_SUBSCRIPTION_KEY",
 		"ALBERTSONS_SEARCH_REESE84",
+		"BRIGHTDATA_PROXY_HOST",
+		"BRIGHTDATA_PROXY_PORT",
+		"BRIGHTDATA_PROXY_USERNAME",
+		"BRIGHTDATA_PROXY_PASSWORD",
 		"PUBLIX_ENABLE",
 		"HEB_ENABLE",
 	} {

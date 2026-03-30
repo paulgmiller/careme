@@ -5,29 +5,22 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"time"
 
 	"careme/internal/albertsons/query"
+	"careme/internal/brightdata"
 )
 
 func main() {
-	if err := run(context.Background(), os.Stdout, os.Args[1:]); err != nil {
+	if err := run(context.Background(), os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, stdout io.Writer, args []string) error {
-	return runWithHTTPClient(ctx, stdout, args, nil)
-}
-
-// exists just for UT
-func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, httpClient *http.Client) error {
-	fs := flag.NewFlagSet("albertsonsquery", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+func run(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("albertsonsquery", flag.ExitOnError)
 
 	var (
 		baseURL         string
@@ -40,6 +33,7 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 		timeoutSec      int
 	)
 
+	// get from store_id?
 	fs.StringVar(&baseURL, "base-url", query.DefaultSearchBaseURL, "Albertsons-family search base URL")
 	fs.StringVar(&storeID, "store-id", "806", "store id to search against")
 	fs.StringVar(&subscriptionKey, "subscription-key", envOrDefault("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY", ""), "Albertsons pathway subscription key")
@@ -58,10 +52,14 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 	if subscriptionKey == "" {
 		return errors.New("subscription-key is required")
 	}
-
-	// todo proxy through bright data ? timeout with context instead of http client?
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
+	if timeoutSec > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+		defer cancel()
+	}
+	httpClient, err := brightdata.NewProxyAwareHTTPClient(brightdata.LoadConfig())
+	if err != nil {
+		return fmt.Errorf("create HTTP client: %w", err)
 	}
 	client, err := query.NewSearchClient(query.SearchClientConfig{
 		BaseURL:         baseURL,
@@ -83,11 +81,10 @@ func runWithHTTPClient(ctx context.Context, stdout io.Writer, args []string, htt
 	}
 
 	for i, doc := range payload.Response.Docs {
-		_, _ = fmt.Fprintf(stdout, "%d: %s (price: %.2f)\n", i+1, doc.Name, doc.Price)
+		fmt.Printf("%d: %s (price: %.2f)\n", i+1, doc.Name, doc.Price)
 	}
-	_, err = fmt.Fprintf(stdout, "total products: %d\n", len(payload.Response.Docs))
-
-	return err
+	fmt.Printf("total products: %d\n", len(payload.Response.Docs))
+	return nil
 }
 
 func envOrDefault(key, fallback string) string {

@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"careme/internal/brightdata"
 )
 
 const additionalStoresEnableEnv = "EXTRA_STORES_ENABLE"
@@ -15,19 +17,20 @@ const (
 )
 
 type Config struct {
-	AI           AIConfig         `json:"ai"`
-	Kroger       KrogerConfig     `json:"kroger"`
-	Walmart      WalmartConfig    `json:"walmart"`
-	Aldi         AldiConfig       `json:"aldi"`
-	WholeFoods   WholeFoodsConfig `json:"wholefoods"`
-	Albertsons   AlbertsonsConfig `json:"albertsons"`
-	Publix       PublixConfig     `json:"publix"`
-	HEB          HEBConfig        `json:"heb"`
-	Wegmans      WegmansConfig    `json:"wegmans"`
-	Mocks        MockConfig       `json:"mocks"`
-	Clerk        ClerkConfig      `json:"clerk"`
-	Admin        AdminConfig      `json:"admin"`
-	PublicOrigin string           `json:"public_origin"`
+	AI              AIConfig               `json:"ai"`
+	Kroger          KrogerConfig           `json:"kroger"`
+	Walmart         WalmartConfig          `json:"walmart"`
+	Aldi            AldiConfig             `json:"aldi"`
+	WholeFoods      WholeFoodsConfig       `json:"wholefoods"`
+	Albertsons      AlbertsonsConfig       `json:"albertsons"`
+	Publix          PublixConfig           `json:"publix"`
+	HEB             HEBConfig              `json:"heb"`
+	Wegmans         WegmansConfig          `json:"wegmans"`
+	BrightDataProxy brightdata.ProxyConfig `json:"brightdata_proxy"`
+	Mocks           MockConfig             `json:"mocks"`
+	Clerk           ClerkConfig            `json:"clerk"`
+	Admin           AdminConfig            `json:"admin"`
+	PublicOrigin    string                 `json:"public_origin"`
 }
 
 type AIConfig struct {
@@ -183,6 +186,7 @@ func Load() (*Config, error) {
 		Wegmans: WegmansConfig{
 			Enable: envEnabled("WEGMANS_ENABLE"),
 		},
+		BrightDataProxy: brightdata.LoadConfig(),
 		Walmart: WalmartConfig{
 			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),
 			KeyVersion: os.Getenv("WALMART_KEY_VERSION"),
