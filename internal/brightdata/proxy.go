@@ -16,7 +16,7 @@ type ProxyConfig struct {
 }
 
 func (c ProxyConfig) Enabled() bool {
-	return c.trimmedHost() != "" || c.trimmedPort() != "" || c.trimmedUsername() != "" || c.trimmedPassword() != ""
+	return c.Host != "" || c.Port != "" || c.Username != "" || c.Password != ""
 }
 
 func (c ProxyConfig) Validate() error {
@@ -24,10 +24,10 @@ func (c ProxyConfig) Validate() error {
 		name  string
 		value string
 	}{
-		{name: "BRIGHTDATA_PROXY_HOST", value: c.trimmedHost()},
-		{name: "BRIGHTDATA_PROXY_PORT", value: c.trimmedPort()},
-		{name: "BRIGHTDATA_PROXY_USERNAME", value: c.trimmedUsername()},
-		{name: "BRIGHTDATA_PROXY_PASSWORD", value: c.trimmedPassword()},
+		{name: "BRIGHTDATA_PROXY_HOST", value: c.Host},
+		{name: "BRIGHTDATA_PROXY_PORT", value: c.Port},
+		{name: "BRIGHTDATA_PROXY_USERNAME", value: c.Username},
+		{name: "BRIGHTDATA_PROXY_PASSWORD", value: c.Password},
 	}
 
 	var missing []string
@@ -59,8 +59,8 @@ func (c ProxyConfig) ProxyURL() (*url.URL, error) {
 
 	return &url.URL{
 		Scheme: "http",
-		User:   url.UserPassword(c.trimmedUsername(), c.trimmedPassword()),
-		Host:   net.JoinHostPort(c.trimmedHost(), c.trimmedPort()),
+		User:   url.UserPassword(c.Username, c.Password),
+		Host:   net.JoinHostPort(c.Host, c.Port),
 	}, nil
 }
 
@@ -83,20 +83,4 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	transport.Proxy = http.ProxyURL(proxyURL)
 	client.Transport = transport
 	return client, nil
-}
-
-func (c ProxyConfig) trimmedHost() string {
-	return strings.TrimSpace(c.Host)
-}
-
-func (c ProxyConfig) trimmedPort() string {
-	return strings.TrimSpace(c.Port)
-}
-
-func (c ProxyConfig) trimmedUsername() string {
-	return strings.TrimSpace(c.Username)
-}
-
-func (c ProxyConfig) trimmedPassword() string {
-	return strings.TrimSpace(c.Password)
 }
