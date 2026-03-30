@@ -3,7 +3,6 @@ package albertsons
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"careme/internal/cache"
@@ -40,9 +39,7 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 		return nil, fmt.Errorf("create Albertsons list cache: %w", err)
 	}
 
-	slog.InfoContext(ctx, "ALBERTSONS invetory", "has", cfg.Albertsons.HasInventory())
-
-	return newLocationBackend(ctx, listCache, zipLookup, cfg.Albertsons.HasInventory())
+	return newLocationBackend(ctx, listCache, zipLookup, true /*hasInventory*/)
 }
 
 func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip, inventory bool) (*LocationBackend, error) {

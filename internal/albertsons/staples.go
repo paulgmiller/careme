@@ -36,20 +36,23 @@ func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
-func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) StaplesProvider {
-	reese84Source := NewCachedReese84Source(cfg.SearchReese84, func() (cache.Cache, error) {
-		return cache.EnsureCache(Container)
-	})
+func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) (StaplesProvider, error) {
+	c, err := cache.EnsureCache(Container)
+	if err != nil {
+		return StaplesProvider{}, fmt.Errorf("create albertsons cache: %w", err)
+	}
+
+	reese84Source := NewCachedReese84Source(c)
+
 	return newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
 		querycfg := query.SearchClientConfig{
 			SubscriptionKey: cfg.SearchSubscriptionKey,
-			Reese84:         cfg.SearchReese84,
 			Reese84Provider: reese84Source.Value,
 			BaseURL:         baseURL,
 			HTTPClient:      httpClient,
 		}
 		return query.NewSearchClient(querycfg)
-	})
+	}), nil
 }
 
 // only used for testing

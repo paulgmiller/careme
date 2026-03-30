@@ -26,7 +26,7 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 	client, err := NewSearchClient(SearchClientConfig{
 		BaseURL:         "https://www.acmemarkets.com",
 		SubscriptionKey: "test-subscription-key",
-		Reese84:         "reese-cookie",
+		Reese84Provider: func(context.Context) (string, error) { return "reese-cookie", nil },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				capturedReq = r
@@ -95,6 +95,7 @@ func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
 	var capturedReq *http.Request
 	client, err := NewSearchClient(SearchClientConfig{
 		SubscriptionKey: "test-subscription-key",
+		Reese84Provider: func(context.Context) (string, error) { return "test-reese84", nil },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				capturedReq = r
@@ -124,7 +125,6 @@ func TestSearchUsesReese84ProviderWhenConfigured(t *testing.T) {
 	var capturedReq *http.Request
 	client, err := NewSearchClient(SearchClientConfig{
 		SubscriptionKey: "test-subscription-key",
-		Reese84:         "stale-cookie",
 		Reese84Provider: func(context.Context) (string, error) {
 			return "fresh-cookie", nil
 		},

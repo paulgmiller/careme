@@ -88,9 +88,6 @@ func TestLoadReadsAlbertsonsSearchCredentials(t *testing.T) {
 	if got, want := cfg.Albertsons.SearchSubscriptionKey, "sub-key"; got != want {
 		t.Fatalf("expected Albertsons subscription key %q, got %q", want, got)
 	}
-	if got, want := cfg.Albertsons.SearchReese84, "cookie-value"; got != want {
-		t.Fatalf("expected Albertsons reese84 %q, got %q", want, got)
-	}
 }
 
 func TestLoadReadsBrightDataProxyConfig(t *testing.T) {

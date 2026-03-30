@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	"careme/internal/cache"
@@ -92,47 +91,21 @@ func LoadLatestReese84(ctx context.Context, c cache.Cache) (*CookieRecord, error
 }
 
 type CachedReese84Source struct {
-	fallback     string
-	cacheFactory func() (cache.Cache, error)
-
-	once  sync.Once
-	cache cache.Cache
-	err   error
+	c cache.Cache
 }
 
-func NewCachedReese84Source(fallback string, cacheFactory func() (cache.Cache, error)) *CachedReese84Source {
+func NewCachedReese84Source(c cache.Cache) *CachedReese84Source {
 	return &CachedReese84Source{
-		fallback:     strings.TrimSpace(fallback),
-		cacheFactory: cacheFactory,
+		c: c,
 	}
 }
 
 func (s *CachedReese84Source) Value(ctx context.Context) (string, error) {
-	cacheStore, err := s.cacheStore()
+	cookie, err := LoadLatestReese84(ctx, s.c)
 	if err != nil {
-		if s.fallback != "" {
-			slog.Warn("failed to initialize albertsons reese84 cache, using fallback cookie", "error", err)
-			return s.fallback, nil
-		}
+		slog.WarnContext(ctx, "failed to load cached albertsons reese84, using fallback cookie", "error", err)
 		return "", err
 	}
 
-	cookie, err := LoadLatestReese84(ctx, cacheStore)
-	if err != nil {
-		slog.WarnContext(ctx, "failed to load cached albertsons reese84, using fallback cookie", "error", err)
-		return s.fallback, nil
-	}
-
 	return cookie.Cookie, nil
-}
-
-func (s *CachedReese84Source) cacheStore() (cache.Cache, error) {
-	s.once.Do(func() {
-		if s.cacheFactory == nil {
-			s.err = errors.New("cache factory is required")
-			return
-		}
-		s.cache, s.err = s.cacheFactory()
-	})
-	return s.cache, s.err
 }

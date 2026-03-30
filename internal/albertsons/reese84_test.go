@@ -1,7 +1,6 @@
 package albertsons
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -41,21 +40,5 @@ func TestSaveReese84RecordWritesLatestAndHistory(t *testing.T) {
 	}
 	if got, want := keys[0], fetchedAt.Format(time.RFC3339Nano)+".json"; got != want {
 		t.Fatalf("unexpected history key: got %q want %q", got, want)
-	}
-}
-
-func TestCachedReese84SourceFallsBackToEnv(t *testing.T) {
-	t.Parallel()
-
-	source := NewCachedReese84Source("env-cookie", func() (cache.Cache, error) {
-		return cache.NewInMemoryCache(), nil
-	})
-
-	got, err := source.Value(context.Background())
-	if err != nil {
-		t.Fatalf("Value returned error: %v", err)
-	}
-	if got != "env-cookie" {
-		t.Fatalf("unexpected cookie: %q", got)
 	}
 }

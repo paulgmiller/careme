@@ -3,7 +3,7 @@ kind: CronJob
 metadata:
   name: albertsons-reese84
   labels:
-    app: careme
+    app: albertsons-reese84
 spec:
   schedule: "0 */6 * * *"
   concurrencyPolicy: Forbid
@@ -15,7 +15,7 @@ spec:
       template:
         metadata:
           labels:
-            app: careme
+            app: albertsons-reese84
             job: albertsons-reese84
         spec:
           restartPolicy: Never
