@@ -192,7 +192,7 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 
 	ingredients, err := g.staplesProvider.FetchStaples(ctx, p.Location.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ingredients for staples: %w", err)
+		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", p.Location.ID, err)
 	}
 	// should this be pushed down into staple proivder? go off product id?
 	ingredients = uniqueByDescription(ingredients)

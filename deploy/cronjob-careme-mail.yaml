@@ -3,7 +3,7 @@ kind: CronJob
 metadata:
   name: careme-mail
   labels:
-    app: careme
+    app: careme-mail
 spec:
   schedule: "0 * * * *"
   concurrencyPolicy: Forbid
@@ -15,7 +15,7 @@ spec:
       template:
         metadata:
           labels:
-            app: careme
+            app: careme-mail
             job: careme-mail
         spec:
           restartPolicy: Never
