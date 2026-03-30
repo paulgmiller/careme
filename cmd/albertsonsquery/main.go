@@ -81,9 +81,9 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	for i, doc := range payload.Response.Docs {
-		_, _ = fmt.Printf("%d: %s (price: %.2f)\n", i+1, doc.Name, doc.Price)
+		fmt.Printf("%d: %s (price: %.2f)\n", i+1, doc.Name, doc.Price)
 	}
-	_, err = fmt.Printf("total products: %d\n", len(payload.Response.Docs))
+	fmt.Printf("total products: %d\n", len(payload.Response.Docs))
 	return nil
 }
 
