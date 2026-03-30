@@ -104,6 +104,8 @@ func (c *BrowserClient) Cookies(ctx context.Context, targetURL string, opts Brow
 		_ = client.Close()
 	}()
 
+	// Bright Data rejects creating a target with the destination URL directly,
+	// so we create a blank tab first and drive navigation over the attached CDP session.
 	targetID, err := client.createTarget(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create browser target: %w", err)
@@ -119,12 +121,16 @@ func (c *BrowserClient) Cookies(ctx context.Context, targetURL string, opts Brow
 		return nil, fmt.Errorf("attach to browser target: %w", err)
 	}
 
+	// Enable the minimum CDP domains we need before navigating so cookie state
+	// is available from the target session once the page settles.
 	if err := client.call(ctx, sessionID, "Page.enable", nil, nil); err != nil {
 		return nil, fmt.Errorf("enable page domain: %w", err)
 	}
 	if err := client.call(ctx, sessionID, "Network.enable", nil, nil); err != nil {
 		return nil, fmt.Errorf("enable network domain: %w", err)
 	}
+	// Navigation has to happen after attach; Bright Data exposes a browser-level
+	// websocket and the actual page work occurs within the per-target session.
 	if err := client.navigate(ctx, sessionID, targetURL); err != nil {
 		return nil, fmt.Errorf("navigate browser target: %w", err)
 	}
