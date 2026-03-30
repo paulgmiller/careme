@@ -120,18 +120,6 @@ func TestLoadReadsBrightDataProxyConfig(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsPartialBrightDataProxyConfig(t *testing.T) {
-	resetStoreEnvs(t)
-	t.Setenv("ENABLE_MOCKS", "1")
-	t.Setenv("BRIGHTDATA_PROXY_HOST", "brd.superproxy.io")
-	t.Setenv("BRIGHTDATA_PROXY_PORT", "33335")
-
-	_, err := Load()
-	if err == nil || !contains(err.Error(), "bright data proxy requires all proxy env vars") {
-		t.Fatalf("expected bright data proxy validation error, got %v", err)
-	}
-}
-
 func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
 	cfg := &Config{}
 	if got, want := cfg.ResolvedPublicOrigin(), "http://localhost:8080"; got != want {

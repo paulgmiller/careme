@@ -8,35 +8,32 @@ import (
 func TestProxyConfigValidate_AllowsDisabled(t *testing.T) {
 	t.Parallel()
 
-	if err := (ProxyConfig{}).Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
+	if (ProxyConfig{}).Enabled() {
+		t.Fatalf("Empty config should not be enabled")
 	}
 }
 
 func TestProxyConfigValidate_RejectsPartialConfig(t *testing.T) {
 	t.Parallel()
 
-	err := (ProxyConfig{
+	enabled := (ProxyConfig{
 		Host: "brd.superproxy.io",
 		Port: "33335",
-	}).Validate()
-	if err == nil {
-		t.Fatal("expected validation error")
+	}).Enabled()
+	if enabled {
+		t.Fatal("expected diabled when only host and port provided")
 	}
 }
 
 func TestProxyConfigProxyURL_BuildsProxyURL(t *testing.T) {
 	t.Parallel()
 
-	proxyURL, err := (ProxyConfig{
+	proxyURL := (ProxyConfig{
 		Host:     "brd.superproxy.io",
 		Port:     "33335",
 		Username: "user-name",
 		Password: "secret-pass",
-	}).ProxyURL()
-	if err != nil {
-		t.Fatalf("ProxyURL() error = %v", err)
-	}
+	}).proxyURL()
 
 	if got, want := proxyURL.String(), "http://user-name:secret-pass@brd.superproxy.io:33335"; got != want {
 		t.Fatalf("unexpected proxy URL: got %q want %q", got, want)

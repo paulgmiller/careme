@@ -144,15 +144,6 @@ func (c *Config) ResolvedPublicOrigin() string {
 	return defaultLocalOrigin
 }
 
-func LoadBrightDataProxyConfigFromEnv() brightdata.ProxyConfig {
-	return brightdata.ProxyConfig{
-		Host:     os.Getenv("BRIGHTDATA_PROXY_HOST"),
-		Port:     os.Getenv("BRIGHTDATA_PROXY_PORT"),
-		Username: os.Getenv("BRIGHTDATA_PROXY_USERNAME"),
-		Password: os.Getenv("BRIGHTDATA_PROXY_PASSWORD"),
-	}
-}
-
 func Load() (*Config, error) {
 	config := &Config{
 		AI: AIConfig{
@@ -195,7 +186,7 @@ func Load() (*Config, error) {
 		Wegmans: WegmansConfig{
 			Enable: envEnabled("WEGMANS_ENABLE"),
 		},
-		BrightDataProxy: LoadBrightDataProxyConfigFromEnv(),
+		BrightDataProxy: brightdata.LoadConfig(),
 		Walmart: WalmartConfig{
 			ConsumerID: os.Getenv("WALMART_CONSUMER_ID"),
 			KeyVersion: os.Getenv("WALMART_KEY_VERSION"),
@@ -213,9 +204,6 @@ func envEnabled(name string) bool {
 
 func validate(cfg *Config) error {
 	if err := validateAbsoluteURL("public origin", cfg.ResolvedPublicOrigin()); err != nil {
-		return err
-	}
-	if err := cfg.BrightDataProxy.Validate(); err != nil {
 		return err
 	}
 
