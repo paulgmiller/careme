@@ -17,20 +17,18 @@ import (
 const (
 	Reese84LatestCacheKey   = "albertsons/reese84/latest.json"
 	Reese84HistoryPrefix    = "albertsons/reese84/history/"
-	DefaultReese84MaxAge    = 24 * time.Hour // first token lasted several days so this is a guess.
 	brightDataBrowserSource = "brightdata-browser-api"
 )
 
-type Reese84Record struct {
+type CookieRecord struct {
 	Cookie    string     `json:"cookie"`
 	FetchedAt time.Time  `json:"fetched_at"`
 	SourceURL string     `json:"source_url"`
 	Provider  string     `json:"provider"`
-	TTLHours  int        `json:"ttl_hours"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-func SaveReese84Record(ctx context.Context, c cache.Cache, record Reese84Record) error {
+func SaveReese84Record(ctx context.Context, c cache.Cache, record CookieRecord) error {
 	if c == nil {
 		return errors.New("cache is required")
 	}
@@ -48,9 +46,6 @@ func SaveReese84Record(ctx context.Context, c cache.Cache, record Reese84Record)
 	record.Provider = strings.TrimSpace(record.Provider)
 	if record.Provider == "" {
 		record.Provider = brightDataBrowserSource
-	}
-	if record.TTLHours <= 0 {
-		record.TTLHours = int(DefaultReese84MaxAge / time.Hour)
 	}
 	if record.ExpiresAt != nil {
 		expires := record.ExpiresAt.UTC()
@@ -72,7 +67,7 @@ func SaveReese84Record(ctx context.Context, c cache.Cache, record Reese84Record)
 	return nil
 }
 
-func LoadLatestReese84(ctx context.Context, c cache.Cache) (*Reese84Record, error) {
+func LoadLatestReese84(ctx context.Context, c cache.Cache) (*CookieRecord, error) {
 	if c == nil {
 		return nil, errors.New("cache is required")
 	}
@@ -85,7 +80,7 @@ func LoadLatestReese84(ctx context.Context, c cache.Cache) (*Reese84Record, erro
 		_ = reader.Close()
 	}()
 
-	var record Reese84Record
+	var record CookieRecord
 	if err := json.NewDecoder(reader).Decode(&record); err != nil {
 		return nil, fmt.Errorf("decode reese84 record: %w", err)
 	}
@@ -96,29 +91,8 @@ func LoadLatestReese84(ctx context.Context, c cache.Cache) (*Reese84Record, erro
 	return &record, nil
 }
 
-func LoadFreshReese84(ctx context.Context, c cache.Cache, maxAge time.Duration, now time.Time) (string, error) {
-	record, err := LoadLatestReese84(ctx, c)
-	if err != nil {
-		return "", err
-	}
-
-	if maxAge > 0 {
-		if now.IsZero() {
-			now = time.Now().UTC()
-		}
-		if record.FetchedAt.IsZero() {
-			return "", cache.ErrNotFound
-		}
-		if now.UTC().Sub(record.FetchedAt.UTC()) > maxAge {
-			return "", cache.ErrNotFound
-		}
-	}
-	return record.Cookie, nil
-}
-
 type CachedReese84Source struct {
 	fallback     string
-	maxAge       time.Duration
 	cacheFactory func() (cache.Cache, error)
 
 	once  sync.Once
@@ -126,13 +100,9 @@ type CachedReese84Source struct {
 	err   error
 }
 
-func NewCachedReese84Source(fallback string, maxAge time.Duration, cacheFactory func() (cache.Cache, error)) *CachedReese84Source {
-	if maxAge <= 0 {
-		maxAge = DefaultReese84MaxAge
-	}
+func NewCachedReese84Source(fallback string, cacheFactory func() (cache.Cache, error)) *CachedReese84Source {
 	return &CachedReese84Source{
 		fallback:     strings.TrimSpace(fallback),
-		maxAge:       maxAge,
 		cacheFactory: cacheFactory,
 	}
 }
@@ -147,18 +117,13 @@ func (s *CachedReese84Source) Value(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	cookie, err := LoadFreshReese84(ctx, cacheStore, s.maxAge, time.Time{})
-	if err == nil {
-		return cookie, nil
-	}
-	if errors.Is(err, cache.ErrNotFound) {
-		return s.fallback, nil
-	}
-	if s.fallback != "" {
+	cookie, err := LoadLatestReese84(ctx, cacheStore)
+	if err != nil {
 		slog.WarnContext(ctx, "failed to load cached albertsons reese84, using fallback cookie", "error", err)
 		return s.fallback, nil
 	}
-	return "", err
+
+	return cookie.Cookie, nil
 }
 
 func (s *CachedReese84Source) cacheStore() (cache.Cache, error) {

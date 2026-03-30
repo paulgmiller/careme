@@ -37,7 +37,7 @@ func NewIdentityProvider() identityProvider {
 }
 
 func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) StaplesProvider {
-	reese84Source := NewCachedReese84Source(cfg.SearchReese84, DefaultReese84MaxAge, func() (cache.Cache, error) {
+	reese84Source := NewCachedReese84Source(cfg.SearchReese84, func() (cache.Cache, error) {
 		return cache.EnsureCache(Container)
 	})
 	return newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {

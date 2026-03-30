@@ -24,10 +24,6 @@ const (
 	brightDataBrowserWSEnv = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
 )
 
-type browserCookieFetcher interface {
-	Cookies(ctx context.Context, targetURL string, opts brightdata.BrowserOptions) ([]brightdata.BrowserCookie, error)
-}
-
 func main() {
 	ctx := context.Background()
 	closeLogger, err := logsetup.Configure(ctx)
@@ -52,7 +48,6 @@ func runWithDeps(ctx context.Context, args []string) error {
 		wsEndpoint string
 		waitMS     int
 		timeoutSec int
-		ttlHours   int
 	)
 
 	fs.StringVar(&targetURL, "url", defaultTargetURL, "page to navigate before reading cookies")
@@ -60,16 +55,12 @@ func runWithDeps(ctx context.Context, args []string) error {
 	fs.StringVar(&wsEndpoint, "ws-endpoint", strings.TrimSpace(os.Getenv(brightDataBrowserWSEnv)), "Bright Data Browser API websocket endpoint including credentials")
 	fs.IntVar(&waitMS, "wait-ms", int((5*time.Second)/time.Millisecond), "wait after initial navigation before reading cookies")
 	fs.IntVar(&timeoutSec, "timeout", 120, "overall timeout in seconds")
-	fs.IntVar(&ttlHours, "ttl-hours", int(albertsons.DefaultReese84MaxAge/time.Hour), "freshness window recorded with the cookie")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if strings.TrimSpace(cookieName) == "" {
 		return errors.New("cookie-name is required")
-	}
-	if ttlHours <= 0 {
-		return errors.New("ttl-hours must be positive")
 	}
 	wsEndpoint = strings.TrimSpace(wsEndpoint)
 	if wsEndpoint == "" {
@@ -79,7 +70,18 @@ func runWithDeps(ctx context.Context, args []string) error {
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	cookieValue, expiresAt, provider, err := fetchCookie(fetchCtx, targetURL, cookieName, wsEndpoint, time.Duration(waitMS)*time.Millisecond)
+	browser, err := brightdata.NewBrowserClient(brightdata.BrowserClientConfig{
+		WSEndpoint: wsEndpoint,
+	})
+	if err != nil {
+		return fmt.Errorf("create Bright Data browser client: %w", err)
+	}
+
+	record, err := albertsons.FetchCookie(fetchCtx, browser, albertsons.CookieParams{
+		TargetURL:           targetURL,
+		CookieName:          cookieName,
+		WaitAfterNavigation: time.Duration(waitMS) * time.Millisecond,
+	})
 	if err != nil {
 		return err
 	}
@@ -89,49 +91,10 @@ func runWithDeps(ctx context.Context, args []string) error {
 		return fmt.Errorf("create albertsons cache: %w", err)
 	}
 
-	fetchedAt := time.Now().UTC()
-	if err := albertsons.SaveReese84Record(fetchCtx, cacheStore, albertsons.Reese84Record{
-		Cookie:    cookieValue,
-		FetchedAt: fetchedAt,
-		SourceURL: targetURL,
-		Provider:  provider,
-		TTLHours:  ttlHours,
-		ExpiresAt: expiresAt,
-	}); err != nil {
+	if err := albertsons.SaveReese84Record(fetchCtx, cacheStore, record); err != nil {
 		return fmt.Errorf("cache reese84 cookie: %w", err)
 	}
 
-	fmt.Printf("cached %s at %s from %s\n", cookieName, fetchedAt.Format(time.RFC3339), targetURL)
+	fmt.Printf("cached %s at %s from %s\n", cookieName, record.FetchedAt.Format(time.RFC3339), targetURL)
 	return nil
-}
-
-func fetchCookie(ctx context.Context, targetURL, cookieName, wsEndpoint string, browserWait time.Duration) (string, *time.Time, string, error) {
-	if wsEndpoint == "" {
-		return "", nil, "", fmt.Errorf("%s is required", brightDataBrowserWSEnv)
-	}
-
-	browser, err := brightdata.NewBrowserClient(brightdata.BrowserClientConfig{
-		WSEndpoint: wsEndpoint,
-	})
-	if err != nil {
-		return "", nil, "", fmt.Errorf("create Bright Data browser client: %w", err)
-	}
-
-	cookies, err := browser.Cookies(ctx, targetURL, brightdata.BrowserOptions{
-		WaitAfterNavigation: browserWait,
-	})
-	if err != nil {
-		return "", nil, "", fmt.Errorf("browser cookie fetch: %w", err)
-	}
-
-	cookie, ok := brightdata.CookieNamed(cookies, cookieName)
-	if !ok {
-		return "", nil, "", fmt.Errorf("cookie %q not found in browser session", cookieName)
-	}
-
-	if cookie.Expires != nil {
-		expiresAt := *cookie.Expires
-		return cookie.Value, &expiresAt, "brightdata-browser-api", nil
-	}
-	return cookie.Value, nil, "brightdata-browser-api", nil
 }
