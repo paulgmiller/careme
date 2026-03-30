@@ -42,14 +42,16 @@ func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) (S
 		return StaplesProvider{}, fmt.Errorf("create albertsons cache: %w", err)
 	}
 
-	reese84Source := NewCachedReese84Source(c)
-
 	return newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
 		querycfg := query.SearchClientConfig{
 			SubscriptionKey: cfg.SearchSubscriptionKey,
-			Reese84Provider: reese84Source.Value,
-			BaseURL:         baseURL,
-			HTTPClient:      httpClient,
+			Reese84Provider: func(ctx context.Context) (string, error) {
+				// umm we should cache this and rotate on failure?
+				cookie, err := LoadLatestReese84(ctx, c)
+				return cookie.Cookie, err
+			},
+			BaseURL:    baseURL,
+			HTTPClient: httpClient,
 		}
 		return query.NewSearchClient(querycfg)
 	}), nil

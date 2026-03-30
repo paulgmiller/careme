@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"path"
 	"strings"
 	"time"
@@ -43,7 +42,7 @@ func SaveReese84Record(ctx context.Context, c cache.Cache, record CookieRecord) 
 		return fmt.Errorf("marshal reese84 record: %w", err)
 	}
 
-	// want to have fall backs
+	// want to have fall backsNewCachedReese84Source
 	historyKey := path.Join(Reese84HistoryPrefix, record.FetchedAt.Format(time.RFC3339Nano)+".json")
 	if err := c.Put(ctx, historyKey, string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("write reese84 history: %w", err)
@@ -76,24 +75,4 @@ func LoadLatestReese84(ctx context.Context, c cache.Cache) (*CookieRecord, error
 		return nil, fmt.Errorf("decode reese84 record: cookie is empty")
 	}
 	return &record, nil
-}
-
-type CachedReese84Source struct {
-	c cache.Cache
-}
-
-func NewCachedReese84Source(c cache.Cache) *CachedReese84Source {
-	return &CachedReese84Source{
-		c: c,
-	}
-}
-
-func (s *CachedReese84Source) Value(ctx context.Context) (string, error) {
-	cookie, err := LoadLatestReese84(ctx, s.c)
-	if err != nil {
-		slog.WarnContext(ctx, "failed to load cached albertsons reese84, using fallback cookie", "error", err)
-		return "", err
-	}
-
-	return cookie.Cookie, nil
 }
