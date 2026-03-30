@@ -36,26 +36,14 @@ func SaveReese84Record(ctx context.Context, c cache.Cache, record CookieRecord) 
 	if record.Cookie == "" {
 		return errors.New("cookie is required")
 	}
-	if record.FetchedAt.IsZero() {
-		record.FetchedAt = time.Now().UTC()
-	} else {
-		record.FetchedAt = record.FetchedAt.UTC()
-	}
-	record.SourceURL = strings.TrimSpace(record.SourceURL)
-	record.Provider = strings.TrimSpace(record.Provider)
-	if record.Provider == "" {
-		record.Provider = brightDataBrowserSource
-	}
-	if record.ExpiresAt != nil {
-		expires := record.ExpiresAt.UTC()
-		record.ExpiresAt = &expires
-	}
+	// other fields are optional for now
 
 	body, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("marshal reese84 record: %w", err)
 	}
 
+	// want to have fall backs
 	historyKey := path.Join(Reese84HistoryPrefix, record.FetchedAt.Format(time.RFC3339Nano)+".json")
 	if err := c.Put(ctx, historyKey, string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("write reese84 history: %w", err)
