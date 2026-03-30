@@ -30,7 +30,11 @@ spec:
             - secretRef:
                 name: ai
             - secretRef:
+                name: albertsons
+            - secretRef:
                 name: auth
+            - secretRef:
+                name: brightdata-proxy
             - secretRef:
                 name: kroger
             - secretRef:
