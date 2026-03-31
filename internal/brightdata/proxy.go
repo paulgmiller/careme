@@ -74,7 +74,7 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 func withRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
-	retryClient.Logger = nil
+	retryClient.Logger = slog.Default()
 
 	// Keep the library defaults for now:
 	// RetryMax=4, RetryWaitMin=1s, RetryWaitMax=30s, Backoff=DefaultBackoff.
@@ -84,7 +84,7 @@ func withRetries(baseClient *http.Client) *http.Client {
 			return false, ctx.Err()
 		}
 		if err != nil {
-			return false, err
+			return true, err // retry these as theya re non canceled?
 		}
 		if resp == nil || resp.Request == nil {
 			return false, nil
