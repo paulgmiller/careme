@@ -47,13 +47,5 @@
                 "Email.Subject": "New users!"
             }
         }
-    },
-    "systemData": {
-        "createdBy": "paul.miller@gmail.com",
-        "createdByType": "User",
-        "createdAt": "2026-03-31T22:03:00.145Z",
-        "lastModifiedBy": "paul.miller@gmail.com",
-        "lastModifiedByType": "User",
-        "lastModifiedAt": "2026-03-31T22:03:00.145Z"
     }
 }
