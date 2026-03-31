@@ -1,8 +1,6 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/wholefoods"
 	"context"
 	"errors"
 	"flag"
@@ -11,6 +9,11 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/logsetup"
+	"careme/internal/wholefoods"
 )
 
 func main() {
@@ -25,6 +28,13 @@ func main() {
 	flag.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
 	flag.Parse()
 
+	ctx := context.Background()
+	closeLogger, err := logsetup.Configure(ctx)
+	if err != nil {
+		log.Fatalf("failed to configure logging: %v", err)
+	}
+	defer closeLogger()
+
 	cacheStore, err := cache.EnsureCache(wholefoods.Container)
 	if err != nil {
 		log.Fatalf("failed to create cache: %v", err)
@@ -33,7 +43,6 @@ func main() {
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	client := wholefoods.NewClientWithBaseURL(baseURL, httpClient)
 
-	ctx := context.Background()
 	refs, err := resolveStoreReferences(ctx, cacheStore, httpClient, sitemapURL)
 	if err != nil {
 		log.Fatalf("failed to resolve store references: %v", err)
@@ -56,6 +65,10 @@ func main() {
 		}
 		time.Sleep(5 * time.Second) // be nice to the server no rush here
 		synced++
+	}
+
+	if err := wholefoods.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
+		log.Fatalf("failed to rebuild Whole Foods location index: %v", err)
 	}
 
 	fmt.Printf("synced %d Whole Foods store summaries\n", synced)
@@ -95,7 +108,7 @@ func resolveStoreReferences(ctx context.Context, cacheStore cache.ListCache, htt
 		refs = append(refs, wholefoods.StoreReference{ID: storeID, URL: url})
 	}
 
-	//TOD remove stores from url map not in itemap?
+	// TOD remove stores from url map not in itemap?
 
 	if updated {
 		if err := wholefoods.SaveStoreURLMap(ctx, cacheStore, refs); err != nil {

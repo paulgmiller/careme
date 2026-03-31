@@ -1,9 +1,6 @@
 package users
 
 import (
-	"careme/internal/auth"
-	"careme/internal/cache"
-	utypes "careme/internal/users/types"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +10,10 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"careme/internal/auth"
+	"careme/internal/cache"
+	utypes "careme/internal/users/types"
 )
 
 type Storage struct {
@@ -120,7 +121,7 @@ func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string,
 	}
 
 	newUser := utypes.User{
-		ID:          clerkUserID, //do we need this o be independent for housholds?
+		ID:          clerkUserID, // do we need this o be independent for housholds?
 		Email:       []string{normalizeEmail(primaryEmail)},
 		CreatedAt:   time.Now(),
 		ShoppingDay: time.Saturday.String(),

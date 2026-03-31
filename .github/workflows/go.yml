@@ -1,41 +1,163 @@
 # .github/workflows/ghcr-publish-pr-gate.yml
-name: Build and Publish 
+name: Build and Publish
+
+env:
+  GOLANGCI_LINT_CACHE: /tmp/golangci-lint
 
 on:
   push:
-    branches: [master, main]   # include both; trim as needed
+    branches: [master, main]
   pull_request:
     branches: [master, main]
   workflow_dispatch:
 
-# Cancel superseded runs (nice for PRs)
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  gate:
-    name: gate                      # this appears in Required checks UI as "<workflow> / gate"
+  verify:
+    name: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write               # needed to push to GHCR on branch pushes
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Go tests
+        run: go test ./...
+
+  vet:
+    name: vet
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run go vet
+        run: go vet ./...
+
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install gofumpt
+        run: bash tools/install.sh gofumpt
+
+      - name: Check Go formatting
+        run: test -z "$(./bin/gofumpt -l .)"
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install golangci-lint
+        run: bash tools/install.sh golangci-lint
+
+      - name: Run golangci-lint
+        run: ./bin/golangci-lint run ./... --timeout=5m
+
+  k8s-lint:
+    name: k8s-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install kubeconform
+        run: bash tools/install.sh kubeconform
+
+      - name: Validate Kubernetes manifests
+        run: ./bin/kubeconform -strict -summary deploy/*.yaml
+
+  publish:
+    name: publish (${{ matrix.name }})
+    needs: [verify, vet, format, lint, k8s-lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: careme
+            cmd_path: ./cmd/careme
+            image_suffix: ""
+          - name: wholefoods
+            cmd_path: ./cmd/wholefoods
+            image_suffix: wholefoods
+          - name: albertsons
+            cmd_path: ./cmd/albertsons
+            image_suffix: albertsons
+          - name: publix
+            cmd_path: ./cmd/publix
+            image_suffix: publix
+          - name: aldi
+            cmd_path: ./cmd/aldi
+            image_suffix: aldi
+          - name: albertsonsreese84
+            cmd_path: ./cmd/albertsonsreese84
+            image_suffix: albertsonsreese84
+
+    steps:
+      - uses: actions/checkout@v5
 
       - name: Derive image name & tags
         id: vars
         run: |
           OWNER_LC=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
           REPO_LC=$(echo "${GITHUB_REPOSITORY#*/}"       | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE=ghcr.io/${OWNER_LC}/${REPO_LC}" >> "$GITHUB_OUTPUT"
+          IMAGE="ghcr.io/${OWNER_LC}/${REPO_LC}"
+          if [ -n "${{ matrix.image_suffix }}" ]; then
+            IMAGE="${IMAGE}-${{ matrix.image_suffix }}"
+          fi
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "SHORT_SHA=${GITHUB_SHA::7}"           >> "$GITHUB_OUTPUT"
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Only needed when actually pushing
       - name: Login to GHCR
         if: github.event_name == 'push'
         uses: docker/login-action@v3
@@ -48,7 +170,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name == 'push' }}  # false on PRs, true on branch pushes
+          push: ${{ github.event_name == 'push' }}
+          build-args: |
+            CMD_PATH=${{ matrix.cmd_path }}
           tags: |
             ${{ steps.vars.outputs.IMAGE }}:latest
             ${{ steps.vars.outputs.IMAGE }}:${{ steps.vars.outputs.SHORT_SHA }}

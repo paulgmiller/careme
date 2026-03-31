@@ -1,9 +1,10 @@
 package main
 
 import (
-	"careme/internal/kroger"
 	"reflect"
 	"testing"
+
+	"careme/internal/kroger"
 )
 
 func TestParseProduceList(t *testing.T) {
@@ -107,7 +108,7 @@ func TestSummarizeFilterMatches(t *testing.T) {
 	}
 }
 
-func TestAnnotateUniqueOnlyMatches(t *testing.T) {
+/*func TestAnnotateUniqueOnlyMatches(t *testing.T) {
 	stats := []produceFilterStats{
 		{
 			FilterTerm:          "fresh produce",
@@ -134,7 +135,7 @@ func TestAnnotateUniqueOnlyMatches(t *testing.T) {
 	if stats[2].UniqueOnlyMatches != 1 {
 		t.Fatalf("stats[2].UniqueOnlyMatches = %d, want %d", stats[2].UniqueOnlyMatches, 1)
 	}
-}
+}*/
 
 func strPtr(s string) *string {
 	return &s

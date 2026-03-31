@@ -1,12 +1,13 @@
 package admin
 
 import (
-	"careme/internal/auth"
-	"careme/internal/config"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"careme/internal/auth"
+	"careme/internal/config"
 )
 
 type middleware struct {

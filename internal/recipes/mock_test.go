@@ -1,10 +1,11 @@
 package recipes
 
 import (
-	"careme/internal/locations"
 	"context"
 	"testing"
 	"time"
+
+	"careme/internal/locations"
 )
 
 func TestMockGenerateRecipes_Returns3Recipes(t *testing.T) {

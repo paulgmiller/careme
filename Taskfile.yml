@@ -1,0 +1,209 @@
+# Install Task: go install github.com/go-task/task/v3/cmd/task@latest
+version: "3"
+
+env:
+  GOCACHE: '{{default "/tmp/go-build" .GOCACHE}}'
+  GOMODCACHE: '{{default "/tmp/go-modcache" .GOMODCACHE}}'
+  GOLANGCI_LINT_CACHE: '{{default "/tmp/golangci-lint" .GOLANGCI_LINT_CACHE}}'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  ci:
+    desc: Run the local equivalent of CI checks and image builds
+    deps:
+      - verify
+      - vet
+      - format-check
+      - lint
+      - k8s-lint
+      - tailwind-check
+      - docker-build-all
+
+  verify:
+    desc: Run the broader local verification suite
+    deps:
+      - fmt
+      - vet
+      - test
+      - lint
+      - k8s-lint
+      - tailwind-check
+
+  fmt:
+    desc: Format Go code with gofumpt
+    deps:
+      - gofumpt
+    cmds:
+      - ./bin/gofumpt -w .
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: Run golangci-lint
+    deps:
+      - golangci-lint
+    cmds:
+      - ./bin/golangci-lint run ./... --timeout=5m
+
+  fmt-check:
+    desc: Check Go formatting with gofumpt
+    deps:
+      - gofumpt
+    cmds:
+      - |
+        files="$(./bin/gofumpt -l .)"
+        test -z "$files" || {
+          printf '%s\n' "$files"
+          exit 1
+        }
+
+  k8s-lint:
+    desc: Validate Kubernetes manifests with kubeconform
+    deps:
+      - kubeconform
+    cmds:
+      - ./bin/kubeconform -strict -summary deploy/*.yaml
+
+  test:
+    desc: Run tests with mocks enabled by default
+    env:
+      ENABLE_MOCKS: '{{default "1" .ENABLE_MOCKS}}'
+    cmds:
+      - go test ./...
+
+  css:
+    desc: Rebuild Tailwind output
+    cmds:
+      - bash tailwind/generate.sh
+
+  tailwind-check:
+    desc: Regenerate Tailwind output and fail on uncommitted changes
+    cmds:
+      - bash tailwind/generate.sh
+      - git diff --exit-code
+
+  docker-build:
+    desc: Build one Docker image locally without pushing
+    vars:
+      CMD_PATH: '{{default "./cmd/careme" .CMD_PATH}}'
+      IMAGE: '{{default "careme-local" .IMAGE}}'
+    cmds:
+      - docker build --build-arg CMD_PATH={{.CMD_PATH}} -t {{.IMAGE}} .
+
+  docker-build-all:
+    desc: Build the same image matrix as CI locally without pushing
+    internal: true
+    deps:
+      - docker-build-careme
+      - docker-build-wholefoods
+      - docker-build-albertsons
+      - docker-build-publix
+      - docker-build-aldi
+
+  docker-build-careme:
+    desc: Build the careme image locally
+    internal: true
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/careme
+          IMAGE: careme-local
+
+  docker-build-wholefoods:
+    desc: Build the wholefoods image locally
+    internal: true
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/wholefoods
+          IMAGE: careme-wholefoods-local
+
+  docker-build-albertsons:
+    desc: Build the albertsons image locally
+    internal: true
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/albertsons
+          IMAGE: careme-albertsons-local
+
+  docker-build-publix:
+    desc: Build the publix image locally
+    internal: true
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/publix
+          IMAGE: careme-publix-local
+
+  docker-build-aldi:
+    desc: Build the aldi image locally
+    internal: true
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/aldi
+          IMAGE: careme-aldi-local
+
+  serve:
+    desc: Run the local web server
+    vars:
+      ADDR: '{{default ":8080" .ADDR}}'
+    cmds:
+      - go run ./cmd/careme -serve -addr {{.ADDR}}
+
+  zipcode:
+    desc: Look up locations for a ZIP code
+    vars:
+      ZIP: '{{default "98101" .ZIP}}'
+    cmds:
+      - go run ./cmd/careme -zipcode {{.ZIP}}
+
+  producecheck:
+    desc: Run produce scoring checks for generator changes
+    vars:
+      LOCATION: '{{default "70500874" .LOCATION}}'
+    cmds:
+      - go run ./cmd/producecheck -location {{.LOCATION}}
+
+  deploy:
+    desc: Deploy the app using deploy/deploy.sh
+    vars:
+      REF: '{{default "origin/master" .REF}}'
+      NAMESPACE: '{{default "careme" .NAMESPACE}}'
+    cmds:
+      - bash deploy/deploy.sh {{.REF}} {{.NAMESPACE}}
+
+  tools:
+    desc: Install pinned local CI tools into ./bin
+    cmds:
+      - bash tools/install.sh
+
+  gofumpt:
+    internal: true
+    status:
+      - test -x ./bin/gofumpt
+    cmds:
+      - bash tools/install.sh gofumpt
+
+  golangci-lint:
+    internal: true
+    status:
+      - test -x ./bin/golangci-lint
+    cmds:
+      - bash tools/install.sh golangci-lint
+
+  kubeconform:
+    internal: true
+    status:
+      - test -x ./bin/kubeconform
+    cmds:
+      - bash tools/install.sh kubeconform

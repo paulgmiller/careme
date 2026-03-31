@@ -1,0 +1,60 @@
+curl 'https://www.heb.com/_next/data/3e8519ef1b9d35cbfb20f4061af231870ee1c789/en/category/shop/490020/490083.json?page=2&sct=H4sIAAAAAAAA%2FxWNyw6CMBBF%2F6VrSCil0LIzhIWJRoIuNMaY0hZh09Y%2BEo3x3x13c%2Bc%2Bzgd5a%2BOon0mHuFWoRfMkyUx4nZcC05wTWeacC5HXuKaaajwRSVGGQrRe%2Fws156AW69xqHp01Ub8izPTnYXcY%2B%2Fv%2Bcj%2Be4IAKMPwbrIoXBSPwWENIWm0gjpumYow1DJecZsiJEIfk5SKC7mwykCgA4qwJQFWDtyrJGFB7vX1%2F1e7vv8IAAAA%3D&parentId=490020&childId=490083' \
+  -H 'accept: */*' \
+  -H 'accept-language: en-US,en;q=0.9' \
+  -b 'visid_incap_2302070=TyVZ39CDS2io1M+W20nj7sfksWkAAAAAQUIPAAAAAADKdXHxwa2H0r1v7HJJ+LhL; HEB_AMP_DEVICE_ID=h-76e68a8a-fc36-4b1d-a924-a548d71be11c; sst=hs:sst:AvA7vMVVUoefldgBhEB9-; sst.sig=gDmtlaeRF2ErOlvtc29S63cMVK9gGXHF6E9lHl6c464; AMP_MKTG_760524e2ba=JTdCJTdE; _gcl_au=1.1.483875282.1773266577; _ga=GA1.1.1216665080.1773266577; SHOPPING_STORE_ID=699; CURR_SESSION_STORE=699; USER_CHOSEN_STORE=true; HEB_AMP_SESSION_ID=1774888610173; incap_ses_605_2302070=72hXeCklY0kWByGFdWRlCKKmymkAAAAAKYFV390+RnlBAfv4d9lH/Q==; reese84=3:7RcazH1MPTe385c3ajP8aw==:2Uvdj/86aJOekTlxf1evKfgcRE3ZyhGOFH7xfmdm3oMwI1JGATXqfGZfV8MSKrQnQIDoAvQNWrhFnQy+XcC3lxXFsVdXtDhbK+XjblBQ/zz7+B0QAMejB9URsyY+r9n/WdDbRE3IqIM8KXXaDO4coPo0yh+rS8D9/QlymLTmjZCriwMsYUo03HJ+dLm/fE7zCIz7OsC8btqMLdNWhhvxn34QbFVt0DuZRTR+tj1WgmzAxMYxtwoY4N2FQmdnKvIpTrKxKa4PnC6Hf0OcNPRpOmiZUuRS7OORE7oHJpS2z0uweDkIJk0WqFYCgOq3AnEiCagWIFlTQ8OClklDi9LBwFJvxOA9kESBKpjvzPKvrGG/9OAXnx3yjswc+om6vIrC2pRDXo53g4mG6SVafGPYm44GMIlpCfjfC4UF0IG7cTuZ7GXItB4mER3kxIl8UdH2hlL4n1thL8LVFlDalorbMqTqPCqs8I8UiUL/+sOSaQ0=:aYZLpIXOwXbL5cIaFB8UdJyKhlHyFabJaQetZCAqQxw=; OptanonConsent=isGpcEnabled=0&datestamp=Mon+Mar+30+2026+09%3A39%3A43+GMT-0700+(Pacific+Daylight+Time)&version=202405.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=5cf748dd-2c5c-4389-873f-32cf9ceaa365&interactionCount=1&isAnonUser=1&landingPath=NotLandingPage&groups=C0004%3A1&AwaitingReconsent=false; _ga_WKSH6HYPT4=GS2.1.s1774888612$o7$g1$t1774888783$j58$l0$h927212919; AMP_760524e2ba=JTdCJTIyZGV2aWNlSWQlMjIlM0ElMjJoLTc2ZTY4YThhLWZjMzYtNGIxZC1hOTI0LWE1NDhkNzFiZTExYyUyMiUyQyUyMnNlc3Npb25JZCUyMiUzQTE3NzQ4ODg2MTAxNzMlMkMlMjJvcHRPdXQlMjIlM0FmYWxzZSUyQyUyMmxhc3RFdmVudFRpbWUlMjIlM0ExNzc0ODg5MTQyODQ0JTJDJTIybGFzdEV2ZW50SWQlMjIlM0EyOTYlMkMlMjJwYWdlQ291bnRlciUyMiUzQTAlMkMlMjJjb29raWVEb21haW4lMjIlM0ElMjIuaGViLmNvbSUyMiU3RA==; _dd_s=aid=e7c65497-296a-4094-b99c-f41bc4e9b10c&rum=2&id=22649c9f-4d6c-4f0e-a01c-3076c30a8374&created=1774888611553&expire=1774890044784' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://www.heb.com/category/shop/fruit-vegetables/vegetables/490020/490083' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'traceparent: 00-000000000000000088bdb0baa7adafdc-48966dabc17e57be-01' \
+  -H 'tracestate: dd=s:1;o:rum' \
+  -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-nextjs-data: 1'
+
+
+
+//seems  like naviagation
+
+curl 'https://www.heb.com/graphql' \
+  -H 'accept: */*' \
+  -H 'accept-language: en' \
+  -H 'amplitude-device-id: h-76e68a8a-fc36-4b1d-a924-a548d71be11c' \
+  -H 'apollographql-client-name: WebPlatform-Solar (Production)' \
+  -H 'apollographql-client-version: 3e8519ef1b9d35cbfb20f4061af231870ee1c789' \
+  -H 'content-type: application/json' \
+  -b 'visid_incap_2302070=TyVZ39CDS2io1M+W20nj7sfksWkAAAAAQUIPAAAAAADKdXHxwa2H0r1v7HJJ+LhL; HEB_AMP_DEVICE_ID=h-76e68a8a-fc36-4b1d-a924-a548d71be11c; sst=hs:sst:AvA7vMVVUoefldgBhEB9-; sst.sig=gDmtlaeRF2ErOlvtc29S63cMVK9gGXHF6E9lHl6c464; AMP_MKTG_760524e2ba=JTdCJTdE; _gcl_au=1.1.483875282.1773266577; _ga=GA1.1.1216665080.1773266577; SHOPPING_STORE_ID=699; CURR_SESSION_STORE=699; USER_CHOSEN_STORE=true; HEB_AMP_SESSION_ID=1774888610173; incap_ses_605_2302070=72hXeCklY0kWByGFdWRlCKKmymkAAAAAKYFV390+RnlBAfv4d9lH/Q==; reese84=3:7RcazH1MPTe385c3ajP8aw==:2Uvdj/86aJOekTlxf1evKfgcRE3ZyhGOFH7xfmdm3oMwI1JGATXqfGZfV8MSKrQnQIDoAvQNWrhFnQy+XcC3lxXFsVdXtDhbK+XjblBQ/zz7+B0QAMejB9URsyY+r9n/WdDbRE3IqIM8KXXaDO4coPo0yh+rS8D9/QlymLTmjZCriwMsYUo03HJ+dLm/fE7zCIz7OsC8btqMLdNWhhvxn34QbFVt0DuZRTR+tj1WgmzAxMYxtwoY4N2FQmdnKvIpTrKxKa4PnC6Hf0OcNPRpOmiZUuRS7OORE7oHJpS2z0uweDkIJk0WqFYCgOq3AnEiCagWIFlTQ8OClklDi9LBwFJvxOA9kESBKpjvzPKvrGG/9OAXnx3yjswc+om6vIrC2pRDXo53g4mG6SVafGPYm44GMIlpCfjfC4UF0IG7cTuZ7GXItB4mER3kxIl8UdH2hlL4n1thL8LVFlDalorbMqTqPCqs8I8UiUL/+sOSaQ0=:aYZLpIXOwXbL5cIaFB8UdJyKhlHyFabJaQetZCAqQxw=; OptanonConsent=isGpcEnabled=0&datestamp=Mon+Mar+30+2026+09%3A38%3A06+GMT-0700+(Pacific+Daylight+Time)&version=202405.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=5cf748dd-2c5c-4389-873f-32cf9ceaa365&interactionCount=1&isAnonUser=1&landingPath=NotLandingPage&groups=C0004%3A1&AwaitingReconsent=false; AMP_760524e2ba=JTdCJTIyZGV2aWNlSWQlMjIlM0ElMjJoLTc2ZTY4YThhLWZjMzYtNGIxZC1hOTI0LWE1NDhkNzFiZTExYyUyMiUyQyUyMnNlc3Npb25JZCUyMiUzQTE3NzQ4ODg2MTAxNzMlMkMlMjJvcHRPdXQlMjIlM0FmYWxzZSUyQyUyMmxhc3RFdmVudFRpbWUlMjIlM0ExNzc0ODg4NzcxMTA5JTJDJTIybGFzdEV2ZW50SWQlMjIlM0EyNzIlMkMlMjJwYWdlQ291bnRlciUyMiUzQTAlMkMlMjJjb29raWVEb21haW4lMjIlM0ElMjIuaGViLmNvbSUyMiU3RA==; _ga_WKSH6HYPT4=GS2.1.s1774888612$o7$g1$t1774888781$j60$l0$h927212919; _dd_s=aid=e7c65497-296a-4094-b99c-f41bc4e9b10c&rum=2&id=22649c9f-4d6c-4f0e-a01c-3076c30a8374&created=1774888611553&expire=1774889682215; AMP_TLDTEST_342c5b51=MQ==' \
+  -H 'origin: https://www.heb.com' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://www.heb.com/category/shop/fruit-vegetables/vegetables/490020/490083' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'traceparent: 00-00000000000000008792d2966e1da76b-4bb28254f6c1937c-01' \
+  -H 'tracestate: dd=s:1;o:rum' \
+  -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  --data-raw '{"operationName":"ShopNavigation","variables":{"storeId":699,"shoppingContext":"EXPLORE_MY_STORE"},"extensions":{"persistedQuery":{"version":1,"sha256Hash":"53197129989f3555e560f3d11a85ebff9a2abe9d9cf6f7f10a8c93feda9503b2"}}}'
+
+
+  //
+  curl 'https://www.heb.com/ads/citrus/v1/resource/first-i/shotgun_aIcr0DaLF2Lqx4m3TDsF1oTuWpkKCQoHMjUyOTAwNhICCAEaDAiw6KrOBhCUw83EAyICCAE=?sessionId=h-76e68a8a-fc36-4b1d-a924-a548d71be11c&event_ts=20260330163943' \
+  -H 'accept: */*' \
+  -H 'accept-language: en-US,en;q=0.9' \
+  -b 'visid_incap_2302070=TyVZ39CDS2io1M+W20nj7sfksWkAAAAAQUIPAAAAAADKdXHxwa2H0r1v7HJJ+LhL; HEB_AMP_DEVICE_ID=h-76e68a8a-fc36-4b1d-a924-a548d71be11c; sst=hs:sst:AvA7vMVVUoefldgBhEB9-; sst.sig=gDmtlaeRF2ErOlvtc29S63cMVK9gGXHF6E9lHl6c464; AMP_MKTG_760524e2ba=JTdCJTdE; _gcl_au=1.1.483875282.1773266577; _ga=GA1.1.1216665080.1773266577; SHOPPING_STORE_ID=699; CURR_SESSION_STORE=699; USER_CHOSEN_STORE=true; HEB_AMP_SESSION_ID=1774888610173; incap_ses_605_2302070=72hXeCklY0kWByGFdWRlCKKmymkAAAAAKYFV390+RnlBAfv4d9lH/Q==; reese84=3:7RcazH1MPTe385c3ajP8aw==:2Uvdj/86aJOekTlxf1evKfgcRE3ZyhGOFH7xfmdm3oMwI1JGATXqfGZfV8MSKrQnQIDoAvQNWrhFnQy+XcC3lxXFsVdXtDhbK+XjblBQ/zz7+B0QAMejB9URsyY+r9n/WdDbRE3IqIM8KXXaDO4coPo0yh+rS8D9/QlymLTmjZCriwMsYUo03HJ+dLm/fE7zCIz7OsC8btqMLdNWhhvxn34QbFVt0DuZRTR+tj1WgmzAxMYxtwoY4N2FQmdnKvIpTrKxKa4PnC6Hf0OcNPRpOmiZUuRS7OORE7oHJpS2z0uweDkIJk0WqFYCgOq3AnEiCagWIFlTQ8OClklDi9LBwFJvxOA9kESBKpjvzPKvrGG/9OAXnx3yjswc+om6vIrC2pRDXo53g4mG6SVafGPYm44GMIlpCfjfC4UF0IG7cTuZ7GXItB4mER3kxIl8UdH2hlL4n1thL8LVFlDalorbMqTqPCqs8I8UiUL/+sOSaQ0=:aYZLpIXOwXbL5cIaFB8UdJyKhlHyFabJaQetZCAqQxw=; _dd_s=aid=e7c65497-296a-4094-b99c-f41bc4e9b10c&rum=2&id=22649c9f-4d6c-4f0e-a01c-3076c30a8374&created=1774888611553&expire=1774889682215; OptanonConsent=isGpcEnabled=0&datestamp=Mon+Mar+30+2026+09%3A39%3A43+GMT-0700+(Pacific+Daylight+Time)&version=202405.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=5cf748dd-2c5c-4389-873f-32cf9ceaa365&interactionCount=1&isAnonUser=1&landingPath=NotLandingPage&groups=C0004%3A1&AwaitingReconsent=false; _ga_WKSH6HYPT4=GS2.1.s1774888612$o7$g1$t1774888783$j58$l0$h927212919; AMP_760524e2ba=JTdCJTIyZGV2aWNlSWQlMjIlM0ElMjJoLTc2ZTY4YThhLWZjMzYtNGIxZC1hOTI0LWE1NDhkNzFiZTExYyUyMiUyQyUyMnNlc3Npb25JZCUyMiUzQTE3NzQ4ODg2MTAxNzMlMkMlMjJvcHRPdXQlMjIlM0FmYWxzZSUyQyUyMmxhc3RFdmVudFRpbWUlMjIlM0ExNzc0ODg4NzgzMTQ3JTJDJTIybGFzdEV2ZW50SWQlMjIlM0EyODIlMkMlMjJwYWdlQ291bnRlciUyMiUzQTAlMkMlMjJjb29raWVEb21haW4lMjIlM0ElMjIuaGViLmNvbSUyMiU3RA==' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://www.heb.com/category/shop/fruit-vegetables/vegetables/490020/490083' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'traceparent: 00-00000000000000002d645568481363a3-782fccb4451d75af-01' \
+  -H 'tracestate: dd=s:1;o:rum' \
+  -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'

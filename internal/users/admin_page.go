@@ -1,18 +1,26 @@
 package users
 
 import (
-	utypes "careme/internal/users/types"
+	"context"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
+
+	"careme/internal/cache"
+	"careme/internal/recipes/feedback"
+
+	utypes "careme/internal/users/types"
 )
 
 type adminUserView struct {
-	ID               string
-	Emails           []string
-	SavedRecipeCount int
+	ID                string
+	Emails            []string
+	CreatedDate       string
+	SavedRecipeCount  int
+	CookedRecipeCount int
 }
 
 var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doctype html>
@@ -30,7 +38,9 @@ var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doct
       <tr>
         <th>User ID</th>
         <th>Emails</th>
+        <th>Created</th>
         <th>Saved Recipe Count</th>
+        <th>Cooked Click Count</th>
       </tr>
     </thead>
     <tbody>
@@ -48,8 +58,12 @@ var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doct
           none
           {{end}}
         </td>
+        <td>{{.CreatedDate}}</td>
         <td>
           {{.SavedRecipeCount}}
+        </td>
+        <td>
+          {{.CookedRecipeCount}}
         </td>
       </tr>
       {{end}}
@@ -71,27 +85,38 @@ func AdminUsersPage(storage *Storage) http.Handler {
 			http.Error(w, "unable to load users", http.StatusInternalServerError)
 			return
 		}
+		filtered := filterAdminUsers(list)
+
 		if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("format")), "emails") {
-			renderAdminEmailsText(w, list)
+			renderAdminEmailsText(w, filtered)
 			return
 		}
 
-		views := make([]adminUserView, 0, len(list))
-		for _, user := range list {
+		views := make([]adminUserView, 0, len(filtered))
+		for _, user := range filtered {
+			createdDate := ""
+			if !user.CreatedAt.IsZero() {
+				createdDate = user.CreatedAt.Format("2006-01-02")
+			}
 			views = append(views, adminUserView{
-				ID:               user.ID,
-				Emails:           append([]string(nil), user.Email...),
-				SavedRecipeCount: len(user.LastRecipes),
+				ID:                user.ID,
+				Emails:            append([]string(nil), user.Email...),
+				CreatedDate:       createdDate,
+				SavedRecipeCount:  len(user.LastRecipes),
+				CookedRecipeCount: cookedRecipeCount(r.Context(), storage.cache, user),
 			})
 		}
 
 		sort.Slice(views, func(i, j int) bool {
-			iEmail := primaryAdminEmail(views[i])
-			jEmail := primaryAdminEmail(views[j])
-			if iEmail == jEmail {
-				return views[i].ID < views[j].ID
+			if views[i].SavedRecipeCount == views[j].SavedRecipeCount {
+				iEmail := primaryAdminEmail(views[i])
+				jEmail := primaryAdminEmail(views[j])
+				if iEmail == jEmail {
+					return views[i].ID < views[j].ID
+				}
+				return iEmail < jEmail
 			}
-			return iEmail < jEmail
+			return views[i].SavedRecipeCount > views[j].SavedRecipeCount
 		})
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -111,6 +136,28 @@ func primaryAdminEmail(v adminUserView) string {
 		return ""
 	}
 	return strings.ToLower(strings.TrimSpace(v.Emails[0]))
+}
+
+func filterAdminUsers(users []utypes.User) []utypes.User {
+	filtered := make([]utypes.User, 0, len(users))
+	for _, user := range users {
+		if !strings.HasPrefix(user.ID, "user_") {
+			continue
+		}
+		filtered = append(filtered, user)
+	}
+	return filtered
+}
+
+func cookedRecipeCount(ctx context.Context, c cache.Cache, user utypes.User) int {
+	hashes := make([]string, 0, len(user.LastRecipes))
+	for _, recipe := range user.LastRecipes {
+		if time.Since(recipe.CreatedAt) > 30*time.Hour*24 {
+			continue
+		}
+		hashes = append(hashes, recipe.Hash)
+	}
+	return len(feedback.NewIO(c).FeedbackByHash(ctx, hashes))
 }
 
 func renderAdminEmailsText(w http.ResponseWriter, users []utypes.User) {

@@ -1,12 +1,13 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
 )
 
 func TestRecipeFileNaming(t *testing.T) {

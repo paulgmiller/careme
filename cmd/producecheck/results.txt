@@ -1,0 +1,31 @@
+03/10/26 results
+
+
+## safeway sample
+### Only filtter available and n/a 
+- * -> 460 ingredients, 62/107 produce terms, 161 matches
+- missing produce for location safeway_01: alfalfa sprout, aloe vera leaf, anaheim pepper, baby bok choy, baby spring mix, banana, bean sprout, blackberry, bok choy, butterhead lettuce, cantaloupe, celery root, curly kale, daikon radish, golden beet, green chili pepper, habanero pepper, honeydew melon, horseradish root, italian parsley, jalapeno pepper, jicama, king trumpet mushroom, lemongrass, little gem lettuce, mixed sprout, napa cabbage, orange bell pepper, parsnip, pear, poblano pepper, portabella mushroom, radicchio, rainbow chard, raspberry, red chili pepper, romaine lettuce, rutabaga, sage, seedless cucumber, serrano pepper, sliced mushroom blend, tomatillo, turnip, yuca
+- Produce score  0.579439: 62/107 with 460 ingredients
+
+### Filter out salami category (same score)
+- * -> 351 ingredients, 62/107 produce terms, 161 matches
+- Produce score  0.579439: 62/107 with 351 ingredients
+
+
+### Fitlering out Pacakged Produce  Drops score 
+- * -> 272 ingredients, 48/107 produce terms, 107 matches
+- Missing produce for location safeway_01: alfalfa sprout, aloe vera leaf, anaheim pepper, apple, arugula, baby arugula, baby bok choy, baby spinach, baby spring mix, banana, bean sprout, blackberry, blueberry, bok choy, broccolini, butterhead lettuce, cantaloupe, celery root, curly kale, daikon radish, golden beet, green bean, green chili pepper, habanero pepper, honeydew melon, horseradish root, italian parsley, jalapeno pepper, jicama, king trumpet mushroom, kiwi, lemongrass, little gem lettuce, mango, mixed sprout, napa cabbage, orange bell pepper, parsnip, pear, pineapple, poblano pepper, portabella mushroom, radicchio, rainbow chard, raspberry, red chili pepper, romaine lettuce, rutabaga, sage, seedless cucumber, serrano pepper, sliced mushroom blend, spring mix, strawberry, sweet corn, tomatillo, turnip, watermelon, yuca
+- Produce score  0.448598: 48/107 with 272 ingredients
+
+## Other stors
+
+### QFC 70500874
+- * -> 776 ingredients, 86/107 produce terms, 373 matches
+missing produce for location 70500874: alfalfa sprout, aloe vera leaf, arugula, baby arugula, bean sprout, broccoli sprout, celery root, chive, curly kale, daikon radish, green chili pepper, horseradish root, king trumpet mushroom, lemongrass, little gem lettuce, mixed sprout, oyster mushroom, radicchio, red chili pepper, sliced mushroom blend, tarragon
+Produce score  0.803738: 86/107 with 644 ingredients
+
+
+## wholefoods_10153
+- * -> 582 ingredients, 88/107 produce terms, 318 matches
+missing produce for location wholefoods_10153: aloe vera leaf, bean sprout, broccolini, curly kale, golden beet, green bean, horseradish root, king trumpet mushroom, lacinato kale, lemongrass, little gem lettuce, mixed sprout, poblano pepper, red chili pepper, rutabaga, seedless cucumber, sliced mushroom blend, sweet corn, yuca
+Produce score  0.822430: 88/107 with 575 ingredients

@@ -1,25 +1,30 @@
 package main
 
 import (
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
 	"context"
 	"encoding/csv"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"text/tabwriter"
 	"time"
+
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
 )
 
 type zipStoreCount struct {
 	Metro string
 	Zip   string
+	Chain string
 	Count int
 }
 
@@ -30,9 +35,11 @@ type metroZipCode struct {
 
 func main() {
 	var inputPath string
+	var outputFormat string
 	var timeoutSeconds int
 
 	flag.StringVar(&inputPath, "input", "zipcodes.txt", "Path to CSV/TXT file containing zip codes")
+	flag.StringVar(&outputFormat, "format", "csv", "Output format: csv, table, or markdown")
 	flag.IntVar(&timeoutSeconds, "timeout", 20, "HTTP timeout in seconds for each zip query")
 	flag.Parse()
 
@@ -61,39 +68,270 @@ func main() {
 		log.Fatalf("failed to create location storage: %v", err)
 	}
 	wg := sync.WaitGroup{}
-	resultsChan := make(chan zipStoreCount, len(metroZipCodes))
+	resultsChan := make(chan zipQueryResult, len(metroZipCodes))
 	for _, code := range metroZipCodes {
 		wg.Add(1)
 		go func(mzc metroZipCode) {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 			stores, err := client.GetLocationsByZip(ctx, mzc.Zip)
 			cancel()
 			if err != nil {
-				log.Fatalf("failed to query locations for zip %s: %v", mzc.Zip, err)
+				resultsChan <- zipQueryResult{
+					err: fmt.Errorf("query locations for zip %s: %w", mzc.Zip, err),
+				}
+				return
 			}
-			resultsChan <- zipStoreCount{Metro: mzc.Metro, Zip: mzc.Zip, Count: len(stores)}
+			resultsChan <- zipQueryResult{
+				counts: countStoresByChain(mzc, stores),
+			}
 		}(code)
 	}
 	wg.Wait()
 	close(resultsChan)
 
-	results := make([]zipStoreCount, 0, len(metroZipCodes))
+	counts := make([]zipStoreCount, 0, len(metroZipCodes))
 	for result := range resultsChan {
-		results = append(results, result)
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		if results[i].Count == results[j].Count {
-			return results[i].Zip < results[j].Zip
+		if result.err != nil {
+			log.Fatal(result.err)
 		}
-		return results[i].Count < results[j].Count
+		counts = append(counts, result.counts...)
+	}
+	sort.Slice(counts, func(i, j int) bool {
+		if counts[i].Metro != counts[j].Metro {
+			return counts[i].Metro < counts[j].Metro
+		}
+		if counts[i].Zip != counts[j].Zip {
+			return counts[i].Zip < counts[j].Zip
+		}
+		if counts[i].Count != counts[j].Count {
+			return counts[i].Count > counts[j].Count
+		}
+		return counts[i].Chain < counts[j].Chain
 	})
 
-	fmt.Println("metro_name,zip_code,store_count")
-	for _, result := range results {
-		fmt.Printf("%s,%s,%d\n", result.Metro, result.Zip, result.Count)
+	if err := writeCounts(os.Stdout, counts, metroZipCodes, outputFormat); err != nil {
+		log.Fatal(err)
 	}
+}
+
+type zipQueryResult struct {
+	counts []zipStoreCount
+	err    error
+}
+
+func countStoresByChain(mzc metroZipCode, stores []locations.Location) []zipStoreCount {
+	counts := make(map[string]int, len(stores))
+	for _, store := range stores {
+		counts[locationChain(store)]++
+	}
+
+	results := make([]zipStoreCount, 0, len(counts))
+	for chain, count := range counts {
+		results = append(results, zipStoreCount{
+			Metro: mzc.Metro,
+			Zip:   mzc.Zip,
+			Chain: chain,
+			Count: count,
+		})
+	}
+
+	return results
+}
+
+func locationChain(store locations.Location) string {
+	if chain := normalizeChainName(store.Chain); chain != "" {
+		return chain
+	}
+
+	if prefix, _, ok := strings.Cut(strings.TrimSpace(store.ID), "_"); ok {
+		if chain := normalizeChainName(prefix); chain != "" {
+			return chain
+		}
+	}
+
+	if isAllDigits(strings.TrimSpace(store.ID)) {
+		return "kroger"
+	}
+
+	return "unknown"
+}
+
+func normalizeChainName(raw string) string {
+	chain := strings.ToLower(strings.TrimSpace(raw))
+	if chain == "" {
+		return ""
+	}
+	return chain
+}
+
+func writeCounts(w io.Writer, counts []zipStoreCount, metroZipCodes []metroZipCode, format string) error {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "csv":
+		return writeCSV(w, counts)
+	case "table":
+		return writeTable(w, counts, metroZipCodes)
+	case "markdown", "md":
+		return writeMarkdownTable(w, counts, metroZipCodes)
+	default:
+		return fmt.Errorf("unsupported format %q", format)
+	}
+}
+
+func writeCSV(w io.Writer, counts []zipStoreCount) error {
+	writer := csv.NewWriter(w)
+	if err := writer.Write([]string{"metro_name", "zip_code", "chain", "store_count"}); err != nil {
+		return fmt.Errorf("write csv header: %w", err)
+	}
+	for _, result := range counts {
+		if err := writer.Write([]string{
+			result.Metro,
+			result.Zip,
+			result.Chain,
+			strconv.Itoa(result.Count),
+		}); err != nil {
+			return fmt.Errorf("write csv row: %w", err)
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("flush csv: %w", err)
+	}
+	return nil
+}
+
+func writeTable(w io.Writer, counts []zipStoreCount, metroZipCodes []metroZipCode) error {
+	chains, rows, countsByRow := pivotCounts(counts, metroZipCodes)
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	header := []string{"metro_name", "zip_code"}
+	header = append(header, chains...)
+	header = append(header, "total")
+	if _, err := fmt.Fprintln(tw, strings.Join(header, "\t")); err != nil {
+		return fmt.Errorf("write table header: %w", err)
+	}
+
+	columnTotals := make(map[string]int, len(chains))
+	grandTotal := 0
+	for _, row := range rows {
+		key := rowKey(row)
+		line := []string{row.Metro, row.Zip}
+		total := 0
+		for _, chain := range chains {
+			count := countsByRow[key][chain]
+			line = append(line, strconv.Itoa(count))
+			total += count
+			columnTotals[chain] += count
+		}
+		line = append(line, strconv.Itoa(total))
+		grandTotal += total
+		if _, err := fmt.Fprintln(tw, strings.Join(line, "\t")); err != nil {
+			return fmt.Errorf("write table row: %w", err)
+		}
+	}
+
+	totalLine := []string{"total", ""}
+	for _, chain := range chains {
+		totalLine = append(totalLine, strconv.Itoa(columnTotals[chain]))
+	}
+	totalLine = append(totalLine, strconv.Itoa(grandTotal))
+	if _, err := fmt.Fprintln(tw, strings.Join(totalLine, "\t")); err != nil {
+		return fmt.Errorf("write table total row: %w", err)
+	}
+
+	if err := tw.Flush(); err != nil {
+		return fmt.Errorf("flush table: %w", err)
+	}
+	return nil
+}
+
+func writeMarkdownTable(w io.Writer, counts []zipStoreCount, metroZipCodes []metroZipCode) error {
+	chains, rows, countsByRow := pivotCounts(counts, metroZipCodes)
+
+	header := []string{"metro_name", "zip_code"}
+	header = append(header, chains...)
+	header = append(header, "total")
+	if _, err := fmt.Fprintf(w, "| %s |\n", strings.Join(header, " | ")); err != nil {
+		return fmt.Errorf("write markdown header: %w", err)
+	}
+
+	separator := make([]string, len(header))
+	for i := range separator {
+		separator[i] = "---"
+	}
+	if _, err := fmt.Fprintf(w, "| %s |\n", strings.Join(separator, " | ")); err != nil {
+		return fmt.Errorf("write markdown separator: %w", err)
+	}
+
+	columnTotals := make(map[string]int, len(chains))
+	grandTotal := 0
+	for _, row := range rows {
+		key := rowKey(row)
+		line := []string{escapeMarkdownCell(row.Metro), escapeMarkdownCell(row.Zip)}
+		total := 0
+		for _, chain := range chains {
+			count := countsByRow[key][chain]
+			line = append(line, strconv.Itoa(count))
+			total += count
+			columnTotals[chain] += count
+		}
+		line = append(line, strconv.Itoa(total))
+		grandTotal += total
+		if _, err := fmt.Fprintf(w, "| %s |\n", strings.Join(line, " | ")); err != nil {
+			return fmt.Errorf("write markdown row: %w", err)
+		}
+	}
+
+	totalLine := []string{"total", ""}
+	for _, chain := range chains {
+		totalLine = append(totalLine, strconv.Itoa(columnTotals[chain]))
+	}
+	totalLine = append(totalLine, strconv.Itoa(grandTotal))
+	if _, err := fmt.Fprintf(w, "| %s |\n", strings.Join(totalLine, " | ")); err != nil {
+		return fmt.Errorf("write markdown total row: %w", err)
+	}
+
+	return nil
+}
+
+type rowKey struct {
+	Metro string
+	Zip   string
+}
+
+func pivotCounts(counts []zipStoreCount, metroZipCodes []metroZipCode) ([]string, []metroZipCode, map[rowKey]map[string]int) {
+	chainSet := make(map[string]struct{}, len(counts))
+	countsByRow := make(map[rowKey]map[string]int, len(metroZipCodes))
+	for _, count := range counts {
+		key := rowKey{Metro: count.Metro, Zip: count.Zip}
+		if countsByRow[key] == nil {
+			countsByRow[key] = make(map[string]int)
+		}
+		countsByRow[key][count.Chain] = count.Count
+		if count.Chain != "" {
+			chainSet[count.Chain] = struct{}{}
+		}
+	}
+
+	chains := make([]string, 0, len(chainSet))
+	for chain := range chainSet {
+		chains = append(chains, chain)
+	}
+	sort.Strings(chains)
+
+	rows := append([]metroZipCode(nil), metroZipCodes...)
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Metro != rows[j].Metro {
+			return rows[i].Metro < rows[j].Metro
+		}
+		return rows[i].Zip < rows[j].Zip
+	})
+
+	return chains, rows, countsByRow
+}
+
+func escapeMarkdownCell(value string) string {
+	return strings.ReplaceAll(value, "|", "\\|")
 }
 
 func readZipCodes(path string) ([]metroZipCode, error) {

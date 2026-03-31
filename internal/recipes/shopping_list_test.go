@@ -1,9 +1,10 @@
 package recipes
 
 import (
-	"careme/internal/ai"
 	"reflect"
 	"testing"
+
+	"careme/internal/ai"
 )
 
 func TestShoppingListForDisplay(t *testing.T) {

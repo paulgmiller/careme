@@ -10,8 +10,10 @@ import (
 	"strings"
 )
 
-var ErrNotFound = errors.New("cache entry not found")
-var ErrAlreadyExists = errors.New("cache entry already exists")
+var (
+	ErrNotFound      = errors.New("cache entry not found")
+	ErrAlreadyExists = errors.New("cache entry already exists")
+)
 
 type PutCondition uint8
 
@@ -39,6 +41,7 @@ type Cache interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
 	Exists(ctx context.Context, key string) (bool, error)
 	Put(ctx context.Context, key, value string, opts PutOptions) error
+	PutReader(ctx context.Context, key string, reader io.Reader, opts PutOptions) error
 }
 
 type ListCache interface {
@@ -110,22 +113,26 @@ func (fc *FileCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
 	return data, nil
 }
 
-func (fc *FileCache) Put(_ context.Context, key, value string, opts PutOptions) error {
+func (fc *FileCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
+	return fc.PutReader(ctx, key, strings.NewReader(value), opts)
+}
+
+func (fc *FileCache) PutReader(_ context.Context, key string, reader io.Reader, opts PutOptions) error {
 	fullPath := filepath.Join(fc.Dir, key)
 	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
 	if opts.Condition == PutIfNoneMatch {
-		return writeIfNoneMatchAtomic(dir, fullPath, value)
+		return writeIfNoneMatchAtomic(dir, fullPath, reader)
 	}
 
 	// TODO: IfMatch support (write only if etag matches).
-	return writeAtomic(dir, fullPath, value)
+	return writeAtomic(dir, fullPath, reader)
 }
 
-func writeAtomic(dir, targetPath, value string) error {
+func writeAtomic(dir, targetPath string, reader io.Reader) error {
 	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
@@ -135,7 +142,7 @@ func writeAtomic(dir, targetPath, value string) error {
 		_ = os.Remove(tmpPath)
 	}()
 
-	if _, err := tmpFile.WriteString(value); err != nil {
+	if _, err := io.Copy(tmpFile, reader); err != nil {
 		if closeErr := tmpFile.Close(); closeErr != nil {
 			return errors.Join(err, closeErr)
 		}
@@ -148,7 +155,7 @@ func writeAtomic(dir, targetPath, value string) error {
 	return os.Rename(tmpPath, targetPath)
 }
 
-func writeIfNoneMatchAtomic(dir, targetPath, value string) error {
+func writeIfNoneMatchAtomic(dir, targetPath string, reader io.Reader) error {
 	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
@@ -158,7 +165,7 @@ func writeIfNoneMatchAtomic(dir, targetPath, value string) error {
 		_ = os.Remove(tmpPath)
 	}()
 
-	if _, err := tmpFile.WriteString(value); err != nil {
+	if _, err := io.Copy(tmpFile, reader); err != nil {
 		if closeErr := tmpFile.Close(); closeErr != nil {
 			return errors.Join(err, closeErr)
 		}

@@ -1,13 +1,15 @@
 package locations
 
 import (
-	"careme/internal/auth"
-	"careme/internal/seasons"
-	"careme/internal/templates"
 	"context"
 	"fmt"
 	"html/template"
 	"net/http"
+
+	"careme/internal/auth"
+	"careme/internal/routing"
+	"careme/internal/seasons"
+	"careme/internal/templates"
 
 	"github.com/samber/lo"
 )
@@ -50,7 +52,19 @@ func (m mock) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
 	return "", false
 }
 
-func (m mock) Register(mux *http.ServeMux, _ auth.AuthClient) {
+func (mock) HasInventory(locationID string) bool {
+	return true
+}
+
+func (mock) RequestStore(ctx context.Context, locationID string) error {
+	return nil
+}
+
+func (mock) RequestedStoreIDs(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (m mock) Register(mux routing.Registrar, _ auth.AuthClient) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		data := struct {
 			Locations       []Location
@@ -63,7 +77,7 @@ func (m mock) Register(mux *http.ServeMux, _ auth.AuthClient) {
 			Locations:       lo.Values(fakes),
 			Zip:             r.URL.Query().Get("zip"),
 			FavoriteStore:   "",
-			ClarityScript:   templates.ClarityScript(),
+			ClarityScript:   templates.ClarityScript(r.Context()),
 			GoogleTagScript: templates.GoogleTagScript(),
 			Style:           seasons.GetCurrentStyle(),
 		}

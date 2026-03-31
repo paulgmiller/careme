@@ -1,19 +1,21 @@
 package recipes
 
 import (
-	"careme/internal/config"
-	"careme/internal/kroger"
-	"careme/internal/locations"
-	"careme/internal/walmart"
-	"careme/internal/wholefoods"
 	"context"
 	"fmt"
 	"testing"
+
+	"careme/internal/albertsons"
+	"careme/internal/brightdata"
+	"careme/internal/config"
+	"careme/internal/kroger"
+	"careme/internal/walmart"
+	"careme/internal/wholefoods"
 )
 
 // todo make this a indepenedent ingredient object not kroger.
 type staplesProvider interface {
-	FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error)
+	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
 }
 
@@ -29,8 +31,7 @@ type routingStaplesProvider struct {
 type backendStaplesProvider interface {
 	IsID(locationID string) bool
 	Signature() string
-	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
-	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
+	staplesProvider
 }
 
 func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
@@ -38,21 +39,22 @@ func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	return routingStaplesProvider{
-		backends: defaultStaplesBackends(kclient),
-	}, nil
-}
-
-func (p routingStaplesProvider) FetchStaples(ctx context.Context, location *locations.Location) ([]kroger.Ingredient, error) {
-	if location == nil {
-		return nil, fmt.Errorf("location is required")
-	}
-
-	provider, err := p.providerForLocation(location.ID)
+	backends, err := defaultStaplesBackends(cfg, kclient)
 	if err != nil {
 		return nil, err
 	}
-	return provider.FetchStaples(ctx, location.ID)
+
+	return routingStaplesProvider{
+		backends: backends,
+	}, nil
+}
+
+func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
+	provider, err := p.providerForLocation(locationID)
+	if err != nil {
+		return nil, err
+	}
+	return provider.FetchStaples(ctx, locationID)
 }
 
 func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
@@ -86,17 +88,32 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
-func defaultStaplesBackends(krogerClient kroger.ClientWithResponsesInterface) []backendStaplesProvider {
+func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) ([]backendStaplesProvider, error) {
+	httpClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
+	if err != nil {
+		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
+	}
+
+	// only returns an err because it ensures a cache for reese84 tokens.
+	albertsonsProvider, err := albertsons.NewStaplesProvider(cfg.Albertsons, httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
+	}
+
 	return []backendStaplesProvider{
 		kroger.NewStaplesProvider(krogerClient),
-		wholefoods.NewStaplesProvider(wholefoods.NewClient(nil)),
+		albertsonsProvider,
+		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
-	}
+		wholefoods.NewStaplesProvider(wholefoods.NewClient(httpClient)),
+	}, nil
 }
 
 func defaultIdentityProviders() []identityProvider {
 	return []identityProvider{
 		kroger.NewIdentityProvider(),
+		// actowiz.NewIdentityProvider(),
+		albertsons.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),
 	}

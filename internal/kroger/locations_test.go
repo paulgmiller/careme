@@ -1,6 +1,10 @@
 package kroger
 
-import "testing"
+import (
+	"testing"
+
+	locationtypes "careme/internal/locations/types"
+)
 
 func TestClientWithResponsesIsID(t *testing.T) {
 	t.Parallel()
@@ -35,5 +39,19 @@ func TestFloat32PtrToFloat64Ptr(t *testing.T) {
 	got := float32PtrToFloat64Ptr(&v)
 	if got == nil || *got != 47.5 {
 		t.Fatalf("unexpected conversion: %v", got)
+	}
+}
+
+func TestChainNameIsCanonicalized(t *testing.T) {
+	t.Parallel()
+
+	loc := locationtypes.Location{
+		ID:      "70500874",
+		Name:    "QFC Bellevue",
+		Chain:   chainName,
+		Address: "10116 NE 8th St",
+	}
+	if loc.Chain != "kroger" {
+		t.Fatalf("unexpected chain: %q", loc.Chain)
 	}
 }

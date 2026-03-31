@@ -1,8 +1,6 @@
 package ai
 
 import (
-	"careme/internal/kroger"
-	"careme/internal/locations"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -12,6 +10,9 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"careme/internal/kroger"
+	"careme/internal/locations"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/conversations"
@@ -27,13 +28,18 @@ type Client struct {
 	schema     map[string]any
 	wineSchema map[string]any
 	model      string
+	wineModel  string
+}
+
+type GeneratedImage struct {
+	Body io.Reader
 }
 
 // todo collapse closer to
 type Ingredient struct {
 	Name     string `json:"name"`
-	Quantity string `json:"quantity"` //should this and price be numbers? need units then
-	Price    string `json:"price"`    //TODO exclude empty
+	Quantity string `json:"quantity"` // should this and price be numbers? need units then
+	Price    string `json:"price"`    // TODO exclude empty
 }
 
 type Recipe struct {
@@ -46,8 +52,8 @@ type Recipe struct {
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
 	WineStyles   []string     `json:"wine_styles"`
-	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      //not in schema
-	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` //not in schema
+	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
+	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` // not in schema
 }
 
 // ComputeHash calculates the fnv128 hash of the recipe content
@@ -74,8 +80,7 @@ func (r *Recipe) ComputeHash() string {
 	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-//intionally not including ConversationID to preserve old hashes
-
+// intionally not including ConversationID to preserve old hashes
 type ShoppingList struct {
 	ConversationID string   `json:"conversation_id,omitempty" jsonschema:"-"`
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
@@ -88,7 +93,7 @@ type WineSelection struct {
 
 // ignoring model for now.
 func NewClient(apiKey, _ string) *Client {
-	//ignor model for now.
+	// ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
@@ -106,40 +111,76 @@ func NewClient(apiKey, _ string) *Client {
 		schema:     m,
 		wineSchema: wine,
 		model:      openai.ChatModelGPT5_4,
+		wineModel:  openai.ChatModelGPT5Mini,
 	}
 }
 
 const systemMessage = `
-"You are a professional chef and recipe developer that wants to help working families cook each night with varied cuisines."
+You are a professional chef and recipe developer that wants to help working families cook each night with varied cuisines.
 
 # Objective
 Generate distinct, practical recipes using the provided constraints to maximize ingredient freshness, quality, and value while ensuring meal variety.
 
 # Instructions
-- Each meal must feature a protein and at least one side of either a vegetable and/or a starch. A combined dish (such as a pasta, stew, or similar) that incorporates a vegetable or starch is also good.
+- Each meal must feature a protein and at least one side of either a vegetable and/or a starch. Include pastas, noodles, stir fry's, stews, braises, curries, casserole and other compositions.
 - Recipes should use diverse cooking methods and represent a variety of cuisines.
-- Provide clear, step-by-step instructions and an ingredient list for each recipe. repeat amounts and prep for each recipe in instructions.
-- Optionally include a wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles. Really put your Sommielier hat on for this.
-- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but but don't pay more for something on sale than a similar ingredient that isn't)
-
+- Provide clear, step-by-step instructions and an ingredient list for each recipe. Repeat amounts and prep for each recipe in instructions. Details on how ingredients are cut and plated. No prices or wine paring in instructions.
+- include a optional wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles. Really put your Sommielier hat on for this.
+- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but be willing to pay for better ingredients). Only use prices given don't invent prices.
+- Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated ingredient quantities and servings.
+- Aim for an aesthetically and texturally pleasing dish. Think about color (not too monochrome), texture (not all mushy), and plating (how would a restaurant plate this?).
+- Suggest at least one recipe that is a little bit richer in terms of price, calories or prep time, be sure to mention in description.
+- Suggest at least one recipe that is different ethnic cuisine.
 
 # Output Format
-- Each recipe includes:
+- List of recipe each includes:
   - title: A short catchy name for the dish.
   - description: Try to sell the dish and add some flair.
   - cook_time: Estimated cook time (for example: "35 minutes")
   - cost_estimate: Estimated total cost in dollars (for example: "$18-24")
-  - instructions: should include quantities and price if in input.
-  - Step-by-step instructions starting with prep. Don't prefix with numbers.
-  - health: Estimated Calorie count and other nutrient health tips.
-  - drink_pairing: the wine pairing suggestion mentioned in instructions
-  - wine_styles: Two or fewer consumer-recognizable wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc", "Cabernet Sauvignon").
-  - wine_styles must only contain searchable style names: no regions, no parenthetical notes, no commas, no "or", no "*-style blend" phrasing.
+  - ingredients:  should include quantities and price if in input. Can include widely availble pantry items not explicitly listed in user input.
+  - instructions: Step-by-step starting with prep and ending with plating. Don't prefix with numbers.
+  - health: Estimated Calorie count and other macro nutrient details.
+  - drink_pairing: the wine pairing sommielier details.
+  - wine_styles: Two or fewer consumer-recognizable wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc", "Cabernet Sauvignon"). Must only contain searchable style names: no regions, no parenthetical notes, no commas, no "or", no "*-style blend" phrasing.
 
 # Planning & Verification
 - Reference your checklist to ensure variety in cooking methods and cuisines
-- confirm ingredient prioritization matches sale/seasonal data.
-- Check cooktime and cost match instructions and ingredient list`
+- Confirm ingredient prioritization matches sale/seasonal data.
+- Verify every ingredient line with a price uses the same product and price from input data.
+- Recalculate cost estimate from listed priced ingredients and ensure it aligns with cost_estimate.
+- Double-check calorie guidance in health against the ingredient list and portion size.
+- Read each instruction step in order and ensure the flow is realistic, non-contradictory, and fully cookable
+- Verify the liquids reduce in stated time
+- Verify technical terms are used correctly.
+- Verify the dish have a good appearance after plating`
+
+const recipeImagePromptInstructions = `
+Generate a realistic overhead food photograph of a single finished plate.
+- Home cooked by a above average cook, not a restaurant or food stylist.
+- Keep plating simple and believable. No tweezers, foam, edible flowers, microgreens, or luxury flourishes unless in recipe instructions.
+- Use a simple kitchen counter, stovetop, sheet pan, wooden table, or casual dining table backdrop.
+- Use natural colors, ordinary cookware or tableware, and realistic portions 
+- Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes 
+- If the recipe has multiple components, show them plated together
+`
+
+const winePrompt = `
+Act as a sommelier for the recipe provided below
+Select 1 to 2 wines from the provided TSV that best match the dish
+Return JSON with wines (ingredient array) and concise commentary explaining why those specific bottles work.
+Only choose wines present in the TSV. For each wine include name and optionally quantity/single price when available from TSV .
+Be creative not always the same safe picks. Consider the specific ingredients, cooking method, and flavor profile of the dish when making your selection.
+Also for fancier/more expensive dishes consider more expensive wines.
+`
+
+const (
+	recipeImageModel = openai.ImageModelGPTImage1_5 // dalle-3 is getting deprecated. 1.5 seems way better than 1.
+	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
+	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
+	recipeImageQuality      = openai.ImageGenerateParamsQualityHigh
+	recipeImageSize         = openai.ImageGenerateParamsSize1024x1024
+)
 
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
 	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
@@ -161,7 +202,7 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 		Format: responses.ResponseFormatTextConfigUnionParam{
 			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
 				Name:   "recipes",
-				Schema: schema, //https://platform.openai.com/docs/guides/structured-outputs?example=structured-data
+				Schema: schema, // https://platform.openai.com/docs/guides/structured-outputs?example=structured-data
 			},
 		},
 	}
@@ -176,7 +217,7 @@ func (c *Client) Regenerate(ctx context.Context, instructions []string, conversa
 
 	params := responses.ResponseNewParams{
 		Model: c.model,
-		//only new input
+		// only new input
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
@@ -226,40 +267,50 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 	return answer, nil
 }
 
-func (c *Client) PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*WineSelection, error) {
-	conversationID = strings.TrimSpace(conversationID)
-	recipeTitle = strings.TrimSpace(recipeTitle)
-	if conversationID == "" {
-		return nil, fmt.Errorf("conversation ID is required for wine picks")
-	}
-	if recipeTitle == "" {
-		return nil, fmt.Errorf("recipe title is required for wine picks")
-	}
-	if len(wines) == 0 {
-		return nil, fmt.Errorf("wines are required for wine picks")
-	}
-	var wineTSV strings.Builder
-	err := kroger.ToTSV(wines, &wineTSV)
+func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*GeneratedImage, error) {
+	prompt, err := buildRecipeImagePrompt(recipe)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to convert wines to TSV", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
+	}
+
+	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	resp, err := client.Images.Generate(ctx, openai.ImageGenerateParams{
+		Prompt:       prompt,
+		Model:        recipeImageModel,
+		N:            openai.Int(1),
+		OutputFormat: recipeImageOutputFormat,
+		Quality:      recipeImageQuality,
+		Size:         recipeImageSize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
+	}
+
+	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("image generation returned no images")
+	}
+	imageBody := strings.TrimSpace(resp.Data[0].B64JSON)
+	if imageBody == "" {
+		return nil, fmt.Errorf("image generation returned empty image data")
+	}
+
+	return &GeneratedImage{
+		Body: base64.NewDecoder(base64.StdEncoding, strings.NewReader(imageBody)),
+	}, nil
+}
+
+func (c *Client) PickWine(ctx context.Context, recipe Recipe, wines []kroger.Ingredient) (*WineSelection, error) {
+	prompt, err := buildWineSelectionPrompt(recipe, wines)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build wine selection prompt: %w", err)
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
-	input := []responses.ResponseInputItemUnionParam{user(fmt.Sprintf("Candidate wines:\n%s", wineTSV.String()))}
 	params := responses.ResponseNewParams{
-		Model: c.model,
-		Instructions: openai.String(
-			"Act as a sommelier. Select 1 to 2 wines from the provided TSV that pair well with the recipe " + recipeTitle + "." +
-				"Return JSON with wines (ingredient array) and commentary about why those particular wines work well" +
-				"Pick wine sizes appropriate to number of people. Price according to the meal fanciness" +
-				"For each wine include name and optionally quantity/price when available from TSV.",
-		),
+		Model:        c.wineModel,
+		Instructions: openai.String(winePrompt),
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: input,
-		},
-		Store: openai.Bool(true),
-		Conversation: responses.ResponseNewParamsConversationUnion{
-			OfString: openai.String(conversationID),
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
 		},
 		Text: scheme(c.wineSchema),
 	}
@@ -303,7 +354,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 		},
 		Text: scheme(c.schema),
 	}
-	//should we stream. Can we pass past generation.
+	// should we stream. Can we pass past generation.
 
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
@@ -316,10 +367,45 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 	return responses.ResponseInputItemParamOfMessage(msg, responses.EasyInputMessageRoleUser)
 }
 
+func buildRecipeImagePrompt(recipe Recipe) (string, error) {
+	var promptBuilder strings.Builder
+	fmt.Fprintf(&promptBuilder, "%s\n", recipeImagePromptInstructions)
+	fmt.Fprintf(&promptBuilder, "\n")
+	fmt.Fprintf(&promptBuilder, "Recipe:\n")
+	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Title)
+	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Description)
+	fmt.Fprintf(&promptBuilder, "Instructions:\n")
+	for _, ins := range recipe.Instructions {
+		fmt.Fprintf(&promptBuilder, "- %s\n", ins)
+	}
+	return promptBuilder.String(), nil
+}
+
+// similiar to image generation builder
+func buildWineSelectionPrompt(recipe Recipe, wines []kroger.Ingredient) (string, error) {
+	var wineTSV strings.Builder
+	if err := kroger.ToTSV(wines, &wineTSV); err != nil {
+		return "", fmt.Errorf("failed to convert wines to TSV: %w", err)
+	}
+
+	var promptBuilder strings.Builder
+	fmt.Fprintf(&promptBuilder, "Recipe:\n")
+	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Title)
+	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Description)
+	fmt.Fprintf(&promptBuilder, "Instructions:\n")
+	for _, ins := range recipe.Instructions {
+		fmt.Fprintf(&promptBuilder, "- %s\n", ins)
+	}
+	fmt.Fprintf(&promptBuilder, "Existing drink pairing note: %s\n", recipe.DrinkPairing)
+	// add cost estimate when we believ it?
+	fmt.Fprintf(&promptBuilder, "\nCandidate wines TSV:\n%s", wineTSV.String())
+	return promptBuilder.String(), nil
+}
+
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
 func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
-	//constants we might make variable later
+	// constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
 	messages = append(messages, user("Default: each recipe should serve 2 people."))
 	messages = append(messages, user("Default: generate 3 recipes"))
@@ -334,10 +420,10 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	ingredientsMessage += buf.String()
 	messages = append(messages, user(ingredientsMessage))
 
-	// Previous recipes to avoid (if any). Reduce this to already cooked?
+	// Previously cooked recipes to avoid (if any).
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
-		prevRecipesMsg.WriteString("Avoid recipes similar to these from the past 2 weeks:\n")
+		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
 		for _, recipe := range lastRecipes {
 			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
 		}

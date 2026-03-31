@@ -5,12 +5,6 @@ package mail
 
 import (
 	"bytes"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/locations"
-	"careme/internal/recipes"
-	"careme/internal/users"
-	utypes "careme/internal/users/types"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,6 +14,15 @@ import (
 	"os"
 	"time"
 
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations"
+	"careme/internal/recipes"
+	"careme/internal/users"
+
+	utypes "careme/internal/users/types"
+
+	"github.com/samber/lo"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -42,11 +45,12 @@ type emailClient interface {
 }
 
 type mailer struct {
-	cache       cache.Cache
-	userStorage *users.Storage
-	generator   *recipes.Generator // interface requires making params public
-	locServer   locServer
-	client      emailClient
+	cache        cache.Cache
+	userStorage  *users.Storage
+	generator    *recipes.Generator // interface requires making params public
+	locServer    locServer
+	client       emailClient
+	publicOrigin string
 }
 
 // TODO share some of this with web.go? good for mocking?
@@ -77,11 +81,12 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	return &mailer{
-		cache:       cache,
-		userStorage: userStorage,
-		generator:   generator.(*recipes.Generator), // TODO do better
-		locServer:   locationserver,
-		client:      sendgrid.NewSendClient(sendgridkey),
+		cache:        cache,
+		userStorage:  userStorage,
+		generator:    generator.(*recipes.Generator), // TODO do better
+		locServer:    locationserver,
+		client:       sendgrid.NewSendClient(sendgridkey),
+		publicOrigin: cfg.ResolvedPublicOrigin(),
 	}, nil
 }
 
@@ -134,12 +139,6 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 
 	p := recipes.DefaultParams(l, date)
 	// p.UserID = user.ID
-	for _, last := range user.LastRecipes {
-		if last.CreatedAt.Before(time.Now().AddDate(0, 0, -14)) {
-			continue
-		}
-		p.LastRecipes = append(p.LastRecipes, last.Title)
-	}
 
 	paramsHash := p.Hash()
 	sentKey := mailSentPrefix + paramsHash + "/" + user.ID
@@ -168,7 +167,19 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 			}
 		}
 
-		//can orphan recipes here with crash or shutdown. Params should have a start time
+		// TODO refactor with recipes/server.go
+		recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
+			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
+		})
+		hashes := make([]string, 0, len(recent))
+		for _, recipe := range recent {
+			hashes = append(hashes, recipe.Hash)
+		}
+		cooked := rio.FeedbackByHash(ctx, hashes)
+		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+			return r.Title, cooked[r.Hash].Cooked
+		})
+		// can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
 		if err != nil {
@@ -182,7 +193,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	}
 
 	var buf bytes.Buffer
-	if err := recipes.FormatMail(p, *shoppingList, &buf); err != nil {
+	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, &buf); err != nil {
 		slog.ErrorContext(ctx, "failed to format mail", "error", err)
 		return
 	}
@@ -190,7 +201,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"
 
-	plainTextContent := "Check out your new recipes at https://careme.cooking/recipes?h=" + paramsHash
+	plainTextContent := "Check out your new recipes at " + m.publicOrigin + "/recipes?h=" + paramsHash
 
 	to := mail.NewEmail(user.Email[0], user.Email[0])
 	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())

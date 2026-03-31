@@ -4,104 +4,84 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
-type AlbertsonsProduct struct {
-	SerialNumber    int     `json:"Sr No"`
-	ProductURL      string  `json:"Product URL"`
-	ProductName     string  `json:"Product Name"`
-	Breadcrumbs     string  `json:"Breadcrumbs"`
-	Category        string  `json:"Category"`
-	SubCategory     string  `json:"Sub Category"`
-	Price           float64 `json:"Price"`
-	DiscountedPrice string  `json:"Discounted Price"`
-	ImageURL        string  `json:"Image URL"`
-	StoreLocation   string  `json:"Store Location"`
-	Availability    string  `json:"Availability"`
+type SafewayProduct struct {
+	StoreName          string   `json:"Store Name"`
+	ZipCode            string   `json:"Zip-Code"`
+	ProductName        string   `json:"Product Name"`
+	ID                 int64    `json:"ID"`
+	URL                string   `json:"URL"`
+	ProductDescription string   `json:"Product Description"` // this is really long
+	MRP                *float64 `json:"MRP"`
+	DiscountedPrice    *float64 `json:"Discounted Price"`
+	Category           string   `json:"Category"`
+	SubCategory        string   `json:"Sub-Category"`
+	Availability       bool     `json:"Availability"`
 }
 
-type WholeFoodsProduct struct {
-	URL                  string            `json:"url"`
-	ProductID            int64             `json:"product_id"`
-	ProductName          string            `json:"product_name"`
-	ProductJSONName      string            `json:"product_json_name"`
-	Brand                string            `json:"brand"`
-	Images               StringSlice       `json:"images"`
-	IngredientsString    string            `json:"ingredients_string"`
-	NutritionalData      NutritionalValues `json:"nutritional_data"`
-	StoreID              int64             `json:"store_id"`
-	RegularPrice         float64           `json:"regular_price"`
-	SalePrice            string            `json:"sale_price"`
-	IncrementalSalePrice string            `json:"incremental_sale_price"`
-	Allergens            string            `json:"allergens"`
-	NetWeight            string            `json:"net_weight"`
-	Location             string            `json:"location"`
-	PackSize             string            `json:"pack_size"`
-	Description          string            `json:"description"`
-	Calories             int               `json:"calories"`
-}
-
-type StringSlice []string
-
-func (s *StringSlice) UnmarshalJSON(data []byte) error {
-	if len(bytes.TrimSpace(data)) == 0 || bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		*s = nil
-		return nil
+// custom marshalling mostly to handle fact that prices get "N/A" sometimes
+func (p *SafewayProduct) UnmarshalJSON(data []byte) error {
+	type rawSafewayProduct struct {
+		StoreName          string          `json:"Store Name"`
+		ZipCode            string          `json:"Zip-Code"`
+		ProductName        string          `json:"Product Name"`
+		ID                 int64           `json:"ID"`
+		URL                string          `json:"URL"`
+		ProductDescription string          `json:"Product Description"`
+		MRP                json.RawMessage `json:"MRP"`
+		DiscountedPrice    json.RawMessage `json:"Discounted Price"`
+		Category           string          `json:"Category"`
+		SubCategory        string          `json:"Sub-Category"`
+		Availability       bool            `json:"Availability"`
 	}
 
-	// Actowiz exports sometimes encode arrays as a JSON string.
-	if len(data) > 0 && data[0] == '"' {
-		var encoded string
-		if err := json.Unmarshal(data, &encoded); err != nil {
-			return err
-		}
-		if encoded == "" {
-			*s = nil
-			return nil
-		}
-		return json.Unmarshal([]byte(encoded), (*[]string)(s))
-	}
-
-	return json.Unmarshal(data, (*[]string)(s))
-}
-
-type NutrientValue struct {
-	Value          string  `json:"value"`
-	Unit           string  `json:"unit"`
-	PerServing     string  `json:"per_serving"`
-	FullDailyValue float64 `json:"full_daily_value"`
-}
-
-type NutritionalValues map[string]NutrientValue
-
-func (n *NutritionalValues) UnmarshalJSON(data []byte) error {
-	if len(bytes.TrimSpace(data)) == 0 || bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		*n = nil
-		return nil
-	}
-
-	if len(data) > 0 && data[0] == '"' {
-		var encoded string
-		if err := json.Unmarshal(data, &encoded); err != nil {
-			return err
-		}
-		if encoded == "" {
-			*n = nil
-			return nil
-		}
-
-		tmp := map[string]NutrientValue{}
-		if err := json.Unmarshal([]byte(encoded), &tmp); err != nil {
-			return fmt.Errorf("decode string-encoded nutritional_data: %w", err)
-		}
-		*n = tmp
-		return nil
-	}
-
-	tmp := map[string]NutrientValue{}
-	if err := json.Unmarshal(data, &tmp); err != nil {
+	var raw rawSafewayProduct
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	*n = tmp
+
+	*p = SafewayProduct{
+		StoreName:          raw.StoreName,
+		ZipCode:            raw.ZipCode,
+		ProductName:        raw.ProductName,
+		ID:                 raw.ID,
+		URL:                raw.URL,
+		ProductDescription: raw.ProductDescription,
+		Category:           raw.Category,
+		SubCategory:        raw.SubCategory,
+		Availability:       raw.Availability,
+	}
+
+	var err error
+	if p.MRP, err = float64Ptr(raw.MRP); err != nil {
+		return fmt.Errorf("decode MRP: %w", err)
+	}
+	if p.DiscountedPrice, err = float64Ptr(raw.DiscountedPrice); err != nil {
+		return fmt.Errorf("decode Discounted Price: %w", err)
+	}
 	return nil
+}
+
+func float64Ptr(data json.RawMessage) (*float64, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+
+	var number *float64
+	if err := json.Unmarshal(trimmed, &number); err == nil {
+		return number, nil
+	}
+
+	var raw string
+	if err := json.Unmarshal(trimmed, &raw); err != nil {
+		return nil, err
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.EqualFold(raw, "N/A") {
+		return nil, nil
+	}
+	return nil, fmt.Errorf("unsupported numeric value %q", raw)
 }

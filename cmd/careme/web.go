@@ -1,21 +1,6 @@
 package main
 
 import (
-	"careme/internal/admin"
-	"careme/internal/auth"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/ingredients"
-	"careme/internal/locations"
-	"careme/internal/logs"
-	"careme/internal/logsink"
-	"careme/internal/recipes"
-	"careme/internal/seasons"
-	"careme/internal/sitemap"
-	"careme/internal/static"
-	"careme/internal/templates"
-	"careme/internal/users"
-	utypes "careme/internal/users/types"
 	"context"
 	"errors"
 	"fmt"
@@ -26,12 +11,33 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"careme/internal/actowiz"
+	"careme/internal/admin"
+	"careme/internal/auth"
+	cachepkg "careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/ingredients"
+	"careme/internal/locations"
+	"careme/internal/recipes"
+	"careme/internal/routing"
+	"careme/internal/seasons"
+	"careme/internal/sitemap"
+	"careme/internal/static"
+	"careme/internal/templates"
+	"careme/internal/users"
+
+	utypes "careme/internal/users/types"
 )
 
-func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error {
-	cache, err := cache.MakeCache()
+func runServer(cfg *config.Config, addr string) error {
+	cache, err := cachepkg.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
+	}
+	imageCache, err := cachepkg.EnsureCache(recipes.RecipeImagesContainer)
+	if err != nil {
+		return fmt.Errorf("failed to create recipe image cache: %w", err)
 	}
 
 	authClient, err := auth.NewFromConfig(cfg)
@@ -39,9 +45,14 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 		return fmt.Errorf("failed to create auth client: %w", err)
 	}
 
-	mux := http.NewServeMux()
-	authClient.Register(mux)
-	static.Register(mux)
+	rootMux := http.NewServeMux()
+	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
+		return authClient.WithAuthHTTP(AppMiddleWare(h, newRequestTrackerFromEnv()))
+	})
+	infraRoutes := routing.Wrap(rootMux, BaseMiddleware)
+
+	authClient.Register(appRoutes)
+	static.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
 
@@ -58,49 +69,35 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	}
 
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
-	userHandler.Register(mux)
+	userHandler.Register(appRoutes)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
-	locationServer.Register(mux, authClient)
+	locationServer.Register(appRoutes, authClient)
 
-	sitemapHandler := sitemap.New(cache)
-	sitemapHandler.Register(mux)
+	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
+	sitemapHandler.Register(infraRoutes)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, authClient)
-	recipeHandler.Register(mux)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient)
+	recipeHandler.Register(appRoutes)
+
+	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
-	mux.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
+	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 
-	if logsinkCfg.Enabled() {
-		logsHandler, err := logs.NewHandler(logsinkCfg)
-		if err != nil {
-			return fmt.Errorf("failed to create logs handler: %w", err)
-		}
-		logsHandler.Register(adminMux)
-	}
-
-	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
+	appRoutes.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		data := struct {
-			ClarityScript   template.HTML
-			GoogleTagScript template.HTML
-			Style           seasons.Style
-		}{
-			ClarityScript:   templates.ClarityScript(),
-			GoogleTagScript: templates.GoogleTagScript(),
-			Style:           seasons.GetCurrentStyle(),
-		}
+		data := templates.NewAboutPageData(ctx, seasons.GetCurrentStyle())
 		if err := templates.About.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "about template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	appRoutes.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		currentUser, err := userStorage.FromRequest(ctx, r, authClient)
 		if err != nil {
@@ -109,9 +106,8 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 				http.Error(w, "unable to load account", http.StatusInternalServerError)
 				return
 			}
-			//no user is fine we'll just pass nil currentUser to template
+			// no user is fine we'll just pass nil currentUser to template
 			// just have two different templates?
-
 		}
 
 		var favoriteStoreName string
@@ -119,7 +115,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			loc, locErr := locationStorage.GetLocationByID(ctx, currentUser.FavoriteStore)
 			if locErr != nil {
 				slog.ErrorContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", locErr)
-				//mutation intentionally not saved bac.
+				// mutation intentionally not saved bac.
 				currentUser.FavoriteStore = ""
 			} else {
 				favoriteStoreName = loc.Name
@@ -133,7 +129,7 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 			Style             seasons.Style
 			ServerSignedIn    bool
 		}{
-			ClarityScript:     templates.ClarityScript(),
+			ClarityScript:     templates.ClarityScript(ctx),
 			GoogleTagScript:   templates.GoogleTagScript(),
 			User:              currentUser,
 			FavoriteStoreName: favoriteStoreName,
@@ -149,11 +145,12 @@ func runServer(cfg *config.Config, logsinkCfg logsink.Config, addr string) error
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)
 
-	mux.Handle("/ready", ro)
+	// no logging for readyiness too noisy.
+	rootMux.Handle("/ready", &recoverer{ro})
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: authClient.WithAuthHTTP(WithMiddleware(mux)),
+		Handler: rootMux,
 	}
 
 	// Channel to listen for errors coming from the server

@@ -1,13 +1,15 @@
 package recipes
 
 import (
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/locations"
 	"context"
 	"slices"
 	"testing"
 	"time"
+
+	"careme/internal/albertsons"
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/locations"
 )
 
 type stubStaplesProvider struct {
@@ -43,7 +45,7 @@ type stubRoutingStaplesProvider struct {
 	calls       int
 }
 
-func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ *locations.Location) ([]kroger.Ingredient, error) {
+func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ string) ([]kroger.Ingredient, error) {
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
@@ -66,14 +68,14 @@ func TestRoutingStaplesProvider_SelectsProviderByLocationID(t *testing.T) {
 		backends: []backendStaplesProvider{krogerProvider, wholeFoodsProvider},
 	}
 
-	if _, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "70100023"}); err != nil {
+	if _, err := provider.FetchStaples(t.Context(), "70100023"); err != nil {
 		t.Fatalf("FetchStaples kroger returned error: %v", err)
 	}
 	if krogerProvider.calls != 1 || wholeFoodsProvider.calls != 0 {
 		t.Fatalf("expected kroger provider to be selected, got kroger=%d wholefoods=%d", krogerProvider.calls, wholeFoodsProvider.calls)
 	}
 
-	if _, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "wholefoods_10216"}); err != nil {
+	if _, err := provider.FetchStaples(t.Context(), "wholefoods_10216"); err != nil {
 		t.Fatalf("FetchStaples whole foods returned error: %v", err)
 	}
 	if krogerProvider.calls != 1 || wholeFoodsProvider.calls != 1 {
@@ -89,7 +91,7 @@ func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) 
 		},
 	}
 
-	_, err := provider.FetchStaples(t.Context(), &locations.Location{ID: "walmart_3098"})
+	_, err := provider.FetchStaples(t.Context(), "walmart_3098")
 	if err == nil {
 		t.Fatal("expected unsupported backend error")
 	}
@@ -120,6 +122,16 @@ func TestRoutingStaplesProvider_GetIngredients_SelectsProviderByLocationID(t *te
 	}
 	if krogerProvider.calls != 0 || wholeFoodsProvider.calls != 1 {
 		t.Fatalf("expected whole foods provider to be selected, got kroger=%d wholefoods=%d", krogerProvider.calls, wholeFoodsProvider.calls)
+	}
+}
+
+func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T) {
+	t.Parallel()
+
+	got := staplesSignatureForLocation("safeway_1142")
+	want := albertsons.NewIdentityProvider().Signature()
+	if got != want {
+		t.Fatalf("unexpected signature: got %q want %q", got, want)
 	}
 }
 

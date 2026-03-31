@@ -1,16 +1,27 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/locations"
-	"careme/internal/seasons"
-	"careme/internal/templates"
+	"context"
 	"html/template"
 	"io"
 	"net/http"
 	"slices"
 	"strings"
+
+	"careme/internal/ai"
+	"careme/internal/locations"
+	"careme/internal/recipes/feedback"
+	"careme/internal/seasons"
+	"careme/internal/templates"
 )
+
+type recipeImageView struct {
+	HasImage bool
+	Hash     string
+	// OutOfBand lets the shared panel template opt into the HTMX outerHTML swap
+	// used by the image-generation response without duplicating the panel markup.
+	OutOfBand bool
+}
 
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
 //
@@ -20,11 +31,14 @@ import (
 // should not own.
 type shoppingRecipeView struct {
 	ai.Recipe
+	// Hash identifies the individual recipe card and backs recipe-scoped
+	// links and HTMX endpoints like /recipe/{hash}/save or /recipe/{hash}/wine.
+	Hash               string
 	SelectionID        string
 	SelectionButtonID  string
 	ListHash           string
-	Hash               string
-	DisplayIngredients []ai.Ingredient //merged food and wine
+	ServerSignedIn     bool
+	DisplayIngredients []ai.Ingredient // merged food and wine
 	Wine               shoppingRecipeWineView
 }
 
@@ -57,20 +71,20 @@ type shoppingListPageData struct {
 }
 
 // FormatShoppingListHTML renders the multi-recipe shopping list view.
-func FormatShoppingListHTML(p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
-	FormatShoppingListHTMLForHash(p, l, nil, signedIn, p.Hash(), writer)
+func FormatShoppingListHTML(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
+	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), writer)
 }
 
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
-func FormatShoppingListHTMLForHash(p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
-	data := shoppingListPageDataForHash(p, l, wineRecommendations, signedIn, hash)
+func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
+	data := shoppingListPageDataForHash(ctx, p, l, wineRecommendations, signedIn, hash)
 
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func shoppingListPageDataForHash(p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string) shoppingListPageData {
+func shoppingListPageDataForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string) shoppingListPageData {
 	savedHashes := make(map[string]struct{}, len(p.Saved))
 	for _, recipe := range p.Saved {
 		savedHashes[recipe.ComputeHash()] = struct{}{}
@@ -92,10 +106,11 @@ func shoppingListPageDataForHash(p *generatorParams, l ai.ShoppingList, wineReco
 		selectionID, selectionButtonID := shoppingSelectionDOMIDs(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
+			Hash:               recipeHash,
 			SelectionID:        selectionID,
 			SelectionButtonID:  selectionButtonID,
 			ListHash:           hash,
-			Hash:               recipeHash,
+			ServerSignedIn:     signedIn,
 			DisplayIngredients: displayIngredients,
 			Wine: shoppingRecipeWineView{
 				ActionID:       wineActionID,
@@ -115,7 +130,7 @@ func shoppingListPageDataForHash(p *generatorParams, l ai.ShoppingList, wineReco
 	return shoppingListPageData{
 		Location:        *p.Location,
 		Date:            p.Date.Format("2006-01-02"),
-		ClarityScript:   templates.ClarityScript(),
+		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Instructions:    p.Instructions,
 		Hash:            hash,
@@ -128,11 +143,12 @@ func shoppingListPageDataForHash(p *generatorParams, l ai.ShoppingList, wineReco
 	}
 }
 
-// FormatRecipeHTML renders a single recipe view.
-func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, thread []RecipeThreadEntry, feedback RecipeFeedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
+// FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, hasRecipeImage bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
+	recipeHash := recipe.ComputeHash()
 	data := struct {
 		Location           locations.Location
 		Date               string
@@ -144,14 +160,15 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		ConversationID     string
 		WineRecommendation *ai.WineSelection
 		Thread             []RecipeThreadEntry
-		Feedback           RecipeFeedback
+		Feedback           feedback.Feedback
 		RecipeHash         string
+		RecipeImage        recipeImageView
 		Style              seasons.Style
 		ServerSignedIn     bool
 	}{
 		Location:           *p.Location,
 		Date:               p.Date.Format("2006-01-02"),
-		ClarityScript:      templates.ClarityScript(),
+		ClarityScript:      templates.ClarityScript(ctx),
 		GoogleTagScript:    templates.GoogleTagScript(),
 		Recipe:             recipe,
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
@@ -159,8 +176,9 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 		ConversationID:     p.ConversationID,
 		WineRecommendation: wineRecommendation,
 		Thread:             thread,
-		Feedback:           feedback,
-		RecipeHash:         recipe.ComputeHash(),
+		Feedback:           fb,
+		RecipeHash:         recipeHash,
+		RecipeImage:        recipeImageData(recipeHash, hasRecipeImage, false),
 		Style:              seasons.GetCurrentStyle(),
 		ServerSignedIn:     signedIn,
 	}
@@ -170,9 +188,49 @@ func FormatRecipeHTML(p *generatorParams, recipe ai.Recipe, signedIn bool, threa
 	}
 }
 
+func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeImageView {
+	return recipeImageView{
+		HasImage:  hasImage,
+		Hash:      recipeHash,
+		OutOfBand: outOfBand,
+	}
+}
+
+func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
+	data := struct {
+		RecipeHash     string
+		RecipeImage    recipeImageView
+		ServerSignedIn bool
+	}{
+		RecipeHash:     recipeHash,
+		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, false),
+		ServerSignedIn: signedIn,
+	}
+
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action", data); err != nil {
+		http.Error(writer, "recipe image action template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
+	data := struct {
+		RecipeHash     string
+		RecipeImage    recipeImageView
+		ServerSignedIn bool
+	}{
+		RecipeHash:     recipeHash,
+		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, true),
+		ServerSignedIn: signedIn,
+	}
+
+	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action_response", data); err != nil {
+		http.Error(writer, "recipe image response template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
 func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer http.ResponseWriter) {
-	//memory waste because we alwways resort?
+	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
@@ -206,16 +264,19 @@ func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer
 	}
 }
 
-// FormatShoppingRecipeWineHTML renders the shopping list wine recommendation fragment for HTMX swaps.
+// FormatShoppingRecipeWineHTML renders the signed-in shopping list wine fragment for HTMX swaps.
 func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSelection, writer http.ResponseWriter) {
 	wineActionID, wineButtonID := shoppingWineDOMIDs(recipeHash)
 	winePreviewID := shoppingWinePreviewDOMID(recipeHash)
 	wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
 	data := struct {
-		Hash string
-		Wine shoppingRecipeWineView
+		// Hash is used for recipe-scoped DOM IDs and /recipe/{hash}/wine endpoints.
+		Hash           string
+		ServerSignedIn bool
+		Wine           shoppingRecipeWineView
 	}{
-		Hash: recipeHash,
+		Hash:           recipeHash,
+		ServerSignedIn: true,
 		Wine: shoppingRecipeWineView{
 			ActionID:       wineActionID,
 			ActionButtonID: wineButtonID,
@@ -259,9 +320,7 @@ func RenderShoppingSelectionUpdateHTML(data shoppingListPageData, recipeHash str
 }
 
 // drops clarity, instructions and most of shoppinglist
-func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
-	// TODO just put params into shopping list and pass that up?
-
+func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, writer io.Writer) error {
 	data := struct {
 		Location locations.Location
 		Date     string
@@ -274,7 +333,7 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, writer io.Writer) error {
 		Date:     p.Date.Format("2006-01-02"),
 		Hash:     p.Hash(),
 		Recipes:  l.Recipes,
-		Domain:   "https://careme.cooking",
+		Domain:   publicOrigin,
 		Style:    seasons.GetCurrentStyle(),
 	}
 

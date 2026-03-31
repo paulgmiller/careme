@@ -1,12 +1,13 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/locations"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/locations"
 )
 
 // Test that the HTML contains the simplified recipe action and live shopping list state.
@@ -40,7 +41,7 @@ func TestFormatShoppingListHTML_ContainsSaveActionAndEmptyListState(t *testing.T
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, multiRecipeList, true, w)
+	FormatShoppingListHTML(t.Context(), p, multiRecipeList, true, w)
 	html := w.Body.String()
 
 	// Verify HTML is valid
@@ -117,7 +118,7 @@ func TestFormatShoppingListHTML_ShowsSetMenuWhenSavedAndPendingRecipesRemain(t *
 	p := DefaultParams(&loc, time.Now())
 	p.Saved = []ai.Recipe{listWithRecipes.Recipes[0]}
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(p, listWithRecipes, true, w)
+	FormatShoppingListHTML(t.Context(), p, listWithRecipes, true, w)
 	html := w.Body.String()
 
 	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
@@ -125,5 +126,42 @@ func TestFormatShoppingListHTML_ShowsSetMenuWhenSavedAndPendingRecipesRemain(t *
 	}
 	if !strings.Contains(html, `Set the menu`) {
 		t.Error("HTML should render the Set the menu label when saved and pending recipes coexist")
+	}
+}
+
+func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
+	list := ai.ShoppingList{
+		Recipes: []ai.Recipe{
+			{
+				Title:        "Shared Recipe",
+				Description:  "Read-only recipe",
+				Ingredients:  []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+				Instructions: []string{"Step 1"},
+				Health:       "Healthy",
+				DrinkPairing: "Water",
+			},
+		},
+	}
+
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+	FormatShoppingListHTML(t.Context(), p, list, false, w)
+	html := w.Body.String()
+
+	if strings.Contains(html, `type="radio"`) {
+		t.Error("HTML should not contain save/dismiss radio inputs when signed out")
+	}
+	if strings.Contains(html, `Try again, chef`) {
+		t.Error("HTML should not contain regenerate action text when signed out")
+	}
+	if strings.Contains(html, `Assemble Shopping List`) {
+		t.Error("HTML should not contain finalize action text when signed out")
+	}
+	if strings.Contains(html, `Save`) {
+		t.Error("HTML should not contain save action text when signed out")
+	}
+	if strings.Contains(html, `Dismiss`) {
+		t.Error("HTML should not contain dismiss action text when signed out")
 	}
 }

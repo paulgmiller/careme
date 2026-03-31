@@ -1,33 +1,36 @@
 package auth
 
 import (
-	"careme/internal/config"
-	"careme/internal/templates"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"careme/internal/config"
+	"careme/internal/routing"
+	"careme/internal/templates"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
 	"github.com/clerk/clerk-sdk-go/v2/jwks"
 	"github.com/clerk/clerk-sdk-go/v2/session"
 	"github.com/clerk/clerk-sdk-go/v2/user"
+	"github.com/samber/lo"
 )
 
-var (
-	ErrNoSession = errors.New("no valid session found")
-)
+var ErrNoSession = errors.New("no valid session found")
 
 type AuthClient interface {
 	GetUserEmail(ctx context.Context, clerkUserID string) (string, error)
 	GetUserIDFromRequest(r *http.Request) (string, error)
 	WithAuthHTTP(handler http.Handler) http.Handler
-	Register(mux *http.ServeMux)
+	Register(mux routing.Registrar)
 }
 
 // Client wraps Clerk SDK functionality
@@ -62,8 +65,7 @@ func NewClient(cfg *config.Config) (*clerkClient, error) {
 }
 
 func (c *clerkClient) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {
-
-	//todo can we pull this right off of claims? not woth bothering?
+	// todo can we pull this right off of claims? not woth bothering?
 	clerkUser, err := c.userClient.Get(ctx, clerkUserID)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch clerk user: %w", err)
@@ -106,7 +108,6 @@ func (c *clerkClient) FromRequest(ctx context.Context, req *http.Request) (strin
 
 // WithClerkHTTP wraps the http.Handler with Clerk's authentication middleware
 func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
-
 	purgeAndRedirect := clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("authorization failure, purging cookies and redirecting")
 		// Clear any existing Clerk cookies by setting them to expired
@@ -117,7 +118,6 @@ func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	}))
 
 	useSessionCookie := clerkhttp.AuthorizationJWTExtractor(func(r *http.Request) string {
-
 		if c, err := r.Cookie("__session"); err == nil {
 			return c.Value
 		}
@@ -163,13 +163,13 @@ func clearCookie(w http.ResponseWriter, name string) {
 	})
 }
 
-func (c *clerkClient) Register(mux *http.ServeMux) {
+func (c *clerkClient) Register(mux routing.Registrar) {
 	mux.HandleFunc("/logout", c.logout)
 	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, c.cfg.Clerk.Signin(), http.StatusSeeOther)
+		http.Redirect(w, r, c.signInURL(r, false), http.StatusSeeOther)
 	})
 	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, c.cfg.Clerk.Signup(), http.StatusSeeOther)
+		http.Redirect(w, r, c.signInURL(r, true), http.StatusSeeOther)
 	})
 	mux.HandleFunc("/auth/establish", func(w http.ResponseWriter, r *http.Request) {
 		if c.cfg.Clerk.PublishableKey == "" {
@@ -182,17 +182,69 @@ func (c *clerkClient) Register(mux *http.ServeMux) {
 			GoogleTagScript     template.HTML
 			GoogleConversionTag string
 			Signup              bool
+			ReturnTo            string // read from a data- attribute in the template to avoid JS-string escaping concerns
 		}{
 			PublishableKey:      c.cfg.Clerk.PublishableKey,
 			GoogleTagScript:     templates.GoogleTagScript(),
 			GoogleConversionTag: templates.GoogleConversionTag(),
-			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"),
+			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"), // used for ad conversions
+			ReturnTo:            returnToFromRequest(r),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
 			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
+}
+
+func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
+	base := c.cfg.Clerk.Signin()
+	if signup {
+		base = c.cfg.Clerk.Signup()
+	}
+	redirectURL := c.authEstablishURL(signup, returnToFromRequest(r))
+	u := lo.Must(url.Parse(base))
+	q := u.Query()
+	q.Set("redirect_url", redirectURL)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func (c *clerkClient) authEstablishURL(signup bool, returnTo string) string {
+	origin := c.cfg.ResolvedPublicOrigin() // can never be emptpy
+	u := lo.Must(url.Parse(origin + "/auth/establish"))
+	q := u.Query()
+	if signup {
+		q.Set("signup", "true")
+	}
+	if returnTo != "" {
+		// Keep the entire relative return target in one opaque query value so
+		// nested ?a=1&b=2 segments are not broken apart during Clerk redirects.
+		q.Set("return_to_b64", base64.RawURLEncoding.EncodeToString([]byte(returnTo)))
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func returnToFromRequest(r *http.Request) string {
+	encoded := strings.TrimSpace(r.URL.Query().Get("return_to_b64"))
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return ""
+	}
+	return sanitizeReturnTo(string(decoded))
+}
+
+// only allow redirects to relative paths in our app.
+func sanitizeReturnTo(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || !strings.HasPrefix(raw, "/") {
+		return ""
+	}
+	if strings.HasPrefix(raw, "//") {
+		return ""
+	}
+	return raw
 }
 
 // Toss this in if you're confused :)

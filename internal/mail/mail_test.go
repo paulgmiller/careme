@@ -75,6 +75,14 @@ func (c *fakeMailCache) Put(_ context.Context, key, value string, opts cache.Put
 	return nil
 }
 
+func (c *fakeMailCache) PutReader(_ context.Context, key string, reader io.Reader, opts cache.PutOptions) error {
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	return c.Put(context.Background(), key, string(body), opts)
+}
+
 type fakeMailLocServer struct {
 	location *locations.Location
 }
@@ -102,7 +110,6 @@ func shoppingDayForStore(t *testing.T, location *locations.Location) string {
 }
 
 func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T) {
-
 	fc := newFakeMailCache(t)
 	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
 	m := &mailer{
@@ -131,7 +138,6 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 }
 
 func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
-
 	fc := newFakeMailCache(t)
 	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
 	m := &mailer{

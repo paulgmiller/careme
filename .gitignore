@@ -31,9 +31,11 @@ Thumbs.db
 .env
 .envtest
 .envprod
+secrets/**/*.env
 
 tailwind/node_modules/
 
 # Cache directory and compiled binary
 cache/
 careme
+bin/

@@ -1,26 +1,28 @@
 package wholefoods
 
 import (
-	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
+	"strings"
 
-	"github.com/samber/lo"
-	lop "github.com/samber/lo/parallel"
+	"careme/internal/cache"
+	"careme/internal/locations/storeindex"
+	"careme/internal/sitemapfetch"
+
+	locationtypes "careme/internal/locations/types"
 )
 
 const (
 	Container = "wholefoods"
-	//prefixes are a little redundant since we already have a container. Could simpify with reimport.
+	// prefixes are a little redundant since we already have a container. Could simpify with reimport.
 	StoreCachePrefix       = "wholefoods/stores/"
 	StoreURLMapCacheKey    = "wholefoods/store_url_map.json"
 	LocationIDPrefix       = "wholefoods_"
 	DefaultStoreSitemapURL = "https://www.wholefoodsmarket.com/sitemap/sitemap-stores.xml"
+	LocationIndexCacheKey  = "wholefoods/store_locations.json"
 )
 
 type StoreReference struct {
@@ -37,30 +39,11 @@ func SaveStoreURLMap(ctx context.Context, c cache.Cache, refs []StoreReference) 
 		urlMap[ref.URL] = ref.ID
 	}
 
-	raw, err := json.Marshal(urlMap)
-	if err != nil {
-		return fmt.Errorf("marshal store url map: %w", err)
-	}
-	if err := c.Put(ctx, StoreURLMapCacheKey, string(raw), cache.Unconditional()); err != nil {
-		return fmt.Errorf("write store url map cache: %w", err)
-	}
-	return nil
+	return sitemapfetch.SaveURLMap(ctx, c, StoreURLMapCacheKey, urlMap)
 }
 
 func LoadStoreURLMap(ctx context.Context, c cache.Cache) (map[string]string, error) {
-	reader, err := c.Get(ctx, StoreURLMapCacheKey)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = reader.Close()
-	}()
-
-	var urlMap map[string]string
-	if err := json.NewDecoder(reader).Decode(&urlMap); err != nil {
-		return nil, fmt.Errorf("decode store url map cache: %w", err)
-	}
-	return urlMap, nil
+	return sitemapfetch.LoadURLMap(ctx, c, StoreURLMapCacheKey)
 }
 
 func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummaryResponse) error {
@@ -80,43 +63,49 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 	return nil
 }
 
-// loadCachedStoreSummaries get all store summaries into memory.
-// its pretty intense and maybe we should just load latlong for index
-func loadCachedStoreSummaries(ctx context.Context, c cache.ListCache) ([]*StoreSummaryResponse, error) {
-	keys, err := c.List(ctx, StoreCachePrefix, "")
-	if err != nil {
-		return nil, fmt.Errorf("list cached store summaries: %w", err)
-	}
-
-	summaries := lop.Map(keys, func(key string, i int) *StoreSummaryResponse {
-		reader, err := c.Get(ctx, StoreCachePrefix+key)
-		if err != nil {
-			slog.WarnContext(ctx, "failed to read cached whole foods store summary", "key", key, "error", err)
-			return nil
+func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
+	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey, func(summary StoreSummaryResponse) storeindex.Entry {
+		lat, lon := storeindex.Coordinates(&summary.PrimaryLocation.Latitude, &summary.PrimaryLocation.Longitude, summary.PrimaryLocation.Address.ZipCode, zipLookup)
+		return storeindex.Entry{
+			ID:  LocationIDPrefix + strconv.Itoa(summary.StoreID),
+			Lat: lat,
+			Lon: lon,
 		}
-		defer func() {
-			_ = reader.Close()
-		}()
-		var summary StoreSummaryResponse
-		if err := json.NewDecoder(reader).Decode(&summary); err != nil {
-			slog.WarnContext(ctx, "failed to decode cached whole foods store summary", "key", key, "error", err)
-			return nil
-		}
-		return &summary
 	})
-
-	summaries = lo.Compact(summaries)
-
-	if len(summaries) == 0 {
-		return nil, fmt.Errorf("failed to load wholefoods locations")
-	}
-
-	return summaries, nil
+	return err
 }
 
-// StoreSummaryToLocation converts a whole food type intoa  generic locaitn.
-// Mostly vanilla except for prefixing name
-func storeSummaryToLocation(summary StoreSummaryResponse) locationtypes.Location {
+func loadCachedStoreSummaryByID(ctx context.Context, c cache.Cache, locationID string) (*StoreSummaryResponse, error) {
+	normalized, ok := parseLocationID(locationID)
+	if !ok {
+		return nil, fmt.Errorf("whole foods location %q not found", locationID)
+	}
+	storeID := strings.TrimPrefix(normalized, LocationIDPrefix)
+
+	reader, err := c.Get(ctx, StoreCachePrefix+storeID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	var summary StoreSummaryResponse
+	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+		return nil, fmt.Errorf("decode whole foods store summary: %w", err)
+	}
+	return &summary, nil
+}
+
+type loader struct {
+	cache cache.Cache
+}
+
+func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Location, error) {
+	summary, err := loadCachedStoreSummaryByID(ctx, l.cache, locationID)
+	if err != nil {
+		return locationtypes.Location{}, err
+	}
 	lat := summary.PrimaryLocation.Latitude
 	lon := summary.PrimaryLocation.Longitude
 
@@ -128,5 +117,6 @@ func storeSummaryToLocation(summary StoreSummaryResponse) locationtypes.Location
 		ZipCode: summary.PrimaryLocation.Address.ZipCode,
 		Lat:     &lat,
 		Lon:     &lon,
-	}
+		Chain:   "wholefoods",
+	}, nil
 }

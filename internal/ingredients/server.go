@@ -1,13 +1,15 @@
 package ingredients
 
 import (
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/recipes"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/recipes"
+	"careme/internal/routing"
 )
 
 type server struct {
@@ -18,7 +20,7 @@ func NewHandler(c cache.Cache) *server {
 	return &server{cache: c}
 }
 
-func (s *server) Register(mux *http.ServeMux) {
+func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /ingredients/{hash}", s.handleIngredients)
 }
 

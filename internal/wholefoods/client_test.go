@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 func TestCategory_BuildsRequestAndDecodesFixture(t *testing.T) {
@@ -95,6 +99,47 @@ func TestCategory_StatusError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "status 502") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCategory_RetriesTransient5xx(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	client := NewClientWithBaseURL("https://example.com", retryingHTTPClient(&http.Client{
+		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			attempts++
+			if attempts < 3 {
+				return &http.Response{
+					StatusCode: http.StatusBadGateway,
+					Header:     make(http.Header),
+					Body:       ioNopCloserString("temporary failure"),
+					Request:    r,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Content-Type": []string{"application/json"},
+				},
+				Body:    ioNopCloserString(`{"results":[{"name":"Retry Beef","slug":"retry-beef","brand":"Whole Foods","store":10216}],"meta":{"total":{"value":1,"relation":"eq"},"state":{"refinements":[],"sort":""}}}`),
+				Request: r,
+			}, nil
+		}),
+	}))
+
+	resp, err := client.Category(context.Background(), "beef", "10216")
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+	if got, want := attempts, 3; got != want {
+		t.Fatalf("unexpected attempts: got %d want %d", got, want)
+	}
+	if got, want := len(resp), 1; got != want {
+		t.Fatalf("unexpected result count: got %d want %d", got, want)
+	}
+	if got := resp[0].Name; got != "Retry Beef" {
+		t.Fatalf("unexpected product name: %q", got)
 	}
 }
 
@@ -235,4 +280,36 @@ func loadFixture(t *testing.T, name string) []byte {
 		t.Fatalf("read fixture %s: %v", name, err)
 	}
 	return data
+}
+
+type wholeFoodsRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f wholeFoodsRoundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
+func ioNopCloserString(body string) io.ReadCloser {
+	return io.NopCloser(strings.NewReader(body))
+}
+
+func retryingHTTPClient(base *http.Client) *http.Client {
+	retryClient := retryablehttp.NewClient()
+	retryClient.Logger = nil
+	retryClient.HTTPClient = base
+	retryClient.RetryMax = 2
+	retryClient.RetryWaitMin = time.Millisecond
+	retryClient.RetryWaitMax = time.Millisecond
+	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		if err != nil {
+			return false, err
+		}
+		if resp == nil || resp.Request == nil {
+			return false, nil
+		}
+		return resp.Request.Method == http.MethodGet && resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
+	}
+	return retryClient.StandardClient()
 }

@@ -1,9 +1,6 @@
 package sitemap
 
 import (
-	"careme/internal/cache"
-	"careme/internal/locations"
-	"careme/internal/recipes"
 	"context"
 	"encoding/xml"
 	"fmt"
@@ -12,30 +9,37 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/locations"
+	"careme/internal/recipes"
+	"careme/internal/recipes/feedback"
 )
 
-func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
+const testPublicOrigin = "https://example.careme.test"
+
+func TestHandleSitemapReturnsXMLWithFeedbackRecipeHashes(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	cacheStore := cache.NewFileCache(".")
+	feedbackIO := feedback.NewIO(cacheStore)
 
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	hashes := make([]string, 0, 3)
 	for i := range 3 {
-		loc := &locations.Location{
-			ID:      fmt.Sprintf("7000500%d", i),
-			Name:    "Test Store",
-			Address: "123 Test St",
-		}
-		params := recipes.DefaultParams(loc, start.AddDate(0, 0, i))
-		hash := params.Hash()
-		if err := cacheStore.Put(context.Background(), "shoppinglist/"+hash, `{"mock":"shopping-list"}`, cache.Unconditional()); err != nil {
-			t.Fatalf("failed to save hash %q to cache: %v", hash, err)
+		hash := fmt.Sprintf("recipe-hash-%d", i)
+		if err := feedbackIO.SaveFeedback(context.Background(), hash, feedback.Feedback{
+			Cooked:    true,
+			Stars:     5,
+			UpdatedAt: start.AddDate(0, 0, i),
+		}); err != nil {
+			t.Fatalf("failed to save feedback %q to cache: %v", hash, err)
 		}
 		hashes = append(hashes, hash)
 	}
 
-	server := New(cacheStore)
+	server := New(cacheStore, testPublicOrigin)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -57,30 +61,92 @@ func TestHandleSitemapReturnsXMLWithCachedRecipeHashes(t *testing.T) {
 		t.Fatalf("expected %d sitemap urls, got %d", expectedCount, len(parsed.URLs))
 	}
 
-	if !containsSitemapURL(parsed.URLs, "https://careme.cooking/about") {
-		t.Fatalf("missing expected static URL %q in sitemap body: %s", "https://careme.cooking/about", rr.Body.String())
+	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/about") {
+		t.Fatalf("missing expected static URL %q in sitemap body: %s", testPublicOrigin+"/about", rr.Body.String())
 	}
 
 	for _, hash := range hashes {
-		wantURL := "https://careme.cooking/recipes?h=" + hash
+		wantURL := testPublicOrigin + "/recipe/" + hash
 		if !containsSitemapURL(parsed.URLs, wantURL) {
 			t.Fatalf("missing expected URL %q in sitemap body: %s", wantURL, rr.Body.String())
 		}
 	}
 }
 
-func TestHandleSitemapNormalizesLegacyShoppingListHashToCanonical(t *testing.T) {
+func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	cacheStore := cache.NewFileCache(".")
-	params := recipes.DefaultParams(&locations.Location{ID: "70006001", Name: "Store"}, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-	hash := params.Hash()
-
-	if err := cacheStore.Put(context.Background(), "shoppinglist/"+hash, `{"mock":"legacy"}`, cache.Unconditional()); err != nil {
-		t.Fatalf("failed to save prefixed key: %v", err)
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	params := recipes.DefaultParams(&locations.Location{
+		ID:      "70005003",
+		Name:    "Test Store",
+		Address: "123 Test St",
+	}, start)
+	shoppingListHash := params.Hash()
+	if err := cacheStore.Put(context.Background(), recipes.ShoppingListCachePrefix+shoppingListHash, `{"mock":"shopping-list"}`, cache.Unconditional()); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
 	}
 
-	server := New(cacheStore)
+	list := recipes.IO(cacheStore)
+	recipe := ai.Recipe{
+		Title:        "Feedback Soup",
+		Description:  "A soup worth commenting on.",
+		CookTime:     "35 minutes",
+		CostEstimate: "$18-24",
+		Ingredients:  []ai.Ingredient{{Name: "Broth", Quantity: "4 cups", Price: "$4"}},
+		Instructions: []string{"Bring broth to a simmer.", "Serve hot."},
+		Health:       "Balanced dinner",
+		DrinkPairing: "Pinot Noir",
+	}
+	if err := list.SaveRecipes(context.Background(), []ai.Recipe{recipe}, shoppingListHash); err != nil {
+		t.Fatalf("failed to save recipe: %v", err)
+	}
+	recipeHash := recipe.ComputeHash()
+	if err := list.SaveFeedback(context.Background(), recipeHash, feedback.Feedback{
+		Cooked:    true,
+		Stars:     5,
+		Comment:   "Worth making again.",
+		UpdatedAt: start,
+	}); err != nil {
+		t.Fatalf("failed to save feedback: %v", err)
+	}
+
+	server := New(cacheStore, testPublicOrigin)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
+	server.handleSitemap(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var parsed urlSet
+	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
+	}
+
+	if len(parsed.URLs) != 2 {
+		t.Fatalf("expected two URLs (about + feedback-backed recipe), got %d", len(parsed.URLs))
+	}
+	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/recipe/"+recipeHash) {
+		t.Fatalf("missing feedback-backed recipe URL in sitemap body: %s", rr.Body.String())
+	}
+}
+
+func TestHandleSitemapIncludesFeedbackWithoutCachedRecipe(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	cacheStore := cache.NewFileCache(".")
+	feedbackIO := feedback.NewIO(cacheStore)
+	if err := feedbackIO.SaveFeedback(context.Background(), "missing-recipe", feedback.Feedback{
+		Cooked:    true,
+		UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("failed to save feedback: %v", err)
+	}
+
+	server := New(cacheStore, testPublicOrigin)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -94,29 +160,28 @@ func TestHandleSitemapNormalizesLegacyShoppingListHashToCanonical(t *testing.T) 
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 	if len(parsed.URLs) != 2 {
-		t.Fatalf("expected two URLs (about + recipe), got %d", len(parsed.URLs))
+		t.Fatalf("expected two URLs (about + feedback-backed recipe), got %d", len(parsed.URLs))
 	}
-	if !containsSitemapURL(parsed.URLs, "https://careme.cooking/about") {
-		t.Fatalf("missing expected static URL %q in sitemap body: %s", "https://careme.cooking/about", rr.Body.String())
+	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/about") {
+		t.Fatalf("missing expected static URL %q in sitemap body: %s", testPublicOrigin+"/about", rr.Body.String())
 	}
-	wantURL := "https://careme.cooking/recipes?h=" + hash
-	if !containsSitemapURL(parsed.URLs, wantURL) {
-		t.Fatalf("missing expected URL %q in sitemap body: %s", wantURL, rr.Body.String())
+	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/recipe/missing-recipe") {
+		t.Fatalf("missing expected URL %q in sitemap body: %s", testPublicOrigin+"/recipe/missing-recipe", rr.Body.String())
 	}
 }
 
-func TestHandleSitemap_IgnoresNonShoppingListKeys(t *testing.T) {
+func TestHandleSitemap_IgnoresNonFeedbackKeys(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	cacheStore := cache.NewFileCache(".")
-	params := recipes.DefaultParams(&locations.Location{ID: "70006002", Name: "Store"}, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-	hash := params.Hash()
-
-	if err := cacheStore.Put(context.Background(), hash, `{"mock":"legacy-root-shopping-list"}`, cache.Unconditional()); err != nil {
-		t.Fatalf("failed to save legacy root key: %v", err)
+	if err := cacheStore.Put(context.Background(), recipes.ShoppingListCachePrefix+"ignored-shopping-list", `{"mock":"shopping-list"}`, cache.Unconditional()); err != nil {
+		t.Fatalf("failed to save shopping list key: %v", err)
+	}
+	if err := cacheStore.Put(context.Background(), "recipe/ignored-recipe", `{"mock":"recipe"}`, cache.Unconditional()); err != nil {
+		t.Fatalf("failed to save recipe key: %v", err)
 	}
 
-	server := New(cacheStore)
+	server := New(cacheStore, testPublicOrigin)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -130,15 +195,15 @@ func TestHandleSitemap_IgnoresNonShoppingListKeys(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 	if len(parsed.URLs) != 1 {
-		t.Fatalf("expected one URL (about) with no shoppinglist keys, got %d", len(parsed.URLs))
+		t.Fatalf("expected one URL (about) with no feedback keys, got %d", len(parsed.URLs))
 	}
-	if parsed.URLs[0].Loc != "https://careme.cooking/about" {
-		t.Fatalf("expected only URL %q, got %q", "https://careme.cooking/about", parsed.URLs[0].Loc)
+	if parsed.URLs[0].Loc != testPublicOrigin+"/about" {
+		t.Fatalf("expected only URL %q, got %q", testPublicOrigin+"/about", parsed.URLs[0].Loc)
 	}
 }
 
 func TestHandleRobotsReturnsExpectedContent(t *testing.T) {
-	server := &Server{}
+	server := New(nil, testPublicOrigin)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
 
@@ -150,7 +215,7 @@ func TestHandleRobotsReturnsExpectedContent(t *testing.T) {
 	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "text/plain") {
 		t.Fatalf("expected text content type, got %q", got)
 	}
-	if rr.Body.String() != fmt.Sprintf(robots, domain) {
+	if rr.Body.String() != fmt.Sprintf(robots, testPublicOrigin) {
 		t.Fatalf("unexpected robots.txt body:\n%s", rr.Body.String())
 	}
 }

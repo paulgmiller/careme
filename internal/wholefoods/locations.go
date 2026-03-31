@@ -1,19 +1,18 @@
 package wholefoods
 
 import (
-	"careme/internal/cache"
-	"careme/internal/locations/geo"
-	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
-	"log/slog"
-	"sort"
 	"strings"
 
-	"github.com/samber/lo"
-)
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/locations/hydrator"
+	"careme/internal/locations/nearby"
+	"careme/internal/locations/storeindex"
 
-const maxLocationDistanceMiles = 20.0
+	locationtypes "careme/internal/locations/types"
+)
 
 type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
@@ -21,32 +20,42 @@ type centroidByZip interface {
 
 type LocationBackend struct {
 	zipLookup centroidByZip
-	byID      map[string]locationtypes.Location
+	spatial   []locationtypes.Location
+	hydrator  *hydrator.LazyHydrator
 }
 
-func NewLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
-	if c == nil {
-		return nil, fmt.Errorf("list cache is required")
+func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
+	if !cfg.WholeFoods.IsEnabled() {
+		return nil, locationtypes.DisabledBackendError("Whole Foods")
 	}
+
 	if zipLookup == nil {
 		return nil, fmt.Errorf("zip centroid lookup is required")
 	}
 
-	//Is this too much? should we just fetch a single blob that is all coordinates -> store ids and lazily fetch stores?
-	summaries, err := loadCachedStoreSummaries(ctx, c)
+	listCache, err := cache.EnsureCache(Container)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create Whole Foods list cache: %w", err)
 	}
 
-	byID := make(map[string]locationtypes.Location, len(summaries))
-	for _, summary := range summaries {
-		loc := storeSummaryToLocation(*summary)
-		byID[loc.ID] = loc
+	return newLocationBackend(ctx, listCache, zipLookup)
+}
+
+func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {
+	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
+	if err != nil {
+		return nil, fmt.Errorf("load wholefoods locations index: %w", err)
+	}
+
+	spatial := make([]locationtypes.Location, 0, len(entries))
+	for _, entry := range entries {
+		spatial = append(spatial, entry.ToLocation())
 	}
 
 	return &LocationBackend{
 		zipLookup: zipLookup,
-		byID:      byID,
+		spatial:   spatial,
+		hydrator:  hydrator.NewLazyHydrator(&loader{c}),
 	}, nil
 }
 
@@ -55,15 +64,19 @@ func (b *LocationBackend) IsID(locationID string) bool {
 	return ok
 }
 
-func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) (*locationtypes.Location, error) {
+func (*LocationBackend) HasInventory(locationID string) bool {
+	return true
+}
+
+func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	normalized, ok := parseLocationID(locationID)
 	if !ok {
 		return nil, fmt.Errorf("whole foods location id %q is invalid", locationID)
 	}
 
-	loc, exists := b.byID[normalized]
-	if !exists {
-		return nil, fmt.Errorf("whole foods location %q not found", locationID)
+	loc, err := b.hydrator.Hydrate(ctx, normalized)
+	if err != nil {
+		return nil, err
 	}
 
 	copy := loc
@@ -71,36 +84,8 @@ func (b *LocationBackend) GetLocationByID(_ context.Context, locationID string) 
 }
 
 func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	centroid, ok := b.zipLookup.ZipCentroidByZIP(strings.TrimSpace(zipcode))
-	if !ok {
-		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode)
-		//fall back to sort by zip?
-		return nil, nil
-	}
-
-	type ranked struct {
-		location locationtypes.Location
-		distance float64
-	}
-	var rankedLocations []ranked
-	for _, loc := range b.byID {
-		if loc.Lat == nil || loc.Lon == nil {
-			continue
-		}
-		distance := geo.HaversineMiles(centroid.Lat, centroid.Lon, *loc.Lat, *loc.Lon)
-		if distance > maxLocationDistanceMiles {
-			continue
-		}
-		rankedLocations = append(rankedLocations, ranked{location: loc, distance: distance})
-	}
-
-	sort.SliceStable(rankedLocations, func(i, j int) bool {
-		return rankedLocations[i].distance < rankedLocations[j].distance
-	})
-
-	return lo.Map(rankedLocations, func(r ranked, _ int) locationtypes.Location {
-		return r.location
-	}), nil
+	candidates := nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, b.spatial, nearby.MaxLocationDistanceMiles)
+	return storeindex.HydrateLocations(ctx, candidates, b.hydrator.Hydrate)
 }
 
 func parseLocationID(locationID string) (string, bool) {

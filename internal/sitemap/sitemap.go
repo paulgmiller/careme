@@ -1,21 +1,22 @@
 package sitemap
 
 import (
-	"careme/internal/cache"
-	"careme/internal/recipes"
 	"encoding/xml"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
+
+	"careme/internal/cache"
+	"careme/internal/recipes/feedback"
+	"careme/internal/routing"
 )
 
 type Server struct {
-	cache cache.ListCache
+	cache        cache.ListCache
+	publicOrigin string
 }
 
 const (
-	domain = "https://careme.cooking"
 	robots = `# Allow all search engines to crawl the site
 User-agent: *
 Allow: /
@@ -25,12 +26,14 @@ Sitemap: %s/sitemap.xml
 `
 )
 
-func New(c cache.ListCache) *Server {
-
-	return &Server{cache: c}
+func New(c cache.ListCache, publicOrigin string) *Server {
+	return &Server{
+		cache:        c,
+		publicOrigin: publicOrigin,
+	}
 }
 
-func (s *Server) Register(mux *http.ServeMux) {
+func (s *Server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	mux.HandleFunc("GET /robots.txt", s.handleRobots)
 }
@@ -47,23 +50,23 @@ type urlEntry struct {
 }
 
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
-
-	hashes, err := s.cache.List(r.Context(), recipes.ShoppingListCachePrefix, "")
+	feedbackHashes, err := s.cache.List(r.Context(), feedback.RecipeFeedbackPrefix(), "")
 	if err != nil {
 		http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
-		slog.ErrorContext(r.Context(), "failed to read sitemap urls", "error", err)
+		slog.ErrorContext(r.Context(), "failed to read feedback urls", "error", err)
 		return
 	}
-	entries := make([]urlEntry, 0, len(hashes)+1)
-	entries = append(entries, urlEntry{Loc: domain + "/about"})
 
-	//this is going to get too  big.  at some point we need a real db to find latest
-	//or we track new entries and expire a lsit.
-	for _, key := range hashes {
-		hash := strings.TrimPrefix(key, recipes.ShoppingListCachePrefix)
-		entries = append(entries, urlEntry{Loc: domain + "/recipes?h=" + hash})
+	entries := make([]urlEntry, 0, len(feedbackHashes)+1)
+	entries = append(entries, urlEntry{Loc: s.publicOrigin + "/about"})
+
+	// this is going to get too  big.  at some point we need a real db to find latest
+	for _, hash := range feedbackHashes {
+		// would be really strange if recipe had feedback but didn't exist.
+		// exists, err := s.cache.Exists(r.Context(), recipes.SingleRecipeCacheKey(hash))
+		entries = append(entries, urlEntry{Loc: s.publicOrigin + "/recipe/" + hash})
 	}
-	slog.InfoContext(r.Context(), "serving sitemap with recipe urls", "count", len(entries), "blobcount", len(hashes))
+	slog.InfoContext(r.Context(), "serving sitemap with recipe urls", "count", len(entries), "feedback_count", len(feedbackHashes))
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	if _, err := w.Write([]byte(xml.Header)); err != nil {
@@ -80,7 +83,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	full := fmt.Sprintf(robots, domain)
+	full := fmt.Sprintf(robots, s.publicOrigin)
 	if _, err := w.Write([]byte(full)); err != nil {
 		slog.ErrorContext(r.Context(), "failed to write robots.txt", "error", err)
 	}

@@ -28,7 +28,19 @@ spec:
               name: http
           envFrom:
             - secretRef:
-                name: careme-secrets3
+                name: ai
+            - secretRef:
+                name: albertsons
+            - secretRef:
+                name: auth
+            - secretRef:
+                name: brightdata-proxy
+            - secretRef:
+                name: kroger
+            - secretRef:
+                name: storage
+            - secretRef:
+                name: walmart
           env:
             - name: CLARITY_PROJECT_ID
               value: "td2gxd3sq9"
@@ -38,10 +50,11 @@ spec:
               value: "xDzACMu074AcEI_x3dhC"
             - name: ADMIN_EMAILS
               value: "paul.miller@gmail.com"
-            - name: WHOLEFOODS_ENABLE
-              value: "1"
+            - name: PUBLIC_ORIGIN
+              value: "https://careme.cooking"
             - name: APPLICATIONINSIGHTS_CONNECTION_STRING
               value: "InstrumentationKey=a532fcc7-5098-4f44-8dde-ff2f32d6a59b;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=fdc94780-6135-4a29-980e-ab114a402e58"
+
           volumeMounts:
             - name: recipes
               mountPath: /recipes
@@ -60,57 +73,13 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 64Mi
+              memory: 500Mi
             limits:
               cpu: 500m
-              memory: 256Mi
+              memory: 750Mi
       volumes:
         - name: recipes
           emptyDir: {}
----
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: careme-mail
-  labels:
-    app: careme
-spec:
-  schedule: "0 * * * *"
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 2
-  failedJobsHistoryLimit: 3
-  jobTemplate:
-    spec:
-      backoffLimit: 1
-      template:
-        metadata:
-          labels:
-            app: careme
-            job: careme-mail
-        spec:
-          restartPolicy: Never
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 65532
-            runAsGroup: 65532
-          containers:
-            - name: careme-mail
-              image: ghcr.io/paulgmiller/careme:${IMAGE_TAG}
-              imagePullPolicy: IfNotPresent
-              args: ["-mail"]
-              envFrom:
-                - secretRef:
-                    name: careme-secrets3
-              env:
-                - name: APPLICATIONINSIGHTS_CONNECTION_STRING
-                  value: "InstrumentationKey=a532fcc7-5098-4f44-8dde-ff2f32d6a59b;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=fdc94780-6135-4a29-980e-ab114a402e58"
-              resources:
-                requests:
-                  cpu: 50m
-                  memory: 64Mi
-                limits:
-                  cpu: 500m
-                  memory: 256Mi
 ---
 apiVersion: v1
 kind: Service

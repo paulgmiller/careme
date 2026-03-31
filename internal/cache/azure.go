@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -22,7 +23,7 @@ type BlobCache struct {
 var _ ListCache = (*BlobCache)(nil)
 
 func NewBlobCache(container string) (*BlobCache, error) {
-	// Your account name and key can be obtained from the Azure Portal.
+	// Should come from config
 	accountName, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if !ok {
 		return nil, fmt.Errorf("AZURE_STORAGE_ACCOUNT_NAME could not be found")
@@ -97,6 +98,10 @@ func (fc *BlobCache) Get(ctx context.Context, key string) (io.ReadCloser, error)
 }
 
 func (fc *BlobCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
+	return fc.PutReader(ctx, key, strings.NewReader(value), opts)
+}
+
+func (fc *BlobCache) PutReader(ctx context.Context, key string, reader io.Reader, opts PutOptions) error {
 	var access *blob.AccessConditions
 	if opts.Condition == PutIfNoneMatch {
 		access = &blob.AccessConditions{}
@@ -106,7 +111,7 @@ func (fc *BlobCache) Put(ctx context.Context, key, value string, opts PutOptions
 		// TODO: IfMatch support.
 	}
 
-	_, err := fc.container.NewBlockBlobClient(key).UploadStream(ctx, strings.NewReader(value), &azblob.UploadStreamOptions{
+	_, err := fc.container.NewBlockBlobClient(key).UploadStream(ctx, reader, &azblob.UploadStreamOptions{
 		AccessConditions: access,
 	})
 	if err != nil {
@@ -140,7 +145,7 @@ func MakeCache() (ListCache, error) {
 func EnsureCache(container string) (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
-		log.Println("Using Azure Blob Storage for cache")
+		slog.Info("Using Azure Blob Storage for cache", "container", container)
 		return NewBlobCache(container)
 	}
 	return NewFileCache(container), nil

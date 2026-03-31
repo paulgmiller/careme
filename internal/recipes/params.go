@@ -2,8 +2,6 @@ package recipes
 
 import (
 	"bytes"
-	"careme/internal/ai"
-	"careme/internal/locations"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -14,6 +12,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/locations"
 
 	"github.com/samber/lo"
 )
@@ -30,15 +31,18 @@ type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
 	Date     time.Time           `json:"date,omitempty"`
 	// People       int
-	//per round instuctions
+	// per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
-	LastRecipes  []string `json:"last_recipes,omitempty"`
+	LastRecipes  []string `json:"-"`                   // this doesn't get populated until after save.
 	// UserID         string      `json:"user_id,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
-	//TODO Both should just be title and hash insread of full ai.Recipe
+	// TODO Both should just be title and hash instead of full ai.Recipe
 	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
+
+	// regeneration-only context from the origin params; not persisted or hashed
+	PriorSavedHashes []string `json:"-"`
 }
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
@@ -94,17 +98,19 @@ func legacyHashToCurrent(hash string, seed string) (string, bool) {
 	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
 }
 
-func (s *server) ParseQueryArgs(ctx context.Context, r *http.Request) (*generatorParams, error) {
+func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*generatorParams, error) {
 	loc := r.URL.Query().Get("location")
 	if loc == "" {
 		return nil, errors.New("must provide location id")
 	}
+	if ls == nil {
+		return nil, errors.New("location lookup is required")
+	}
 
-	l, err := s.locServer.GetLocationByID(ctx, loc)
+	l, err := ls.GetLocationByID(ctx, loc)
 	if err != nil {
 		return nil, err
 	}
-
 	storeLoc, err := resolveStoreTimeLocation(ctx, l)
 	if err != nil {
 		return nil, err

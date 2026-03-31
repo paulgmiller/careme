@@ -1,11 +1,12 @@
 package recipes
 
 import (
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"log/slog"
 	"time"
+
+	"careme/internal/cache"
 
 	"github.com/samber/lo"
 )

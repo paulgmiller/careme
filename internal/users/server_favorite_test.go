@@ -1,8 +1,6 @@
 package users
 
 import (
-	"careme/internal/auth"
-	"careme/internal/cache"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"careme/internal/auth"
+	"careme/internal/cache"
+	"careme/internal/routing"
 )
 
 type noSessionAuth struct{}
@@ -26,7 +28,7 @@ func (n noSessionAuth) WithAuthHTTP(handler http.Handler) http.Handler {
 	return handler
 }
 
-func (n noSessionAuth) Register(_ *http.ServeMux) {}
+func (n noSessionAuth) Register(_ routing.Registrar) {}
 
 func newFavoriteTestServer(t *testing.T, clerk auth.AuthClient) *server {
 	t.Helper()

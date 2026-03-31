@@ -1,16 +1,17 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/kroger"
-	"careme/internal/locations"
 	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/locations"
 )
 
 func TestSaveParams_IsAtomic(t *testing.T) {
@@ -29,14 +30,11 @@ func TestSaveParams_IsAtomic(t *testing.T) {
 
 	const n = 32
 	var wg sync.WaitGroup
-	wg.Add(n)
-
 	errs := make(chan error, n)
 	for range n {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			errs <- rio.SaveParams(t.Context(), p)
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)

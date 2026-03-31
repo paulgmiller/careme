@@ -16,6 +16,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/routing"
 	"careme/internal/templates"
 	"careme/internal/users"
 
@@ -27,7 +28,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(t)
-	resp := mustGet(t, client, srv.URL+"/ready") //our readiness probe works even with mocks?
+	resp := mustGet(t, client, srv.URL+"/ready") // our readiness probe works even with mocks?
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected /ready to return 200 OK, got %d", resp.StatusCode)
 	}
@@ -118,8 +119,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		t.Fatalf("expected recipe page to persist stars value, got body: %s", recipeBody)
 	}
 
-	//TODO step 6 make sure recipes are saved to user page?
-
+	// TODO step 6 make sure recipes are saved to user page?
 }
 
 func TestZipFromCoordinatesRedirect(t *testing.T) {
@@ -154,7 +154,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	cfg := &config.Config{Mocks: config.MockConfig{Enable: true}}
-	err := templates.Init(cfg, "dummyhash") //initialize templates so they don't hit the file system during tests
+	err := templates.Init(cfg, "dummyhash") // initialize templates so they don't hit the file system during tests
 	if err != nil {
 		t.Fatalf("failed to create templates %v", err)
 	}
@@ -175,18 +175,22 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	mockAuth := auth.Mock(cfg)
 
-	mux := http.NewServeMux()
+	rootMux := http.NewServeMux()
+	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
+		return mockAuth.WithAuthHTTP(AppMiddleWare(h, &fakeRequestTracker{}))
+	})
+	infraRoutes := routing.Wrap(rootMux, BaseMiddleware)
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
-	locationServer.Register(mux, mockAuth)
-	users.NewHandler(userStorage, locationStorage, mockAuth).Register(mux)
-	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, mockAuth).Register(mux)
+	locationServer.Register(appRoutes, mockAuth)
+	users.NewHandler(userStorage, locationStorage, mockAuth).Register(appRoutes)
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth).Register(appRoutes)
 
 	ro := &readyOnce{}
 	ro.Add(generator, locationServer)
 
-	mux.Handle("/ready", ro)
+	infraRoutes.Handle("/ready", ro)
 
-	return httptest.NewServer(WithMiddleware(mux))
+	return httptest.NewServer(rootMux)
 }
 
 func newTestClient(t *testing.T) *http.Client {

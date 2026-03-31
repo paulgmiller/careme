@@ -1,29 +1,37 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/kroger"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/kroger"
+	"careme/internal/recipes/feedback"
+
 	"github.com/samber/lo"
 )
 
-const recipeCachePrefix = "recipe/"
-const ShoppingListCachePrefix = "shoppinglist/"
-const ingredientsCachePrefix = "ingredients/"
-const paramsCachePrefix = "params/"
+const (
+	recipeCachePrefix       = "recipe/"
+	ShoppingListCachePrefix = "shoppinglist/"
+	ingredientsCachePrefix  = "ingredients/"
+	paramsCachePrefix       = "params/"
+)
 
 type recipeio struct {
-	Cache cache.Cache
+	Cache               cache.Cache
+	feedback.FeedbackIO // should this be pulled out?
 }
 
-func IO(c cache.Cache) *recipeio {
-	return &recipeio{c}
+func IO(c cache.Cache) recipeio {
+	return recipeio{
+		Cache:      c,
+		FeedbackIO: feedback.NewIO(c),
+	}
 }
 
 func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
@@ -50,7 +58,6 @@ func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 	shoppinglist, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {
 		return nil, fmt.Errorf("error getting shopping list for hash %s: %w", hash, err)
-
 	}
 	defer func() {
 		if err := shoppinglist.Close(); err != nil {
@@ -71,7 +78,7 @@ func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 
 func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generatorParams, error) {
 	primaryKey := paramsCachePrefix + hash
-	//have to convert legacy hashes because each recipe stored an origin hash and we didn't rewrite them
+	// have to convert legacy hashes because each recipe stored an origin hash and we didn't rewrite them
 	paramsReader, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {
 		return nil, fmt.Errorf("error getting params for hash %s: %w", hash, err)
@@ -90,7 +97,7 @@ func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generato
 }
 
 func (rio recipeio) IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error) {
-	//honor legacy hashes? I don't think so gets converted in server
+	// honor legacy hashes? I don't think so gets converted in server
 	primaryKey := ingredientsCachePrefix + hash
 	ingredientBlob, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {
@@ -141,7 +148,7 @@ func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, origin
 
 var ErrAlreadyExists = errors.New("already exists")
 
-func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
+func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	paramsJSON := lo.Must(json.Marshal(p))
 	if err := rio.Cache.Put(ctx, paramsCachePrefix+p.Hash(), string(paramsJSON), cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
@@ -153,7 +160,7 @@ func (rio *recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	return nil
 }
 
-func (rio *recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
+func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
 	// Save each recipe separately by its hash
 	if err := rio.SaveRecipes(ctx, shoppingList.Recipes, hash); err != nil {
 		return err

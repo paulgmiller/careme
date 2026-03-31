@@ -65,7 +65,7 @@ type Product struct {
 	ImageThumbnail       string  `json:"imageThumbnail"`
 	Store                int     `json:"store"`
 	IsLocal              bool    `json:"isLocal"`
-	//unit of measure.
+	// unit of measure.
 	UOM string `json:"uom,omitempty"`
 }
 

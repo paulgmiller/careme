@@ -2,10 +2,11 @@ package main
 
 import (
 	"bytes"
-	"careme/internal/cache"
 	"context"
 	"errors"
 	"testing"
+
+	"careme/internal/cache"
 )
 
 func TestPurgeInvalidShoppingListsApply(t *testing.T) {

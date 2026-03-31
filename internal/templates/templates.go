@@ -1,10 +1,16 @@
 package templates
 
 import (
-	"careme/internal/config"
+	"context"
 	"embed"
+	"encoding/base64"
 	"html/template"
+	"net/url"
 	"os"
+	"strings"
+
+	"careme/internal/config"
+	"careme/internal/logsetup"
 )
 
 //go:embed *.html
@@ -24,6 +30,8 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	funcs := template.FuncMap{
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
+		"PublicOrigin":        func() string { return config.ResolvedPublicOrigin() },
+		"SignInPath":          signInPath,
 		"TailwindAssetPath":   func() string { return tailwindAssetPath },
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
@@ -40,7 +48,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Location = ensure(tmpls, "locations.html")
 	Mail = ensure(tmpls, "mail.html")
 
-	//todo pull from config.
+	// todo pull from config.
 	Clarityproject = os.Getenv("CLARITY_PROJECT_ID")
 	GoogleTagID = os.Getenv("GOOGLE_TAG_ID")
 	GoogleConversionLabel = os.Getenv("GOOGLE_CONVERSION_LABEL")
@@ -55,15 +63,27 @@ func ensure(templates *template.Template, name string) *template.Template {
 	return tmpl
 }
 
-var Clarityproject string
-var GoogleTagID string
-var GoogleConversionLabel string
+func signInPath(returnTo string) string {
+	returnTo = strings.TrimSpace(returnTo)
+	if returnTo == "" {
+		return "/sign-in"
+	}
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(returnTo))
+	return "/sign-in?return_to_b64=" + url.QueryEscape(encoded)
+}
 
-// ClarityScript generates the Microsoft Clarity tracking script HTML
-func ClarityScript() template.HTML {
+var (
+	Clarityproject        string
+	GoogleTagID           string
+	GoogleConversionLabel string
+)
+
+// ClarityScript generates the Microsoft Clarity tracking script HTML.
+func ClarityScript(ctx context.Context) template.HTML {
 	if Clarityproject == "" {
 		return ""
 	}
+	sessionID, _ := logsetup.SessionIDFromContext(ctx)
 
 	script := `<script type="text/javascript">
     (function(c,l,a,r,i,t,y){
@@ -71,6 +91,13 @@ func ClarityScript() template.HTML {
         t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
         y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
     })(window, document, "clarity", "script", "` + Clarityproject + `");
+`
+	if sessionID != "" {
+		script += `
+    window.clarity("identify", "` + template.JSEscapeString(sessionID) + `", "` + template.JSEscapeString(sessionID) + `");
+`
+	}
+	script += `
 </script>`
 
 	return template.HTML(script)

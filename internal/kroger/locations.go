@@ -1,10 +1,13 @@
 package kroger
 
 import (
-	locationtypes "careme/internal/locations/types"
 	"context"
 	"fmt"
+
+	locationtypes "careme/internal/locations/types"
 )
+
+const chainName = "kroger"
 
 func (c *ClientWithResponses) IsID(locationID string) bool {
 	if locationID == "" {
@@ -15,6 +18,11 @@ func (c *ClientWithResponses) IsID(locationID string) bool {
 			return false
 		}
 	}
+	return true
+}
+
+// we should hide ClientWithResponses
+func (*ClientWithResponses) HasInventory(locationID string) bool {
 	return true
 }
 
@@ -51,6 +59,7 @@ func (c *ClientWithResponses) GetLocationByID(ctx context.Context, locationID st
 		ZipCode: zipCode,
 		Lat:     lat,
 		Lon:     lon,
+		Chain:   chainName,
 	}, nil
 }
 
@@ -91,6 +100,7 @@ func (c *ClientWithResponses) GetLocationsByZip(ctx context.Context, zipcode str
 			ZipCode: zipCode,
 			Lat:     lat,
 			Lon:     lon,
+			Chain:   chainName,
 		})
 	}
 	return locations, nil

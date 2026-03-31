@@ -1,13 +1,6 @@
 package recipes
 
 import (
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/kroger"
-	"careme/internal/locations"
-	"careme/internal/parallelism"
-	"careme/internal/wholefoods"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -15,8 +8,17 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/kroger"
+	"careme/internal/locations"
+	"careme/internal/parallelism"
+	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
 	"github.com/samber/lo/mutable"
@@ -26,7 +28,8 @@ type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
-	PickWine(ctx context.Context, conversationID string, recipeTitle string, wines []kroger.Ingredient) (*ai.WineSelection, error)
+	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
+	PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error)
 	Ready(ctx context.Context) error
 }
 
@@ -60,18 +63,18 @@ func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
 	}, nil
 }
 
-func (g *Generator) PickAWine(ctx context.Context, conversationID string, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (g *Generator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
-		if style != "" { //would this ever happen?
+		if style != "" { // would this ever happen?
 			styles = append(styles, style)
 		}
 	}
 
-	//whole foods search not actually implmented hard code categories
+	// whole foods search not actually implmented hard code categories
 	if wholefoods.NewIdentityProvider().IsID(location) {
-		styles = []string{"red-wine", "white-wine", "sparkling"} //rose
+		styles = []string{"red-wine", "white-wine", "sparkling"} // rose
 	}
 
 	if len(styles) == 0 {
@@ -112,7 +115,7 @@ func (g *Generator) PickAWine(ctx context.Context, conversationID string, locati
 	}
 	wines = uniqueByDescription(wines)
 
-	selection, err := g.aiClient.PickWine(ctx, conversationID, recipe.Title, wines)
+	selection, err := g.aiClient.PickWine(ctx, recipe, wines)
 	if err != nil {
 		return nil, err
 	}
@@ -130,12 +133,14 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		for _, dismissed := range p.Dismissed {
 			instructions = append(instructions, "Passed on "+dismissed.Title)
 		}
+		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
+			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
+		}
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		// want to add saved to insructions but only once. TODO
 		// Include saved recipes in the shopping list
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
@@ -158,7 +163,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	// should never happen? How do you get save on first generte?
 	// shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
-	//TODO this does not get saved in params and thus must be loaded from html
+	// TODO this does not get saved in params and thus must be loaded from html
 	// could update params after first generation or pregenerate before we save params.
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
@@ -167,6 +172,10 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 
 func (g *Generator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	return g.aiClient.AskQuestion(ctx, question, conversationID)
+}
+
+func (g *Generator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+	return g.aiClient.GenerateRecipeImage(ctx, recipe)
 }
 
 // calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
@@ -181,11 +190,13 @@ func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroge
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
-	ingredients, err := g.staplesProvider.FetchStaples(ctx, p.Location)
+	ingredients, err := g.staplesProvider.FetchStaples(ctx, p.Location.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ingredients for staples: %w", err)
+		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", p.Location.ID, err)
 	}
+	// should this be pushed down into staple proivder? go off product id?
 	ingredients = uniqueByDescription(ingredients)
+
 	mutable.Shuffle(ingredients)
 
 	if err := g.io.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {
@@ -221,4 +232,16 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
 	lo.Must(io.WriteString(fnv, normalizedStyle))
 	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
+}
+
+func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
+	titles := make([]string, 0, len(saved))
+	for _, recipe := range saved {
+		hash := recipe.ComputeHash()
+		if slices.Contains(priorSavedHashes, hash) {
+			continue
+		}
+		titles = append(titles, recipe.Title)
+	}
+	return lo.Uniq(titles)
 }

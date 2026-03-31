@@ -1,12 +1,13 @@
 package locations
 
 import (
-	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/wholefoods"
 	"context"
 	"os"
 	"testing"
+
+	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/wholefoods"
 )
 
 func TestNewAddsWholeFoodsBackendWhenEnabled(t *testing.T) {
@@ -45,6 +46,9 @@ func TestNewAddsWholeFoodsBackendWhenEnabled(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
+	if err := wholefoods.RebuildLocationIndex(context.Background(), listCache, LoadCentroids()); err != nil {
+		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	}
 
 	storage, err := New(&config.Config{
 		WholeFoods: config.WholeFoodsConfig{Enable: true},
@@ -59,7 +63,7 @@ func TestNewAddsWholeFoodsBackendWhenEnabled(t *testing.T) {
 	}
 
 	var found bool
-	for _, backend := range locStorage.client {
+	for _, backend := range locStorage.clients {
 		if _, ok := backend.(*wholefoods.LocationBackend); ok {
 			found = true
 			break

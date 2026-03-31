@@ -1,12 +1,14 @@
 package static
 
 import (
-	"careme/internal/seasons"
 	"crypto/sha256"
 	_ "embed"
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	"careme/internal/routing"
+	"careme/internal/seasons"
 )
 
 //go:embed tailwind.css
@@ -35,8 +37,7 @@ func Init() {
 }
 
 // Register serves static assets and wires template asset paths.
-func Register(mux *http.ServeMux) {
-
+func Register(mux routing.Registrar) {
 	mux.HandleFunc(TailwindAssetPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
