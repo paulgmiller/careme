@@ -1,0 +1,49 @@
+{
+    "apiVersion": "2026-03-01",
+    "id": "/subscriptions/9f43d7e0-b18f-41e2-82cd-3fddc93b7b76/resourceGroups/careme/providers/microsoft.insights/scheduledqueryrules/careme errors",
+    "name": "careme errors",
+    "type": "microsoft.insights/scheduledqueryrules",
+    "kind": "LogAlert",
+    "location": "westus3",
+    "tags": {},
+    "properties": {
+        "createdWithApiVersion": "2025-01-01-preview",
+        "displayName": "careme errors",
+        "description": "did we get errors? ",
+        "severity": 3,
+        "enabled": true,
+        "evaluationFrequency": "PT1H",
+        "scopes": [
+            "/subscriptions/9f43d7e0-b18f-41e2-82cd-3fddc93b7b76/resourceGroups/careme/providers/microsoft.insights/components/caremeinsights"
+        ],
+        "targetResourceTypes": [
+            "microsoft.insights/components"
+        ],
+        "windowSize": "PT1H",
+        "overrideQueryTimeRange": "P2D",
+        "criteria": {
+            "allOf": [
+                {
+                    "query": "traces\n| where timestamp > ago(1h)\n| where severityLevel > 1\n| project timestamp, message, customDimensions\n| where customDimensions[\"error\"] !contains \"IpLHR8yDDEY\"\n\n",
+                    "timeAggregation": "Count",
+                    "dimensions": [],
+                    "resourceIdColumn": "",
+                    "operator": "GreaterThan",
+                    "threshold": 0,
+                    "failingPeriods": {
+                        "numberOfEvaluationPeriods": 1,
+                        "minFailingPeriodsToAlert": 1
+                    }
+                }
+            ]
+        },
+        "autoMitigate": false,
+        "actions": {
+            "actionGroups": [
+                "/subscriptions/9F43D7E0-B18F-41E2-82CD-3FDDC93B7B76/resourceGroups/careme/providers/microsoft.insights/actionGroups/mailme"
+            ],
+            "customProperties": {},
+            "actionProperties": {}
+        }
+    }    
+}
