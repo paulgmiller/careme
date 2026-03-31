@@ -64,8 +64,10 @@ func run(ctx context.Context, args []string) error {
 	client, err := query.NewSearchClient(query.SearchClientConfig{
 		BaseURL:         baseURL,
 		SubscriptionKey: subscriptionKey,
-		Reese84:         reese84,
-		HTTPClient:      httpClient,
+		Reese84Provider: func(context.Context) (string, error) {
+			return reese84, nil
+		}, // use the alberttson cache?
+		HTTPClient: httpClient,
 	})
 	if err != nil {
 		return fmt.Errorf("create search client: %w", err)

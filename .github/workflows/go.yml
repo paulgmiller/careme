@@ -136,6 +136,9 @@ jobs:
           - name: aldi
             cmd_path: ./cmd/aldi
             image_suffix: aldi
+          - name: albertsonsreese84
+            cmd_path: ./cmd/albertsonsreese84
+            image_suffix: albertsonsreese84
 
     steps:
       - uses: actions/checkout@v5

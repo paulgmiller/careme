@@ -97,12 +97,18 @@ func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithRe
 	wholeFoodsHTTPClient := logsetup.InstrumentHTTPClient(httpClient, "wholefoods")
 	albertsonsHTTPClient := logsetup.InstrumentHTTPClient(httpClient, "albertsons")
 
+	// only returns an err because it ensures a cache for reese84 tokens.
+	albertsonsProvider, err := albertsons.NewStaplesProvider(cfg.Albertsons, albertsonsHTTPClient)
+	if err != nil {
+		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
+	}
+
 	return []backendStaplesProvider{
 		kroger.NewStaplesProvider(krogerClient),
+		albertsonsProvider,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(wholeFoodsHTTPClient)),
-		albertsons.NewStaplesProvider(cfg.Albertsons, albertsonsHTTPClient),
 	}, nil
 }
 

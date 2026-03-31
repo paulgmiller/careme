@@ -78,9 +78,10 @@ func (c *AldiConfig) IsEnabled() bool {
 }
 
 type AlbertsonsConfig struct {
-	Enable                bool   `json:"enable"`
+	Enable bool `json:"enable"`
+	// removing this keeps stores but disables inventory
 	SearchSubscriptionKey string `json:"search_subscription_key"`
-	SearchReese84         string `json:"search_reese84"`
+	// SearchReese84 string `json:"search_reese84"`
 }
 
 func (c *AlbertsonsConfig) IsEnabled() bool {
@@ -89,7 +90,7 @@ func (c *AlbertsonsConfig) IsEnabled() bool {
 
 // can we dynamically disable if our key  expires
 func (c *AlbertsonsConfig) HasInventory() bool {
-	return c.SearchReese84 != ""
+	return c.SearchSubscriptionKey != ""
 }
 
 type PublixConfig struct {
@@ -175,7 +176,7 @@ func Load() (*Config, error) {
 		Albertsons: AlbertsonsConfig{
 			Enable:                envEnabled("ALBERTSONS_ENABLE"),
 			SearchSubscriptionKey: os.Getenv("ALBERTSONS_SEARCH_SUBSCRIPTION_KEY"),
-			SearchReese84:         os.Getenv("ALBERTSONS_SEARCH_REESE84"),
+			// SearchReese84:         os.Getenv("ALBERTSONS_SEARCH_REESE84"),
 		},
 		Publix: PublixConfig{
 			Enable: envEnabled("PUBLIX_ENABLE"),
