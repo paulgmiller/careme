@@ -1,0 +1,59 @@
+{
+    "apiVersion": "2026-03-01",
+    "id": "/subscriptions/9f43d7e0-b18f-41e2-82cd-3fddc93b7b76/resourceGroups/careme/providers/microsoft.insights/scheduledqueryrules/new users",
+    "name": "new users",
+    "type": "microsoft.insights/scheduledqueryrules",
+    "kind": "LogAlert",
+    "location": "westus3",
+    "tags": {},
+    "properties": {
+        "createdWithApiVersion": "2025-01-01-preview",
+        "displayName": "new users",
+        "description": "people signed up!",
+        "severity": 3,
+        "enabled": true,
+        "evaluationFrequency": "P1D",
+        "scopes": [
+            "/subscriptions/9f43d7e0-b18f-41e2-82cd-3fddc93b7b76/resourceGroups/careme/providers/microsoft.insights/components/caremeinsights"
+        ],
+        "targetResourceTypes": [
+            "microsoft.insights/components"
+        ],
+        "windowSize": "P1D",
+        "overrideQueryTimeRange": "P2D",
+        "criteria": {
+            "allOf": [
+                {
+                    "query": "traces\n| where timestamp > ago(1d)\n| where message startswith \"created new user\"\n",
+                    "timeAggregation": "Count",
+                    "dimensions": [],
+                    "resourceIdColumn": "",
+                    "operator": "GreaterThan",
+                    "threshold": 0,
+                    "failingPeriods": {
+                        "numberOfEvaluationPeriods": 1,
+                        "minFailingPeriodsToAlert": 1
+                    }
+                }
+            ]
+        },
+        "autoMitigate": false,
+        "actions": {
+            "actionGroups": [
+                "/subscriptions/9f43d7e0-b18f-41e2-82cd-3fddc93b7b76/resourcegroups/careme/providers/microsoft.insights/actiongroups/mailme"
+            ],
+            "customProperties": {},
+            "actionProperties": {
+                "Email.Subject": "New users!"
+            }
+        }
+    },
+    "systemData": {
+        "createdBy": "paul.miller@gmail.com",
+        "createdByType": "User",
+        "createdAt": "2026-03-31T22:03:00.145Z",
+        "lastModifiedBy": "paul.miller@gmail.com",
+        "lastModifiedByType": "User",
+        "lastModifiedAt": "2026-03-31T22:03:00.145Z"
+    }
+}
