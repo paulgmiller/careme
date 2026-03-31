@@ -1,9 +1,12 @@
 package query
 
 import (
+	"bytes"
+	"careme/internal/logsetup"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -35,7 +38,6 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 					Header: http.Header{
 						"Content-Type": []string{"application/json"},
 					},
-					// this is going to fail
 					Body: io.NopCloser(strings.NewReader(`{"response":{"numFound":3,"disableTracking":false,"start":0,"miscInfo":{"attributionToken":"","query":"","sort":"","filter":"","nextPageToken":""},"isExactMatch":true,"docs":[{"id":"1","name":"Apples","price":1.99},{"id":"2","name":"Bananas","price":2.49},{"id":"3","name":"Carrots","price":3.99}]}}`)),
 				}, nil
 			}),
@@ -119,6 +121,51 @@ func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
 	}
 }
 
+func TestSearchLogsOutboundHTTPResponse(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	body := `{"response":{"numFound":1,"disableTracking":false,"start":0,"miscInfo":{"attributionToken":"","query":"","sort":"","filter":"","nextPageToken":""},"isExactMatch":true,"docs":[{"id":"1","name":"Apples","price":1.99}]}}`
+
+	httpClient := logsetup.InstrumentHTTPClientWithLogger(&http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}, "albertsons", logger)
+
+	client, err := NewSearchClient(SearchClientConfig{
+		BaseURL:         "https://www.acmemarkets.com",
+		SubscriptionKey: "test-subscription-key",
+		Reese84Provider: func(context.Context) (string, error) { return "test-reese84", nil },
+		HTTPClient:      httpClient,
+	})
+	if err != nil {
+		t.Fatalf("NewSearchClient returned error: %v", err)
+	}
+
+	if _, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+
+	output := logs.String()
+	if !strings.Contains(output, "provider=albertsons") {
+		t.Fatalf("expected provider in log output, got %q", output)
+	}
+	if !strings.Contains(output, "status_code=200") {
+		t.Fatalf("expected status code in log output, got %q", output)
+	}
+	if !strings.Contains(output, "url=\"https://www.acmemarkets.com/abs/pub/xapi/wcax/pathway/search?") {
+		t.Fatalf("expected request url in log output, got %q", output)
+	}
+	if !strings.Contains(output, "response_bytes=217") {
+		t.Fatalf("expected response size in log output, got %q", output)
+	}
+}
+
 func TestSearchUsesReese84ProviderWhenConfigured(t *testing.T) {
 	t.Parallel()
 
@@ -177,6 +224,44 @@ func TestSearchReturnsProviderError(t *testing.T) {
 	_, err = client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err == nil || !strings.Contains(err.Error(), "resolve reese84") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSearchLogsOutboundHTTPResponseForStatusErrors(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+
+	httpClient := logsetup.InstrumentHTTPClientWithLogger(&http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusForbidden,
+				Body:       io.NopCloser(strings.NewReader("nope")),
+			}, nil
+		}),
+	}, "albertsons", logger)
+
+	client, err := NewSearchClient(SearchClientConfig{
+		BaseURL:         "https://www.acmemarkets.com",
+		SubscriptionKey: "test-subscription-key",
+		Reese84Provider: func(context.Context) (string, error) { return "test-reese84", nil },
+		HTTPClient:      httpClient,
+	})
+	if err != nil {
+		t.Fatalf("NewSearchClient returned error: %v", err)
+	}
+
+	if _, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err == nil {
+		t.Fatal("expected error")
+	}
+
+	output := logs.String()
+	if !strings.Contains(output, "status_code=403") {
+		t.Fatalf("expected status code in log output, got %q", output)
+	}
+	if !strings.Contains(output, "response_bytes=4") {
+		t.Fatalf("expected response size in log output, got %q", output)
 	}
 }
 

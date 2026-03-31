@@ -1,9 +1,13 @@
 package wholefoods
 
 import (
+	"bytes"
+	"careme/internal/logsetup"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -227,6 +231,69 @@ func TestStoreSummary_RequiresStore(t *testing.T) {
 	}
 }
 
+func TestCategory_LogsOutboundHTTPResponse(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	body := `{"results":[{"name":"Beef","slug":"beef","brand":"Whole Foods Market","store":10216}]}`
+
+	client := NewClientWithBaseURL("https://example.test", logsetup.InstrumentHTTPClientWithLogger(&http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}, "wholefoods", logger))
+
+	if _, err := client.Category(context.Background(), "beef", "10216"); err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+
+	output := logs.String()
+	if !strings.Contains(output, "provider=wholefoods") {
+		t.Fatalf("expected provider in log output, got %q", output)
+	}
+	if !strings.Contains(output, "status_code=200") {
+		t.Fatalf("expected status code in log output, got %q", output)
+	}
+	if !strings.Contains(output, "url=\"https://example.test/api/products/category/beef?limit=60&offset=0&store=10216\"") {
+		t.Fatalf("expected request url in log output, got %q", output)
+	}
+	if !strings.Contains(output, "response_bytes=86") {
+		t.Fatalf("expected response size in log output, got %q", output)
+	}
+}
+
+func TestCategory_LogsOutboundHTTPResponseForStatusErrors(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+
+	client := NewClientWithBaseURL("https://example.test", logsetup.InstrumentHTTPClientWithLogger(&http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Body:       io.NopCloser(strings.NewReader("nope")),
+			}, nil
+		}),
+	}, "wholefoods", logger))
+
+	if _, err := client.Category(context.Background(), "beef", "10216"); err == nil {
+		t.Fatal("expected error")
+	}
+
+	output := logs.String()
+	if !strings.Contains(output, "status_code=502") {
+		t.Fatalf("expected status code in log output, got %q", output)
+	}
+	if !strings.Contains(output, "response_bytes=4") {
+		t.Fatalf("expected response size in log output, got %q", output)
+	}
+}
+
 func loadFixture(t *testing.T, name string) []byte {
 	t.Helper()
 
@@ -235,4 +302,10 @@ func loadFixture(t *testing.T, name string) []byte {
 		t.Fatalf("read fixture %s: %v", name, err)
 	}
 	return data
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }
