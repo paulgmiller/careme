@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+
+	"careme/internal/httpx"
 )
 
 //go:embed brightdata.crt
@@ -46,7 +48,7 @@ func (c ProxyConfig) proxyURL() *url.URL {
 func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	client := &http.Client{}
 	if !cfg.Enabled() {
-		return client, nil
+		return httpx.WrapClient(client, httpx.RetryConfig{}), nil
 	}
 
 	rootCAs, err := proxyRootCAs()
@@ -65,7 +67,7 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	transport.Proxy = http.ProxyURL(cfg.proxyURL())
 	transport.TLSClientConfig = &tls.Config{RootCAs: rootCAs}
 	client.Transport = transport
-	return client, nil
+	return httpx.WrapClient(client, httpx.RetryConfig{}), nil
 }
 
 func proxyRootCAs() (*x509.CertPool, error) {

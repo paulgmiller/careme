@@ -3,6 +3,8 @@ package brightdata
 import (
 	"net/http"
 	"testing"
+
+	"careme/internal/httpx"
 )
 
 func TestProxyConfigValidate_AllowsDisabled(t *testing.T) {
@@ -57,9 +59,14 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 		t.Fatalf("expected no client timeout, got %s", client.Timeout)
 	}
 
-	transport, ok := client.Transport.(*http.Transport)
+	retryTransport, ok := client.Transport.(*httpx.RetryTransport)
 	if !ok {
-		t.Fatalf("expected *http.Transport, got %T", client.Transport)
+		t.Fatalf("expected *httpx.RetryTransport, got %T", client.Transport)
+	}
+
+	transport, ok := retryTransport.Base.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected wrapped base *http.Transport, got %T", retryTransport.Base)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, "https://www.example.com/products", nil)
@@ -91,7 +98,11 @@ func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	if client.Timeout != 0 {
 		t.Fatalf("expected no client timeout, got %s", client.Timeout)
 	}
-	if client.Transport != nil {
-		t.Fatalf("expected nil transport when proxy disabled, got %T", client.Transport)
+	retryTransport, ok := client.Transport.(*httpx.RetryTransport)
+	if !ok {
+		t.Fatalf("expected *httpx.RetryTransport when proxy disabled, got %T", client.Transport)
+	}
+	if retryTransport.Base != http.DefaultTransport {
+		t.Fatalf("expected wrapped default transport, got %T", retryTransport.Base)
 	}
 }

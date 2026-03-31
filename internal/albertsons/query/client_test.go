@@ -8,6 +8,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
+
+	"careme/internal/httpx"
 )
 
 func TestNewSearchClientRequiresSubscriptionKey(t *testing.T) {
@@ -177,6 +180,51 @@ func TestSearchReturnsProviderError(t *testing.T) {
 	_, err = client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err == nil || !strings.Contains(err.Error(), "resolve reese84") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSearch_RetriesTransient5xx(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	client, err := NewSearchClient(SearchClientConfig{
+		BaseURL:         "https://www.acmemarkets.com",
+		SubscriptionKey: "test-subscription-key",
+		Reese84Provider: func(context.Context) (string, error) { return "reese-cookie", nil },
+		HTTPClient: httpx.WrapClient(&http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				attempts++
+				if attempts < 3 {
+					return &http.Response{
+						StatusCode: http.StatusBadGateway,
+						Body:       io.NopCloser(strings.NewReader("temporary failure")),
+					}, nil
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header: http.Header{
+						"Content-Type": []string{"application/json"},
+					},
+					Body: io.NopCloser(strings.NewReader(`{"response":{"numFound":1,"disableTracking":false,"start":0,"miscInfo":{"attributionToken":"","query":"","sort":"","filter":"","nextPageToken":""},"isExactMatch":true,"docs":[{"id":"1","name":"Apples","price":1.99}]}}`)),
+				}, nil
+			}),
+		}, httpx.RetryConfig{
+			Sleep: func(context.Context, time.Duration) error { return nil },
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewSearchClient returned error: %v", err)
+	}
+
+	payload, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if got, want := attempts, 3; got != want {
+		t.Fatalf("unexpected attempts: got %d want %d", got, want)
+	}
+	if got, want := payload.Response.NumFound, 1; got != want {
+		t.Fatalf("unexpected numFound: got %d want %d", got, want)
 	}
 }
 
