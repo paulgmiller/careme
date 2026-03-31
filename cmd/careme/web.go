@@ -90,15 +90,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	appRoutes.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		data := struct {
-			ClarityScript   template.HTML
-			GoogleTagScript template.HTML
-			Style           seasons.Style
-		}{
-			ClarityScript:   templates.ClarityScript(ctx),
-			GoogleTagScript: templates.GoogleTagScript(),
-			Style:           seasons.GetCurrentStyle(),
-		}
+		data := templates.NewAboutPageData(ctx, seasons.GetCurrentStyle())
 		if err := templates.About.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "about template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
