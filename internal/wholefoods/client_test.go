@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"careme/internal/httpx"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 func TestCategory_BuildsRequestAndDecodesFixture(t *testing.T) {
@@ -106,7 +106,7 @@ func TestCategory_RetriesTransient5xx(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	client := NewClientWithBaseURL("https://example.com", httpx.WrapClient(&http.Client{
+	client := NewClientWithBaseURL("https://example.com", retryingHTTPClient(&http.Client{
 		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			attempts++
 			if attempts < 3 {
@@ -114,6 +114,7 @@ func TestCategory_RetriesTransient5xx(t *testing.T) {
 					StatusCode: http.StatusBadGateway,
 					Header:     make(http.Header),
 					Body:       ioNopCloserString("temporary failure"),
+					Request:    r,
 				}, nil
 			}
 			return &http.Response{
@@ -121,11 +122,10 @@ func TestCategory_RetriesTransient5xx(t *testing.T) {
 				Header: http.Header{
 					"Content-Type": []string{"application/json"},
 				},
-				Body: ioNopCloserString(`{"results":[{"name":"Retry Beef","slug":"retry-beef","brand":"Whole Foods","store":10216}],"meta":{"total":{"value":1,"relation":"eq"},"state":{"refinements":[],"sort":""}}}`),
+				Body:    ioNopCloserString(`{"results":[{"name":"Retry Beef","slug":"retry-beef","brand":"Whole Foods","store":10216}],"meta":{"total":{"value":1,"relation":"eq"},"state":{"refinements":[],"sort":""}}}`),
+				Request: r,
 			}, nil
 		}),
-	}, httpx.RetryConfig{
-		Sleep: func(context.Context, time.Duration) error { return nil },
 	}))
 
 	resp, err := client.Category(context.Background(), "beef", "10216")
@@ -290,4 +290,26 @@ func (f wholeFoodsRoundTripFunc) RoundTrip(r *http.Request) (*http.Response, err
 
 func ioNopCloserString(body string) io.ReadCloser {
 	return io.NopCloser(strings.NewReader(body))
+}
+
+func retryingHTTPClient(base *http.Client) *http.Client {
+	retryClient := retryablehttp.NewClient()
+	retryClient.Logger = nil
+	retryClient.HTTPClient = base
+	retryClient.RetryMax = 2
+	retryClient.RetryWaitMin = time.Millisecond
+	retryClient.RetryWaitMax = time.Millisecond
+	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		if err != nil {
+			return false, err
+		}
+		if resp == nil || resp.Request == nil {
+			return false, nil
+		}
+		return resp.Request.Method == http.MethodGet && resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
+	}
+	return retryClient.StandardClient()
 }

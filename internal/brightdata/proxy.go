@@ -1,6 +1,7 @@
 package brightdata
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
@@ -11,7 +12,7 @@ import (
 	"net/url"
 	"os"
 
-	"careme/internal/httpx"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 //go:embed brightdata.crt
@@ -48,7 +49,7 @@ func (c ProxyConfig) proxyURL() *url.URL {
 func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	client := &http.Client{}
 	if !cfg.Enabled() {
-		return httpx.WrapClient(client, httpx.RetryConfig{}), nil
+		return withRetries(client), nil
 	}
 
 	rootCAs, err := proxyRootCAs()
@@ -67,7 +68,35 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	transport.Proxy = http.ProxyURL(cfg.proxyURL())
 	transport.TLSClientConfig = &tls.Config{RootCAs: rootCAs}
 	client.Transport = transport
-	return httpx.WrapClient(client, httpx.RetryConfig{}), nil
+	return withRetries(client), nil
+}
+
+func withRetries(baseClient *http.Client) *http.Client {
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient = baseClient
+	retryClient.Logger = nil
+
+	// Keep the library defaults for now:
+	// RetryMax=4, RetryWaitMin=1s, RetryWaitMax=30s, Backoff=DefaultBackoff.
+	// We'll tune these once we have a clearer sense of how often these retries fire.
+	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		if err != nil {
+			return false, err
+		}
+		if resp == nil || resp.Request == nil {
+			return false, nil
+		}
+		switch resp.Request.Method {
+		case http.MethodGet, http.MethodHead:
+		default:
+			return false, nil
+		}
+		return resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
+	}
+	return retryClient.StandardClient()
 }
 
 func proxyRootCAs() (*x509.CertPool, error) {

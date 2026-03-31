@@ -1,10 +1,12 @@
 package brightdata
 
 import (
+	"context"
 	"net/http"
 	"testing"
+	"time"
 
-	"careme/internal/httpx"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 func TestProxyConfigValidate_AllowsDisabled(t *testing.T) {
@@ -59,14 +61,14 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 		t.Fatalf("expected no client timeout, got %s", client.Timeout)
 	}
 
-	retryTransport, ok := client.Transport.(*httpx.RetryTransport)
+	retryTransport, ok := client.Transport.(*retryablehttp.RoundTripper)
 	if !ok {
-		t.Fatalf("expected *httpx.RetryTransport, got %T", client.Transport)
+		t.Fatalf("expected *retryablehttp.RoundTripper, got %T", client.Transport)
 	}
 
-	transport, ok := retryTransport.Base.(*http.Transport)
+	transport, ok := retryTransport.Client.HTTPClient.Transport.(*http.Transport)
 	if !ok {
-		t.Fatalf("expected wrapped base *http.Transport, got %T", retryTransport.Base)
+		t.Fatalf("expected wrapped base *http.Transport, got %T", retryTransport.Client.HTTPClient.Transport)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, "https://www.example.com/products", nil)
@@ -98,11 +100,108 @@ func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	if client.Timeout != 0 {
 		t.Fatalf("expected no client timeout, got %s", client.Timeout)
 	}
-	retryTransport, ok := client.Transport.(*httpx.RetryTransport)
+	retryTransport, ok := client.Transport.(*retryablehttp.RoundTripper)
 	if !ok {
-		t.Fatalf("expected *httpx.RetryTransport when proxy disabled, got %T", client.Transport)
+		t.Fatalf("expected *retryablehttp.RoundTripper when proxy disabled, got %T", client.Transport)
 	}
-	if retryTransport.Base != http.DefaultTransport {
-		t.Fatalf("expected wrapped default transport, got %T", retryTransport.Base)
+	if retryTransport.Client.HTTPClient.Transport != nil {
+		t.Fatalf("expected default base transport via nil transport, got %T", retryTransport.Client.HTTPClient.Transport)
 	}
+}
+
+func TestWithRetries_OnlyRetriesGet5xx(t *testing.T) {
+	t.Parallel()
+
+	retryClient := withRetries(&http.Client{})
+
+	transport, ok := retryClient.Transport.(*retryablehttp.RoundTripper)
+	if !ok {
+		t.Fatalf("expected *retryablehttp.RoundTripper, got %T", retryClient.Transport)
+	}
+
+	tests := []struct {
+		name   string
+		method string
+		status int
+		want   bool
+	}{
+		{name: "get 502", method: http.MethodGet, status: http.StatusBadGateway, want: true},
+		{name: "head 500", method: http.MethodHead, status: http.StatusInternalServerError, want: true},
+		{name: "get 404", method: http.MethodGet, status: http.StatusNotFound, want: false},
+		{name: "post 500", method: http.MethodPost, status: http.StatusInternalServerError, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(context.Background(), tt.method, "https://example.com", nil)
+			if err != nil {
+				t.Fatalf("NewRequestWithContext() error = %v", err)
+			}
+			resp := &http.Response{StatusCode: tt.status, Request: req}
+
+			got, err := transport.Client.CheckRetry(context.Background(), resp, nil)
+			if err != nil {
+				t.Fatalf("CheckRetry() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("unexpected retry decision: got %v want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWithRetries_RespectsCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	retryClient := withRetries(&http.Client{})
+	transport, ok := retryClient.Transport.(*retryablehttp.RoundTripper)
+	if !ok {
+		t.Fatalf("expected *retryablehttp.RoundTripper, got %T", retryClient.Transport)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	got, err := transport.Client.CheckRetry(ctx, &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Request:    mustRequest(t, http.MethodGet),
+	}, nil)
+	if got {
+		t.Fatal("expected canceled context not to retry")
+	}
+	if err != context.Canceled {
+		t.Fatalf("unexpected error: got %v want %v", err, context.Canceled)
+	}
+}
+
+func TestWithRetries_UsesLibraryDefaults(t *testing.T) {
+	t.Parallel()
+
+	retryClient := withRetries(&http.Client{})
+	transport, ok := retryClient.Transport.(*retryablehttp.RoundTripper)
+	if !ok {
+		t.Fatalf("expected *retryablehttp.RoundTripper, got %T", retryClient.Transport)
+	}
+
+	if got, want := transport.Client.RetryMax, 4; got != want {
+		t.Fatalf("unexpected RetryMax: got %d want %d", got, want)
+	}
+	if got, want := transport.Client.RetryWaitMin, time.Second; got != want {
+		t.Fatalf("unexpected RetryWaitMin: got %s want %s", got, want)
+	}
+	if got, want := transport.Client.RetryWaitMax, 30*time.Second; got != want {
+		t.Fatalf("unexpected RetryWaitMax: got %s want %s", got, want)
+	}
+	if got := transport.Client.Backoff(time.Second, 30*time.Second, 0, nil); got != time.Second {
+		t.Fatalf("unexpected default backoff for attempt 0: got %s want %s", got, time.Second)
+	}
+}
+
+func mustRequest(t *testing.T, method string) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), method, "https://example.com", nil)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext() error = %v", err)
+	}
+	return req
 }
