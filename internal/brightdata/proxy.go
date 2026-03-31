@@ -71,6 +71,27 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	return withRetries(client), nil
 }
 
+var _ retryablehttp.LeveledLogger = slog.Default()
+
+// retrying 5xx errors and network errors, but not context cancellations or 4xx errors.
+func retriable(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if err != nil {
+		return true, err // retry these as theya re non canceled?
+	}
+	if resp == nil || resp.Request == nil {
+		return false, nil
+	}
+	switch resp.Request.Method {
+	case http.MethodGet, http.MethodHead:
+	default:
+		return false, nil
+	}
+	return resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
+}
+
 func withRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
@@ -79,23 +100,7 @@ func withRetries(baseClient *http.Client) *http.Client {
 	// Keep the library defaults for now:
 	// RetryMax=4, RetryWaitMin=1s, RetryWaitMax=30s, Backoff=DefaultBackoff.
 	// We'll tune these once we have a clearer sense of how often these retries fire.
-	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
-		if ctx.Err() != nil {
-			return false, ctx.Err()
-		}
-		if err != nil {
-			return true, err // retry these as theya re non canceled?
-		}
-		if resp == nil || resp.Request == nil {
-			return false, nil
-		}
-		switch resp.Request.Method {
-		case http.MethodGet, http.MethodHead:
-		default:
-			return false, nil
-		}
-		return resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
-	}
+	retryClient.CheckRetry = retriable
 	return retryClient.StandardClient()
 }
 
