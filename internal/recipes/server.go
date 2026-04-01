@@ -201,12 +201,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
-		// http.Error(w, "recipe not found or expired", http.StatusNotFound)
-		// return
-		p = DefaultParams(&locations.Location{
-			ID:   "",
-			Name: "Unknown Location",
-		}, time.Now())
+		http.Error(w, "recipe not found or expired", http.StatusNotFound)
+		return
 	}
 
 	if p.ConversationID == "" {
