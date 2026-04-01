@@ -386,7 +386,7 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 	}
 }
 
-func TestHandleSingle_LegacyOriginHashDoesNotFailWhenParamsMissing(t *testing.T) {
+func TestHandleSingle_LegacyOriginHashFailWhenParamsMissing(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -419,15 +419,8 @@ func TestHandleSingle_LegacyOriginHashDoesNotFailWhenParamsMissing(t *testing.T)
 
 	s.handleSingle(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
-	}
-	body := rr.Body.String()
-	if !strings.Contains(body, "/recipes?h="+canonicalHash) {
-		t.Fatalf("expected canonical back-link hash %q in response body: %s", canonicalHash, body)
-	}
-	if !strings.Contains(body, "Unknown Location") {
-		t.Fatalf("expected fallback params rendering with Unknown Location, body: %s", body)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rr.Code)
 	}
 }
 
