@@ -196,19 +196,9 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
-<<<<<<< HEAD
-		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
-		// http.Error(w, "recipe not found or expired", http.StatusNotFound)
-		// return
-		p = DefaultParams(&locations.Location{
-			ID:   "",
-			Name: "Unknown Location",
-		}, time.Now())
-=======
 		slog.ErrorContext(ctx, "failed to load params for hash", "origin hash", recipe.OriginHash, "hash", hash, "error", err)
 		http.Error(w, "recipe not found or expired", http.StatusInternalServerError)
 		return
->>>>>>> 57b4321 (error on params/originhash notfound/empty)
 	}
 
 	if p.ConversationID == "" {
