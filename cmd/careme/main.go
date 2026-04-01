@@ -13,6 +13,9 @@ import (
 	"careme/internal/mail"
 	"careme/internal/static"
 	"careme/internal/templates"
+
+	//todo have this load encrypted files directly.
+	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
