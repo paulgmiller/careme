@@ -9,6 +9,7 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/config"
 	"careme/internal/kroger"
+	"careme/internal/parallelism"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 )
@@ -55,6 +56,22 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 		return nil, err
 	}
 	return provider.FetchStaples(ctx, locationID)
+}
+
+// this is a little expnsive should we protect it
+func (p routingStaplesProvider) Ready(ctx context.Context) error {
+	storeIDs := []string{
+		"wholefoods_10153", // bellevue
+		"safeway_490",      // bellevue
+		"70500874",         // qfc in bellevue
+		"starmarket_3566",  // boston
+		"acmemarkets_806",  // newark
+	}
+	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]kroger.Ingredient, error) {
+		return p.FetchStaples(ctx, storeID)
+	})
+
+	return err
 }
 
 func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {

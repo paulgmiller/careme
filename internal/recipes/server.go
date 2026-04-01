@@ -78,6 +78,7 @@ type generator interface {
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 	Ready(ctx context.Context) error
+	StaplesReady(ctx context.Context) error
 }
 
 type server struct {
@@ -117,6 +118,15 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
 	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
 	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
+
+	mux.HandleFunc("GET /staples/ready", func(w http.ResponseWriter, r *http.Request) {
+		err := s.generator.StaplesReady(r.Context())
+		if err != nil {
+			http.Error(w, fmt.Sprintf("staples not ready: %v", err), http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 }
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
