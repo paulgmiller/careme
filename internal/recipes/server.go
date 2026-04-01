@@ -184,12 +184,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	loadWG.Wait()
 
 	if recipe.OriginHash == "" {
-		slog.WarnContext(ctx, "recipe missing origin hash Probably and old recipe", "hash", hash)
-		p := DefaultParams(&locations.Location{
-			ID:   "",
-			Name: "Unknown Location",
-		}, time.Now())
-		FormatRecipeHTML(ctx, p, *recipe, signedIn, hasRecipeImage, thread, feedback, wineRecommendation, w)
+		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
+		http.Error(w, "recipe not found or expired", http.StatusInternalServerError)
 		return
 	}
 	// we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
@@ -200,6 +196,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
+<<<<<<< HEAD
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", recipe.OriginHash, "error", err)
 		// http.Error(w, "recipe not found or expired", http.StatusNotFound)
 		// return
@@ -207,6 +204,11 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			ID:   "",
 			Name: "Unknown Location",
 		}, time.Now())
+=======
+		slog.ErrorContext(ctx, "failed to load params for hash", "origin hash", recipe.OriginHash, "hash", hash, "error", err)
+		http.Error(w, "recipe not found or expired", http.StatusInternalServerError)
+		return
+>>>>>>> 57b4321 (error on params/originhash notfound/empty)
 	}
 
 	if p.ConversationID == "" {
