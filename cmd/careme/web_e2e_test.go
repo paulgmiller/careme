@@ -344,10 +344,10 @@ func extractHiddenValue(t *testing.T, body, name string) string {
 
 func extractRecipeHashes(t *testing.T, body string) []string {
 	t.Helper()
-	re := regexp.MustCompile(`id="save-([^"]+)"`)
+	re := regexp.MustCompile(`<a href="/recipe/([^"]+)"`)
 	matches := re.FindAllStringSubmatch(body, -1)
 	if len(matches) == 0 {
-		t.Fatalf("expected recipe save inputs in page")
+		t.Fatalf("expected recipe cards in page")
 	}
 	seen := make(map[string]struct{})
 	var hashes []string

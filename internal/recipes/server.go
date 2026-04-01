@@ -611,15 +611,16 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
-
-	var response bytes.Buffer
-	if _, err := fmt.Fprint(&response, `<span class="text-xs font-medium text-action-green-700">Saved to kitchen</span>`); err != nil {
-		slog.ErrorContext(ctx, "failed to build save response", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
+	pageData, err := s.shoppingListPageData(ctx, selectionHash, p, true)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load shopping list page data after save", "selection_hash", selectionHash, "error", err)
+		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
-	if err := RenderShoppingFinalizeControlsHTML(selectionHash, len(p.Saved) > 0, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after save", "selection_hash", selectionHash, "error", err)
+
+	var response bytes.Buffer
+	if err := RenderShoppingSelectionUpdateHTML(pageData, recipeHash, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render shopping selection update after save", "selection_hash", selectionHash, "recipe_hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -689,15 +690,16 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
-
-	var response bytes.Buffer
-	if _, err := fmt.Fprint(&response, `<span class="text-xs font-medium text-action-red-700">Removed from kitchen</span>`); err != nil {
-		slog.ErrorContext(ctx, "failed to build dismiss response", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
+	pageData, err := s.shoppingListPageData(ctx, selectionHash, p, true)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load shopping list page data after dismiss", "selection_hash", selectionHash, "error", err)
+		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
-	if err := RenderShoppingFinalizeControlsHTML(selectionHash, len(p.Saved) > 0, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after dismiss", "selection_hash", selectionHash, "error", err)
+
+	var response bytes.Buffer
+	if err := RenderShoppingSelectionUpdateHTML(pageData, recipeHash, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render shopping selection update after dismiss", "selection_hash", selectionHash, "recipe_hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -708,6 +710,28 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
+}
+
+func (s *server) shoppingListPageData(ctx context.Context, hash string, p *generatorParams, signedIn bool) (shoppingListPageData, error) {
+	slist, err := s.FromCache(ctx, hash)
+	if err != nil {
+		return shoppingListPageData{}, err
+	}
+
+	wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
+	for _, recipe := range slist.Recipes {
+		recipeHash := recipe.ComputeHash()
+		wineRecommendation, wineErr := s.WineFromCache(ctx, recipeHash)
+		if wineErr != nil {
+			if !errors.Is(wineErr, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to load cached wine recommendation for shopping selection update", "recipe_hash", recipeHash, "error", wineErr)
+			}
+			continue
+		}
+		wineRecommendations[recipeHash] = wineRecommendation
+	}
+
+	return shoppingListPageDataForHash(ctx, p, *slist, wineRecommendations, signedIn, hash), nil
 }
 
 func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
