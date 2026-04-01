@@ -184,6 +184,17 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	loadWG.Wait()
 
 	if recipe.OriginHash == "" {
+		// Would like to make this an error however this in album is missing a origin hash and its too pretty to break
+		// https://careme.cooking/recipe/mQs4oIYMJoqCmqDMXv74bA==
+		if hash == "mQs4oIYMJoqCmqDMXv74bA==" {
+			slog.InfoContext(ctx, "recipe missing origin hash Probably and old recipe", "hash", hash)
+			p := DefaultParams(&locations.Location{
+				ID:   "",
+				Name: "Unknown Location",
+			}, time.Now())
+			FormatRecipeHTML(ctx, p, *recipe, signedIn, hasRecipeImage, thread, feedback, wineRecommendation, w)
+			return
+		}
 		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
 		http.Error(w, "recipe not found or expired", http.StatusInternalServerError)
 		return
