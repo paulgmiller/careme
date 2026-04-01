@@ -217,6 +217,22 @@ func (g *Generator) Ready(ctx context.Context) error {
 	return g.aiClient.Ready(ctx)
 }
 
+// this is a little expnsive should we protect it
+func (g *Generator) StaplesReady(ctx context.Context) error {
+	storeIDs := []string{
+		"wholefoods_10153", // bellevue
+		"safeway_490",      // bellevue
+		"70500874",         // qfc in bellevue
+		"starmarket_3566",  // boston
+		"acmemarkets_806",  // newark
+	}
+	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]kroger.Ingredient, error) {
+		return g.staplesProvider.FetchStaples(ctx, storeID)
+	})
+
+	return err
+}
+
 // toStr returns the string value if non-nil, or "empty" otherwise.
 func toStr(s *string) string {
 	if s == nil {
