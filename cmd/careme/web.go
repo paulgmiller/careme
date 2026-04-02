@@ -205,6 +205,9 @@ func gracefulShutdown(svr *http.Server, recipesWait func()) error {
 		close(done)
 	}()
 
+	// recipes can take several minutes to complete.
+	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
 	// Wait for all recipe generation goroutines to complete
 	slog.Info("Waiting for recipe generation goroutines to complete")
 
