@@ -89,6 +89,7 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 }
 
 func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) ([]backendStaplesProvider, error) {
+	// should we do this per request so we get new proxies per user? https://github.com/paulgmiller/careme/issues/443
 	httpClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 	if err != nil {
 		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
