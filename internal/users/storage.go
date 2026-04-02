@@ -1,8 +1,6 @@
 package users
 
 import (
-	"careme/internal/auth"
-	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +10,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"careme/internal/auth"
+	"careme/internal/cache"
 
 	utypes "careme/internal/users/types"
 )
