@@ -854,10 +854,12 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to parse start time", "time", startArg, "error", err)
 		redirectToHash(w, r, hashParam, true /*useStart*/)
+		return
 	}
 
 	if time.Since(startTime) < time.Minute*10 {
 		s.Spin(w, r)
+		return
 	}
 	slog.WarnContext(ctx, "rekicking generation", "time", startArg, "hash", hashParam)
 
