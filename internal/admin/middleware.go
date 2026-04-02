@@ -1,13 +1,12 @@
 package admin
 
 import (
+	"careme/internal/auth"
+	"careme/internal/config"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
-
-	"careme/internal/auth"
-	"careme/internal/config"
 )
 
 type middleware struct {
@@ -44,7 +43,7 @@ func (m *middleware) Enforce(next http.Handler) http.Handler {
 
 		email, err := m.auth.GetUserEmail(r.Context(), userID)
 		if err != nil {
-			slog.WarnContext(r.Context(), "admin email lookup failed", "user_id", userID, "error", err)
+			slog.WarnContext(r.Context(), "admin email lookup failed", "error", err)
 			http.NotFound(w, r)
 			return
 		}

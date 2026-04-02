@@ -1,6 +1,8 @@
 package users
 
 import (
+	"careme/internal/auth"
+	"careme/internal/cache"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/auth"
-	"careme/internal/cache"
 	utypes "careme/internal/users/types"
 )
 
@@ -59,7 +59,7 @@ func (s *Storage) GetByID(id string) (*utypes.User, error) {
 	}
 	defer func() {
 		if err := userBytes.Close(); err != nil {
-			slog.Error("failed to close user reader", "error", err, "user_id", id)
+			slog.Error("failed to close user reader", "error", err)
 		}
 	}()
 	decoder := json.NewDecoder(userBytes)

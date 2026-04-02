@@ -3,6 +3,8 @@ package logsetup
 import (
 	"context"
 	"log/slog"
+
+	"github.com/clerk/clerk-sdk-go/v2"
 )
 
 type contextKey string
@@ -68,6 +70,12 @@ func (h *contextHandler) Handle(ctx context.Context, record slog.Record) error {
 	if sessionID, ok := SessionIDFromContext(ctx); ok {
 		record.AddAttrs(slog.String("session_id", sessionID))
 	}
+	// hard dependency on clerk is bad. but plumbg an auth
+	sessionClaims, ok := clerk.SessionClaimsFromContext(ctx)
+	if ok && sessionClaims != nil {
+		record.AddAttrs(slog.String("user_id", sessionClaims.Subject))
+	}
+
 	return h.handler.Handle(ctx, record)
 }
 
