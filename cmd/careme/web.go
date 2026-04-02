@@ -1,21 +1,9 @@
 package main
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"html/template"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
 	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/auth"
-	cachepkg "careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/ingredients"
 	"careme/internal/locations"
@@ -27,6 +15,18 @@ import (
 	"careme/internal/templates"
 	"careme/internal/users"
 	"careme/internal/watchdog"
+	"context"
+	"errors"
+	"fmt"
+	"html/template"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	cachepkg "careme/internal/cache"
 
 	utypes "careme/internal/users/types"
 )
@@ -186,6 +186,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 func gracefulShutdown(svr *http.Server, recipesWait func()) error {
 	// Give outstanding requests 25 seconds to complete (kubernetes has 30 second grace period)
+	time.Sleep(5 * time.Second) // buffer to allow ingress ot update. only needed in prod
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
