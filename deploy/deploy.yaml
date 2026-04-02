@@ -64,12 +64,14 @@ spec:
               port: http
             initialDelaySeconds: 1
             periodSeconds: 5
+            timeoutSeconds: 3
           livenessProbe:
             httpGet:
               path: /ready
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 3
           resources:
             requests:
               cpu: 50m
