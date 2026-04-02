@@ -88,7 +88,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	return &mailer{
 		cache:        cache,
 		userStorage:  userStorage,
-		generator:    generator, // TODO do better take an interface in mailer.
+		generator:    generator,
 		locServer:    locationserver,
 		client:       sendgrid.NewSendClient(sendgridkey),
 		publicOrigin: cfg.ResolvedPublicOrigin(),
