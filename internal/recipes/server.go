@@ -582,13 +582,13 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, selectionHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load recipe selection for save", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		slog.ErrorContext(ctx, "failed to load recipe selection for save", "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
 	selection.markSaved(recipeHash)
 	if err := s.saveRecipeSelection(ctx, currentUser.ID, selectionHash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe selection", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		slog.ErrorContext(ctx, "failed to save recipe selection", "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
@@ -606,14 +606,14 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.saveRecipesToUserProfile(ctx, currentUser, *recipe); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe to user profile", "user_id", currentUser.ID, "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to save recipe to user profile", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
 
 	p, err := s.paramsForAction(ctx, selectionHash, currentUser.ID, "")
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for save response", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		slog.ErrorContext(ctx, "failed to load params for save response", "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
@@ -672,26 +672,26 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, selectionHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load recipe selection for dismiss", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		slog.ErrorContext(ctx, "failed to load recipe selection for dismiss", "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
 	selection.markDismissed(recipeHash)
 	if err := s.saveRecipeSelection(ctx, currentUser.ID, selectionHash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe selection for dismiss", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		slog.ErrorContext(ctx, "failed to save recipe selection for dismiss", "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
 
 	if err := s.removeRecipeFromUserProfile(ctx, *currentUser, recipeHash); err != nil {
-		slog.ErrorContext(ctx, "failed to remove recipe from user profile", "user_id", currentUser.ID, "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to remove recipe from user profile", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
 
 	p, err := s.paramsForAction(ctx, selectionHash, currentUser.ID, "")
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for dismiss response", "user_id", currentUser.ID, "selection_hash", selectionHash, "error", err)
+		slog.ErrorContext(ctx, "failed to load params for dismiss response", "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
@@ -934,7 +934,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		if signedIn {
 			fromStore, selErr := s.loadRecipeSelection(ctx, userID, hashParam)
 			if selErr != nil {
-				slog.ErrorContext(ctx, "failed to load recipe selection for render", "user_id", userID, "hash", hashParam, "error", selErr)
+				slog.ErrorContext(ctx, "failed to load recipe selection for render", "hash", hashParam, "error", selErr)
 				http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
 				return
 			}
@@ -1030,7 +1030,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 			return r.Title, cooked[r.Hash].Cooked
 		})
 
-		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash, "user_id", currentUser.ID)
+		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
@@ -1132,7 +1132,7 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utyp
 	if err := s.storage.Update(currentUser); err != nil {
 		return fmt.Errorf("failed to update user with saved recipes: %w", err)
 	}
-	slog.InfoContext(ctx, "added saved recipe to user profile", "user_id", currentUser.ID, "title", recipe.Title)
+	slog.InfoContext(ctx, "added saved recipe to user profile", "title", recipe.Title)
 
 	return nil
 }
@@ -1155,6 +1155,6 @@ func (s *server) removeRecipeFromUserProfile(ctx context.Context, currentUser ut
 	if err := s.storage.Update(&currentUser); err != nil {
 		return fmt.Errorf("failed to update user when dismissing recipe: %w", err)
 	}
-	slog.InfoContext(ctx, "removed recipe from user profile", "user_id", currentUser.ID, "hash", recipeHash)
+	slog.InfoContext(ctx, "removed recipe from user profile", "hash", recipeHash)
 	return nil
 }

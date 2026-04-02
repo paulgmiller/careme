@@ -97,15 +97,6 @@ func (c *clerkClient) GetUserIDFromRequest(r *http.Request) (string, error) {
 	return sessionClaims.Subject, nil
 }
 
-func (c *clerkClient) FromRequest(ctx context.Context, req *http.Request) (string, error) {
-	clerkUserID, err := c.GetUserIDFromRequest(req)
-	if err != nil {
-		return "", err
-	}
-	slog.InfoContext(ctx, "found clerk user ID", "clerk_user_id", clerkUserID)
-	return clerkUserID, nil
-}
-
 // WithClerkHTTP wraps the http.Handler with Clerk's authentication middleware
 func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	purgeAndRedirect := clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
