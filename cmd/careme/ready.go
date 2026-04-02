@@ -5,24 +5,30 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
+
+	"careme/internal/logsetup"
 )
 
 type readyOnce struct {
 	done   bool
 	checks []Readyable
+	mu     sync.Mutex
 }
 
 func (r *readyOnce) Ready(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.done {
 		return nil
 	}
+	ctx = logsetup.WithOperationID(ctx, "readiness_check")
 	for _, check := range r.checks {
 		if err := check.Ready(ctx); err != nil {
 			slog.ErrorContext(ctx, "check failed", "error", err, "check", fmt.Sprintf("%T", check))
 			return err
 		}
 	}
-	// not thread safe? only ever set to true
 	r.done = true
 	return nil
 }
