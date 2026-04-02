@@ -72,12 +72,12 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 }
 
 // this would be nice but it logs all retries as errors which sets off alerts.
-// and is missing context.
 // var _ retryablehttp.LeveledLogger = slog.Default()
 type SlogPrintf struct{}
 
 func (l SlogPrintf) Printf(format string, args ...interface{}) {
-	slog.Info(fmt.Sprintf(format, args...))
+	// missing context sadly so no operation id
+	slog.With().Info(fmt.Sprintf(format, args...), "source", "retryablehttp")
 }
 
 // retrying 5xx errors and network errors, but not context cancellations or 4xx errors.
