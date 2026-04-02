@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -44,6 +45,10 @@ func (s *Server) Register(mux routing.Registrar) {
 			if err != nil {
 				http.Error(w, fmt.Sprintf("%s not ready: %v", watcher.name, err), http.StatusServiceUnavailable)
 				return
+			}
+
+			if _, err := w.Write([]byte("OK")); err != nil {
+				slog.ErrorContext(r.Context(), "failed to write readiness response", "error", err)
 			}
 			w.WriteHeader(http.StatusOK)
 		})
