@@ -71,7 +71,14 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	return withRetries(client), nil
 }
 
-var _ retryablehttp.LeveledLogger = slog.Default()
+// this would be nice but it logs all retries as errors which sets off alerts.
+// and is missing context.
+// var _ retryablehttp.LeveledLogger = slog.Default()
+type SlogPrintf struct{}
+
+func (l SlogPrintf) Printf(format string, args ...interface{}) {
+	slog.Info(fmt.Sprintf(format, args...))
+}
 
 // retrying 5xx errors and network errors, but not context cancellations or 4xx errors.
 func retriable(ctx context.Context, resp *http.Response, err error) (bool, error) {
@@ -95,7 +102,7 @@ func retriable(ctx context.Context, resp *http.Response, err error) (bool, error
 func withRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
-	retryClient.Logger = slog.Default()
+	retryClient.Logger = SlogPrintf{}
 
 	// Keep the library defaults for now:
 	// RetryMax=4, RetryWaitMin=1s, RetryWaitMax=30s, Backoff=DefaultBackoff.
