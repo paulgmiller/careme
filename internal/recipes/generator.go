@@ -227,6 +227,7 @@ func (g *Generator) Watchdog(ctx context.Context) error {
 		"acmemarkets_806",  // newark
 	}
 	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]kroger.Ingredient, error) {
+		// defeats point of watch dog to read from cache but we could write to it as a courtesy.
 		return g.staplesProvider.FetchStaples(ctx, storeID)
 	})
 
