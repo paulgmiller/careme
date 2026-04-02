@@ -363,7 +363,7 @@ func (m mock) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (m mock) StaplesReady(ctx context.Context) error {
+func (m mock) Watchdog(ctx context.Context) error {
 	return nil
 }
 

@@ -45,7 +45,7 @@ type Generator struct {
 	io              ingredientio
 }
 
-func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
+func NewGenerator(cfg *config.Config, io ingredientio) (generatorPlus, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -217,8 +217,8 @@ func (g *Generator) Ready(ctx context.Context) error {
 	return g.aiClient.Ready(ctx)
 }
 
-// this is a little expnsive should we protect it
-func (g *Generator) StaplesReady(ctx context.Context) error {
+// this is a little expnsive so unlike ready above needs to be protected by a once by.
+func (g *Generator) Watchdog(ctx context.Context) error {
 	storeIDs := []string{
 		"wholefoods_10153", // bellevue
 		"safeway_490",      // bellevue

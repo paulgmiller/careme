@@ -77,8 +77,13 @@ type generator interface {
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
-	// Ready(ctx context.Context) error
-	// StaplesReady(ctx context.Context) error
+}
+
+// should we have new generator just return two interfaces instead of gluing?
+type generatorPlus interface {
+	generator
+	Ready(ctx context.Context) error
+	Watchdog(ctx context.Context) error
 }
 
 type server struct {
@@ -118,21 +123,6 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
 	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
 	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
-
-	// todo move this out a watch dog package.
-	var stapleGuard OncePer
-	mux.HandleFunc("GET /watchdogs/staples", func(w http.ResponseWriter, r *http.Request) {
-		err := stapleGuard.Do(r.Context(), 6*time.Hour, s.generator.StaplesReady)
-		if errors.Is(err, tooSoonError) {
-			http.Error(w, "can only call watchdog ever 6 hours", http.StatusServiceUnavailable)
-			return
-		}
-		if err != nil {
-			http.Error(w, fmt.Sprintf("staples not ready: %v", err), http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	})
 }
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {

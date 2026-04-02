@@ -148,6 +148,21 @@ func runServer(cfg *config.Config, addr string) error {
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
 
+	// time for a watchdog package?
+	var stapleGuard recipes.OncePer
+	rootMux.HandleFunc("GET /watchdogs/staples", func(w http.ResponseWriter, r *http.Request) {
+		err := stapleGuard.Do(r.Context(), 6*time.Hour, generator.Watchdog)
+		if errors.Is(err, recipes.TooSoonError) {
+			http.Error(w, "can only call watchdog ever 6 hours", http.StatusServiceUnavailable)
+			return
+		}
+		if err != nil {
+			http.Error(w, fmt.Sprintf("staples not ready: %v", err), http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
 	server := &http.Server{
 		Addr:    addr,
 		Handler: rootMux,

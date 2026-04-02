@@ -45,6 +45,9 @@ type generatorParams struct {
 	PriorSavedHashes []string `json:"-"`
 }
 
+// exist for mail's interface be careful please.
+type GeneratorParams = generatorParams
+
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 	// normalize to midnight (shave hours, minutes, seconds, nanoseconds)
 	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
