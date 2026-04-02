@@ -35,6 +35,16 @@ type GeneratedImage struct {
 	Body io.Reader
 }
 
+type responseToolUsageLog struct {
+	Tool        string `json:"tool"`
+	Action      string `json:"action,omitempty"`
+	Status      string `json:"status,omitempty"`
+	QueryCount  int    `json:"query_count,omitempty"`
+	SourceCount int    `json:"source_count,omitempty"`
+	URL         string `json:"url,omitempty"`
+	Pattern     string `json:"pattern,omitempty"`
+}
+
 // todo collapse closer to
 type Ingredient struct {
 	Name     string `json:"name"`
@@ -182,8 +192,64 @@ const (
 	recipeImageSize         = openai.ImageGenerateParamsSize1024x1024
 )
 
+func logResponseUsage(ctx context.Context, operation string, resp *responses.Response) {
+	outputItemTypes, toolUsage, reasoningItems := summarizeResponseOutput(resp.Output)
+	slog.InfoContext(ctx, operation,
+		"model", resp.Model,
+		"input_tokens", resp.Usage.InputTokens,
+		"cached_input_tokens", resp.Usage.InputTokensDetails.CachedTokens,
+		"output_tokens", resp.Usage.OutputTokens,
+		"reasoning_tokens", resp.Usage.OutputTokensDetails.ReasoningTokens,
+		"total_tokens", resp.Usage.TotalTokens,
+		"reasoning_items", reasoningItems,
+		"output_item_types", outputItemTypes,
+		"tool_usage", toolUsage,
+		"usage", json.RawMessage(resp.Usage.RawJSON()),
+	)
+}
+
+func summarizeResponseOutput(output []responses.ResponseOutputItemUnion) (map[string]int, []responseToolUsageLog, int) {
+	outputItemTypes := make(map[string]int, len(output))
+	var toolUsage []responseToolUsageLog
+	reasoningItems := 0
+
+	for _, item := range output {
+		outputItemTypes[item.Type]++
+		switch typed := item.AsAny().(type) {
+		case responses.ResponseFunctionWebSearch:
+			usage := responseToolUsageLog{
+				Tool:   "web_search",
+				Status: string(typed.Status),
+			}
+			switch action := typed.Action.AsAny().(type) {
+			case responses.ResponseFunctionWebSearchActionSearch:
+				usage.Action = "search"
+				usage.QueryCount = len(action.Queries)
+				if usage.QueryCount == 0 && action.Query != "" {
+					usage.QueryCount = 1
+				}
+				usage.SourceCount = len(action.Sources)
+			case responses.ResponseFunctionWebSearchActionOpenPage:
+				usage.Action = "open_page"
+				usage.URL = action.URL
+			case responses.ResponseFunctionWebSearchActionFind:
+				usage.Action = "find_in_page"
+				usage.URL = action.URL
+				usage.Pattern = action.Pattern
+			default:
+				usage.Action = typed.Action.Type
+			}
+			toolUsage = append(toolUsage, usage)
+		case responses.ResponseReasoningItem:
+			reasoningItems++
+		}
+	}
+
+	return outputItemTypes, toolUsage, reasoningItems
+}
+
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
-	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
+	logResponseUsage(ctx, "recipe response usage", resp)
 	var shoppingList ShoppingList
 	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
@@ -208,6 +274,55 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
+func recipeWebSearchTool(location *locations.Location) responses.ToolUnionParam {
+	tool := responses.ToolParamOfWebSearch(responses.WebSearchToolTypeWebSearch)
+	if tool.OfWebSearch == nil {
+		return responses.ToolUnionParam{}
+	}
+	tool.OfWebSearch.SearchContextSize = responses.WebSearchToolSearchContextSizeMedium
+	tool.OfWebSearch.UserLocation = responses.WebSearchToolUserLocationParam{
+		Country: openai.String("US"),
+		Region:  openai.String(location.State),
+		Type:    "approximate",
+	}
+	return tool
+}
+
+func (c *Client) generateRecipesParams(location *locations.Location, messages responses.ResponseInputParam, conversationID string) responses.ResponseNewParams {
+	return responses.ResponseNewParams{
+		Model:        c.model,
+		Instructions: openai.String(systemMessage),
+		Reasoning: openai.ReasoningParam{
+			Effort: openai.ReasoningEffortHigh,
+		},
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Store: openai.Bool(true),
+		Conversation: responses.ResponseNewParamsConversationUnion{
+			OfConversationObject: &responses.ResponseConversationParam{
+				ID: conversationID,
+			},
+		},
+		/*Include: []responses.ResponseIncludable{
+			responses.ResponseIncludableWebSearchCallActionSources,
+		},
+		Tools: []responses.ToolUnionParam{
+			recipeWebSearchTool(location),
+		},*/
+		Text: scheme(c.schema),
+	}
+}
+
+/* Results from high  web search 5 minutes.  57565
+time=2026-04-02T12:06:30.776-07:00 level=INFO msg="recipe response usage" model=gpt-5.4-2026-03-05 input_tokens=43448 cached_input_tokens=0 output_tokens=14117 reasoning_tokens=11432 total_tokens=57565 reasoning_items=5 output_item_types="map[message:1 reasoning:5 web_search_call:4]" tool_usage="[{Tool:web_search Action:search Status:completed QueryCount:3 SourceCount:21 URL: Pattern:} {Tool:web_search Action:open_page Status:completed QueryCount:0 SourceCount:0 URL:https://thewholeu.uw.edu/wp-content/uploads/WashingtonSeasonalProduce.pdf Pattern:} {Tool:web_search Action:find_in_page Status:completed QueryCount:0 SourceCount:0 URL:https://thewholeu.uw.edu/wp-content/uploads/WashingtonSeasonalProduce.pdf Pattern:Asparagus} {Tool:web_search Action:search Status:completed QueryCount:3 SourceCount:16 URL: Pattern:}]" usage="{\n    \"input_tokens\": 43448,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 14117,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 11432\n    },\n    \"total_tokens\": 57565\n  }" operation_id=05e011bc-0657-48ad-9ba2-586fedcb42c2 session_id=6de8234f-d186-4767-a58b-7f9d30d80e84
+time=2026-04-02T12:06:30.776-07:00 level=INFO msg="generated chat" location="70100023 on 2026-04-02" duration=5m51.12289037s hash=7H5WaS2sx4c operation_id=05e011bc-0657-48ad-9ba2-586fedcb42c2 session_id=6de8234f-d186-4767-a58b-7f9d30d80e84
+
+Resultrs on medium and web search
+time=2026-04-02T12:23:23.720-07:00 level=INFO msg="recipe response usage" model=gpt-5.4-2026-03-05 input_tokens=43389 cached_input_tokens=5120 output_tokens=14481 reasoning_tokens=12040 total_tokens=57870 reasoning_items=6 output_item_types="map[message:1 reasoning:6 web_search_call:5]" tool_usage="[{Tool:web_search Action:search Status:completed QueryCount:3 SourceCount:25 URL: Pattern:} {Tool:web_search Action:open_page Status:completed QueryCount:0 SourceCount:0 URL:https://rightasrain.uwmedicine.org/body/food/25-pnw-spring-vegetables-and-fruits Pattern:} {Tool:web_search Action:open_page Status:completed QueryCount:0 SourceCount:0 URL: Pattern:} {Tool:web_search Action:open_page Status:completed QueryCount:0 SourceCount:0 URL:https://www.lattinscountrycider.com/produce-list Pattern:} {Tool:web_search Action:open_page Status:completed QueryCount:0 SourceCount:0 URL:https://www.lattinscountrycider.com/produce-list Pattern:}]" usage="{\n    \"input_tokens\": 43389,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 5120\n    },\n    \"output_tokens\": 14481,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 12040\n    },\n    \"total_tokens\": 57870\n  }" operation_id=6a7a47ad-c669-456f-8c11-e958a5d98998 session_id=6de8234f-d186-4767-a58b-7f9d30d80e84
+time=2026-04-02T12:23:23.721-07:00 level=INFO msg="generated chat" location="wholefoods_10153 on 2026-04-02" duration=5m20.35827134s
+*/
+
 func (c *Client) Regenerate(ctx context.Context, instructions []string, conversationID string) (*ShoppingList, error) {
 	if conversationID == "" {
 		return nil, fmt.Errorf("conversation ID is required for regeneration")
@@ -218,6 +333,9 @@ func (c *Client) Regenerate(ctx context.Context, instructions []string, conversa
 	params := responses.ResponseNewParams{
 		Model: c.model,
 		// only new input
+		Reasoning: openai.ReasoningParam{
+			Effort: openai.ReasoningEffortMedium,
+		},
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
@@ -339,21 +457,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 		return nil, fmt.Errorf("failed to create conversation: %w", err)
 	}
 
-	params := responses.ResponseNewParams{
-		Model:        c.model,
-		Instructions: openai.String(systemMessage),
-
-		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messages,
-		},
-		Store: openai.Bool(true),
-		Conversation: responses.ResponseNewParamsConversationUnion{
-			OfConversationObject: &responses.ResponseConversationParam{
-				ID: convo.ID,
-			},
-		},
-		Text: scheme(c.schema),
-	}
+	params := c.generateRecipesParams(location, messages, convo.ID)
 	// should we stream. Can we pass past generation.
 
 	resp, err := client.Responses.New(ctx, params)
