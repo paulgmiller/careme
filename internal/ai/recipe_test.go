@@ -1,11 +1,15 @@
 package ai
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"careme/internal/kroger"
+	"careme/internal/locations"
+	openai "github.com/openai/openai-go/v3"
 )
 
 func TestRecipeComputeHash(t *testing.T) {
@@ -151,6 +155,83 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\n\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
 		t.Fatalf("expected candidate wines TSV in prompt: %s", prompt)
+	}
+}
+
+func TestRecipeModelOrDefault(t *testing.T) {
+	if got := recipeModelOrDefault(""); got != openai.ChatModelGPT5_4 {
+		t.Fatalf("empty model should fall back to gpt-5.4, got %q", got)
+	}
+	if got := recipeModelOrDefault("gpt-5.4-mini"); got != "gpt-5.4-mini" {
+		t.Fatalf("explicit model should be preserved, got %q", got)
+	}
+}
+
+func TestBuildRecipeDefaultsMessage(t *testing.T) {
+	location := &locations.Location{State: "CA"}
+	date := time.Date(2026, time.April, 2, 0, 0, 0, 0, time.UTC)
+
+	got := buildRecipeDefaultsMessage(location, date)
+
+	for _, want := range []string{
+		"Fallback defaults for recipe generation. Use these only when the user has not already specified otherwise.",
+		"follow the user's instruction and ignore the default",
+		"Current date and state for seasonal tie-breakers: April 2, 2026 in CA.",
+		"Seasonal ingredients are a tie-breaker for freshness and value only when they fit the requested cuisine and dish naturally.",
+		"Default servings: 2 people.",
+		"Default recipe count: 3 recipes.",
+		"Default prep and cook time: under 1 hour.",
+		"Default cooking methods: oven, stove, grill, slow cooker.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("defaults message missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestBuildRecipeMessagesUsesConsolidatedFallbackDefaults(t *testing.T) {
+	client := NewClient("test-key", "")
+	location := &locations.Location{State: "CA"}
+	date := time.Date(2026, time.April, 2, 0, 0, 0, 0, time.UTC)
+	ingredients := []kroger.Ingredient{
+		{Description: strPtr("Asparagus"), Size: strPtr("1 lb"), PriceRegular: float32Ptr(3.99)},
+	}
+
+	messages, err := client.buildRecipeMessages(location, ingredients, []string{"Serve 4 people", "Make it Greek"}, date, nil)
+	if err != nil {
+		t.Fatalf("buildRecipeMessages returned error: %v", err)
+	}
+	if len(messages) != 4 {
+		t.Fatalf("expected defaults, ingredients, and two user instruction messages; got %d", len(messages))
+	}
+
+	first, err := json.Marshal(messages[0])
+	if err != nil {
+		t.Fatalf("failed to marshal first message: %v", err)
+	}
+	firstMessage := string(first)
+	if !strings.Contains(firstMessage, "Fallback defaults for recipe generation") {
+		t.Fatalf("expected first message to contain fallback defaults block: %s", firstMessage)
+	}
+	if strings.Contains(firstMessage, "Prioritize ingredients that are in season for the current date and user's state location") {
+		t.Fatalf("expected seasonality to live inside fallback defaults block instead of a separate binding instruction: %s", firstMessage)
+	}
+	if strings.Contains(firstMessage, "\"Default: each recipe should serve 2 people.\"") {
+		t.Fatalf("expected old per-default binding message to be removed: %s", firstMessage)
+	}
+}
+
+func TestSystemMessagePrioritizesUserIntentAndVerification(t *testing.T) {
+	for _, want := range []string{
+		"Follow constraints in this order: explicit user instructions and corrections, factual input data, fallback defaults, then stylistic goals.",
+		"If seasonality conflicts with the requested cuisine, dish style, diet, budget, or other direct user intent, preserve the user's intent and cuisine coherence.",
+		"Determine servings from explicit user instructions first; only use fallback defaults if the user did not specify servings.",
+		"Do not invent prices.",
+		"If exact nutrition is uncertain, keep calorie and macro guidance approximate and conservative.",
+	} {
+		if !strings.Contains(systemMessage, want) {
+			t.Fatalf("system message missing %q", want)
+		}
 	}
 }
 
