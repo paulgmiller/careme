@@ -219,6 +219,7 @@ func (g *Generator) Ready(ctx context.Context) error {
 
 // this is a little expnsive should we protect it
 func (g *Generator) StaplesReady(ctx context.Context) error {
+	// should we take this from the watchdog request? Changing it requires a redeploy now.
 	storeIDs := []string{
 		"wholefoods_10153", // bellevue
 		"safeway_490",      // bellevue

@@ -578,6 +578,10 @@ func (c *captureKickgenerationGenerator) Ready(ctx context.Context) error {
 	return nil
 }
 
+func (c *captureKickgenerationGenerator) StaplesReady(ctx context.Context) error {
+	return nil
+}
+
 func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -642,6 +646,30 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	}
 }
 
+func TestWatchdogStaples_ReturnsTooManyRequestsWhenCheckInProgress(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
+	guard, err := NewOncePer(cacheStore, "staples-ready")
+	if err != nil {
+		t.Fatalf("new onceper: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := cacheStore.Put(t.Context(), guard.claimKey(6*time.Hour, now), `{"claimed_at":"`+now.Format(time.RFC3339Nano)+`"}`, cache.IfNoneMatch()); err != nil {
+		t.Fatalf("seed in-progress claim: %v", err)
+	}
+
+	s := newTestServer(t, withTestCache(cacheStore))
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/watchdog/staples", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected status %d, got %d", http.StatusTooManyRequests, rr.Code)
+	}
+}
+
 type captureQuestionGenerator struct {
 	lastQuestion string
 	lastWinePick struct {
@@ -696,6 +724,10 @@ func (c *captureQuestionGenerator) PickAWine(ctx context.Context, location strin
 }
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
+	return nil
+}
+
+func (c *captureQuestionGenerator) StaplesReady(ctx context.Context) error {
 	return nil
 }
 

@@ -119,8 +119,18 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
 	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
 
-	mux.HandleFunc("GET /staples/ready", func(w http.ResponseWriter, r *http.Request) {
-		err := s.generator.StaplesReady(r.Context())
+	staplesGuard, err := NewOncePer(s.recipeio.Cache, "staples-ready")
+	if err != nil {
+		panic(err)
+	}
+	mux.HandleFunc("GET /watchdog/staples", func(w http.ResponseWriter, r *http.Request) {
+		err := staplesGuard.Do(r.Context(), 6*time.Hour, func() error {
+			return s.generator.StaplesReady(r.Context())
+		})
+		if errors.Is(err, ErrOncePerInProgress) {
+			http.Error(w, err.Error(), http.StatusTooManyRequests)
+			return
+		}
 		if err != nil {
 			http.Error(w, fmt.Sprintf("staples not ready: %v", err), http.StatusServiceUnavailable)
 			return

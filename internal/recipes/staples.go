@@ -9,7 +9,6 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/config"
 	"careme/internal/kroger"
-	"careme/internal/parallelism"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 )
@@ -58,22 +57,6 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	return provider.FetchStaples(ctx, locationID)
 }
 
-// this is a little expnsive should we protect it
-func (p routingStaplesProvider) Ready(ctx context.Context) error {
-	storeIDs := []string{
-		"wholefoods_10153", // bellevue
-		"safeway_490",      // bellevue
-		"70500874",         // qfc in bellevue
-		"starmarket_3566",  // boston
-		"acmemarkets_806",  // newark
-	}
-	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]kroger.Ingredient, error) {
-		return p.FetchStaples(ctx, storeID)
-	})
-
-	return err
-}
-
 func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
 	provider, err := p.providerForLocation(locationID)
 	if err != nil {
@@ -96,13 +79,15 @@ func staplesSignatureForLocation(locationID string) string {
 	panic("unknown staples provider for location " + locationID)
 }
 
+var UnknownStaplesProviderError = fmt.Errorf("unknown staples provider for location")
+
 func (p routingStaplesProvider) providerForLocation(locationID string) (backendStaplesProvider, error) {
 	for _, backend := range p.backends {
 		if backend.IsID(locationID) {
 			return backend, nil
 		}
 	}
-	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
+	return nil, fmt.Errorf("%w: %q", UnknownStaplesProviderError, locationID)
 }
 
 func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) ([]backendStaplesProvider, error) {
