@@ -1,6 +1,17 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"html/template"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/auth"
@@ -15,16 +26,6 @@ import (
 	"careme/internal/templates"
 	"careme/internal/users"
 	"careme/internal/watchdog"
-	"context"
-	"errors"
-	"fmt"
-	"html/template"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	cachepkg "careme/internal/cache"
 
