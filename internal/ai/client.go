@@ -18,6 +18,7 @@ import (
 	"github.com/openai/openai-go/v3/conversations"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
+	"github.com/openai/openai-go/v3/shared"
 	"github.com/samber/lo"
 
 	"github.com/invopop/jsonschema"
@@ -91,9 +92,7 @@ type WineSelection struct {
 	Commentary string       `json:"commentary"`
 }
 
-// ignoring model for now.
 func NewClient(apiKey, _ string) *Client {
-	// ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
@@ -111,7 +110,7 @@ func NewClient(apiKey, _ string) *Client {
 		schema:     m,
 		wineSchema: wine,
 		model:      openai.ChatModelGPT5_4,
-		wineModel:  openai.ChatModelGPT5Mini,
+		wineModel:  openai.ChatModelGPT5_4Mini, // how do we test this?
 	}
 }
 
@@ -121,16 +120,21 @@ You are a professional chef and recipe developer that wants to help working fami
 # Objective
 Generate distinct, practical recipes using the provided constraints to maximize ingredient freshness, quality, and value while ensuring meal variety.
 
+# Constraint Priority
+- Follow constraints in this order: explicit user instructions and corrections, factual input data, fallback defaults, then stylistic goals.
+- If an explicit user instruction conflicts with a fallback default, follow the explicit user instruction.
+- If seasonality conflicts with the requested cuisine, dish style, diet, budget, or other direct user intent, preserve the user's intent and cuisine coherence. Use seasonal ingredients only when they fit naturally.
+
 # Instructions
 - Each meal must feature a protein and at least one side of either a vegetable and/or a starch. Include pastas, noodles, stir fry's, stews, braises, curries, casserole and other compositions.
-- Recipes should use diverse cooking methods and represent a variety of cuisines.
+- Recipes should use diverse cooking methods and represent a variety of cuisines when that does not conflict with direct user instructions.
 - Provide clear, step-by-step instructions and an ingredient list for each recipe. Repeat amounts and prep for each recipe in instructions. Details on how ingredients are cut and plated. No prices or wine paring in instructions.
 - include a optional wine pairing suggestion for each recipe if appropriate. Suggest a couple of styles. Really put your Sommielier hat on for this.
-- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but be willing to pay for better ingredients). Only use prices given don't invent prices.
-- Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated ingredient quantities and servings.
+- Prioritize ingredients that are on sale (the bigger the discount, the higher the priority but be willing to pay for better ingredients). Treat seasonality as a tie-breaker for freshness and value when it fits the requested cuisine and dish. Only use prices given and never invent prices.
+- Aim for healthy unless otherwise stated. Calorie estimates must be conservative and reasonable for the stated ingredient quantities and servings.
 - Aim for an aesthetically and texturally pleasing dish. Think about color (not too monochrome), texture (not all mushy), and plating (how would a restaurant plate this?).
-- Suggest at least one recipe that is a little bit richer in terms of price, calories or prep time, be sure to mention in description.
-- Suggest at least one recipe that is different ethnic cuisine.
+- Suggest at least one recipe that is a little bit richer in terms of price, calories or prep time, be sure to mention in description, but do not break direct user constraints to do it.
+- Suggest at least one recipe that is different ethnic cuisine, but do not break direct user constraints to do it.
 
 # Output Format
 - List of recipe each includes:
@@ -145,11 +149,15 @@ Generate distinct, practical recipes using the provided constraints to maximize 
   - wine_styles: Two or fewer consumer-recognizable wine styles for search (for example: "Pinot Noir", "Sauvignon Blanc", "Cabernet Sauvignon"). Must only contain searchable style names: no regions, no parenthetical notes, no commas, no "or", no "*-style blend" phrasing.
 
 # Planning & Verification
-- Reference your checklist to ensure variety in cooking methods and cuisines
-- Confirm ingredient prioritization matches sale/seasonal data.
+- Determine servings from explicit user instructions first; only use fallback defaults if the user did not specify servings.
+- Determine recipe count from explicit user instructions first; only use fallback defaults if the user did not specify count.
+- Reference your checklist to ensure variety in cooking methods and cuisines only after direct user constraints are satisfied.
+- Confirm ingredient prioritization matches sale data and uses seasonality only when it fits the requested cuisine and dish.
 - Verify every ingredient line with a price uses the same product and price from input data.
+- Do not invent prices. Pantry items or unpriced staples may appear without a price.
 - Recalculate cost estimate from listed priced ingredients and ensure it aligns with cost_estimate.
-- Double-check calorie guidance in health against the ingredient list and portion size.
+- Double-check calorie guidance in health against the ingredient list, portion size, and serving count.
+- If exact nutrition is uncertain, keep calorie and macro guidance approximate and conservative.
 - Read each instruction step in order and ensure the flow is realistic, non-contradictory, and fully cookable
 - Verify the liquids reduce in stated time
 - Verify technical terms are used correctly.
@@ -181,6 +189,12 @@ const (
 	recipeImageQuality      = openai.ImageGenerateParamsQualityHigh
 	recipeImageSize         = openai.ImageGenerateParamsSize1024x1024
 )
+
+func recipeReasoning() shared.ReasoningParam {
+	return shared.ReasoningParam{
+		Effort: shared.ReasoningEffortMedium,
+	}
+}
 
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
 	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
@@ -217,6 +231,7 @@ func (c *Client) Regenerate(ctx context.Context, instructions []string, conversa
 
 	params := responses.ResponseNewParams{
 		Model: c.model,
+		// Reasoning: recipeReasoning(),
 		// only new input
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
@@ -247,6 +262,7 @@ func (c *Client) AskQuestion(ctx context.Context, question string, conversationI
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
+		Reasoning:    recipeReasoning(),
 		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(question)},
@@ -341,6 +357,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
+		Reasoning:    recipeReasoning(),
 		Instructions: openai.String(systemMessage),
 
 		Input: responses.ResponseNewParamsInputUnion{
@@ -405,12 +422,7 @@ func buildWineSelectionPrompt(recipe Recipe, wines []kroger.Ingredient) (string,
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
 func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
-	// constants we might make variable later
-	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
-	messages = append(messages, user("Default: each recipe should serve 2 people."))
-	messages = append(messages, user("Default: generate 3 recipes"))
-	messages = append(messages, user("Default: prep and cook time under 1 hour"))
-	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
+	messages = append(messages, user(buildRecipeDefaultsMessage(location, date)))
 
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
 	var buf strings.Builder
@@ -435,6 +447,18 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	messages = append(messages, cleanInstuctions(instructions)...)
 
 	return messages, nil
+}
+
+func buildRecipeDefaultsMessage(location *locations.Location, date time.Time) string {
+	var promptBuilder strings.Builder
+	promptBuilder.WriteString("Fallback defaults for recipe generation. Use these only when the user has not already specified otherwise. If any direct user instruction conflicts with a default, follow the user's instruction and ignore the default.\n")
+	fmt.Fprintf(&promptBuilder, "- Current date and state for seasonal tie-breakers: %s in %s.\n", date.Format("January 2, 2006"), location.State)
+	promptBuilder.WriteString("- Seasonal ingredients are a tie-breaker for freshness and value only when they fit the requested cuisine and dish naturally.\n")
+	promptBuilder.WriteString("- Default servings: 2 people.\n")
+	promptBuilder.WriteString("- Default recipe count: 3 recipes.\n")
+	promptBuilder.WriteString("- Default prep and cook time: under 1 hour.\n")
+	promptBuilder.WriteString("- Default cooking methods: oven, stove, grill, slow cooker.\n")
+	return promptBuilder.String()
 }
 
 func (c *Client) Ready(ctx context.Context) error {
