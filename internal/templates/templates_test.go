@@ -3,6 +3,7 @@ package templates
 import (
 	"bytes"
 	"context"
+	"html/template"
 	"strings"
 	"testing"
 
@@ -81,5 +82,43 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "Dungeness crab pasta") {
 		t.Fatalf("about page should render album comments from Go data, body: %s", rendered)
+	}
+}
+
+func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	if err := Init(cfg, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+			t.Fatalf("cleanup Init() error = %v", err)
+		}
+	})
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
+		RefreshInterval string
+	}{
+		Style:           seasons.GetCurrentStyle(),
+		ServerSignedIn:  false,
+		RefreshInterval: "10",
+	}
+
+	var buf bytes.Buffer
+	if err := Spin.Execute(&buf, data); err != nil {
+		t.Fatalf("Spin.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, `data-clerk-publishable-key="pk_test_123"`) {
+		t.Fatalf("spinner page should include Clerk bootstrap script, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `const serverSignedIn =`) || !strings.Contains(rendered, `!serverSignedIn && clerkSignedIn`) {
+		t.Fatalf("spinner page should pass server sign-in state to Clerk refresh logic, body: %s", rendered)
 	}
 }

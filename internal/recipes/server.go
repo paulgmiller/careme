@@ -850,31 +850,38 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if startTime, err := time.Parse(time.RFC3339Nano, startArg); err == nil {
-		if time.Since(startTime) > time.Minute*10 {
-			p, err := s.ParamsFromCache(ctx, hashParam)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
-				http.Error(w, "recipe not found or expired", http.StatusNotFound)
-				return
-			}
+	startTime, err := time.Parse(time.RFC3339Nano, startArg)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to parse start time", "time", startArg, "error", err)
+		redirectToHash(w, r, hashParam, true /*useStart*/)
+	}
 
-			currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
-			if err != nil {
-				if !errors.Is(err, auth.ErrNoSession) {
-					slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
-					http.Error(w, "unable to load account", http.StatusInternalServerError)
-					return
-				}
-				http.Redirect(w, r, "/", http.StatusSeeOther)
-				return
-			}
-			s.kickgeneration(ctx, p, currentUser)
-			redirectToHash(w, r, p.Hash(), true /*useStart*/)
+	if time.Since(startTime) < time.Minute*10 {
+		s.Spin(w, r)
+	}
+	slog.WarnContext(ctx, "rekicking generation", "time", startArg, "hash", hashParam)
+
+	p, err := s.ParamsFromCache(ctx, hashParam)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+		http.Error(w, "recipe not found or expired", http.StatusNotFound)
+		return
+	}
+
+	// this could fail becasuse clerk isn't refreshing?
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
+	if err != nil {
+		if !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
+		slog.WarnContext(ctx, "no valid session found from spin page.", "hash", hashParam)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
 	}
-	s.Spin(w, r)
+	s.kickgeneration(ctx, p, currentUser)
+	redirectToHash(w, r, p.Hash(), true /*useStart*/)
 }
 
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
@@ -1021,7 +1028,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 			return r.Title, cooked[r.Hash].Cooked
 		})
 
-		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
+		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash, "user_id", currentUser.ID)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
@@ -1040,15 +1047,19 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ctx := r.Context()
+	_, err := s.clerk.GetUserIDFromRequest(r)
+	signedIn := !errors.Is(err, auth.ErrNoSession)
 	spinnerData := struct {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
+		ServerSignedIn  bool
 		RefreshInterval string // seconds
 	}{
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
+		ServerSignedIn:  signedIn,
 		RefreshInterval: "10", // seconds
 	}
 
