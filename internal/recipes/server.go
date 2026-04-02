@@ -77,7 +77,13 @@ type generator interface {
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
+}
+
+// should we have new generator just return two interfaces instead of gluing?
+type generatorPlus interface {
+	generator
 	Ready(ctx context.Context) error
+	Watchdog(ctx context.Context) error
 }
 
 type server struct {

@@ -14,6 +14,7 @@ import (
 	"os"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
@@ -44,10 +45,14 @@ type emailClient interface {
 	Send(message *mail.SGMailV3) (*rest.Response, error)
 }
 
+type generator interface {
+	GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error)
+}
+
 type mailer struct {
 	cache        cache.Cache
 	userStorage  *users.Storage
-	generator    *recipes.Generator // interface requires making params public
+	generator    generator // interface requires making params public
 	locServer    locServer
 	client       emailClient
 	publicOrigin string
@@ -83,7 +88,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	return &mailer{
 		cache:        cache,
 		userStorage:  userStorage,
-		generator:    generator.(*recipes.Generator), // TODO do better
+		generator:    generator,
 		locServer:    locationserver,
 		client:       sendgrid.NewSendClient(sendgridkey),
 		publicOrigin: cfg.ResolvedPublicOrigin(),

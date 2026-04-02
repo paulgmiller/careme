@@ -26,6 +26,7 @@ import (
 	"careme/internal/static"
 	"careme/internal/templates"
 	"careme/internal/users"
+	"careme/internal/watchdog"
 
 	utypes "careme/internal/users/types"
 )
@@ -81,6 +82,10 @@ func runServer(cfg *config.Config, addr string) error {
 	recipeHandler.Register(appRoutes)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
+
+	watchdogServer := watchdog.Server{}
+	watchdogServer.Add("staples", generator, 6.*time.Hour)
+	watchdogServer.Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))

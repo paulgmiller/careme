@@ -363,6 +363,10 @@ func (m mock) Ready(ctx context.Context) error {
 	return nil
 }
 
+func (m mock) Watchdog(ctx context.Context) error {
+	return nil
+}
+
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	id := p.ConversationID
 	if id == "" {

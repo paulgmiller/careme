@@ -45,7 +45,7 @@ type Generator struct {
 	io              ingredientio
 }
 
-func NewGenerator(cfg *config.Config, io ingredientio) (generator, error) {
+func NewGenerator(cfg *config.Config, io ingredientio) (generatorPlus, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -215,6 +215,23 @@ func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
 
 func (g *Generator) Ready(ctx context.Context) error {
 	return g.aiClient.Ready(ctx)
+}
+
+// this is a little expnsive so unlike ready above needs to be protected by a once by.
+func (g *Generator) Watchdog(ctx context.Context) error {
+	storeIDs := []string{
+		"wholefoods_10153", // bellevue
+		"safeway_490",      // bellevue
+		"70500874",         // qfc in bellevue
+		"starmarket_3566",  // boston
+		"acmemarkets_806",  // newark
+	}
+	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]kroger.Ingredient, error) {
+		// defeats point of watch dog to read from cache but we could write to it as a courtesy.
+		return g.staplesProvider.FetchStaples(ctx, storeID)
+	})
+
+	return err
 }
 
 // toStr returns the string value if non-nil, or "empty" otherwise.
