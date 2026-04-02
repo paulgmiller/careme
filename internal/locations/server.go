@@ -141,7 +141,8 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 
 func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, zip string, favoriteStore string, serverSignedIn bool) error {
 	locs, err := l.storage.GetLocationsByZip(ctx, zip)
-	if err != nil {
+	// be very forgiving of errors here.
+	if len(locs) == 0 && err != nil {
 		return fmt.Errorf("failed to get locations for zip %s: %w", zip, err)
 	}
 

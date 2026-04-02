@@ -64,12 +64,14 @@ spec:
               port: http
             initialDelaySeconds: 1
             periodSeconds: 5
+            timeoutSeconds: 3 #first call has to get outh token (should we do a startup probe?)
           livenessProbe:
             httpGet:
               path: /ready
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 3 #first call has to get outh token
           resources:
             requests:
               cpu: 50m

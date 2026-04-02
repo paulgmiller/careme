@@ -409,7 +409,7 @@ func TestLocationStorageNearestZIPToCoordinates(t *testing.T) {
 	}
 }
 
-func TestGetLocationsByZipSucceedsWhenAtLeastOneBackendSucceeds(t *testing.T) {
+func TestGetLocationsByZipWhenAtLeastOneBackendSucceeds(t *testing.T) {
 	fail := newFakeLocationClient()
 	fail.err = fmt.Errorf("backend down")
 
@@ -422,8 +422,8 @@ func TestGetLocationsByZipSucceedsWhenAtLeastOneBackendSucceeds(t *testing.T) {
 
 	server := newTestLocationServerWithBackends([]locationBackend{fail, success})
 	locs, err := server.GetLocationsByZip(context.Background(), "00601")
-	if err != nil {
-		t.Fatalf("did not expect error when one backend succeeds: %v", err)
+	if err == nil {
+		t.Fatalf("expected an error: %v", err)
 	}
 	if len(locs) != 1 || locs[0].ID != "ok" {
 		t.Fatalf("unexpected locations: %+v", locs)

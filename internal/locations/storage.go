@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
-	"sync"
 	"time"
 
 	"careme/internal/albertsons"
@@ -18,6 +17,7 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations/geo"
 	"careme/internal/logsetup"
+	"careme/internal/parallelism"
 	"careme/internal/publix"
 	"careme/internal/walmart"
 	"careme/internal/wegmans"
@@ -174,34 +174,16 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 }
 
 func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
-	results := make(chan []Location, len(l.clients))
-	errors := make(chan error, len(l.clients))
-	var wg sync.WaitGroup
-	for _, backend := range l.clients {
-		wg.Add(1)
-		go func(backend locationBackend) {
-			defer wg.Done()
-			start := time.Now()
-			locations, err := backend.GetLocationsByZip(ctx, zipcode)
-			if err != nil {
-				slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "zip", zipcode)
-				errors <- err
-				return
-			}
-			slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
-			results <- locations
-		}(backend)
-	}
-	wg.Wait()
-	close(results)
-	close(errors)
-	if len(errors) == len(l.clients) {
-		return nil, fmt.Errorf("all backends failed to get locations for zip %s", zipcode)
-	}
-	var allLocations []Location
-	for result := range results {
-		allLocations = append(allLocations, result...)
-	}
+	allLocations, fetcherrors := parallelism.Flatten(l.clients, func(backend locationBackend) ([]Location, error) {
+		start := time.Now()
+		locations, err := backend.GetLocationsByZip(ctx, zipcode)
+		if err != nil {
+			slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "zip", zipcode)
+			return nil, err
+		}
+		slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
+		return locations, err
+	})
 
 	for _, loc := range allLocations {
 		go func(loc Location) {
@@ -215,7 +197,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 	if !hasRequestedCentroid {
 		// were missign zip codes. Make this an error later?
 		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode, "count", len(allLocations))
-		return allLocations, nil
+		return allLocations, fetcherrors
 	}
 
 	filtered := make([]Location, 0, len(allLocations))
@@ -235,7 +217,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 	allLocations = filtered
 	sortLocationsByDistanceFromCentroid(allLocations, requestedCentroid, l.zipCentroids)
 
-	return allLocations, nil
+	return allLocations, fetcherrors
 }
 
 func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID string) (Location, bool) {
