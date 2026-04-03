@@ -30,15 +30,30 @@ func loadRuntimeEnv() error {
 }
 
 func loadDotEnv(path string) error {
-	entries, err := readDotEnv(path)
+	resolvedPath, err := findPathUpToGitRoot(path)
 	if err != nil {
 		return err
 	}
-	mergeEnv(entries)
+	if resolvedPath == "" {
+		return nil
+	}
+
+	if err := godotenv.Load(resolvedPath); err != nil {
+		return fmt.Errorf("load %q: %w", resolvedPath, err)
+	}
+
 	return nil
 }
 
 func loadEncryptedEnv(path string) error {
+	resolvedPath, err := findPathUpToGitRoot(path)
+	if err != nil {
+		return err
+	}
+	if resolvedPath == "" {
+		return nil
+	}
+
 	identities, err := loadSSHIdentities()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -47,7 +62,7 @@ func loadEncryptedEnv(path string) error {
 		return fmt.Errorf("load ssh identity for %q: %w", path, err)
 	}
 
-	entries, err := decryptDotEnv(path, identities)
+	entries, err := decryptDotEnv(resolvedPath, identities)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -56,23 +71,6 @@ func loadEncryptedEnv(path string) error {
 	}
 	mergeEnv(entries)
 	return nil
-}
-
-func readDotEnv(path string) (map[string]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read %q: %w", path, err)
-	}
-	defer f.Close()
-
-	entries, err := godotenv.Parse(f)
-	if err != nil {
-		return nil, fmt.Errorf("parse %q: %w", path, err)
-	}
-	return entries, nil
 }
 
 func decryptDotEnv(path string, identities []age.Identity) (map[string]string, error) {
@@ -96,6 +94,35 @@ func decryptDotEnv(path string, identities []age.Identity) (map[string]string, e
 	}
 
 	return entries, nil
+}
+
+func findPathUpToGitRoot(path string) (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("get working directory: %w", err)
+	}
+
+	for {
+		candidate := filepath.Join(dir, path)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("stat %q: %w", candidate, err)
+		}
+
+		gitMarker := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitMarker); err == nil {
+			return "", nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("stat %q: %w", gitMarker, err)
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", nil
+		}
+		dir = parent
+	}
 }
 
 func loadSSHIdentities() ([]age.Identity, error) {
