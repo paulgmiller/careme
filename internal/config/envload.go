@@ -69,7 +69,7 @@ func loadEncryptedEnv(path string) error {
 		}
 		return err
 	}
-	mergeEnv(entries)
+	setEnvIfUnset(entries)
 	return nil
 }
 
@@ -154,7 +154,9 @@ func loadSSHIdentities() ([]age.Identity, error) {
 	return nil, os.ErrNotExist
 }
 
-func mergeEnv(entries map[string]string) {
+func setEnvIfUnset(entries map[string]string) {
+	// godotenv.Load only accepts filenames; decrypted secrets are in-memory bytes/reader,
+	// so we parse and apply them manually while preserving existing process env values.
 	for key, value := range entries {
 		if _, exists := os.LookupEnv(key); exists {
 			continue
