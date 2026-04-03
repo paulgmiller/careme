@@ -7,10 +7,10 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 require github.com/samber/lo v1.53.0
 
 require (
+	filippo.io/age v1.2.1
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.4
 	github.com/clerk/clerk-sdk-go/v2 v2.5.1
-	filippo.io/age v1.2.1
 	github.com/gobwas/ws v1.4.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/invopop/jsonschema v0.13.0
@@ -27,6 +27,7 @@ require (
 
 require (
 	code.cloudfoundry.org/clock v0.0.0-20180518195852-02e53af36e6c // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
