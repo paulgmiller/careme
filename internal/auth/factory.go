@@ -3,10 +3,10 @@ package auth
 import "careme/internal/config"
 
 // NewFromConfig creates an AuthClient based on config settings.
-func NewFromConfig(cfg *config.Config) (AuthClient, error) {
+func NewFromConfig(cfg *config.Config, userExists UserExistsFunc) (AuthClient, error) {
 	if cfg.Mocks.Enable {
-		return Mock(cfg), nil
+		return Mock(cfg, userExists), nil
 	}
 
-	return NewClient(cfg)
+	return NewClient(cfg, userExists)
 }

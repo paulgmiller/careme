@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -33,6 +34,8 @@ type AuthClient interface {
 	Register(mux routing.Registrar)
 }
 
+type UserExistsFunc func(ctx context.Context, clerkUserID string) (bool, error)
+
 // Client wraps Clerk SDK functionality
 // todo private
 type clerkClient struct {
@@ -40,12 +43,13 @@ type clerkClient struct {
 	userClient    *user.Client
 	sessionClient *session.Client
 	jwksClient    *jwks.Client
+	userExists    UserExistsFunc
 }
 
 var _ AuthClient = (*clerkClient)(nil)
 
 // NewClient creates a new Clerk client wrapper
-func NewClient(cfg *config.Config) (*clerkClient, error) {
+func NewClient(cfg *config.Config, userExists UserExistsFunc) (*clerkClient, error) {
 	if cfg.Clerk.SecretKey == "" {
 		return nil, fmt.Errorf("clerk secret key is required")
 	}
@@ -61,6 +65,7 @@ func NewClient(cfg *config.Config) (*clerkClient, error) {
 		sessionClient: session.NewClient(clientConfig),
 		jwksClient:    jwks.NewClient(clientConfig),
 		cfg:           cfg,
+		userExists:    userExists,
 	}, nil
 }
 
@@ -162,6 +167,35 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, c.signInURL(r, true), http.StatusSeeOther)
 	})
+	mux.HandleFunc("POST /auth/user-exists", func(w http.ResponseWriter, r *http.Request) {
+		if c.userExists == nil {
+			http.Error(w, "user exists handler missing", http.StatusInternalServerError)
+			return
+		}
+		clerkUserID, err := c.GetUserIDFromRequest(r)
+		if err != nil {
+			if errors.Is(err, ErrNoSession) {
+				http.Error(w, "no valid session found", http.StatusUnauthorized)
+				return
+			}
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		exists, err := c.userExists(r.Context(), clerkUserID)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "auth user exists lookup failed", "clerk_user_id", clerkUserID, "error", err)
+			http.Error(w, "unable to check account", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		if err := json.NewEncoder(w).Encode(struct {
+			Exists bool `json:"exists"`
+		}{
+			Exists: exists,
+		}); err != nil {
+			slog.ErrorContext(r.Context(), "auth user exists encode failed", "clerk_user_id", clerkUserID, "error", err)
+		}
+	})
 	mux.HandleFunc("/auth/establish", func(w http.ResponseWriter, r *http.Request) {
 		if c.cfg.Clerk.PublishableKey == "" {
 			http.Error(w, "clerk publishable key missing", http.StatusInternalServerError)
@@ -172,13 +206,13 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 			PublishableKey      string
 			GoogleTagScript     template.HTML
 			GoogleConversionTag string
-			Signup              bool
+			UserExistsURL       string
 			ReturnTo            string // read from a data- attribute in the template to avoid JS-string escaping concerns
 		}{
 			PublishableKey:      c.cfg.Clerk.PublishableKey,
 			GoogleTagScript:     templates.GoogleTagScript(),
 			GoogleConversionTag: templates.GoogleConversionTag(),
-			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"), // used for ad conversions
+			UserExistsURL:       "/auth/user-exists",
 			ReturnTo:            returnToFromRequest(r),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
@@ -193,7 +227,7 @@ func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
 	if signup {
 		base = c.cfg.Clerk.Signup()
 	}
-	redirectURL := c.authEstablishURL(signup, returnToFromRequest(r))
+	redirectURL := c.authEstablishURL(returnToFromRequest(r))
 	u := lo.Must(url.Parse(base))
 	q := u.Query()
 	q.Set("redirect_url", redirectURL)
@@ -201,13 +235,10 @@ func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
 	return u.String()
 }
 
-func (c *clerkClient) authEstablishURL(signup bool, returnTo string) string {
+func (c *clerkClient) authEstablishURL(returnTo string) string {
 	origin := c.cfg.ResolvedPublicOrigin() // can never be emptpy
 	u := lo.Must(url.Parse(origin + "/auth/establish"))
 	q := u.Query()
-	if signup {
-		q.Set("signup", "true")
-	}
 	if returnTo != "" {
 		// Keep the entire relative return target in one opaque query value so
 		// nested ?a=1&b=2 segments are not broken apart during Clerk redirects.

@@ -139,7 +139,7 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 	)
 	t.Cleanup(s.Wait)
 
-	currentUser, err := storage.FindOrCreateFromClerk(t.Context(), "mock-clerk-user-id", auth.DefaultMock())
+	currentUser, _, err := storage.FindOrCreateFromClerk(t.Context(), "mock-clerk-user-id", auth.DefaultMock())
 	if err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *t
 	)
 	t.Cleanup(s.Wait)
 
-	currentUser, err := storage.FindOrCreateFromClerk(t.Context(), "mock-clerk-user-id", auth.DefaultMock())
+	currentUser, _, err := storage.FindOrCreateFromClerk(t.Context(), "mock-clerk-user-id", auth.DefaultMock())
 	if err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}

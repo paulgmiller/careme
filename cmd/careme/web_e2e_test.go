@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -173,7 +175,16 @@ func newTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("failed to create location server: %v", err)
 	}
 
-	mockAuth := auth.Mock(cfg)
+	mockAuth := auth.Mock(cfg, func(_ context.Context, clerkUserID string) (bool, error) {
+		_, err := userStorage.GetByID(clerkUserID)
+		if err == nil {
+			return true, nil
+		}
+		if errors.Is(err, users.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	})
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {

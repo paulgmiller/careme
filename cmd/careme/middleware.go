@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"careme/internal/attribution"
 	"careme/internal/logsetup"
 
 	"github.com/clerk/clerk-sdk-go/v2"
@@ -23,6 +24,7 @@ import (
 const (
 	sessionCookieName   = "careme_session_id"
 	sessionCookieMaxAge = 30 * 60
+	attributionMaxAge   = 90 * 24 * 60 * 60
 )
 
 type logger struct {
@@ -202,11 +204,27 @@ type sessionIDHandler struct {
 	http.Handler
 }
 
+type attributionHandler struct {
+	http.Handler
+}
+
 func (h *sessionIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sessionID := readOrCreateSessionID(r)
 	ctx := logsetup.WithSessionID(r.Context(), sessionID)
 	http.SetCookie(w, sessionCookie(r, sessionID))
 	h.Handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func (h *attributionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if clickIDs, ok := attribution.CaptureFromRequest(r); ok {
+		value, err := attribution.EncodeCookieValue(clickIDs)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to encode attribution cookie", "error", err)
+		} else {
+			http.SetCookie(w, attributionCookie(r, value))
+		}
+	}
+	h.Handler.ServeHTTP(w, r)
 }
 
 func readOrCreateSessionID(r *http.Request) string {
@@ -232,6 +250,18 @@ func sessionCookie(r *http.Request, sessionID string) *http.Cookie {
 	}
 }
 
+func attributionCookie(r *http.Request, value string) *http.Cookie {
+	return &http.Cookie{
+		Name:     attribution.CookieName,
+		Value:    value,
+		Path:     "/",
+		MaxAge:   attributionMaxAge,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   r.TLS != nil,
+	}
+}
+
 // just recover and log
 func BaseMiddleware(h http.Handler) http.Handler {
 	h = &recoverer{h}
@@ -243,5 +273,6 @@ func AppMiddleWare(h http.Handler, tracker requestTracker) http.Handler {
 	h = BaseMiddleware(h)
 	h = newAppInsightsTracker(h, tracker) // must be "inside" operatid and session handler.
 	h = &operationIDHandler{h}
+	h = &attributionHandler{h}
 	return &sessionIDHandler{h}
 }

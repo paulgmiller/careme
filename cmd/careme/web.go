@@ -42,7 +42,18 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create recipe image cache: %w", err)
 	}
 
-	authClient, err := auth.NewFromConfig(cfg)
+	userStorage := users.NewStorage(cache)
+	userStorage.SetSignupReporter(users.NewAttributionSignupReporter(userStorage))
+	authClient, err := auth.NewFromConfig(cfg, func(ctx context.Context, clerkUserID string) (bool, error) {
+		_, err := userStorage.GetByID(clerkUserID)
+		if err == nil {
+			return true, nil
+		}
+		if errors.Is(err, users.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create auth client: %w", err)
 	}
@@ -55,8 +66,6 @@ func runServer(cfg *config.Config, addr string) error {
 
 	authClient.Register(appRoutes)
 	static.Register(infraRoutes)
-
-	userStorage := users.NewStorage(cache)
 
 	generator, err := recipes.NewGenerator(cfg, recipes.IO(cache))
 	if err != nil {

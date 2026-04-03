@@ -16,15 +16,24 @@ type Recipe struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type SignupAttribution struct {
+	GCLID       string    `json:"gclid,omitempty"`
+	GBRAID      string    `json:"gbraid,omitempty"`
+	WBRAID      string    `json:"wbraid,omitempty"`
+	LandingPath string    `json:"landing_path,omitempty"`
+	CapturedAt  time.Time `json:"captured_at,omitempty"`
+}
+
 type User struct {
-	ID            string    `json:"id"`
-	Email         []string  `json:"email"`
-	CreatedAt     time.Time `json:"created_at"`
-	LastRecipes   []Recipe  `json:"last_recipes,omitempty"`
-	FavoriteStore string    `json:"favorite_store,omitempty"`
-	ShoppingDay   string    `json:"shopping_day,omitempty"`
-	MailOptIn     bool      `json:"mail_opt_in,omitempty"`
-	Directive     string    `json:"directive,omitempty"`
+	ID                string             `json:"id"`
+	Email             []string           `json:"email"`
+	CreatedAt         time.Time          `json:"created_at"`
+	LastRecipes       []Recipe           `json:"last_recipes,omitempty"`
+	FavoriteStore     string             `json:"favorite_store,omitempty"`
+	ShoppingDay       string             `json:"shopping_day,omitempty"`
+	MailOptIn         bool               `json:"mail_opt_in,omitempty"`
+	Directive         string             `json:"directive,omitempty"`
+	SignupAttribution *SignupAttribution `json:"signup_attribution,omitempty"`
 }
 
 // need to take a look up to location cache?

@@ -114,7 +114,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("tab") == "past" {
 		activeTab = "past"
 	}
-	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+	currentUser, _, err := s.storage.EnsureFromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
@@ -125,13 +125,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		// clerk_refresh and seee if they are then logged in. But we only want to do that once?
 		// TODO stick just show a sign in button on user page if no session
 		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 
@@ -265,7 +258,7 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
-	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+	currentUser, _, err := s.storage.EnsureFromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
@@ -274,13 +267,6 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 

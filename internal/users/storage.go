@@ -18,7 +18,20 @@ import (
 )
 
 type Storage struct {
-	cache cache.ListCache
+	cache          cache.ListCache
+	signupReporter SignupReporter
+}
+
+type SignupReporter interface {
+	ReportSignup(ctx context.Context, user *utypes.User, r *http.Request) error
+}
+
+type StorageOption func(*Storage)
+
+type noopSignupReporter struct{}
+
+func (noopSignupReporter) ReportSignup(context.Context, *utypes.User, *http.Request) error {
+	return nil
 }
 
 var ErrNotFound = errors.New("user not found")
@@ -29,8 +42,33 @@ const (
 	emailPrefix = "email2user/"
 )
 
-func NewStorage(c cache.ListCache) *Storage {
-	return &Storage{cache: c}
+func NewStorage(c cache.ListCache, opts ...StorageOption) *Storage {
+	storage := &Storage{
+		cache:          c,
+		signupReporter: noopSignupReporter{},
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(storage)
+		}
+	}
+	return storage
+}
+
+func WithSignupReporter(reporter SignupReporter) StorageOption {
+	return func(s *Storage) {
+		if reporter != nil {
+			s.signupReporter = reporter
+		}
+	}
+}
+
+func (s *Storage) SetSignupReporter(reporter SignupReporter) {
+	if reporter == nil {
+		s.signupReporter = noopSignupReporter{}
+		return
+	}
+	s.signupReporter = reporter
 }
 
 // obviously needs to be better
@@ -98,27 +136,41 @@ type emailFetcher interface {
 }
 
 func (s *Storage) FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error) {
+	user, _, err := s.EnsureFromRequest(ctx, r, authClient)
+	return user, err
+}
+
+func (s *Storage) EnsureFromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, bool, error) {
 	clerkUserID, err := authClient.GetUserIDFromRequest(r)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return s.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
+	user, created, err := s.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
+	if err != nil {
+		return nil, false, err
+	}
+	if created {
+		if err := s.signupReporter.ReportSignup(ctx, user, r); err != nil {
+			slog.ErrorContext(ctx, "failed to report signup", "user_id", user.ID, "error", err)
+		}
+	}
+	return user, created, nil
 }
 
 // interface for clerk client
-func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*utypes.User, error) {
+func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*utypes.User, bool, error) {
 	user, err := s.GetByID(clerkUserID)
 	if err == nil {
-		return user, nil
+		return user, false, nil
 	}
 
 	if err != nil && !errors.Is(err, ErrNotFound) {
-		return nil, err
+		return nil, false, err
 	}
 
 	primaryEmail, err := emailFetcher.GetUserEmail(ctx, clerkUserID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch user email from clerk: %w", err)
+		return nil, false, fmt.Errorf("failed to fetch user email from clerk: %w", err)
 	}
 
 	newUser := utypes.User{
@@ -128,13 +180,13 @@ func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string,
 		ShoppingDay: time.Saturday.String(),
 	}
 	if err := s.Update(&newUser); err != nil {
-		return nil, fmt.Errorf("failed to create new user: %w", err)
+		return nil, false, fmt.Errorf("failed to create new user: %w", err)
 	}
 	if err := s.cache.Put(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID, cache.Unconditional()); err != nil {
-		return nil, fmt.Errorf("failed to index new user by email: %w", err)
+		return nil, false, fmt.Errorf("failed to index new user by email: %w", err)
 	}
 	slog.InfoContext(ctx, "created new user", "id", clerkUserID, "email", primaryEmail)
-	return &newUser, nil
+	return &newUser, true, nil
 }
 
 func (s *Storage) Update(user *utypes.User) error {

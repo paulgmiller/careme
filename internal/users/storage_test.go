@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/attribution"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -19,9 +20,25 @@ type stubEmailFetcher struct {
 	calls int
 }
 
+type stubSignupReporter struct {
+	calls int
+	user  *utypes.User
+	path  string
+	err   error
+}
+
 func (s *stubEmailFetcher) GetUserEmail(_ context.Context, _ string) (string, error) {
 	s.calls++
 	return s.email, s.err
+}
+
+func (s *stubSignupReporter) ReportSignup(_ context.Context, user *utypes.User, r *http.Request) error {
+	s.calls++
+	s.user = user
+	if r != nil {
+		s.path = r.URL.RequestURI()
+	}
+	return s.err
 }
 
 func TestStorageUpdateAndGetByID(t *testing.T) {
@@ -113,9 +130,12 @@ func TestFindOrCreateFromClerkExistingUser(t *testing.T) {
 	}
 
 	fetcher := &stubEmailFetcher{email: "should-not-call@example.com"}
-	got, err := storage.FindOrCreateFromClerk(context.Background(), "user-3", fetcher)
+	got, created, err := storage.FindOrCreateFromClerk(context.Background(), "user-3", fetcher)
 	if err != nil {
 		t.Fatalf("FindOrCreateFromClerk() error: %v", err)
+	}
+	if created {
+		t.Fatal("FindOrCreateFromClerk() created = true, want false")
 	}
 	if fetcher.calls != 0 {
 		t.Fatalf("expected email fetcher to not be called, calls=%d", fetcher.calls)
@@ -131,10 +151,13 @@ func TestFindOrCreateFromClerkCreatesUser(t *testing.T) {
 
 	fetcher := &stubEmailFetcher{email: "NewUser@Example.com"}
 	start := time.Now()
-	got, err := storage.FindOrCreateFromClerk(context.Background(), "user-4", fetcher)
+	got, created, err := storage.FindOrCreateFromClerk(context.Background(), "user-4", fetcher)
 	end := time.Now()
 	if err != nil {
 		t.Fatalf("FindOrCreateFromClerk() error: %v", err)
+	}
+	if !created {
+		t.Fatal("FindOrCreateFromClerk() created = false, want true")
 	}
 	if fetcher.calls != 1 {
 		t.Fatalf("expected email fetcher to be called once, calls=%d", fetcher.calls)
@@ -168,7 +191,7 @@ func TestFromRequestCreatesUserWithMockAuth(t *testing.T) {
 	cfg := &config.Config{
 		Mocks: config.MockConfig{Email: "NewUser@Example.com"},
 	}
-	client := auth.Mock(cfg)
+	client := auth.Mock(cfg, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	got, err := storage.FromRequest(context.Background(), req, client)
@@ -199,7 +222,7 @@ func TestFromRequestReturnsExistingUser(t *testing.T) {
 	cfg := &config.Config{
 		Mocks: config.MockConfig{Email: "ignored@example.com"},
 	}
-	client := auth.Mock(cfg)
+	client := auth.Mock(cfg, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	got, err := storage.FromRequest(context.Background(), req, client)
@@ -211,5 +234,122 @@ func TestFromRequestReturnsExistingUser(t *testing.T) {
 	}
 	if len(got.Email) != 1 || got.Email[0] != "existing@example.com" {
 		t.Fatalf("FromRequest() Email = %v, want [existing@example.com]", got.Email)
+	}
+}
+
+func TestEnsureFromRequestReportsSignupForNewUser(t *testing.T) {
+	fc := cache.NewFileCache(t.TempDir())
+	reporter := &stubSignupReporter{}
+	storage := NewStorage(fc, WithSignupReporter(reporter))
+
+	cfg := &config.Config{
+		Mocks: config.MockConfig{Email: "NewUser@Example.com"},
+	}
+	client := auth.Mock(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/user?tab=customize", nil)
+	got, created, err := storage.EnsureFromRequest(context.Background(), req, client)
+	if err != nil {
+		t.Fatalf("EnsureFromRequest() error: %v", err)
+	}
+	if !created {
+		t.Fatal("EnsureFromRequest() created = false, want true")
+	}
+	if reporter.calls != 1 {
+		t.Fatalf("expected signup reporter to be called once, calls=%d", reporter.calls)
+	}
+	if reporter.user == nil || reporter.user.ID != got.ID {
+		t.Fatalf("signup reporter user = %+v, want ID %q", reporter.user, got.ID)
+	}
+	if reporter.path != "/user?tab=customize" {
+		t.Fatalf("signup reporter path = %q, want %q", reporter.path, "/user?tab=customize")
+	}
+}
+
+func TestEnsureFromRequestDoesNotReportExistingUser(t *testing.T) {
+	fc := cache.NewFileCache(t.TempDir())
+	reporter := &stubSignupReporter{}
+	storage := NewStorage(fc, WithSignupReporter(reporter))
+
+	existing := &utypes.User{
+		ID:          "mock-clerk-user-id",
+		Email:       []string{"existing@example.com"},
+		ShoppingDay: time.Thursday.String(),
+	}
+	if err := storage.Update(existing); err != nil {
+		t.Fatalf("Update() error: %v", err)
+	}
+
+	cfg := &config.Config{
+		Mocks: config.MockConfig{Email: "ignored@example.com"},
+	}
+	client := auth.Mock(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/user", nil)
+	got, created, err := storage.EnsureFromRequest(context.Background(), req, client)
+	if err != nil {
+		t.Fatalf("EnsureFromRequest() error: %v", err)
+	}
+	if created {
+		t.Fatal("EnsureFromRequest() created = true, want false")
+	}
+	if got.ID != existing.ID {
+		t.Fatalf("EnsureFromRequest() ID = %q, want %q", got.ID, existing.ID)
+	}
+	if reporter.calls != 0 {
+		t.Fatalf("expected signup reporter to not be called, calls=%d", reporter.calls)
+	}
+}
+
+func TestEnsureFromRequestPersistsCapturedAttribution(t *testing.T) {
+	fc := cache.NewFileCache(t.TempDir())
+	storage := NewStorage(fc)
+	storage.SetSignupReporter(NewAttributionSignupReporter(storage))
+
+	cfg := &config.Config{
+		Mocks: config.MockConfig{Email: "NewUser@Example.com"},
+	}
+	client := auth.Mock(cfg, nil)
+
+	captured := attribution.ClickIDs{
+		GCLID:       "gclid-123",
+		GBRAID:      "gbraid-456",
+		LandingPath: "/?gclid=gclid-123&gbraid=gbraid-456",
+		CapturedAt:  time.Date(2026, time.April, 3, 10, 0, 0, 0, time.UTC),
+	}
+	value, err := attribution.EncodeCookieValue(captured)
+	if err != nil {
+		t.Fatalf("EncodeCookieValue() error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/user", nil)
+	req.AddCookie(&http.Cookie{Name: attribution.CookieName, Value: value})
+
+	got, created, err := storage.EnsureFromRequest(context.Background(), req, client)
+	if err != nil {
+		t.Fatalf("EnsureFromRequest() error: %v", err)
+	}
+	if !created {
+		t.Fatal("EnsureFromRequest() created = false, want true")
+	}
+	if got.SignupAttribution == nil {
+		t.Fatal("expected signup attribution to be stored")
+	}
+	if got.SignupAttribution.GCLID != "gclid-123" {
+		t.Fatalf("SignupAttribution.GCLID = %q, want %q", got.SignupAttribution.GCLID, "gclid-123")
+	}
+	if got.SignupAttribution.GBRAID != "gbraid-456" {
+		t.Fatalf("SignupAttribution.GBRAID = %q, want %q", got.SignupAttribution.GBRAID, "gbraid-456")
+	}
+	if got.SignupAttribution.LandingPath != captured.LandingPath {
+		t.Fatalf("SignupAttribution.LandingPath = %q, want %q", got.SignupAttribution.LandingPath, captured.LandingPath)
+	}
+
+	stored, err := storage.GetByID(got.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error: %v", err)
+	}
+	if stored.SignupAttribution == nil || stored.SignupAttribution.GCLID != "gclid-123" {
+		t.Fatalf("stored SignupAttribution = %+v", stored.SignupAttribution)
 	}
 }

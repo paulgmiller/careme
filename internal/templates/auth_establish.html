@@ -6,7 +6,7 @@
     <title>Signing In</title>
     {{.GoogleTagScript}}
   </head>
-  <body data-return-to="{{.ReturnTo}}">
+  <body data-return-to="{{.ReturnTo}}" data-user-exists-url="{{.UserExistsURL}}">
     <script
       crossorigin="anonymous"
       data-clerk-publishable-key="{{.PublishableKey}}"
@@ -19,20 +19,45 @@
         history.replaceState({}, "", url.toString());
 
         const returnTo = document.body.dataset.returnTo || "/";
+        const userExistsURL = document.body.dataset.userExistsUrl;
         const finishRedirect = () => location.replace(returnTo);
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-        if ({{.Signup}} &&
-            "{{.GoogleConversionTag}}" !== "" &&
-            typeof gtag === "function") {
-          gtag("event", "conversion", {
-            send_to: "{{.GoogleConversionTag}}",
-            event_callback: finishRedirect,
-          });
-          setTimeout(finishRedirect, 1500);
-          return;
-        }
+        const checkUserExists = async () => {
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const response = await fetch(userExistsURL, {
+              method: "POST",
+              credentials: "same-origin",
+              headers: {
+                "Accept": "application/json",
+              },
+            });
+            if (response.ok) {
+              return response.json();
+            }
+            if (response.status !== 401 || attempt === 4) {
+              throw new Error(`auth user exists failed: ${response.status}`);
+            }
+            await wait(150);
+          }
+          throw new Error("auth user exists failed");
+        };
 
-        finishRedirect();
+        checkUserExists().then((payload) => {
+          if (!payload.exists &&
+              "{{.GoogleConversionTag}}" !== "" &&
+              typeof gtag === "function") {
+            gtag("event", "conversion", {
+              send_to: "{{.GoogleConversionTag}}",
+              event_callback: finishRedirect,
+            });
+            setTimeout(finishRedirect, 1500);
+            return;
+          }
+          finishRedirect();
+        }).catch(() => {
+          finishRedirect();
+        });
       });
     </script>
   </body>

@@ -122,3 +122,54 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 		t.Fatalf("spinner page should pass server sign-in state to Clerk refresh logic, body: %s", rendered)
 	}
 }
+
+func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	if err := Init(cfg, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+			t.Fatalf("cleanup Init() error = %v", err)
+		}
+	})
+
+	data := struct {
+		PublishableKey      string
+		GoogleTagScript     template.HTML
+		GoogleConversionTag string
+		UserExistsURL       string
+		ReturnTo            string
+	}{
+		PublishableKey:      "pk_test_123",
+		GoogleConversionTag: "AW-123/abc",
+		UserExistsURL:       "/auth/user-exists",
+		ReturnTo:            "/recipe/hash",
+	}
+
+	var buf bytes.Buffer
+	if err := AuthEstablish.Execute(&buf, data); err != nil {
+		t.Fatalf("AuthEstablish.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, `data-return-to="/recipe/hash"`) {
+		t.Fatalf("auth establish page should include return target, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `data-user-exists-url="/auth/user-exists"`) {
+		t.Fatalf("auth establish page should include user exists endpoint, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `fetch(userExistsURL, {`) {
+		t.Fatalf("auth establish page should call user exists endpoint, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `if (!payload.exists &&`) {
+		t.Fatalf("auth establish page should gate conversion on missing user, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `send_to: "AW-123\/abc"`) {
+		t.Fatalf("auth establish page should emit configured conversion tag, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `event_callback: finishRedirect`) {
+		t.Fatalf("auth establish page should redirect after gtag callback, body: %s", rendered)
+	}
+}
