@@ -4,10 +4,36 @@ import (
 	"reflect"
 	"testing"
 
+	"careme/internal/ingredientcoverage"
 	"careme/internal/kroger"
 )
 
-func TestParseProduceList(t *testing.T) {
+func TestSelectedDatasets_CustomTerms(t *testing.T) {
+	got, err := selectedDatasets("produce", " carrots,Carrots, brussel sprouts , kale ")
+	if err != nil {
+		t.Fatalf("selectedDatasets() error = %v", err)
+	}
+	want := []ingredientcoverage.Dataset{{
+		Name:  "custom",
+		Label: "Custom",
+		Terms: []string{"carrot", "brussels sprout", "kale"},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("selectedDatasets() = %#v, want %#v", got, want)
+	}
+}
+
+func TestSelectedDatasets_DefaultDataset(t *testing.T) {
+	got, err := selectedDatasets("produce", "")
+	if err != nil {
+		t.Fatalf("selectedDatasets() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "produce" {
+		t.Fatalf("selectedDatasets() = %#v, want produce dataset", got)
+	}
+}
+
+func TestIngredientCoverageParseTermsCSV(t *testing.T) {
 	tests := []struct {
 		name string
 		csv  string
@@ -27,16 +53,16 @@ func TestParseProduceList(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := parseProduceList(tc.csv)
+			got := ingredientcoverage.ParseTermsCSV(tc.csv)
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("parseProduceList() = %#v, want %#v", got, tc.want)
+				t.Fatalf("ParseTermsCSV() = %#v, want %#v", got, tc.want)
 			}
 		})
 	}
 }
 
 func TestNormalizeTerm(t *testing.T) {
-	got := normalizeTerm("  Brussel   Sprouts ")
+	got := ingredientcoverage.BaselineMatcher().NormalizeTerm("  Brussel   Sprouts ")
 	want := "brussels sprout"
 	if got != want {
 		t.Fatalf("normalizeTerm() = %q, want %q", got, want)
@@ -44,7 +70,7 @@ func TestNormalizeTerm(t *testing.T) {
 }
 
 func TestNormalizeTerm_RemovesParentheticalAndDiacritics(t *testing.T) {
-	got := normalizeTerm(" Green Onions (Scallions), Jalapeño Peppers ")
+	got := ingredientcoverage.BaselineMatcher().NormalizeTerm(" Green Onions (Scallions), Jalapeño Peppers ")
 	want := "green onion jalapeno pepper"
 	if got != want {
 		t.Fatalf("normalizeTerm() = %q, want %q", got, want)
@@ -58,25 +84,14 @@ func TestHasProduce_UsesTokenMatching(t *testing.T) {
 		strPtr("Simple Truth Organic® Whole Baby Bella Mushrooms"),
 		strPtr("Simple Truth Organic® Kiwifruit"),
 	}
-	ingredients := make([]kroger.Ingredient, 0, len(descriptions))
-	for _, d := range descriptions {
-		ingredients = append(ingredients, kroger.Ingredient{Description: d})
-	}
 
-	tests := []struct {
-		term string
-		want int
-	}{
-		{term: "seedless cucumbers", want: 1},
-		{term: "jalapeño peppers", want: 1},
-		{term: "baby bella (cremini) mushrooms", want: 1},
-		{term: "kiwi", want: 1},
-	}
-	for _, tc := range tests {
-		got := hasProduce(ingredients, tc.term)
-		if len(got) != tc.want {
-			t.Fatalf("hasProduce(%q) = %d matches, want %d", tc.term, len(got), tc.want)
-		}
+	report := ingredientcoverage.Analyze(ingredientcoverage.Dataset{
+		Name:  "custom",
+		Label: "Custom",
+		Terms: []string{"seedless cucumbers", "jalapeño peppers", "baby bella (cremini) mushrooms", "kiwi"},
+	}, wrapIngredients(descriptions), ingredientcoverage.BaselineMatcher())
+	if report.MatchedTerms != 4 {
+		t.Fatalf("MatchedTerms = %d, want 4", report.MatchedTerms)
 	}
 }
 
@@ -87,56 +102,33 @@ func TestSummarizeFilterMatches(t *testing.T) {
 		strPtr("Fresh Jalapeno Peppers"),
 		strPtr("Simple Truth Organic® Kiwifruit"),
 	}
-	ingredients := make([]kroger.Ingredient, 0, len(descriptions))
-	for _, d := range descriptions {
-		ingredients = append(ingredients, kroger.Ingredient{Description: d})
-	}
 
-	produce := []string{
-		"seedless cucumbers",
-		"jalapeño peppers",
-		"kiwi",
-		"dill",
+	report := ingredientcoverage.Analyze(ingredientcoverage.Dataset{
+		Name:  "custom",
+		Label: "Custom",
+		Terms: []string{
+			"seedless cucumbers",
+			"jalapeño peppers",
+			"kiwi",
+			"dill",
+		},
+	}, wrapIngredients(descriptions), ingredientcoverage.BaselineMatcher())
+	if report.MatchedTerms != 3 {
+		t.Fatalf("MatchedTerms = %d, want %d", report.MatchedTerms, 3)
 	}
-
-	matchedTerms, matchedProducts := summarizeFilterMatches(produce, ingredients)
-	if matchedTerms != 3 {
-		t.Fatalf("summarizeFilterMatches() matchedTerms = %d, want %d", matchedTerms, 3)
-	}
-	if matchedProducts != 3 {
-		t.Fatalf("summarizeFilterMatches() matchedProducts = %d, want %d", matchedProducts, 3)
+	if report.TotalMatches != 3 {
+		t.Fatalf("TotalMatches = %d, want %d", report.TotalMatches, 3)
 	}
 }
 
-/*func TestAnnotateUniqueOnlyMatches(t *testing.T) {
-	stats := []produceFilterStats{
-		{
-			FilterTerm:          "fresh produce",
-			matchedDescriptions: []string{"A", "B", "C"},
-		},
-		{
-			FilterTerm:          "mushrooms produce",
-			matchedDescriptions: []string{"B", "D"},
-		},
-		{
-			FilterTerm:          "fresh peppers",
-			matchedDescriptions: []string{"E"},
-		},
-	}
-
-	annotateUniqueOnlyMatches(stats)
-
-	if stats[0].UniqueOnlyMatches != 2 {
-		t.Fatalf("stats[0].UniqueOnlyMatches = %d, want %d", stats[0].UniqueOnlyMatches, 2)
-	}
-	if stats[1].UniqueOnlyMatches != 1 {
-		t.Fatalf("stats[1].UniqueOnlyMatches = %d, want %d", stats[1].UniqueOnlyMatches, 1)
-	}
-	if stats[2].UniqueOnlyMatches != 1 {
-		t.Fatalf("stats[2].UniqueOnlyMatches = %d, want %d", stats[2].UniqueOnlyMatches, 1)
-	}
-}*/
-
 func strPtr(s string) *string {
 	return &s
+}
+
+func wrapIngredients(descriptions []*string) []kroger.Ingredient {
+	ingredients := make([]kroger.Ingredient, 0, len(descriptions))
+	for _, description := range descriptions {
+		ingredients = append(ingredients, kroger.Ingredient{Description: description})
+	}
+	return ingredients
 }
