@@ -10,8 +10,10 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.4
 	github.com/clerk/clerk-sdk-go/v2 v2.5.1
+	filippo.io/age v1.2.1
 	github.com/gobwas/ws v1.4.0
 	github.com/invopop/jsonschema v0.13.0
+	github.com/joho/godotenv v1.5.1
 	github.com/microsoft/ApplicationInsights-Go v0.4.4
 	github.com/openai/openai-go/v3 v3.29.0
 	github.com/openclosed-dev/slogan v0.2.0

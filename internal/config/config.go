@@ -146,6 +146,10 @@ func (c *Config) ResolvedPublicOrigin() string {
 }
 
 func Load() (*Config, error) {
+	if err := loadRuntimeEnv(); err != nil {
+		return nil, err
+	}
+
 	config := &Config{
 		AI: AIConfig{
 			APIKey: os.Getenv("AI_API_KEY"),
