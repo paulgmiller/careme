@@ -42,76 +42,58 @@ func loadEncryptedEnv(path string) error {
 		return fmt.Errorf("load ssh identity for %q: %w", path, err)
 	}
 
-	entries, err := decryptDotEnv(path, identities)
+	return decryptDotEnv(path, identities)
+}
+
+func decryptDotEnv(path string, identities []age.Identity) error {
+	ciphertext, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("read encrypted env %q: %w", path, err)
 	}
-	setEnvIfUnset(entries)
-	return nil
-}
-
-func decryptDotEnv(path string, identities []age.Identity) (map[string]string, error) {
-	ciphertext, err := os.Open(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("read encrypted env %q: %w", path, err)
-	}
-	defer ciphertext.Close()
+	defer func() {
+		_ = ciphertext.Close()
+	}()
 
 	reader, err := age.Decrypt(ciphertext, identities...)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt env %q: %w", path, err)
+		return fmt.Errorf("decrypt env %q: %w", path, err)
 	}
 
+	// no load for read so manually merge in entries from parse
 	entries, err := godotenv.Parse(reader)
 	if err != nil {
-		return nil, fmt.Errorf("parse decrypted env %q: %w", path, err)
+		return fmt.Errorf("parse decrypted env %q: %w", path, err)
 	}
-
-	return entries, nil
+	for key, value := range entries {
+		if _, exists := os.LookupEnv(key); !exists {
+			_ = os.Setenv(key, value)
+		}
+	}
+	return nil
 }
 
 func loadSSHIdentities() ([]age.Identity, error) {
-	paths := []string{filepath.Join(".ssh", "id_ed25519")}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		homePath := filepath.Join(home, ".ssh", "id_ed25519")
-		if homePath != paths[0] {
-			paths = append(paths, homePath)
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return []age.Identity{}, nil
+	}
+	path := filepath.Join(home, ".ssh", "id_ed25519")
+
+	key, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []age.Identity{}, nil
 		}
+		return nil, err
 	}
 
-	for _, path := range paths {
-		key, err := os.ReadFile(path)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			return nil, err
-		}
-
-		identity, err := agessh.ParseIdentity(key)
-		if err != nil {
-			return nil, fmt.Errorf("parse ssh identity %q: %w", path, err)
-		}
-
-		return []age.Identity{identity}, nil
+	identity, err := agessh.ParseIdentity(key)
+	if err != nil {
+		return nil, fmt.Errorf("parse ssh identity %q: %w", path, err)
 	}
 
-	return nil, os.ErrNotExist
-}
-
-func setEnvIfUnset(entries map[string]string) {
-	// godotenv.Load only accepts filenames; decrypted secrets are in-memory bytes/reader,
-	// so we parse and apply them manually while preserving existing process env values.
-	for key, value := range entries {
-		if _, exists := os.LookupEnv(key); exists {
-			continue
-		}
-		_ = os.Setenv(key, value)
-	}
+	return []age.Identity{identity}, nil
 }

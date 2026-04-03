@@ -27,6 +27,7 @@ func TestLoadRuntimeEnvLoadsDotAndEncryptedWithoutOverride(t *testing.T) {
 	t.Setenv("KEEP", "already")
 
 	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
 	oldWD, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Getwd() error = %v", err)
@@ -42,10 +43,11 @@ func TestLoadRuntimeEnvLoadsDotAndEncryptedWithoutOverride(t *testing.T) {
 		t.Fatalf("WriteFile(.env) error = %v", err)
 	}
 
-	if err := os.MkdirAll(filepath.Join(".ssh"), 0o700); err != nil {
+	sshDir := filepath.Join(tmp, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll(.ssh) error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(".ssh", "id_ed25519"), []byte(testSSHPrivateKey), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(sshDir, "id_ed25519"), []byte(testSSHPrivateKey), 0o600); err != nil {
 		t.Fatalf("WriteFile(id_ed25519) error = %v", err)
 	}
 
