@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"careme/internal/attribution"
 	"careme/internal/logsetup"
 )
 
@@ -247,40 +246,6 @@ func TestSessionIDHandlerReplacesInvalidCookie(t *testing.T) {
 	cookie := findCookie(t, rec.Result().Cookies(), sessionCookieName)
 	if cookie.Value == "not-a-uuid" {
 		t.Fatal("expected invalid session cookie to be replaced")
-	}
-}
-
-func TestAttributionHandlerCapturesClickIDs(t *testing.T) {
-	handler := &attributionHandler{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusNoContent)
-		}),
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/?gclid=abc123&gbraid=gb-7", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	cookie := findCookie(t, rec.Result().Cookies(), attribution.CookieName)
-	if cookie.MaxAge != attributionMaxAge {
-		t.Fatalf("expected MaxAge %d, got %d", attributionMaxAge, cookie.MaxAge)
-	}
-	clickIDs, err := attribution.ReadFromRequest(httptest.NewRequest(http.MethodGet, "https://careme.cooking/", nil))
-	if err == nil || clickIDs.GCLID != "" {
-		t.Fatal("expected helper request without cookie to fail")
-	}
-
-	readReq := httptest.NewRequest(http.MethodGet, "https://careme.cooking/", nil)
-	readReq.AddCookie(cookie)
-	got, err := attribution.ReadFromRequest(readReq)
-	if err != nil {
-		t.Fatalf("ReadFromRequest() error: %v", err)
-	}
-	if got.GCLID != "abc123" {
-		t.Fatalf("expected GCLID %q, got %q", "abc123", got.GCLID)
-	}
-	if got.GBRAID != "gb-7" {
-		t.Fatalf("expected GBRAID %q, got %q", "gb-7", got.GBRAID)
 	}
 }
 

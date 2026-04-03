@@ -114,7 +114,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("tab") == "past" {
 		activeTab = "past"
 	}
-	currentUser, _, err := s.storage.EnsureFromRequest(ctx, r, s.clerk)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
@@ -258,7 +258,7 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
-	currentUser, _, err := s.storage.EnsureFromRequest(ctx, r, s.clerk)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)

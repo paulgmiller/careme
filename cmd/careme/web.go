@@ -43,7 +43,6 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 
 	userStorage := users.NewStorage(cache)
-	userStorage.SetSignupReporter(users.NewAttributionSignupReporter(userStorage))
 	authClient, err := auth.NewFromConfig(cfg, func(ctx context.Context, clerkUserID string) (bool, error) {
 		_, err := userStorage.GetByID(clerkUserID)
 		if err == nil {
