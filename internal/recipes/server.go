@@ -265,6 +265,10 @@ func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", http.DetectContentType(header))
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	if _, err := io.Copy(w, imageReader); err != nil {
+		if ctx.Err() != nil {
+			slog.DebugContext(ctx, "image stream canceled", "hash", hash, "ctxErr", ctx.Err(), "error", err)
+			return
+		}
 		slog.ErrorContext(ctx, "failed to stream cached recipe image", "hash", hash, "error", err)
 	}
 }
