@@ -15,6 +15,7 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/recipes"
 	"careme/internal/routing"
+	"careme/internal/templates"
 )
 
 type server struct {
@@ -29,9 +30,9 @@ type inspectorPageData struct {
 	Date            string
 	IngredientCount int
 	DatasetLinks    []inspectorLink
-	MatcherLinks    []inspectorLink
 	JSONHref        string
 	TSVHref         string
+	ClerkRefresh    template.HTML
 	Sections        []analysisSectionView
 }
 
@@ -42,19 +43,12 @@ type inspectorLink struct {
 }
 
 type analysisSectionView struct {
-	DatasetName        string
-	DatasetLabel       string
-	ComparisonMode     bool
-	Baseline           reportView
-	Stemmed            *reportView
-	AddedTerms         []string
-	RemovedTerms       []string
-	AddedIngredients   []string
-	RemovedIngredients []string
+	DatasetName  string
+	DatasetLabel string
+	Report       reportView
 }
 
 type reportView struct {
-	MatcherLabel           string
 	MatchedTerms           int
 	TotalTerms             int
 	Score                  string
@@ -106,173 +100,81 @@ var inspectorTemplate = template.Must(template.New("ingredient-inspector").Parse
         <a class="pill{{if .Active}} active{{end}}" href="{{.Href}}">{{.Label}}</a>
         {{end}}
       </div>
-      <div class="pillbar">
-        {{range .MatcherLinks}}
-        <a class="pill{{if .Active}} active{{end}}" href="{{.Href}}">{{.Label}}</a>
-        {{end}}
-      </div>
       <p><a href="{{.JSONHref}}">Raw JSON</a> · <a href="{{.TSVHref}}">TSV export</a></p>
     </div>
 
     {{range .Sections}}
     <section class="panel">
       <h2>{{.DatasetLabel}}</h2>
-      <div class="grid{{if .ComparisonMode}} two{{end}}">
+      <div class="grid two">
         <div>
-          <h3>{{.Baseline.MatcherLabel}}</h3>
+          <h3>Matched</h3>
           <div class="stats">
-            <div class="stat"><span class="muted">Score</span><strong>{{.Baseline.Score}}</strong><span>{{.Baseline.MatchedTerms}} / {{.Baseline.TotalTerms}} terms</span></div>
-            <div class="stat"><span class="muted">Matched ingredients</span><strong>{{.Baseline.MatchedIngredientCount}}</strong><span>{{.Baseline.TotalIngredients}} total</span></div>
-            <div class="stat"><span class="muted">Term hits</span><strong>{{.Baseline.TotalMatches}}</strong><span>term to ingredient matches</span></div>
-            <div class="stat"><span class="muted">Unmatched ingredients</span><strong>{{len .Baseline.UnmatchedIngredients}}</strong><span>no test terms hit</span></div>
+            <div class="stat"><span class="muted">Score</span><strong>{{.Report.Score}}</strong><span>{{.Report.MatchedTerms}} / {{.Report.TotalTerms}} terms</span></div>
+            <div class="stat"><span class="muted">Matched ingredients</span><strong>{{.Report.MatchedIngredientCount}}</strong><span>{{.Report.TotalIngredients}} total</span></div>
+            <div class="stat"><span class="muted">Term hits</span><strong>{{.Report.TotalMatches}}</strong><span>term to ingredient matches</span></div>
           </div>
-          <div class="grid two">
-            <div class="listbox">
-              <h3>Matched terms</h3>
-              {{if .Baseline.TermMatches}}
-              <ul class="tight">
-                {{range .Baseline.TermMatches}}
-                <li><strong>{{.Term}}</strong>: {{range $index, $match := .Matches}}{{if $index}}, {{end}}{{$match}}{{end}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">No matched terms.</p>
+          <div class="listbox">
+            <h3>Matched terms</h3>
+            {{if .Report.TermMatches}}
+            <ul class="tight">
+              {{range .Report.TermMatches}}
+              <li><strong>{{.Term}}</strong>: {{range $index, $match := .Matches}}{{if $index}}, {{end}}{{$match}}{{end}}</li>
               {{end}}
-            </div>
-            <div class="listbox">
-              <h3>Missing terms</h3>
-              {{if .Baseline.MissingTerms}}
-              <ul class="tight">
-                {{range .Baseline.MissingTerms}}
-                <li>{{.}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">All terms matched.</p>
+            </ul>
+            {{else}}
+            <p class="muted">No matched terms.</p>
+            {{end}}
+          </div>
+          <div class="listbox">
+            <h3>Ingredients with term hits</h3>
+            {{if .Report.MatchedIngredients}}
+            <ul class="tight">
+              {{range .Report.MatchedIngredients}}
+              <li><strong>{{.Description}}</strong>: {{range $index, $term := .Terms}}{{if $index}}, {{end}}{{$term}}{{end}}</li>
               {{end}}
-            </div>
-            <div class="listbox">
-              <h3>Ingredients with term hits</h3>
-              {{if .Baseline.MatchedIngredients}}
-              <ul class="tight">
-                {{range .Baseline.MatchedIngredients}}
-                <li><strong>{{.Description}}</strong>: {{range $index, $term := .Terms}}{{if $index}}, {{end}}{{$term}}{{end}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">No ingredients matched a term.</p>
-              {{end}}
-            </div>
-            <div class="listbox">
-              <h3>Ingredients with no term hits</h3>
-              {{if .Baseline.UnmatchedIngredients}}
-              <ul class="tight">
-                {{range .Baseline.UnmatchedIngredients}}
-                <li>{{.}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">Every ingredient matched at least one term.</p>
-              {{end}}
-            </div>
+            </ul>
+            {{else}}
+            <p class="muted">No ingredients matched a term.</p>
+            {{end}}
           </div>
         </div>
-
-        {{if .ComparisonMode}}
         <div>
-          <h3>{{.Stemmed.MatcherLabel}}</h3>
+          <h3>Unmatched</h3>
           <div class="stats">
-            <div class="stat"><span class="muted">Score</span><strong>{{.Stemmed.Score}}</strong><span>{{.Stemmed.MatchedTerms}} / {{.Stemmed.TotalTerms}} terms</span></div>
-            <div class="stat"><span class="muted">Matched ingredients</span><strong>{{.Stemmed.MatchedIngredientCount}}</strong><span>{{.Stemmed.TotalIngredients}} total</span></div>
-            <div class="stat"><span class="muted">Term hits</span><strong>{{.Stemmed.TotalMatches}}</strong><span>term to ingredient matches</span></div>
-            <div class="stat"><span class="muted">Unmatched ingredients</span><strong>{{len .Stemmed.UnmatchedIngredients}}</strong><span>no test terms hit</span></div>
+            <div class="stat"><span class="muted">Missing terms</span><strong>{{len .Report.MissingTerms}}</strong><span>no ingredient hits</span></div>
+            <div class="stat"><span class="muted">Unmatched ingredients</span><strong>{{len .Report.UnmatchedIngredients}}</strong><span>no test terms hit</span></div>
           </div>
-          <div class="grid two">
-            <div class="listbox">
-              <h3>Stemmer gained</h3>
-              {{if or .AddedTerms .AddedIngredients}}
-              <p><strong>Terms</strong></p>
-              {{if .AddedTerms}}
-              <ul class="tight">
-                {{range .AddedTerms}}
-                <li>{{.}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">No additional terms.</p>
+          <div class="listbox">
+            <h3>Missing terms</h3>
+            {{if .Report.MissingTerms}}
+            <ul class="tight">
+              {{range .Report.MissingTerms}}
+              <li>{{.}}</li>
               {{end}}
-              <p><strong>Ingredients</strong></p>
-              {{if .AddedIngredients}}
-              <ul class="tight">
-                {{range .AddedIngredients}}
-                <li>{{.}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">No additional ingredients.</p>
+            </ul>
+            {{else}}
+            <p class="muted">All terms matched.</p>
+            {{end}}
+          </div>
+          <div class="listbox">
+            <h3>Ingredients with no term hits</h3>
+            {{if .Report.UnmatchedIngredients}}
+            <ul class="tight">
+              {{range .Report.UnmatchedIngredients}}
+              <li>{{.}}</li>
               {{end}}
-              {{else}}
-              <p class="muted">No additional matches.</p>
-              {{end}}
-            </div>
-            <div class="listbox">
-              <h3>Stemmer lost</h3>
-              {{if or .RemovedTerms .RemovedIngredients}}
-              <p><strong>Terms</strong></p>
-              {{if .RemovedTerms}}
-              <ul class="tight">
-                {{range .RemovedTerms}}
-                <li>{{.}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">No lost terms.</p>
-              {{end}}
-              <p><strong>Ingredients</strong></p>
-              {{if .RemovedIngredients}}
-              <ul class="tight">
-                {{range .RemovedIngredients}}
-                <li>{{.}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">No lost ingredients.</p>
-              {{end}}
-              {{else}}
-              <p class="muted">No regressions.</p>
-              {{end}}
-            </div>
-            <div class="listbox">
-              <h3>Stemmed matched terms</h3>
-              {{if .Stemmed.TermMatches}}
-              <ul class="tight">
-                {{range .Stemmed.TermMatches}}
-                <li><strong>{{.Term}}</strong>: {{range $index, $match := .Matches}}{{if $index}}, {{end}}{{$match}}{{end}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">No matched terms.</p>
-              {{end}}
-            </div>
-            <div class="listbox">
-              <h3>Stemmed unmatched ingredients</h3>
-              {{if .Stemmed.UnmatchedIngredients}}
-              <ul class="tight">
-                {{range .Stemmed.UnmatchedIngredients}}
-                <li>{{.}}</li>
-                {{end}}
-              </ul>
-              {{else}}
-              <p class="muted">Every ingredient matched at least one term.</p>
-              {{end}}
-            </div>
+            </ul>
+            {{else}}
+            <p class="muted">Every ingredient matched at least one term.</p>
+            {{end}}
           </div>
         </div>
-        {{end}}
       </div>
     </section>
     {{end}}
   </main>
+  {{.ClerkRefresh}}
 </body>
 </html>`))
 
@@ -343,11 +245,6 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	comparisonMode, err := parseComparisonMode(r.URL.Query().Get("matcher"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 
 	pageData := inspectorPageData{
 		Hash:            hash,
@@ -357,10 +254,10 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 		Date:            params.Date.Format("2006-01-02"),
 		IngredientCount: len(ingredients),
 		DatasetLinks:    buildDatasetLinks(r.URL, selectedDatasetName(r.URL.Query().Get("dataset"))),
-		MatcherLinks:    buildMatcherLinks(r.URL, comparisonMode),
 		JSONHref:        withQuery(r.URL, map[string]string{"format": "json"}),
 		TSVHref:         withQuery(r.URL, map[string]string{"format": "tsv"}),
-		Sections:        buildSections(selectedDatasets, ingredients, comparisonMode),
+		ClerkRefresh:    templates.ClerkRefreshHTML(true),
+		Sections:        buildSections(selectedDatasets, ingredients),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -368,17 +265,6 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 	if err := inspectorTemplate.Execute(w, pageData); err != nil {
 		slog.ErrorContext(ctx, "failed to render ingredients inspector", "hash", hash, "error", err)
 		http.Error(w, "failed to render ingredient inspector", http.StatusInternalServerError)
-	}
-}
-
-func parseComparisonMode(value string) (bool, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "baseline":
-		return false, nil
-	case "compare":
-		return true, nil
-	default:
-		return false, fmt.Errorf("unsupported matcher %q", value)
 	}
 }
 
@@ -400,15 +286,9 @@ func buildDatasetLinks(current *url.URL, active string) []inspectorLink {
 	return links
 }
 
-func buildMatcherLinks(current *url.URL, comparisonMode bool) []inspectorLink {
-	return []inspectorLink{
-		{Label: "Baseline", Href: withQuery(current, map[string]string{"matcher": "baseline", "format": ""}), Active: !comparisonMode},
-		{Label: "Compare stemmer", Href: withQuery(current, map[string]string{"matcher": "compare", "format": ""}), Active: comparisonMode},
-	}
-}
-
 func withQuery(current *url.URL, updates map[string]string) string {
 	copyURL := *current
+	copyURL.Path = adminPath(copyURL.Path)
 	query := copyURL.Query()
 	for key, value := range updates {
 		if value == "" {
@@ -421,33 +301,31 @@ func withQuery(current *url.URL, updates map[string]string) string {
 	return copyURL.String()
 }
 
-func buildSections(datasets []ingredientcoverage.Dataset, ingredients []kroger.Ingredient, comparisonMode bool) []analysisSectionView {
+func adminPath(path string) string {
+	if strings.HasPrefix(path, "/admin/") || path == "/admin" {
+		return path
+	}
+	if strings.HasPrefix(path, "/") {
+		return "/admin" + path
+	}
+	return "/admin/" + path
+}
+
+func buildSections(datasets []ingredientcoverage.Dataset, ingredients []kroger.Ingredient) []analysisSectionView {
 	sections := make([]analysisSectionView, 0, len(datasets))
 	for _, dataset := range datasets {
-		baseline := ingredientcoverage.Analyze(dataset, ingredients, ingredientcoverage.BaselineMatcher())
-		section := analysisSectionView{
-			DatasetName:    dataset.Name,
-			DatasetLabel:   dataset.Label,
-			ComparisonMode: comparisonMode,
-			Baseline:       reportFromCoverage(baseline),
-		}
-		if comparisonMode {
-			comparison := ingredientcoverage.Compare(dataset, ingredients)
-			stemmed := reportFromCoverage(comparison.Stemmed)
-			section.Stemmed = &stemmed
-			section.AddedTerms = comparison.AddedTerms
-			section.RemovedTerms = comparison.RemovedTerms
-			section.AddedIngredients = comparison.AddedIngredients
-			section.RemovedIngredients = comparison.RemovedIngredients
-		}
-		sections = append(sections, section)
+		report := ingredientcoverage.Analyze(dataset, ingredients, ingredientcoverage.BaselineMatcher())
+		sections = append(sections, analysisSectionView{
+			DatasetName:  dataset.Name,
+			DatasetLabel: dataset.Label,
+			Report:       reportFromCoverage(report),
+		})
 	}
 	return sections
 }
 
 func reportFromCoverage(report ingredientcoverage.Report) reportView {
 	return reportView{
-		MatcherLabel:           report.MatcherLabel,
 		MatchedTerms:           report.MatchedTerms,
 		TotalTerms:             report.TotalTerms,
 		Score:                  fmt.Sprintf("%.3f", report.Score),

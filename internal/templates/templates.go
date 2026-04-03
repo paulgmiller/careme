@@ -52,6 +52,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Clarityproject = os.Getenv("CLARITY_PROJECT_ID")
 	GoogleTagID = os.Getenv("GOOGLE_TAG_ID")
 	GoogleConversionLabel = os.Getenv("GOOGLE_CONVERSION_LABEL")
+	ClerkPublishableKeyValue = config.Clerk.PublishableKey
 	return nil
 }
 
@@ -73,9 +74,10 @@ func signInPath(returnTo string) string {
 }
 
 var (
-	Clarityproject        string
-	GoogleTagID           string
-	GoogleConversionLabel string
+	Clarityproject           string
+	GoogleTagID              string
+	GoogleConversionLabel    string
+	ClerkPublishableKeyValue string
 )
 
 // ClarityScript generates the Microsoft Clarity tracking script HTML.
@@ -126,4 +128,36 @@ func GoogleConversionTag() string {
 		return ""
 	}
 	return GoogleTagID + "/" + GoogleConversionLabel
+}
+
+func ClerkRefreshHTML(serverSignedIn bool) template.HTML {
+	if ClerkPublishableKeyValue == "" {
+		return ""
+	}
+	signedIn := "false"
+	if serverSignedIn {
+		signedIn = "true"
+	}
+	html := `<script
+  async
+  crossorigin="anonymous"
+  data-clerk-publishable-key="` + template.HTMLEscapeString(ClerkPublishableKeyValue) + `"
+  src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js">
+</script>
+
+<script>
+  (async () => {
+    const serverSignedIn = ` + signedIn + `;
+    const key = "clerk-ssr-sync-reloaded:" + location.pathname + location.search;
+    while (!window.Clerk?.load) await new Promise(r => setTimeout(r, 10));
+    await Clerk.load();
+    const clerkSignedIn = !!Clerk.isSignedIn;
+    if (!serverSignedIn && clerkSignedIn && !sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, "1");
+      location.reload();
+      return;
+    }
+  })();
+</script>`
+	return template.HTML(html)
 }

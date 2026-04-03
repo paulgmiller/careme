@@ -95,6 +95,9 @@ func TestServerReturnsIngredientInspectorHTML(t *testing.T) {
 	if !strings.Contains(body, "Produce") {
 		t.Fatalf("expected produce section in body, got %q", body)
 	}
+	if !strings.Contains(body, "/admin/ingredients/"+params.Hash()) {
+		t.Fatalf("expected admin-prefixed ingredient links in body, got %q", body)
+	}
 }
 
 func TestServerReturnsIngredientsTSV(t *testing.T) {

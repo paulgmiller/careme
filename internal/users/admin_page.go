@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/recipes/feedback"
+	"careme/internal/templates"
 
 	utypes "careme/internal/users/types"
 )
@@ -69,6 +70,7 @@ var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doct
       {{end}}
     </tbody>
   </table>
+  {{.ClerkRefresh}}
 </body>
 </html>`))
 
@@ -122,8 +124,12 @@ func AdminUsersPage(storage *Storage) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if err := adminUsersPageTmpl.Execute(w, struct {
-			Users []adminUserView
-		}{Users: views}); err != nil {
+			Users        []adminUserView
+			ClerkRefresh template.HTML
+		}{
+			Users:        views,
+			ClerkRefresh: templates.ClerkRefreshHTML(true),
+		}); err != nil {
 			slog.ErrorContext(r.Context(), "failed to render admin users page", "error", err)
 			http.Error(w, "unable to render users", http.StatusInternalServerError)
 			return

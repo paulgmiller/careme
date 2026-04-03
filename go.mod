@@ -18,7 +18,6 @@ require (
 	github.com/microsoft/ApplicationInsights-Go v0.4.4
 	github.com/openai/openai-go/v3 v3.29.0
 	github.com/openclosed-dev/slogan v0.2.0
-	github.com/reiver/go-porterstemmer v1.0.1
 	github.com/sendgrid/rest v2.6.9+incompatible
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	golang.org/x/crypto v0.49.0
