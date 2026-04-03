@@ -8,8 +8,8 @@ Usage:
   ./getsecret.sh put [secrets-dir] [namespace]
 
 Commands:
-  get          Fetch each Kubernetes Secret named by a *.env file in secrets-dir
-               and write it back to that file.
+  get          Fetch every Kubernetes Secret in the namespace and write each
+               one to secrets-dir/<secret-name>.env.
   put          Apply each *.env file in secrets-dir to the Kubernetes Secret with
                the same basename.
 
@@ -34,23 +34,27 @@ require_command() {
 sync_get() {
   local secrets_dir="$1"
   local namespace="$2"
-  local files=()
+  local secret_names=()
 
   mkdir -p "${secrets_dir}"
-  shopt -s nullglob
-  files=("${secrets_dir}"/*.env)
-  shopt -u nullglob
 
-  if [[ ${#files[@]} -eq 0 ]]; then
-    echo "error: no .env files found in ${secrets_dir}" >&2
+  mapfile -t secret_names < <(
+    kubectl get secrets \
+      -n "${namespace}" \
+      -o json \
+      | jq -r '.items | sort_by(.metadata.name)[] | .metadata.name'
+  )
+
+  if [[ ${#secret_names[@]} -eq 0 ]]; then
+    echo "error: no secrets found in namespace '${namespace}'" >&2
     exit 1
   fi
 
-  local file
-  for file in "${files[@]}"; do
-    local secret_name
+  local secret_name
+  for secret_name in "${secret_names[@]}"; do
+    local file
     local tmp_file
-    secret_name="$(basename "${file}" .env)"
+    file="${secrets_dir}/${secret_name}.env"
     tmp_file="$(mktemp)"
 
     kubectl get secret "${secret_name}" \
