@@ -174,7 +174,7 @@ func TestFromRequestCreatesUserWithMockAuth(t *testing.T) {
 	cfg := &config.Config{
 		Mocks: config.MockConfig{Email: "NewUser@Example.com"},
 	}
-	client := auth.Mock(cfg, nil)
+	client := auth.Mock(cfg)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	got, err := storage.FromRequest(context.Background(), req, client)
@@ -205,7 +205,7 @@ func TestFromRequestReturnsExistingUser(t *testing.T) {
 	cfg := &config.Config{
 		Mocks: config.MockConfig{Email: "ignored@example.com"},
 	}
-	client := auth.Mock(cfg, nil)
+	client := auth.Mock(cfg)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	got, err := storage.FromRequest(context.Background(), req, client)
