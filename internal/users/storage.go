@@ -102,27 +102,23 @@ func (s *Storage) FromRequest(ctx context.Context, r *http.Request, authClient a
 	if err != nil {
 		return nil, err
 	}
-	user, _, err := s.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
-	if err != nil {
-		return nil, err
-	}
-	return user, nil
+	return s.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
 }
 
 // interface for clerk client
-func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*utypes.User, bool, error) {
+func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*utypes.User, error) {
 	user, err := s.GetByID(clerkUserID)
 	if err == nil {
-		return user, false, nil
+		return user, nil
 	}
 
 	if err != nil && !errors.Is(err, ErrNotFound) {
-		return nil, false, err
+		return nil, err
 	}
 
 	primaryEmail, err := emailFetcher.GetUserEmail(ctx, clerkUserID)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to fetch user email from clerk: %w", err)
+		return nil, fmt.Errorf("failed to fetch user email from clerk: %w", err)
 	}
 
 	newUser := utypes.User{
@@ -132,13 +128,13 @@ func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string,
 		ShoppingDay: time.Saturday.String(),
 	}
 	if err := s.Update(&newUser); err != nil {
-		return nil, false, fmt.Errorf("failed to create new user: %w", err)
+		return nil, fmt.Errorf("failed to create new user: %w", err)
 	}
 	if err := s.cache.Put(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID, cache.Unconditional()); err != nil {
-		return nil, false, fmt.Errorf("failed to index new user by email: %w", err)
+		return nil, fmt.Errorf("failed to index new user by email: %w", err)
 	}
 	slog.InfoContext(ctx, "created new user", "id", clerkUserID, "email", primaryEmail)
-	return &newUser, true, nil
+	return &newUser, nil
 }
 
 func (s *Storage) Update(user *utypes.User) error {

@@ -113,12 +113,9 @@ func TestFindOrCreateFromClerkExistingUser(t *testing.T) {
 	}
 
 	fetcher := &stubEmailFetcher{email: "should-not-call@example.com"}
-	got, created, err := storage.FindOrCreateFromClerk(context.Background(), "user-3", fetcher)
+	got, err := storage.FindOrCreateFromClerk(context.Background(), "user-3", fetcher)
 	if err != nil {
 		t.Fatalf("FindOrCreateFromClerk() error: %v", err)
-	}
-	if created {
-		t.Fatal("FindOrCreateFromClerk() created = true, want false")
 	}
 	if fetcher.calls != 0 {
 		t.Fatalf("expected email fetcher to not be called, calls=%d", fetcher.calls)
@@ -134,13 +131,10 @@ func TestFindOrCreateFromClerkCreatesUser(t *testing.T) {
 
 	fetcher := &stubEmailFetcher{email: "NewUser@Example.com"}
 	start := time.Now()
-	got, created, err := storage.FindOrCreateFromClerk(context.Background(), "user-4", fetcher)
+	got, err := storage.FindOrCreateFromClerk(context.Background(), "user-4", fetcher)
 	end := time.Now()
 	if err != nil {
 		t.Fatalf("FindOrCreateFromClerk() error: %v", err)
-	}
-	if !created {
-		t.Fatal("FindOrCreateFromClerk() created = false, want true")
 	}
 	if fetcher.calls != 1 {
 		t.Fatalf("expected email fetcher to be called once, calls=%d", fetcher.calls)

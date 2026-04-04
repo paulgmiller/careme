@@ -10,7 +10,7 @@ import (
 
 // Client wraps Clerk SDK functionality
 type mockClient struct {
-	email      string
+	email string
 }
 
 var _ AuthClient = (*mockClient)(nil)
@@ -19,11 +19,11 @@ var _ AuthClient = (*mockClient)(nil)
 func Mock(cfg *config.Config) AuthClient {
 	email := cfg.Mocks.Email
 	if email == "" {
-		email = "you@careme.cooking"
+		return DefaultMock()
 	}
 
 	return &mockClient{
-		email:      email,
+		email: email,
 	}
 }
 
@@ -50,5 +50,5 @@ func (c *mockClient) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *mockClient) Register(mux routing.Registrar) {
-	mux.HandleFunc("/logout", c.logout)	
+	mux.HandleFunc("/logout", c.logout)
 }
