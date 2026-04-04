@@ -33,8 +33,6 @@ type AuthClient interface {
 	Register(mux routing.Registrar)
 }
 
-type UserExistsFunc func(ctx context.Context, clerkUserID string) (bool, error)
-
 // Client wraps Clerk SDK functionality
 // todo private
 type clerkClient struct {
