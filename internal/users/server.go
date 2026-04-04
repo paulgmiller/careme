@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -9,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"encoding/json"
 
 	"careme/internal/auth"
 	"careme/internal/cache"
@@ -59,7 +59,7 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /user/exists", s.handleExists)
 }
 
-func (s *server) handleExists (w http.ResponseWriter, r *http.Request) {
+func (s *server) handleExists(w http.ResponseWriter, r *http.Request) {
 	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
@@ -74,7 +74,7 @@ func (s *server) handleExists (w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(r.Context(), "auth user exists lookup failed", "clerk_user_id", clerkUserID, "error", err)
 		http.Error(w, "unable to check account", http.StatusInternalServerError)
 		return
-	}		
+	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if err := json.NewEncoder(w).Encode(struct {
@@ -86,10 +86,10 @@ func (s *server) handleExists (w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s * server) exists(uid string) (bool, error) {	 
+func (s *server) exists(uid string) (bool, error) {
 	_, err := s.storage.GetByID(uid)
 	if errors.Is(err, ErrNotFound) {
-		return false, nil 
+		return false, nil
 	}
 	if err != nil {
 		return false, err

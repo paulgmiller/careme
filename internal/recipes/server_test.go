@@ -276,7 +276,6 @@ func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *t
 	)
 	t.Cleanup(s.Wait)
 
-	
 	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
 	currentUser, err := storage.FromRequest(t.Context(), req, auth.DefaultMock())
 	if err != nil {
