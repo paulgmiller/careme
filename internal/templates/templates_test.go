@@ -154,14 +154,17 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	}
 
 	rendered := buf.String()
-	if !strings.Contains(rendered, `data-return-to="/recipe/hash"`) {
-		t.Fatalf("auth establish page should include return target, body: %s", rendered)
+	if !strings.Contains(rendered, `const returnTo = "\/recipe\/hash" || "/";`) {
+		t.Fatalf("auth establish page should inline return target, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `data-user-exists-url="/auth/user-exists"`) {
-		t.Fatalf("auth establish page should include user exists endpoint, body: %s", rendered)
+	if !strings.Contains(rendered, `const userExistsURL = "\/auth\/user-exists";`) {
+		t.Fatalf("auth establish page should inline user exists endpoint, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, `fetch(userExistsURL, {`) {
 		t.Fatalf("auth establish page should call user exists endpoint, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `for (let attempt = 0; attempt < 5; attempt++)`) {
+		t.Fatalf("auth establish page should not retry user exists check, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, `if (!payload.exists &&`) {
 		t.Fatalf("auth establish page should gate conversion on missing user, body: %s", rendered)
@@ -171,5 +174,11 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	}
 	if !strings.Contains(rendered, `event_callback: finishRedirect`) {
 		t.Fatalf("auth establish page should redirect after gtag callback, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, "console.warn(`auth user exists failed: ${response.status}`)") {
+		t.Fatalf("auth establish page should log when user exists endpoint returns a failure, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `.catch((error) => {`) {
+		t.Fatalf("auth establish page should not use a catch handler for user exists failures, body: %s", rendered)
 	}
 }

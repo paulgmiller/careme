@@ -6,7 +6,7 @@
     <title>Signing In</title>
     {{.GoogleTagScript}}
   </head>
-  <body data-return-to="{{.ReturnTo}}" data-user-exists-url="{{.UserExistsURL}}">
+  <body>
     <script
       crossorigin="anonymous"
       data-clerk-publishable-key="{{.PublishableKey}}"
@@ -18,29 +18,23 @@
         url.searchParams.delete("__clerk_db_jwt");
         history.replaceState({}, "", url.toString());
 
-        const returnTo = document.body.dataset.returnTo || "/";
-        const userExistsURL = document.body.dataset.userExistsUrl;
+        const returnTo = "{{.ReturnTo}}" || "/";
+        const userExistsURL = "{{.UserExistsURL}}";
         const finishRedirect = () => location.replace(returnTo);
-        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
         const checkUserExists = async () => {
-          for (let attempt = 0; attempt < 5; attempt++) {
-            const response = await fetch(userExistsURL, {
-              method: "POST",
-              credentials: "same-origin",
-              headers: {
-                "Accept": "application/json",
-              },
-            });
-            if (response.ok) {
-              return response.json();
-            }
-            if (response.status !== 401 || attempt === 4) {
-              throw new Error(`auth user exists failed: ${response.status}`);
-            }
-            await wait(150);
+          const response = await fetch(userExistsURL, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: {
+              "Accept": "application/json",
+            },
+          });
+          if (!response.ok) {
+            console.warn(`auth user exists failed: ${response.status}`);
+            return { exists: true };
           }
-          throw new Error("auth user exists failed");
+          return response.json();
         };
 
         checkUserExists().then((payload) => {
@@ -54,8 +48,6 @@
             setTimeout(finishRedirect, 1500);
             return;
           }
-          finishRedirect();
-        }).catch(() => {
           finishRedirect();
         });
       });
