@@ -172,13 +172,13 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 			PublishableKey      string
 			GoogleTagScript     template.HTML
 			GoogleConversionTag string
-			Signup              bool
+			UserExistsURL       string
 			ReturnTo            string // read from a data- attribute in the template to avoid JS-string escaping concerns
 		}{
 			PublishableKey:      c.cfg.Clerk.PublishableKey,
 			GoogleTagScript:     templates.GoogleTagScript(),
 			GoogleConversionTag: templates.GoogleConversionTag(),
-			Signup:              strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("signup")), "true"), // used for ad conversions
+			UserExistsURL:       "/user/exists",
 			ReturnTo:            returnToFromRequest(r),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
@@ -193,7 +193,7 @@ func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
 	if signup {
 		base = c.cfg.Clerk.Signup()
 	}
-	redirectURL := c.authEstablishURL(signup, returnToFromRequest(r))
+	redirectURL := c.authEstablishURL(returnToFromRequest(r))
 	u := lo.Must(url.Parse(base))
 	q := u.Query()
 	q.Set("redirect_url", redirectURL)
@@ -201,13 +201,10 @@ func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
 	return u.String()
 }
 
-func (c *clerkClient) authEstablishURL(signup bool, returnTo string) string {
+func (c *clerkClient) authEstablishURL(returnTo string) string {
 	origin := c.cfg.ResolvedPublicOrigin() // can never be emptpy
 	u := lo.Must(url.Parse(origin + "/auth/establish"))
 	q := u.Query()
-	if signup {
-		q.Set("signup", "true")
-	}
 	if returnTo != "" {
 		// Keep the entire relative return target in one opaque query value so
 		// nested ?a=1&b=2 segments are not broken apart during Clerk redirects.

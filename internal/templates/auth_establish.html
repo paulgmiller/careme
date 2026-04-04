@@ -6,7 +6,7 @@
     <title>Signing In</title>
     {{.GoogleTagScript}}
   </head>
-  <body data-return-to="{{.ReturnTo}}">
+  <body>
     <script
       crossorigin="anonymous"
       data-clerk-publishable-key="{{.PublishableKey}}"
@@ -18,21 +18,38 @@
         url.searchParams.delete("__clerk_db_jwt");
         history.replaceState({}, "", url.toString());
 
-        const returnTo = document.body.dataset.returnTo || "/";
+        const returnTo = "{{.ReturnTo}}" || "/";
+        const userExistsURL = "{{.UserExistsURL}}";
         const finishRedirect = () => location.replace(returnTo);
 
-        if ({{.Signup}} &&
-            "{{.GoogleConversionTag}}" !== "" &&
-            typeof gtag === "function") {
-          gtag("event", "conversion", {
-            send_to: "{{.GoogleConversionTag}}",
-            event_callback: finishRedirect,
+        const checkUserExists = async () => {
+          const response = await fetch(userExistsURL, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: {
+              "Accept": "application/json",
+            },
           });
-          setTimeout(finishRedirect, 1500);
-          return;
-        }
+          if (!response.ok) {
+            console.warn(`auth user exists failed: ${response.status}`);
+            return { exists: true };
+          }
+          return response.json();
+        };
 
-        finishRedirect();
+        checkUserExists().then((payload) => {
+          if (!payload.exists &&
+              "{{.GoogleConversionTag}}" !== "" &&
+              typeof gtag === "function") {
+            gtag("event", "conversion", {
+              send_to: "{{.GoogleConversionTag}}",
+              event_callback: finishRedirect,
+            });
+            setTimeout(finishRedirect, 1500);
+            return;
+          }
+          finishRedirect();
+        });
       });
     </script>
   </body>

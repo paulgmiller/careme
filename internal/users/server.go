@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -55,6 +56,45 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
 	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
+	mux.HandleFunc("GET /user/exists", s.handleExists)
+}
+
+func (s *server) handleExists(w http.ResponseWriter, r *http.Request) {
+	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			http.Error(w, "no valid session found", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+	exists, err := s.exists(clerkUserID)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "auth user exists lookup failed", "clerk_user_id", clerkUserID, "error", err)
+		http.Error(w, "unable to check account", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err := json.NewEncoder(w).Encode(struct {
+		Exists bool `json:"exists"`
+	}{
+		Exists: exists,
+	}); err != nil {
+		slog.ErrorContext(r.Context(), "auth user exists encode failed", "clerk_user_id", clerkUserID, "error", err)
+	}
+}
+
+func (s *server) exists(uid string) (bool, error) {
+	_, err := s.storage.GetByID(uid)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // used on user page to manaully save recipes
@@ -114,7 +154,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("tab") == "past" {
 		activeTab = "past"
 	}
-	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
@@ -125,13 +165,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		// clerk_refresh and seee if they are then logged in. But we only want to do that once?
 		// TODO stick just show a sign in button on user page if no session
 		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 
@@ -265,7 +298,7 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
-	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
@@ -274,13 +307,6 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	currentUser, err := s.storage.FindOrCreateFromClerk(ctx, clerkUserID, s.clerk)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to get user by clerk ID", "clerk_user_id", clerkUserID, "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 

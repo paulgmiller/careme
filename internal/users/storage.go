@@ -102,11 +102,11 @@ func (s *Storage) FromRequest(ctx context.Context, r *http.Request, authClient a
 	if err != nil {
 		return nil, err
 	}
-	return s.FindOrCreateFromClerk(ctx, clerkUserID, authClient)
+	return s.findOrCreateFromClerk(ctx, clerkUserID, authClient)
 }
 
 // interface for clerk client
-func (s *Storage) FindOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*utypes.User, error) {
+func (s *Storage) findOrCreateFromClerk(ctx context.Context, clerkUserID string, emailFetcher emailFetcher) (*utypes.User, error) {
 	user, err := s.GetByID(clerkUserID)
 	if err == nil {
 		return user, nil

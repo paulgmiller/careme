@@ -113,15 +113,15 @@ func TestFindOrCreateFromClerkExistingUser(t *testing.T) {
 	}
 
 	fetcher := &stubEmailFetcher{email: "should-not-call@example.com"}
-	got, err := storage.FindOrCreateFromClerk(context.Background(), "user-3", fetcher)
+	got, err := storage.findOrCreateFromClerk(context.Background(), "user-3", fetcher)
 	if err != nil {
-		t.Fatalf("FindOrCreateFromClerk() error: %v", err)
+		t.Fatalf("findOrCreateFromClerk() error: %v", err)
 	}
 	if fetcher.calls != 0 {
 		t.Fatalf("expected email fetcher to not be called, calls=%d", fetcher.calls)
 	}
 	if got.ID != user.ID {
-		t.Fatalf("FindOrCreateFromClerk() ID = %q, want %q", got.ID, user.ID)
+		t.Fatalf("findOrCreateFromClerk() ID = %q, want %q", got.ID, user.ID)
 	}
 }
 
@@ -131,25 +131,25 @@ func TestFindOrCreateFromClerkCreatesUser(t *testing.T) {
 
 	fetcher := &stubEmailFetcher{email: "NewUser@Example.com"}
 	start := time.Now()
-	got, err := storage.FindOrCreateFromClerk(context.Background(), "user-4", fetcher)
+	got, err := storage.findOrCreateFromClerk(context.Background(), "user-4", fetcher)
 	end := time.Now()
 	if err != nil {
-		t.Fatalf("FindOrCreateFromClerk() error: %v", err)
+		t.Fatalf("findOrCreateFromClerk() error: %v", err)
 	}
 	if fetcher.calls != 1 {
 		t.Fatalf("expected email fetcher to be called once, calls=%d", fetcher.calls)
 	}
 	if got.ID != "user-4" {
-		t.Fatalf("FindOrCreateFromClerk() ID = %q, want %q", got.ID, "user-4")
+		t.Fatalf("findOrCreateFromClerk() ID = %q, want %q", got.ID, "user-4")
 	}
 	if len(got.Email) != 1 || got.Email[0] != "newuser@example.com" {
-		t.Fatalf("FindOrCreateFromClerk() Email = %v, want [newuser@example.com]", got.Email)
+		t.Fatalf("findOrCreateFromClerk() Email = %v, want [newuser@example.com]", got.Email)
 	}
 	if got.ShoppingDay != time.Saturday.String() {
-		t.Fatalf("FindOrCreateFromClerk() ShoppingDay = %q, want %q", got.ShoppingDay, time.Saturday.String())
+		t.Fatalf("findOrCreateFromClerk() ShoppingDay = %q, want %q", got.ShoppingDay, time.Saturday.String())
 	}
 	if got.CreatedAt.Before(start) || got.CreatedAt.After(end) {
-		t.Fatalf("FindOrCreateFromClerk() CreatedAt = %v, expected between %v and %v", got.CreatedAt, start, end)
+		t.Fatalf("findOrCreateFromClerk() CreatedAt = %v, expected between %v and %v", got.CreatedAt, start, end)
 	}
 
 	stored, err := storage.GetByID("user-4")
