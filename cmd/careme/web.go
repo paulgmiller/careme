@@ -43,16 +43,7 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 
 	userStorage := users.NewStorage(cache)
-	authClient, err := auth.NewFromConfig(cfg, func(ctx context.Context, clerkUserID string) (bool, error) {
-		_, err := userStorage.GetByID(clerkUserID)
-		if err == nil {
-			return true, nil
-		}
-		if errors.Is(err, users.ErrNotFound) {
-			return false, nil
-		}
-		return false, err
-	})
+	authClient, err := auth.NewFromConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create auth client: %w", err)
 	}

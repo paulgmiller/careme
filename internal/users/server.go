@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"encoding/json"
 
 	"careme/internal/auth"
 	"careme/internal/cache"
@@ -55,6 +56,45 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
 	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
+	mux.HandleFunc("GET /user/exists", s.handleExists)
+}
+
+func (s *server) handleExists (w http.ResponseWriter, r *http.Request) {
+	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			http.Error(w, "no valid session found", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+	exists, err := s.exists(clerkUserID)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "auth user exists lookup failed", "clerk_user_id", clerkUserID, "error", err)
+		http.Error(w, "unable to check account", http.StatusInternalServerError)
+		return
+	}		
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err := json.NewEncoder(w).Encode(struct {
+		Exists bool `json:"exists"`
+	}{
+		Exists: exists,
+	}); err != nil {
+		slog.ErrorContext(r.Context(), "auth user exists encode failed", "clerk_user_id", clerkUserID, "error", err)
+	}
+}
+
+func (s * server) exists(uid string) (bool, error) {	 
+	_, err := s.storage.GetByID(uid)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil 
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // used on user page to manaully save recipes

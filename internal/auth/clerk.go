@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -43,13 +42,12 @@ type clerkClient struct {
 	userClient    *user.Client
 	sessionClient *session.Client
 	jwksClient    *jwks.Client
-	userExists    UserExistsFunc
 }
 
 var _ AuthClient = (*clerkClient)(nil)
 
 // NewClient creates a new Clerk client wrapper
-func NewClient(cfg *config.Config, userExists UserExistsFunc) (*clerkClient, error) {
+func NewClient(cfg *config.Config) (*clerkClient, error) {
 	if cfg.Clerk.SecretKey == "" {
 		return nil, fmt.Errorf("clerk secret key is required")
 	}
@@ -65,7 +63,6 @@ func NewClient(cfg *config.Config, userExists UserExistsFunc) (*clerkClient, err
 		sessionClient: session.NewClient(clientConfig),
 		jwksClient:    jwks.NewClient(clientConfig),
 		cfg:           cfg,
-		userExists:    userExists,
 	}, nil
 }
 
@@ -167,35 +164,6 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 	mux.HandleFunc("/sign-up", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, c.signInURL(r, true), http.StatusSeeOther)
 	})
-	mux.HandleFunc("POST /auth/user-exists", func(w http.ResponseWriter, r *http.Request) {
-		if c.userExists == nil {
-			http.Error(w, "user exists handler missing", http.StatusInternalServerError)
-			return
-		}
-		clerkUserID, err := c.GetUserIDFromRequest(r)
-		if err != nil {
-			if errors.Is(err, ErrNoSession) {
-				http.Error(w, "no valid session found", http.StatusUnauthorized)
-				return
-			}
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}
-		exists, err := c.userExists(r.Context(), clerkUserID)
-		if err != nil {
-			slog.ErrorContext(r.Context(), "auth user exists lookup failed", "clerk_user_id", clerkUserID, "error", err)
-			http.Error(w, "unable to check account", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		if err := json.NewEncoder(w).Encode(struct {
-			Exists bool `json:"exists"`
-		}{
-			Exists: exists,
-		}); err != nil {
-			slog.ErrorContext(r.Context(), "auth user exists encode failed", "clerk_user_id", clerkUserID, "error", err)
-		}
-	})
 	mux.HandleFunc("/auth/establish", func(w http.ResponseWriter, r *http.Request) {
 		if c.cfg.Clerk.PublishableKey == "" {
 			http.Error(w, "clerk publishable key missing", http.StatusInternalServerError)
@@ -212,7 +180,7 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 			PublishableKey:      c.cfg.Clerk.PublishableKey,
 			GoogleTagScript:     templates.GoogleTagScript(),
 			GoogleConversionTag: templates.GoogleConversionTag(),
-			UserExistsURL:       "/auth/user-exists",
+			UserExistsURL:       "/user/exists",
 			ReturnTo:            returnToFromRequest(r),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
