@@ -47,6 +47,7 @@ type KrogerTokenManager struct {
 	expiresAt    time.Time
 	clientID     string
 	clientSecret string
+	httpClient   *http.Client
 	mu           sync.Mutex
 }
 
@@ -54,6 +55,7 @@ func NewKrogerTokenManager(clientID, clientSecret string) *KrogerTokenManager {
 	return &KrogerTokenManager{
 		clientID:     clientID,
 		clientSecret: clientSecret,
+		httpClient:   newRetryingHTTPClient(&http.Client{}),
 	}
 }
 
@@ -76,7 +78,7 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.SetBasicAuth(m.clientID, m.clientSecret)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := m.httpClient.Do(req)
 		if err != nil {
 			return "", err
 		}
@@ -113,7 +115,9 @@ func GetOAuth2Token(ctx context.Context, clientID, clientSecret string) (string,
 }
 
 func FromConfig(cfg *config.Config) (*ClientWithResponses, error) {
+	httpClient := newRetryingHTTPClient(&http.Client{})
 	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
+	tokenManager.httpClient = httpClient
 
 	// Custom request editor that refreshes token if needed
 	requestEditor := func(editorCtx context.Context, req *http.Request) error {
@@ -126,6 +130,7 @@ func FromConfig(cfg *config.Config) (*ClientWithResponses, error) {
 	}
 
 	return NewClientWithResponses("https://api.kroger.com/v1",
+		WithHTTPClient(httpClient),
 		WithRequestEditorFn(requestEditor),
 	)
 }
