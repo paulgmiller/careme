@@ -139,7 +139,8 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 	)
 	t.Cleanup(s.Wait)
 
-	currentUser, err := storage.FindOrCreateFromClerk(t.Context(), "mock-clerk-user-id", auth.DefaultMock())
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	currentUser, err := storage.FromRequest(t.Context(), req, auth.DefaultMock())
 	if err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}
@@ -148,7 +149,6 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 		t.Fatalf("failed to save user directive: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
 	expectedParams, err := ParseQueryArgs(t.Context(), req, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("failed to build expected params: %v", err)
@@ -276,12 +276,13 @@ func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *t
 	)
 	t.Cleanup(s.Wait)
 
-	currentUser, err := storage.FindOrCreateFromClerk(t.Context(), "mock-clerk-user-id", auth.DefaultMock())
+	
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	currentUser, err := storage.FromRequest(t.Context(), req, auth.DefaultMock())
 	if err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
 	runRequest := func(t *testing.T, directive string) string {
 		t.Helper()
 
