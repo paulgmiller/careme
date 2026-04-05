@@ -27,6 +27,7 @@ import (
 func main() {
 	path := flag.String("secret-file", "secrets/envtest", "encrypted file to apply to k8s namespace")
 	namespace := flag.String("ns", "", "k8s namespace")
+	flag.Parse()
 	ctx := context.Background()
 
 	identities, err := loadSSHIdentities()
@@ -74,15 +75,15 @@ func main() {
 			continue
 		}
 		//check currents managed by
-		if current.Annotations["manged-by "] != "github.com/paulgmiller/kage" {
+		if current.Annotations["managed-by"] != "github.com/paulgmiller/kage" {
 			log.Fatalf("existing secret not managed by kage")
 		}
 		secret.ResourceVersion = current.ResourceVersion
-		secretapi.Update(ctx, current, metav1.UpdateOptions{})
+		_, err = secretapi.Update(ctx, secret, metav1.UpdateOptions{})
 		if err != nil {
 			log.Fatalf("failed to update %s: %s", secret.Name, err)
 		}
-		log.Printf("Created %s/%s", *namespace, secret.Name)
+		log.Printf("Updated %s/%s", *namespace, secret.Name)
 	}
 
 }
