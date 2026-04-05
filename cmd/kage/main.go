@@ -18,6 +18,7 @@ import (
 	"github.com/joho/godotenv"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -61,11 +62,25 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	secretapi := clientset.CoreV1().Secrets(*namespace)
 	for _, secret := range secrets {
-		_, err = clientset.CoreV1().
-			Secrets(*namespace).Update(ctx, secret, metav1.UpdateOptions{})
+		current, err := secretapi.Get(ctx, secret.Name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			_, err = secretapi.Create(ctx, secret, metav1.CreateOptions{})
+			if err != nil {
+				log.Fatalf("failed to update %s: %s", secret.Name, err)
+			}
+			log.Printf("Created %s/%s", *namespace, secret.Name)
+			continue
+		}
+		//check currents managed by
+		if current.Annotations["manged-by "] != "github.com/paulgmiller/kage" {
+			log.Fatalf("existing secret not managed by kage")
+		}
+		secret.ResourceVersion = current.ResourceVersion
+		secretapi.Update(ctx, current, metav1.UpdateOptions{})
 		if err != nil {
-			log.Fatalf("failed to appy %s: %s", secret.Name, err)
+			log.Fatalf("failed to update %s: %s", secret.Name, err)
 		}
 		log.Printf("Created %s/%s", *namespace, secret.Name)
 	}
@@ -114,7 +129,7 @@ func secrets(r io.Reader) ([]*corev1.Secret, error) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 				Annotations: map[string]string{
-					"careme.cooking/managed-by": "secret-writer",
+					"managed-by": "github.com/paulgmiller/kage",
 				},
 			},
 			Type:       corev1.SecretTypeOpaque,
