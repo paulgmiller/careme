@@ -83,7 +83,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to update %s: %s", secret.Name, err)
 		}
+		//only update if actually changed
 		log.Printf("Updated %s/%s", *namespace, secret.Name)
+
 	}
 
 }
