@@ -91,7 +91,6 @@ func main() {
 		log.Printf("Updated %s/%s", *namespace, secret.Name)
 
 	}
-
 }
 
 func secretNeedsUpdate(current, desired *corev1.Secret) bool {
