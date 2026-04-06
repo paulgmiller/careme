@@ -2,26 +2,32 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
-	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"filippo.io/age"
 	"filippo.io/age/agessh"
-	"github.com/joho/godotenv"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+)
+
+const (
+	managedByAnnotationKey   = "managed-by"
+	managedByAnnotationValue = "github.com/paulgmiller/kage"
+	secretCommentPrefix      = "secret:"
 )
 
 func main() {
@@ -74,20 +80,33 @@ func main() {
 			log.Printf("Created %s/%s", *namespace, secret.Name)
 			continue
 		}
-		//check currents managed by
-		if current.Annotations["managed-by"] != "github.com/paulgmiller/kage" {
-			log.Fatalf("existing secret not managed by kage")
+		if !secretNeedsUpdate(current, secret) {
+			continue
 		}
 		secret.ResourceVersion = current.ResourceVersion
 		_, err = secretapi.Update(ctx, secret, metav1.UpdateOptions{})
 		if err != nil {
 			log.Fatalf("failed to update %s: %s", secret.Name, err)
 		}
-		//only update if actually changed
 		log.Printf("Updated %s/%s", *namespace, secret.Name)
 
 	}
 
+}
+
+func secretNeedsUpdate(current, desired *corev1.Secret) bool {
+	if current.Annotations[managedByAnnotationKey] != desired.Annotations[managedByAnnotationKey] {
+		return true
+	}
+	if len(current.Data) != len(desired.StringData) {
+		return true
+	}
+	for key, value := range desired.StringData {
+		if !bytes.Equal(current.Data[key], []byte(value)) {
+			return true
+		}
+	}
+	return false
 }
 
 func secrets(r io.Reader) ([]*corev1.Secret, error) {
@@ -96,10 +115,9 @@ func secrets(r io.Reader) ([]*corev1.Secret, error) {
 	secretVals := map[string]map[string]string{}
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(line, "#") {
-			comment := strings.TrimSpace(strings.TrimPrefix(line, "#"))
-			if strings.HasPrefix(comment, "secret:") {
-				currentSecret = strings.TrimPrefix(comment, "secret:")
+		if comment, found := strings.CutPrefix(line, "#"); found {
+			if secretName, found := strings.CutPrefix(comment, secretCommentPrefix); found {
+				currentSecret = secretName
 				if _, found := secretVals[currentSecret]; found {
 					return nil, fmt.Errorf("duplicate secret comment %s", currentSecret)
 				}
@@ -110,20 +128,21 @@ func secrets(r io.Reader) ([]*corev1.Secret, error) {
 		if len(currentSecret) == 0 {
 			continue
 		}
-		//incredibly lazy and waseful come back and figure out yourself.
-		kv, err := godotenv.Unmarshal(line)
+		key, value, err := parseSecretLine(line)
 		if err != nil {
 			return nil, err
 		}
-		secret := secretVals[currentSecret]
-		for key, value := range kv {
-			if _, found := secret[key]; found {
-				return nil, fmt.Errorf("duplicate secret key %s", key)
-			}
-			secret[key] = value
+		if key == "" {
+			continue
 		}
-		maps.Insert(secretVals[currentSecret], maps.All(kv))
-
+		secret := secretVals[currentSecret]
+		if _, found := secret[key]; found {
+			return nil, fmt.Errorf("duplicate secret key %s", key)
+		}
+		secret[key] = value
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
 	}
 
 	var secrets []*corev1.Secret
@@ -132,7 +151,7 @@ func secrets(r io.Reader) ([]*corev1.Secret, error) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 				Annotations: map[string]string{
-					"managed-by": "github.com/paulgmiller/kage",
+					managedByAnnotationKey: managedByAnnotationValue,
 				},
 			},
 			Type:       corev1.SecretTypeOpaque,
@@ -141,6 +160,67 @@ func secrets(r io.Reader) ([]*corev1.Secret, error) {
 		secrets = append(secrets, secret)
 	}
 	return secrets, nil
+}
+
+func parseSecretLine(line string) (string, string, error) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return "", "", nil
+	}
+
+	key, rawValue, found := strings.Cut(trimmed, "=")
+	if !found {
+		return "", "", fmt.Errorf("invalid secret entry %q", line)
+	}
+
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", "", fmt.Errorf("invalid secret entry %q", line)
+	}
+
+	value := stripInlineComment(rawValue)
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		unquoted, err := strconv.Unquote(value)
+		if err != nil {
+			return "", "", err
+		}
+		value = unquoted
+	} else if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
+		value = value[1 : len(value)-1]
+	}
+
+	return key, value, nil
+}
+
+func stripInlineComment(value string) string {
+	var quote byte
+	escaped := false
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if quote == '"' && ch == '\\' {
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+		if ch == '"' || ch == '\'' {
+			quote = ch
+			continue
+		}
+		if ch == '#' && (i == 0 || value[i-1] == ' ' || value[i-1] == '\t') {
+			return value[:i]
+		}
+	}
+	return value
 }
 
 // share with internal/config?
