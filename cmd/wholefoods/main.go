@@ -78,7 +78,7 @@ func run(ctx context.Context) error {
 			continue
 		}
 		if err := wholefoods.CacheStoreSummary(ctx, cacheStore, summary); err != nil {
-			return fmt.Errorf("faield to cache store %s, %w", summary.StoreID, err)
+			return fmt.Errorf("faield to cache store %d, %w", summary.StoreID, err)
 		}
 		time.Sleep(5 * time.Second) // be nice to the server no rush here
 		synced++
