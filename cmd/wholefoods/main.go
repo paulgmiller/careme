@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,17 +17,29 @@ import (
 )
 
 func main() {
+	os.Exit(realMain())
+}
+
+func realMain() int {
 	ctx := context.Background()
 	closeLogger, err := logsetup.Configure(ctx)
 	if err != nil {
-		log.Fatalf("failed to configure logging: %v", err)
+		slog.ErrorContext(ctx, "failed to configure logging", "error", err)
+		return 1
 	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			slog.ErrorContext(ctx, "whole foods scrape panicked", "panic", recovered)
+			closeLogger()
+			os.Exit(1)
+		}
+		closeLogger()
+	}()
 	if err := run(ctx); err != nil {
 		slog.Error("failed abertson scrape", "error", err)
-		closeLogger()
-		os.Exit(1)
+		return 1
 	}
-	closeLogger()
+	return 0
 }
 
 func run(ctx context.Context) error {

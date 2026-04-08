@@ -18,19 +18,30 @@ import (
 )
 
 func main() {
+	os.Exit(realMain())
+}
+
+func realMain() int {
 	ctx := context.Background()
 	closeLogger, err := logsetup.Configure(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "can't set up logger", "error", err)
-		os.Exit(1)
+		return 1
 	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			slog.ErrorContext(ctx, "albertsons scrape panicked", "panic", recovered)
+			closeLogger()
+			os.Exit(1)
+		}
+		closeLogger()
+	}()
 
 	if err := run(ctx); err != nil {
 		slog.Error("albertsons scrape failed", "error", err)
-		closeLogger()
-		os.Exit(1)
+		return 1
 	}
-	closeLogger()
+	return 0
 }
 
 func run(ctx context.Context) error {
