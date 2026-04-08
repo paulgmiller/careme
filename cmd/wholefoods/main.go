@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"careme/internal/cache"
@@ -37,7 +38,8 @@ func main() {
 
 	cacheStore, err := cache.EnsureCache(wholefoods.Container)
 	if err != nil {
-		log.Fatalf("failed to create cache: %v", err)
+		slog.ErrorContext(ctx, "failed to create cache", "error", err)
+		os.Exit(1)
 	}
 
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
@@ -45,10 +47,12 @@ func main() {
 
 	refs, err := resolveStoreReferences(ctx, cacheStore, httpClient, sitemapURL)
 	if err != nil {
-		log.Fatalf("failed to resolve store references: %v", err)
+		slog.ErrorContext(ctx, "failed to resolve store references", "error", err)
+		os.Exit(1)
 	}
 	if len(refs) == 0 {
-		log.Fatalf("no Whole Foods store references found")
+		slog.ErrorContext(ctx, "no Whole Foods store references found", "error", err)
+		os.Exit(1)
 	}
 
 	slog.Info("syncing Whole Foods store summaries", "count", len(refs))
@@ -56,7 +60,11 @@ func main() {
 	for _, ref := range refs {
 		summary, err := client.StoreSummary(ctx, ref.ID)
 		if err != nil {
-			slog.Warn("failed to fetch Whole Foods store summary", "store_id", ref.ID, "url", ref.URL, "error", err)
+			if !errors.Is(err, wholefoods.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to fetch Whole Foods store summary", "store_id", ref.ID, "url", ref.URL, "error", err)
+			} else {
+				slog.InfoContext(ctx, err.Error(), "store_id", ref.ID, "url", ref.URL)
+			}
 			continue
 		}
 		if err := wholefoods.CacheStoreSummary(ctx, cacheStore, summary); err != nil {
@@ -68,7 +76,8 @@ func main() {
 	}
 
 	if err := wholefoods.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
-		log.Fatalf("failed to rebuild Whole Foods location index: %v", err)
+		slog.ErrorContext(ctx, "failed to rebuild Whole Foods location index", "error", err)
+		os.Exit(1)
 	}
 
 	fmt.Printf("synced %d Whole Foods store summaries\n", synced)
