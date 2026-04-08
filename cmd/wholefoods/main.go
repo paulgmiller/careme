@@ -76,7 +76,7 @@ func main() {
 	}
 
 	if err := wholefoods.RebuildLocationIndex(ctx, cacheStore, locations.LoadCentroids()); err != nil {
-		slog.ErrorContext(ctx, "failed to rebuild Whole Foods location index: %v", err)
+		slog.ErrorContext(ctx, "failed to rebuild Whole Foods location index", "error", err)
 		os.Exit(1)
 	}
 

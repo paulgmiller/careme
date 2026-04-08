@@ -231,7 +231,7 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, dest any) error {
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		buf, _ := io.ReadAll(resp.Body)
+		buf, _ := io.ReadAll(io.LimitReader(resp.Body, 4000))
 		return fmt.Errorf("request failed: status %d: %s", resp.StatusCode, buf)
 	}
 
