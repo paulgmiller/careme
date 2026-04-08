@@ -46,8 +46,6 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("can't parse %s", err)
 	}
 
-	flag.Parse()
-
 	cacheStore, err := cache.EnsureCache(wholefoods.Container)
 	if err != nil {
 		return err
