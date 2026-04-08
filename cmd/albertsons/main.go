@@ -5,9 +5,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -32,18 +32,21 @@ func main() {
 	ctx := context.Background()
 	closeLogger, err := logsetup.Configure(ctx)
 	if err != nil {
-		log.Fatalf("failed to configure logging: %v", err)
+		slog.Error("failed to configure logging", "error", err)
+		os.Exit(1)
 	}
 	defer closeLogger()
 
 	chains, err := selectedChains(brands)
 	if err != nil {
-		log.Fatalf("failed to parse brands: %v", err)
+		slog.Error("failed to parse brands", "error", err)
+		os.Exit(1)
 	}
 
 	cacheStore, err := cache.EnsureCache(albertsons.Container)
 	if err != nil {
-		log.Fatalf("failed to create cache: %v", err)
+		slog.Error("failed to create cache", "error", err)
+		os.Exit(1)
 	}
 
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
@@ -51,7 +54,8 @@ func main() {
 
 	synced, err := syncChains(ctx, cacheStore, httpClient, chains, delay)
 	if err != nil {
-		log.Fatalf("failed to sync Albertsons-family store summaries: %v", err)
+		slog.Error("failed to sync Albertsons-family store summaries", "error", err)
+		os.Exit(1)
 	}
 
 	fmt.Printf("synced %d Albertsons-family store summaries\n", synced)

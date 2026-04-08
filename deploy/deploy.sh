@@ -6,6 +6,7 @@ deploy_dir="deploy"
 manifest_files=(
   "${deploy_dir}/deploy.yaml"
   "${deploy_dir}/cronjob-careme-mail.yaml"
+  "${deploy_dir}/cronjob-albertsons-scrape.yaml"
   "${deploy_dir}/cronjob-albertsons-reese84.yaml"
   "${deploy_dir}/cronjob-wholefoods-scrape.yaml"
 )
