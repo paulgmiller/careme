@@ -18,35 +18,43 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+	closeLogger, err := logsetup.Configure(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "can't set up logger", "error", err)
+		os.Exit(1)
+	}
+
+	if err := run(ctx); err != nil {
+		slog.Error("albertsons scrape failed", "error", err)
+		closeLogger()
+		os.Exit(1)
+	}
+	closeLogger()
+}
+
+func run(ctx context.Context) error {
 	var (
 		brands     string
 		timeoutSec int
 		delayMS    int
 	)
-
-	flag.StringVar(&brands, "brands", "", "comma-separated brand keys to sync (default: all configured chains)")
-	flag.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
-	flag.IntVar(&delayMS, "delay-ms", 1000, "delay between store page requests in milliseconds")
-	flag.Parse()
-
-	ctx := context.Background()
-	closeLogger, err := logsetup.Configure(ctx)
-	if err != nil {
-		slog.Error("failed to configure logging", "error", err)
-		os.Exit(1)
+	fs := flag.NewFlagSet("alberrtsons", flag.ContinueOnError)
+	fs.StringVar(&brands, "brands", "", "comma-separated brand keys to sync (default: all configured chains)")
+	fs.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
+	fs.IntVar(&delayMS, "delay-ms", 1000, "delay between store page requests in milliseconds")
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		return fmt.Errorf("can't parse %s", err)
 	}
-	defer closeLogger()
 
 	chains, err := selectedChains(brands)
 	if err != nil {
-		slog.Error("failed to parse brands", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("parse brands: %w", err)
 	}
 
 	cacheStore, err := cache.EnsureCache(albertsons.Container)
 	if err != nil {
-		slog.Error("failed to create cache", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("create cache: %w", err)
 	}
 
 	httpClient := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
@@ -54,11 +62,11 @@ func main() {
 
 	synced, err := syncChains(ctx, cacheStore, httpClient, chains, delay)
 	if err != nil {
-		slog.Error("failed to sync Albertsons-family store summaries", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("sync Albertsons-family store summaries: %w", err)
 	}
 
-	fmt.Printf("synced %d Albertsons-family store summaries\n", synced)
+	slog.InfoContext(ctx, "synced Albertsons-family store summaries", "count", synced)
+	return nil
 }
 
 func syncChains(ctx context.Context, cacheStore cache.ListCache, httpClient *http.Client, chains []albertsons.Chain, delay time.Duration) (int, error) {
