@@ -29,7 +29,6 @@ func main() {
 		os.Exit(1)
 	}
 	closeLogger()
-
 }
 
 func run(ctx context.Context) error {
@@ -72,7 +71,7 @@ func run(ctx context.Context) error {
 		if err != nil {
 			if !errors.Is(err, wholefoods.ErrNotFound) {
 				slog.ErrorContext(ctx, "failed to fetch Whole Foods store summary", "store_id", ref.ID, "url", ref.URL, "error", err)
-				//return error early?
+				// return error early?
 			} else {
 				slog.InfoContext(ctx, err.Error(), "store_id", ref.ID, "url", ref.URL)
 			}
