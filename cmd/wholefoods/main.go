@@ -56,7 +56,11 @@ func main() {
 	for _, ref := range refs {
 		summary, err := client.StoreSummary(ctx, ref.ID)
 		if err != nil {
-			slog.Warn("failed to fetch Whole Foods store summary", "store_id", ref.ID, "url", ref.URL, "error", err)
+			if !errors.Is(err, wholefoods.ErrNotFound) {
+				slog.Warn("failed to fetch Whole Foods store summary", "store_id", ref.ID, "url", ref.URL, "error", err)
+			} else {
+				slog.InfoContext(ctx, err.Error(), "store_id", ref.ID, "url", ref.URL)
+			}
 			continue
 		}
 		if err := wholefoods.CacheStoreSummary(ctx, cacheStore, summary); err != nil {
