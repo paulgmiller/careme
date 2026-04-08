@@ -193,6 +193,8 @@ func (c *Client) Category(ctx context.Context, queryterm, store string) ([]Produ
 	}
 }
 
+var ErrNotFound = fmt.Errorf("store not found")
+
 // StoreSummary fetches a store summary payload like /api/stores/10216/summary.
 func (c *Client) StoreSummary(ctx context.Context, store string) (*StoreSummaryResponse, error) {
 	store = strings.TrimSpace(store)
@@ -224,15 +226,16 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, dest any) error {
 		_ = resp.Body.Close()
 	}()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
-	if err != nil {
-		return fmt.Errorf("read response: %w", err)
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("%w: %s", ErrNotFound, endpoint)
 	}
 
-	if err := json.Unmarshal(body, dest); err != nil {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		buf, _ := io.ReadAll(io.LimitReader(resp.Body, 4000))
+		return fmt.Errorf("request failed: status %d: %s", resp.StatusCode, buf)
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
