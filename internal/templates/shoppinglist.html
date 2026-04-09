@@ -89,38 +89,7 @@
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
                   {{if .ServerSignedIn}}
-                  <input type="radio"
-                         {{if .Saved}}checked{{end}}
-                         name="recipe-{{.Hash}}"
-                         value="save"
-                         id="save-{{.Hash}}"
-                         class="peer/save hidden" />
-                  <label for="save-{{.Hash}}"
-                         hx-post="/recipe/{{.Hash}}/save"
-                         hx-vals='{"h":"{{$.Hash}}"}'
-                         hx-trigger="click"
-                         hx-target="next .profile-status"
-                         hx-swap="innerHTML"
-                         onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
-                         class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 peer-checked/save:border-action-green-700 peer-checked/save:bg-action-green-600 peer-checked/save:text-white">
-                    Save
-                  </label>
-                  <input type="radio"
-                         {{if .Dismissed}}checked{{end}}
-                         name="recipe-{{.Hash}}"
-                         value="dismiss"
-                         id="dismiss-{{.Hash}}"
-                         class="peer/dismiss hidden" />
-                  <label for="dismiss-{{.Hash}}"
-                         hx-post="/recipe/{{.Hash}}/dismiss"
-                         hx-vals='{"h":"{{$.Hash}}"}'
-                         hx-trigger="click"
-                         hx-target="next .profile-status"
-                         hx-swap="innerHTML"
-                         onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
-                         class="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 peer-checked/dismiss:border-action-red-700 peer-checked/dismiss:bg-action-red-600 peer-checked/dismiss:text-white">
-                    Dismiss
-                  </label>
+                  {{template "shopping_recipe_action" .}}
                   {{end}}
                   <button type="button"
                           onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
@@ -128,7 +97,6 @@
                     Details
                   </button>
                   {{template "shopping_recipe_wine_action" .}}
-                  {{if .ServerSignedIn}}<span class="profile-status text-xs font-medium text-ink-600" aria-live="polite"></span>{{end}}
                 </div>
               </header>
 
@@ -136,7 +104,7 @@
                   {{template "shopping_recipe_wine_preview" .}}
               </div>
 
-              <details {{if not (or .Saved .Dismissed)}}open{{end}} class="space-y-4">
+              <details {{if not .Saved}}open{{end}} class="space-y-4">
                 <summary class="hidden">Details</summary>
                 <section class="space-y-6">
                 <div class="grid gap-6 md:grid-cols-2">
@@ -178,28 +146,14 @@
             </article>
             {{end}}
 
-            {{if .ShoppingList}}
-            <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-              <details>
-                <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Shopping list
-                </summary>
-                <div class="mt-4">
-                <ul class="space-y-2 text-ink-700">
-                  {{range .ShoppingList}}
-                  <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                    <span class="font-medium text-brand-700">{{.Name}}</span>
-                    <span class="text-ink-600">{{.Quantity}}</span>
-                  </li>
-                  {{end}}
-                </ul>
-                </div>
-              </details>
-            </section>
+            {{if .ServerSignedIn}}
+            {{template "shopping_list_section" .}}
             {{end}}
           </div>
 
+          {{if .ServerSignedIn}}
           {{template "shopping_finalize_controls" .}}
+          {{end}}
         </div>
       </div>
 
@@ -224,34 +178,102 @@
 {{end}}
 
 {{define "shopping_finalize_controls_content"}}
-  {{if .ServerSignedIn}}
-  {{template "shopping_finalize_controls_signed_in_content" .}}
-  {{end}}
-{{end}}
-
-{{define "shopping_finalize_controls_signed_in_content"}}
-  <span class="inline-flex" {{if not .HasSavedRecipes}}title="Save at least one recipe to assemble your shopping list."{{end}}>
+  {{if and .ServerSignedIn .ShowSetMenu}}
+  <span class="inline-flex">
     <button type="button"
-            id="finalizeButton"
-            {{if .HasSavedRecipes}}hx-post="/recipes/{{.Hash}}/finalize"
-            hx-swap="none"{{else}}disabled
-            aria-disabled="true"
-            aria-describedby="finalize-help"{{end}}
-            class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if .HasSavedRecipes}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
-      Assemble Shopping List
+            id="setMenuButton"
+            hx-post="/recipes/{{.Hash}}/finalize"
+            hx-swap="none"
+            class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
+      Set the menu
     </button>
   </span>
-  {{if not .HasSavedRecipes}}
-  <p id="finalize-help" class="text-sm text-ink-600">
-    Save at least one recipe to assemble your shopping list.
+  <p class="text-sm text-ink-600">
+    Keep only the dishes you've saved.
   </p>
   {{end}}
 {{end}}
 
 {{define "shopping_finalize_controls_response"}}
 <div id="shopping-finalize-controls" hx-swap-oob="outerHTML" class="mt-10 flex flex-wrap items-center gap-4">
-  {{template "shopping_finalize_controls_signed_in_content" .}}
+  {{template "shopping_finalize_controls_content" .}}
 </div>
+{{end}}
+
+{{define "shopping_recipe_action"}}
+<div id="{{.SelectionID}}" class="inline-flex items-center gap-2">
+  {{template "shopping_recipe_action_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_action_content"}}
+  {{if .Saved}}
+  <button type="button"
+          id="{{.SelectionButtonID}}"
+          hx-post="/recipe/{{.Hash}}/dismiss"
+          hx-vals='{"h":"{{.ListHash}}"}'
+          hx-target="#{{.SelectionID}}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="#{{.SelectionButtonID}}"
+          onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 focus:outline-none focus:ring-2 focus:ring-action-red-300 focus:ring-offset-2">
+    Dismiss
+  </button>
+  <span class="text-xs font-semibold text-action-green-700" aria-live="polite">Saved</span>
+  {{else}}
+  <button type="button"
+          id="{{.SelectionButtonID}}"
+          hx-post="/recipe/{{.Hash}}/save"
+          hx-vals='{"h":"{{.ListHash}}"}'
+          hx-target="#{{.SelectionID}}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="#{{.SelectionButtonID}}"
+          onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=false;"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2">
+    Save
+  </button>
+  {{end}}
+{{end}}
+
+{{define "shopping_recipe_action_response"}}
+{{template "shopping_recipe_action" .}}
+{{end}}
+
+{{define "shopping_list_section"}}
+<section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  {{template "shopping_list_section_content" .}}
+</section>
+{{end}}
+
+{{define "shopping_list_section_oob"}}
+<section id="shopping-list-section" hx-swap-oob="outerHTML" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  {{template "shopping_list_section_content" .}}
+</section>
+{{end}}
+
+{{define "shopping_list_section_content"}}
+  <div class="space-y-2">
+    <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
+    <p class="text-sm text-ink-600">Built from the recipes you've saved.</p>
+  </div>
+  {{if .ShoppingList}}
+  <ul class="mt-4 space-y-2 text-ink-700">
+    {{range .ShoppingList}}
+    <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
+      <span class="font-medium text-brand-700">{{.Name}}</span>
+      <span class="text-ink-600">{{.Quantity}}</span>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="mt-4 rounded-xl border border-dashed border-brand-200 bg-brand-50/60 px-4 py-3 text-sm text-ink-600">
+    Save a recipe to start your shopping list.
+  </p>
+  {{end}}
+{{end}}
+
+{{define "shopping_list_section_response"}}
+{{template "shopping_list_section_oob" .}}
 {{end}}
 
 {{define "shopping_recipe_wine_action"}}

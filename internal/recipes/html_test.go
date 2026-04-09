@@ -77,13 +77,13 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 		t.Error("shopping list HTML should include htmx script")
 	}
 	if !strings.Contains(html, "Shopping list") {
-		t.Error("shopping list HTML should render the shopping list section for a single recipe")
+		t.Error("shopping list HTML should render the shopping list section")
 	}
-	if !strings.Contains(html, `id="finalize-help"`) {
-		t.Error("shopping list HTML should include helper text for disabled finalize state")
+	if !strings.Contains(html, `Save a recipe to start your shopping list.`) {
+		t.Error("shopping list HTML should include the empty state helper when nothing is saved")
 	}
-	if !strings.Contains(html, `disabled`) {
-		t.Error("shopping list HTML should disable finalize button when nothing is saved")
+	if strings.Contains(html, `Set the menu`) {
+		t.Error("shopping list HTML should not show Set the menu when nothing is saved")
 	}
 }
 
@@ -424,6 +424,7 @@ func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *te
 	}
 	wineHash := multi.Recipes[0].ComputeHash()
 	pickerHash := multi.Recipes[1].ComputeHash()
+	p.Saved = []ai.Recipe{multi.Recipes[0]}
 	pickerActionID, pickerButtonID := shoppingWineDOMIDs(pickerHash)
 	pickerPreviewID := shoppingWinePreviewDOMID(pickerHash)
 	pickerDetailID, pickerDetailButtonID := shoppingWineDetailDOMIDs(pickerHash)
@@ -462,7 +463,7 @@ func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *te
 	if !strings.Contains(html, `aria-label="Choose wine"`) {
 		t.Fatalf("shopping list should include accessible wine picker label, body: %s", html)
 	}
-	if strings.Index(html, `aria-live="polite"`) > strings.Index(html, `id="`+pickerPreviewID+`"`) {
+	if strings.Index(html, `id="`+pickerActionID+`"`) > strings.Index(html, `id="`+pickerPreviewID+`"`) {
 		t.Fatalf("shopping list should render wine preview beneath the action row, body: %s", html)
 	}
 	if got := strings.Count(html, "Cellar Red"); got != 4 {
