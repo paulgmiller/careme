@@ -79,6 +79,12 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, "Shopping list") {
 		t.Error("shopping list HTML should render the shopping list section for a single recipe")
 	}
+	if !strings.Contains(html, `class="ingredient-row"`) {
+		t.Error("shopping list HTML should render ingredient rows with responsive aligned columns")
+	}
+	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
+		t.Error("shopping list HTML should no longer use the old wrapped ingredient row layout")
+	}
 	if !strings.Contains(html, `id="finalize-help"`) {
 		t.Error("shopping list HTML should include helper text for disabled finalize state")
 	}
@@ -249,6 +255,12 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, "Estimated cost:") {
 		t.Error("recipe HTML should contain estimated cost")
 	}
+	if !strings.Contains(html, `class="ingredient-row"`) {
+		t.Error("recipe HTML should render ingredient rows with responsive aligned columns")
+	}
+	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
+		t.Error("recipe HTML should no longer use the old wrapped ingredient row layout")
+	}
 	if !strings.Contains(html, `id="question-error"`) {
 		t.Error("recipe HTML should contain question error surface")
 	}
@@ -372,6 +384,75 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	}
 	if strings.Contains(html, "Choose a wine") {
 		t.Error("recipe HTML should not render the wine picker when recommendation exists")
+	}
+}
+
+func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.ConversationID = "convo123"
+	w := httptest.NewRecorder()
+	recipe := ai.Recipe{
+		Title:        "Market Greens",
+		Description:  "Simple salad",
+		CookTime:     "10 minutes",
+		CostEstimate: "$8-10",
+		Ingredients: []ai.Ingredient{
+			{Name: "Little gem lettuce", Quantity: "2 heads", Price: ""},
+		},
+		Instructions: []string{"Wash and plate."},
+		Health:       "Light",
+		DrinkPairing: "Sparkling water",
+	}
+
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := w.Body.String()
+
+	isValidHTML(t, html)
+	if !strings.Contains(html, "Little gem lettuce") {
+		t.Fatal("recipe HTML should include ingredient name when price is empty")
+	}
+	if !strings.Contains(html, "2 heads") {
+		t.Fatal("recipe HTML should include ingredient quantity when price is empty")
+	}
+	if !strings.Contains(html, `class="ingredient-row-empty"`) {
+		t.Fatal("recipe HTML should reserve desktop alignment when ingredient price is empty")
+	}
+}
+
+func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+	listWithoutPrice := ai.ShoppingList{
+		Recipes: []ai.Recipe{
+			{
+				Title:        "Spring Pasta",
+				Description:  "Bright and quick",
+				CookTime:     "20 minutes",
+				CostEstimate: "$12-15",
+				Ingredients: []ai.Ingredient{
+					{Name: "English peas", Quantity: "1 cup", Price: ""},
+				},
+				Instructions: []string{"Boil and toss."},
+				Health:       "Balanced",
+				DrinkPairing: "Lemon water",
+			},
+		},
+	}
+
+	FormatShoppingListHTML(t.Context(), p, listWithoutPrice, true, w)
+	html := w.Body.String()
+
+	isValidHTML(t, html)
+	if !strings.Contains(html, "English peas") {
+		t.Fatal("shopping list HTML should include ingredient name when price is empty")
+	}
+	if !strings.Contains(html, "1 cup") {
+		t.Fatal("shopping list HTML should include ingredient quantity when price is empty")
+	}
+	if !strings.Contains(html, `class="ingredient-row-empty"`) {
+		t.Fatal("shopping list HTML should reserve desktop alignment when ingredient price is empty")
 	}
 }
 
