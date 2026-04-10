@@ -144,10 +144,10 @@
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Ingredients</h3>
                     <ul class="mt-3 space-y-2 text-ink-700">
                       {{range .DisplayIngredients}}
-                      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                        <span class="font-medium text-brand-700">{{.Name}}</span>
-                        <span class="text-ink-600">{{.Quantity}}</span>
-                        <span class="text-ink-500">{{.Price}}</span>
+                      <li class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-lg bg-brand-50 px-3 py-2 text-sm">
+                        <span class="min-w-0 font-medium text-brand-700">{{.Name}}</span>
+                        <span class="whitespace-nowrap text-right text-ink-600">{{.Quantity}}</span>
+                        <span class="whitespace-nowrap text-right tabular-nums text-ink-500">{{.Price}}</span>
                       </li>
                       {{end}}
                     </ul>
