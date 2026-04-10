@@ -79,7 +79,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, "Shopping list") {
 		t.Error("shopping list HTML should render the shopping list section for a single recipe")
 	}
-	if !strings.Contains(html, `class="ingredient-row"`) {
+	if !strings.Contains(html, `sm:grid-cols-[minmax(0,1fr)_10rem_5rem]`) {
 		t.Error("shopping list HTML should render ingredient rows with responsive aligned columns")
 	}
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
@@ -255,7 +255,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, "Estimated cost:") {
 		t.Error("recipe HTML should contain estimated cost")
 	}
-	if !strings.Contains(html, `class="ingredient-row"`) {
+	if !strings.Contains(html, `sm:grid-cols-[minmax(0,1fr)_10rem_5rem]`) {
 		t.Error("recipe HTML should render ingredient rows with responsive aligned columns")
 	}
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
@@ -415,7 +415,7 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 	if !strings.Contains(html, "2 heads") {
 		t.Fatal("recipe HTML should include ingredient quantity when price is empty")
 	}
-	if !strings.Contains(html, `class="ingredient-row-empty"`) {
+	if !strings.Contains(html, `hidden sm:block`) {
 		t.Fatal("recipe HTML should reserve desktop alignment when ingredient price is empty")
 	}
 }
@@ -451,7 +451,7 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 	if !strings.Contains(html, "1 cup") {
 		t.Fatal("shopping list HTML should include ingredient quantity when price is empty")
 	}
-	if !strings.Contains(html, `class="ingredient-row-empty"`) {
+	if !strings.Contains(html, `hidden sm:block`) {
 		t.Fatal("shopping list HTML should reserve desktop alignment when ingredient price is empty")
 	}
 }

@@ -21,62 +21,6 @@
   {{end}}
 
   {{template "tailwind_head" .Style}}
-  <style>
-    .ingredient-row {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    .ingredient-row-meta {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 0.25rem 0.75rem;
-      font-size: 0.75rem;
-    }
-
-    .ingredient-row-empty {
-      display: none;
-    }
-
-    .shopping-list-row {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    @media (min-width: 640px) {
-      .ingredient-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 10rem 5rem;
-        align-items: start;
-        column-gap: 0.75rem;
-      }
-
-      .ingredient-row-meta {
-        display: contents;
-      }
-
-      .ingredient-row-qty,
-      .ingredient-row-price,
-      .shopping-list-row-qty {
-        text-align: right;
-        font-size: 0.875rem;
-      }
-
-      .ingredient-row-empty {
-        display: block;
-      }
-
-      .shopping-list-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 10rem;
-        align-items: start;
-        column-gap: 0.75rem;
-      }
-    }
-  </style>
 
   {{.ClarityScript}}
   {{.GoogleTagScript}}
@@ -201,18 +145,18 @@
                     <ul class="mt-3 space-y-2 text-ink-700">
                       {{range .DisplayIngredients}}
                       <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                        <div class="ingredient-row">
+                        <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem_5rem] sm:items-start sm:gap-3">
                           <span class="font-medium text-brand-700">{{.Name}}</span>
-                          <div class="ingredient-row-meta">
+                          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs sm:contents">
                             {{if .Quantity}}
-                            <span class="ingredient-row-qty text-ink-600">{{.Quantity}}</span>
+                            <span class="text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
                             {{else}}
-                            <span class="ingredient-row-empty" aria-hidden="true"></span>
+                            <span class="hidden sm:block" aria-hidden="true"></span>
                             {{end}}
                             {{if .Price}}
-                            <span class="ingredient-row-price text-ink-500">{{.Price}}</span>
+                            <span class="text-ink-500 sm:text-right sm:text-sm">{{.Price}}</span>
                             {{else}}
-                            <span class="ingredient-row-empty" aria-hidden="true"></span>
+                            <span class="hidden sm:block" aria-hidden="true"></span>
                             {{end}}
                           </div>
                         </div>
@@ -256,12 +200,12 @@
                 <ul class="space-y-2 text-ink-700">
                   {{range .ShoppingList}}
                   <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                    <div class="shopping-list-row">
+                    <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
                       <span class="font-medium text-brand-700">{{.Name}}</span>
                       {{if .Quantity}}
-                      <span class="shopping-list-row-qty text-xs text-ink-600">{{.Quantity}}</span>
+                      <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
                       {{else}}
-                      <span class="ingredient-row-empty" aria-hidden="true"></span>
+                      <span class="hidden sm:block" aria-hidden="true"></span>
                       {{end}}
                     </div>
                   </li>
