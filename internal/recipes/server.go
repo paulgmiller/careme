@@ -430,6 +430,7 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
+		return //this means there is garbage in the cache dont generate juar replace
 	}
 
 	recipe, err := s.SingleFromCache(ctx, hash)
