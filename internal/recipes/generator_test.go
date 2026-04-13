@@ -32,6 +32,7 @@ type captureGenerateAIClient struct {
 }
 
 type captureCritiquer struct {
+	mu      sync.Mutex
 	err     error
 	recipes []ai.Recipe
 }
@@ -131,7 +132,9 @@ func (c *captureGenerateAIClient) Ready(ctx context.Context) error {
 }
 
 func (c *captureCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
+	c.mu.Lock()
 	c.recipes = append(c.recipes, recipe)
+	c.mu.Unlock()
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -370,7 +373,7 @@ func TestGenerateRecipes_SavesCritiquesForGeneratedRecipes(t *testing.T) {
 	}
 }
 
-func TestGenerateRecipes_CritiqueFailuresDoNotFailGeneration(t *testing.T) {
+func TestGenerateRecipes_CritiqueFailuresFailGeneration(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	io := IO(cacheStore)
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -380,7 +383,8 @@ func TestGenerateRecipes_CritiqueFailuresDoNotFailGeneration(t *testing.T) {
 
 	recipe := ai.Recipe{Title: "Roast Chicken", Description: "Crisp and simple", Instructions: []string{"Roast the chicken."}}
 	g := &Generator{
-		io: io,
+		io:  io,
+		cio: io,
 		aiClient: &captureGenerateAIClient{
 			shoppingList: &ai.ShoppingList{
 				ConversationID: "conv-123",
@@ -391,11 +395,11 @@ func TestGenerateRecipes_CritiqueFailuresDoNotFailGeneration(t *testing.T) {
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
-	if err != nil {
-		t.Fatalf("GenerateRecipes returned error: %v", err)
+	if err == nil {
+		t.Fatal("expected GenerateRecipes to fail when critique caching fails")
 	}
-	if got == nil || len(got.Recipes) != 1 {
-		t.Fatalf("expected generated recipes to still be returned, got %+v", got)
+	if got != nil {
+		t.Fatalf("expected no shopping list on critique failure, got %+v", got)
 	}
 	if _, err := io.CritiqueFromCache(t.Context(), recipe.ComputeHash()); !errors.Is(err, cache.ErrNotFound) {
 		t.Fatalf("expected no cached critique after failure, got %v", err)
@@ -408,8 +412,8 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 
 	critiquer := &captureCritiquer{}
 	g := &Generator{
-		io:        IO(cache.NewFileCache(t.TempDir())),
-		cio:       IO(cache.NewFileCache(t.TempDir())),
+		io:        IO(cache.NewInMemoryCache()),
+		cio:       IO(cache.NewInMemoryCache()),
 		aiClient:  &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
 		critiquer: critiquer,
 	}

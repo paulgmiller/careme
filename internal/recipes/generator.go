@@ -164,7 +164,9 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		g.cacheRecipeCritiques(ctx, shoppingList.Recipes)
+		if err := g.cacheRecipeCritiques(ctx, shoppingList.Recipes); err != nil {
+			return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
+		}
 		// Include saved recipes in the shopping list
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
@@ -183,7 +185,9 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
-	g.cacheRecipeCritiques(ctx, shoppingList.Recipes)
+	if err := g.cacheRecipeCritiques(ctx, shoppingList.Recipes); err != nil {
+		return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
+	}
 	// how to pipe this back to ai client? should ai client hjave its own critiquer or do we just call regenerate once?
 
 	// should never happen? How do you get save on first generte?
@@ -295,22 +299,23 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 	return lo.Uniq(titles)
 }
 
-// todo start to fail on errors when this is in pipeline
-func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recipe) {
+func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recipe) error {
 	if g.critiquer == nil || g.cio == nil {
 		// yuck refactor tests to make this alway present
-		return
+		return nil
 	}
-
-	for _, recipe := range recipes {
+	_, err := parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (int, error) {
 		hash := recipe.ComputeHash()
 		critique, err := g.critiquer.CritiqueRecipe(ctx, recipe)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to critique recipe", "recipe", recipe.Title, "hash", hash, "error", err)
-			continue
+			return 0, fmt.Errorf("critique recipe %q (%s): %w", recipe.Title, hash, err)
 		}
 		if err := g.cio.SaveCritique(ctx, hash, critique); err != nil {
 			slog.ErrorContext(ctx, "failed to cache recipe critique", "recipe", recipe.Title, "hash", hash, "error", err)
+			return 0, fmt.Errorf("cache critique for recipe %q (%s): %w", recipe.Title, hash, err)
 		}
-	}
+		return 0, nil
+	})
+	return err
 }
