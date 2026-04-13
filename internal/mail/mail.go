@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -198,7 +199,11 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	}
 
 	var buf bytes.Buffer
-	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, &buf); err != nil {
+	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + url.Values{
+		"user":  []string{user.ID},
+		"token": []string{users.UnsubscribeToken(user)},
+	}.Encode()
+	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, &buf); err != nil {
 		slog.ErrorContext(ctx, "failed to format mail", "error", err)
 		return
 	}

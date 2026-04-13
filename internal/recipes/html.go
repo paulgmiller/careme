@@ -296,21 +296,23 @@ func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, write
 }
 
 // drops clarity, instructions and most of shoppinglist
-func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, writer io.Writer) error {
+func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsubscribeURL string, writer io.Writer) error {
 	data := struct {
-		Location locations.Location
-		Date     string
-		Hash     string
-		Recipes  []ai.Recipe
-		Domain   string
-		Style    seasons.Style
+		Location       locations.Location
+		Date           string
+		Hash           string
+		Recipes        []ai.Recipe
+		Domain         string
+		UnsubscribeURL string
+		Style          seasons.Style
 	}{
-		Location: *p.Location,
-		Date:     p.Date.Format("2006-01-02"),
-		Hash:     p.Hash(),
-		Recipes:  l.Recipes,
-		Domain:   publicOrigin,
-		Style:    seasons.GetCurrentStyle(),
+		Location:       *p.Location,
+		Date:           p.Date.Format("2006-01-02"),
+		Hash:           p.Hash(),
+		Recipes:        l.Recipes,
+		Domain:         publicOrigin,
+		UnsubscribeURL: unsubscribeURL,
+		Style:          seasons.GetCurrentStyle(),
 	}
 
 	return templates.Mail.Execute(writer, data)

@@ -929,7 +929,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.URL.Query().Get("mail") == "true" {
-			if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), w); err != nil {
+			if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), "", w); err != nil {
 				slog.ErrorContext(ctx, "failed to render mail template", "error", err)
 				http.Error(w, "failed to render mail template", http.StatusInternalServerError)
 			}
