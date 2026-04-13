@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
-	"strings"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/parallelism"
+
+	"github.com/samber/lo"
 )
 
 type adminCritiqueView struct {
@@ -104,7 +106,13 @@ func AdminCritiquesPage(c cache.ListCache) http.Handler {
 			return
 		}
 
-		views := loadAdminCritiqueViews(r.Context(), c, hashes)
+		views, err := loadAdminCritiqueViews(r.Context(), c, hashes)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to load recipe critiques for admin page", "error", err)
+			http.Error(w, "unable to load recipe critiques", http.StatusInternalServerError)
+			return
+		}
+		views = lo.Compact(views)
 		sort.Slice(views, func(i, j int) bool {
 			return views[i].CritiquedAt.After(views[j].CritiquedAt)
 		})
@@ -112,7 +120,7 @@ func AdminCritiquesPage(c cache.ListCache) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if err := adminCritiquesPageTmpl.Execute(w, struct {
-			Critiques []adminCritiqueView
+			Critiques []*adminCritiqueView
 		}{Critiques: views}); err != nil {
 			slog.ErrorContext(r.Context(), "failed to render admin recipe critiques page", "error", err)
 			http.Error(w, "unable to render recipe critiques", http.StatusInternalServerError)
@@ -121,23 +129,16 @@ func AdminCritiquesPage(c cache.ListCache) http.Handler {
 	})
 }
 
-func loadAdminCritiqueViews(ctx context.Context, c cache.Cache, hashes []string) []adminCritiqueView {
+func loadAdminCritiqueViews(ctx context.Context, c cache.Cache, hashes []string) ([]*adminCritiqueView, error) {
 	rio := IO(c)
-	views := make([]adminCritiqueView, 0, len(hashes))
-	for _, rawHash := range hashes {
-		hash := strings.TrimSpace(rawHash)
-		if hash == "" {
-			continue
-		}
-
+	views, err := parallelism.MapWithErrors(hashes, func(hash string) (*adminCritiqueView, error) {
 		view := adminCritiqueView{
 			RecipeURL: "/recipe/" + hash,
 		}
 
 		critique, err := rio.CritiqueFromCache(ctx, hash)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to load recipe critique for admin page", "hash", hash, "error", err)
-			continue
+			return nil, err
 		}
 		view.RecipeCritique = *critique
 
@@ -149,7 +150,7 @@ func loadAdminCritiqueViews(ctx context.Context, c cache.Cache, hashes []string)
 			view.RecipeTitle = recipe.Title
 		}
 
-		views = append(views, view)
-	}
-	return views
+		return &view, nil
+	})
+	return views, err
 }
