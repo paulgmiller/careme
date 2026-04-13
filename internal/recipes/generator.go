@@ -247,8 +247,10 @@ func (g *Generator) Ready(ctx context.Context) error {
 	if err := g.aiClient.Ready(ctx); err != nil {
 		return err
 	}
-	if err := g.critiquer.Ready(ctx); err != nil {
-		return fmt.Errorf("gemini critique client not ready: %w", err)
+	if g.critiquer != nil {
+		if err := g.critiquer.Ready(ctx); err != nil {
+			return fmt.Errorf("gemini critique client not ready: %w", err)
+		}
 	}
 	return nil
 }

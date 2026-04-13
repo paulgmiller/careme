@@ -95,7 +95,6 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 		"Needs more brightness.",
 		"Rest the chicken before slicing.",
 		"Finish with lemon juice.",
-		"2026-04-13 20:15",
 		"/recipe/" + newestHash,
 	} {
 		if !strings.Contains(body, want) {

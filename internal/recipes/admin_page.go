@@ -34,7 +34,6 @@ var adminCritiquesPageTmpl = template.Must(template.New("admin-critiques").Parse
   </nav>
   <h1>Recipe Critiques</h1>
   <p>Total critiques: {{len .Critiques}}</p>
-  {{if .Critiques}}
   <table border="1" cellpadding="6" cellspacing="0">
     <thead>
       <tr>
@@ -82,7 +81,6 @@ var adminCritiquesPageTmpl = template.Must(template.New("admin-critiques").Parse
             </ul>
             {{end}}
           </details>
-          {{end}}
         </td>
       </tr>
       {{end}}
