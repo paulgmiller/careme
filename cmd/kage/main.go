@@ -28,11 +28,14 @@ const (
 	managedByAnnotationKey   = "managed-by"
 	managedByAnnotationValue = "github.com/paulgmiller/kage"
 	secretCommentPrefix      = "secret:"
+	minSecretValueLength     = 5
 )
 
+// kage is my dumbed down vesion of https://github.com/getsops/sops
 func main() {
 	path := flag.String("secret-file", "secrets/envtest", "encrypted file to apply to k8s namespace")
 	namespace := flag.String("ns", "", "k8s namespace")
+	check := flag.Bool("check", false, "dump secret names")
 	flag.Parse()
 	ctx := context.Background()
 
@@ -52,10 +55,25 @@ func main() {
 	if err != nil {
 		log.Fatalf("decrypt file  %q: %s", *path, err)
 	}
+
 	secrets, err := secrets(reader)
 	if err != nil {
 		panic(err)
 	}
+
+	// adding gets tricky to retain comments
+	if *check {
+		for name, secret := range secrets {
+			fmt.Println(name)
+			for key, value := range secret {
+				fmt.Printf("  %s=%s\n", key, maskedSecretValue(value))
+			}
+			fmt.Println()
+		}
+		return
+	}
+
+	secretsK8s := toK8s(secrets)
 
 	cfg, err := clientcmd.BuildConfigFromFlags(
 		"",
@@ -70,7 +88,7 @@ func main() {
 		panic(err)
 	}
 	secretapi := clientset.CoreV1().Secrets(*namespace)
-	for _, secret := range secrets {
+	for _, secret := range secretsK8s {
 		current, err := secretapi.Get(ctx, secret.Name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			_, err = secretapi.Create(ctx, secret, metav1.CreateOptions{})
@@ -108,10 +126,12 @@ func secretNeedsUpdate(current, desired *corev1.Secret) bool {
 	return false
 }
 
-func secrets(r io.Reader) ([]*corev1.Secret, error) {
+type secret map[string]string
+
+func secrets(r io.Reader) (map[string]secret, error) {
 	sc := bufio.NewScanner(r)
 	var currentSecret string
-	secretVals := map[string]map[string]string{}
+	secretVals := map[string]secret{}
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if comment, found := strings.CutPrefix(line, "#"); found {
@@ -120,7 +140,7 @@ func secrets(r io.Reader) ([]*corev1.Secret, error) {
 				if _, found := secretVals[currentSecret]; found {
 					return nil, fmt.Errorf("duplicate secret comment %s", currentSecret)
 				}
-				secretVals[currentSecret] = map[string]string{}
+				secretVals[currentSecret] = secret{}
 			}
 			continue
 		}
@@ -138,12 +158,18 @@ func secrets(r io.Reader) ([]*corev1.Secret, error) {
 		if _, found := secret[key]; found {
 			return nil, fmt.Errorf("duplicate secret key %s", key)
 		}
+		if len(value) < minSecretValueLength {
+			return nil, fmt.Errorf("secret %s/%s must be at least %d characters", currentSecret, key, minSecretValueLength)
+		}
 		secret[key] = value
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
+	return secretVals, nil
+}
 
+func toK8s(secretVals map[string]secret) []*corev1.Secret {
 	var secrets []*corev1.Secret
 	for name, vals := range secretVals {
 		secret := &corev1.Secret{
@@ -158,7 +184,7 @@ func secrets(r io.Reader) ([]*corev1.Secret, error) {
 		}
 		secrets = append(secrets, secret)
 	}
-	return secrets, nil
+	return secrets
 }
 
 func parseSecretLine(line string) (string, string, error) {
@@ -190,6 +216,11 @@ func parseSecretLine(line string) (string, string, error) {
 	}
 
 	return key, value, nil
+}
+
+func maskedSecretValue(value string) string {
+	// invariant is value must be 5 or more characters, so this is safe
+	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
 }
 
 func stripInlineComment(value string) string {

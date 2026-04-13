@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -165,10 +167,7 @@ func TestSecretNeedsUpdate(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := secretNeedsUpdate(tt.current, tt.desired)
-			if got != tt.want {
-				t.Fatalf("secretNeedsUpdate() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, secretNeedsUpdate(tt.current, tt.desired))
 		})
 	}
 }
@@ -182,49 +181,39 @@ func TestSecrets(t *testing.T) {
 		input := strings.NewReader(`
 #secret:first
 API_KEY=alpha
-TOKEN=beta
+TOKEN=bravo
 
 #secret:second
 ZIP=98101
-`)
+		`)
 
 		got, err := secrets(input)
-		if err != nil {
-			t.Fatalf("secrets() error = %v", err)
-		}
-		if len(got) != 2 {
-			t.Fatalf("len(secrets()) = %d, want 2", len(got))
-		}
+		require.NoError(t, err)
+		require.Len(t, got, 2)
+		require.Contains(t, got, "first")
+		require.Contains(t, got, "second")
+		assert.Equal(t, "alpha", got["first"]["API_KEY"])
+		assert.Equal(t, "bravo", got["first"]["TOKEN"])
+		assert.Equal(t, "98101", got["second"]["ZIP"])
 
+		secretsK8s := toK8s(got)
 		byName := map[string]*corev1.Secret{}
-		for _, secret := range got {
+		for _, secret := range secretsK8s {
 			byName[secret.Name] = secret
 		}
 
+		require.Contains(t, byName, "first")
 		first := byName["first"]
-		if first == nil {
-			t.Fatalf("missing secret %q", "first")
-		}
-		if first.Type != corev1.SecretTypeOpaque {
-			t.Fatalf("first.Type = %q, want %q", first.Type, corev1.SecretTypeOpaque)
-		}
-		if first.Annotations[managedByAnnotationKey] != managedByAnnotationValue {
-			t.Fatalf("first managed-by = %q", first.Annotations[managedByAnnotationKey])
-		}
-		if first.StringData["API_KEY"] != "alpha" {
-			t.Fatalf("first API_KEY = %q, want %q", first.StringData["API_KEY"], "alpha")
-		}
-		if first.StringData["TOKEN"] != "beta" {
-			t.Fatalf("first TOKEN = %q, want %q", first.StringData["TOKEN"], "beta")
-		}
+		require.NotNil(t, first)
+		assert.Equal(t, corev1.SecretTypeOpaque, first.Type)
+		assert.Equal(t, managedByAnnotationValue, first.Annotations[managedByAnnotationKey])
+		assert.Equal(t, "alpha", first.StringData["API_KEY"])
+		assert.Equal(t, "bravo", first.StringData["TOKEN"])
 
+		require.Contains(t, byName, "second")
 		second := byName["second"]
-		if second == nil {
-			t.Fatalf("missing secret %q", "second")
-		}
-		if second.StringData["ZIP"] != "98101" {
-			t.Fatalf("second ZIP = %q, want %q", second.StringData["ZIP"], "98101")
-		}
+		require.NotNil(t, second)
+		assert.Equal(t, "98101", second.StringData["ZIP"])
 	})
 
 	t.Run("handles end of line comments", func(t *testing.T) {
@@ -236,23 +225,25 @@ API_KEY=alpha # primary key
 TOKEN="beta # still value" # comment
 PATH=with#hash
 `))
-		if err != nil {
-			t.Fatalf("secrets() error = %v", err)
-		}
-		if len(got) != 1 {
-			t.Fatalf("len(secrets()) = %d, want 1", len(got))
-		}
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		require.Contains(t, got, "first")
 
-		first := got[0]
-		if first.StringData["API_KEY"] != "alpha" {
-			t.Fatalf("API_KEY = %q, want %q", first.StringData["API_KEY"], "alpha")
-		}
-		if first.StringData["TOKEN"] != "beta # still value" {
-			t.Fatalf("TOKEN = %q, want %q", first.StringData["TOKEN"], "beta # still value")
-		}
-		if first.StringData["PATH"] != "with#hash" {
-			t.Fatalf("PATH = %q, want %q", first.StringData["PATH"], "with#hash")
-		}
+		first := got["first"]
+		assert.Equal(t, "alpha", first["API_KEY"])
+		assert.Equal(t, "beta # still value", first["TOKEN"])
+		assert.Equal(t, "with#hash", first["PATH"])
+	})
+
+	t.Run("rejects short values", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := secrets(strings.NewReader(`
+#secret:first
+EMPTY=
+NON_EMPTY=value
+`))
+		require.Error(t, err)
 	})
 
 	t.Run("duplicate secret comment returns error", func(t *testing.T) {
@@ -264,9 +255,7 @@ API_KEY=alpha
 #secret:first
 TOKEN=beta
 `))
-		if err == nil {
-			t.Fatal("secrets() error = nil, want duplicate secret comment error")
-		}
+		require.Error(t, err)
 	})
 
 	t.Run("duplicate key returns error", func(t *testing.T) {
@@ -275,11 +264,9 @@ TOKEN=beta
 		_, err := secrets(strings.NewReader(`
 #secret:first
 API_KEY=alpha
-API_KEY=beta
+API_KEY=bravo
 `))
-		if err == nil {
-			t.Fatal("secrets() error = nil, want duplicate secret key error")
-		}
+		require.Error(t, err)
 	})
 
 	t.Run("invalid entry returns error", func(t *testing.T) {
@@ -289,8 +276,11 @@ API_KEY=beta
 #secret:first
 not-an-env-line
 `))
-		if err == nil {
-			t.Fatal("secrets() error = nil, want invalid secret entry error")
-		}
+		require.Error(t, err)
 	})
+}
+
+func TestMaskedSecretValue(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "a[5]a", maskedSecretValue("alpha"))
 }
