@@ -1,8 +1,10 @@
 package ai
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildRecipeCritiquePrompt(t *testing.T) {
@@ -23,9 +25,7 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 	}
 
 	prompt, err := buildRecipeCritiquePrompt(recipe)
-	if err != nil {
-		t.Fatalf("buildRecipeCritiquePrompt returned error: %v", err)
-	}
+	require.NoError(t, err)
 	for _, want := range []string{
 		`"title": "Roast Chicken"`,
 		`"cook_time": "45 minutes"`,
@@ -37,17 +37,13 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		`Recipe JSON:`,
 		`Return JSON only using schema_version "recipe-critique-v1".`,
 	} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected prompt to contain %q, got:\n%s", want, prompt)
-		}
+		assert.Contains(t, prompt, want)
 	}
 	for _, unwanted := range []string{
 		`"origin_hash"`,
 		`"previously_saved"`,
 	} {
-		if strings.Contains(prompt, unwanted) {
-			t.Fatalf("did not expect prompt to contain %q, got:\n%s", unwanted, prompt)
-		}
+		assert.NotContains(t, prompt, unwanted)
 	}
 }
 
@@ -60,58 +56,36 @@ func TestParseRecipeCritique(t *testing.T) {
 		"issues": [{"severity": "HIGH", "category": "Timing", "detail": "Reduce the sauce longer."}],
 		"suggested_fixes": [" simmer longer "]
 	}`)
-	if err != nil {
-		t.Fatalf("parseRecipeCritique returned error: %v", err)
-	}
-	if critique.Summary != "Strong draft." {
-		t.Fatalf("unexpected summary: %#v", critique)
-	}
-	if len(critique.Strengths) != 1 || critique.Strengths[0] != "balanced flavors" {
-		t.Fatalf("unexpected strengths: %#v", critique.Strengths)
-	}
-	if len(critique.Issues) != 1 || critique.Issues[0].Severity != "high" || critique.Issues[0].Category != "timing" || critique.Issues[0].Detail != "Reduce the sauce longer." {
-		t.Fatalf("unexpected issues: %#v", critique.Issues)
-	}
-	if len(critique.SuggestedFixes) != 1 || critique.SuggestedFixes[0] != "simmer longer" {
-		t.Fatalf("unexpected suggested fixes: %#v", critique.SuggestedFixes)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "Strong draft.", critique.Summary)
+	require.Len(t, critique.Strengths, 1)
+	assert.Equal(t, "balanced flavors", critique.Strengths[0])
+	require.Len(t, critique.Issues, 1)
+	assert.Equal(t, "HIGH", critique.Issues[0].Severity)
+	assert.Equal(t, "Timing", critique.Issues[0].Category)
+	assert.Equal(t, "Reduce the sauce longer.", critique.Issues[0].Detail)
+	require.Len(t, critique.SuggestedFixes, 1)
+	assert.Equal(t, " simmer longer ", critique.SuggestedFixes[0])
 }
 
 func TestParseRecipeCritiqueRequiresScoreRange(t *testing.T) {
 	_, err := parseRecipeCritique(`{"schema_version":"recipe-critique-v1","overall_score":11,"summary":"too high","strengths":[],"issues":[],"suggested_fixes":[]}`)
-	if err == nil || !strings.Contains(err.Error(), "overall score") {
-		t.Fatalf("expected score validation error, got %v", err)
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "overall score")
 }
 
 func TestRecipeCritiqueJSONSchemaTracksStruct(t *testing.T) {
 	schema := recipeCritiqueJSONSchema()
 
 	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected top-level properties object, got %#v", schema["properties"])
-	}
-	if _, ok := properties["schema_version"]; !ok {
-		t.Fatal("expected schema_version in reflected schema")
-	}
-	if _, ok := properties["overall_score"]; !ok {
-		t.Fatal("expected overall_score in reflected schema")
-	}
-	if _, ok := properties["model"]; ok {
-		t.Fatal("did not expect internal metadata field model in reflected schema")
-	}
-	if _, ok := properties["critiqued_at"]; ok {
-		t.Fatal("did not expect internal metadata field critiqued_at in reflected schema")
-	}
+	require.True(t, ok, "expected top-level properties object, got %#v", schema["properties"])
+	assert.Contains(t, properties, "schema_version")
+	assert.Contains(t, properties, "overall_score")
+	assert.NotContains(t, properties, "model")
+	assert.NotContains(t, properties, "critiqued_at")
 
 	overallScore, ok := properties["overall_score"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected overall_score schema object, got %#v", properties["overall_score"])
-	}
-	if got := overallScore["minimum"]; got != float64(1) {
-		t.Fatalf("expected reflected minimum 1, got %#v", got)
-	}
-	if got := overallScore["maximum"]; got != float64(10) {
-		t.Fatalf("expected reflected maximum 10, got %#v", got)
-	}
+	require.True(t, ok, "expected overall_score schema object, got %#v", properties["overall_score"])
+	assert.Equal(t, float64(1), overallScore["minimum"])
+	assert.Equal(t, float64(10), overallScore["maximum"])
 }
