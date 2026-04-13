@@ -41,6 +41,9 @@ type recipeCritiquer interface {
 type ingredientio interface {
 	SaveIngredients(ctx context.Context, hash string, ingredients []kroger.Ingredient) error
 	IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error)
+}
+
+type critiqueIO interface {
 	SaveCritique(ctx context.Context, hash string, critique *ai.RecipeCritique) error
 }
 
@@ -50,9 +53,15 @@ type Generator struct {
 	critiquer       recipeCritiquer
 	staplesProvider staplesProvider
 	io              ingredientio
+	cio             critiqueIO // pull this out?
 }
 
-func NewGenerator(cfg *config.Config, io ingredientio) (generatorPlus, error) {
+type allIO interface {
+	ingredientio
+	critiqueIO
+}
+
+func NewGenerator(cfg *config.Config, io allIO) (generatorPlus, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -69,6 +78,7 @@ func NewGenerator(cfg *config.Config, io ingredientio) (generatorPlus, error) {
 
 	return &Generator{
 		io:              io,
+		cio:             io, // pull this out?
 		config:          cfg,
 		aiClient:        ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
 		critiquer:       critiquer,
@@ -174,6 +184,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
 	g.cacheRecipeCritiques(ctx, shoppingList.Recipes)
+	// how to pipe this back to ai client? should ai client hjave its own critiquer or do we just call regenerate once?
 
 	// should never happen? How do you get save on first generte?
 	// shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
@@ -232,9 +243,6 @@ func (g *Generator) Ready(ctx context.Context) error {
 	if err := g.aiClient.Ready(ctx); err != nil {
 		return err
 	}
-	if g.critiquer == nil {
-		return nil
-	}
 	if err := g.critiquer.Ready(ctx); err != nil {
 		return fmt.Errorf("gemini critique client not ready: %w", err)
 	}
@@ -287,10 +295,13 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 	return lo.Uniq(titles)
 }
 
+// todo start to fail on errors when this is in pipeline
 func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recipe) {
-	if g.critiquer == nil {
+	if g.critiquer == nil || g.cio == nil {
+		// yuck refactor tests to make this alway present
 		return
 	}
+
 	for _, recipe := range recipes {
 		hash := recipe.ComputeHash()
 		critique, err := g.critiquer.CritiqueRecipe(ctx, recipe)
@@ -298,7 +309,7 @@ func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recip
 			slog.ErrorContext(ctx, "failed to critique recipe", "recipe", recipe.Title, "hash", hash, "error", err)
 			continue
 		}
-		if err := g.io.SaveCritique(ctx, hash, critique); err != nil {
+		if err := g.cio.SaveCritique(ctx, hash, critique); err != nil {
 			slog.ErrorContext(ctx, "failed to cache recipe critique", "recipe", recipe.Title, "hash", hash, "error", err)
 		}
 	}

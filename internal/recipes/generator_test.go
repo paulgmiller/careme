@@ -344,6 +344,7 @@ func TestGenerateRecipes_SavesCritiquesForGeneratedRecipes(t *testing.T) {
 	critiquer := &captureCritiquer{}
 	g := &Generator{
 		io:        io,
+		cio:       io,
 		aiClient:  aiStub,
 		critiquer: critiquer,
 	}
@@ -408,6 +409,7 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	critiquer := &captureCritiquer{}
 	g := &Generator{
 		io:        IO(cache.NewFileCache(t.TempDir())),
+		cio:       IO(cache.NewFileCache(t.TempDir())),
 		aiClient:  &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
 		critiquer: critiquer,
 	}
