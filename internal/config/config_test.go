@@ -117,6 +117,28 @@ func TestLoadReadsBrightDataProxyConfig(t *testing.T) {
 	}
 }
 
+func TestLoadReadsGeminiCritiqueConfig(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("GEMINI_API_KEY", "gemini-key")
+	t.Setenv("GEMINI_CRITIQUE_MODEL", "gemini-2.5-pro")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got, want := cfg.Gemini.APIKey, "gemini-key"; got != want {
+		t.Fatalf("expected Gemini API key %q, got %q", want, got)
+	}
+	if got, want := cfg.Gemini.CritiqueModel, "gemini-2.5-pro"; got != want {
+		t.Fatalf("expected Gemini critique model %q, got %q", want, got)
+	}
+	if !cfg.Gemini.IsEnabled() {
+		t.Fatal("expected Gemini critique config to be enabled")
+	}
+}
+
 func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
 	cfg := &Config{}
 	if got, want := cfg.ResolvedPublicOrigin(), "http://localhost:8080"; got != want {
@@ -168,6 +190,8 @@ func resetStoreEnvs(t *testing.T) {
 		"BRIGHTDATA_PROXY_PORT",
 		"BRIGHTDATA_PROXY_USERNAME",
 		"BRIGHTDATA_PROXY_PASSWORD",
+		"GEMINI_API_KEY",
+		"GEMINI_CRITIQUE_MODEL",
 		"PUBLIX_ENABLE",
 		"HEB_ENABLE",
 	} {

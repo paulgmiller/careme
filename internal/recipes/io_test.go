@@ -177,6 +177,38 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 	}
 }
 
+func TestSaveCritique_UsesPrefixedKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	hash := "recipe-hash"
+	critique := &ai.RecipeCritique{
+		SchemaVersion:  "recipe-critique-v1",
+		OverallScore:   8,
+		Summary:        "Strong draft.",
+		Strengths:      []string{"balanced"},
+		Issues:         []ai.RecipeCritiqueIssue{{Severity: "low", Category: "clarity", Detail: "One step could be tighter."}},
+		SuggestedFixes: []string{"tighten one step"},
+	}
+
+	if err := rio.SaveCritique(t.Context(), hash, critique); err != nil {
+		t.Fatalf("SaveCritique failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpDir, recipeCritiquesCachePrefix, hash)); err != nil {
+		t.Fatalf("expected recipe critique at prefixed key: %v", err)
+	}
+
+	got, err := rio.CritiqueFromCache(t.Context(), hash)
+	if err != nil {
+		t.Fatalf("CritiqueFromCache failed: %v", err)
+	}
+	if got.Summary != "Strong draft." {
+		t.Fatalf("unexpected cached critique: %#v", got)
+	}
+}
+
 func loPtr(v string) *string {
 	return &v
 }
