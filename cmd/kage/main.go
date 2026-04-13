@@ -31,6 +31,7 @@ const (
 	minSecretValueLength     = 5
 )
 
+// kage is my dumbed down vesion of https://github.com/getsops/sops
 func main() {
 	path := flag.String("secret-file", "secrets/envtest", "encrypted file to apply to k8s namespace")
 	namespace := flag.String("ns", "", "k8s namespace")
