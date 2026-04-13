@@ -8,20 +8,23 @@ import (
 	"strings"
 	"time"
 
+	"github.com/invopop/jsonschema"
 	"google.golang.org/genai"
 )
 
 const (
-	defaultGeminiCritiqueModel = "gemini-2.5-flash"
+	// https://ai.google.dev/gemini-api/docs/models
+	defaultGeminiCritiqueModel = "gemini-3.1-pro-preview" //"gemini-2.5-flash"
 	recipeCritiqueSchemaV1     = "recipe-critique-v1"
 )
 
 const recipeCritiqueSystemInstruction = `
-You are a strict recipe editor reviewing AI-generated recipes before they are reused for future product tuning.
+You are a strict recipe editor reviewing AI-generated recipes before they are given to human cooks and used for future fine tuning.
 
-Judge the recipe like an experienced chef teaching home cooks:
+Judge the recipe like an experienced chef helping create recipes to teach home cooks:
 - is it realistic to cook as written
 - are the instructions coherent and complete
+- are the applications of salt, acid, fat, and heat appropriate
 - are the timing and cost estimates plausible
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
@@ -29,26 +32,27 @@ Judge the recipe like an experienced chef teaching home cooks:
 Be concise and concrete. Return JSON only.`
 
 type RecipeCritiqueIssue struct {
-	Severity string `json:"severity"`
-	Category string `json:"category"`
+	Severity string `json:"severity" jsonschema:"enum=low,enum=medium,enum=high"`
+	Category string `json:"category" jsonschema:"enum=cookability,enum=safety,enum=clarity,enum=flavor,enum=timing,enum=cost,enum=nutrition,enum=ingredient_usage,enum=presentation"`
 	Detail   string `json:"detail"`
 }
 
 type RecipeCritique struct {
-	SchemaVersion  string                `json:"schema_version"`
-	OverallScore   int                   `json:"overall_score"`
+	SchemaVersion string `json:"schema_version" jsonschema:"enum=recipe-critique-v1"`
+	OverallScore  int    `json:"overall_score" jsonschema:"minimum=1,maximum=10"`
+	// creativity and practicality scores?
 	Summary        string                `json:"summary"`
 	Strengths      []string              `json:"strengths"`
 	Issues         []RecipeCritiqueIssue `json:"issues"`
 	SuggestedFixes []string              `json:"suggested_fixes"`
-	Model          string                `json:"model,omitempty"`
-	CritiquedAt    time.Time             `json:"critiqued_at,omitempty"`
+	Model          string                `json:"model,omitempty" jsonschema:"-"`
+	CritiquedAt    time.Time             `json:"critiqued_at,omitempty" jsonschema:"-"`
 }
 
 type Critiquer struct {
 	apiKey string
 	model  string
-	schema *genai.Schema
+	schema map[string]any
 }
 
 func NewCritiquer(apiKey, model string) *Critiquer {
@@ -59,7 +63,7 @@ func NewCritiquer(apiKey, model string) *Critiquer {
 	return &Critiquer{
 		apiKey: strings.TrimSpace(apiKey),
 		model:  model,
-		schema: recipeCritiqueSchema(),
+		schema: recipeCritiqueJSONSchema(),
 	}
 }
 
@@ -71,6 +75,11 @@ func (c *Critiquer) Ready(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	for _, err := range client.Models.All(ctx) {
+		return err
+	}
+	return fmt.Errorf("model not found: %s", c.model)
+	/* expensive?
 	resp, err := client.Models.GenerateContent(ctx, c.model, genai.Text("Reply with ready."), &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr[float32](0),
 		MaxOutputTokens: 8,
@@ -81,7 +90,7 @@ func (c *Critiquer) Ready(ctx context.Context) error {
 	if strings.TrimSpace(resp.Text()) == "" {
 		return fmt.Errorf("empty response from Gemini critique model")
 	}
-	return nil
+	*/
 }
 
 func (c *Critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, error) {
@@ -98,10 +107,10 @@ func (c *Critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	}
 	resp, err := client.Models.GenerateContent(ctx, c.model, genai.Text(prompt), &genai.GenerateContentConfig{
 		SystemInstruction: genai.NewContentFromText(recipeCritiqueSystemInstruction, genai.RoleUser),
-		Temperature:       genai.Ptr[float32](0),
-		MaxOutputTokens:   768,
-		ResponseMIMEType:  "application/json",
-		ResponseSchema:    c.schema,
+		// Temperature:        genai.Ptr[float32](0),
+		// MaxOutputTokens:    768,
+		ResponseMIMEType:   "application/json",
+		ResponseJsonSchema: c.schema,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to critique recipe: %w", err)
@@ -117,10 +126,8 @@ func (c *Critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	if err != nil {
 		return nil, err
 	}
-	critique.Model = firstNonEmpty(strings.TrimSpace(resp.ModelVersion), c.model)
-	if critique.CritiquedAt.IsZero() {
-		critique.CritiquedAt = time.Now().UTC()
-	}
+	critique.Model = resp.ModelVersion
+	critique.CritiquedAt = time.Now().UTC()
 	return critique, nil
 }
 
@@ -144,16 +151,7 @@ func parseRecipeCritique(body string) (*RecipeCritique, error) {
 	if err := json.Unmarshal([]byte(body), &critique); err != nil {
 		return nil, fmt.Errorf("failed to parse Gemini critique: %w", err)
 	}
-	critique.SchemaVersion = firstNonEmpty(strings.TrimSpace(critique.SchemaVersion), recipeCritiqueSchemaV1)
-	critique.Summary = strings.TrimSpace(critique.Summary)
-	critique.Strengths = compactTrimmed(critique.Strengths)
-	critique.SuggestedFixes = compactTrimmed(critique.SuggestedFixes)
-	for i := range critique.Issues {
-		critique.Issues[i].Severity = strings.TrimSpace(strings.ToLower(critique.Issues[i].Severity))
-		critique.Issues[i].Category = strings.TrimSpace(strings.ToLower(critique.Issues[i].Category))
-		critique.Issues[i].Detail = strings.TrimSpace(critique.Issues[i].Detail)
-	}
-	critique.Issues = compactIssues(critique.Issues)
+	critique.SchemaVersion = recipeCritiqueSchemaV1
 
 	if critique.Summary == "" {
 		return nil, fmt.Errorf("gemini critique summary is required")
@@ -165,142 +163,33 @@ func parseRecipeCritique(body string) (*RecipeCritique, error) {
 }
 
 func buildRecipeCritiquePrompt(recipe Recipe) (string, error) {
-	var b strings.Builder
-	fmt.Fprintf(&b, "Critique this generated recipe for correctness and usefulness to a home cook.\n\n")
-	fmt.Fprintf(&b, "Recipe:\n")
-	fmt.Fprintf(&b, "Title: %s\n", recipe.Title)
-	if recipe.Description != "" {
-		fmt.Fprintf(&b, "Description: %s\n", recipe.Description)
+	payload := recipe
+	payload.OriginHash = ""
+	payload.Saved = false
+	body, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal recipe critique payload: %w", err)
 	}
-	if recipe.CookTime != "" {
-		fmt.Fprintf(&b, "Cook time: %s\n", recipe.CookTime)
-	}
-	if recipe.CostEstimate != "" {
-		fmt.Fprintf(&b, "Cost estimate: %s\n", recipe.CostEstimate)
-	}
-	if recipe.Health != "" {
-		fmt.Fprintf(&b, "Health notes: %s\n", recipe.Health)
-	}
-	if recipe.DrinkPairing != "" {
-		fmt.Fprintf(&b, "Drink pairing: %s\n", recipe.DrinkPairing)
-	}
-	fmt.Fprintf(&b, "\nIngredients:\n")
-	for _, ingredient := range recipe.Ingredients {
-		fmt.Fprintf(&b, "- %s", strings.TrimSpace(ingredient.Name))
-		if ingredient.Quantity != "" {
-			fmt.Fprintf(&b, " | quantity: %s", strings.TrimSpace(ingredient.Quantity))
-		}
-		if ingredient.Price != "" {
-			fmt.Fprintf(&b, " | price: %s", strings.TrimSpace(ingredient.Price))
-		}
-		fmt.Fprintf(&b, "\n")
-	}
-	fmt.Fprintf(&b, "\nInstructions:\n")
-	for _, step := range recipe.Instructions {
-		fmt.Fprintf(&b, "- %s\n", strings.TrimSpace(step))
-	}
-	fmt.Fprintf(&b, "\nReturn JSON only using schema_version %q.\n", recipeCritiqueSchemaV1)
-	return b.String(), nil
+	return fmt.Sprintf(
+		"Critique this generated recipe for correctness and usefulness to a home cook.\nReturn JSON only using schema_version %q.\nRecipe JSON:\n%s",
+		recipeCritiqueSchemaV1,
+		string(body),
+	), nil
 }
 
-func recipeCritiqueSchema() *genai.Schema {
-	return &genai.Schema{
-		Type:             genai.TypeObject,
-		PropertyOrdering: []string{"schema_version", "overall_score", "summary", "strengths", "issues", "suggested_fixes"},
-		Required:         []string{"schema_version", "overall_score", "summary", "strengths", "issues", "suggested_fixes"},
-		Properties: map[string]*genai.Schema{
-			"schema_version": {
-				Type:        genai.TypeString,
-				Description: "Return exactly recipe-critique-v1.",
-			},
-			"overall_score": {
-				Type:        genai.TypeInteger,
-				Description: "Overall quality score from 1 to 10.",
-				Minimum:     float64Ptr(1),
-				Maximum:     float64Ptr(10),
-			},
-			"summary": {
-				Type:        genai.TypeString,
-				Description: "A short overall verdict on the recipe.",
-			},
-			"strengths": {
-				Type:        genai.TypeArray,
-				Description: "Short strengths of the recipe.",
-				Items: &genai.Schema{
-					Type: genai.TypeString,
-				},
-			},
-			"issues": {
-				Type:        genai.TypeArray,
-				Description: "Concrete issues that should be tracked for later tuning.",
-				Items: &genai.Schema{
-					Type:             genai.TypeObject,
-					PropertyOrdering: []string{"severity", "category", "detail"},
-					Required:         []string{"severity", "category", "detail"},
-					Properties: map[string]*genai.Schema{
-						"severity": {
-							Type:        genai.TypeString,
-							Format:      "enum",
-							Enum:        []string{"low", "medium", "high"},
-							Description: "Issue severity.",
-						},
-						"category": {
-							Type:        genai.TypeString,
-							Format:      "enum",
-							Enum:        []string{"cookability", "safety", "clarity", "flavor", "timing", "cost", "nutrition", "ingredient_usage", "presentation"},
-							Description: "Issue category.",
-						},
-						"detail": {
-							Type:        genai.TypeString,
-							Description: "Concrete explanation of the issue.",
-						},
-					},
-				},
-			},
-			"suggested_fixes": {
-				Type:        genai.TypeArray,
-				Description: "Short suggestions to improve the recipe.",
-				Items: &genai.Schema{
-					Type: genai.TypeString,
-				},
-			},
-		},
+func recipeCritiqueJSONSchema() map[string]any {
+	r := jsonschema.Reflector{
+		DoNotReference: true,
+		ExpandedStruct: true,
 	}
-}
-
-func compactTrimmed(values []string) []string {
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		out = append(out, value)
+	schema := r.Reflect(&RecipeCritique{})
+	body, err := json.Marshal(schema)
+	if err != nil {
+		panic(fmt.Sprintf("marshal recipe critique schema: %v", err))
+	}
+	var out map[string]any
+	if err := json.Unmarshal(body, &out); err != nil {
+		panic(fmt.Sprintf("decode recipe critique schema: %v", err))
 	}
 	return out
-}
-
-func compactIssues(values []RecipeCritiqueIssue) []RecipeCritiqueIssue {
-	out := make([]RecipeCritiqueIssue, 0, len(values))
-	for _, value := range values {
-		if value.Detail == "" {
-			continue
-		}
-		out = append(out, value)
-	}
-	return out
-}
-
-func float64Ptr(v float64) *float64 {
-	return &v
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }
