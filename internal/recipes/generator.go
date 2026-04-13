@@ -33,14 +33,21 @@ type aiClient interface {
 	Ready(ctx context.Context) error
 }
 
+type recipeCritiquer interface {
+	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
+	Ready(ctx context.Context) error
+}
+
 type ingredientio interface {
 	SaveIngredients(ctx context.Context, hash string, ingredients []kroger.Ingredient) error
 	IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error)
+	SaveCritique(ctx context.Context, hash string, critique *ai.RecipeCritique) error
 }
 
 type Generator struct {
 	config          *config.Config
 	aiClient        aiClient
+	critiquer       recipeCritiquer
 	staplesProvider staplesProvider
 	io              ingredientio
 }
@@ -55,10 +62,16 @@ func NewGenerator(cfg *config.Config, io ingredientio) (generatorPlus, error) {
 		return nil, fmt.Errorf("failed to create staples provider: %w", err)
 	}
 
+	var critiquer recipeCritiquer
+	if cfg.Gemini.IsEnabled() {
+		critiquer = ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel)
+	}
+
 	return &Generator{
 		io:              io,
 		config:          cfg,
 		aiClient:        ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
+		critiquer:       critiquer,
 		staplesProvider: stapesProvider,
 	}, nil
 }
@@ -141,6 +154,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
+		g.cacheRecipeCritiques(ctx, shoppingList.Recipes)
 		// Include saved recipes in the shopping list
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
@@ -159,6 +173,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
+	g.cacheRecipeCritiques(ctx, shoppingList.Recipes)
 
 	// should never happen? How do you get save on first generte?
 	// shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
@@ -214,7 +229,16 @@ func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
 }
 
 func (g *Generator) Ready(ctx context.Context) error {
-	return g.aiClient.Ready(ctx)
+	if err := g.aiClient.Ready(ctx); err != nil {
+		return err
+	}
+	if g.critiquer == nil {
+		return nil
+	}
+	if err := g.critiquer.Ready(ctx); err != nil {
+		return fmt.Errorf("gemini critique client not ready: %w", err)
+	}
+	return nil
 }
 
 // this is a little expnsive so unlike ready above needs to be protected by a once by.
@@ -261,4 +285,21 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 		titles = append(titles, recipe.Title)
 	}
 	return lo.Uniq(titles)
+}
+
+func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recipe) {
+	if g.critiquer == nil {
+		return
+	}
+	for _, recipe := range recipes {
+		hash := recipe.ComputeHash()
+		critique, err := g.critiquer.CritiqueRecipe(ctx, recipe)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to critique recipe", "recipe", recipe.Title, "hash", hash, "error", err)
+			continue
+		}
+		if err := g.io.SaveCritique(ctx, hash, critique); err != nil {
+			slog.ErrorContext(ctx, "failed to cache recipe critique", "recipe", recipe.Title, "hash", hash, "error", err)
+		}
+	}
 }
