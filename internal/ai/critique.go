@@ -49,28 +49,25 @@ type RecipeCritique struct {
 	CritiquedAt    time.Time             `json:"critiqued_at,omitempty" jsonschema:"-"`
 }
 
-type Critiquer struct {
+type critiquer struct {
 	apiKey string
 	model  string
 	schema map[string]any
 }
 
-func NewCritiquer(apiKey, model string) *Critiquer {
+func NewCritiquer(apiKey, model string) *critiquer {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		model = defaultGeminiCritiqueModel
 	}
-	return &Critiquer{
+	return &critiquer{
 		apiKey: strings.TrimSpace(apiKey),
 		model:  model,
 		schema: recipeCritiqueJSONSchema(),
 	}
 }
 
-func (c *Critiquer) Ready(ctx context.Context) error {
-	if c == nil || c.apiKey == "" {
-		return fmt.Errorf("gemini critique client is not configured")
-	}
+func (c *critiquer) Ready(ctx context.Context) error {
 	client, err := c.newClient(ctx)
 	if err != nil {
 		return err
@@ -93,10 +90,7 @@ func (c *Critiquer) Ready(ctx context.Context) error {
 	*/
 }
 
-func (c *Critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, error) {
-	if c == nil || c.apiKey == "" {
-		return nil, fmt.Errorf("gemini critique client is not configured")
-	}
+func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, error) {
 	prompt, err := buildRecipeCritiquePrompt(recipe)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe critique prompt: %w", err)
@@ -131,7 +125,7 @@ func (c *Critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	return critique, nil
 }
 
-func (c *Critiquer) newClient(ctx context.Context) (*genai.Client, error) {
+func (c *critiquer) newClient(ctx context.Context) (*genai.Client, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  c.apiKey,
 		Backend: genai.BackendGeminiAPI,

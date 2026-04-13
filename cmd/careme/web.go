@@ -90,6 +90,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
+	adminMux.Handle("/critiques", recipes.AdminCritiquesPage(cache))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
