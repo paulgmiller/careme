@@ -182,7 +182,7 @@ func TestSecrets(t *testing.T) {
 		input := strings.NewReader(`
 #secret:first
 API_KEY=alpha
-TOKEN=beta
+TOKEN=bravo
 
 #secret:second
 ZIP=98101
@@ -195,9 +195,19 @@ ZIP=98101
 		if len(got) != 2 {
 			t.Fatalf("len(secrets()) = %d, want 2", len(got))
 		}
+		if got["first"]["API_KEY"] != "alpha" {
+			t.Fatalf("first API_KEY = %q, want %q", got["first"]["API_KEY"], "alpha")
+		}
+		if got["first"]["TOKEN"] != "bravo" {
+			t.Fatalf("first TOKEN = %q, want %q", got["first"]["TOKEN"], "bravo")
+		}
+		if got["second"]["ZIP"] != "98101" {
+			t.Fatalf("second ZIP = %q, want %q", got["second"]["ZIP"], "98101")
+		}
 
+		secretsK8s := toK8s(got)
 		byName := map[string]*corev1.Secret{}
-		for _, secret := range got {
+		for _, secret := range secretsK8s {
 			byName[secret.Name] = secret
 		}
 
@@ -214,8 +224,8 @@ ZIP=98101
 		if first.StringData["API_KEY"] != "alpha" {
 			t.Fatalf("first API_KEY = %q, want %q", first.StringData["API_KEY"], "alpha")
 		}
-		if first.StringData["TOKEN"] != "beta" {
-			t.Fatalf("first TOKEN = %q, want %q", first.StringData["TOKEN"], "beta")
+		if first.StringData["TOKEN"] != "bravo" {
+			t.Fatalf("first TOKEN = %q, want %q", first.StringData["TOKEN"], "bravo")
 		}
 
 		second := byName["second"]
@@ -243,15 +253,28 @@ PATH=with#hash
 			t.Fatalf("len(secrets()) = %d, want 1", len(got))
 		}
 
-		first := got[0]
-		if first.StringData["API_KEY"] != "alpha" {
-			t.Fatalf("API_KEY = %q, want %q", first.StringData["API_KEY"], "alpha")
+		first := got["first"]
+		if first["API_KEY"] != "alpha" {
+			t.Fatalf("API_KEY = %q, want %q", first["API_KEY"], "alpha")
 		}
-		if first.StringData["TOKEN"] != "beta # still value" {
-			t.Fatalf("TOKEN = %q, want %q", first.StringData["TOKEN"], "beta # still value")
+		if first["TOKEN"] != "beta # still value" {
+			t.Fatalf("TOKEN = %q, want %q", first["TOKEN"], "beta # still value")
 		}
-		if first.StringData["PATH"] != "with#hash" {
-			t.Fatalf("PATH = %q, want %q", first.StringData["PATH"], "with#hash")
+		if first["PATH"] != "with#hash" {
+			t.Fatalf("PATH = %q, want %q", first["PATH"], "with#hash")
+		}
+	})
+
+	t.Run("rejects short values", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := secrets(strings.NewReader(`
+#secret:first
+EMPTY=
+NON_EMPTY=value
+`))
+		if err == nil {
+			t.Fatal("secrets() error = nil, want short secret value error")
 		}
 	})
 
@@ -275,7 +298,7 @@ TOKEN=beta
 		_, err := secrets(strings.NewReader(`
 #secret:first
 API_KEY=alpha
-API_KEY=beta
+API_KEY=bravo
 `))
 		if err == nil {
 			t.Fatal("secrets() error = nil, want duplicate secret key error")
@@ -293,4 +316,12 @@ not-an-env-line
 			t.Fatal("secrets() error = nil, want invalid secret entry error")
 		}
 	})
+}
+
+func TestMaskedSecretValue(t *testing.T) {
+	t.Parallel()
+	want := "a[5]a"
+	if got := maskedSecretValue("alpha"); got != want {
+		t.Fatalf("maskedSecretValue(alpha) = %q, want %q", got, want)
+	}
 }

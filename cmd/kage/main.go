@@ -28,6 +28,7 @@ const (
 	managedByAnnotationKey   = "managed-by"
 	managedByAnnotationValue = "github.com/paulgmiller/kage"
 	secretCommentPrefix      = "secret:"
+	minSecretValueLength     = 5
 )
 
 func main() {
@@ -64,7 +65,7 @@ func main() {
 		for name, secret := range secrets {
 			fmt.Println(name)
 			for key, value := range secret {
-				fmt.Printf("  %s=%s[%d]%s\n", key, value[:1], len(value), value[len(value)-1:])
+				fmt.Printf("  %s=%s\n", key, maskedSecretValue(value))
 			}
 			fmt.Println()
 		}
@@ -156,6 +157,9 @@ func secrets(r io.Reader) (map[string]secret, error) {
 		if _, found := secret[key]; found {
 			return nil, fmt.Errorf("duplicate secret key %s", key)
 		}
+		if len(value) < minSecretValueLength {
+			return nil, fmt.Errorf("secret %s/%s must be at least %d characters", currentSecret, key, minSecretValueLength)
+		}
 		secret[key] = value
 	}
 	if err := sc.Err(); err != nil {
@@ -211,6 +215,11 @@ func parseSecretLine(line string) (string, string, error) {
 	}
 
 	return key, value, nil
+}
+
+func maskedSecretValue(value string) string {
+	// invariant is value must be 5 or more characters, so this is safe
+	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
 }
 
 func stripInlineComment(value string) string {
