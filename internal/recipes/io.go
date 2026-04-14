@@ -162,10 +162,7 @@ func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 
 func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
 	// Save each recipe separately by its hash
-	if err := rio.SaveRecipes(ctx, shoppingList.Recipes, hash); err != nil {
-		return err
-	}
-	if err := rio.SaveRecipes(ctx, shoppingList.Discarded, hash); err != nil {
+	if err := rio.SaveRecipes(ctx, append(shoppingList.Recipes, shoppingList.Discarded...), hash); err != nil {
 		return err
 	}
 	// we could actually nuke out the rest of recipe and lazily load but not yet

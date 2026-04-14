@@ -200,7 +200,7 @@ func (c *captureCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe)
 	}
 	return &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
-		OverallScore:   7,
+		OverallScore:   minimumRecipeCritiqueScore,
 		Summary:        "Solid draft.",
 		Strengths:      []string{"clear direction"},
 		Issues:         []ai.RecipeCritiqueIssue{{Severity: "medium", Category: "timing", Detail: "Timing could be tighter."}},
@@ -563,7 +563,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 		t.Fatalf("expected one critique-driven regenerate call, got %d", aiStub.regenerateCalls)
 	}
 	wantInstructions := []string{
-		"Revise theses 7 low scoring recipes using this critique feedback.",
+		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below.",
 		"Recipe \"Weak Dinner\" scored 6/10.\n Issues: [clarity/high] The sauce step is vague.\n Suggested fixes: clarify when to reduce the sauce",
 	}
 	if got := aiStub.regenerateInstructions[0]; !slices.Equal(got, wantInstructions) {
@@ -763,7 +763,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 		t.Fatalf("unexpected regenerate conversation IDs: got %v", got)
 	}
 	wantRetryInstructions := []string{
-		"Revise theses 7 low scoring recipes using this critique feedback.",
+		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below.",
 		"Recipe \"Needs Work\" scored 5/10.\n Issues: [timing/medium] Cooking times are inconsistent.\n Suggested fixes: make the timing consistent",
 	}
 	if got := aiStub.regenerateInstructions[1]; !slices.Equal(got, wantRetryInstructions) {

@@ -340,20 +340,20 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 		return nil, fmt.Errorf("conversation ID is required for critique retry")
 	}
 
-	retried, err := g.aiClient.Regenerate(ctx, critiqueRetryInstructions(garbage), shoppingList.ConversationID)
+	shoppingList, err = g.aiClient.Regenerate(ctx, critiqueRetryInstructions(garbage), shoppingList.ConversationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}
-	retried.Recipes = append(retried.Recipes, good...)
+	shoppingList.Recipes = append(shoppingList.Recipes, good...)
 	shoppingList.Discarded = lo.Map(garbage, func(result recipeCritiqueResult, _ int) ai.Recipe {
 		return *result.Recipe
 	})
 
 	// async as this is just debug not retrying twice yet.
-	if _, err := g.cacheRecipeCritiques(ctx, retried.Recipes); err != nil {
+	if _, err := g.cacheRecipeCritiques(ctx, shoppingList.Recipes); err != nil {
 		return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
 	}
-	return retried, nil
+	return shoppingList, nil
 }
 
 func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recipe) ([]recipeCritiqueResult, error) {
