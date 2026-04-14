@@ -355,6 +355,7 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 		Instructions: []string{"Roast salmon and vegetables until done."},
 		Health:       "High protein",
 		DrinkPairing: "Pinot Noir",
+		OriginHash:   legacyHash,
 	}
 	recipeHash := recipe.ComputeHash()
 	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, legacyHash); err != nil {

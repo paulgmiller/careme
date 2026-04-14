@@ -10,6 +10,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/kroger"
+	"careme/internal/parallelism"
 	"careme/internal/recipes/feedback"
 
 	"github.com/samber/lo"
@@ -127,23 +128,20 @@ func (rio recipeio) SaveIngredients(ctx context.Context, hash string, ingredient
 // exported for backfilling
 func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, originHash string) error {
 	// Save each recipe separately by its hash (could skip ones that are saved?)
-	var errs []error
-	for i := range recipes {
-		recipe := &recipes[i]
-		recipe.OriginHash = originHash
-		hash := recipe.ComputeHash()
-
-		recipeJSON := lo.Must(json.Marshal(recipe))
+	_, err := parallelism.MapWithErrors(recipes, func(r ai.Recipe) (bool, error) {
+		hash := r.ComputeHash()
+		recipeJSON := lo.Must(json.Marshal(r))
 		if err := rio.Cache.Put(ctx, recipeCachePrefix+hash, string(recipeJSON), cache.IfNoneMatch()); err != nil {
 			if errors.Is(err, cache.ErrAlreadyExists) {
-				continue
+				return false, nil
 			}
-			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", recipe.Title, "error", err)
-			errs = append(errs, fmt.Errorf("error saving %s, %w", hash, err))
+			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", r.Title, "error", err)
+			return false, err
 		}
-		slog.InfoContext(ctx, "stored recipe", "title", recipe.Title, "hash", hash)
-	}
-	return errors.Join(errs...)
+		slog.InfoContext(ctx, "stored recipe", "title", r.Title, "hash", hash)
+		return true, nil
+	})
+	return err
 }
 
 var ErrAlreadyExists = errors.New("already exists")
@@ -161,6 +159,15 @@ func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 }
 
 func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
+	for i := range shoppingList.Recipes {
+		recipe := &shoppingList.Recipes[i]
+		recipe.OriginHash = hash
+	}
+	for i := range shoppingList.Discarded {
+		recipe := &shoppingList.Discarded[i]
+		recipe.OriginHash = hash
+	}
+
 	// Save each recipe separately by its hash
 	if err := rio.SaveRecipes(ctx, append(shoppingList.Recipes, shoppingList.Discarded...), hash); err != nil {
 		return err
