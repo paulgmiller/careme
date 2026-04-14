@@ -320,6 +320,7 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 	var good []ai.Recipe
 	for _, result := range results {
 		if result.Critique.OverallScore >= minimumRecipeCritiqueScore {
+			slog.InfoContext(ctx, "low scoring recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
 			good = append(good, *result.Recipe)
 		} else {
 			// if there are no issues should we still retry? wasted of tokens
@@ -329,9 +330,11 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 	if len(garbage) == 0 {
 		return shoppingList, nil
 	}
+
 	if strings.TrimSpace(shoppingList.ConversationID) == "" {
 		return nil, fmt.Errorf("conversation ID is required for critique retry")
 	}
+
 	retried, err := g.aiClient.Regenerate(ctx, critiqueRetryInstructions(garbage), shoppingList.ConversationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)

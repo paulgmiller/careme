@@ -563,8 +563,8 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 		t.Fatalf("expected one critique-driven regenerate call, got %d", aiStub.regenerateCalls)
 	}
 	wantInstructions := []string{
-		"Revise the recipes using this critique feedback. Replace or improve any weak recipes so every recipe would score at least 7/10.",
-		`Recipe "Weak Dinner" scored 6/10. Summary: Needs a cleaner finish. Issues: [clarity/high] The sauce step is vague. Suggested fixes: clarify when to reduce the sauce`,
+		"Revise theses 7 low scoring recipes using this critique feedback.",
+		"Recipe \"Weak Dinner\" scored 6/10.\n Issues: [clarity/high] The sauce step is vague.\n Suggested fixes: clarify when to reduce the sauce",
 	}
 	if got := aiStub.regenerateInstructions[0]; !slices.Equal(got, wantInstructions) {
 		t.Fatalf("unexpected critique retry instructions: got %v want %v", got, wantInstructions)
@@ -579,6 +579,74 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 		t.Fatalf("expected cached critique for retried recipe: %v", err)
 	} else if critique.OverallScore != 8 {
 		t.Fatalf("expected final critique score 8, got %d", critique.OverallScore)
+	}
+}
+
+func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
+	weak := ai.Recipe{Title: "Weak Dinner", Description: "Needs work"}
+	good := ai.Recipe{Title: "Solid Dinner", Description: "Already fine"}
+	retried := ai.Recipe{Title: "Better Dinner", Description: "Improved"}
+
+	cacheStore := cache.NewFileCache(t.TempDir())
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
+		t.Fatalf("failed to seed ingredients cache: %v", err)
+	}
+
+	aiStub := &sequenceAIClient{
+		generateResponses: []*ai.ShoppingList{{
+			ConversationID: "conv-initial",
+			Recipes:        []ai.Recipe{weak, good},
+		}},
+		regenerateResponses: []*ai.ShoppingList{{
+			ConversationID: "conv-retried",
+			Recipes:        []ai.Recipe{retried},
+		}},
+	}
+	critiquer := &captureCritiquer{
+		fn: func(recipe ai.Recipe) (*ai.RecipeCritique, error) {
+			switch recipe.Title {
+			case "Weak Dinner":
+				return &ai.RecipeCritique{
+					SchemaVersion:  "recipe-critique-v1",
+					OverallScore:   6,
+					Summary:        "Needs a cleaner finish.",
+					Strengths:      []string{"solid idea"},
+					Issues:         []ai.RecipeCritiqueIssue{{Severity: "high", Category: "clarity", Detail: "The sauce step is vague."}},
+					SuggestedFixes: []string{"clarify when to reduce the sauce"},
+				}, nil
+			case "Solid Dinner", "Better Dinner":
+				return &ai.RecipeCritique{
+					SchemaVersion:  "recipe-critique-v1",
+					OverallScore:   8,
+					Summary:        "Ready to cook.",
+					Strengths:      []string{"clear direction"},
+					Issues:         []ai.RecipeCritiqueIssue{{Severity: "low", Category: "timing", Detail: "Could shave a minute or two."}},
+					SuggestedFixes: []string{"tighten the simmer time"},
+				}, nil
+			default:
+				t.Fatalf("unexpected recipe critique request for %q", recipe.Title)
+				return nil, nil
+			}
+		},
+	}
+	g := &Generator{
+		io:        io,
+		cio:       io,
+		aiClient:  aiStub,
+		critiquer: critiquer,
+	}
+
+	got, err := g.GenerateRecipes(t.Context(), params)
+	if err != nil {
+		t.Fatalf("GenerateRecipes returned error: %v", err)
+	}
+	if got == nil || len(got.Recipes) != 2 {
+		t.Fatalf("expected retried recipe plus preserved good recipe, got %+v", got)
+	}
+	if got.Recipes[0].Title != "Better Dinner" || got.Recipes[1].Title != "Solid Dinner" {
+		t.Fatalf("unexpected recipe order after partial retry: %+v", got.Recipes)
 	}
 }
 
@@ -695,8 +763,8 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 		t.Fatalf("unexpected regenerate conversation IDs: got %v", got)
 	}
 	wantRetryInstructions := []string{
-		"Revise the recipes using this critique feedback. Replace or improve any weak recipes so every recipe would score at least 7/10.",
-		`Recipe "Needs Work" scored 5/10. Summary: Too loose for a weeknight cook. Issues: [timing/medium] Cooking times are inconsistent. Suggested fixes: make the timing consistent`,
+		"Revise theses 7 low scoring recipes using this critique feedback.",
+		"Recipe \"Needs Work\" scored 5/10.\n Issues: [timing/medium] Cooking times are inconsistent.\n Suggested fixes: make the timing consistent",
 	}
 	if got := aiStub.regenerateInstructions[1]; !slices.Equal(got, wantRetryInstructions) {
 		t.Fatalf("unexpected critique retry instructions: got %v want %v", got, wantRetryInstructions)
