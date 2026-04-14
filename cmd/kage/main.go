@@ -36,8 +36,13 @@ func main() {
 	path := flag.String("secret-file", "secrets/envtest", "encrypted file to apply to k8s namespace")
 	namespace := flag.String("ns", "", "k8s namespace")
 	check := flag.Bool("check", false, "dump secret names")
+	forreal := flag.Bool("apply", false, "don't actually apply secrets just print what would be done")
 	flag.Parse()
 	ctx := context.Background()
+
+	if *forreal {
+		log.Printf("THIS IS NOT A DRILL")
+	}
 
 	identities, err := loadSSHIdentities()
 	if err != nil {
@@ -73,6 +78,10 @@ func main() {
 		return
 	}
 
+	if namespace == nil || *namespace == "" {
+		log.Fatal("namespace is required")
+	}
+
 	secretsK8s := toK8s(secrets)
 
 	cfg, err := clientcmd.BuildConfigFromFlags(
@@ -101,6 +110,10 @@ func main() {
 		if !secretNeedsUpdate(current, secret) {
 			continue
 		}
+		if !*forreal {
+			log.Printf("would update %s/%s\n", *namespace, secret.Name)
+			continue
+		}
 		secret.ResourceVersion = current.ResourceVersion
 		_, err = secretapi.Update(ctx, secret, metav1.UpdateOptions{})
 		if err != nil {
@@ -113,13 +126,16 @@ func main() {
 
 func secretNeedsUpdate(current, desired *corev1.Secret) bool {
 	if current.Annotations[managedByAnnotationKey] != desired.Annotations[managedByAnnotationKey] {
+		log.Printf("secret %s unmanged", desired.Name)
 		return true
 	}
 	if len(current.Data) != len(desired.StringData) {
+		log.Printf("secret %s key count mismatch", desired.Name)
 		return true
 	}
 	for key, value := range desired.StringData {
 		if !bytes.Equal(current.Data[key], []byte(value)) {
+			log.Printf("secret %s key %s needs update", desired.Name, key)
 			return true
 		}
 	}
