@@ -233,6 +233,10 @@ func (c *Client) Regenerate(ctx context.Context, instructions []string, conversa
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
 
+	if resp.Conversation.ID != conversationID {
+		return nil, fmt.Errorf("conversation ID mismatch in regeneration response")
+	}
+
 	return responseToShoppingList(ctx, resp)
 }
 

@@ -381,7 +381,8 @@ func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recip
 }
 
 func critiqueRetryInstructions(results []recipeCritiqueResult) []string {
-	revise := fmt.Sprintf("Revise and return exactly %d recipes as replacements for the low-scoring recipes listed below.", len(results))
+	// first shot really wanted to explain corrections in description. Should we add another debug field for that?
+	revise := fmt.Sprintf("Revise and return exactly %d recipes as replacements for the low-scoring recipes listed below. Description should focus on selling the dish not these corrections", len(results))
 	instructions := []string{revise}
 	for _, result := range results {
 		// do we care about summar or is it just a wast of tokens
