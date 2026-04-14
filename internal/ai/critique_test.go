@@ -1,10 +1,12 @@
 package ai
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genai"
 )
 
 func TestBuildRecipeCritiquePrompt(t *testing.T) {
@@ -88,4 +90,26 @@ func TestRecipeCritiqueJSONSchemaTracksStruct(t *testing.T) {
 	require.True(t, ok, "expected overall_score schema object, got %#v", properties["overall_score"])
 	assert.Equal(t, float64(1), overallScore["minimum"])
 	assert.Equal(t, float64(10), overallScore["maximum"])
+}
+
+func TestGeminiUsageLogValue(t *testing.T) {
+	t.Run("nil usage", func(t *testing.T) {
+		raw, ok := geminiUsageLogValue(nil).(json.RawMessage)
+		require.True(t, ok)
+		assert.JSONEq(t, `null`, string(raw))
+	})
+
+	t.Run("usage marshals to json", func(t *testing.T) {
+		raw, ok := geminiUsageLogValue(&genai.GenerateContentResponseUsageMetadata{
+			PromptTokenCount:     448,
+			CandidatesTokenCount: 986,
+			TotalTokenCount:      1877,
+		}).(json.RawMessage)
+		require.True(t, ok)
+		assert.JSONEq(t, `{
+			"promptTokenCount": 448,
+			"candidatesTokenCount": 986,
+			"totalTokenCount": 1877
+		}`, string(raw))
+	})
 }

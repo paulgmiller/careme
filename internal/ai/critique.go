@@ -99,6 +99,7 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	if err != nil {
 		return nil, err
 	}
+	start := time.Now()
 	resp, err := client.Models.GenerateContent(ctx, c.model, genai.Text(prompt), &genai.GenerateContentConfig{
 		SystemInstruction: genai.NewContentFromText(recipeCritiqueSystemInstruction, genai.RoleUser),
 		// Temperature:        genai.Ptr[float32](0),
@@ -113,7 +114,8 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		"model", c.model,
 		"model_version", resp.ModelVersion,
 		"response_id", resp.ResponseID,
-		"usage", resp.UsageMetadata,
+		"latencyMS", time.Since(start).Milliseconds(),
+		"usage", geminiUsageLogValue(resp.UsageMetadata),
 	)
 
 	critique, err := parseRecipeCritique(resp.Text())
@@ -123,6 +125,17 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	critique.Model = resp.ModelVersion
 	critique.CritiquedAt = time.Now().UTC()
 	return critique, nil
+}
+
+func geminiUsageLogValue(usage *genai.GenerateContentResponseUsageMetadata) any {
+	if usage == nil {
+		return json.RawMessage("null")
+	}
+	body, err := json.Marshal(usage)
+	if err != nil {
+		return fmt.Sprintf("failed to marshal Gemini usage metadata: %v", err)
+	}
+	return json.RawMessage(body)
 }
 
 func (c *critiquer) newClient(ctx context.Context) (*genai.Client, error) {
