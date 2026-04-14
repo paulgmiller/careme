@@ -125,8 +125,7 @@ func (rio recipeio) SaveIngredients(ctx context.Context, hash string, ingredient
 	return rio.Cache.Put(ctx, ingredientsCachePrefix+hash, string(ingredientsJSON), cache.Unconditional())
 }
 
-// exported for backfilling
-func (rio recipeio) SaveRecipes(ctx context.Context, recipes []ai.Recipe, originHash string) error {
+func (rio recipeio) saveRecipes(ctx context.Context, recipes []ai.Recipe) error {
 	// Save each recipe separately by its hash (could skip ones that are saved?)
 	_, err := parallelism.MapWithErrors(recipes, func(r ai.Recipe) (bool, error) {
 		hash := r.ComputeHash()
@@ -160,16 +159,14 @@ func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 
 func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
 	for i := range shoppingList.Recipes {
-		recipe := &shoppingList.Recipes[i]
-		recipe.OriginHash = hash
+		shoppingList.Recipes[i].OriginHash = hash
 	}
 	for i := range shoppingList.Discarded {
-		recipe := &shoppingList.Discarded[i]
-		recipe.OriginHash = hash
+		shoppingList.Discarded[i].OriginHash = hash
 	}
 
 	// Save each recipe separately by its hash
-	if err := rio.SaveRecipes(ctx, append(shoppingList.Recipes, shoppingList.Discarded...), hash); err != nil {
+	if err := rio.saveRecipes(ctx, append(shoppingList.Recipes, shoppingList.Discarded...)); err != nil {
 		return err
 	}
 	// we could actually nuke out the rest of recipe and lazily load but not yet

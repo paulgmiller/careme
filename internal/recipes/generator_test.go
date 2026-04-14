@@ -563,7 +563,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 		t.Fatalf("expected one critique-driven regenerate call, got %d", aiStub.regenerateCalls)
 	}
 	wantInstructions := []string{
-		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below.",
+		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below. Description should focus on selling the dish not these corrections",
 		"Recipe \"Weak Dinner\" scored 6/10.\n Issues: [clarity/high] The sauce step is vague.\n Suggested fixes: clarify when to reduce the sauce",
 	}
 	if got := aiStub.regenerateInstructions[0]; !slices.Equal(got, wantInstructions) {
@@ -763,7 +763,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 		t.Fatalf("unexpected regenerate conversation IDs: got %v", got)
 	}
 	wantRetryInstructions := []string{
-		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below.",
+		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below. Description should focus on selling the dish not these corrections",
 		"Recipe \"Needs Work\" scored 5/10.\n Issues: [timing/medium] Cooking times are inconsistent.\n Suggested fixes: make the timing consistent",
 	}
 	if got := aiStub.regenerateInstructions[1]; !slices.Equal(got, wantRetryInstructions) {
