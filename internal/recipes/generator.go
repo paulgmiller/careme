@@ -47,6 +47,8 @@ type critiqueIO interface {
 	SaveCritique(ctx context.Context, hash string, critique *ai.RecipeCritique) error
 }
 
+const minimumRecipeCritiqueScore = 7
+
 type Generator struct {
 	config          *config.Config
 	aiClient        aiClient
@@ -153,6 +155,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
 		// these should both always be true. Warn if not because its a caching bug?
 		instructions := []string{p.Instructions}
+		// TODO give more guidnance on how many recipes to generate here
 		for _, dismissed := range p.Dismissed {
 			instructions = append(instructions, "Passed on "+dismissed.Title)
 		}
@@ -164,8 +167,9 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		if err := g.cacheRecipeCritiques(ctx, shoppingList.Recipes); err != nil {
-			return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
+		shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+		if err != nil {
+			return nil, err
 		}
 		// Include saved recipes in the shopping list
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
@@ -185,8 +189,9 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
-	if err := g.cacheRecipeCritiques(ctx, shoppingList.Recipes); err != nil {
-		return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
+	shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+	if err != nil {
+		return nil, err
 	}
 	// how to pipe this back to ai client? should ai client hjave its own critiquer or do we just call regenerate once?
 
@@ -301,23 +306,108 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 	return lo.Uniq(titles)
 }
 
-func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recipe) error {
+type recipeCritiqueResult struct {
+	Recipe   *ai.Recipe // just here so we can give the model the title
+	Critique *ai.RecipeCritique
+}
+
+func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
+	results, err := g.cacheRecipeCritiques(ctx, shoppingList.Recipes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
+	}
+	var garbage []recipeCritiqueResult
+	var good []ai.Recipe
+	for _, result := range results {
+		if result.Critique.OverallScore >= minimumRecipeCritiqueScore {
+			good = append(good, *result.Recipe)
+		} else {
+			// if there are no issues should we still retry? wasted of tokens
+			garbage = append(garbage, result)
+		}
+	}
+	if len(garbage) == 0 {
+		return shoppingList, nil
+	}
+	if strings.TrimSpace(shoppingList.ConversationID) == "" {
+		return nil, fmt.Errorf("conversation ID is required for critique retry")
+	}
+	retried, err := g.aiClient.Regenerate(ctx, critiqueRetryInstructions(garbage), shoppingList.ConversationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
+	}
+	retried.Recipes = append(retried.Recipes, good...)
+	if _, err := g.cacheRecipeCritiques(ctx, retried.Recipes); err != nil {
+		return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
+	}
+	return retried, nil
+}
+
+func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recipe) ([]recipeCritiqueResult, error) {
 	if g.critiquer == nil || g.cio == nil {
 		// yuck refactor tests to make this alway present
-		return nil
+		return nil, nil
 	}
-	_, err := parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (int, error) {
+	return parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (recipeCritiqueResult, error) {
 		hash := recipe.ComputeHash()
 		critique, err := g.critiquer.CritiqueRecipe(ctx, recipe)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to critique recipe", "recipe", recipe.Title, "hash", hash, "error", err)
-			return 0, fmt.Errorf("critique recipe %q (%s): %w", recipe.Title, hash, err)
+			return recipeCritiqueResult{}, fmt.Errorf("critique recipe %q (%s): %w", recipe.Title, hash, err)
 		}
+		// should we background the saving of this? too fast to matter?
 		if err := g.cio.SaveCritique(ctx, hash, critique); err != nil {
 			slog.ErrorContext(ctx, "failed to cache recipe critique", "recipe", recipe.Title, "hash", hash, "error", err)
-			return 0, fmt.Errorf("cache critique for recipe %q (%s): %w", recipe.Title, hash, err)
+			return recipeCritiqueResult{}, fmt.Errorf("cache critique for recipe %q (%s): %w", recipe.Title, hash, err)
 		}
-		return 0, nil
+		return recipeCritiqueResult{
+			Recipe:   &recipe,
+			Critique: critique,
+		}, nil
 	})
-	return err
+}
+
+func critiqueRetryInstructions(results []recipeCritiqueResult) []string {
+	instructions := []string{
+		fmt.Sprintf("Revise theses %d low scoring recipes using this critique feedback.", minimumRecipeCritiqueScore),
+	}
+	for _, result := range results {
+		// do we care about summar or is it just a wast of tokens
+		instructions = append(instructions, fmt.Sprintf(
+			"Recipe %q scored %d/10.\n Issues: %s\n Suggested fixes: %s",
+			result.Recipe.Title,
+			result.Critique.OverallScore,
+			// strings.TrimSpace(result.Critique.Summary),
+			formatCritiqueIssues(result.Critique.Issues),
+			formatSuggestedFixes(result.Critique.SuggestedFixes),
+		))
+	}
+	return instructions
+}
+
+func formatCritiqueIssues(issues []ai.RecipeCritiqueIssue) string {
+	if len(issues) == 0 {
+		return "none listed."
+	}
+	parts := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		parts = append(parts, fmt.Sprintf("[%s/%s] %s", issue.Category, issue.Severity, strings.TrimSpace(issue.Detail)))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func formatSuggestedFixes(fixes []string) string {
+	if len(fixes) == 0 {
+		return "none listed."
+	}
+	trimmed := make([]string, 0, len(fixes))
+	for _, fix := range fixes {
+		if fix = strings.TrimSpace(fix); fix != "" {
+			trimmed = append(trimmed, fix)
+		}
+	}
+	if len(trimmed) == 0 {
+		return "none listed."
+	}
+	return strings.Join(trimmed, "; ")
 }
