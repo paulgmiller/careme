@@ -142,7 +142,8 @@ func loadAdminCritiqueViews(ctx context.Context, c cache.Cache, hashes []string)
 
 		recipe, err := rio.SingleFromCache(ctx, hash)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to load recipe for admin critiques page", "hash", hash, "error", err)
+			// make this an error after we don't load all critiques or purge ones where we didn't discart
+			slog.InfoContext(ctx, "failed to load recipe for admin critiques page", "hash", hash, "error", err)
 			view.RecipeTitle = "Unknown recipe"
 		} else {
 			view.RecipeTitle = recipe.Title
