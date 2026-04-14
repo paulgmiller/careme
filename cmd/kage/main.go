@@ -110,7 +110,7 @@ func main() {
 		if !secretNeedsUpdate(current, secret) {
 			continue
 		}
-		if *forreal {
+		if !*forreal {
 			log.Printf("would update %s/%s\n", *namespace, secret.Name)
 			continue
 		}
