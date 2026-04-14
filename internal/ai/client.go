@@ -84,6 +84,7 @@ func (r *Recipe) ComputeHash() string {
 type ShoppingList struct {
 	ConversationID string   `json:"conversation_id,omitempty" jsonschema:"-"`
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
+	Discarded      []Recipe `json:"-" jsonschema:"-"`
 }
 
 type WineSelection struct {

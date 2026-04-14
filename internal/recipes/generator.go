@@ -320,6 +320,8 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 	var good []ai.Recipe
 	for _, result := range results {
 		if result.Critique.OverallScore >= minimumRecipeCritiqueScore {
+			slog.InfoContext(ctx, "acceptable", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
+
 			good = append(good, *result.Recipe)
 		} else {
 			// if there are no issues should we still retry? wasted of tokens
@@ -330,6 +332,9 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 	if len(garbage) == 0 {
 		return shoppingList, nil
 	}
+	slog.InfoContext(ctx, "regenerating recipes based on critique feedback", "garbage_count", len(garbage), "good_count", len(good))
+
+	// store the garbage ones for reference
 
 	if strings.TrimSpace(shoppingList.ConversationID) == "" {
 		return nil, fmt.Errorf("conversation ID is required for critique retry")
@@ -340,6 +345,11 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}
 	retried.Recipes = append(retried.Recipes, good...)
+	shoppingList.Discarded = lo.Map(garbage, func(result recipeCritiqueResult, _ int) ai.Recipe {
+		return *result.Recipe
+	})
+
+	// async as this is just debug not retrying twice yet.
 	if _, err := g.cacheRecipeCritiques(ctx, retried.Recipes); err != nil {
 		return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
 	}
@@ -371,9 +381,8 @@ func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recip
 }
 
 func critiqueRetryInstructions(results []recipeCritiqueResult) []string {
-	instructions := []string{
-		fmt.Sprintf("Revise theses %d low scoring recipes using this critique feedback.", minimumRecipeCritiqueScore),
-	}
+	revise := fmt.Sprintf("Revise and return exactly %d recipes as replacements for the low-scoring recipes listed below.", len(results))
+	instructions := []string{revise}
 	for _, result := range results {
 		// do we care about summar or is it just a wast of tokens
 		instructions = append(instructions, fmt.Sprintf(

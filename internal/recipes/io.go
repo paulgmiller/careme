@@ -165,7 +165,11 @@ func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.Shopp
 	if err := rio.SaveRecipes(ctx, shoppingList.Recipes, hash); err != nil {
 		return err
 	}
+	if err := rio.SaveRecipes(ctx, shoppingList.Discarded, hash); err != nil {
+		return err
+	}
 	// we could actually nuke out the rest of recipe and lazily load but not yet
+	shoppingList.Discarded = nil
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
 	if err := rio.Cache.Put(ctx, ShoppingListCachePrefix+hash, string(shoppingJSON), cache.Unconditional()); err != nil {
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "hash", hash, "error", err)
