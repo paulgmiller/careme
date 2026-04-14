@@ -125,10 +125,10 @@ func main() {
 }
 
 func secretNeedsUpdate(current, desired *corev1.Secret) bool {
-	/*if current.Annotations[managedByAnnotationKey] != desired.Annotations[managedByAnnotationKey] {
+	if current.Annotations[managedByAnnotationKey] != desired.Annotations[managedByAnnotationKey] {
 		log.Printf("secret %s unmanged", desired.Name)
 		return true
-	}*/
+	}
 	if len(current.Data) != len(desired.StringData) {
 		log.Printf("secret %s key count mismatch", desired.Name)
 		return true
