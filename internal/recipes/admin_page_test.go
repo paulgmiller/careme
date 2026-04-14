@@ -43,9 +43,7 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 			DrinkPairing: "Pinot Grigio",
 		},
 	}
-	if err := rio.SaveRecipes(t.Context(), recipes, "origin-hash"); err != nil {
-		t.Fatalf("save recipes: %v", err)
-	}
+	saveRecipesForOrigin(t, rio, "origin-hash", recipes...)
 
 	newestHash := recipes[0].ComputeHash()
 	olderHash := recipes[1].ComputeHash()

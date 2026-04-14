@@ -114,6 +114,62 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	}
 }
 
+func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	kept := ai.Recipe{
+		Title:        "One Pan Chicken",
+		Description:  "Simple weeknight meal",
+		Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
+		Instructions: []string{"Prep ingredients", "Cook chicken"},
+		Health:       "Balanced",
+		DrinkPairing: "Chardonnay",
+	}
+	discarded := ai.Recipe{
+		Title:        "Mushy Pasta",
+		Description:  "Too vague to keep",
+		Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 lb", Price: "1.99"}},
+		Instructions: []string{"Cook until done somehow"},
+		Health:       "Heavy",
+		DrinkPairing: "None",
+	}
+	hash := "test-hash"
+	list := &ai.ShoppingList{
+		ConversationID: "conversation-123",
+		Recipes:        []ai.Recipe{kept},
+		Discarded:      []ai.Recipe{discarded},
+	}
+
+	if err := rio.SaveShoppingList(t.Context(), list, hash); err != nil {
+		t.Fatalf("SaveShoppingList failed: %v", err)
+	}
+
+	if len(list.Discarded) != 0 {
+		t.Fatalf("expected SaveShoppingList to clear discarded recipes after persisting, got %+v", list.Discarded)
+	}
+
+	stored, err := rio.SingleFromCache(t.Context(), discarded.ComputeHash())
+	if err != nil {
+		t.Fatalf("expected discarded recipe to be saved individually: %v", err)
+	}
+	if stored.Title != discarded.Title {
+		t.Fatalf("expected discarded recipe title %q, got %q", discarded.Title, stored.Title)
+	}
+	if stored.OriginHash != hash {
+		t.Fatalf("expected discarded recipe origin hash %q, got %q", hash, stored.OriginHash)
+	}
+
+	cachedList, err := rio.FromCache(t.Context(), hash)
+	if err != nil {
+		t.Fatalf("FromCache failed: %v", err)
+	}
+	if len(cachedList.Discarded) != 0 {
+		t.Fatalf("expected cached shopping list to omit discarded recipes, got %+v", cachedList.Discarded)
+	}
+}
+
 func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)

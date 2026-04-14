@@ -84,6 +84,7 @@ func (r *Recipe) ComputeHash() string {
 type ShoppingList struct {
 	ConversationID string   `json:"conversation_id,omitempty" jsonschema:"-"`
 	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
+	Discarded      []Recipe `json:"-" jsonschema:"-"`
 }
 
 type WineSelection struct {
@@ -230,6 +231,10 @@ func (c *Client) Regenerate(ctx context.Context, instructions []string, conversa
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
+	}
+
+	if resp.Conversation.ID != conversationID {
+		return nil, fmt.Errorf("conversation ID mismatch in regeneration response")
 	}
 
 	return responseToShoppingList(ctx, resp)

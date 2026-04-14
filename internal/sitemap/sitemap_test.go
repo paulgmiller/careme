@@ -99,8 +99,8 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 		Health:       "Balanced dinner",
 		DrinkPairing: "Pinot Noir",
 	}
-	if err := list.SaveRecipes(context.Background(), []ai.Recipe{recipe}, shoppingListHash); err != nil {
-		t.Fatalf("failed to save recipe: %v", err)
+	if err := list.SaveShoppingList(context.Background(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, shoppingListHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
 	}
 	recipeHash := recipe.ComputeHash()
 	if err := list.SaveFeedback(context.Background(), recipeHash, feedback.Feedback{
