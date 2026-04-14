@@ -1,7 +1,7 @@
 package ai
 
 import (
-	"encoding/json"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -92,24 +92,36 @@ func TestRecipeCritiqueJSONSchemaTracksStruct(t *testing.T) {
 	assert.Equal(t, float64(10), overallScore["maximum"])
 }
 
-func TestGeminiUsageLogValue(t *testing.T) {
+func TestGeminiUsageLogAttr(t *testing.T) {
 	t.Run("nil usage", func(t *testing.T) {
-		raw, ok := geminiUsageLogValue(nil).(json.RawMessage)
-		require.True(t, ok)
-		assert.JSONEq(t, `null`, string(raw))
+		attr := geminiUsageLogAttr(nil)
+		assert.Equal(t, "usage", attr.Key)
+		assert.Equal(t, slog.KindGroup, attr.Value.Kind())
+		require.Len(t, attr.Value.Group(), 1)
+		assert.Equal(t, slog.Bool("available", false), attr.Value.Group()[0])
 	})
 
-	t.Run("usage marshals to json", func(t *testing.T) {
-		raw, ok := geminiUsageLogValue(&genai.GenerateContentResponseUsageMetadata{
-			PromptTokenCount:     448,
-			CandidatesTokenCount: 986,
-			TotalTokenCount:      1877,
-		}).(json.RawMessage)
-		require.True(t, ok)
-		assert.JSONEq(t, `{
-			"promptTokenCount": 448,
-			"candidatesTokenCount": 986,
-			"totalTokenCount": 1877
-		}`, string(raw))
+	t.Run("usage becomes a slog group", func(t *testing.T) {
+		attr := geminiUsageLogAttr(&genai.GenerateContentResponseUsageMetadata{
+			CachedContentTokenCount: 22,
+			PromptTokenCount:        448,
+			CandidatesTokenCount:    986,
+			ThoughtsTokenCount:      111,
+			ToolUsePromptTokenCount: 310,
+			TotalTokenCount:         1877,
+			TrafficType:             genai.TrafficTypeOnDemand,
+		})
+		assert.Equal(t, "usage", attr.Key)
+		assert.Equal(t, slog.KindGroup, attr.Value.Kind())
+		assert.Equal(t, []slog.Attr{
+			slog.Bool("available", true),
+			slog.Int("cachedContentTokenCount", 22),
+			slog.Int("promptTokenCount", 448),
+			slog.Int("candidatesTokenCount", 986),
+			slog.Int("thoughtsTokenCount", 111),
+			slog.Int("toolUsePromptTokenCount", 310),
+			slog.Int("totalTokenCount", 1877),
+			slog.String("trafficType", string(genai.TrafficTypeOnDemand)),
+		}, attr.Value.Group())
 	})
 }

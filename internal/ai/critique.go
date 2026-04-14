@@ -115,7 +115,7 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		"model_version", resp.ModelVersion,
 		"response_id", resp.ResponseID,
 		"latencyMS", time.Since(start).Milliseconds(),
-		"usage", geminiUsageLogValue(resp.UsageMetadata),
+		geminiUsageLogAttr(resp.UsageMetadata),
 	)
 
 	critique, err := parseRecipeCritique(resp.Text())
@@ -127,15 +127,26 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	return critique, nil
 }
 
-func geminiUsageLogValue(usage *genai.GenerateContentResponseUsageMetadata) any {
+// remove if we get https://github.com/openclosed-dev/slogan/pull/3 in
+func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
 	if usage == nil {
-		return json.RawMessage("null")
+		return slog.Group("usage", slog.Bool("available", false))
 	}
-	body, err := json.Marshal(usage)
-	if err != nil {
-		return fmt.Sprintf("failed to marshal Gemini usage metadata: %v", err)
+
+	attrs := []any{
+		slog.Bool("available", true),
+		slog.Int("cachedContentTokenCount", int(usage.CachedContentTokenCount)),
+		slog.Int("promptTokenCount", int(usage.PromptTokenCount)),
+		slog.Int("candidatesTokenCount", int(usage.CandidatesTokenCount)),
+		slog.Int("thoughtsTokenCount", int(usage.ThoughtsTokenCount)),
+		slog.Int("toolUsePromptTokenCount", int(usage.ToolUsePromptTokenCount)),
+		slog.Int("totalTokenCount", int(usage.TotalTokenCount)),
 	}
-	return json.RawMessage(body)
+	if usage.TrafficType != "" {
+		attrs = append(attrs, slog.String("trafficType", string(usage.TrafficType)))
+	}
+
+	return slog.Group("usage", attrs...)
 }
 
 func (c *critiquer) newClient(ctx context.Context) (*genai.Client, error) {
