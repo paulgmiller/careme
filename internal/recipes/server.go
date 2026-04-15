@@ -79,6 +79,10 @@ type generator interface {
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 }
 
+type backgroundWaiter interface {
+	Wait()
+}
+
 // should we have new generator just return two interfaces instead of gluing?
 type generatorPlus interface {
 	generator
@@ -1043,12 +1047,13 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 			return
 		}
 
-		// add saved recipes here rather than each
-
+		// should save be inside generator or shouild saved merging happen out here?
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			return
 		}
+
+		// Make sure we have critiques for final recipes
 	})
 }
 

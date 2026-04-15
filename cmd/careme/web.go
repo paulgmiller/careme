@@ -58,7 +58,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	userStorage := users.NewStorage(cache)
 
-	generator, err := recipes.NewGenerator(cfg, recipes.IO(cache))
+	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}

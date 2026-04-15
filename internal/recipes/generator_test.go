@@ -2,7 +2,6 @@ package recipes
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"sync"
 	"testing"
@@ -405,11 +404,12 @@ func TestGenerateRecipes_SavesCritiquesForGeneratedRecipes(t *testing.T) {
 		},
 	}
 	critiquer := &captureCritiquer{}
+	cachedCrit := newCachingCritiquer(critiquer, cacheStore)
+	mc := &MultiCritiquer{critiquer: cachedCrit}
 	g := &Generator{
 		io:        io,
-		cio:       io,
 		aiClient:  aiStub,
-		critiquer: critiquer,
+		critiquer: mc,
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -433,39 +433,6 @@ func TestGenerateRecipes_SavesCritiquesForGeneratedRecipes(t *testing.T) {
 	}
 }
 
-func TestGenerateRecipes_CritiqueFailuresFailGeneration(t *testing.T) {
-	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore)
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
-		t.Fatalf("failed to seed ingredients cache: %v", err)
-	}
-
-	recipe := ai.Recipe{Title: "Roast Chicken", Description: "Crisp and simple", Instructions: []string{"Roast the chicken."}}
-	g := &Generator{
-		io:  io,
-		cio: io,
-		aiClient: &captureGenerateAIClient{
-			shoppingList: &ai.ShoppingList{
-				ConversationID: "conv-123",
-				Recipes:        []ai.Recipe{recipe},
-			},
-		},
-		critiquer: &captureCritiquer{err: errors.New("gemini down")},
-	}
-
-	got, err := g.GenerateRecipes(t.Context(), params)
-	if err == nil {
-		t.Fatal("expected GenerateRecipes to fail when critique caching fails")
-	}
-	if got != nil {
-		t.Fatalf("expected no shopping list on critique failure, got %+v", got)
-	}
-	if _, err := io.CritiqueFromCache(t.Context(), recipe.ComputeHash()); !errors.Is(err, cache.ErrNotFound) {
-		t.Fatalf("expected no cached critique after failure, got %v", err)
-	}
-}
-
 func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea"}
@@ -473,9 +440,8 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	critiquer := &captureCritiquer{}
 	g := &Generator{
 		io:        IO(cache.NewInMemoryCache()),
-		cio:       IO(cache.NewInMemoryCache()),
 		aiClient:  &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
-		critiquer: critiquer,
+		critiquer: &MultiCritiquer{critiquer: critiquer},
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -544,9 +510,8 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 	g := &Generator{
 		io:        io,
-		cio:       io,
 		aiClient:  aiStub,
-		critiquer: critiquer,
+		critiquer: &MultiCritiquer{critiquer: critiquer},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -633,9 +598,8 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 	}
 	g := &Generator{
 		io:        io,
-		cio:       io,
 		aiClient:  aiStub,
-		critiquer: critiquer,
+		critiquer: &MultiCritiquer{critiquer: critiquer},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -668,9 +632,8 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 	}
 	g := &Generator{
 		io:        io,
-		cio:       io,
 		aiClient:  aiStub,
-		critiquer: &captureCritiquer{},
+		critiquer: &MultiCritiquer{critiquer: &captureCritiquer{}},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -733,9 +696,8 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	}
 	g := &Generator{
 		io:        io,
-		cio:       io,
 		aiClient:  aiStub,
-		critiquer: critiquer,
+		critiquer: &MultiCritiquer{critiquer: critiquer},
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -806,9 +768,8 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 	}
 	g := &Generator{
 		io:        io,
-		cio:       io,
 		aiClient:  aiStub,
-		critiquer: critiquer,
+		critiquer: &MultiCritiquer{critiquer: critiquer},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)

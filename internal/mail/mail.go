@@ -67,7 +67,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 
 	userStorage := users.NewStorage(cache)
 
-	generator, err := recipes.NewGenerator(cfg, recipes.IO(cache))
+	generator, err := recipes.NewGenerator(cfg, cache)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}

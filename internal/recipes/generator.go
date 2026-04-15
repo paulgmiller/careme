@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"careme/internal/ai"
@@ -33,9 +34,40 @@ type aiClient interface {
 	Ready(ctx context.Context) error
 }
 
-type recipeCritiquer interface {
-	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
-	Ready(ctx context.Context) error
+type multiCritiquier interface {
+	CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan recipeCritiqueResult
+}
+
+type MultiCritiquer struct {
+	critiquer recipeCritiquer
+	wg        sync.WaitGroup
+}
+
+func (mc *MultiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan recipeCritiqueResult {
+	results := make(chan recipeCritiqueResult)
+	mc.wg.Add(len(recipes))
+
+	var localWg sync.WaitGroup
+	for _, recipe := range recipes {
+		localWg.Go(func() {
+			defer mc.wg.Done()
+			critique, err := mc.critiquer.CritiqueRecipe(ctx, recipe)
+			results <- recipeCritiqueResult{
+				Recipe:   &recipe,
+				Critique: critique,
+				err:      err,
+			}
+		})
+	}
+	go func() {
+		mc.wg.Wait()
+		close(results)
+	}()
+	return results
+}
+
+func (mc *MultiCritiquer) Wait() {
+	mc.wg.Wait()
 }
 
 type ingredientio interface {
@@ -43,27 +75,18 @@ type ingredientio interface {
 	IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error)
 }
 
-type critiqueIO interface {
-	SaveCritique(ctx context.Context, hash string, critique *ai.RecipeCritique) error
-}
-
 const minimumRecipeCritiqueScore = 8
 
 type Generator struct {
 	config          *config.Config
 	aiClient        aiClient
-	critiquer       recipeCritiquer
+	critiquer       multiCritiquier
 	staplesProvider staplesProvider
-	io              ingredientio
-	cio             critiqueIO // pull this out?
+	// TODO move ingrededientio into staples provider and remove from generator.
+	io ingredientio
 }
 
-type allIO interface {
-	ingredientio
-	critiqueIO
-}
-
-func NewGenerator(cfg *config.Config, io allIO) (generatorPlus, error) {
+func NewGenerator(cfg *config.Config, cache cache.Cache) (generatorPlus, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -73,18 +96,20 @@ func NewGenerator(cfg *config.Config, io allIO) (generatorPlus, error) {
 		return nil, fmt.Errorf("failed to create staples provider: %w", err)
 	}
 
-	var critiquer recipeCritiquer
+	// accept a critiquier in new instead
+	var mc multiCritiquier
 	if cfg.Gemini.IsEnabled() {
-		critiquer = ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel)
+		crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel)
+		cachingCritiquer := newCachingCritiquer(crit, cache)
+		mc = &MultiCritiquer{critiquer: cachingCritiquer}
 	}
 
 	return &Generator{
-		io:              io,
-		cio:             io, // pull this out?
+		io:              IO(cache),
 		config:          cfg,
 		aiClient:        ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
-		critiquer:       critiquer,
 		staplesProvider: stapesProvider,
+		critiquer:       mc,
 	}, nil
 }
 
@@ -193,10 +218,6 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	if err != nil {
 		return nil, err
 	}
-	// how to pipe this back to ai client? should ai client hjave its own critiquer or do we just call regenerate once?
-
-	// should never happen? How do you get save on first generte?
-	// shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
 	// TODO this does not get saved in params and thus must be loaded from html
 	// could update params after first generation or pregenerate before we save params.
@@ -252,11 +273,6 @@ func (g *Generator) Ready(ctx context.Context) error {
 	if err := g.aiClient.Ready(ctx); err != nil {
 		return err
 	}
-	if g.critiquer != nil {
-		if err := g.critiquer.Ready(ctx); err != nil {
-			return fmt.Errorf("gemini critique client not ready: %w", err)
-		}
-	}
 	return nil
 }
 
@@ -309,25 +325,32 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 type recipeCritiqueResult struct {
 	Recipe   *ai.Recipe // just here so we can give the model the title
 	Critique *ai.RecipeCritique
+	err      error
 }
 
 func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
-	results, err := g.cacheRecipeCritiques(ctx, shoppingList.Recipes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
+	if g.critiquer == nil {
+		return shoppingList, nil
 	}
+
+	results := g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
 	var garbage []recipeCritiqueResult
 	var good []ai.Recipe
-	for _, result := range results {
-		if result.Critique.OverallScore >= minimumRecipeCritiqueScore {
-			slog.InfoContext(ctx, "acceptable", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
-
+	for result := range results {
+		if result.err != nil {
+			slog.ErrorContext(ctx, "failed to critique recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "error", result.err)
 			good = append(good, *result.Recipe)
-		} else {
-			// if there are no issues should we still retry? wasted of tokens
-			slog.InfoContext(ctx, "low scoring recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
-			garbage = append(garbage, result)
+			continue
 		}
+
+		if result.Critique.OverallScore >= minimumRecipeCritiqueScore {
+			good = append(good, *result.Recipe)
+			continue
+		}
+		// if there are no issues should we still retry? wasted of tokens
+		slog.InfoContext(ctx, "low scoring recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
+		garbage = append(garbage, result)
+
 	}
 	if len(garbage) == 0 {
 		return shoppingList, nil
@@ -340,7 +363,7 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 		return nil, fmt.Errorf("conversation ID is required for critique retry")
 	}
 
-	shoppingList, err = g.aiClient.Regenerate(ctx, critiqueRetryInstructions(garbage), shoppingList.ConversationID)
+	shoppingList, err := g.aiClient.Regenerate(ctx, critiqueRetryInstructions(garbage), shoppingList.ConversationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}
@@ -349,35 +372,9 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 		return *result.Recipe
 	})
 
-	// async as this is just debug not retrying twice yet.
-	if _, err := g.cacheRecipeCritiques(ctx, shoppingList.Recipes); err != nil {
-		return nil, fmt.Errorf("failed to cache recipe critiques: %w", err)
-	}
+	// fire this off async
+	_ = g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
 	return shoppingList, nil
-}
-
-func (g *Generator) cacheRecipeCritiques(ctx context.Context, recipes []ai.Recipe) ([]recipeCritiqueResult, error) {
-	if g.critiquer == nil || g.cio == nil {
-		// yuck refactor tests to make this alway present
-		return nil, nil
-	}
-	return parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (recipeCritiqueResult, error) {
-		hash := recipe.ComputeHash()
-		critique, err := g.critiquer.CritiqueRecipe(ctx, recipe)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to critique recipe", "recipe", recipe.Title, "hash", hash, "error", err)
-			return recipeCritiqueResult{}, fmt.Errorf("critique recipe %q (%s): %w", recipe.Title, hash, err)
-		}
-		// should we background the saving of this? too fast to matter?
-		if err := g.cio.SaveCritique(ctx, hash, critique); err != nil {
-			slog.ErrorContext(ctx, "failed to cache recipe critique", "recipe", recipe.Title, "hash", hash, "error", err)
-			return recipeCritiqueResult{}, fmt.Errorf("cache critique for recipe %q (%s): %w", recipe.Title, hash, err)
-		}
-		return recipeCritiqueResult{
-			Recipe:   &recipe,
-			Critique: critique,
-		}, nil
-	})
 }
 
 func critiqueRetryInstructions(results []recipeCritiqueResult) []string {
