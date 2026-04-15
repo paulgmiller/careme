@@ -61,7 +61,6 @@ func runServer(cfg *config.Config, addr string) error {
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
 	watchdogServer := watchdog.Server{}
-	watchdogServer.Register(infraRoutes)
 
 	var generator recipes.ExtGenerator
 	var waitFns []func()
@@ -84,6 +83,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		waitFns = append(waitFns, mc.Wait)
 	}
+	watchdogServer.Register(infraRoutes)
 
 	centroids := locations.LoadCentroids()
 
@@ -104,13 +104,14 @@ func runServer(cfg *config.Config, addr string) error {
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient)
 	recipeHandler.Register(appRoutes)
-	waitFns = append(waitFns, recipeHandler.Wait)
+	waitFns = append([]func(){recipeHandler.Wait}, waitFns...)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	recipeIO := recipes.IO(cache)
+	// TODO this ugly as all get out.
 	adminMux.Handle("/critiques", critique.AdminCritiquesPage(cache, func(ctx context.Context, hash string) (string, error) {
 		recipe, err := recipeIO.SingleFromCache(ctx, hash)
 		if err != nil {
