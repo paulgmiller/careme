@@ -16,10 +16,10 @@ func CacheKey(hash string) string {
 }
 
 type store struct {
-	cache cache.Cache
+	cache cache.ListCache
 }
 
-func NewStore(c cache.Cache) store {
+func NewStore(c cache.ListCache) store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
@@ -52,9 +52,5 @@ func (s store) Save(ctx context.Context, hash string, critique *ai.RecipeCritiqu
 }
 
 func (s store) ListHashes(ctx context.Context) ([]string, error) {
-	lister, ok := s.cache.(cache.ListCache)
-	if !ok {
-		return nil, fmt.Errorf("cache does not support listing critiques")
-	}
-	return lister.List(ctx, CachePrefix, "")
+	return s.cache.List(ctx, CachePrefix, "")
 }

@@ -58,7 +58,7 @@ type multiCritiquer struct {
 	wg        sync.WaitGroup
 }
 
-func NewManager(cfg *config.Config, c cache.Cache) Manager {
+func NewManager(cfg *config.Config, c cache.ListCache) Manager {
 	if !cfg.Gemini.IsEnabled() {
 		return rubberstamp{}
 	}
