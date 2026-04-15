@@ -9,10 +9,10 @@ import (
 	"careme/internal/cache"
 )
 
-const CachePrefix = "recipe_critiques/"
+const cachePrefix = "recipe_critiques/"
 
-func CacheKey(hash string) string {
-	return CachePrefix + hash
+func cacheKey(hash string) string {
+	return cachePrefix + hash
 }
 
 type store struct {
@@ -27,7 +27,7 @@ func NewStore(c cache.ListCache) store {
 }
 
 func (s store) Load(ctx context.Context, hash string) (*ai.RecipeCritique, error) {
-	critiqueReader, err := s.cache.Get(ctx, CacheKey(hash))
+	critiqueReader, err := s.cache.Get(ctx, cacheKey(hash))
 	if err != nil {
 		return nil, err
 	}
@@ -48,9 +48,9 @@ func (s store) Save(ctx context.Context, hash string, critique *ai.RecipeCritiqu
 	if err != nil {
 		return err
 	}
-	return s.cache.Put(ctx, CacheKey(hash), string(body), cache.Unconditional())
+	return s.cache.Put(ctx, cacheKey(hash), string(body), cache.Unconditional())
 }
 
 func (s store) ListHashes(ctx context.Context) ([]string, error) {
-	return s.cache.List(ctx, CachePrefix, "")
+	return s.cache.List(ctx, cachePrefix, "")
 }

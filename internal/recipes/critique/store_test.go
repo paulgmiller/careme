@@ -31,7 +31,7 @@ func TestStoreSaveUsesPrefixedKey(t *testing.T) {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(tmpDir, CachePrefix, hash)); err != nil {
+	if _, err := os.Stat(filepath.Join(tmpDir, cachePrefix, hash)); err != nil {
 		t.Fatalf("expected recipe critique at prefixed key: %v", err)
 	}
 
