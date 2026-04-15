@@ -184,7 +184,7 @@ const (
 )
 
 func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
-	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
+	slog.InfoContext(ctx, "API usage", responseUsageLogAttr(resp.Usage))
 	var shoppingList ShoppingList
 	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
@@ -291,7 +291,7 @@ func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
 	}
 
-	slog.InfoContext(ctx, "API usage", slog.Any("usage", json.RawMessage(resp.Usage.RawJSON())))
+	slog.InfoContext(ctx, "API usage", imageUsageLogAttr(resp.Usage))
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("image generation returned no images")
 	}
@@ -303,6 +303,37 @@ func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 	return &GeneratedImage{
 		Body: base64.NewDecoder(base64.StdEncoding, strings.NewReader(imageBody)),
 	}, nil
+}
+
+// remove this and imageUsage if we get https://github.com/openclosed-dev/slogan/pull/3 in
+func responseUsageLogAttr(usage responses.ResponseUsage) slog.Attr {
+	return slog.Group("usage",
+		slog.Int64("inputTokens", usage.InputTokens),
+		slog.Group("inputTokensDetails",
+			slog.Int64("cachedTokens", usage.InputTokensDetails.CachedTokens),
+		),
+		slog.Int64("outputTokens", usage.OutputTokens),
+		slog.Group("outputTokensDetails",
+			slog.Int64("reasoningTokens", usage.OutputTokensDetails.ReasoningTokens),
+		),
+		slog.Int64("totalTokens", usage.TotalTokens),
+	)
+}
+
+func imageUsageLogAttr(usage openai.ImagesResponseUsage) slog.Attr {
+	return slog.Group("usage",
+		slog.Int64("inputTokens", usage.InputTokens),
+		slog.Group("inputTokensDetails",
+			slog.Int64("imageTokens", usage.InputTokensDetails.ImageTokens),
+			slog.Int64("textTokens", usage.InputTokensDetails.TextTokens),
+		),
+		slog.Int64("outputTokens", usage.OutputTokens),
+		slog.Group("outputTokensDetails",
+			slog.Int64("imageTokens", usage.OutputTokensDetails.ImageTokens),
+			slog.Int64("textTokens", usage.OutputTokensDetails.TextTokens),
+		),
+		slog.Int64("totalTokens", usage.TotalTokens),
+	)
 }
 
 func (c *Client) PickWine(ctx context.Context, recipe Recipe, wines []kroger.Ingredient) (*WineSelection, error) {

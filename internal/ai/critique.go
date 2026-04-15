@@ -99,6 +99,7 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	if err != nil {
 		return nil, err
 	}
+	start := time.Now()
 	resp, err := client.Models.GenerateContent(ctx, c.model, genai.Text(prompt), &genai.GenerateContentConfig{
 		SystemInstruction: genai.NewContentFromText(recipeCritiqueSystemInstruction, genai.RoleUser),
 		// Temperature:        genai.Ptr[float32](0),
@@ -113,7 +114,8 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		"model", c.model,
 		"model_version", resp.ModelVersion,
 		"response_id", resp.ResponseID,
-		"usage", resp.UsageMetadata,
+		"latencyMS", time.Since(start).Milliseconds(),
+		geminiUsageLogAttr(resp.UsageMetadata),
 	)
 
 	critique, err := parseRecipeCritique(resp.Text())
@@ -123,6 +125,28 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	critique.Model = resp.ModelVersion
 	critique.CritiquedAt = time.Now().UTC()
 	return critique, nil
+}
+
+// remove if we get https://github.com/openclosed-dev/slogan/pull/3 in
+func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
+	if usage == nil {
+		return slog.Group("usage", slog.Bool("available", false))
+	}
+
+	attrs := []any{
+		slog.Bool("available", true),
+		slog.Int("cachedContentTokenCount", int(usage.CachedContentTokenCount)),
+		slog.Int("promptTokenCount", int(usage.PromptTokenCount)),
+		slog.Int("candidatesTokenCount", int(usage.CandidatesTokenCount)),
+		slog.Int("thoughtsTokenCount", int(usage.ThoughtsTokenCount)),
+		slog.Int("toolUsePromptTokenCount", int(usage.ToolUsePromptTokenCount)),
+		slog.Int("totalTokenCount", int(usage.TotalTokenCount)),
+	}
+	if usage.TrafficType != "" {
+		attrs = append(attrs, slog.String("trafficType", string(usage.TrafficType)))
+	}
+
+	return slog.Group("usage", attrs...)
 }
 
 func (c *critiquer) newClient(ctx context.Context) (*genai.Client, error) {

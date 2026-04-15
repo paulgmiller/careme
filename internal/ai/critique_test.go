@@ -1,10 +1,12 @@
 package ai
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genai"
 )
 
 func TestBuildRecipeCritiquePrompt(t *testing.T) {
@@ -88,4 +90,38 @@ func TestRecipeCritiqueJSONSchemaTracksStruct(t *testing.T) {
 	require.True(t, ok, "expected overall_score schema object, got %#v", properties["overall_score"])
 	assert.Equal(t, float64(1), overallScore["minimum"])
 	assert.Equal(t, float64(10), overallScore["maximum"])
+}
+
+func TestGeminiUsageLogAttr(t *testing.T) {
+	t.Run("nil usage", func(t *testing.T) {
+		attr := geminiUsageLogAttr(nil)
+		assert.Equal(t, "usage", attr.Key)
+		assert.Equal(t, slog.KindGroup, attr.Value.Kind())
+		require.Len(t, attr.Value.Group(), 1)
+		assert.Equal(t, slog.Bool("available", false), attr.Value.Group()[0])
+	})
+
+	t.Run("usage becomes a slog group", func(t *testing.T) {
+		attr := geminiUsageLogAttr(&genai.GenerateContentResponseUsageMetadata{
+			CachedContentTokenCount: 22,
+			PromptTokenCount:        448,
+			CandidatesTokenCount:    986,
+			ThoughtsTokenCount:      111,
+			ToolUsePromptTokenCount: 310,
+			TotalTokenCount:         1877,
+			TrafficType:             genai.TrafficTypeOnDemand,
+		})
+		assert.Equal(t, "usage", attr.Key)
+		assert.Equal(t, slog.KindGroup, attr.Value.Kind())
+		assert.Equal(t, []slog.Attr{
+			slog.Bool("available", true),
+			slog.Int("cachedContentTokenCount", 22),
+			slog.Int("promptTokenCount", 448),
+			slog.Int("candidatesTokenCount", 986),
+			slog.Int("thoughtsTokenCount", 111),
+			slog.Int("toolUsePromptTokenCount", 310),
+			slog.Int("totalTokenCount", 1877),
+			slog.String("trafficType", string(genai.TrafficTypeOnDemand)),
+		}, attr.Value.Group())
+	})
 }
