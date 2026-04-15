@@ -508,7 +508,8 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 			}
 		},
 	}
-	mc := &MultiCritiquer{critiquer: critiquer}
+
+	mc := &MultiCritiquer{critiquer: newCachingCritiquer(critiquer, cacheStore)}
 	g := &Generator{
 		io:        io,
 		aiClient:  aiStub,

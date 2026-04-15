@@ -44,7 +44,7 @@ type MultiCritiquer struct {
 }
 
 func (mc *MultiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan recipeCritiqueResult {
-	results := make(chan recipeCritiqueResult)
+	results := make(chan recipeCritiqueResult, len(recipes))
 	mc.wg.Add(len(recipes))
 
 	var localWg sync.WaitGroup
@@ -60,7 +60,7 @@ func (mc *MultiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Reci
 		})
 	}
 	go func() {
-		mc.wg.Wait()
+		localWg.Wait()
 		close(results)
 	}()
 	return results
@@ -367,13 +367,14 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}
+	newRecipes := shoppingList.Recipes
 	shoppingList.Recipes = append(shoppingList.Recipes, good...)
 	shoppingList.Discarded = lo.Map(garbage, func(result recipeCritiqueResult, _ int) ai.Recipe {
 		return *result.Recipe
 	})
 
 	// fire this off async
-	_ = g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
+	_ = g.critiquer.CritiqueRecipes(ctx, newRecipes)
 	return shoppingList, nil
 }
 
