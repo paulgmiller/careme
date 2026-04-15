@@ -59,16 +59,30 @@ func runServer(cfg *config.Config, addr string) error {
 	static.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
+	ro := &readyOnce{}
+	watchdogServer := watchdog.Server{}
+	watchdogServer.Register(infraRoutes)
 
-	mc := critique.NewManager(cfg, cache)
-	staples, err := recipes.NewCachedStaplesService(cfg, cache)
-	if err != nil {
-		return fmt.Errorf("failed to create staples service: %w", err)
-	}
-	aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
-	generator, err := recipes.NewGenerator(aiclient, mc, staples)
-	if err != nil {
-		return fmt.Errorf("failed to create recipe generator: %w", err)
+	var generator recipes.ExtGenerator
+	var waitFns []func()
+
+	if cfg.Mocks.Enable {
+		generator = recipes.NewMockGenerator()
+	} else {
+		mc := critique.NewManager(cfg, cache)
+		ro.Add(mc)
+		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
+		ro.Add(aiclient)
+		staples, err := recipes.NewCachedStaplesService(cfg, cache)
+		if err != nil {
+			return fmt.Errorf("failed to create staples service: %w", err)
+		}
+		watchdogServer.Add("staples", staples, 6.*time.Hour)
+		generator, err = recipes.NewGenerator(aiclient, mc, staples)
+		if err != nil {
+			return fmt.Errorf("failed to create recipe generator: %w", err)
+		}
+		waitFns = append(waitFns, mc.Wait)
 	}
 
 	centroids := locations.LoadCentroids()
@@ -89,12 +103,9 @@ func runServer(cfg *config.Config, addr string) error {
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient)
 	recipeHandler.Register(appRoutes)
+	waitFns = append(waitFns, recipeHandler.Wait)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
-
-	watchdogServer := watchdog.Server{}
-	watchdogServer.Add("staples", staples, 6.*time.Hour)
-	watchdogServer.Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
@@ -157,8 +168,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 	})
 
-	ro := &readyOnce{}
-	ro.Add(aiclient, locationServer, mc)
+	ro.Add(locationServer)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
@@ -190,14 +200,11 @@ func runServer(cfg *config.Config, addr string) error {
 		return nil
 	case sig := <-shutdown:
 		slog.Info("Shutdown signal received", "signal", sig)
-		return gracefulShutdown(server, func() {
-			recipeHandler.Wait()
-			mc.Wait()
-		})
+		return gracefulShutdown(server, waitFns...)
 	}
 }
 
-func gracefulShutdown(svr *http.Server, wait func()) error {
+func gracefulShutdown(svr *http.Server, waitFns ...func()) error {
 	// Give outstanding requests 25 seconds to complete (kubernetes has 30 second grace period)
 	time.Sleep(5 * time.Second) // buffer to allow ingress ot update. only needed in prod
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
@@ -215,7 +222,9 @@ func gracefulShutdown(svr *http.Server, wait func()) error {
 
 	done := make(chan struct{})
 	go func() {
-		wait()
+		for _, wait := range waitFns {
+			wait()
+		}
 		close(done)
 	}()
 

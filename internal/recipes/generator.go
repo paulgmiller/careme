@@ -36,13 +36,14 @@ type StaplesService interface {
 	Watchdog(ctx context.Context) error
 }
 
+// TODO unexport?
 type Generator struct {
 	aiClient  AIClient
 	critiquer critique.Service
 	staples   StaplesService
 }
 
-func NewGenerator(aiClient AIClient, critiquer critique.Service, staples StaplesService) (generatorPlus, error) {
+func NewGenerator(aiClient AIClient, critiquer critique.Service, staples StaplesService) (*Generator, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
