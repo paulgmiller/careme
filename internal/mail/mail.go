@@ -56,6 +56,7 @@ type mailer struct {
 	locServer    locServer
 	client       emailClient
 	publicOrigin string
+	wait         func()
 }
 
 // TODO share some of this with web.go? good for mocking?
@@ -92,6 +93,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		locServer:    locationserver,
 		client:       sendgrid.NewSendClient(sendgridkey),
 		publicOrigin: cfg.ResolvedPublicOrigin(),
+		wait:         mc.Wait,
 	}, nil
 }
 
@@ -106,6 +108,8 @@ func (m *mailer) RunOnce(ctx context.Context) {
 	for _, user := range users {
 		m.sendEmail(ctx, user)
 	}
+	m.wait()
+	slog.InfoContext(ctx, "finished user email run")
 }
 
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {

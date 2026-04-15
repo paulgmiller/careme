@@ -38,6 +38,7 @@ type multiCritiquier interface {
 	CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan recipeCritiqueResult
 }
 
+// TODO move this out of generator.go
 type multiCritiquierPlus interface {
 	multiCritiquier
 	Wait()
@@ -299,6 +300,7 @@ func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
 	})
 }
 
+// TODO pass in ai client so web.go can check aiclients readiness.
 func (g *Generator) Ready(ctx context.Context) error {
 	if err := g.aiClient.Ready(ctx); err != nil {
 		return err

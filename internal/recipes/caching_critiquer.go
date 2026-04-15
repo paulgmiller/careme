@@ -15,7 +15,7 @@ type recipeCritiquer interface {
 	Ready(ctx context.Context) error
 }
 
-// move critique.go over here?
+// TODO move critique.go over here and get rid of this iterface chacing admin_page
 type critiqueCache interface {
 	CritiqueFromCache(ctx context.Context, hash string) (*ai.RecipeCritique, error)
 	SaveCritique(ctx context.Context, hash string, critique *ai.RecipeCritique) error
@@ -59,7 +59,7 @@ func (c *cachingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe)
 	}
 	if err := c.cache.SaveCritique(ctx, hash, critique); err != nil {
 		slog.ErrorContext(ctx, "failed to cache recipe critique", "recipe", recipe.Title, "hash", hash, "error", err)
-		// not actually fatal just erro?
+		// not actually fatal
 	}
 	return critique, nil
 }

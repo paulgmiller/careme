@@ -1048,8 +1048,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 			slog.ErrorContext(ctx, "save error", "error", err)
 			return
 		}
-
-		// Make sure we have critiques for final recipes
 	})
 }
 
