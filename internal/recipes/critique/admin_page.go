@@ -136,12 +136,14 @@ func loadAdminCritiqueViews(
 	hashes []string,
 	loadRecipeTitle func(context.Context, string) (string, error),
 ) ([]*adminCritiqueView, error) {
+
+	store := newStore(c)
 	views, err := parallelism.MapWithErrors(hashes, func(hash string) (*adminCritiqueView, error) {
 		view := adminCritiqueView{
 			RecipeURL: "/recipe/" + hash,
 		}
 
-		cachedCritique, err := Load(ctx, c, hash)
+		cachedCritique, err := store.Load(ctx, hash)
 		if err != nil {
 			return nil, err
 		}

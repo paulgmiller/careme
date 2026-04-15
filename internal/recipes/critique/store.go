@@ -26,14 +26,6 @@ func newStore(c cache.Cache) store {
 	return store{cache: c}
 }
 
-func Load(ctx context.Context, c cache.Cache, hash string) (*ai.RecipeCritique, error) {
-	return newStore(c).Load(ctx, hash)
-}
-
-func Save(ctx context.Context, c cache.Cache, hash string, critique *ai.RecipeCritique) error {
-	return newStore(c).Save(ctx, hash, critique)
-}
-
 func ListHashes(ctx context.Context, c cache.ListCache) ([]string, error) {
 	return newStore(c).ListHashes(ctx)
 }
