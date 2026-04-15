@@ -124,7 +124,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	}
 
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
-	ingredients, err := g.GetStaples(ctx, p)
+	ingredients, err := g.staples.GetStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
@@ -150,10 +150,6 @@ func (g *Generator) AskQuestion(ctx context.Context, question string, conversati
 
 func (g *Generator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
 	return g.aiClient.GenerateRecipeImage(ctx, recipe)
-}
-
-func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
-	return g.staples.GetStaples(ctx, p)
 }
 
 func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
