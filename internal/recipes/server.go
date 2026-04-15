@@ -79,10 +79,6 @@ type generator interface {
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 }
 
-type backgroundWaiter interface {
-	Wait()
-}
-
 // should we have new generator just return two interfaces instead of gluing?
 type generatorPlus interface {
 	generator
