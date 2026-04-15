@@ -58,7 +58,8 @@ func runServer(cfg *config.Config, addr string) error {
 
 	userStorage := users.NewStorage(cache)
 
-	generator, err := recipes.NewGenerator(cfg, recipes.IO(cache))
+	mc := recipes.NewMultiCritiquer(cfg, cache)
+	generator, err := recipes.NewGenerator(cfg, cache, mc)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -150,7 +151,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	ro := &readyOnce{}
-	ro.Add(generator, locationServer)
+	ro.Add(generator, locationServer, mc)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
@@ -182,11 +183,14 @@ func runServer(cfg *config.Config, addr string) error {
 		return nil
 	case sig := <-shutdown:
 		slog.Info("Shutdown signal received", "signal", sig)
-		return gracefulShutdown(server, recipeHandler.Wait)
+		return gracefulShutdown(server, func() {
+			recipeHandler.Wait()
+			mc.Wait()
+		})
 	}
 }
 
-func gracefulShutdown(svr *http.Server, recipesWait func()) error {
+func gracefulShutdown(svr *http.Server, wait func()) error {
 	// Give outstanding requests 25 seconds to complete (kubernetes has 30 second grace period)
 	time.Sleep(5 * time.Second) // buffer to allow ingress ot update. only needed in prod
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
@@ -204,7 +208,7 @@ func gracefulShutdown(svr *http.Server, recipesWait func()) error {
 
 	done := make(chan struct{})
 	go func() {
-		recipesWait()
+		wait()
 		close(done)
 	}()
 
