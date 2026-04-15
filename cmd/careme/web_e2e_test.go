@@ -163,7 +163,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
 
-	generator, err := recipes.NewGenerator(cfg, cacheStore)
+	generator, err := recipes.NewGenerator(cfg, cacheStore, recipes.NewMultiCritiquer(cfg, cacheStore))
 	if err != nil {
 		t.Fatalf("failed to create generator: %v", err)
 	}

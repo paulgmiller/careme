@@ -38,9 +38,44 @@ type multiCritiquier interface {
 	CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan recipeCritiqueResult
 }
 
+type multiCritiquierPlus interface {
+	multiCritiquier
+	Wait()
+}
+
+type rubberstamp struct{}
+
+func (r rubberstamp) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan recipeCritiqueResult {
+	results := make(chan recipeCritiqueResult, len(recipes))
+	for _, r := range recipes {
+		results <- recipeCritiqueResult{
+			Critique: &ai.RecipeCritique{OverallScore: 10},
+			Recipe:   &r,
+			err:      nil,
+		}
+	}
+	close(results)
+	return results
+}
+
+func (r rubberstamp) Wait() {}
+
 type MultiCritiquer struct {
 	critiquer recipeCritiquer
 	wg        sync.WaitGroup
+}
+
+func (mc *MultiCritiquer) Ready(ctx context.Context) error {
+	return mc.critiquer.Ready(ctx)
+}
+
+func NewMultiCritiquer(cfg *config.Config, cache cache.Cache) multiCritiquierPlus {
+	if !cfg.Gemini.IsEnabled() {
+		return rubberstamp{}
+	}
+	crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel)
+	cachingCritiquer := newCachingCritiquer(crit, cache)
+	return &MultiCritiquer{critiquer: cachingCritiquer}
 }
 
 func (mc *MultiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan recipeCritiqueResult {
@@ -86,7 +121,8 @@ type Generator struct {
 	io ingredientio
 }
 
-func NewGenerator(cfg *config.Config, cache cache.Cache) (generatorPlus, error) {
+// this is kind of a factory. Could instead take stapes/criqiue and ai client isntead of creating them
+func NewGenerator(cfg *config.Config, cache cache.Cache, mc multiCritiquier) (generatorPlus, error) {
 	if cfg.Mocks.Enable {
 		return mock{}, nil
 	}
@@ -94,14 +130,6 @@ func NewGenerator(cfg *config.Config, cache cache.Cache) (generatorPlus, error) 
 	stapesProvider, err := NewStaplesProvider(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples provider: %w", err)
-	}
-
-	// accept a critiquier in new instead
-	var mc multiCritiquier
-	if cfg.Gemini.IsEnabled() {
-		crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel)
-		cachingCritiquer := newCachingCritiquer(crit, cache)
-		mc = &MultiCritiquer{critiquer: cachingCritiquer}
 	}
 
 	return &Generator{
