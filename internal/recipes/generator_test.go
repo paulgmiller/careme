@@ -508,10 +508,11 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 			}
 		},
 	}
+	mc := &MultiCritiquer{critiquer: critiquer}
 	g := &Generator{
 		io:        io,
 		aiClient:  aiStub,
-		critiquer: &MultiCritiquer{critiquer: critiquer},
+		critiquer: mc,
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -537,6 +538,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	if got := aiStub.regenerateConversation; !slices.Equal(got, []string{"conv-initial"}) {
 		t.Fatalf("unexpected critique retry conversation IDs: got %v", got)
 	}
+	mc.Wait()
 	if len(critiquer.recipes) != 2 {
 		t.Fatalf("expected two critique passes, got %d", len(critiquer.recipes))
 	}
