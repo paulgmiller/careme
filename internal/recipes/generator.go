@@ -41,6 +41,7 @@ type multiCritiquier interface {
 type multiCritiquierPlus interface {
 	multiCritiquier
 	Wait()
+	Ready(ctx context.Context) error
 }
 
 type rubberstamp struct{}
@@ -58,7 +59,8 @@ func (r rubberstamp) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <
 	return results
 }
 
-func (r rubberstamp) Wait() {}
+func (r rubberstamp) Wait()                           {}
+func (r rubberstamp) Ready(ctx context.Context) error { return nil }
 
 type MultiCritiquer struct {
 	critiquer recipeCritiquer
