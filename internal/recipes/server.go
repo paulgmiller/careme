@@ -82,8 +82,6 @@ type generator interface {
 // should we have new generator just return two interfaces instead of gluing?
 type generatorPlus interface {
 	generator
-	Ready(ctx context.Context) error
-	Watchdog(ctx context.Context) error
 }
 
 type server struct {
@@ -361,11 +359,9 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		questionForModel = fmt.Sprintf("Regarding %s: %s", recipeTitle, question)
 	}
 
-	// TODO: conversation id is user-provided form input.
-	// Also still curious if we should fork conversation per recipe
-	conversationID := strings.TrimSpace(r.FormValue("conversation_id"))
+	conversationID, conversationErr := s.conversationIDForRecipe(ctx, hash)
 	if conversationID == "" {
-		slog.ErrorContext(ctx, "failed to load conversation id", "hash", hash)
+		slog.ErrorContext(ctx, "failed to load conversation id", "hash", hash, "error", conversationErr)
 		http.Error(w, "conversation id not found", http.StatusInternalServerError)
 		return
 	}
@@ -398,6 +394,34 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	FormatRecipeThreadHTML(thread, true, conversationID, w)
+}
+
+func (s *server) conversationIDForRecipe(ctx context.Context, hash string) (string, error) {
+	recipe, err := s.SingleFromCache(ctx, hash)
+	if err != nil {
+		return "", err
+	}
+	originHash := strings.TrimSpace(recipe.OriginHash)
+	if normalizedHash, ok := legacyHashToCurrent(originHash, legacyRecipeHashSeed); ok {
+		originHash = normalizedHash
+	}
+	if originHash == "" {
+		return "", fmt.Errorf("recipe %q has no origin hash", hash)
+	}
+
+	params, err := s.ParamsFromCache(ctx, originHash)
+	if err == nil && strings.TrimSpace(params.ConversationID) != "" {
+		return strings.TrimSpace(params.ConversationID), nil
+	}
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		return "", err
+	}
+
+	currentList, err := s.FromCache(ctx, originHash)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(currentList.ConversationID), nil
 }
 
 func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {

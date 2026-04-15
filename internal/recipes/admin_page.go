@@ -10,6 +10,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/parallelism"
+	"careme/internal/recipes/critique"
 
 	"github.com/samber/lo"
 )
@@ -97,7 +98,8 @@ func AdminCritiquesPage(c cache.ListCache) http.Handler {
 		}
 
 		// this won't last long till its too big.
-		hashes, err := c.List(r.Context(), recipeCritiquesCachePrefix, "")
+		store := critique.NewStore(c)
+		hashes, err := store.ListHashes(r.Context())
 		if err != nil {
 			slog.ErrorContext(r.Context(), "failed to list recipe critiques for admin page", "error", err)
 			http.Error(w, "unable to load recipe critiques", http.StatusInternalServerError)
@@ -129,16 +131,17 @@ func AdminCritiquesPage(c cache.ListCache) http.Handler {
 
 func loadAdminCritiqueViews(ctx context.Context, c cache.Cache, hashes []string) ([]*adminCritiqueView, error) {
 	rio := IO(c)
+	store := critique.NewStore(c)
 	views, err := parallelism.MapWithErrors(hashes, func(hash string) (*adminCritiqueView, error) {
 		view := adminCritiqueView{
 			RecipeURL: "/recipe/" + hash,
 		}
 
-		critique, err := rio.CritiqueFromCache(ctx, hash)
+		cachedCritique, err := store.Load(ctx, hash)
 		if err != nil {
 			return nil, err
 		}
-		view.RecipeCritique = *critique
+		view.RecipeCritique = *cachedCritique
 
 		recipe, err := rio.SingleFromCache(ctx, hash)
 		if err != nil {

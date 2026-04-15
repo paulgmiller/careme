@@ -11,6 +11,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/kroger"
 	"careme/internal/locations"
+	"careme/internal/recipes/critique"
 )
 
 type captureWineQuestionAIClient struct {
@@ -199,7 +200,7 @@ func (c *captureCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe)
 	}
 	return &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
-		OverallScore:   minimumRecipeCritiqueScore,
+		OverallScore:   critique.MinimumRecipeScore,
 		Summary:        "Solid draft.",
 		Strengths:      []string{"clear direction"},
 		Issues:         []ai.RecipeCritiqueIssue{{Severity: "medium", Category: "timing", Detail: "Timing could be tighter."}},
@@ -263,7 +264,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 		},
 	}
 	g := &Generator{
-		io:       IO(cacheStore),
+		staples:  &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}},
 		aiClient: aiStub,
 	}
 
@@ -309,9 +310,8 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 		},
 	}
 	g := &Generator{
-		io:              IO(cache.NewFileCache(t.TempDir())),
-		aiClient:        aiStub,
-		staplesProvider: staplesStub,
+		staples:  &cachedStaplesService{cache: IO(cache.NewFileCache(t.TempDir())), provider: staplesStub},
+		aiClient: aiStub,
 	}
 
 	got, err := g.PickAWine(t.Context(), "wholefoods_10216", ai.Recipe{
@@ -349,7 +349,6 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		},
 	}
 	g := &Generator{
-		io:       IO(cache.NewFileCache(t.TempDir())),
 		aiClient: aiStub,
 	}
 
@@ -404,10 +403,10 @@ func TestGenerateRecipes_SavesCritiquesForGeneratedRecipes(t *testing.T) {
 		},
 	}
 	critiquer := &captureCritiquer{}
-	cachedCrit := newCachingCritiquer(critiquer, cacheStore)
-	mc := &MultiCritiquer{critiquer: cachedCrit}
+	cachedCrit := critique.NewCachingCritiquer(critiquer, cacheStore)
+	mc := critique.NewMultiCritiquer(cachedCrit)
 	g := &Generator{
-		io:        io,
+		staples:   &cachedStaplesService{cache: io},
 		aiClient:  aiStub,
 		critiquer: mc,
 	}
@@ -423,12 +422,12 @@ func TestGenerateRecipes_SavesCritiquesForGeneratedRecipes(t *testing.T) {
 		t.Fatalf("expected %d critiques, got %d", len(generated), len(critiquer.recipes))
 	}
 	for _, recipe := range generated {
-		critique, err := io.CritiqueFromCache(t.Context(), recipe.ComputeHash())
+		gotCritique, err := critique.NewStore(cacheStore).FromCache(t.Context(), recipe.ComputeHash())
 		if err != nil {
 			t.Fatalf("expected critique for %q: %v", recipe.Title, err)
 		}
-		if critique.Summary != "Solid draft." {
-			t.Fatalf("unexpected critique summary for %q: %#v", recipe.Title, critique)
+		if gotCritique.Summary != "Solid draft." {
+			t.Fatalf("unexpected critique summary for %q: %#v", recipe.Title, gotCritique)
 		}
 	}
 }
@@ -439,9 +438,8 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 
 	critiquer := &captureCritiquer{}
 	g := &Generator{
-		io:        IO(cache.NewInMemoryCache()),
 		aiClient:  &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
-		critiquer: &MultiCritiquer{critiquer: critiquer},
+		critiquer: critique.NewMultiCritiquer(critiquer),
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -509,9 +507,9 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 		},
 	}
 
-	mc := &MultiCritiquer{critiquer: newCachingCritiquer(critiquer, cacheStore)}
+	mc := critique.NewMultiCritiquer(critique.NewCachingCritiquer(critiquer, cacheStore))
 	g := &Generator{
-		io:        io,
+		staples:   &cachedStaplesService{cache: io},
 		aiClient:  aiStub,
 		critiquer: mc,
 	}
@@ -543,10 +541,10 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	if len(critiquer.recipes) != 2 {
 		t.Fatalf("expected two critique passes, got %d", len(critiquer.recipes))
 	}
-	if critique, err := io.CritiqueFromCache(t.Context(), retried.ComputeHash()); err != nil {
+	if gotCritique, err := critique.NewStore(cacheStore).FromCache(t.Context(), retried.ComputeHash()); err != nil {
 		t.Fatalf("expected cached critique for retried recipe: %v", err)
-	} else if critique.OverallScore != 8 {
-		t.Fatalf("expected final critique score 8, got %d", critique.OverallScore)
+	} else if gotCritique.OverallScore != 8 {
+		t.Fatalf("expected final critique score 8, got %d", gotCritique.OverallScore)
 	}
 }
 
@@ -600,9 +598,9 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 		},
 	}
 	g := &Generator{
-		io:        io,
+		staples:   &cachedStaplesService{cache: io},
 		aiClient:  aiStub,
-		critiquer: &MultiCritiquer{critiquer: critiquer},
+		critiquer: critique.NewMultiCritiquer(critiquer),
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -634,9 +632,9 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 		}},
 	}
 	g := &Generator{
-		io:        io,
+		staples:   &cachedStaplesService{cache: io},
 		aiClient:  aiStub,
-		critiquer: &MultiCritiquer{critiquer: &captureCritiquer{}},
+		critiquer: critique.NewMultiCritiquer(&captureCritiquer{}),
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -656,8 +654,6 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	initial := ai.Recipe{Title: "Needs Work", Description: "First pass"}
 	retried := ai.Recipe{Title: "Ready Now", Description: "Second pass"}
 
-	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore)
 	aiStub := &sequenceAIClient{
 		regenerateResponses: []*ai.ShoppingList{
 			{
@@ -698,9 +694,8 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 		},
 	}
 	g := &Generator{
-		io:        io,
 		aiClient:  aiStub,
-		critiquer: &MultiCritiquer{critiquer: critiquer},
+		critiquer: critique.NewMultiCritiquer(critiquer),
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -770,9 +765,9 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 		},
 	}
 	g := &Generator{
-		io:        io,
+		staples:   &cachedStaplesService{cache: io},
 		aiClient:  aiStub,
-		critiquer: &MultiCritiquer{critiquer: critiquer},
+		critiquer: critique.NewMultiCritiquer(critiquer),
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)

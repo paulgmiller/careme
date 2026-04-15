@@ -12,6 +12,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/kroger"
 	"careme/internal/locations"
+	"careme/internal/recipes/critique"
 )
 
 func TestSaveParams_IsAtomic(t *testing.T) {
@@ -236,10 +237,10 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 func TestSaveCritique_UsesPrefixedKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
+	store := critique.NewStore(cacheStore)
 
 	hash := "recipe-hash"
-	critique := &ai.RecipeCritique{
+	wantCritique := &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
 		OverallScore:   8,
 		Summary:        "Strong draft.",
@@ -248,15 +249,15 @@ func TestSaveCritique_UsesPrefixedKey(t *testing.T) {
 		SuggestedFixes: []string{"tighten one step"},
 	}
 
-	if err := rio.SaveCritique(t.Context(), hash, critique); err != nil {
+	if err := store.Save(t.Context(), hash, wantCritique); err != nil {
 		t.Fatalf("SaveCritique failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(tmpDir, recipeCritiquesCachePrefix, hash)); err != nil {
+	if _, err := os.Stat(filepath.Join(tmpDir, critique.CachePrefix, hash)); err != nil {
 		t.Fatalf("expected recipe critique at prefixed key: %v", err)
 	}
 
-	got, err := rio.CritiqueFromCache(t.Context(), hash)
+	got, err := store.FromCache(t.Context(), hash)
 	if err != nil {
 		t.Fatalf("CritiqueFromCache failed: %v", err)
 	}

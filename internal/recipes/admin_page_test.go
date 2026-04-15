@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/recipes/critique"
 )
 
 func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
@@ -44,11 +45,12 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 		},
 	}
 	saveRecipesForOrigin(t, rio, "origin-hash", recipes...)
+	critiqueStore := critique.NewStore(fc)
 
 	newestHash := recipes[0].ComputeHash()
 	olderHash := recipes[1].ComputeHash()
 
-	if err := rio.SaveCritique(t.Context(), newestHash, &ai.RecipeCritique{
+	if err := critiqueStore.Save(t.Context(), newestHash, &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
 		OverallScore:   9,
 		Summary:        "Strong weeknight draft.",
@@ -60,7 +62,7 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save newest critique: %v", err)
 	}
-	if err := rio.SaveCritique(t.Context(), olderHash, &ai.RecipeCritique{
+	if err := critiqueStore.Save(t.Context(), olderHash, &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
 		OverallScore:   6,
 		Summary:        "Needs more brightness.",

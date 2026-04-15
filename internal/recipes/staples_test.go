@@ -145,8 +145,10 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 		},
 	}
 	g := &Generator{
-		io:              IO(cacheStore),
-		staplesProvider: provider,
+		staples: &cachedStaplesService{
+			cache:    IO(cacheStore),
+			provider: provider,
+		},
 	}
 	params := &generatorParams{
 		Location: &locations.Location{ID: "wholefoods_10216", Name: "Westlake"},

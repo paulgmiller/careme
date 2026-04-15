@@ -14,11 +14,13 @@ import (
 
 	"careme/internal/actowiz"
 	"careme/internal/admin"
+	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/config"
 	"careme/internal/ingredients"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/recipes/critique"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
@@ -58,8 +60,13 @@ func runServer(cfg *config.Config, addr string) error {
 
 	userStorage := users.NewStorage(cache)
 
-	mc := recipes.NewMultiCritiquer(cfg, cache)
-	generator, err := recipes.NewGenerator(cfg, cache, mc)
+	mc := critique.NewManager(cfg, cache)
+	staples, err := recipes.NewCachedStaplesService(cfg, cache)
+	if err != nil {
+		return fmt.Errorf("failed to create staples service: %w", err)
+	}
+	aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
+	generator, err := recipes.NewGenerator(aiclient, mc, staples)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -86,7 +93,7 @@ func runServer(cfg *config.Config, addr string) error {
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
 	watchdogServer := watchdog.Server{}
-	watchdogServer.Add("staples", generator, 6.*time.Hour)
+	watchdogServer.Add("staples", staples, 6.*time.Hour)
 	watchdogServer.Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
@@ -151,7 +158,7 @@ func runServer(cfg *config.Config, addr string) error {
 	})
 
 	ro := &readyOnce{}
-	ro.Add(generator, locationServer, mc)
+	ro.Add(aiclient, locationServer, mc)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
