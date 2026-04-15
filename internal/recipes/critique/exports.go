@@ -14,7 +14,7 @@ func NewCachingCritiquer(critiquer RecipeCritiquer, c cache.Cache) *CachingCriti
 	if c == nil {
 		panic("cache must not be nil")
 	}
-	return newCachingCritiquer(critiquer, NewStore(c))
+	return newCachingCritiquer(critiquer, newStore(c))
 }
 
 func NewMultiCritiquer(critiquer RecipeCritiquer) *MultiCritiquer {

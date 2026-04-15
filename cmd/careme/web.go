@@ -96,6 +96,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler.Register(appRoutes)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
+	ro.Add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
@@ -109,7 +110,14 @@ func runServer(cfg *config.Config, addr string) error {
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
-	adminMux.Handle("/critiques", recipes.AdminCritiquesPage(cache))
+	recipeIO := recipes.IO(cache)
+	adminMux.Handle("/critiques", critique.AdminCritiquesPage(cache, func(ctx context.Context, hash string) (string, error) {
+		recipe, err := recipeIO.SingleFromCache(ctx, hash)
+		if err != nil {
+			return "", err
+		}
+		return recipe.Title, nil
+	}))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
@@ -167,8 +175,6 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
-
-	ro.Add(locationServer)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})

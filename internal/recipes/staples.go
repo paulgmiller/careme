@@ -66,7 +66,7 @@ func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 	}, nil
 }
 
-func NewCachedStaplesService(cfg *config.Config, c cache.Cache) (StaplesService, error) {
+func NewCachedStaplesService(cfg *config.Config, c cache.Cache) (*cachedStaplesService, error) {
 	provider, err := NewStaplesProvider(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples provider: %w", err)

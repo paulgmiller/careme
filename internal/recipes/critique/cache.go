@@ -14,10 +14,10 @@ var _ recipeCritiquer = &cachingCritiquer{}
 
 type cachingCritiquer struct {
 	critiquer recipeCritiquer
-	store     Store
+	store     store
 }
 
-func newCachingCritiquer(critiquer recipeCritiquer, store Store) *cachingCritiquer {
+func newCachingCritiquer(critiquer recipeCritiquer, store store) *cachingCritiquer {
 	if critiquer == nil {
 		panic("critiquer must not be nil")
 	}

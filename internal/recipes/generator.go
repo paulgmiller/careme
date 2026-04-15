@@ -21,7 +21,7 @@ import (
 	"github.com/samber/lo"
 )
 
-type AIClient interface {
+type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
@@ -30,20 +30,19 @@ type AIClient interface {
 	Ready(ctx context.Context) error
 }
 
-type StaplesService interface {
+type staplesService interface {
 	GetStaples(ctx context.Context, p *GeneratorParams) ([]kroger.Ingredient, error)
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error)
-	Watchdog(ctx context.Context) error
 }
 
 // TODO unexport?
 type Generator struct {
-	aiClient  AIClient
+	aiClient  aiClient
 	critiquer critique.Service
-	staples   StaplesService
+	staples   staplesService
 }
 
-func NewGenerator(aiClient AIClient, critiquer critique.Service, staples StaplesService) (*Generator, error) {
+func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService) (*Generator, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}

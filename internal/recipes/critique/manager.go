@@ -24,6 +24,7 @@ type Service interface {
 	CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan Result
 }
 
+// if we have web.go make rubbertamp directly this goes away
 type Manager interface {
 	Service
 	Wait()
@@ -63,7 +64,7 @@ func NewManager(cfg *config.Config, c cache.Cache) Manager {
 	}
 	crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel)
 	return &multiCritiquer{
-		critiquer: newCachingCritiquer(crit, NewStore(c)),
+		critiquer: newCachingCritiquer(crit, newStore(c)),
 	}
 }
 

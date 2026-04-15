@@ -422,7 +422,7 @@ func TestGenerateRecipes_SavesCritiquesForGeneratedRecipes(t *testing.T) {
 		t.Fatalf("expected %d critiques, got %d", len(generated), len(critiquer.recipes))
 	}
 	for _, recipe := range generated {
-		gotCritique, err := critique.NewStore(cacheStore).FromCache(t.Context(), recipe.ComputeHash())
+		gotCritique, err := critique.Load(t.Context(), cacheStore, recipe.ComputeHash())
 		if err != nil {
 			t.Fatalf("expected critique for %q: %v", recipe.Title, err)
 		}
@@ -541,7 +541,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	if len(critiquer.recipes) != 2 {
 		t.Fatalf("expected two critique passes, got %d", len(critiquer.recipes))
 	}
-	if gotCritique, err := critique.NewStore(cacheStore).FromCache(t.Context(), retried.ComputeHash()); err != nil {
+	if gotCritique, err := critique.Load(t.Context(), cacheStore, retried.ComputeHash()); err != nil {
 		t.Fatalf("expected cached critique for retried recipe: %v", err)
 	} else if gotCritique.OverallScore != 8 {
 		t.Fatalf("expected final critique score 8, got %d", gotCritique.OverallScore)

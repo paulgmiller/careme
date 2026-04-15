@@ -237,8 +237,6 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 func TestSaveCritique_UsesPrefixedKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	store := critique.NewStore(cacheStore)
-
 	hash := "recipe-hash"
 	wantCritique := &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
@@ -249,7 +247,7 @@ func TestSaveCritique_UsesPrefixedKey(t *testing.T) {
 		SuggestedFixes: []string{"tighten one step"},
 	}
 
-	if err := store.Save(t.Context(), hash, wantCritique); err != nil {
+	if err := critique.Save(t.Context(), cacheStore, hash, wantCritique); err != nil {
 		t.Fatalf("SaveCritique failed: %v", err)
 	}
 
@@ -257,7 +255,7 @@ func TestSaveCritique_UsesPrefixedKey(t *testing.T) {
 		t.Fatalf("expected recipe critique at prefixed key: %v", err)
 	}
 
-	got, err := store.FromCache(t.Context(), hash)
+	got, err := critique.Load(t.Context(), cacheStore, hash)
 	if err != nil {
 		t.Fatalf("CritiqueFromCache failed: %v", err)
 	}

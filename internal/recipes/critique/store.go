@@ -15,18 +15,30 @@ func CacheKey(hash string) string {
 	return CachePrefix + hash
 }
 
-type Store struct {
+type store struct {
 	cache cache.Cache
 }
 
-func NewStore(c cache.Cache) Store {
+func newStore(c cache.Cache) store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
-	return Store{cache: c}
+	return store{cache: c}
 }
 
-func (s Store) Load(ctx context.Context, hash string) (*ai.RecipeCritique, error) {
+func Load(ctx context.Context, c cache.Cache, hash string) (*ai.RecipeCritique, error) {
+	return newStore(c).Load(ctx, hash)
+}
+
+func Save(ctx context.Context, c cache.Cache, hash string, critique *ai.RecipeCritique) error {
+	return newStore(c).Save(ctx, hash, critique)
+}
+
+func ListHashes(ctx context.Context, c cache.ListCache) ([]string, error) {
+	return newStore(c).ListHashes(ctx)
+}
+
+func (s store) Load(ctx context.Context, hash string) (*ai.RecipeCritique, error) {
 	critiqueReader, err := s.cache.Get(ctx, CacheKey(hash))
 	if err != nil {
 		return nil, err
@@ -40,7 +52,7 @@ func (s Store) Load(ctx context.Context, hash string) (*ai.RecipeCritique, error
 	return &critique, err
 }
 
-func (s Store) Save(ctx context.Context, hash string, critique *ai.RecipeCritique) error {
+func (s store) Save(ctx context.Context, hash string, critique *ai.RecipeCritique) error {
 	if critique == nil {
 		return fmt.Errorf("recipe critique is required")
 	}
@@ -51,11 +63,7 @@ func (s Store) Save(ctx context.Context, hash string, critique *ai.RecipeCritiqu
 	return s.cache.Put(ctx, CacheKey(hash), string(body), cache.Unconditional())
 }
 
-func (s Store) FromCache(ctx context.Context, hash string) (*ai.RecipeCritique, error) {
-	return s.Load(ctx, hash)
-}
-
-func (s Store) ListHashes(ctx context.Context) ([]string, error) {
+func (s store) ListHashes(ctx context.Context) ([]string, error) {
 	lister, ok := s.cache.(cache.ListCache)
 	if !ok {
 		return nil, fmt.Errorf("cache does not support listing critiques")
