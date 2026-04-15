@@ -1,8 +1,6 @@
 package critique_test
 
 import (
-	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,6 +18,7 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 
 	fc := cache.NewFileCache(t.TempDir())
 	recipesCache := recipes.IO(fc)
+	store := critique.NewStore(fc)
 
 	recipeList := []ai.Recipe{
 		{
@@ -54,7 +53,7 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	newestHash := recipeList[0].ComputeHash()
 	olderHash := recipeList[1].ComputeHash()
 
-	if err := critique.Save(t.Context(), fc, newestHash, &ai.RecipeCritique{
+	if err := store.Save(t.Context(), newestHash, &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
 		OverallScore:   9,
 		Summary:        "Strong weeknight draft.",
@@ -66,7 +65,7 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save newest critique: %v", err)
 	}
-	if err := critique.Save(t.Context(), fc, olderHash, &ai.RecipeCritique{
+	if err := store.Save(t.Context(), olderHash, &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
 		OverallScore:   6,
 		Summary:        "Needs more brightness.",
@@ -82,13 +81,8 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/critiques", nil)
 	rr := httptest.NewRecorder()
 
-	critique.AdminCritiquesPage(fc, func(ctx context.Context, hash string) (string, error) {
-		recipe, err := recipesCache.SingleFromCache(ctx, hash)
-		if err != nil {
-			return "", err
-		}
-		return recipe.Title, nil
-	}).ServeHTTP(rr, req)
+	handler := critique.AdminCritiquesPage(store, recipesCache)
+	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
@@ -117,13 +111,13 @@ func TestAdminCritiquesPageMethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	fc := cache.NewFileCache(t.TempDir())
+	store := critique.NewStore(fc)
+	recipesCache := recipes.IO(fc)
 
 	req := httptest.NewRequest(http.MethodPost, "/critiques", nil)
 	rr := httptest.NewRecorder()
 
-	critique.AdminCritiquesPage(fc, func(context.Context, string) (string, error) {
-		return "", errors.New("should not be called")
-	}).ServeHTTP(rr, req)
+	critique.AdminCritiquesPage(store, recipesCache).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusMethodNotAllowed)

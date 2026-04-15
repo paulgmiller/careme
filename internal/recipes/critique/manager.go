@@ -64,7 +64,7 @@ func NewManager(cfg *config.Config, c cache.Cache) Manager {
 	}
 	crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel)
 	return &multiCritiquer{
-		critiquer: newCachingCritiquer(crit, newStore(c)),
+		critiquer: newCachingCritiquer(crit, NewStore(c)),
 	}
 }
 

@@ -38,7 +38,7 @@ func TestCachingCritiquerUsesCacheOnSecondCall(t *testing.T) {
 			Summary:       "Great.",
 		},
 	}
-	critiquer := NewCachingCritiquer(base, cache.NewFileCache(t.TempDir()))
+	critiquer := newCachingCritiquer(base, NewStore(cache.NewFileCache(t.TempDir())))
 	recipe := ai.Recipe{Title: "Roast Chicken"}
 
 	first, err := critiquer.CritiqueRecipe(t.Context(), recipe)
@@ -62,7 +62,7 @@ func TestCachingCritiquerReadyDelegates(t *testing.T) {
 	t.Parallel()
 
 	want := errors.New("not ready")
-	critiquer := NewCachingCritiquer(&stubCritiquer{readyErr: want}, cache.NewFileCache(t.TempDir()))
+	critiquer := newCachingCritiquer(&stubCritiquer{readyErr: want}, NewStore(cache.NewFileCache(t.TempDir())))
 
 	if err := critiquer.Ready(t.Context()); !errors.Is(err, want) {
 		t.Fatalf("Ready error = %v, want %v", err, want)

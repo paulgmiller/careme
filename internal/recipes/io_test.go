@@ -12,7 +12,6 @@ import (
 	"careme/internal/cache"
 	"careme/internal/kroger"
 	"careme/internal/locations"
-	"careme/internal/recipes/critique"
 )
 
 func TestSaveParams_IsAtomic(t *testing.T) {
@@ -231,36 +230,6 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 	}
 	if got.Commentary != "Try a tempranillo." {
 		t.Fatalf("unexpected cached wine recommendation: got %q", got)
-	}
-}
-
-func TestSaveCritique_UsesPrefixedKey(t *testing.T) {
-	tmpDir := t.TempDir()
-	cacheStore := cache.NewFileCache(tmpDir)
-	hash := "recipe-hash"
-	wantCritique := &ai.RecipeCritique{
-		SchemaVersion:  "recipe-critique-v1",
-		OverallScore:   8,
-		Summary:        "Strong draft.",
-		Strengths:      []string{"balanced"},
-		Issues:         []ai.RecipeCritiqueIssue{{Severity: "low", Category: "clarity", Detail: "One step could be tighter."}},
-		SuggestedFixes: []string{"tighten one step"},
-	}
-
-	if err := critique.Save(t.Context(), cacheStore, hash, wantCritique); err != nil {
-		t.Fatalf("SaveCritique failed: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(tmpDir, critique.CachePrefix, hash)); err != nil {
-		t.Fatalf("expected recipe critique at prefixed key: %v", err)
-	}
-
-	got, err := critique.Load(t.Context(), cacheStore, hash)
-	if err != nil {
-		t.Fatalf("CritiqueFromCache failed: %v", err)
-	}
-	if got.Summary != "Strong draft." {
-		t.Fatalf("unexpected cached critique: %#v", got)
 	}
 }
 

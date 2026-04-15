@@ -8,7 +8,6 @@ import (
 	"sort"
 
 	"careme/internal/ai"
-	"careme/internal/cache"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -89,9 +88,13 @@ var adminCritiquesPageTmpl = template.Must(template.New("admin-critiques").Parse
 </body>
 </html>`))
 
-func AdminCritiquesPage(c cache.ListCache, loadRecipeTitle func(context.Context, string) (string, error)) http.Handler {
-	if loadRecipeTitle == nil {
-		panic("loadRecipeTitle must not be nil")
+type recipeio interface {
+	SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error)
+}
+
+func AdminCritiquesPage(s store, rio recipeio) http.Handler {
+	if rio == nil {
+		panic("store and recipeio must not be nil")
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,14 +103,14 @@ func AdminCritiquesPage(c cache.ListCache, loadRecipeTitle func(context.Context,
 			return
 		}
 
-		hashes, err := ListHashes(r.Context(), c)
+		hashes, err := s.ListHashes(r.Context())
 		if err != nil {
 			slog.ErrorContext(r.Context(), "failed to list recipe critiques for admin page", "error", err)
 			http.Error(w, "unable to load recipe critiques", http.StatusInternalServerError)
 			return
 		}
 
-		views, err := loadAdminCritiqueViews(r.Context(), c, hashes, loadRecipeTitle)
+		views, err := loadAdminCritiqueViews(r.Context(), s, rio, hashes)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "failed to load recipe critiques for admin page", "error", err)
 			http.Error(w, "unable to load recipe critiques", http.StatusInternalServerError)
@@ -132,12 +135,11 @@ func AdminCritiquesPage(c cache.ListCache, loadRecipeTitle func(context.Context,
 
 func loadAdminCritiqueViews(
 	ctx context.Context,
-	c cache.Cache,
+	store store,
+	rio recipeio,
 	hashes []string,
-	loadRecipeTitle func(context.Context, string) (string, error),
 ) ([]*adminCritiqueView, error) {
 
-	store := newStore(c)
 	views, err := parallelism.MapWithErrors(hashes, func(hash string) (*adminCritiqueView, error) {
 		view := adminCritiqueView{
 			RecipeURL: "/recipe/" + hash,
@@ -149,12 +151,12 @@ func loadAdminCritiqueViews(
 		}
 		view.RecipeCritique = *cachedCritique
 
-		recipeTitle, err := loadRecipeTitle(ctx, hash)
+		recipeTitle, err := rio.SingleFromCache(ctx, hash)
 		if err != nil {
 			slog.InfoContext(ctx, "failed to load recipe for admin critiques page", "hash", hash, "error", err)
 			view.RecipeTitle = "Unknown recipe"
 		} else {
-			view.RecipeTitle = recipeTitle
+			view.RecipeTitle = recipeTitle.Title
 		}
 
 		return &view, nil

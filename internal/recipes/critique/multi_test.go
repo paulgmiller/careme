@@ -18,7 +18,9 @@ func TestMultiCritiquerCritiquesEachRecipe(t *testing.T) {
 			Summary:       "Solid.",
 		},
 	}
-	mc := NewMultiCritiquer(base)
+	mc := &multiCritiquer{
+		critiquer: base,
+	}
 	recipes := []ai.Recipe{
 		{Title: "One"},
 		{Title: "Two"},

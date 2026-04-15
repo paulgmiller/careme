@@ -25,7 +25,9 @@ func TestStoreSaveUsesPrefixedKey(t *testing.T) {
 		SuggestedFixes: []string{"tighten one step"},
 	}
 
-	if err := Save(t.Context(), cacheStore, hash, want); err != nil {
+	s := NewStore(cacheStore)
+
+	if err := s.Save(t.Context(), hash, want); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
@@ -33,7 +35,7 @@ func TestStoreSaveUsesPrefixedKey(t *testing.T) {
 		t.Fatalf("expected recipe critique at prefixed key: %v", err)
 	}
 
-	got, err := Load(t.Context(), cacheStore, hash)
+	got, err := s.Load(t.Context(), hash)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -46,8 +48,9 @@ func TestStoreListHashes(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
+	s := NewStore(cacheStore)
 	for _, hash := range []string{"b", "a"} {
-		if err := Save(t.Context(), cacheStore, hash, &ai.RecipeCritique{
+		if err := s.Save(t.Context(), hash, &ai.RecipeCritique{
 			SchemaVersion: "recipe-critique-v1",
 			OverallScore:  7,
 			Summary:       hash,
@@ -56,7 +59,7 @@ func TestStoreListHashes(t *testing.T) {
 		}
 	}
 
-	hashes, err := ListHashes(t.Context(), cacheStore)
+	hashes, err := s.ListHashes(t.Context())
 	if err != nil {
 		t.Fatalf("ListHashes failed: %v", err)
 	}

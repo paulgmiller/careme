@@ -19,15 +19,11 @@ type store struct {
 	cache cache.Cache
 }
 
-func newStore(c cache.Cache) store {
+func NewStore(c cache.Cache) store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
 	return store{cache: c}
-}
-
-func ListHashes(ctx context.Context, c cache.ListCache) ([]string, error) {
-	return newStore(c).ListHashes(ctx)
 }
 
 func (s store) Load(ctx context.Context, hash string) (*ai.RecipeCritique, error) {
