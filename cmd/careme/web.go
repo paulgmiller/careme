@@ -111,14 +111,7 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	recipeIO := recipes.IO(cache)
-	// TODO this ugly as all get out.
-	adminMux.Handle("/critiques", critique.AdminCritiquesPage(cache, func(ctx context.Context, hash string) (string, error) {
-		recipe, err := recipeIO.SingleFromCache(ctx, hash)
-		if err != nil {
-			return "", err
-		}
-		return recipe.Title, nil
-	}))
+	adminMux.Handle("/critiques", critique.AdminCritiquesPage(critique.NewStore(cache), recipeIO))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
