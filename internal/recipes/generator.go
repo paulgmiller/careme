@@ -27,11 +27,11 @@ type aiClient interface {
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error)
-	Ready(ctx context.Context) error
 }
 
 type staplesService interface {
 	GetStaples(ctx context.Context, p *GeneratorParams) ([]kroger.Ingredient, error)
+	//only used for wine. Probably need a refactoro
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error)
 }
 
@@ -101,6 +101,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 
 	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
+		//should never get a conversation id without instructions or saved/dismissed
+		// could assert or warn on that
 		instructions := []string{p.Instructions}
 		for _, dismissed := range p.Dismissed {
 			instructions = append(instructions, "Passed on "+dismissed.Title)
@@ -108,6 +110,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
 			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
 		}
+		//TODO more guidance on how many recipes to generate?
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
@@ -205,6 +208,7 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 		return nil, fmt.Errorf("conversation ID is required for critique retry")
 	}
 
+	//we could also just give all feedback back if any are below score
 	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ConversationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
