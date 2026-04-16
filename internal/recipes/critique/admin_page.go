@@ -139,7 +139,6 @@ func loadAdminCritiqueViews(
 	rio recipeio,
 	hashes []string,
 ) ([]*adminCritiqueView, error) {
-
 	views, err := parallelism.MapWithErrors(hashes, func(hash string) (*adminCritiqueView, error) {
 		view := adminCritiqueView{
 			RecipeURL: "/recipe/" + hash,
