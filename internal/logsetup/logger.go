@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime/debug"
 
 	"github.com/openclosed-dev/slogan/appinsights"
 )
@@ -27,5 +28,23 @@ func Configure(ctx context.Context) (func(), error) {
 	}
 
 	slog.SetDefault(slog.New(slog.NewMultiHandler(handlers...)))
-	return closeFn, nil
+	return recoverAndClose(ctx, closeFn), nil
+}
+
+func recoverAndClose(ctx context.Context, closeFn func()) func() {
+	return func() {
+		panicValue := recover()
+		if panicValue != nil {
+			slog.ErrorContext(ctx, "panic before logger flush",
+				"panic", panicValue,
+				"stack", string(debug.Stack()),
+			)
+		}
+
+		closeFn()
+
+		if panicValue != nil {
+			panic(panicValue)
+		}
+	}
 }
