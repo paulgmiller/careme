@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -29,10 +30,11 @@ type locationGetter interface {
 }
 
 type server struct {
-	storage   *Storage
-	userTmpl  *template.Template // just remove or is this useful?
-	locGetter locationGetter
-	clerk     auth.AuthClient // make an interface
+	storage            *Storage
+	userTmpl           *template.Template // just remove or is this useful?
+	locGetter          locationGetter
+	clerk              auth.AuthClient // make an interface
+	unsubscribeFactory UnsubscribeTokenFactory
 }
 
 type pastRecipeView struct {
@@ -48,12 +50,13 @@ const (
 )
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient) *server {
+func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient, unsubscribe UnsubscribeTokenFactory) *server {
 	return &server{
-		storage:   storage,
-		userTmpl:  templates.User,
-		locGetter: locGetter,
-		clerk:     clerkClient,
+		storage:            storage,
+		userTmpl:           templates.User,
+		locGetter:          locGetter,
+		clerk:              clerkClient,
+		unsubscribeFactory: unsubscribe,
 	}
 }
 
@@ -61,6 +64,7 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
 	mux.HandleFunc("POST /user/recipes/remove", s.handleRemoveUserRecipe)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
+	mux.HandleFunc("GET /user/unsubscribe", s.handleUnsubscribe)
 	mux.HandleFunc("GET /user/exists", s.handleExists)
 }
 
@@ -164,6 +168,8 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		favoriteBefore := strings.TrimSpace(currentUser.FavoriteStore) != ""
+
 		// Only update favorite_store if provided
 		if favoriteStore := strings.TrimSpace(r.FormValue("favorite_store")); favoriteStore != "" || r.Form.Has("favorite_store") {
 			currentUser.FavoriteStore = favoriteStore
@@ -178,6 +184,9 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			currentUser.Directive = generationPrompt
 		}
 		currentUser.MailOptIn = r.FormValue("mail_opt_in") == "1"
+		if !favoriteBefore && strings.TrimSpace(currentUser.FavoriteStore) != "" {
+			currentUser.MailOptIn = true
+		}
 
 		if err := s.storage.Update(currentUser); err != nil {
 			slog.ErrorContext(ctx, "failed to update user", "error", err)
@@ -321,7 +330,11 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing favorite_store", http.StatusBadRequest)
 		return
 	}
+	favoriteBefore := strings.TrimSpace(currentUser.FavoriteStore) != ""
 	currentUser.FavoriteStore = favoriteStore
+	if !favoriteBefore && favoriteStore != "" {
+		currentUser.MailOptIn = true
+	}
 	if err := s.storage.Update(currentUser); err != nil {
 		slog.ErrorContext(ctx, "failed to update user", "error", err)
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
@@ -329,6 +342,50 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
+		return
+	}
+
+	// keep scrapers from unsubscribing people
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	userID := strings.TrimSpace(r.FormValue("user"))
+	token := strings.TrimSpace(r.FormValue("token"))
+	if userID == "" || token == "" {
+		http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
+		return
+	}
+	currentUser, err := s.storage.GetByID(userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for unsubscribe", "user_id", userID, "error", err)
+		http.Error(w, "unable to process request", http.StatusInternalServerError)
+		return
+	}
+	want := s.unsubscribeFactory.UnsubscribeToken(currentUser.ID)
+	if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
+		http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
+		return
+	}
+	currentUser.MailOptIn = false
+	if err := s.storage.Update(currentUser); err != nil {
+		slog.ErrorContext(ctx, "failed to disable mail opt in", "user_id", userID, "error", err)
+		http.Error(w, "unable to process request", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte("You are unsubscribed from Careme recipe emails."))
 }
 
 func isHTMXRequest(r *http.Request) bool {

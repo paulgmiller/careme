@@ -26,7 +26,8 @@ func TestUserPageUpdate_E2E(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
 
-	srv := NewHandler(storage, nil, auth.DefaultMock())
+	tf := FakeUnsubscribeTokenFactory()
+	srv := NewHandler(storage, nil, auth.DefaultMock(), tf)
 	mux := http.NewServeMux()
 	srv.Register(mux)
 

@@ -15,6 +15,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/templates"
+	"careme/internal/users"
 	utypes "careme/internal/users/types"
 
 	"github.com/sendgrid/rest"
@@ -94,9 +95,11 @@ func (f *fakeMailLocServer) GetLocationByID(_ context.Context, _ string) (*locat
 type fakeMailClient struct {
 	response *rest.Response
 	err      error
+	last     *sgmail.SGMailV3
 }
 
-func (f *fakeMailClient) Send(_ *sgmail.SGMailV3) (*rest.Response, error) {
+func (f *fakeMailClient) Send(msg *sgmail.SGMailV3) (*rest.Response, error) {
+	f.last = msg
 	return f.response, f.err
 }
 
@@ -120,6 +123,7 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 		client: &fakeMailClient{
 			response: &rest.Response{StatusCode: 500, Body: "sendgrid internal error"},
 		},
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
 
 	m.sendEmail(context.Background(), utypes.User{
@@ -140,14 +144,17 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	fc := newFakeMailCache(t)
 	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
+	client := &fakeMailClient{
+		response: &rest.Response{StatusCode: 202, Body: "accepted"},
+	}
 	m := &mailer{
 		cache: fc,
 		locServer: &fakeMailLocServer{
 			location: location,
 		},
-		client: &fakeMailClient{
-			response: &rest.Response{StatusCode: 202, Body: "accepted"},
-		},
+		client:             client,
+		publicOrigin:       "https://careme.cooking",
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
 
 	m.sendEmail(context.Background(), utypes.User{
@@ -185,5 +192,8 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	}
 	if claim.ParamsHash == "" {
 		t.Fatalf("expected claim params hash to be set")
+	}
+	if client.last == nil || !strings.Contains(client.last.Content[1].Value, "Unsubscribe") {
+		t.Fatalf("expected sent message to contain unsubscribe link %s", client.last.Content[1].Value)
 	}
 }

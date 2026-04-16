@@ -67,6 +67,9 @@ func TestHandleFavoriteHTMXRefreshesPage(t *testing.T) {
 	if user.FavoriteStore != "222" {
 		t.Fatalf("expected favorite store to be 222, got %q", user.FavoriteStore)
 	}
+	if !user.MailOptIn {
+		t.Fatal("expected mail opt in to be enabled after first favorite store set")
+	}
 }
 
 func TestHandleFavoriteRejectsNonHTMXRequest(t *testing.T) {

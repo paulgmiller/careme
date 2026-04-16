@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -51,13 +52,14 @@ type generator interface {
 }
 
 type mailer struct {
-	cache        cache.Cache
-	userStorage  *users.Storage
-	generator    generator // interface requires making params public
-	locServer    locServer
-	client       emailClient
-	publicOrigin string
-	wait         func()
+	cache              cache.Cache
+	userStorage        *users.Storage
+	generator          generator // interface requires making params public
+	locServer          locServer
+	client             emailClient
+	publicOrigin       string
+	wait               func()
+	unsubscribeFactory users.UnsubscribeTokenFactory
 }
 
 // TODO share some of this with web.go? good for mocking?
@@ -92,13 +94,14 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	return &mailer{
-		cache:        cache,
-		userStorage:  userStorage,
-		generator:    generator,
-		locServer:    locationserver,
-		client:       sendgrid.NewSendClient(sendgridkey),
-		publicOrigin: cfg.ResolvedPublicOrigin(),
-		wait:         mc.Wait,
+		cache:              cache,
+		userStorage:        userStorage,
+		generator:          generator,
+		locServer:          locationserver,
+		client:             sendgrid.NewSendClient(sendgridkey),
+		publicOrigin:       cfg.ResolvedPublicOrigin(),
+		wait:               mc.Wait,
+		unsubscribeFactory: users.NewUnsubscribeTokenFactory(*cfg),
 	}, nil
 }
 
@@ -207,7 +210,11 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	}
 
 	var buf bytes.Buffer
-	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, &buf); err != nil {
+	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + url.Values{
+		"user":  []string{user.ID},
+		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user.ID)},
+	}.Encode()
+	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, &buf); err != nil {
 		slog.ErrorContext(ctx, "failed to format mail", "error", err)
 		return
 	}
@@ -215,7 +222,8 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
 	subject := "Your new recipes are ready!"
 
-	plainTextContent := "Check out your new recipes at " + m.publicOrigin + "/recipes?h=" + paramsHash
+	plainTextContent := "Check out your new recipes at " + m.publicOrigin + "/recipes?h=" + paramsHash +
+		"\n\n Unsubscribe from these emails: " + unsubscribeURL
 
 	to := mail.NewEmail(user.Email[0], user.Email[0])
 	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
