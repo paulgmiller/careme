@@ -213,3 +213,44 @@ func TestFromRequestReturnsExistingUser(t *testing.T) {
 		t.Fatalf("FromRequest() Email = %v, want [existing@example.com]", got.Email)
 	}
 }
+
+func TestStorageRemoveRecipesByHash(t *testing.T) {
+	fc := cache.NewFileCache(t.TempDir())
+	storage := NewStorage(fc)
+
+	keep := utypes.Recipe{
+		Title:     "Keep",
+		Hash:      "keep-hash",
+		CreatedAt: time.Now().Add(-time.Hour).Round(0),
+	}
+	removeOne := utypes.Recipe{
+		Title:     "Remove One",
+		Hash:      "remove-hash",
+		CreatedAt: time.Now().Add(-30 * time.Minute).Round(0),
+	}
+	removeTwo := utypes.Recipe{
+		Title:     "Remove Two",
+		Hash:      "remove-hash",
+		CreatedAt: time.Now().Round(0),
+	}
+	user := &utypes.User{
+		ID:          "user-remove-hash",
+		Email:       []string{"hash@example.com"},
+		ShoppingDay: time.Saturday.String(),
+		LastRecipes: []utypes.Recipe{keep, removeOne, removeTwo},
+	}
+	if err := storage.Update(user); err != nil {
+		t.Fatalf("Update() error: %v", err)
+	}
+
+	removed, err := storage.RemoveRecipe(user, "remove-hash")
+	if err != nil {
+		t.Fatalf("RemoveRecipe() error: %v", err)
+	}
+	if !removed {
+		t.Fatalf("RemoveRecipe() removed = false, want true")
+	}
+	if len(user.LastRecipes) != 1 || user.LastRecipes[0].Hash != keep.Hash {
+		t.Fatalf("RemoveRecipe() LastRecipes = %#v, want only keep recipe", user.LastRecipes)
+	}
+}

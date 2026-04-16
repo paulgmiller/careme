@@ -684,8 +684,8 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.removeRecipeFromUserProfile(ctx, *currentUser, recipeHash); err != nil {
-		slog.ErrorContext(ctx, "failed to remove recipe from user profile", "hash", recipeHash, "error", err)
+	if _, err := s.storage.RemoveRecipe(currentUser, recipeHash); err != nil {
+		slog.ErrorContext(ctx, "failed to remove recipe from storage", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
@@ -1134,27 +1134,5 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utyp
 	}
 	slog.InfoContext(ctx, "added saved recipe to user profile", "title", recipe.Title)
 
-	return nil
-}
-
-func (s *server) removeRecipeFromUserProfile(ctx context.Context, currentUser utypes.User, recipeHash string) error {
-	recipeHash = strings.TrimSpace(recipeHash)
-	if recipeHash == "" {
-		return fmt.Errorf("invalid recipe hash")
-	}
-
-	before := len(currentUser.LastRecipes)
-	currentUser.LastRecipes = lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
-		return r.Hash != recipeHash
-	})
-
-	if len(currentUser.LastRecipes) == before {
-		return nil
-	}
-
-	if err := s.storage.Update(&currentUser); err != nil {
-		return fmt.Errorf("failed to update user when dismissing recipe: %w", err)
-	}
-	slog.InfoContext(ctx, "removed recipe from user profile", "hash", recipeHash)
 	return nil
 }

@@ -15,6 +15,8 @@ import (
 	"careme/internal/cache"
 
 	utypes "careme/internal/users/types"
+
+	"github.com/samber/lo"
 )
 
 type Storage struct {
@@ -150,6 +152,29 @@ func (s *Storage) Update(user *utypes.User) error {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 	return nil
+}
+
+func (s *Storage) RemoveRecipe(user *utypes.User, recipeHash string) (bool, error) {
+	recipeHash = strings.TrimSpace(recipeHash)
+	if recipeHash == "" {
+		return false, fmt.Errorf("invalid recipe hash")
+	}
+	if user == nil {
+		return false, fmt.Errorf("user is required")
+	}
+
+	filtered := lo.Filter(user.LastRecipes, func(recipe utypes.Recipe, _ int) bool {
+		return recipe.Hash != recipeHash
+	})
+	if len(filtered) == len(user.LastRecipes) {
+		return false, nil // not found
+	}
+
+	user.LastRecipes = filtered
+	if err := s.Update(user); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func normalizeEmail(email string) string {

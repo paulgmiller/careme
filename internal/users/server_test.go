@@ -176,17 +176,20 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 		userTmpl: templates.User,
 		clerk:    testAuthClient{},
 	}
+	now := time.Now()
 
 	existing := &utypes.User{
 		ID:          "user-1",
 		Email:       []string{"user@example.com"},
-		CreatedAt:   time.Now(),
+		CreatedAt:   now,
 		ShoppingDay: "Saturday",
 		LastRecipes: []utypes.Recipe{
-			{Title: "Cooked Pasta", Hash: "hash-cooked", CreatedAt: time.Now().Add(-2 * time.Hour)},
-			{Title: "Cooked No Rating", Hash: "hash-cooked-unrated", CreatedAt: time.Now().Add(-90 * time.Minute)},
-			{Title: "Saved Soup", Hash: "hash-saved", CreatedAt: time.Now().Add(-1 * time.Hour)},
-			{Title: "Manual Entry", CreatedAt: time.Now()},
+			{Title: "Cooked Pasta", Hash: "hash-cooked", CreatedAt: now.Add(-2 * time.Hour)},
+			{Title: "Cooked No Rating", Hash: "hash-cooked-unrated", CreatedAt: now.Add(-90 * time.Minute)},
+			{Title: "Saved Soup", Hash: "hash-saved", CreatedAt: now.Add(-1 * time.Hour)},
+			{Title: "Cooked Three Weeks", Hash: "hash-cooked-three-weeks", CreatedAt: now.Add(-21 * 24 * time.Hour)},
+			{Title: "Saved Three Weeks", Hash: "hash-saved-three-weeks", CreatedAt: now.Add(-21 * 24 * time.Hour)},
+			{Title: "Cooked Five Weeks", Hash: "hash-cooked-five-weeks", CreatedAt: now.Add(-35 * 24 * time.Hour)},
 		},
 	}
 	if err := storage.Update(existing); err != nil {
@@ -202,6 +205,15 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	}
 	if err := feedbackIO.SaveFeedback(t.Context(), "hash-saved", feedback.Feedback{Cooked: false, UpdatedAt: time.Now()}); err != nil {
 		t.Fatalf("failed to seed uncooked feedback: %v", err)
+	}
+	if err := feedbackIO.SaveFeedback(t.Context(), "hash-cooked-three-weeks", feedback.Feedback{Cooked: true, Stars: 2, UpdatedAt: time.Now()}); err != nil {
+		t.Fatalf("failed to seed three-week cooked feedback: %v", err)
+	}
+	if err := feedbackIO.SaveFeedback(t.Context(), "hash-saved-three-weeks", feedback.Feedback{Cooked: false, UpdatedAt: time.Now()}); err != nil {
+		t.Fatalf("failed to seed three-week saved feedback: %v", err)
+	}
+	if err := feedbackIO.SaveFeedback(t.Context(), "hash-cooked-five-weeks", feedback.Feedback{Cooked: true, Stars: 5, UpdatedAt: time.Now()}); err != nil {
+		t.Fatalf("failed to seed five-week cooked feedback: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/user?tab=past", nil)
@@ -223,7 +235,67 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	if strings.Contains(body, `Saved Soup</a> <span aria-label="Rated`) {
 		t.Fatalf("expected uncooked saved recipe not to render stars, got body: %s", body)
 	}
-	if strings.Contains(body, `Manual Entry <span aria-label="Rated`) {
-		t.Fatalf("expected manual recipe without hash not to render stars, got body: %s", body)
+	if !strings.Contains(body, `Cooked Three Weeks</a> <span aria-label="Rated 2 stars" title="Rated 2 stars">⭐⭐</span>`) {
+		t.Fatalf("expected cooked recipe from three weeks ago to remain visible, got body: %s", body)
+	}
+	if strings.Contains(body, `Saved Three Weeks`) {
+		t.Fatalf("expected uncooked saved recipe older than two weeks to be hidden, got body: %s", body)
+	}
+	if strings.Contains(body, `Cooked Five Weeks`) {
+		t.Fatalf("expected cooked recipe older than four weeks to be hidden, got body: %s", body)
+	}
+	if !strings.Contains(body, `action="/user/recipes/remove"`) {
+		t.Fatalf("expected remove recipe form on past recipes list, got body: %s", body)
+	}
+}
+
+func TestHandleRemoveUserRecipe_RemovesMatchingRecipe(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := &server{
+		storage:  storage,
+		userTmpl: templates.User,
+		clerk:    testAuthClient{},
+	}
+
+	keep := utypes.Recipe{Title: "Keep Me", Hash: "hash-keep", CreatedAt: time.Now().Add(-2 * time.Hour).Round(0)}
+	remove := utypes.Recipe{Title: "Remove Me", Hash: "hash-remove", CreatedAt: time.Now().Add(-1 * time.Hour).Round(0)}
+	existing := &utypes.User{
+		ID:          "user-1",
+		Email:       []string{"user@example.com"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{keep, remove},
+	}
+	if err := storage.Update(existing); err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+
+	form := url.Values{
+		"hash": {remove.Hash},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/user/recipes/remove", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	s.handleRemoveUserRecipe(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "/user?tab=past" {
+		t.Fatalf("expected redirect to /user?tab=past, got %q", got)
+	}
+
+	updated, err := storage.GetByID("user-1")
+	if err != nil {
+		t.Fatalf("failed to fetch updated user: %v", err)
+	}
+	if len(updated.LastRecipes) != 1 {
+		t.Fatalf("expected one recipe after removal, got %d", len(updated.LastRecipes))
+	}
+	if updated.LastRecipes[0].Title != keep.Title {
+		t.Fatalf("expected kept recipe %q, got %q", keep.Title, updated.LastRecipes[0].Title)
 	}
 }
