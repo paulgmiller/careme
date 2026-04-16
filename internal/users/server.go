@@ -252,7 +252,10 @@ func pastRecipeViews(ctx context.Context, c cache.Cache, recipes []utypes.Recipe
 	savedCutoff := now.Add(-savedPastRecipesWindow)
 	// need a more efficient way to do this. Might be pagination/db time
 	recentRecipes := lo.Filter(recipes, func(recipe utypes.Recipe, _ int) bool {
-		return !recipe.CreatedAt.Before(cookedCutoff)
+		if recipe.Hash == "" {
+			return false // come back and deal with manual later
+		}
+		return recipe.CreatedAt.After(cookedCutoff)
 	})
 
 	feedbackIO := feedback.NewIO(c)
