@@ -3,35 +3,33 @@ package users
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
-	"os"
-	"strings"
 
+	"careme/internal/config"
 	utypes "careme/internal/users/types"
 )
 
-func unsubscribeSecret() string {
-	if v := strings.TrimSpace(os.Getenv("CLERK_SECRET_KEY")); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(os.Getenv("AI_API_KEY")); v != "" {
-		return v
-	}
-	return "careme-unsubscribe-secret"
+type unsubscribeTokenFactory struct {
+	secret []byte
 }
 
-func UnsubscribeToken(user utypes.User) string {
-	mac := hmac.New(sha256.New, []byte(unsubscribeSecret()))
+type UnsubscribeTokenFactory interface {
+	UnsubscribeToken(user utypes.User) string
+}
+
+func NewUnsubscribeTokenFactory(cfg config.Config) *unsubscribeTokenFactory {
+	secret := cfg.Clerk.SecretKey // what else can we use
+	return &unsubscribeTokenFactory{secret: []byte(secret)}
+}
+
+func (f *unsubscribeTokenFactory) UnsubscribeToken(user utypes.User) string {
+	// Why not just do SHA256(key || message)? Because plain hash functions like SHA-256 have structural properties that make naive keyed constructions risky, especially length-extension attacks for Merkle–Damgård hashes like SHA-256.
+	mac := hmac.New(sha256.New, f.secret)
 	mac.Write([]byte(user.ID))
 	mac.Write([]byte("|"))
-	if len(user.Email) > 0 {
-		mac.Write([]byte(strings.TrimSpace(strings.ToLower(user.Email[0]))))
-	}
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func ValidUnsubscribeToken(user utypes.User, token string) bool {
-	want := UnsubscribeToken(user)
-	return subtle.ConstantTimeCompare([]byte(token), []byte(want)) == 1
+func FakeUnsubscribeTokenFactory() *unsubscribeTokenFactory {
+	return &unsubscribeTokenFactory{secret: []byte("fake_secret_for_testing")}
 }

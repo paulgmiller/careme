@@ -15,6 +15,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/templates"
+	"careme/internal/users"
 	utypes "careme/internal/users/types"
 
 	"github.com/sendgrid/rest"
@@ -122,6 +123,7 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 		client: &fakeMailClient{
 			response: &rest.Response{StatusCode: 500, Body: "sendgrid internal error"},
 		},
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
 
 	m.sendEmail(context.Background(), utypes.User{
@@ -150,8 +152,9 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 		locServer: &fakeMailLocServer{
 			location: location,
 		},
-		client:       client,
-		publicOrigin: "https://careme.cooking",
+		client:             client,
+		publicOrigin:       "https://careme.cooking",
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
 
 	m.sendEmail(context.Background(), utypes.User{
@@ -190,7 +193,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	if claim.ParamsHash == "" {
 		t.Fatalf("expected claim params hash to be set")
 	}
-	if client.last == nil || !strings.Contains(client.last.Content[0].Value, "Unsubscribe") {
-		t.Fatalf("expected sent message to contain unsubscribe link")
+	if client.last == nil || !strings.Contains(client.last.Content[1].Value, "Unsubscribe") {
+		t.Fatalf("expected sent message to contain unsubscribe link %s", client.last.Content[1].Value)
 	}
 }

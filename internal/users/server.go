@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -29,10 +30,11 @@ type locationGetter interface {
 }
 
 type server struct {
-	storage   *Storage
-	userTmpl  *template.Template // just remove or is this useful?
-	locGetter locationGetter
-	clerk     auth.AuthClient // make an interface
+	storage            *Storage
+	userTmpl           *template.Template // just remove or is this useful?
+	locGetter          locationGetter
+	clerk              auth.AuthClient // make an interface
+	unsubscribeFactory UnsubscribeTokenFactory
 }
 
 type pastRecipeView struct {
@@ -48,12 +50,13 @@ const (
 )
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient) *server {
+func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient, unsubscribe UnsubscribeTokenFactory) *server {
 	return &server{
-		storage:   storage,
-		userTmpl:  templates.User,
-		locGetter: locGetter,
-		clerk:     clerkClient,
+		storage:            storage,
+		userTmpl:           templates.User,
+		locGetter:          locGetter,
+		clerk:              clerkClient,
+		unsubscribeFactory: unsubscribe,
 	}
 }
 
@@ -343,8 +346,12 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := strings.TrimSpace(r.URL.Query().Get("user"))
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
+		return
+	}
+	userID := strings.TrimSpace(r.FormValue("user"))
+	token := strings.TrimSpace(r.FormValue("token"))
 	if userID == "" || token == "" {
 		http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
 		return
@@ -359,8 +366,13 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to process request", http.StatusInternalServerError)
 		return
 	}
-	if !ValidUnsubscribeToken(*currentUser, token) {
+	want := s.unsubscribeFactory.UnsubscribeToken(*currentUser)
+	if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
 		http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
+		return
+	}
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	currentUser.MailOptIn = false

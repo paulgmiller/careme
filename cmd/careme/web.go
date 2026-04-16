@@ -92,7 +92,7 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
 
-	userHandler := users.NewHandler(userStorage, locationStorage, authClient)
+	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg))
 	userHandler.Register(appRoutes)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
