@@ -226,6 +226,9 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	}
 
 	body := rr.Body.String()
+	if !strings.Contains(body, `/static/htmx@2.0.8.js`) {
+		t.Fatalf("expected user page to include htmx script, got body: %s", body)
+	}
 	if !strings.Contains(body, `Cooked Pasta</a> <span aria-label="Rated 4 stars" title="Rated 4 stars">⭐⭐⭐⭐</span>`) {
 		t.Fatalf("expected cooked recipe to render 4 stars, got body: %s", body)
 	}
@@ -244,12 +247,15 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	if strings.Contains(body, `Cooked Five Weeks`) {
 		t.Fatalf("expected cooked recipe older than four weeks to be hidden, got body: %s", body)
 	}
-	if !strings.Contains(body, `action="/user/recipes/remove"`) {
-		t.Fatalf("expected remove recipe form on past recipes list, got body: %s", body)
+	if !strings.Contains(body, `hx-post="/user/recipes/remove"`) {
+		t.Fatalf("expected remove recipe form to post via htmx, got body: %s", body)
+	}
+	if !strings.Contains(body, `hx-target="closest li"`) || !strings.Contains(body, `hx-swap="delete"`) {
+		t.Fatalf("expected remove recipe form to delete only the matching row, got body: %s", body)
 	}
 }
 
-func TestHandleRemoveUserRecipe_RemovesMatchingRecipe(t *testing.T) {
+func TestHandleRemoveUserRecipe_RejectsNonHTMXRequests(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
@@ -281,11 +287,61 @@ func TestHandleRemoveUserRecipe_RemovesMatchingRecipe(t *testing.T) {
 
 	s.handleRemoveUserRecipe(rr, req)
 
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
 	}
-	if got := rr.Header().Get("Location"); got != "/user?tab=past" {
-		t.Fatalf("expected redirect to /user?tab=past, got %q", got)
+
+	updated, err := storage.GetByID("user-1")
+	if err != nil {
+		t.Fatalf("failed to fetch updated user: %v", err)
+	}
+	if len(updated.LastRecipes) != 2 {
+		t.Fatalf("expected recipes to remain unchanged, got %d", len(updated.LastRecipes))
+	}
+	gotTitles := []string{updated.LastRecipes[0].Title, updated.LastRecipes[1].Title}
+	if !strings.Contains(strings.Join(gotTitles, ","), keep.Title) || !strings.Contains(strings.Join(gotTitles, ","), remove.Title) {
+		t.Fatalf("expected recipes to remain unchanged, got %#v", updated.LastRecipes)
+	}
+}
+
+func TestHandleRemoveUserRecipe_HTMXRemovesMatchingRecipeWithoutRedirect(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := &server{
+		storage:  storage,
+		userTmpl: templates.User,
+		clerk:    testAuthClient{},
+	}
+
+	keep := utypes.Recipe{Title: "Keep Me", Hash: "hash-keep", CreatedAt: time.Now().Add(-2 * time.Hour).Round(0)}
+	remove := utypes.Recipe{Title: "Remove Me", Hash: "hash-remove", CreatedAt: time.Now().Add(-1 * time.Hour).Round(0)}
+	existing := &utypes.User{
+		ID:          "user-1",
+		Email:       []string{"user@example.com"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{keep, remove},
+	}
+	if err := storage.Update(existing); err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+
+	form := url.Values{
+		"hash": {remove.Hash},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/user/recipes/remove", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+
+	s.handleRemoveUserRecipe(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "" {
+		t.Fatalf("expected no redirect location for htmx request, got %q", got)
 	}
 
 	updated, err := storage.GetByID("user-1")

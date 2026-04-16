@@ -138,7 +138,11 @@
                     <a href="/recipe/{{$recipe.Hash}}" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{$recipe.Title}}</a>
                     {{- if $recipe.Cooked}} <span aria-label="{{$recipe.CookedStarsLabel}}" title="{{$recipe.CookedStarsLabel}}">{{$recipe.CookedStars}}</span>{{end}}
                   </div>
-                  <form method="POST" action="/user/recipes/remove" class="shrink-0">
+                  <form method="POST"
+                        hx-post="/user/recipes/remove"
+                        hx-target="closest li"
+                        hx-swap="delete"
+                        class="shrink-0">
                     <input type="hidden" name="hash" value="{{$recipe.Hash}}" />
                     <button type="submit"
                             class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-brand-200 text-brand-600 transition hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
@@ -162,6 +166,7 @@
       <p class="mt-6 text-center text-sm text-gray-500">Need help? Reach out from the home page.</p>
     </section>
   </main>
+  <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>

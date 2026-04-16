@@ -108,6 +108,10 @@ func (s *server) exists(uid string) (bool, error) {
 
 func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
 
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
@@ -116,7 +120,7 @@ func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Error(w, "no valid session found", http.StatusUnauthorized)
 		return
 	}
 
@@ -129,11 +133,11 @@ func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) 
 	}
 	if !removed {
 		slog.ErrorContext(ctx, "why did we get a fail to remove?", "hash", recipeHash)
-		http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
+		http.Error(w, "recipe not found", http.StatusNotFound)
 		return
 	}
 
-	http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
