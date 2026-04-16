@@ -116,31 +116,15 @@ func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	recipeTitle := strings.TrimSpace(r.FormValue("recipe"))
 	recipeHash := strings.TrimSpace(r.FormValue("hash"))
-	recipeCreatedAtRaw := strings.TrimSpace(r.FormValue("created_at"))
-	if recipeTitle == "" || recipeCreatedAtRaw == "" {
-		http.Error(w, "invalid recipe selection", http.StatusBadRequest)
-		return
-	}
-
-	recipeCreatedAt, err := time.Parse(time.RFC3339Nano, recipeCreatedAtRaw)
-	if err != nil {
-		http.Error(w, "invalid recipe selection", http.StatusBadRequest)
-		return
-	}
-
-	removed, err := s.storage.RemoveRecipe(currentUser, utypes.Recipe{
-		Title:     recipeTitle,
-		Hash:      recipeHash,
-		CreatedAt: recipeCreatedAt,
-	})
+	removed, err := s.storage.RemoveRecipe(currentUser, recipeHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to update user when removing recipe", "error", err)
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 		return
 	}
 	if !removed {
+		slog.ErrorContext(ctx, "why did we get a fail to remove?", "hash", recipeHash)
 		http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
 		return
 	}

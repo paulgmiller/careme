@@ -260,7 +260,7 @@ func TestHandleRemoveUserRecipe_RemovesMatchingRecipe(t *testing.T) {
 	}
 
 	keep := utypes.Recipe{Title: "Keep Me", Hash: "hash-keep", CreatedAt: time.Now().Add(-2 * time.Hour).Round(0)}
-	remove := utypes.Recipe{Title: "Remove Me", CreatedAt: time.Now().Add(-1 * time.Hour).Round(0)}
+	remove := utypes.Recipe{Title: "Remove Me", Hash: "hash-remove", CreatedAt: time.Now().Add(-1 * time.Hour).Round(0)}
 	existing := &utypes.User{
 		ID:          "user-1",
 		Email:       []string{"user@example.com"},
@@ -273,9 +273,7 @@ func TestHandleRemoveUserRecipe_RemovesMatchingRecipe(t *testing.T) {
 	}
 
 	form := url.Values{
-		"recipe":     {remove.Title},
-		"hash":       {remove.Hash},
-		"created_at": {remove.CreatedAt.Format(time.RFC3339Nano)},
+		"hash": {remove.Hash},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/user/recipes/remove", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

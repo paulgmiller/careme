@@ -214,50 +214,6 @@ func TestFromRequestReturnsExistingUser(t *testing.T) {
 	}
 }
 
-func TestStorageRemoveRecipe(t *testing.T) {
-	fc := cache.NewFileCache(t.TempDir())
-	storage := NewStorage(fc)
-
-	keep := utypes.Recipe{
-		Title:     "Keep",
-		Hash:      "keep-hash",
-		CreatedAt: time.Now().Add(-time.Hour).Round(0),
-	}
-	remove := utypes.Recipe{
-		Title:     "Remove",
-		Hash:      "",
-		CreatedAt: time.Now().Round(0),
-	}
-	user := &utypes.User{
-		ID:          "user-remove-exact",
-		Email:       []string{"remove@example.com"},
-		ShoppingDay: time.Saturday.String(),
-		LastRecipes: []utypes.Recipe{keep, remove},
-	}
-	if err := storage.Update(user); err != nil {
-		t.Fatalf("Update() error: %v", err)
-	}
-
-	removed, err := storage.RemoveRecipe(user, remove)
-	if err != nil {
-		t.Fatalf("RemoveRecipe() error: %v", err)
-	}
-	if !removed {
-		t.Fatalf("RemoveRecipe() removed = false, want true")
-	}
-	if len(user.LastRecipes) != 1 || user.LastRecipes[0].Title != keep.Title {
-		t.Fatalf("RemoveRecipe() LastRecipes = %#v, want only keep recipe", user.LastRecipes)
-	}
-
-	stored, err := storage.GetByID(user.ID)
-	if err != nil {
-		t.Fatalf("GetByID() error: %v", err)
-	}
-	if len(stored.LastRecipes) != 1 || stored.LastRecipes[0].Title != keep.Title {
-		t.Fatalf("stored LastRecipes = %#v, want only keep recipe", stored.LastRecipes)
-	}
-}
-
 func TestStorageRemoveRecipesByHash(t *testing.T) {
 	fc := cache.NewFileCache(t.TempDir())
 	storage := NewStorage(fc)
@@ -287,14 +243,14 @@ func TestStorageRemoveRecipesByHash(t *testing.T) {
 		t.Fatalf("Update() error: %v", err)
 	}
 
-	removed, err := storage.RemoveRecipesByHash(user, "remove-hash")
+	removed, err := storage.RemoveRecipe(user, "remove-hash")
 	if err != nil {
-		t.Fatalf("RemoveRecipesByHash() error: %v", err)
+		t.Fatalf("RemoveRecipe() error: %v", err)
 	}
 	if !removed {
-		t.Fatalf("RemoveRecipesByHash() removed = false, want true")
+		t.Fatalf("RemoveRecipe() removed = false, want true")
 	}
 	if len(user.LastRecipes) != 1 || user.LastRecipes[0].Hash != keep.Hash {
-		t.Fatalf("RemoveRecipesByHash() LastRecipes = %#v, want only keep recipe", user.LastRecipes)
+		t.Fatalf("RemoveRecipe() LastRecipes = %#v, want only keep recipe", user.LastRecipes)
 	}
 }
