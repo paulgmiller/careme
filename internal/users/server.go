@@ -350,6 +350,13 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
 		return
 	}
+
+	// keep scrapers from unsubscribing people
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	userID := strings.TrimSpace(r.FormValue("user"))
 	token := strings.TrimSpace(r.FormValue("token"))
 	if userID == "" || token == "" {
@@ -369,10 +376,6 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	want := s.unsubscribeFactory.UnsubscribeToken(currentUser.ID)
 	if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
 		http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
-		return
-	}
-	if r.Method == http.MethodHead {
-		w.WriteHeader(http.StatusOK)
 		return
 	}
 	currentUser.MailOptIn = false
