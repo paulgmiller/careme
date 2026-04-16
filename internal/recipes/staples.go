@@ -2,15 +2,22 @@ package recipes
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"testing"
+	"time"
 
 	"careme/internal/albertsons"
 	"careme/internal/brightdata"
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
+	"careme/internal/parallelism"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
+
+	"github.com/samber/lo/mutable"
 )
 
 // todo make this a indepenedent ingredient object not kroger.
@@ -34,6 +41,16 @@ type backendStaplesProvider interface {
 	staplesProvider
 }
 
+type ingredientio interface {
+	SaveIngredients(ctx context.Context, hash string, ingredients []kroger.Ingredient) error
+	IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error)
+}
+
+type cachedStaplesService struct {
+	provider staplesProvider
+	cache    ingredientio
+}
+
 func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 	kclient, err := kroger.FromConfig(cfg)
 	if err != nil {
@@ -46,6 +63,17 @@ func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 
 	return routingStaplesProvider{
 		backends: backends,
+	}, nil
+}
+
+func NewCachedStaplesService(cfg *config.Config, c cache.Cache) (*cachedStaplesService, error) {
+	provider, err := NewStaplesProvider(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create staples provider: %w", err)
+	}
+	return &cachedStaplesService{
+		provider: provider,
+		cache:    IO(c),
 	}, nil
 }
 
@@ -63,6 +91,69 @@ func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID s
 		return nil, err
 	}
 	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
+}
+
+func (s *cachedStaplesService) GetStaples(ctx context.Context, p *GeneratorParams) ([]kroger.Ingredient, error) {
+	lochash := p.LocationHash()
+
+	if cachedIngredients, err := s.cache.IngredientsFromCache(ctx, lochash); err == nil {
+		slog.InfoContext(ctx, "serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
+		return cachedIngredients, nil
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
+	}
+
+	ingredients, err := s.provider.FetchStaples(ctx, p.Location.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", p.Location.ID, err)
+	}
+	ingredients = uniqueByDescription(ingredients)
+	mutable.Shuffle(ingredients)
+
+	if err := s.cache.SaveIngredients(ctx, lochash, ingredients); err != nil {
+		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
+		return nil, err
+	}
+	return ingredients, nil
+}
+
+func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error) {
+	cacheKey := wineIngredientsCacheKey(searchTerm, locationID, date)
+	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "style", searchTerm)
+
+	wines, err := s.cache.IngredientsFromCache(ctx, cacheKey)
+	if err == nil {
+		logger.InfoContext(ctx, "serving cached ingredients", "count", len(wines))
+		return wines, nil
+	}
+	if !errors.Is(err, cache.ErrNotFound) {
+		logger.ErrorContext(ctx, "failed to read cached ingredients", "error", err)
+	}
+
+	wines, err = s.provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ingredients for %q: %w", searchTerm, err)
+	}
+	logger.InfoContext(ctx, "found ingredients", "count", len(wines))
+
+	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {
+		logger.ErrorContext(ctx, "failed to cache ingredients", "error", err)
+	}
+	return wines, nil
+}
+
+func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
+	storeIDs := []string{
+		"wholefoods_10153",
+		"safeway_490",
+		"70500874",
+		"starmarket_3566",
+		"acmemarkets_806",
+	}
+	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]kroger.Ingredient, error) {
+		return s.provider.FetchStaples(ctx, storeID)
+	})
+	return err
 }
 
 func staplesSignatureForLocation(locationID string) string {

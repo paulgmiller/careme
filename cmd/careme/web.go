@@ -14,11 +14,13 @@ import (
 
 	"careme/internal/actowiz"
 	"careme/internal/admin"
+	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/config"
 	"careme/internal/ingredients"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/recipes/critique"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
@@ -57,11 +59,31 @@ func runServer(cfg *config.Config, addr string) error {
 	static.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
+	ro := &readyOnce{}
+	watchdogServer := watchdog.Server{}
 
-	generator, err := recipes.NewGenerator(cfg, recipes.IO(cache))
-	if err != nil {
-		return fmt.Errorf("failed to create recipe generator: %w", err)
+	var generator recipes.ExtGenerator
+	var waitFns []func()
+
+	if cfg.Mocks.Enable {
+		generator = recipes.NewMockGenerator()
+	} else {
+		mc := critique.NewManager(cfg, cache)
+		ro.Add(mc)
+		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
+		ro.Add(aiclient)
+		staples, err := recipes.NewCachedStaplesService(cfg, cache)
+		if err != nil {
+			return fmt.Errorf("failed to create staples service: %w", err)
+		}
+		watchdogServer.Add("staples", staples, 6.*time.Hour)
+		generator, err = recipes.NewGenerator(aiclient, mc, staples)
+		if err != nil {
+			return fmt.Errorf("failed to create recipe generator: %w", err)
+		}
+		waitFns = append(waitFns, mc.Wait)
 	}
+	watchdogServer.Register(infraRoutes)
 
 	centroids := locations.LoadCentroids()
 
@@ -74,6 +96,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler.Register(appRoutes)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
+	ro.Add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
@@ -81,15 +104,14 @@ func runServer(cfg *config.Config, addr string) error {
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient)
 	recipeHandler.Register(appRoutes)
+	waitFns = append([]func(){recipeHandler.Wait}, waitFns...)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
-	watchdogServer := watchdog.Server{}
-	watchdogServer.Add("staples", generator, 6.*time.Hour)
-	watchdogServer.Register(infraRoutes)
-
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
+	recipeIO := recipes.IO(cache)
+	adminMux.Handle("/critiques", critique.AdminCritiquesPage(critique.NewStore(cache), recipeIO))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
@@ -148,9 +170,6 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 	})
 
-	ro := &readyOnce{}
-	ro.Add(generator, locationServer)
-
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
 
@@ -181,11 +200,11 @@ func runServer(cfg *config.Config, addr string) error {
 		return nil
 	case sig := <-shutdown:
 		slog.Info("Shutdown signal received", "signal", sig)
-		return gracefulShutdown(server, recipeHandler.Wait)
+		return gracefulShutdown(server, waitFns...)
 	}
 }
 
-func gracefulShutdown(svr *http.Server, recipesWait func()) error {
+func gracefulShutdown(svr *http.Server, waitFns ...func()) error {
 	// Give outstanding requests 25 seconds to complete (kubernetes has 30 second grace period)
 	time.Sleep(5 * time.Second) // buffer to allow ingress ot update. only needed in prod
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
@@ -203,7 +222,9 @@ func gracefulShutdown(svr *http.Server, recipesWait func()) error {
 
 	done := make(chan struct{})
 	go func() {
-		recipesWait()
+		for _, wait := range waitFns {
+			wait()
+		}
 		close(done)
 	}()
 

@@ -20,6 +20,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/recipes/critique"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
@@ -57,6 +58,7 @@ type mailer struct {
 	locServer    locServer
 	client       emailClient
 	publicOrigin string
+	wait         func()
 }
 
 // TODO share some of this with web.go? good for mocking?
@@ -67,8 +69,12 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	userStorage := users.NewStorage(cache)
-
-	generator, err := recipes.NewGenerator(cfg, recipes.IO(cache))
+	mc := critique.NewManager(cfg, cache)
+	staples, err := recipes.NewCachedStaplesService(cfg, cache)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create staples service: %w", err)
+	}
+	generator, err := recipes.NewGenerator(ai.NewClient(cfg.AI.APIKey, "TODOMODEL"), mc, staples)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -93,6 +99,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		locServer:    locationserver,
 		client:       sendgrid.NewSendClient(sendgridkey),
 		publicOrigin: cfg.ResolvedPublicOrigin(),
+		wait:         mc.Wait,
 	}, nil
 }
 
@@ -107,6 +114,8 @@ func (m *mailer) RunOnce(ctx context.Context) {
 	for _, user := range users {
 		m.sendEmail(ctx, user)
 	}
+	m.wait()
+	slog.InfoContext(ctx, "finished user email run")
 }
 
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {

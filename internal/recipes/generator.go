@@ -3,7 +3,6 @@ package recipes
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -13,15 +12,13 @@ import (
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
+	"careme/internal/recipes/critique"
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
-	"github.com/samber/lo/mutable"
 )
 
 type aiClient interface {
@@ -30,36 +27,35 @@ type aiClient interface {
 	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error)
-	Ready(ctx context.Context) error
 }
 
-type ingredientio interface {
-	SaveIngredients(ctx context.Context, hash string, ingredients []kroger.Ingredient) error
-	IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error)
+type staplesService interface {
+	GetStaples(ctx context.Context, p *GeneratorParams) ([]kroger.Ingredient, error)
+	// only used for wine. Probably need a refactoro
+	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error)
 }
 
+// TODO unexport?
 type Generator struct {
-	config          *config.Config
-	aiClient        aiClient
-	staplesProvider staplesProvider
-	io              ingredientio
+	aiClient  aiClient
+	critiquer critique.Service
+	staples   staplesService
 }
 
-func NewGenerator(cfg *config.Config, io ingredientio) (generatorPlus, error) {
-	if cfg.Mocks.Enable {
-		return mock{}, nil
+func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService) (*Generator, error) {
+	if aiClient == nil {
+		return nil, fmt.Errorf("ai client is required")
 	}
-
-	stapesProvider, err := NewStaplesProvider(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create staples provider: %w", err)
+	if critiquer == nil {
+		return nil, fmt.Errorf("critiquer is required")
 	}
-
+	if staples == nil {
+		return nil, fmt.Errorf("staples service is required")
+	}
 	return &Generator{
-		io:              io,
-		config:          cfg,
-		aiClient:        ai.NewClient(cfg.AI.APIKey, "TODOMODEL"),
-		staplesProvider: stapesProvider,
+		aiClient:  aiClient,
+		critiquer: critiquer,
+		staples:   staples,
 	}, nil
 }
 
@@ -67,44 +63,21 @@ func (g *Generator) PickAWine(ctx context.Context, location string, recipe ai.Re
 	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
-		if style != "" { // would this ever happen?
+		if style != "" {
 			styles = append(styles, style)
 		}
 	}
 
-	// whole foods search not actually implmented hard code categories
 	if wholefoods.NewIdentityProvider().IsID(location) {
-		styles = []string{"red-wine", "white-wine", "sparkling"} // rose
+		styles = []string{"red-wine", "white-wine", "sparkling"}
 	}
 
 	if len(styles) == 0 {
 		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
 	}
-	dateStr := date.Format("2006-01-02")
-	logger := slog.With("location", location, "date", dateStr)
 
 	wines, err := parallelism.Flatten(styles, func(style string) ([]kroger.Ingredient, error) {
-		cacheKey := wineIngredientsCacheKey(style, location, date)
-		winesOfStyle, err := g.io.IngredientsFromCache(ctx, cacheKey)
-		if err == nil {
-			logger.InfoContext(ctx, "Serving cached wines for style", "style", style, "count", len(winesOfStyle))
-			return winesOfStyle, nil
-		}
-		if !errors.Is(err, cache.ErrNotFound) {
-			logger.ErrorContext(ctx, "Failed to read cached wines for style", "style", style, "error", err)
-		}
-
-		winesOfStyle, err = g.staplesProvider.GetIngredients(ctx, location, style, 0)
-		if err != nil {
-			slog.ErrorContext(ctx, "Failed to get ingredients for wine style", "style", style, "error", err)
-			return nil, fmt.Errorf("failed to get ingredients for style %q: %w", style, err)
-		}
-		logger.InfoContext(ctx, "Found wines.", "style", style, "count", len(winesOfStyle))
-
-		if err := g.io.SaveIngredients(ctx, cacheKey, winesOfStyle); err != nil {
-			logger.ErrorContext(ctx, "Failed to cache wines for style", "style", style, "error", err)
-		}
-		return winesOfStyle, nil
+		return g.staples.GetIngredients(ctx, location, style, 0, date)
 	})
 	if err != nil {
 		return nil, err
@@ -128,7 +101,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 
 	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
-		// these should both always be true. Warn if not because its a caching bug?
+		// should never get a conversation id without instructions or saved/dismissed
+		// could assert or warn on that
 		instructions := []string{p.Instructions}
 		for _, dismissed := range p.Dismissed {
 			instructions = append(instructions, "Passed on "+dismissed.Title)
@@ -136,35 +110,38 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
 			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
 		}
+		// TODO more guidance on how many recipes to generate?
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		// Include saved recipes in the shopping list
+		shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+		if err != nil {
+			return nil, err
+		}
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 		return shoppingList, nil
 	}
+
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
-	ingredients, err := g.GetStaples(ctx, p)
+	ingredients, err := g.staples.GetStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
 
 	instructions := []string{p.Directive, p.Instructions}
-
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
+	shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+	if err != nil {
+		return nil, err
+	}
 
-	// should never happen? How do you get save on first generte?
-	// shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
-
-	// TODO this does not get saved in params and thus must be loaded from html
-	// could update params after first generation or pregenerate before we save params.
 	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return shoppingList, nil
@@ -178,63 +155,12 @@ func (g *Generator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (
 	return g.aiClient.GenerateRecipeImage(ctx, recipe)
 }
 
-// calls get ingredients for a number of "staples" basically fresh produce and vegatbles.
-// tries to filter to no brand or certain brands to avoid shelved products
-func (g *Generator) GetStaples(ctx context.Context, p *generatorParams) ([]kroger.Ingredient, error) {
-	lochash := p.LocationHash()
-
-	if cachedIngredients, err := g.io.IngredientsFromCache(ctx, lochash); err == nil {
-		slog.Info("serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
-		return cachedIngredients, nil
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
-	}
-
-	ingredients, err := g.staplesProvider.FetchStaples(ctx, p.Location.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", p.Location.ID, err)
-	}
-	// should this be pushed down into staple proivder? go off product id?
-	ingredients = uniqueByDescription(ingredients)
-
-	mutable.Shuffle(ingredients)
-
-	if err := g.io.SaveIngredients(ctx, p.LocationHash(), ingredients); err != nil {
-		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
-		return nil, err
-	}
-	return ingredients, nil
-}
-
-// TODO should we be going off product id instead?
 func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
 	return lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
 		return toStr(i.Description)
 	})
 }
 
-func (g *Generator) Ready(ctx context.Context) error {
-	return g.aiClient.Ready(ctx)
-}
-
-// this is a little expnsive so unlike ready above needs to be protected by a once by.
-func (g *Generator) Watchdog(ctx context.Context) error {
-	storeIDs := []string{
-		"wholefoods_10153", // bellevue
-		"safeway_490",      // bellevue
-		"70500874",         // qfc in bellevue
-		"starmarket_3566",  // boston
-		"acmemarkets_806",  // newark
-	}
-	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]kroger.Ingredient, error) {
-		// defeats point of watch dog to read from cache but we could write to it as a courtesy.
-		return g.staplesProvider.FetchStaples(ctx, storeID)
-	})
-
-	return err
-}
-
-// toStr returns the string value if non-nil, or "empty" otherwise.
 func toStr(s *string) string {
 	if s == nil {
 		return "empty"
@@ -261,4 +187,38 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 		titles = append(titles, recipe.Title)
 	}
 	return lo.Uniq(titles)
+}
+
+func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
+	if g.critiquer == nil {
+		return shoppingList, nil
+	}
+
+	results := g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
+	good, garbage := critique.Split(ctx, results, critique.MinimumRecipeScore)
+	for _, result := range garbage {
+		slog.InfoContext(ctx, "low scoring recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
+	}
+	if len(garbage) == 0 {
+		return shoppingList, nil
+	}
+	slog.InfoContext(ctx, "regenerating recipes based on critique feedback", "garbage_count", len(garbage), "good_count", len(good))
+
+	if strings.TrimSpace(shoppingList.ConversationID) == "" {
+		return nil, fmt.Errorf("conversation ID is required for critique retry")
+	}
+
+	// we could also just give all feedback back if any are below score
+	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ConversationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
+	}
+	newRecipes := shoppingList.Recipes
+	shoppingList.Recipes = append(shoppingList.Recipes, good...)
+	shoppingList.Discarded = lo.Map(garbage, func(result critique.Result, _ int) ai.Recipe {
+		return *result.Recipe
+	})
+
+	_ = g.critiquer.CritiqueRecipes(ctx, newRecipes)
+	return shoppingList, nil
 }

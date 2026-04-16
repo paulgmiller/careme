@@ -1,11 +1,16 @@
 package ai
 
 import (
+	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"careme/internal/kroger"
+
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/responses"
 )
 
 func TestRecipeComputeHash(t *testing.T) {
@@ -151,6 +156,74 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\n\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
 		t.Fatalf("expected candidate wines TSV in prompt: %s", prompt)
+	}
+}
+
+func TestResponseUsageLogAttr(t *testing.T) {
+	attr := responseUsageLogAttr(responses.ResponseUsage{
+		InputTokens:  1200,
+		OutputTokens: 350,
+		TotalTokens:  1550,
+		InputTokensDetails: responses.ResponseUsageInputTokensDetails{
+			CachedTokens: 900,
+		},
+		OutputTokensDetails: responses.ResponseUsageOutputTokensDetails{
+			ReasoningTokens: 125,
+		},
+	})
+
+	if attr.Key != "usage" {
+		t.Fatalf("unexpected attr key: %s", attr.Key)
+	}
+	if attr.Value.Kind() != slog.KindGroup {
+		t.Fatalf("unexpected attr kind: %v", attr.Value.Kind())
+	}
+	if !reflect.DeepEqual(attr.Value.Group(), []slog.Attr{
+		slog.Int64("inputTokens", 1200),
+		slog.Group("inputTokensDetails", slog.Int64("cachedTokens", 900)),
+		slog.Int64("outputTokens", 350),
+		slog.Group("outputTokensDetails", slog.Int64("reasoningTokens", 125)),
+		slog.Int64("totalTokens", 1550),
+	}) {
+		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())
+	}
+}
+
+func TestImageUsageLogAttr(t *testing.T) {
+	attr := imageUsageLogAttr(openai.ImagesResponseUsage{
+		InputTokens:  100,
+		OutputTokens: 200,
+		TotalTokens:  300,
+		InputTokensDetails: openai.ImagesResponseUsageInputTokensDetails{
+			ImageTokens: 60,
+			TextTokens:  40,
+		},
+		OutputTokensDetails: openai.ImagesResponseUsageOutputTokensDetails{
+			ImageTokens: 180,
+			TextTokens:  20,
+		},
+	})
+
+	if attr.Key != "usage" {
+		t.Fatalf("unexpected attr key: %s", attr.Key)
+	}
+	if attr.Value.Kind() != slog.KindGroup {
+		t.Fatalf("unexpected attr kind: %v", attr.Value.Kind())
+	}
+	if !reflect.DeepEqual(attr.Value.Group(), []slog.Attr{
+		slog.Int64("inputTokens", 100),
+		slog.Group("inputTokensDetails",
+			slog.Int64("imageTokens", 60),
+			slog.Int64("textTokens", 40),
+		),
+		slog.Int64("outputTokens", 200),
+		slog.Group("outputTokensDetails",
+			slog.Int64("imageTokens", 180),
+			slog.Int64("textTokens", 20),
+		),
+		slog.Int64("totalTokens", 300),
+	}) {
+		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())
 	}
 }
 

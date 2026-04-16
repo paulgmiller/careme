@@ -15,6 +15,10 @@ import (
 
 type mock struct{}
 
+func NewMockGenerator() generator {
+	return mock{}
+}
+
 var mockRecipeImage = []byte{
 	0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n',
 	0x00, 0x00, 0x00, 0x0d, 'I', 'H', 'D', 'R',
@@ -357,14 +361,6 @@ var mockRecipes = []ai.Recipe{
 			"bake until cheese melts",
 		},
 	},
-}
-
-func (m mock) Ready(ctx context.Context) error {
-	return nil
-}
-
-func (m mock) Watchdog(ctx context.Context) error {
-	return nil
 }
 
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {

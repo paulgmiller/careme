@@ -162,11 +162,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
-
-	generator, err := recipes.NewGenerator(cfg, recipes.IO(cacheStore))
-	if err != nil {
-		t.Fatalf("failed to create generator: %v", err)
-	}
+	generator := recipes.NewMockGenerator()
 	centroids := locations.LoadCentroids()
 	locationStorage, err := locations.New(cfg, cacheStore, centroids)
 	if err != nil {
@@ -186,7 +182,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth).Register(appRoutes)
 
 	ro := &readyOnce{}
-	ro.Add(generator, locationServer)
+	ro.Add(locationServer)
 
 	infraRoutes.Handle("/ready", ro)
 

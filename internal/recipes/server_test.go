@@ -355,11 +355,10 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 		Instructions: []string{"Roast salmon and vegetables until done."},
 		Health:       "High protein",
 		DrinkPairing: "Pinot Noir",
+		OriginHash:   legacyHash,
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, legacyHash); err != nil {
-		t.Fatalf("failed to save recipe with legacy origin hash: %v", err)
-	}
+	saveRecipesForOrigin(t, s, legacyHash, recipe)
 
 	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash, nil)
 	req.SetPathValue("hash", recipeHash)
@@ -409,9 +408,7 @@ func TestHandleSingle_LegacyOriginHashFailWhenParamsMissing(t *testing.T) {
 		DrinkPairing: "Sparkling water",
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, legacyHash); err != nil {
-		t.Fatalf("failed to save recipe with legacy origin hash: %v", err)
-	}
+	saveRecipesForOrigin(t, s, legacyHash, recipe)
 
 	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash, nil)
 	req.SetPathValue("hash", recipeHash)
@@ -448,9 +445,7 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 		DrinkPairing: "Pinot noir",
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
-		t.Fatalf("failed to save recipe: %v", err)
-	}
+	saveRecipesForOrigin(t, s, originHash, recipe)
 	if err := s.SaveWine(t.Context(), recipeHash, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Light Pinot Noir", Price: "$13.99"},
@@ -643,8 +638,9 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 }
 
 type captureQuestionGenerator struct {
-	lastQuestion string
-	lastWinePick struct {
+	lastQuestion       string
+	lastConversationID string
+	lastWinePick       struct {
 		recipeTitle string
 		date        time.Time
 	}
@@ -662,6 +658,7 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 
 func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	c.lastQuestion = question
+	c.lastConversationID = conversationID
 	return "Try chicken thighs at the same cook time.", nil
 }
 
@@ -699,6 +696,32 @@ func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
 	return nil
 }
 
+func seedQuestionConversation(t *testing.T, s *server, conversationID string) string {
+	t.Helper()
+
+	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Question Test Store"}, time.Now())
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	recipe := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+	}
+	recipeHash := recipe.ComputeHash()
+	saveRecipesForOrigin(t, s, originHash, recipe)
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{recipe},
+		ConversationID: conversationID,
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+	return recipeHash
+}
+
 func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
@@ -706,14 +729,16 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 		withTestGenerator(&captureQuestionGenerator{}),
 	)
 
+	recipeHash := seedQuestionConversation(t, s, "conv-test")
+
 	form := url.Values{
 		"conversation_id": {"conv-test"},
 		"question":        {"Can I swap the protein?"},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
-	req.SetPathValue("hash", "hash")
+	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()
 
 	s.handleQuestion(rr, req)
@@ -733,6 +758,9 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	}
 	if !strings.Contains(body, "Try chicken thighs at the same cook time.") {
 		t.Fatalf("expected answer in response, got body: %s", body)
+	}
+	if got, want := s.generator.(*captureQuestionGenerator).lastConversationID, "conv-test"; got != want {
+		t.Fatalf("expected generator conversation ID %q, got %q", want, got)
 	}
 }
 
@@ -768,15 +796,17 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 		withTestGenerator(g),
 	)
 
+	recipeHash := seedQuestionConversation(t, s, "conv-test")
+
 	form := url.Values{
 		"conversation_id": {"conv-test"},
 		"question":        {"Can I swap the protein?"},
 		"recipe_title":    {"BBQ Pulled Pork"},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
-	req.SetPathValue("hash", "hash")
+	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()
 
 	s.handleQuestion(rr, req)
@@ -845,9 +875,7 @@ func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
 		WineStyles:   []string{"pinot noir"},
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
-		t.Fatalf("failed to save recipe: %v", err)
-	}
+	saveRecipesForOrigin(t, s, originHash, recipe)
 
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine", nil)
 	req.Header.Set("HX-Request", "true")
@@ -899,9 +927,7 @@ func TestHandleWine_ShoppingVariantReturnsShoppingFragment(t *testing.T) {
 		WineStyles:   []string{"pinot noir"},
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
-		t.Fatalf("failed to save recipe: %v", err)
-	}
+	saveRecipesForOrigin(t, s, originHash, recipe)
 
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine?view=shopping", nil)
 	req.Header.Set("HX-Request", "true")
@@ -950,9 +976,7 @@ func TestHandleWine_UsesCachedWineRecommendation(t *testing.T) {
 		WineStyles:   []string{"pinot noir"},
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s1.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
-		t.Fatalf("failed to save recipe: %v", err)
-	}
+	saveRecipesForOrigin(t, s1, originHash, recipe)
 
 	req1 := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine", nil)
 	req1.Header.Set("HX-Request", "true")
@@ -1048,9 +1072,7 @@ func TestHandleGenerateRecipeImage_GeneratesAndCachesOnMiss(t *testing.T) {
 		Instructions: []string{"Roast until done."},
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "origin-hash"); err != nil {
-		t.Fatalf("failed to save recipe: %v", err)
-	}
+	saveRecipesForOrigin(t, s, "origin-hash", recipe)
 
 	req1 := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/image", nil)
 	req1.Header.Set("HX-Request", "true")
@@ -1123,9 +1145,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 		t.Fatalf("failed to save params: %v", err)
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
-		t.Fatalf("failed to save recipe in cache: %v", err)
-	}
+	saveRecipesForOrigin(t, s, originHash, recipe)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes:        []ai.Recipe{recipe},
 		ConversationID: "conv-123",
@@ -1212,9 +1232,7 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 		t.Fatalf("failed to save params: %v", err)
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "stale-origin-hash"); err != nil {
-		t.Fatalf("failed to save recipe in cache: %v", err)
-	}
+	saveRecipesForOrigin(t, s, "stale-origin-hash", recipe)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes:        []ai.Recipe{recipe},
 		ConversationID: "conv-123",
@@ -1268,9 +1286,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 		t.Fatalf("failed to save params: %v", err)
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, originHash); err != nil {
-		t.Fatalf("failed to save recipe in cache: %v", err)
-	}
+	saveRecipesForOrigin(t, s, originHash, recipe)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes:        []ai.Recipe{recipe},
 		ConversationID: "conv-123",
@@ -1379,9 +1395,7 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 		t.Fatalf("failed to save params: %v", err)
 	}
 	recipeHash := recipe.ComputeHash()
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{recipe}, "stale-origin-hash"); err != nil {
-		t.Fatalf("failed to save recipe in cache: %v", err)
-	}
+	saveRecipesForOrigin(t, s, "stale-origin-hash", recipe)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes:        []ai.Recipe{recipe},
 		ConversationID: "conv-123",
@@ -1450,9 +1464,7 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 
 	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
 	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{savedRecipe, dismissedRecipe}, originHash); err != nil {
-		t.Fatalf("failed to save recipes: %v", err)
-	}
+	saveRecipesForOrigin(t, s, originHash, savedRecipe, dismissedRecipe)
 	shoppingList := &ai.ShoppingList{
 		Recipes:        []ai.Recipe{savedRecipe, dismissedRecipe},
 		ConversationID: "conv-123",
@@ -1535,9 +1547,7 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 		t.Fatalf("failed to save params: %v", err)
 	}
 
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{alreadySaved, newlySaved, available}, originHash); err != nil {
-		t.Fatalf("failed to save recipes: %v", err)
-	}
+	saveRecipesForOrigin(t, s, originHash, alreadySaved, newlySaved, available)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes:        []ai.Recipe{alreadySaved, newlySaved, available},
 		ConversationID: "conv-123",
@@ -1599,9 +1609,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 
 	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
 	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
-	if err := s.SaveRecipes(t.Context(), []ai.Recipe{savedRecipe, dismissedRecipe}, originHash); err != nil {
-		t.Fatalf("failed to save recipes: %v", err)
-	}
+	saveRecipesForOrigin(t, s, originHash, savedRecipe, dismissedRecipe)
 	shoppingList := &ai.ShoppingList{
 		Recipes:        []ai.Recipe{savedRecipe, dismissedRecipe},
 		ConversationID: "conv-123",

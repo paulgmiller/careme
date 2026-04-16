@@ -18,6 +18,7 @@ const (
 
 type Config struct {
 	AI              AIConfig               `json:"ai"`
+	Gemini          GeminiConfig           `json:"gemini"`
 	Kroger          KrogerConfig           `json:"kroger"`
 	Walmart         WalmartConfig          `json:"walmart"`
 	Aldi            AldiConfig             `json:"aldi"`
@@ -35,6 +36,15 @@ type Config struct {
 
 type AIConfig struct {
 	APIKey string `json:"api_key"`
+}
+
+type GeminiConfig struct {
+	APIKey        string `json:"api_key"`
+	CritiqueModel string `json:"critique_model"`
+}
+
+func (c *GeminiConfig) IsEnabled() bool {
+	return strings.TrimSpace(c.APIKey) != ""
 }
 
 type KrogerConfig struct {
@@ -153,6 +163,10 @@ func Load() (*Config, error) {
 	config := &Config{
 		AI: AIConfig{
 			APIKey: os.Getenv("AI_API_KEY"),
+		},
+		Gemini: GeminiConfig{
+			APIKey:        os.Getenv("GEMINI_API_KEY"),
+			CritiqueModel: os.Getenv("GEMINI_CRITIQUE_MODEL"),
 		},
 		Kroger: KrogerConfig{
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),

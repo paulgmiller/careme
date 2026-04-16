@@ -26,9 +26,10 @@
 - `tailwind\generate.sh`: run when ever you change css or html
 
 ## Coding Style & Naming Conventions
-- Go 1.24; always format Go changes with `task fmt` or `gofumpt`, and keep code `gofumpt`-clean before review. Favor small, focused functions and table-driven tests.
+- Go 1.26; always format Go changes with `task fmt` or `gofumpt`, and keep code `gofumpt`-clean before review. Favor small, focused functions and table-driven tests.
 - Exported identifiers in `CamelCase`; package-private helpers in `lowerCamel`. Template names mirror file names in `internal/templates`.
 - Prefer standard library first; add dependencies sparingly and record rationale in PR description if new.
+- For tests perfer testify/assert or testify/require to limit verboseness 
 - Prefer simple html to javascript frameworks
 - For UI copy, prefer plain culinary language over technical terms (example: use "Try again, chef" instead of "Regenerate", and "make it vegetarian" instead of "prefer vegetarian").
 - Nothing is used outside of this repository so if a method is only used in tests it can be removed even if its public
@@ -47,6 +48,6 @@
 - Keep commits scoped and reviewable; avoid mixing refactors with feature changes unless necessary.
 
 ## Security & Configuration Notes
-- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `CLARITY_PROJECT_ID`, `GOOGLE_TAG_ID`, `GOOGLE_CONVERSION_LABEL`, `HISTORY_PATH`. Azure logging uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`.
+- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `GEMINI_API_KEY`, `GEMINI_CRITIQUE_MODEL`, `CLARITY_PROJECT_ID`, `GOOGLE_TAG_ID`, `GOOGLE_CONVERSION_LABEL`, `HISTORY_PATH`. Azure logging uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`.
 - Never commit secrets or generated recipe outputs. If testing against real APIs, use minimal scopes and rotate keys promptly.
 - Any handler that lets you see data from multiple users should go behind the /admin mux to secure it. 

@@ -42,6 +42,11 @@ type pastRecipeView struct {
 	CookedStarsLabel string
 }
 
+const (
+	cookedPastRecipesWindow = 28 * 24 * time.Hour
+	savedPastRecipesWindow  = 14 * 24 * time.Hour
+)
+
 // NewHandler returns an http.Handler that serves the user related routes under /user.
 func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient) *server {
 	return &server{
@@ -54,7 +59,7 @@ func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.Aut
 
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
-	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
+	mux.HandleFunc("POST /user/recipes/remove", s.handleRemoveUserRecipe)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
 	mux.HandleFunc("GET /user/unsubscribe", s.handleUnsubscribe)
 	mux.HandleFunc("GET /user/exists", s.handleExists)
@@ -98,11 +103,10 @@ func (s *server) exists(uid string) (bool, error) {
 	return true, nil
 }
 
-// used on user page to manaully save recipes
-func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
 			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
@@ -113,34 +117,19 @@ func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recipeTitle := strings.TrimSpace(r.FormValue("recipe"))
-	if recipeTitle == "" {
-		slog.ErrorContext(ctx, "no recipe title provided")
-		http.Error(w, "no recipe title provided", http.StatusBadRequest)
-		return
-	}
-
-	hash := strings.TrimSpace(r.FormValue("hash"))
-
-	for _, existing := range currentUser.LastRecipes {
-		if strings.EqualFold(existing.Title, recipeTitle) {
-			slog.InfoContext(ctx, "duplicate previous recipe", "title", recipeTitle)
-			http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
-			return
-		}
-	}
-
-	newRecipe := utypes.Recipe{
-		Title:     recipeTitle,
-		Hash:      hash,
-		CreatedAt: time.Now(),
-	}
-	currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
-	if err := s.storage.Update(currentUser); err != nil {
-		slog.ErrorContext(ctx, "failed to update user", "error", err)
+	recipeHash := strings.TrimSpace(r.FormValue("hash"))
+	removed, err := s.storage.RemoveRecipe(currentUser, recipeHash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to update user when removing recipe", "error", err)
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 		return
 	}
+	if !removed {
+		slog.ErrorContext(ctx, "why did we get a fail to remove?", "hash", recipeHash)
+		http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
+		return
+	}
+
 	http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
 }
 
@@ -219,10 +208,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			favoriteStoreName = loc.Name
 		}
 	}
-	// TODO paginate and search on page instead.
-	if len(userForTemplate.LastRecipes) > 14 {
-		userForTemplate.LastRecipes = userForTemplate.LastRecipes[0:14]
-	}
+
 	data := struct {
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
@@ -251,21 +237,36 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func pastRecipeViews(ctx context.Context, c cache.Cache, recipes []utypes.Recipe) []pastRecipeView {
+	now := time.Now()
+	cookedCutoff := now.Add(-cookedPastRecipesWindow)
+	savedCutoff := now.Add(-savedPastRecipesWindow)
+	// need a more efficient way to do this. Might be pagination/db time
+	recentRecipes := lo.Filter(recipes, func(recipe utypes.Recipe, _ int) bool {
+		if recipe.Hash == "" {
+			return false // come back and deal with manual later
+		}
+		return recipe.CreatedAt.After(cookedCutoff)
+	})
+
 	feedbackIO := feedback.NewIO(c)
-	hashes := make([]string, 0, len(recipes))
-	for _, recipe := range recipes {
+	hashes := make([]string, 0, len(recentRecipes))
+	for _, recipe := range recentRecipes {
 		hashes = append(hashes, recipe.Hash)
 	}
 	feedbackByHash := feedbackIO.FeedbackByHash(ctx, hashes)
 
-	return lo.Map(recipes, func(recipe utypes.Recipe, _ int) pastRecipeView {
+	return lo.FilterMap(recentRecipes, func(recipe utypes.Recipe, _ int) (pastRecipeView, bool) {
 		state, ok := feedbackByHash[recipe.Hash]
+		cooked := ok && state.Cooked
+		if !cooked && recipe.CreatedAt.Before(savedCutoff) {
+			return pastRecipeView{}, false
+		}
 		return pastRecipeView{
 			Recipe:           recipe,
-			Cooked:           ok && state.Cooked,
+			Cooked:           cooked,
 			CookedStars:      cookedStars(ok, state),
 			CookedStarsLabel: cookedStarsLabel(ok, state),
-		}
+		}, true
 	})
 }
 

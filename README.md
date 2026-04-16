@@ -11,8 +11,10 @@ The application is configured via environment variables:
 ### Mandatory 
 - `KROGER_CLIENT_ID` - Kroger API client ID (required)
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
-- `AI_API_KEY` - OpenAI or Anthropic API key (required)
+- `AI_API_KEY` - OpenAI API key for recipe generation and chat (required)
 ### Optional 
+- `GEMINI_API_KEY` - Gemini API key for cached recipe critique generation
+- `GEMINI_CRITIQUE_MODEL` - Gemini model for recipe critique (defaults to `gemini-2.5-flash`)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `GOOGLE_TAG_ID` - Google Ads/gtag ID for web analytics (optional)
 - `GOOGLE_CONVERSION_LABEL` - Google Ads conversion label used on `/auth/establish?signup=true` (optional)
