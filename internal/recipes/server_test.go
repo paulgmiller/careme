@@ -600,14 +600,13 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 
 	now := time.Now()
 	cookedRecent := utypes.Recipe{Title: "Cooked Recently", Hash: "hash-cooked-recent", CreatedAt: now.Add(-48 * time.Hour)}
-	manualRecent := utypes.Recipe{Title: "Manual Recently", CreatedAt: now.Add(-36 * time.Hour)}
 	notCookedRecent := utypes.Recipe{Title: "Only Saved", Hash: "hash-saved-recent", CreatedAt: now.Add(-24 * time.Hour)}
 	tooOldCooked := utypes.Recipe{Title: "Cooked Too Old", Hash: "hash-cooked-old", CreatedAt: now.Add(-15 * 24 * time.Hour)}
 	currentUser := &utypes.User{
 		ID:          "user-1",
 		Email:       []string{"chef@example.com"},
 		ShoppingDay: "Saturday",
-		LastRecipes: []utypes.Recipe{cookedRecent, manualRecent, notCookedRecent, tooOldCooked},
+		LastRecipes: []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked},
 	}
 
 	if err := s.SaveFeedback(t.Context(), cookedRecent.Hash, feedback.Feedback{Cooked: true, UpdatedAt: now}); err != nil {
@@ -633,8 +632,8 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	if captured == nil {
 		t.Fatal("expected captured params")
 	}
-	if got, want := captured.LastRecipes, []string{"Cooked Recently", "Manual Recently"}; !slices.Equal(got, want) {
-		t.Fatalf("expected cooked and manual recent recipes in avoid list, got %v", got)
+	if got, want := captured.LastRecipes, []string{"Cooked Recently"}; !slices.Equal(got, want) {
+		t.Fatalf("expected only recently cooked recipes in avoid list, got %v", got)
 	}
 }
 

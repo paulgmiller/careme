@@ -1028,9 +1028,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 		cooked := s.FeedbackByHash(ctx, hashes)
 
 		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-			if r.Hash == "" {
-				return r.Title, true
-			}
 			return r.Title, cooked[r.Hash].Cooked
 		})
 

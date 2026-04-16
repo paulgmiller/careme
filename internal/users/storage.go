@@ -152,6 +152,49 @@ func (s *Storage) Update(user *utypes.User) error {
 	return nil
 }
 
+func (s *Storage) RemoveRecipe(user *utypes.User, target utypes.Recipe) (bool, error) {
+	return s.removeRecipesMatching(user, func(recipe utypes.Recipe) bool {
+		return recipe.Title == target.Title &&
+			recipe.Hash == target.Hash &&
+			recipe.CreatedAt.Equal(target.CreatedAt)
+	})
+}
+
+func (s *Storage) RemoveRecipesByHash(user *utypes.User, recipeHash string) (bool, error) {
+	recipeHash = strings.TrimSpace(recipeHash)
+	if recipeHash == "" {
+		return false, fmt.Errorf("invalid recipe hash")
+	}
+	return s.removeRecipesMatching(user, func(recipe utypes.Recipe) bool {
+		return recipe.Hash == recipeHash
+	})
+}
+
+func (s *Storage) removeRecipesMatching(user *utypes.User, shouldRemove func(utypes.Recipe) bool) (bool, error) {
+	if user == nil {
+		return false, fmt.Errorf("user is required")
+	}
+
+	filtered := make([]utypes.Recipe, 0, len(user.LastRecipes))
+	removed := false
+	for _, recipe := range user.LastRecipes {
+		if shouldRemove(recipe) {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, recipe)
+	}
+	if !removed {
+		return false, nil
+	}
+
+	user.LastRecipes = filtered
+	if err := s.Update(user); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func normalizeEmail(email string) string {
 	// remove . from before @? or +<suffix?
 	return strings.TrimSpace(strings.ToLower(email))

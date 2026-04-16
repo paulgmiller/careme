@@ -54,7 +54,6 @@ func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.Aut
 
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
-	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
 	mux.HandleFunc("POST /user/recipes/remove", s.handleRemoveUserRecipe)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
 	mux.HandleFunc("GET /user/exists", s.handleExists)
@@ -98,52 +97,6 @@ func (s *server) exists(uid string) (bool, error) {
 	return true, nil
 }
 
-// used on user page to manaully save recipes
-func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
-	if err != nil {
-		if !errors.Is(err, auth.ErrNoSession) {
-			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	recipeTitle := strings.TrimSpace(r.FormValue("recipe"))
-	if recipeTitle == "" {
-		slog.ErrorContext(ctx, "no recipe title provided")
-		http.Error(w, "no recipe title provided", http.StatusBadRequest)
-		return
-	}
-
-	hash := strings.TrimSpace(r.FormValue("hash"))
-
-	for _, existing := range currentUser.LastRecipes {
-		if strings.EqualFold(existing.Title, recipeTitle) {
-			slog.InfoContext(ctx, "duplicate previous recipe", "title", recipeTitle)
-			http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
-			return
-		}
-	}
-
-	newRecipe := utypes.Recipe{
-		Title:     recipeTitle,
-		Hash:      hash,
-		CreatedAt: time.Now(),
-	}
-	currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
-	if err := s.storage.Update(currentUser); err != nil {
-		slog.ErrorContext(ctx, "failed to update user", "error", err)
-		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
-}
-
 func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -172,19 +125,18 @@ func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	before := len(currentUser.LastRecipes)
-	currentUser.LastRecipes = lo.Filter(currentUser.LastRecipes, func(recipe utypes.Recipe, _ int) bool {
-		return recipe.Title != recipeTitle || recipe.Hash != recipeHash || !recipe.CreatedAt.Equal(recipeCreatedAt)
+	removed, err := s.storage.RemoveRecipe(currentUser, utypes.Recipe{
+		Title:     recipeTitle,
+		Hash:      recipeHash,
+		CreatedAt: recipeCreatedAt,
 	})
-
-	if len(currentUser.LastRecipes) == before {
-		http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
-		return
-	}
-
-	if err := s.storage.Update(currentUser); err != nil {
+	if err != nil {
 		slog.ErrorContext(ctx, "failed to update user when removing recipe", "error", err)
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
+		return
+	}
+	if !removed {
+		http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
 		return
 	}
 

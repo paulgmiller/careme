@@ -128,45 +128,30 @@
 
           {{if eq .ActiveTab "past"}}
           <section class="space-y-4">
-
-            <form method="POST" action="/user/recipes" class="space-y-4 rounded-xl border border-brand-100 bg-brand-50/60 p-5">
-              <div class="space-y-2">
-                <label for="previous_recipe" class="text-sm font-medium text-gray-700">Add something you cooked to avoid repeats</label>
-                <input id="previous_recipe"
-                       name="recipe"
-                       type="text"
-                       placeholder="Enter recipe name"
-                       class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-              </div>
-              <button type="submit"
-                      class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                Add Recipe
-              </button>
-            </form>
-
             {{if .PastRecipes}}
             <span class="text-xs uppercase tracking-wide text-gray-400">Recent history</span>
             <ul class="divide-y divide-brand-100 rounded-xl border border-brand-100 bg-white/60">
-              {{range .PastRecipes}}
+              {{range $recipe := .PastRecipes}}
               <li class="px-5 py-4 text-sm text-gray-700">
                 <div class="flex items-start justify-between gap-4">
                   <div>
                     <div class="font-semibold text-brand-700">
-                      {{if .Hash}}
-                      <a href="/recipe/{{.Hash}}" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{.Title}}</a>{{if .Cooked}} <span aria-label="{{.CookedStarsLabel}}" title="{{.CookedStarsLabel}}">{{.CookedStars}}</span>{{end}}
-                      {{else}}
-                      {{.Title}}{{if .Cooked}} <span aria-label="{{.CookedStarsLabel}}" title="{{.CookedStarsLabel}}">{{.CookedStars}}</span>{{end}}
-                      {{end}}
+                      {{- with $recipe.Hash -}}
+                      <a href="/recipe/{{.}}" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{$recipe.Title}}</a>
+                      {{- else -}}
+                      {{$recipe.Title}}
+                      {{- end -}}
+                      {{- if $recipe.Cooked}} <span aria-label="{{$recipe.CookedStarsLabel}}" title="{{$recipe.CookedStarsLabel}}">{{$recipe.CookedStars}}</span>{{end}}
                     </div>
-                    <p class="mt-1 text-xs text-gray-500">Added: {{.CreatedAt.Format "January 2, 2006"}}</p>
+                    <p class="mt-1 text-xs text-gray-500">Added: {{$recipe.CreatedAt.Format "January 2, 2006"}}</p>
                   </div>
                   <form method="POST" action="/user/recipes/remove" class="shrink-0">
-                    <input type="hidden" name="recipe" value="{{.Title}}" />
-                    <input type="hidden" name="hash" value="{{.Hash}}" />
-                    <input type="hidden" name="created_at" value="{{.CreatedAt.Format "2006-01-02T15:04:05.999999999Z07:00"}}" />
+                    <input type="hidden" name="recipe" value="{{$recipe.Title}}" />
+                    <input type="hidden" name="hash" value="{{$recipe.Hash}}" />
+                    <input type="hidden" name="created_at" value="{{$recipe.CreatedAt.Format "2006-01-02T15:04:05.999999999Z07:00"}}" />
                     <button type="submit"
                             class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-brand-200 text-brand-600 transition hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
-                            aria-label="Remove recipe {{.Title}}"
+                            aria-label="Remove recipe {{$recipe.Title}}"
                             title="Remove this recipe">
                       ×
                     </button>
