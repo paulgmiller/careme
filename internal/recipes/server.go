@@ -936,10 +936,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if r.URL.Query().Get("mail") == "true" {
 			tf := users.NewUnsubscribeTokenFactory(*s.cfg)
-			unsubscribeURL := s.cfg.ResolvedPublicOrigin() + "/user/unsubscribe?" + url.Values{
-				"user":  []string{userID},
-				"token": []string{tf.UnsubscribeToken(userID)},
-			}.Encode()
+			var unsubscribeURL string
+			if signedIn {
+				unsubscribeURL = s.cfg.ResolvedPublicOrigin() + "/user/unsubscribe?" + url.Values{
+					"user":  []string{userID},
+					"token": []string{tf.UnsubscribeToken(userID)},
+				}.Encode()
+			}
 			if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), unsubscribeURL, w); err != nil {
 				slog.ErrorContext(ctx, "failed to render mail template", "error", err)
 				http.Error(w, "failed to render mail template", http.StatusInternalServerError)
