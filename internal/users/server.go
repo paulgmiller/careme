@@ -42,6 +42,11 @@ type pastRecipeView struct {
 	CookedStarsLabel string
 }
 
+const (
+	cookedPastRecipesWindow = 28 * 24 * time.Hour
+	savedPastRecipesWindow  = 14 * 24 * time.Hour
+)
+
 // NewHandler returns an http.Handler that serves the user related routes under /user.
 func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient) *server {
 	return &server{
@@ -213,10 +218,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			favoriteStoreName = loc.Name
 		}
 	}
-	// TODO paginate and search on page instead.
-	if len(userForTemplate.LastRecipes) > 14 {
-		userForTemplate.LastRecipes = userForTemplate.LastRecipes[0:14]
-	}
+
 	data := struct {
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
@@ -245,21 +247,33 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func pastRecipeViews(ctx context.Context, c cache.Cache, recipes []utypes.Recipe) []pastRecipeView {
+	now := time.Now()
+	cookedCutoff := now.Add(-cookedPastRecipesWindow)
+	savedCutoff := now.Add(-savedPastRecipesWindow)
+	// need a more efficient way to do this. Might be pagination/db time
+	recentRecipes := lo.Filter(recipes, func(recipe utypes.Recipe, _ int) bool {
+		return !recipe.CreatedAt.Before(cookedCutoff)
+	})
+
 	feedbackIO := feedback.NewIO(c)
-	hashes := make([]string, 0, len(recipes))
-	for _, recipe := range recipes {
+	hashes := make([]string, 0, len(recentRecipes))
+	for _, recipe := range recentRecipes {
 		hashes = append(hashes, recipe.Hash)
 	}
 	feedbackByHash := feedbackIO.FeedbackByHash(ctx, hashes)
 
-	return lo.Map(recipes, func(recipe utypes.Recipe, _ int) pastRecipeView {
+	return lo.FilterMap(recentRecipes, func(recipe utypes.Recipe, _ int) (pastRecipeView, bool) {
 		state, ok := feedbackByHash[recipe.Hash]
+		cooked := ok && state.Cooked
+		if !cooked && recipe.CreatedAt.Before(savedCutoff) {
+			return pastRecipeView{}, false
+		}
 		return pastRecipeView{
 			Recipe:           recipe,
-			Cooked:           ok && state.Cooked,
+			Cooked:           cooked,
 			CookedStars:      cookedStars(ok, state),
 			CookedStarsLabel: cookedStarsLabel(ok, state),
-		}
+		}, true
 	})
 }
 
