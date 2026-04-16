@@ -174,7 +174,7 @@ func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) 
 
 	before := len(currentUser.LastRecipes)
 	currentUser.LastRecipes = lo.Filter(currentUser.LastRecipes, func(recipe utypes.Recipe, _ int) bool {
-		return !(recipe.Title == recipeTitle && recipe.Hash == recipeHash && recipe.CreatedAt.Equal(recipeCreatedAt))
+		return recipe.Title != recipeTitle || recipe.Hash != recipeHash || !recipe.CreatedAt.Equal(recipeCreatedAt)
 	})
 
 	if len(currentUser.LastRecipes) == before {
