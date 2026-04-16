@@ -212,7 +212,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	var buf bytes.Buffer
 	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + url.Values{
 		"user":  []string{user.ID},
-		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user)},
+		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user.ID)},
 	}.Encode()
 	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, &buf); err != nil {
 		slog.ErrorContext(ctx, "failed to format mail", "error", err)

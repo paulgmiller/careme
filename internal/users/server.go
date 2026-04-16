@@ -366,7 +366,7 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to process request", http.StatusInternalServerError)
 		return
 	}
-	want := s.unsubscribeFactory.UnsubscribeToken(*currentUser)
+	want := s.unsubscribeFactory.UnsubscribeToken(currentUser.ID)
 	if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
 		http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
 		return

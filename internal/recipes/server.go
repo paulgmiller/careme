@@ -923,13 +923,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
 			return
 		}
-		if r.URL.Query().Get("mail") == "true" {
-			if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), "", w); err != nil {
-				slog.ErrorContext(ctx, "failed to render mail template", "error", err)
-				http.Error(w, "failed to render mail template", http.StatusInternalServerError)
-			}
-			return
-		}
 		userID, err := s.clerk.GetUserIDFromRequest(r)
 		signedIn := !errors.Is(err, auth.ErrNoSession)
 		if signedIn {
@@ -940,6 +933,18 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.mergeParamsWithSelection(ctx, p, fromStore, slist.Recipes)
+		}
+		if r.URL.Query().Get("mail") == "true" {
+			tf := users.NewUnsubscribeTokenFactory(*s.cfg)
+			unsubscribeURL := s.cfg.ResolvedPublicOrigin() + "/user/unsubscribe?" + url.Values{
+				"user":  []string{userID},
+				"token": []string{tf.UnsubscribeToken(userID)},
+			}.Encode()
+			if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), unsubscribeURL, w); err != nil {
+				slog.ErrorContext(ctx, "failed to render mail template", "error", err)
+				http.Error(w, "failed to render mail template", http.StatusInternalServerError)
+			}
+			return
 		}
 		applySavedToRecipes(slist.Recipes, p)
 		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))

@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 
 	"careme/internal/config"
-	utypes "careme/internal/users/types"
 )
 
 type unsubscribeTokenFactory struct {
@@ -14,7 +13,7 @@ type unsubscribeTokenFactory struct {
 }
 
 type UnsubscribeTokenFactory interface {
-	UnsubscribeToken(user utypes.User) string
+	UnsubscribeToken(userid string) string
 }
 
 func NewUnsubscribeTokenFactory(cfg config.Config) *unsubscribeTokenFactory {
@@ -22,10 +21,10 @@ func NewUnsubscribeTokenFactory(cfg config.Config) *unsubscribeTokenFactory {
 	return &unsubscribeTokenFactory{secret: []byte(secret)}
 }
 
-func (f *unsubscribeTokenFactory) UnsubscribeToken(user utypes.User) string {
+func (f *unsubscribeTokenFactory) UnsubscribeToken(userid string) string {
 	// Why not just do SHA256(key || message)? Because plain hash functions like SHA-256 have structural properties that make naive keyed constructions risky, especially length-extension attacks for Merkle–Damgård hashes like SHA-256.
 	mac := hmac.New(sha256.New, f.secret)
-	mac.Write([]byte(user.ID))
+	mac.Write([]byte(userid))
 	mac.Write([]byte("|"))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

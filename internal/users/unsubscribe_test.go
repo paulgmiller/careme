@@ -31,7 +31,7 @@ func TestHandleUnsubscribeDisablesMailOptInOnGet(t *testing.T) {
 
 	params := url.Values{
 		"user":  []string{u.ID},
-		"token": []string{tf.UnsubscribeToken(*u)},
+		"token": []string{tf.UnsubscribeToken(u.ID)},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/user/unsubscribe?"+params.Encode(), nil)
 	rr := httptest.NewRecorder()
@@ -67,7 +67,7 @@ func TestHandleUnsubscribeDoesNotDisableMailOptInOnHead(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodHead, "/user/unsubscribe?"+url.Values{
 		"user":  []string{u.ID},
-		"token": []string{tf.UnsubscribeToken(*u)},
+		"token": []string{tf.UnsubscribeToken(u.ID)},
 	}.Encode(), nil)
 	rr := httptest.NewRecorder()
 
