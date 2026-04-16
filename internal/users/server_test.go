@@ -226,4 +226,60 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	if strings.Contains(body, `Manual Entry <span aria-label="Rated`) {
 		t.Fatalf("expected manual recipe without hash not to render stars, got body: %s", body)
 	}
+	if !strings.Contains(body, `action="/user/recipes/remove"`) {
+		t.Fatalf("expected remove recipe form on past recipes list, got body: %s", body)
+	}
+}
+
+func TestHandleRemoveUserRecipe_RemovesMatchingRecipe(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := &server{
+		storage:  storage,
+		userTmpl: templates.User,
+		clerk:    testAuthClient{},
+	}
+
+	keep := utypes.Recipe{Title: "Keep Me", Hash: "hash-keep", CreatedAt: time.Now().Add(-2 * time.Hour).Round(0)}
+	remove := utypes.Recipe{Title: "Remove Me", CreatedAt: time.Now().Add(-1 * time.Hour).Round(0)}
+	existing := &utypes.User{
+		ID:          "user-1",
+		Email:       []string{"user@example.com"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{keep, remove},
+	}
+	if err := storage.Update(existing); err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+
+	form := url.Values{
+		"recipe":     {remove.Title},
+		"hash":       {remove.Hash},
+		"created_at": {remove.CreatedAt.Format(time.RFC3339Nano)},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/user/recipes/remove", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	s.handleRemoveUserRecipe(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "/user?tab=past" {
+		t.Fatalf("expected redirect to /user?tab=past, got %q", got)
+	}
+
+	updated, err := storage.GetByID("user-1")
+	if err != nil {
+		t.Fatalf("failed to fetch updated user: %v", err)
+	}
+	if len(updated.LastRecipes) != 1 {
+		t.Fatalf("expected one recipe after removal, got %d", len(updated.LastRecipes))
+	}
+	if updated.LastRecipes[0].Title != keep.Title {
+		t.Fatalf("expected kept recipe %q, got %q", keep.Title, updated.LastRecipes[0].Title)
+	}
 }

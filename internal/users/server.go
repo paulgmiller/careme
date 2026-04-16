@@ -55,6 +55,7 @@ func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.Aut
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
 	mux.HandleFunc("POST /user/recipes", s.handleUserRecipes)
+	mux.HandleFunc("POST /user/recipes/remove", s.handleRemoveUserRecipe)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
 	mux.HandleFunc("GET /user/exists", s.handleExists)
 }
@@ -140,6 +141,53 @@ func (s *server) handleUserRecipes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
 		return
 	}
+	http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
+}
+
+func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil {
+		if !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	recipeTitle := strings.TrimSpace(r.FormValue("recipe"))
+	recipeHash := strings.TrimSpace(r.FormValue("hash"))
+	recipeCreatedAtRaw := strings.TrimSpace(r.FormValue("created_at"))
+	if recipeTitle == "" || recipeCreatedAtRaw == "" {
+		http.Error(w, "invalid recipe selection", http.StatusBadRequest)
+		return
+	}
+
+	recipeCreatedAt, err := time.Parse(time.RFC3339Nano, recipeCreatedAtRaw)
+	if err != nil {
+		http.Error(w, "invalid recipe selection", http.StatusBadRequest)
+		return
+	}
+
+	before := len(currentUser.LastRecipes)
+	currentUser.LastRecipes = lo.Filter(currentUser.LastRecipes, func(recipe utypes.Recipe, _ int) bool {
+		return !(recipe.Title == recipeTitle && recipe.Hash == recipeHash && recipe.CreatedAt.Equal(recipeCreatedAt))
+	})
+
+	if len(currentUser.LastRecipes) == before {
+		http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
+		return
+	}
+
+	if err := s.storage.Update(currentUser); err != nil {
+		slog.ErrorContext(ctx, "failed to update user when removing recipe", "error", err)
+		http.Error(w, "unable to save preferences", http.StatusInternalServerError)
+		return
+	}
+
 	http.Redirect(w, r, "/user?tab=past", http.StatusSeeOther)
 }
 
