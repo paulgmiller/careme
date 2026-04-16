@@ -732,7 +732,8 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	recipeHash := seedQuestionConversation(t, s, "conv-test")
 
 	form := url.Values{
-		"question": {"Can I swap the protein?"},
+		"conversation_id": {"conv-test"},
+		"question":        {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -798,8 +799,9 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	recipeHash := seedQuestionConversation(t, s, "conv-test")
 
 	form := url.Values{
-		"question":     {"Can I swap the protein?"},
-		"recipe_title": {"BBQ Pulled Pork"},
+		"conversation_id": {"conv-test"},
+		"question":        {"Can I swap the protein?"},
+		"recipe_title":    {"BBQ Pulled Pork"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

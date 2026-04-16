@@ -130,6 +130,7 @@ func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*genera
 
 	p := DefaultParams(l, date)
 	p.Instructions = r.URL.Query().Get("instructions")
+	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
 
 	return p, nil
 }
