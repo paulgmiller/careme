@@ -1,4 +1,4 @@
-package recipes
+package critique
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"sort"
 
 	"careme/internal/ai"
-	"careme/internal/cache"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -47,7 +46,7 @@ var adminCritiquesPageTmpl = template.Must(template.New("admin-critiques").Parse
       {{range .Critiques}}
       <tr>
         <td>
-          <a href="{{.RecipeURL}}">{{.RecipeTitle}}</a> 
+          <a href="{{.RecipeURL}}">{{.RecipeTitle}}</a>
         </td>
         <td>{{.OverallScore}}/10</td>
         <td>
@@ -89,22 +88,29 @@ var adminCritiquesPageTmpl = template.Must(template.New("admin-critiques").Parse
 </body>
 </html>`))
 
-func AdminCritiquesPage(c cache.ListCache) http.Handler {
+type recipeio interface {
+	SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error)
+}
+
+func AdminCritiquesPage(s store, rio recipeio) http.Handler {
+	if rio == nil {
+		panic("store and recipeio must not be nil")
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
-		// this won't last long till its too big.
-		hashes, err := c.List(r.Context(), recipeCritiquesCachePrefix, "")
+		hashes, err := s.ListHashes(r.Context())
 		if err != nil {
 			slog.ErrorContext(r.Context(), "failed to list recipe critiques for admin page", "error", err)
 			http.Error(w, "unable to load recipe critiques", http.StatusInternalServerError)
 			return
 		}
 
-		views, err := loadAdminCritiqueViews(r.Context(), c, hashes)
+		views, err := loadAdminCritiqueViews(r.Context(), s, rio, hashes)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "failed to load recipe critiques for admin page", "error", err)
 			http.Error(w, "unable to load recipe critiques", http.StatusInternalServerError)
@@ -127,26 +133,29 @@ func AdminCritiquesPage(c cache.ListCache) http.Handler {
 	})
 }
 
-func loadAdminCritiqueViews(ctx context.Context, c cache.Cache, hashes []string) ([]*adminCritiqueView, error) {
-	rio := IO(c)
+func loadAdminCritiqueViews(
+	ctx context.Context,
+	store store,
+	rio recipeio,
+	hashes []string,
+) ([]*adminCritiqueView, error) {
 	views, err := parallelism.MapWithErrors(hashes, func(hash string) (*adminCritiqueView, error) {
 		view := adminCritiqueView{
 			RecipeURL: "/recipe/" + hash,
 		}
 
-		critique, err := rio.CritiqueFromCache(ctx, hash)
+		cachedCritique, err := store.Load(ctx, hash)
 		if err != nil {
 			return nil, err
 		}
-		view.RecipeCritique = *critique
+		view.RecipeCritique = *cachedCritique
 
-		recipe, err := rio.SingleFromCache(ctx, hash)
+		recipeTitle, err := rio.SingleFromCache(ctx, hash)
 		if err != nil {
-			// make this an error after we don't load all critiques or purge ones where we didn't discart
 			slog.InfoContext(ctx, "failed to load recipe for admin critiques page", "hash", hash, "error", err)
 			view.RecipeTitle = "Unknown recipe"
 		} else {
-			view.RecipeTitle = recipe.Title
+			view.RecipeTitle = recipeTitle.Title
 		}
 
 		return &view, nil

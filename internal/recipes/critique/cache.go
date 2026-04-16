@@ -1,4 +1,4 @@
-package recipes
+package critique
 
 import (
 	"context"
@@ -10,31 +10,20 @@ import (
 	"careme/internal/cache"
 )
 
-type recipeCritiquer interface {
-	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
-	Ready(ctx context.Context) error
-}
-
-// TODO move critique.go over here and get rid of this iterface chacing admin_page
-type critiqueCache interface {
-	CritiqueFromCache(ctx context.Context, hash string) (*ai.RecipeCritique, error)
-	SaveCritique(ctx context.Context, hash string, critique *ai.RecipeCritique) error
-}
-
 var _ recipeCritiquer = &cachingCritiquer{}
 
 type cachingCritiquer struct {
 	critiquer recipeCritiquer
-	cache     critiqueCache
+	store     store
 }
 
-func newCachingCritiquer(critiquer recipeCritiquer, cache cache.Cache) *cachingCritiquer {
-	if critiquer == nil || cache == nil {
-		panic("critiquer and cache must not be nil")
+func newCachingCritiquer(critiquer recipeCritiquer, store store) *cachingCritiquer {
+	if critiquer == nil {
+		panic("critiquer must not be nil")
 	}
 	return &cachingCritiquer{
 		critiquer: critiquer,
-		cache:     IO(cache),
+		store:     store,
 	}
 }
 
@@ -44,7 +33,7 @@ func (c *cachingCritiquer) Ready(ctx context.Context) error {
 
 func (c *cachingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
 	hash := recipe.ComputeHash()
-	critique, err := c.cache.CritiqueFromCache(ctx, hash)
+	critique, err := c.store.Load(ctx, hash)
 	if err == nil {
 		return critique, nil
 	}
@@ -57,9 +46,8 @@ func (c *cachingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe)
 	if err != nil {
 		return nil, err
 	}
-	if err := c.cache.SaveCritique(ctx, hash, critique); err != nil {
+	if err := c.store.Save(ctx, hash, critique); err != nil {
 		slog.ErrorContext(ctx, "failed to cache recipe critique", "recipe", recipe.Title, "hash", hash, "error", err)
-		// not actually fatal
 	}
 	return critique, nil
 }

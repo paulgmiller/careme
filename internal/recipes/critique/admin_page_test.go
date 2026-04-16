@@ -1,4 +1,4 @@
-package recipes
+package critique_test
 
 import (
 	"net/http"
@@ -9,15 +9,18 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/recipes"
+	"careme/internal/recipes/critique"
 )
 
 func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	t.Parallel()
 
 	fc := cache.NewFileCache(t.TempDir())
-	rio := IO(fc)
+	recipesCache := recipes.IO(fc)
+	store := critique.NewStore(fc)
 
-	recipes := []ai.Recipe{
+	recipeList := []ai.Recipe{
 		{
 			Title:        "Spring Chicken",
 			Description:  "Bright and quick.",
@@ -43,12 +46,14 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 			DrinkPairing: "Pinot Grigio",
 		},
 	}
-	saveRecipesForOrigin(t, rio, "origin-hash", recipes...)
+	if err := recipesCache.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: recipeList}, "origin-hash"); err != nil {
+		t.Fatalf("save shopping list: %v", err)
+	}
 
-	newestHash := recipes[0].ComputeHash()
-	olderHash := recipes[1].ComputeHash()
+	newestHash := recipeList[0].ComputeHash()
+	olderHash := recipeList[1].ComputeHash()
 
-	if err := rio.SaveCritique(t.Context(), newestHash, &ai.RecipeCritique{
+	if err := store.Save(t.Context(), newestHash, &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
 		OverallScore:   9,
 		Summary:        "Strong weeknight draft.",
@@ -60,7 +65,7 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save newest critique: %v", err)
 	}
-	if err := rio.SaveCritique(t.Context(), olderHash, &ai.RecipeCritique{
+	if err := store.Save(t.Context(), olderHash, &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
 		OverallScore:   6,
 		Summary:        "Needs more brightness.",
@@ -76,7 +81,8 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/critiques", nil)
 	rr := httptest.NewRecorder()
 
-	AdminCritiquesPage(fc).ServeHTTP(rr, req)
+	handler := critique.AdminCritiquesPage(store, recipesCache)
+	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
@@ -105,11 +111,13 @@ func TestAdminCritiquesPageMethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
 	fc := cache.NewFileCache(t.TempDir())
+	store := critique.NewStore(fc)
+	recipesCache := recipes.IO(fc)
 
 	req := httptest.NewRequest(http.MethodPost, "/critiques", nil)
 	rr := httptest.NewRecorder()
 
-	AdminCritiquesPage(fc).ServeHTTP(rr, req)
+	critique.AdminCritiquesPage(store, recipesCache).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusMethodNotAllowed)

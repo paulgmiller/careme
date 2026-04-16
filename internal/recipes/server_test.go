@@ -638,8 +638,9 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 }
 
 type captureQuestionGenerator struct {
-	lastQuestion string
-	lastWinePick struct {
+	lastQuestion       string
+	lastConversationID string
+	lastWinePick       struct {
 		recipeTitle string
 		date        time.Time
 	}
@@ -657,6 +658,7 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 
 func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	c.lastQuestion = question
+	c.lastConversationID = conversationID
 	return "Try chicken thighs at the same cook time.", nil
 }
 
@@ -694,6 +696,32 @@ func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
 	return nil
 }
 
+func seedQuestionConversation(t *testing.T, s *server, conversationID string) string {
+	t.Helper()
+
+	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Question Test Store"}, time.Now())
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	recipe := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+	}
+	recipeHash := recipe.ComputeHash()
+	saveRecipesForOrigin(t, s, originHash, recipe)
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{recipe},
+		ConversationID: conversationID,
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+	return recipeHash
+}
+
 func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
@@ -701,14 +729,16 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 		withTestGenerator(&captureQuestionGenerator{}),
 	)
 
+	recipeHash := seedQuestionConversation(t, s, "conv-test")
+
 	form := url.Values{
 		"conversation_id": {"conv-test"},
 		"question":        {"Can I swap the protein?"},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
-	req.SetPathValue("hash", "hash")
+	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()
 
 	s.handleQuestion(rr, req)
@@ -728,6 +758,9 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	}
 	if !strings.Contains(body, "Try chicken thighs at the same cook time.") {
 		t.Fatalf("expected answer in response, got body: %s", body)
+	}
+	if got, want := s.generator.(*captureQuestionGenerator).lastConversationID, "conv-test"; got != want {
+		t.Fatalf("expected generator conversation ID %q, got %q", want, got)
 	}
 }
 
@@ -763,15 +796,17 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 		withTestGenerator(g),
 	)
 
+	recipeHash := seedQuestionConversation(t, s, "conv-test")
+
 	form := url.Values{
 		"conversation_id": {"conv-test"},
 		"question":        {"Can I swap the protein?"},
 		"recipe_title":    {"BBQ Pulled Pork"},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
-	req.SetPathValue("hash", "hash")
+	req.SetPathValue("hash", recipeHash)
 	rr := httptest.NewRecorder()
 
 	s.handleQuestion(rr, req)

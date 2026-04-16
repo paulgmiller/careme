@@ -144,16 +144,17 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 			{Description: loPtr("Baby Spinach")},
 		},
 	}
-	g := &Generator{
-		io:              IO(cacheStore),
-		staplesProvider: provider,
+	s := &cachedStaplesService{
+		cache:    IO(cacheStore),
+		provider: provider,
 	}
+
 	params := &generatorParams{
 		Location: &locations.Location{ID: "wholefoods_10216", Name: "Westlake"},
 		Date:     time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC),
 	}
 
-	got, err := g.GetStaples(t.Context(), params)
+	got, err := s.GetStaples(t.Context(), params)
 	if err != nil {
 		t.Fatalf("GetStaples returned error: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 		t.Fatalf("expected cached deduped results, got %d", len(cached))
 	}
 
-	gotAgain, err := g.GetStaples(t.Context(), params)
+	gotAgain, err := s.GetStaples(t.Context(), params)
 	if err != nil {
 		t.Fatalf("GetStaples returned error on cached call: %v", err)
 	}
