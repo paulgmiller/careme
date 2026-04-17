@@ -1060,10 +1060,7 @@ func (s *server) spin(ctx context.Context, hash string, w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
 	status, err := s.GenerationStatusFromCache(ctx, hash)
-	switch {
-	case err == nil:
-	case errors.Is(err, cache.ErrNotFound):
-	default:
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load generation status", "hash", hash, "error", err)
 	}
 

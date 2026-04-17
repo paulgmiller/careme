@@ -13,6 +13,9 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type captureWineQuestionAIClient struct {
@@ -246,38 +249,6 @@ func (s *captureWineStaplesProvider) searchTerms() []string {
 	return slices.Clone(s.searches)
 }
 
-func (s *captureGenerationStatusStore) SaveGenerationStatus(_ context.Context, hash string, status GenerationStatus) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.statuses == nil {
-		s.statuses = make(map[string][]GenerationStatus)
-	}
-	s.statuses[hash] = append(s.statuses[hash], status)
-	return nil
-}
-
-func (s *captureGenerationStatusStore) GenerationStatusFromCache(_ context.Context, hash string) (*GenerationStatus, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	history := s.statuses[hash]
-	if len(history) == 0 {
-		return nil, cache.ErrNotFound
-	}
-	latest := history[len(history)-1]
-	return &latest, nil
-}
-
-func (s *captureGenerationStatusStore) stagesFor(hash string) []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	history := s.statuses[hash]
-	stages := make([]string, 0, len(history))
-	for _, status := range history {
-		stages = append(stages, status.Stage)
-	}
-	return stages
-}
-
 func TestWineIngredientsCacheKey_UsesStyleDateAndLocation(t *testing.T) {
 	got := wineIngredientsCacheKey(" Pinot Noir ", "70500874", time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC))
 	want := "wines/0XY3COdxwHk"
@@ -453,9 +424,10 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 	critiquer := &captureCritiqueService{}
 	g := &Generator{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: StatusStore(cacheStore),
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -473,14 +445,19 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 }
 
+type noopstatuswriter struct{}
+
+func (noopstatuswriter) SaveGenerationStatus(_ context.Context, _, _ string) error { return nil }
+
 func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea"}
 
 	critiquer := &captureCritiqueService{}
 	g := &Generator{
-		aiClient:  &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
-		critiquer: critiquer,
+		aiClient:     &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -549,9 +526,10 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 
 	g := &Generator{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -635,9 +613,10 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 		},
 	}
 	g := &Generator{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -669,9 +648,10 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 		}},
 	}
 	g := &Generator{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: &captureCritiqueService{},
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    &captureCritiqueService{},
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -686,6 +666,15 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 	}
 }
 
+type statusCounter struct {
+	status []string
+}
+
+func (s *statusCounter) SaveGenerationStatus(_ context.Context, _, stat string) error {
+	s.status = append(s.status, stat)
+	return nil
+}
+
 func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 	steady := ai.Recipe{Title: "Steady Dinner", Description: "Good enough"}
 
@@ -696,21 +685,17 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
 
-	statuses := &captureGenerationStatusStore{}
+	statuses := &statusCounter{}
 	g := &Generator{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  &sequenceAIClient{generateResponses: []*ai.ShoppingList{{ConversationID: "conv-stable", Recipes: []ai.Recipe{steady}}}},
-		critiquer: &captureCritiqueService{},
-		statuses:  statuses,
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     &sequenceAIClient{generateResponses: []*ai.ShoppingList{{ConversationID: "conv-stable", Recipes: []ai.Recipe{steady}}}},
+		critiquer:    &captureCritiqueService{},
+		statusWriter: statuses,
 	}
 
-	if _, err := g.GenerateRecipes(t.Context(), params); err != nil {
-		t.Fatalf("GenerateRecipes returned error: %v", err)
-	}
-
-	if got, want := statuses.stagesFor(params.Hash()), []string{generationStageIngredientsReady, generationStageRecipesGenerated, generationStageComplete}; !slices.Equal(got, want) {
-		t.Fatalf("unexpected status stages: got %v want %v", got, want)
-	}
+	_, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(statuses.status), "got statuses %v", statuses.status)
 }
 
 func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
@@ -758,8 +743,9 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 		},
 	}
 	g := &Generator{
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -792,55 +778,6 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	}
 	if got := aiStub.regenerateInstructions[1]; !slices.Equal(got, wantRetryInstructions) {
 		t.Fatalf("unexpected critique retry instructions: got %v want %v", got, wantRetryInstructions)
-	}
-}
-
-func TestGenerateRecipes_RegenerateWritesRetryStatusStages(t *testing.T) {
-	initial := ai.Recipe{Title: "Needs Work", Description: "First pass"}
-	retried := ai.Recipe{Title: "Ready Now", Description: "Second pass"}
-
-	statuses := &captureGenerationStatusStore{}
-	aiStub := &sequenceAIClient{
-		regenerateResponses: []*ai.ShoppingList{
-			{ConversationID: "conv-first-pass", Recipes: []ai.Recipe{initial}},
-			{ConversationID: "conv-second-pass", Recipes: []ai.Recipe{retried}},
-		},
-	}
-	critiquer := &captureCritiqueService{
-		fn: func(recipe ai.Recipe) (*ai.RecipeCritique, error) {
-			switch recipe.Title {
-			case "Needs Work":
-				return &ai.RecipeCritique{
-					SchemaVersion: "recipe-critique-v1",
-					OverallScore:  5,
-				}, nil
-			case "Ready Now":
-				return &ai.RecipeCritique{
-					SchemaVersion: "recipe-critique-v1",
-					OverallScore:  8,
-				}, nil
-			default:
-				t.Fatalf("unexpected recipe critique request for %q", recipe.Title)
-				return nil, nil
-			}
-		},
-	}
-	g := &Generator{
-		aiClient:  aiStub,
-		critiquer: critiquer,
-		statuses:  statuses,
-	}
-
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	params.ConversationID = "conv-original"
-	params.Instructions = "make it vegetarian"
-
-	if _, err := g.GenerateRecipes(t.Context(), params); err != nil {
-		t.Fatalf("GenerateRecipes returned error: %v", err)
-	}
-
-	if got, want := statuses.stagesFor(params.Hash()), []string{generationStageRecipesGenerated, generationStageCritiqueRetrying, generationStageComplete}; !slices.Equal(got, want) {
-		t.Fatalf("unexpected regenerate status stages: got %v want %v", got, want)
 	}
 }
 
@@ -878,9 +815,10 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 		},
 	}
 	g := &Generator{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)

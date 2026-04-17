@@ -24,6 +24,9 @@ import (
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRedirectToHash(t *testing.T) {
@@ -642,26 +645,19 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 	s := newTestServer(t, withTestCache(cacheStore))
 
 	hash := "spinner-hash"
-	status := GenerationStatus{
-		Stage:     generationStageCritiqueRetrying,
-		Message:   generationStatusMessage(generationStageCritiqueRetrying),
-		UpdatedAt: time.Now().UTC(),
-	}
-	if err := s.SaveGenerationStatus(t.Context(), hash, status); err != nil {
-		t.Fatalf("failed to seed generation status: %v", err)
-	}
+	status := "Baby we working"
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(hash)+"&start=2026-04-17T12%3A00%3A00Z", nil)
+	err := s.SaveGenerationStatus(t.Context(), hash, status)
+	require.NoError(t, err)
+
 	rr := httptest.NewRecorder()
 
-	s.Spin(rr, req)
+	s.spin(t.Context(), hash, rr)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if body := rr.Body.String(); !strings.Contains(body, status.Message) {
-		t.Fatalf("expected spinner body to include %q, got %s", status.Message, body)
-	}
+	assert.Contains(t, rr.Body.String(), status)
 }
 
 type captureQuestionGenerator struct {
