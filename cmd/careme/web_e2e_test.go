@@ -173,9 +173,9 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
-		return mockAuth.WithAuthHTTP(AppMiddleWare(h, &fakeRequestTracker{}))
+		return mockAuth.WithAuthHTTP(appMiddleware(h, &fakeRequestTracker{}))
 	})
-	infraRoutes := routing.Wrap(rootMux, BaseMiddleware)
+	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
@@ -183,7 +183,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth).Register(appRoutes)
 
 	ro := &readyOnce{}
-	ro.Add(locationServer)
+	ro.add(locationServer)
 
 	infraRoutes.Handle("/ready", ro)
 

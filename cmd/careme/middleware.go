@@ -233,14 +233,14 @@ func sessionCookie(r *http.Request, sessionID string) *http.Cookie {
 }
 
 // just recover and log
-func BaseMiddleware(h http.Handler) http.Handler {
+func baseMiddleware(h http.Handler) http.Handler {
 	h = &recoverer{h}
 	return &logger{h}
 }
 
 // instrument with app insights and log with operation and session ids.
-func AppMiddleWare(h http.Handler, tracker requestTracker) http.Handler {
-	h = BaseMiddleware(h)
+func appMiddleware(h http.Handler, tracker requestTracker) http.Handler {
+	h = baseMiddleware(h)
 	h = newAppInsightsTracker(h, tracker) // must be "inside" operatid and session handler.
 	h = &operationIDHandler{h}
 	return &sessionIDHandler{h}

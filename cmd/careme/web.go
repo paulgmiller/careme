@@ -51,9 +51,9 @@ func runServer(cfg *config.Config, addr string) error {
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
-		return authClient.WithAuthHTTP(AppMiddleWare(h, newRequestTrackerFromEnv()))
+		return authClient.WithAuthHTTP(appMiddleware(h, newRequestTrackerFromEnv()))
 	})
-	infraRoutes := routing.Wrap(rootMux, BaseMiddleware)
+	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
 	authClient.Register(appRoutes)
 	static.Register(infraRoutes)
@@ -69,9 +69,9 @@ func runServer(cfg *config.Config, addr string) error {
 		generator = recipes.NewMockGenerator()
 	} else {
 		mc := critique.NewManager(cfg, cache)
-		ro.Add(mc)
+		ro.add(mc)
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
-		ro.Add(aiclient)
+		ro.add(aiclient)
 		staples, err := recipes.NewCachedStaplesService(cfg, cache)
 		if err != nil {
 			return fmt.Errorf("failed to create staples service: %w", err)
@@ -96,7 +96,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler.Register(appRoutes)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
-	ro.Add(locationServer)
+	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())

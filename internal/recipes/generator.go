@@ -35,14 +35,13 @@ type staplesService interface {
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error)
 }
 
-// TODO unexport?
-type Generator struct {
+type generatorService struct {
 	aiClient  aiClient
 	critiquer critique.Service
 	staples   staplesService
 }
 
-func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService) (*Generator, error) {
+func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService) (*generatorService, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
@@ -52,14 +51,14 @@ func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staples
 	if staples == nil {
 		return nil, fmt.Errorf("staples service is required")
 	}
-	return &Generator{
+	return &generatorService{
 		aiClient:  aiClient,
 		critiquer: critiquer,
 		staples:   staples,
 	}, nil
 }
 
-func (g *Generator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (g *generatorService) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
@@ -95,7 +94,7 @@ func (g *Generator) PickAWine(ctx context.Context, location string, recipe ai.Re
 	return selection, nil
 }
 
-func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	hash := p.Hash()
 	start := time.Now()
 
@@ -147,11 +146,11 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	return shoppingList, nil
 }
 
-func (g *Generator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+func (g *generatorService) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
 	return g.aiClient.AskQuestion(ctx, question, conversationID)
 }
 
-func (g *Generator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+func (g *generatorService) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
 	return g.aiClient.GenerateRecipeImage(ctx, recipe)
 }
 
@@ -189,7 +188,7 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 	return lo.Uniq(titles)
 }
 
-func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
+func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
 	if g.critiquer == nil {
 		return shoppingList, nil
 	}
