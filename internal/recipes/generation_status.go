@@ -15,8 +15,7 @@ type statusWriter interface {
 	SaveGenerationStatus(ctx context.Context, hash string, status string) error
 }
 
-type generationStatusStore interface {
-	statusWriter
+type statusReader interface {
 	GenerationStatusFromCache(ctx context.Context, hash string) (string, error)
 }
 
@@ -24,7 +23,10 @@ type statusStore struct {
 	cache cache.Cache
 }
 
-var _ generationStatusStore = statusStore{}
+var (
+	_ statusReader = &statusStore{}
+	_ statusWriter = &statusStore{}
+)
 
 func StatusStore(c cache.Cache) *statusStore {
 	return &statusStore{c}

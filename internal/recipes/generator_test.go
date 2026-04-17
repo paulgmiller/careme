@@ -422,7 +422,7 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 		staples:      &cachedStaplesService{cache: io},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
-		statusWriter: StatusStore(cacheStore),
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)

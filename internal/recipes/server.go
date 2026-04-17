@@ -84,27 +84,27 @@ type ExtGenerator = generator
 type server struct {
 	recipeio
 	imageio
-	generationStatusStore
-	cfg       *config.Config
-	storage   *users.Storage
-	generator generator
-	locServer locServer
-	wg        sync.WaitGroup
-	clerk     auth.AuthClient
+	statusReader statusReader
+	cfg          *config.Config
+	storage      *users.Storage
+	generator    generator
+	locServer    locServer
+	wg           sync.WaitGroup
+	clerk        auth.AuthClient
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, imageCache cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
-		recipeio:              IO(c),
-		imageio:               imageio{Cache: imageCache},
-		generationStatusStore: StatusStore(c),
-		cfg:                   cfg,
-		storage:               storage,
-		generator:             generator,
-		locServer:             locServer,
-		clerk:                 clerkClient,
+		recipeio:     IO(c),
+		imageio:      imageio{Cache: imageCache},
+		statusReader: StatusStore(c),
+		cfg:          cfg,
+		storage:      storage,
+		generator:    generator,
+		locServer:    locServer,
+		clerk:        clerkClient,
 	}
 }
 
@@ -1059,7 +1059,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 func (s *server) spin(ctx context.Context, hash string, w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
-	status, err := s.GenerationStatusFromCache(ctx, hash)
+	status, err := s.statusReader.GenerationStatusFromCache(ctx, hash)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load generation status", "hash", hash, "error", err)
 	}

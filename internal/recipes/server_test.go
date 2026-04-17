@@ -646,8 +646,8 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 
 	hash := "spinner-hash"
 	status := "Baby we working"
-
-	err := s.SaveGenerationStatus(t.Context(), hash, status)
+	writer := s.statusReader.(*statusStore)
+	err := writer.SaveGenerationStatus(t.Context(), hash, status)
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
