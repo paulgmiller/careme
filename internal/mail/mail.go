@@ -75,7 +75,9 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
-	generator, err := recipes.NewGenerator(ai.NewClient(cfg.AI.APIKey, "TODOMODEL"), mc, staples, recipes.IO(cache))
+	ss := recipes.StatusStore(cache)
+	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}

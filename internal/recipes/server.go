@@ -84,6 +84,7 @@ type ExtGenerator = generator
 type server struct {
 	recipeio
 	imageio
+	generationStatusStore
 	cfg       *config.Config
 	storage   *users.Storage
 	generator generator
@@ -96,13 +97,14 @@ type server struct {
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, imageCache cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
-		recipeio:  IO(c),
-		imageio:   imageio{Cache: imageCache},
-		cfg:       cfg,
-		storage:   storage,
-		generator: generator,
-		locServer: locServer,
-		clerk:     clerkClient,
+		recipeio:              IO(c),
+		imageio:               imageio{Cache: imageCache},
+		generationStatusStore: StatusStore(c),
+		cfg:                   cfg,
+		storage:               storage,
+		generator:             generator,
+		locServer:             locServer,
+		clerk:                 clerkClient,
 	}
 }
 
@@ -859,7 +861,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	}
 
 	if time.Since(startTime) < time.Minute*10 {
-		s.Spin(w, r)
+		s.spin(ctx, hashParam, w)
 		return
 	}
 	slog.WarnContext(ctx, "rekicking generation", "time", startArg, "hash", hashParam)
@@ -1021,9 +1023,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
 	hash := p.Hash()
-	if err := s.SaveGenerationStatus(ctx, hash, newGenerationStatus(generationStageStarting)); err != nil {
-		slog.ErrorContext(ctx, "failed to save starting generation status", "hash", hash, "error", err)
-	}
 
 	s.wg.Go(func() {
 		// copy over request id to new context? can't be same context because end of http request will cancel it.
@@ -1057,22 +1056,17 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 	})
 }
 
-func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
+func (s *server) spin(ctx context.Context, hash string, w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	ctx := r.Context()
-	_, err := s.clerk.GetUserIDFromRequest(r)
-	signedIn := !errors.Is(err, auth.ErrNoSession)
-	statusMessage := generationStatusMessage(generationStageStarting)
-	if hash := strings.TrimSpace(r.URL.Query().Get(queryArgHash)); hash != "" {
-		status, err := s.GenerationStatusFromCache(ctx, hash)
-		switch {
-		case err == nil:
-			statusMessage = status.Message
-		case errors.Is(err, cache.ErrNotFound):
-		default:
-			slog.ErrorContext(ctx, "failed to load generation status", "hash", hash, "error", err)
-		}
+
+	status, err := s.GenerationStatusFromCache(ctx, hash)
+	switch {
+	case err == nil:
+	case errors.Is(err, cache.ErrNotFound):
+	default:
+		slog.ErrorContext(ctx, "failed to load generation status", "hash", hash, "error", err)
 	}
+
 	spinnerData := struct {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
@@ -1084,9 +1078,9 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  signedIn,
+		ServerSignedIn:  true, // how coukld we get here otherweise
 		RefreshInterval: "10", // seconds
-		StatusMessage:   statusMessage,
+		StatusMessage:   status,
 	}
 
 	if err := templates.Spin.Execute(w, spinnerData); err != nil {
