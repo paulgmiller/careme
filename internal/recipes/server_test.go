@@ -652,7 +652,7 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	s.spin(t.Context(), hash, rr)
+	s.spin(t.Context(), rr, hash)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)

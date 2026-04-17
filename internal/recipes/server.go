@@ -861,7 +861,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	}
 
 	if time.Since(startTime) < time.Minute*10 {
-		s.spin(ctx, hashParam, w)
+		s.spin(ctx, w, hashParam)
 		return
 	}
 	slog.WarnContext(ctx, "rekicking generation", "time", startArg, "hash", hashParam)
@@ -1056,7 +1056,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 	})
 }
 
-func (s *server) spin(ctx context.Context, hash string, w http.ResponseWriter) {
+func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
 	status, err := s.statusReader.GenerationStatusFromCache(ctx, hash)
@@ -1070,12 +1070,14 @@ func (s *server) spin(ctx context.Context, hash string, w http.ResponseWriter) {
 		Style           seasons.Style
 		RefreshInterval string // seconds
 		StatusMessage   string
+		ServerSignedIn  bool
 	}{
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
 		RefreshInterval: "10", // seconds
 		StatusMessage:   status,
+		ServerSignedIn:  true, // clerk refresh doesn't need to reload because spin will just do it anwyays
 	}
 
 	if err := templates.Spin.Execute(w, spinnerData); err != nil {

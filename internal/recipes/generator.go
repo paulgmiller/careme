@@ -195,9 +195,10 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 func titles(prefix string, recipes []ai.Recipe) string {
 	var b strings.Builder
 	b.WriteString(prefix)
+	b.WriteString("\n")
 	for _, r := range recipes {
 		b.WriteString(r.Title)
-		b.WriteString("; ")
+		b.WriteString("\n")
 	}
 	return b.String()
 }
@@ -215,7 +216,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	if len(garbage) == 0 {
 		return shoppingList, nil
 	}
-	slog.InfoContext(ctx, "regenerating recipes based on critique feedback", "garbage_count", len(garbage), "good_count", len(good))
+	slog.InfoContext(ctx, "Regenerating recipes based on critique feedback:", "garbage_count", len(garbage), "good_count", len(good))
 	garbageRecipes := lo.Map(garbage, func(r critique.Result, _ int) ai.Recipe { return *r.Recipe })
 	g.writeStatus(ctx, hash, titles("Making adjustments to these recipes: ", garbageRecipes))
 
