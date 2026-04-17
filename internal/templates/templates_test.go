@@ -104,10 +104,12 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 		Style           seasons.Style
 		ServerSignedIn  bool
 		RefreshInterval string
+		StatusMessage   string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
+		StatusMessage:   "Ingredients are ready. Building your recipes.",
 	}
 
 	var buf bytes.Buffer
@@ -121,6 +123,9 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 	if !strings.Contains(rendered, `const serverSignedIn =`) || !strings.Contains(rendered, `!serverSignedIn && clerkSignedIn`) {
 		t.Fatalf("spinner page should pass server sign-in state to Clerk refresh logic, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, data.StatusMessage) {
+		t.Fatalf("spinner page should render status message, body: %s", rendered)
 	}
 }
 
