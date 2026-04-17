@@ -34,7 +34,6 @@ Thumbs.db
 secrets/**/*.env
 
 tailwind/node_modules/
-docs/screenshots/review/
 
 # Cache directory and compiled binary
 cache/

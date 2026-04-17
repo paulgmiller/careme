@@ -155,6 +155,9 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	if !strings.Contains(rendered, "Ballard Market") {
 		t.Fatalf("home page should render favorite store name, body: %s", rendered)
 	}
+	if !strings.Contains(rendered, `id="favorite-store-chef-notes"`) {
+		t.Fatalf("home page should render favorite store chef notes toggle control, body: %s", rendered)
+	}
 	if !strings.Contains(rendered, "Chef notes") {
 		t.Fatalf("home page should render chef notes toggle, body: %s", rendered)
 	}
@@ -192,8 +195,17 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 	}
 
 	rendered := buf.String()
-	if strings.Contains(rendered, `id="favorite-store-notes"`) {
-		t.Fatalf("home page should not render favorite store notes toggle without a favorite store, body: %s", rendered)
+	if strings.Contains(rendered, `id="favorite-store-chef-notes"`) {
+		t.Fatalf("home page should not render favorite store chef notes toggle without a favorite store, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `for="favorite-store-chef-notes"`) {
+		t.Fatalf("home page should not render favorite store chef notes label without a favorite store, body: %s", rendered)
+	}
+	if strings.Contains(rendered, "Chef notes") {
+		t.Fatalf("home page should not render favorite store chef notes copy without a favorite store, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `name="instructions"`) {
+		t.Fatalf("home page should not render favorite store instructions field without a favorite store, body: %s", rendered)
 	}
 }
 

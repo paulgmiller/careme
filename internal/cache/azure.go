@@ -143,7 +143,8 @@ func MakeCache() (ListCache, error) {
 }
 
 func EnsureCache(container string) (ListCache, error) {
-	if strings.TrimSpace(os.Getenv("AZURE_STORAGE_ACCOUNT_NAME")) != "" {
+	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
+	if ok {
 		slog.Info("Using Azure Blob Storage for cache", "container", container)
 		return NewBlobCache(container)
 	}
