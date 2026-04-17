@@ -26,7 +26,7 @@ type Server struct {
 }
 
 func (s *Server) Add(name string, dog watchdog, period time.Duration) {
-	guard := NewOncePer(period, dog)
+	guard := newOncePer(period, dog)
 	s.watchers = append(s.watchers, watcher{
 		name:   name,
 		period: period,
