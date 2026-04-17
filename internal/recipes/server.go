@@ -1021,6 +1021,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
 	hash := p.Hash()
+	if err := s.SaveGenerationStatus(ctx, hash, newGenerationStatus(generationStageStarting)); err != nil {
+		slog.ErrorContext(ctx, "failed to save starting generation status", "hash", hash, "error", err)
+	}
 
 	s.wg.Go(func() {
 		// copy over request id to new context? can't be same context because end of http request will cancel it.
@@ -1059,18 +1062,31 @@ func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	_, err := s.clerk.GetUserIDFromRequest(r)
 	signedIn := !errors.Is(err, auth.ErrNoSession)
+	statusMessage := generationStatusMessage(generationStageStarting)
+	if hash := strings.TrimSpace(r.URL.Query().Get(queryArgHash)); hash != "" {
+		status, err := s.GenerationStatusFromCache(ctx, hash)
+		switch {
+		case err == nil:
+			statusMessage = status.Message
+		case errors.Is(err, cache.ErrNotFound):
+		default:
+			slog.ErrorContext(ctx, "failed to load generation status", "hash", hash, "error", err)
+		}
+	}
 	spinnerData := struct {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
 		ServerSignedIn  bool
 		RefreshInterval string // seconds
+		StatusMessage   string
 	}{
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
 		RefreshInterval: "10", // seconds
+		StatusMessage:   statusMessage,
 	}
 
 	if err := templates.Spin.Execute(w, spinnerData); err != nil {

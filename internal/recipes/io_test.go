@@ -233,6 +233,35 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 	}
 }
 
+func TestSaveGenerationStatus_UsesPrefixedKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	hash := "generation-hash"
+	status := GenerationStatus{
+		Stage:     generationStageIngredientsReady,
+		Message:   generationStatusMessage(generationStageIngredientsReady),
+		UpdatedAt: time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC),
+	}
+
+	if err := rio.SaveGenerationStatus(t.Context(), hash, status); err != nil {
+		t.Fatalf("SaveGenerationStatus failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpDir, generationStatusCachePrefix, hash)); err != nil {
+		t.Fatalf("expected generation status at prefixed key: %v", err)
+	}
+
+	got, err := rio.GenerationStatusFromCache(t.Context(), hash)
+	if err != nil {
+		t.Fatalf("GenerationStatusFromCache failed: %v", err)
+	}
+	if got.Stage != status.Stage || got.Message != status.Message || !got.UpdatedAt.Equal(status.UpdatedAt) {
+		t.Fatalf("unexpected generation status payload: got %+v want %+v", got, status)
+	}
+}
+
 func loPtr(v string) *string {
 	return &v
 }

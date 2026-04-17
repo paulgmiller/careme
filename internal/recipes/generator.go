@@ -40,9 +40,10 @@ type Generator struct {
 	aiClient  aiClient
 	critiquer critique.Service
 	staples   staplesService
+	statuses  generationStatusStore
 }
 
-func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService) (*Generator, error) {
+func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService, statuses generationStatusStore) (*Generator, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
@@ -56,6 +57,7 @@ func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staples
 		aiClient:  aiClient,
 		critiquer: critiquer,
 		staples:   staples,
+		statuses:  statuses,
 	}, nil
 }
 
@@ -116,7 +118,8 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+		g.updateGenerationStatus(ctx, hash, generationStageRecipesGenerated)
+		shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 		if err != nil {
 			return nil, err
 		}
@@ -131,13 +134,15 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
+	g.updateGenerationStatus(ctx, hash, generationStageIngredientsReady)
 
 	instructions := []string{p.Directive, p.Instructions}
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
-	shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+	g.updateGenerationStatus(ctx, hash, generationStageRecipesGenerated)
+	shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 	if err != nil {
 		return nil, err
 	}
@@ -189,8 +194,9 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 	return lo.Uniq(titles)
 }
 
-func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
+func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, hash string, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
 	if g.critiquer == nil {
+		g.updateGenerationStatus(ctx, hash, generationStageComplete)
 		return shoppingList, nil
 	}
 
@@ -200,9 +206,11 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 		slog.InfoContext(ctx, "low scoring recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
 	}
 	if len(garbage) == 0 {
+		g.updateGenerationStatus(ctx, hash, generationStageComplete)
 		return shoppingList, nil
 	}
 	slog.InfoContext(ctx, "regenerating recipes based on critique feedback", "garbage_count", len(garbage), "good_count", len(good))
+	g.updateGenerationStatus(ctx, hash, generationStageCritiqueRetrying)
 
 	if strings.TrimSpace(shoppingList.ConversationID) == "" {
 		return nil, fmt.Errorf("conversation ID is required for critique retry")
@@ -220,5 +228,15 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 	})
 
 	_ = g.critiquer.CritiqueRecipes(ctx, newRecipes)
+	g.updateGenerationStatus(ctx, hash, generationStageComplete)
 	return shoppingList, nil
+}
+
+func (g *Generator) updateGenerationStatus(ctx context.Context, hash string, stage string) {
+	if g == nil || g.statuses == nil || strings.TrimSpace(hash) == "" {
+		return
+	}
+	if err := g.statuses.SaveGenerationStatus(ctx, hash, newGenerationStatus(stage)); err != nil {
+		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "stage", stage, "error", err)
+	}
 }

@@ -77,7 +77,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}
 		watchdogServer.Add("staples", staples, 6.*time.Hour)
-		generator, err = recipes.NewGenerator(aiclient, mc, staples)
+		generator, err = recipes.NewGenerator(aiclient, mc, staples, recipes.IO(cache))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}

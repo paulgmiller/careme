@@ -637,6 +637,33 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	}
 }
 
+func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore))
+
+	hash := "spinner-hash"
+	status := GenerationStatus{
+		Stage:     generationStageCritiqueRetrying,
+		Message:   generationStatusMessage(generationStageCritiqueRetrying),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.SaveGenerationStatus(t.Context(), hash, status); err != nil {
+		t.Fatalf("failed to seed generation status: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(hash)+"&start=2026-04-17T12%3A00%3A00Z", nil)
+	rr := httptest.NewRecorder()
+
+	s.Spin(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if body := rr.Body.String(); !strings.Contains(body, status.Message) {
+		t.Fatalf("expected spinner body to include %q, got %s", status.Message, body)
+	}
+}
+
 type captureQuestionGenerator struct {
 	lastQuestion       string
 	lastConversationID string
