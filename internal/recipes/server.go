@@ -84,25 +84,27 @@ type ExtGenerator = generator
 type server struct {
 	recipeio
 	imageio
-	cfg       *config.Config
-	storage   *users.Storage
-	generator generator
-	locServer locServer
-	wg        sync.WaitGroup
-	clerk     auth.AuthClient
+	statusReader statusReader
+	cfg          *config.Config
+	storage      *users.Storage
+	generator    generator
+	locServer    locServer
+	wg           sync.WaitGroup
+	clerk        auth.AuthClient
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, imageCache cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
-		recipeio:  IO(c),
-		imageio:   imageio{Cache: imageCache},
-		cfg:       cfg,
-		storage:   storage,
-		generator: generator,
-		locServer: locServer,
-		clerk:     clerkClient,
+		recipeio:     IO(c),
+		imageio:      imageio{Cache: imageCache},
+		statusReader: StatusStore(c),
+		cfg:          cfg,
+		storage:      storage,
+		generator:    generator,
+		locServer:    locServer,
+		clerk:        clerkClient,
 	}
 }
 
@@ -859,7 +861,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	}
 
 	if time.Since(startTime) < time.Minute*10 {
-		s.Spin(w, r)
+		s.spin(ctx, w, hashParam)
 		return
 	}
 	slog.WarnContext(ctx, "rekicking generation", "time", startArg, "hash", hashParam)
@@ -1054,23 +1056,28 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 	})
 }
 
-func (s *server) Spin(w http.ResponseWriter, r *http.Request) {
+func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	ctx := r.Context()
-	_, err := s.clerk.GetUserIDFromRequest(r)
-	signedIn := !errors.Is(err, auth.ErrNoSession)
+
+	status, err := s.statusReader.GenerationStatusFromCache(ctx, hash)
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load generation status", "hash", hash, "error", err)
+	}
+
 	spinnerData := struct {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
-		ServerSignedIn  bool
 		RefreshInterval string // seconds
+		StatusMessage   string
+		ServerSignedIn  bool
 	}{
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  signedIn,
 		RefreshInterval: "10", // seconds
+		StatusMessage:   status,
+		ServerSignedIn:  true, // clerk refresh doesn't need to reload because spin will just do it anwyays
 	}
 
 	if err := templates.Spin.Execute(w, spinnerData); err != nil {

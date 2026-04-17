@@ -24,6 +24,9 @@ import (
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRedirectToHash(t *testing.T) {
@@ -635,6 +638,26 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	if got, want := captured.LastRecipes, []string{"Cooked Recently"}; !slices.Equal(got, want) {
 		t.Fatalf("expected only recently cooked recipes in avoid list, got %v", got)
 	}
+}
+
+func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore))
+
+	hash := "spinner-hash"
+	status := "Baby we working"
+	writer := s.statusReader.(*statusStore)
+	err := writer.SaveGenerationStatus(t.Context(), hash, status)
+	require.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+
+	s.spin(t.Context(), rr, hash)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	assert.Contains(t, rr.Body.String(), status)
 }
 
 type captureQuestionGenerator struct {

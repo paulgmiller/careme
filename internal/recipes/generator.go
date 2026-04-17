@@ -36,12 +36,13 @@ type staplesService interface {
 }
 
 type generatorService struct {
-	aiClient  aiClient
-	critiquer critique.Service
-	staples   staplesService
+	aiClient     aiClient
+	critiquer    critique.Service
+	staples      staplesService
+	statusWriter statusWriter
 }
 
-func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService) (*generatorService, error) {
+func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService, statuses statusWriter) (*generatorService, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
@@ -52,9 +53,10 @@ func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staples
 		return nil, fmt.Errorf("staples service is required")
 	}
 	return &generatorService{
-		aiClient:  aiClient,
-		critiquer: critiquer,
-		staples:   staples,
+		aiClient:     aiClient,
+		critiquer:    critiquer,
+		staples:      staples,
+		statusWriter: statuses,
 	}, nil
 }
 
@@ -115,7 +117,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+		shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 		if err != nil {
 			return nil, err
 		}
@@ -130,13 +132,15 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
+	g.writeStatus(ctx, hash, fmt.Sprintf("Looking through %d ingredients", len(ingredients)))
 
 	instructions := []string{p.Directive, p.Instructions}
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
-	shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+
+	shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 	if err != nil {
 		return nil, err
 	}
@@ -188,11 +192,22 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 	return lo.Uniq(titles)
 }
 
-func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
+func titles(prefix string, recipes []ai.Recipe) string {
+	var b strings.Builder
+	b.WriteString(prefix)
+	b.WriteString("\n")
+	for _, r := range recipes {
+		b.WriteString(r.Title)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash string, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
 	if g.critiquer == nil {
 		return shoppingList, nil
 	}
-
+	g.writeStatus(ctx, hash, titles("Getting feeeback on these recipes:", shoppingList.Recipes))
 	results := g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
 	good, garbage := critique.Split(ctx, results, critique.MinimumRecipeScore)
 	for _, result := range garbage {
@@ -201,7 +216,9 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, shoppingLi
 	if len(garbage) == 0 {
 		return shoppingList, nil
 	}
-	slog.InfoContext(ctx, "regenerating recipes based on critique feedback", "garbage_count", len(garbage), "good_count", len(good))
+	slog.InfoContext(ctx, "Regenerating recipes based on critique feedback:", "garbage_count", len(garbage), "good_count", len(good))
+	garbageRecipes := lo.Map(garbage, func(r critique.Result, _ int) ai.Recipe { return *r.Recipe })
+	g.writeStatus(ctx, hash, titles("Making adjustments to these recipes: ", garbageRecipes))
 
 	if strings.TrimSpace(shoppingList.ConversationID) == "" {
 		return nil, fmt.Errorf("conversation ID is required for critique retry")
@@ -219,5 +236,16 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, shoppingLi
 	})
 
 	_ = g.critiquer.CritiqueRecipes(ctx, newRecipes)
+	// no point in upating as we're async here g.updateGenerationStatus(ctx, hash, "")
 	return shoppingList, nil
+}
+
+// just making this best effort
+func (g *generatorService) writeStatus(ctx context.Context, hash string, status string) {
+	if strings.TrimSpace(hash) == "" {
+		return
+	}
+	if err := g.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
+		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "status", status, "error", err)
+	}
 }

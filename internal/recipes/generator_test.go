@@ -13,6 +13,9 @@ import (
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type captureWineQuestionAIClient struct {
@@ -416,9 +419,10 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 	critiquer := &captureCritiqueService{}
 	g := &generatorService{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -436,14 +440,19 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 }
 
+type noopstatuswriter struct{}
+
+func (noopstatuswriter) SaveGenerationStatus(_ context.Context, _, _ string) error { return nil }
+
 func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea"}
 
 	critiquer := &captureCritiqueService{}
 	g := &generatorService{
-		aiClient:  &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
-		critiquer: critiquer,
+		aiClient:     &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -512,9 +521,10 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 
 	g := &generatorService{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -598,9 +608,10 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 		},
 	}
 	g := &generatorService{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -632,9 +643,10 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 		}},
 	}
 	g := &generatorService{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: &captureCritiqueService{},
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    &captureCritiqueService{},
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -647,6 +659,38 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 	if aiStub.regenerateCalls != 0 {
 		t.Fatalf("expected no critique-driven regenerate calls, got %d", aiStub.regenerateCalls)
 	}
+}
+
+type statusCounter struct {
+	status []string
+}
+
+func (s *statusCounter) SaveGenerationStatus(_ context.Context, _, stat string) error {
+	s.status = append(s.status, stat)
+	return nil
+}
+
+func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
+	steady := ai.Recipe{Title: "Steady Dinner", Description: "Good enough"}
+
+	cacheStore := cache.NewFileCache(t.TempDir())
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
+		t.Fatalf("failed to seed ingredients cache: %v", err)
+	}
+
+	statuses := &statusCounter{}
+	g := &generatorService{
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     &sequenceAIClient{generateResponses: []*ai.ShoppingList{{ConversationID: "conv-stable", Recipes: []ai.Recipe{steady}}}},
+		critiquer:    &captureCritiqueService{},
+		statusWriter: statuses,
+	}
+
+	_, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(statuses.status), "got statuses %v", statuses.status)
 }
 
 func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
@@ -694,8 +738,9 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 		},
 	}
 	g := &generatorService{
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -765,9 +810,10 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 		},
 	}
 	g := &generatorService{
-		staples:   &cachedStaplesService{cache: io},
-		aiClient:  aiStub,
-		critiquer: critiquer,
+		staples:      &cachedStaplesService{cache: io},
+		aiClient:     aiStub,
+		critiquer:    critiquer,
+		statusWriter: noopstatuswriter{},
 	}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
