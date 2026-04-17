@@ -1068,14 +1068,12 @@ func (s *server) spin(ctx context.Context, hash string, w http.ResponseWriter) {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
-		ServerSignedIn  bool
 		RefreshInterval string // seconds
 		StatusMessage   string
 	}{
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  true, // how coukld we get here otherweise
 		RefreshInterval: "10", // seconds
 		StatusMessage:   status,
 	}
