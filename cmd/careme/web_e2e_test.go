@@ -205,7 +205,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory).Register(appRoutes)
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth).Register(appRoutes)
-	registerHomeRoute(appRoutes, userStorage, locationStorage, mockAuth)
+	appRoutes.Handle("/", home{userStorage, locationStorage, mockAuth})
 
 	ro := &readyOnce{}
 	ro.Add(locationServer)
