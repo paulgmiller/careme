@@ -10,6 +10,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/logsetup"
 	"careme/internal/seasons"
+	utypes "careme/internal/users/types"
 
 	"golang.org/x/net/html"
 )
@@ -125,6 +126,91 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 	if !strings.Contains(rendered, data.StatusMessage) {
 		t.Fatalf("spinner page should render status message, body: %s", rendered)
+	}
+}
+
+func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript     template.HTML
+		GoogleTagScript   template.HTML
+		User              *utypes.User
+		FavoriteStoreName string
+		Style             seasons.Style
+		ServerSignedIn    bool
+	}{
+		User: &utypes.User{
+			Email:         []string{"chef@example.com"},
+			FavoriteStore: "70500874",
+		},
+		FavoriteStoreName: "Ballard Market",
+		Style:             seasons.GetCurrentStyle(),
+		ServerSignedIn:    true,
+	}
+
+	var buf bytes.Buffer
+	if err := Home.Execute(&buf, data); err != nil {
+		t.Fatalf("Home.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, "Ballard Market") {
+		t.Fatalf("home page should render favorite store name, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `id="favorite-store-chef-notes"`) {
+		t.Fatalf("home page should render favorite store chef notes toggle control, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, "Chef notes") {
+		t.Fatalf("home page should render chef notes toggle, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `name="instructions"`) {
+		t.Fatalf("home page should render instructions textarea, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `/recipes?location=70500874`) {
+		t.Fatalf("home page should render direct recipe link, body: %s", rendered)
+	}
+}
+
+func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript     template.HTML
+		GoogleTagScript   template.HTML
+		User              *utypes.User
+		FavoriteStoreName string
+		Style             seasons.Style
+		ServerSignedIn    bool
+	}{
+		User: &utypes.User{
+			Email: []string{"chef@example.com"},
+		},
+		Style:          seasons.GetCurrentStyle(),
+		ServerSignedIn: true,
+	}
+
+	var buf bytes.Buffer
+	if err := Home.Execute(&buf, data); err != nil {
+		t.Fatalf("Home.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if strings.Contains(rendered, `id="favorite-store-chef-notes"`) {
+		t.Fatalf("home page should not render favorite store chef notes toggle without a favorite store, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `for="favorite-store-chef-notes"`) {
+		t.Fatalf("home page should not render favorite store chef notes label without a favorite store, body: %s", rendered)
+	}
+	if strings.Contains(rendered, "Chef notes") {
+		t.Fatalf("home page should not render favorite store chef notes copy without a favorite store, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `name="instructions"`) {
+		t.Fatalf("home page should not render favorite store instructions field without a favorite store, body: %s", rendered)
 	}
 }
 

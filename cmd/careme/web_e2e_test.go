@@ -150,6 +150,30 @@ func TestZipFromCoordinatesRedirect(t *testing.T) {
 	}
 }
 
+func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.Close()
+
+	client := newTestClient(t)
+	_ = mustPostFormBody(t, client, srv.URL+"/user", url.Values{
+		"favorite_store": {"70500874"},
+	})
+
+	body := mustGetBody(t, client, srv.URL+"/")
+	if !strings.Contains(body, "Favorite store") {
+		t.Fatalf("expected favorite store card on home page, got body: %s", body)
+	}
+	if !strings.Contains(body, `/recipes?location=70500874`) {
+		t.Fatalf("expected home page recipe link to favorite store, got body: %s", body)
+	}
+	if !strings.Contains(body, "Chef notes") {
+		t.Fatalf("expected chef notes toggle on home page, got body: %s", body)
+	}
+	if !strings.Contains(body, `name="instructions"`) {
+		t.Fatalf("expected home page chef notes form, got body: %s", body)
+	}
+}
+
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -181,6 +205,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory).Register(appRoutes)
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth).Register(appRoutes)
+	appRoutes.Handle("/", home{userStorage, locationStorage, mockAuth})
 
 	ro := &readyOnce{}
 	ro.add(locationServer)
@@ -250,6 +275,31 @@ func mustPostFormBodyHTMX(t *testing.T, client *http.Client, targetURL string, d
 		t.Fatalf("POST %s expected 200, got %d: %s", targetURL, resp.StatusCode, body)
 	}
 	return readAll(t, resp.Body)
+}
+
+func mustPostFormBody(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		t.Fatalf("POST %s failed to build request: %v", targetURL, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s failed: %v", targetURL, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body := readAll(t, resp.Body)
+		t.Fatalf("POST %s expected 200, got %d: %s", targetURL, resp.StatusCode, body)
+	}
+	body := readAll(t, resp.Body)
+	requireValidHTML(t, targetURL, resp.Header.Get("Content-Type"), body)
+	return body
 }
 
 func mustPostFormRedirectHTMX(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
