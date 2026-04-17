@@ -18,42 +18,42 @@ const (
 	defaultCategoryLimit = 60
 )
 
-// Client calls the public Whole Foods category products endpoint.
-type Client struct {
+// client calls the public Whole Foods category products endpoint.
+type client struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-// CategoryResponse matches the public category API payload shape used in wf-output/beef.json.
-type CategoryResponse struct {
-	Facets     []Facet      `json:"facets"`
-	Breadcrumb []Breadcrumb `json:"breadcrumb"`
-	Results    []Product    `json:"results"`
-	Meta       Meta         `json:"meta"`
+// categoryResponse matches the public category API payload shape used in wf-output/beef.json.
+type categoryResponse struct {
+	Facets     []facet      `json:"facets"`
+	Breadcrumb []breadcrumb `json:"breadcrumb"`
+	Results    []product    `json:"results"`
+	Meta       meta         `json:"meta"`
 }
 
-type Facet struct {
+type facet struct {
 	Label       string            `json:"label"`
 	Slug        string            `json:"slug"`
 	Type        string            `json:"type,omitempty"`
-	Refinements []FacetRefinement `json:"refinements"`
+	Refinements []facetRefinement `json:"refinements"`
 }
 
-type FacetRefinement struct {
+type facetRefinement struct {
 	Label       string            `json:"label"`
 	Slug        string            `json:"slug"`
 	Count       int               `json:"count"`
 	IsSelected  bool              `json:"isSelected"`
 	Disabled    bool              `json:"disabled"`
-	Refinements []FacetRefinement `json:"refinements,omitempty"`
+	Refinements []facetRefinement `json:"refinements,omitempty"`
 }
 
-type Breadcrumb struct {
+type breadcrumb struct {
 	Label string `json:"label"`
 	Slug  string `json:"slug"`
 }
 
-type Product struct {
+type product struct {
 	RegularPrice         float64 `json:"regularPrice"`
 	SalePrice            float64 `json:"salePrice,omitempty"`
 	IncrementalSalePrice float64 `json:"incrementalSalePrice,omitempty"`
@@ -69,22 +69,22 @@ type Product struct {
 	UOM string `json:"uom,omitempty"`
 }
 
-type Meta struct {
-	Total Total `json:"total"`
-	State State `json:"state"`
+type meta struct {
+	Total total `json:"total"`
+	State state `json:"state"`
 }
 
-type Total struct {
+type total struct {
 	Value    int    `json:"value"`
 	Relation string `json:"relation"`
 }
 
-type State struct {
-	Refinements []StateRefinement `json:"refinements"`
+type state struct {
+	Refinements []stateRefinement `json:"refinements"`
 	Sort        string            `json:"sort"`
 }
 
-type StateRefinement struct {
+type stateRefinement struct {
 	Label      string `json:"label"`
 	Slug       string `json:"slug"`
 	FilterSlug string `json:"filterSlug"`
@@ -134,12 +134,12 @@ type StoreAddress struct {
 }
 
 // NewClient creates a Whole Foods client with a default base URL and timeout.
-func NewClient(httpClient *http.Client) *Client {
+func NewClient(httpClient *http.Client) *client {
 	return NewClientWithBaseURL(DefaultBaseURL, httpClient)
 }
 
 // NewClientWithBaseURL creates a Whole Foods client for the provided base URL.
-func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *Client {
+func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
@@ -148,7 +148,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *Client {
 		httpClient = &http.Client{Timeout: 20 * time.Second}
 	}
 
-	return &Client{
+	return &client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
 	}
@@ -156,7 +156,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *Client {
 
 // Category fetches category products and follows limit/offset pagination until
 // the API returns fewer items than the requested page size.
-func (c *Client) Category(ctx context.Context, queryterm, store string) ([]Product, error) {
+func (c *client) Category(ctx context.Context, queryterm, store string) ([]product, error) {
 	queryterm = strings.TrimSpace(queryterm)
 	if queryterm == "" {
 		return nil, errors.New("queryterm is required")
@@ -172,7 +172,7 @@ func (c *Client) Category(ctx context.Context, queryterm, store string) ([]Produ
 		return nil, fmt.Errorf("parse category URL: %w", err)
 	}
 
-	var combined []Product
+	var combined []product
 	for offset := 0; ; offset += defaultCategoryLimit {
 		params := endpoint.Query()
 		params.Set("store", store)
@@ -180,7 +180,7 @@ func (c *Client) Category(ctx context.Context, queryterm, store string) ([]Produ
 		params.Set("offset", fmt.Sprintf("%d", offset))
 		endpoint.RawQuery = params.Encode()
 
-		var page CategoryResponse
+		var page categoryResponse
 		if err := c.getJSON(ctx, endpoint.String(), &page); err != nil {
 			return nil, err
 		}
@@ -196,7 +196,7 @@ func (c *Client) Category(ctx context.Context, queryterm, store string) ([]Produ
 var ErrNotFound = fmt.Errorf("store not found")
 
 // StoreSummary fetches a store summary payload like /api/stores/10216/summary.
-func (c *Client) StoreSummary(ctx context.Context, store string) (*StoreSummaryResponse, error) {
+func (c *client) StoreSummary(ctx context.Context, store string) (*StoreSummaryResponse, error) {
 	store = strings.TrimSpace(store)
 	if store == "" {
 		return nil, errors.New("store is required")
@@ -211,7 +211,7 @@ func (c *Client) StoreSummary(ctx context.Context, store string) (*StoreSummaryR
 	return &decoded, nil
 }
 
-func (c *Client) getJSON(ctx context.Context, endpoint string, dest any) error {
+func (c *client) getJSON(ctx context.Context, endpoint string, dest any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)

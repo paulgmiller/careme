@@ -24,13 +24,13 @@ func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
 }
 
 type stubCategoryClient struct {
-	results map[string][]Product
+	results map[string][]product
 	errs    map[string]error
 	mu      sync.Mutex
 	calls   []string
 }
 
-func (s *stubCategoryClient) Category(_ context.Context, queryterm, store string) ([]Product, error) {
+func (s *stubCategoryClient) Category(_ context.Context, queryterm, store string) ([]product, error) {
 	s.mu.Lock()
 	s.calls = append(s.calls, store+":"+queryterm)
 	s.mu.Unlock()
@@ -54,7 +54,7 @@ func (s *stubCategoryClient) hasCall(want string) bool {
 
 func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	client := &stubCategoryClient{
-		results: map[string][]Product{
+		results: map[string][]product{
 			"fresh-vegetables": {
 				{
 					Name:         "Organic Asparagus",
@@ -113,7 +113,7 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 
 func TestStaplesProvider_GetIngredients_UsesSearchTerm(t *testing.T) {
 	client := &stubCategoryClient{
-		results: map[string][]Product{
+		results: map[string][]product{
 			"pinot noir": {
 				{Name: "Pinot Noir", Slug: "pinot-noir", Brand: "WFM", Store: 10216},
 				{Name: "Rose", Slug: "rose", Brand: "WFM", Store: 10216},

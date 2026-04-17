@@ -59,11 +59,6 @@ type captureWineStaplesProvider struct {
 	responses map[string][]kroger.Ingredient
 }
 
-type captureGenerationStatusStore struct {
-	mu       sync.Mutex
-	statuses map[string][]GenerationStatus
-}
-
 func (c *captureWineQuestionAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
 	panic("unexpected call to GenerateRecipes")
 }
@@ -283,7 +278,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 			Commentary: "Great with your dish.",
 		},
 	}
-	g := &Generator{
+	g := &generatorService{
 		staples:  &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}},
 		aiClient: aiStub,
 	}
@@ -329,7 +324,7 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 			"sparkling":  {{Description: loPtr("Whole Foods Bubbly")}},
 		},
 	}
-	g := &Generator{
+	g := &generatorService{
 		staples:  &cachedStaplesService{cache: IO(cache.NewFileCache(t.TempDir())), provider: staplesStub},
 		aiClient: aiStub,
 	}
@@ -368,7 +363,7 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 			Recipes:        []ai.Recipe{newResult},
 		},
 	}
-	g := &Generator{
+	g := &generatorService{
 		aiClient: aiStub,
 	}
 
@@ -423,7 +418,7 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 		},
 	}
 	critiquer := &captureCritiqueService{}
-	g := &Generator{
+	g := &generatorService{
 		staples:      &cachedStaplesService{cache: io},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
@@ -454,7 +449,7 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea"}
 
 	critiquer := &captureCritiqueService{}
-	g := &Generator{
+	g := &generatorService{
 		aiClient:     &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -525,7 +520,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 		},
 	}
 
-	g := &Generator{
+	g := &generatorService{
 		staples:      &cachedStaplesService{cache: io},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
@@ -612,7 +607,7 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 			}
 		},
 	}
-	g := &Generator{
+	g := &generatorService{
 		staples:      &cachedStaplesService{cache: io},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
@@ -647,7 +642,7 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 			Recipes:        []ai.Recipe{steady},
 		}},
 	}
-	g := &Generator{
+	g := &generatorService{
 		staples:      &cachedStaplesService{cache: io},
 		aiClient:     aiStub,
 		critiquer:    &captureCritiqueService{},
@@ -686,7 +681,7 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 	}
 
 	statuses := &statusCounter{}
-	g := &Generator{
+	g := &generatorService{
 		staples:      &cachedStaplesService{cache: io},
 		aiClient:     &sequenceAIClient{generateResponses: []*ai.ShoppingList{{ConversationID: "conv-stable", Recipes: []ai.Recipe{steady}}}},
 		critiquer:    &captureCritiqueService{},
@@ -742,7 +737,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 			}
 		},
 	}
-	g := &Generator{
+	g := &generatorService{
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -814,7 +809,7 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 			}, nil
 		},
 	}
-	g := &Generator{
+	g := &generatorService{
 		staples:      &cachedStaplesService{cache: io},
 		aiClient:     aiStub,
 		critiquer:    critiquer,

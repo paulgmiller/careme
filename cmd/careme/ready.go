@@ -12,11 +12,11 @@ import (
 
 type readyOnce struct {
 	done   bool
-	checks []Readyable
+	checks []readyable
 	mu     sync.Mutex
 }
 
-func (r *readyOnce) Ready(ctx context.Context) error {
+func (r *readyOnce) ready(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.done {
@@ -33,16 +33,16 @@ func (r *readyOnce) Ready(ctx context.Context) error {
 	return nil
 }
 
-type Readyable interface {
+type readyable interface {
 	Ready(context.Context) error
 }
 
-func (r *readyOnce) Add(f ...Readyable) {
+func (r *readyOnce) add(f ...readyable) {
 	r.checks = append(r.checks, f...)
 }
 
 func (r *readyOnce) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if err := r.Ready(req.Context()); err != nil {
+	if err := r.ready(req.Context()); err != nil {
 		http.Error(w, "not ready: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}

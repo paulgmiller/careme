@@ -5,18 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"time"
 
 	"careme/internal/cache"
 )
 
 const generationStatusCachePrefix = "generation_status/"
-
-type GenerationStatus struct {
-	Stage     string    `json:"stage"`
-	Message   string    `json:"message"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
 
 type statusWriter interface {
 	SaveGenerationStatus(ctx context.Context, hash string, status string) error

@@ -11,7 +11,7 @@ func TestOncePerDo(t *testing.T) {
 	t.Parallel()
 
 	dog := &stubWatchdog{}
-	guard := NewOncePer(time.Hour, dog)
+	guard := newOncePer(time.Hour, dog)
 
 	if err := guard.Watchdog(context.Background()); err != nil {
 		t.Fatalf("first call: %v", err)
