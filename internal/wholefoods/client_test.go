@@ -167,10 +167,10 @@ func TestCategory_PaginatesUntilShortPage(t *testing.T) {
 			pageSize = 5
 		}
 
-		results := make([]Product, 0, pageSize)
+		results := make([]product, 0, pageSize)
 		for i := 0; i < pageSize; i++ {
 			n := offset + i
-			results = append(results, Product{
+			results = append(results, product{
 				Name:  fmt.Sprintf("Product %d", n),
 				Slug:  fmt.Sprintf("product-%d", n),
 				Brand: "Whole Foods Market",
@@ -178,10 +178,10 @@ func TestCategory_PaginatesUntilShortPage(t *testing.T) {
 			})
 		}
 
-		resp := CategoryResponse{
-			Breadcrumb: []Breadcrumb{{Label: "Meat", Slug: "meat"}, {Label: "Fish", Slug: "fish"}},
-			Meta: Meta{
-				Total: Total{Value: limit*2 + 5, Relation: "eq"},
+		resp := categoryResponse{
+			Breadcrumb: []breadcrumb{{Label: "Meat", Slug: "meat"}, {Label: "Fish", Slug: "fish"}},
+			Meta: meta{
+				Total: total{Value: limit*2 + 5, Relation: "eq"},
 			},
 			Results: results,
 		}

@@ -252,7 +252,7 @@ func TestSessionIDHandlerReplacesInvalidCookie(t *testing.T) {
 func TestWithMiddlewareProvidesBothIDs(t *testing.T) {
 	var operationID string
 	var sessionID string
-	handler := AppMiddleWare(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := appMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		operationID, _ = logsetup.OperationIDFromContext(r.Context())
 		sessionID, _ = logsetup.SessionIDFromContext(r.Context())
 		w.WriteHeader(http.StatusNoContent)
@@ -280,7 +280,7 @@ func TestWithMiddlewareProvidesBothIDs(t *testing.T) {
 func TestWithMiddlewareProvidesIDsWithoutTracker(t *testing.T) {
 	var operationID string
 	var sessionID string
-	handler := AppMiddleWare(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := appMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		operationID, _ = logsetup.OperationIDFromContext(r.Context())
 		sessionID, _ = logsetup.SessionIDFromContext(r.Context())
 		w.WriteHeader(http.StatusNoContent)
@@ -330,8 +330,8 @@ func TestRouteScopedMiddlewareSkipsSessionCookieForStaticRoutes(t *testing.T) {
 	appMux.HandleFunc("/about", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	rootMux.Handle("/static/", BaseMiddleware(infraMux))
-	rootMux.Handle("/", AppMiddleWare(appMux, &fakeRequestTracker{}))
+	rootMux.Handle("/static/", baseMiddleware(infraMux))
+	rootMux.Handle("/", appMiddleware(appMux, &fakeRequestTracker{}))
 
 	staticReq := httptest.NewRequest(http.MethodGet, "http://careme.cooking/static/app.js", nil)
 	staticRec := httptest.NewRecorder()
