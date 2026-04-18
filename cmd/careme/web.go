@@ -112,6 +112,7 @@ func runServer(cfg *config.Config, addr string) error {
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
+	appRoutes.Handle("/critiques/{hash}", critique.CritiquePage(critique.NewStore(cache), recipeIO))
 
 	appRoutes.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

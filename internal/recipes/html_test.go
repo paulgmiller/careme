@@ -208,7 +208,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -276,6 +276,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="feedback"`) {
 		t.Error("recipe HTML should contain text feedback control")
 	}
+	if strings.Contains(html, "Recipe score:") {
+		t.Error("recipe HTML should hide recipe score when no critique exists")
+	}
 }
 
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
@@ -283,7 +286,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -299,6 +302,28 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	}
 	if strings.Contains(html, `name="feedback"`) {
 		t.Error("recipe HTML should not contain feedback form when signed out")
+	}
+}
+
+func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.ConversationID = "convo123"
+	w := httptest.NewRecorder()
+	score := 8
+
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := w.Body.String()
+
+	isValidHTML(t, html)
+	if !strings.Contains(html, "Recipe score:") {
+		t.Error("recipe HTML should contain recipe score text")
+	}
+	if !strings.Contains(html, `href="/critiques/`) {
+		t.Error("recipe HTML should contain public critique link")
+	}
+	if !strings.Contains(html, ">8/10<") {
+		t.Error("recipe HTML should contain critique score value")
 	}
 }
 
@@ -359,7 +384,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
+	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Oregon Pinot Noir", Price: "$14.99"},
 			{Name: "Backup Chardonnay", Price: "$11.99"},
@@ -405,7 +430,7 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		DrinkPairing: "Sparkling water",
 	}
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -464,7 +489,7 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	recipe := list.Recipes[0]
 	recipeHash := recipe.ComputeHash()
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, true, nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
