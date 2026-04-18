@@ -22,6 +22,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -91,6 +92,11 @@ type server struct {
 	locServer    locServer
 	wg           sync.WaitGroup
 	clerk        auth.AuthClient
+	critiques    critiqueStore
+}
+
+type critiqueStore interface {
+	Load(ctx context.Context, hash string) (*ai.RecipeCritique, error)
 }
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
@@ -105,6 +111,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		generator:    generator,
 		locServer:    locServer,
 		clerk:        clerkClient,
+		critiques:    critique.NewStore(c),
 	}
 }
 
@@ -141,6 +148,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = s.clerk.GetUserIDFromRequest(r)
 	signedIn := !errors.Is(err, auth.ErrNoSession)
+	var critiqueScore *int
 	feedback := feedback.Feedback{}
 	var thread []RecipeThreadEntry
 	var wineRecommendation *ai.WineSelection
@@ -184,6 +192,20 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		}
 		hasRecipeImage = exists
 	})
+	loadWG.Go(func() {
+		if s.critiques == nil {
+			return
+		}
+		result, err := s.critiques.Load(ctx, hash)
+		if err != nil {
+			if !errors.Is(err, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to load recipe critique", "hash", hash, "error", err)
+			}
+			return
+		}
+		score := result.OverallScore
+		critiqueScore = &score
+	})
 	loadWG.Wait()
 
 	if recipe.OriginHash == "" {
@@ -195,7 +217,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				ID:   "",
 				Name: "Unknown Location",
 			}, time.Now())
-			FormatRecipeHTML(ctx, p, *recipe, signedIn, hasRecipeImage, thread, feedback, wineRecommendation, w)
+			FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
 			return
 		}
 		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
@@ -224,7 +246,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(ctx, p, *recipe, signedIn, hasRecipeImage, thread, feedback, wineRecommendation, w)
+	FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {

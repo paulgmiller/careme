@@ -129,43 +129,47 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, hasRecipeImage bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	recipeHash := recipe.ComputeHash()
 	data := struct {
-		Location           locations.Location
-		Date               string
-		ClarityScript      template.HTML
-		GoogleTagScript    template.HTML
-		Recipe             ai.Recipe
-		DisplayIngredients []ai.Ingredient
-		OriginHash         string
-		ConversationID     string
-		WineRecommendation *ai.WineSelection
-		Thread             []RecipeThreadEntry
-		Feedback           feedback.Feedback
-		RecipeHash         string
-		RecipeImage        recipeImageView
-		Style              seasons.Style
-		ServerSignedIn     bool
+		Location            locations.Location
+		Date                string
+		ClarityScript       template.HTML
+		GoogleTagScript     template.HTML
+		Recipe              ai.Recipe
+		DisplayIngredients  []ai.Ingredient
+		OriginHash          string
+		ConversationID      string
+		WineRecommendation  *ai.WineSelection
+		Thread              []RecipeThreadEntry
+		Feedback            feedback.Feedback
+		RecipeHash          string
+		RecipeImage         recipeImageView
+		Style               seasons.Style
+		ServerSignedIn      bool
+		RecipeCritiqueURL   string
+		RecipeCritiqueScore *int
 	}{
-		Location:           *p.Location,
-		Date:               p.Date.Format("2006-01-02"),
-		ClarityScript:      templates.ClarityScript(ctx),
-		GoogleTagScript:    templates.GoogleTagScript(),
-		Recipe:             recipe,
-		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
-		OriginHash:         recipe.OriginHash,
-		ConversationID:     p.ConversationID,
-		WineRecommendation: wineRecommendation,
-		Thread:             thread,
-		Feedback:           fb,
-		RecipeHash:         recipeHash,
-		RecipeImage:        recipeImageData(recipeHash, hasRecipeImage, false),
-		Style:              seasons.GetCurrentStyle(),
-		ServerSignedIn:     signedIn,
+		Location:            *p.Location,
+		Date:                p.Date.Format("2006-01-02"),
+		ClarityScript:       templates.ClarityScript(ctx),
+		GoogleTagScript:     templates.GoogleTagScript(),
+		Recipe:              recipe,
+		DisplayIngredients:  ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		OriginHash:          recipe.OriginHash,
+		ConversationID:      p.ConversationID,
+		WineRecommendation:  wineRecommendation,
+		Thread:              thread,
+		Feedback:            fb,
+		RecipeHash:          recipeHash,
+		RecipeImage:         recipeImageData(recipeHash, hasRecipeImage, false),
+		Style:               seasons.GetCurrentStyle(),
+		ServerSignedIn:      signedIn,
+		RecipeCritiqueURL:   "/critiques/" + recipeHash,
+		RecipeCritiqueScore: critiqueScore,
 	}
 
 	if err := templates.Recipe.Execute(writer, data); err != nil {
