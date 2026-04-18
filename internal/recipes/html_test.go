@@ -208,7 +208,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	recipe := list.Recipes[0]
+	recipe.OriginHash = "selection-hash"
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
 
 	isValidHTML(t, html)
@@ -276,8 +278,32 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="feedback"`) {
 		t.Error("recipe HTML should contain text feedback control")
 	}
+	if !strings.Contains(html, "Save to kitchen") {
+		t.Error("recipe HTML should contain save to kitchen button when recipe can be saved")
+	}
+	if strings.Contains(html, "/dismiss") {
+		t.Error("recipe HTML should not contain dismiss controls")
+	}
 }
 
+func TestFormatRecipeHTML_HidesSaveButtonWhenRecipeAlreadySaved(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+	recipe := list.Recipes[0]
+	recipe.OriginHash = "selection-hash"
+	recipe.Saved = true
+
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := w.Body.String()
+
+	if strings.Contains(html, "Save to kitchen") {
+		t.Error("recipe HTML should hide save button when recipe is already saved")
+	}
+	if !strings.Contains(html, "Saved to kitchen") {
+		t.Error("recipe HTML should show saved status when recipe is already saved")
+	}
+}
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())

@@ -614,23 +614,25 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := s.paramsForAction(ctx, selectionHash, currentUser.ID, "")
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for save response", "selection_hash", selectionHash, "error", err)
-		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
-		return
-	}
-
 	var response bytes.Buffer
 	if _, err := fmt.Fprint(&response, `<span class="text-xs font-medium text-action-green-700">Saved to kitchen</span>`); err != nil {
 		slog.ErrorContext(ctx, "failed to build save response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
-	if err := RenderShoppingFinalizeControlsHTML(selectionHash, len(p.Saved) > 0, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after save", "selection_hash", selectionHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
+
+	if strings.TrimSpace(r.FormValue("view")) != "recipe" {
+		p, err := s.paramsForAction(ctx, selectionHash, currentUser.ID, "")
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load params for save response", "selection_hash", selectionHash, "error", err)
+			http.Error(w, "failed to save recipe", http.StatusInternalServerError)
+			return
+		}
+		if err := RenderShoppingFinalizeControlsHTML(selectionHash, len(p.Saved) > 0, &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render finalize controls after save", "selection_hash", selectionHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	setTextContent(w)

@@ -211,6 +211,26 @@
             {{end}}
 
             {{template "recipe_thread" .}}
+
+            {{if and .ServerSignedIn .OriginHash}}
+            <div id="recipe-save-action" class="flex items-center justify-end border-t border-brand-100 pt-4">
+              {{if .Recipe.Saved}}
+              <span class="inline-flex items-center gap-1 text-sm font-medium text-action-green-700">
+                <span aria-hidden="true">✓</span>Saved to kitchen
+              </span>
+              {{else}}
+              <button type="button"
+                      hx-post="/recipe/{{.RecipeHash}}/save"
+                      hx-vals='{"h":"{{.OriginHash}}","view":"recipe"}'
+                      hx-target="#recipe-save-action"
+                      hx-swap="innerHTML"
+                      hx-disabled-elt="this"
+                      class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-500 focus:ring-offset-2">
+                Save to kitchen
+              </button>
+              {{end}}
+            </div>
+            {{end}}
           </section>
 
         </div>
