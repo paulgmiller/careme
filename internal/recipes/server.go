@@ -101,7 +101,7 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.Cache, imageCache cache.Cache, clerkClient auth.AuthClient) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient) *server {
 	return &server{
 		recipeio:     IO(c),
 		imageio:      imageio{Cache: imageCache},
