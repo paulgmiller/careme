@@ -60,7 +60,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, list, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	html := w.String()
 	isValidHTML(t, html)
@@ -94,7 +94,7 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, list, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	html := w.String()
 
@@ -110,7 +110,7 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 
 	templates.Clarityproject = "test456"
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, list, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	if !bytes.Contains(w.Bytes(), []byte("www.clarity.ms/tag/")) {
 		t.Error("HTML should contain Clarity script URL")
@@ -146,7 +146,7 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	templates.Clarityproject = ""
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, list, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	if bytes.Contains(w.Bytes(), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")
@@ -163,7 +163,7 @@ func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
 	})
 	templates.GoogleTagID = "AW-1234567890"
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, list, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	if !bytes.Contains(w.Bytes(), []byte("www.googletagmanager.com/gtag/js?id=AW-1234567890")) {
 		t.Error("HTML should contain Google tag script URL")
@@ -183,7 +183,7 @@ func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 	})
 	templates.GoogleTagID = ""
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, list, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	if bytes.Contains(w.Bytes(), []byte("googletagmanager.com")) {
 		t.Error("HTML should not contain Google tag script when tag ID is empty")
@@ -194,7 +194,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, list, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	html := w.String()
 
@@ -353,7 +353,7 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	}
 
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, multiRecipeList, false, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, multiRecipeList, nil, false, p.Hash(), &w)
 	require.NoError(t, err)
 	html := w.String()
 
@@ -476,7 +476,7 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		},
 	}
 
-	err := FormatShoppingListHTML(t.Context(), p, listWithoutPrice, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, listWithoutPrice, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	html := w.String()
 

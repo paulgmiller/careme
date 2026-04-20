@@ -55,11 +55,6 @@ type shoppingRecipeWineView struct {
 	Recommendation *ai.WineSelection
 }
 
-// FormatShoppingListHTML renders the multi-recipe shopping list view.
-func FormatShoppingListHTML(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, writer io.Writer) error {
-	return FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), writer)
-}
-
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer io.Writer) error {
 	dismissedHashes := make(map[string]bool, len(p.Dismissed))

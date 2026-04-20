@@ -43,7 +43,7 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, multiRecipeList, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, multiRecipeList, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	html := w.String()
 
@@ -130,7 +130,7 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, listWithSavedRecipe, true, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, listWithSavedRecipe, nil, true, p.Hash(), &w)
 	require.NoError(t, err)
 	html := w.String()
 
@@ -159,7 +159,7 @@ func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	var w bytes.Buffer
-	err := FormatShoppingListHTML(t.Context(), p, list, false, &w)
+	err := FormatShoppingListHTMLForHash(t.Context(), p, list, nil, false, p.Hash(), &w)
 	require.NoError(t, err)
 	html := w.String()
 
