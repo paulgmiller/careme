@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"careme/internal/ai"
 	"careme/internal/kroger"
@@ -102,16 +103,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
-		// should never get a conversation id without instructions or saved/dismissed
-		// could assert or warn on that
-		instructions := []string{p.Instructions}
-		for _, dismissed := range p.Dismissed {
-			instructions = append(instructions, "Passed on "+dismissed.Title)
-		}
-		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
-			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
-		}
-		// TODO more guidance on how many recipes to generate?
+		instructions := regenerateInstructions(p)
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
@@ -203,6 +195,20 @@ func titles(prefix string, recipes []ai.Recipe) string {
 	return b.String()
 }
 
+func regenerateInstructions(p *generatorParams) []string {
+	instructions := make([]string, 0, 1+len(p.Dismissed)+len(p.Saved))
+	if trimmed := strings.TrimSpace(p.Instructions); trimmed != "" {
+		instructions = append(instructions, trimmed)
+	}
+	for _, dismissed := range p.Dismissed {
+		instructions = append(instructions, "Passed on "+dismissed.Title)
+	}
+	for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
+		instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
+	}
+	return instructions
+}
+
 func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash string, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
 	if g.critiquer == nil {
 		return shoppingList, nil
@@ -230,6 +236,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}
 	newRecipes := shoppingList.Recipes
+	linkToParents(garbage, recipePtrs(newRecipes))
 	shoppingList.Recipes = append(shoppingList.Recipes, good...)
 	shoppingList.Discarded = lo.Map(garbage, func(result critique.Result, _ int) ai.Recipe {
 		return *result.Recipe
@@ -248,4 +255,90 @@ func (g *generatorService) writeStatus(ctx context.Context, hash string, status 
 	if err := g.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
 		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "status", status, "error", err)
 	}
+}
+
+func linkToParents(garbage []critique.Result, newRecipes []*ai.Recipe) {
+	parents := lo.Map(garbage, func(result critique.Result, _ int) *ai.Recipe {
+		return result.Recipe
+	})
+	applyParentHashesByTitleMatch(parents, newRecipes)
+}
+
+func recipePtrs(recipes []ai.Recipe) []*ai.Recipe {
+	ptrs := make([]*ai.Recipe, 0, len(recipes))
+	for i := range recipes {
+		ptrs = append(ptrs, &recipes[i])
+	}
+	return ptrs
+}
+
+func applyParentHashesByTitleMatch(parents []*ai.Recipe, newRecipes []*ai.Recipe) {
+	type candidateMatch struct {
+		new    *ai.Recipe
+		parent *ai.Recipe
+		score  int
+	}
+
+	matches := make([]candidateMatch, 0, len(newRecipes)*len(parents))
+	for _, newRecipe := range newRecipes {
+		for _, parent := range parents {
+			score := sharedWords(newRecipe.Title, parent.Title)
+			if score == 0 {
+				continue
+			}
+			matches = append(matches, candidateMatch{
+				new:    newRecipe,
+				parent: parent,
+				score:  score,
+			})
+		}
+	}
+
+	slices.SortFunc(matches, func(a, b candidateMatch) int {
+		return b.score - a.score
+	})
+
+	used := make(map[*ai.Recipe]bool, len(newRecipes))
+	for _, match := range matches {
+		if match.new == nil || match.parent == nil {
+			continue
+		}
+		if used[match.new] {
+			continue
+		}
+		if used[match.parent] {
+			continue
+		}
+		parentHash := match.parent.ComputeHash()
+		childHash := match.new.ComputeHash()
+		if parentHash == "" || childHash == "" || parentHash == childHash {
+			continue
+		}
+		match.new.ParentHash = parentHash
+		used[match.new] = true
+		used[match.parent] = true
+	}
+}
+
+func sharedWords(a, b string) int {
+	wordsA := wordSet(a)
+	wordsB := wordSet(b)
+	return lo.CountBy(lo.Keys(wordsA), func(word string) bool {
+		return wordsB[word]
+	})
+}
+
+func wordSet(title string) map[string]bool {
+	wordDict := make(map[string]bool)
+	s := strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	for _, word := range s {
+		// tiny words not valuable?
+		if len(word) < 2 {
+			continue
+		}
+		wordDict[word] = true
+	}
+	return wordDict
 }

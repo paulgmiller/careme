@@ -222,6 +222,11 @@
         <a href="{{.RecipeCritiqueURL}}" class="hover:text-gray-500">{{.RecipeCritiqueScore}}/10</a>
       </p>
       {{end}}
+      {{if .Recipe.ParentHash}}
+      <p class="text-center text-xs text-gray-400">
+        <a href="/recipe/{{.Recipe.ParentHash}}" class="hover:text-gray-500">Previous iteration</a>
+      </p>
+      {{end}}
       <p class="text-center text-sm text-gray-500">Planned by Careme.</p>
     </section>
   </main>
