@@ -1,23 +1,21 @@
 package main
 
 import (
-	"context"
-	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"os"
 	"runtime/debug"
-	"strconv"
-	"strings"
 	"time"
 
 	"careme/internal/logsetup"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/google/uuid"
-	azureappinsights "github.com/microsoft/ApplicationInsights-Go/appinsights"
-	"github.com/microsoft/ApplicationInsights-Go/appinsights/contracts"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -41,7 +39,6 @@ func (lrw *loggingResponseWriter) WriteHeader(code int) {
 
 func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	// should we use auth client?
 	user := ""
 	if claims, ok := clerk.SessionClaimsFromContext(r.Context()); ok {
 		user = claims.Subject
@@ -53,122 +50,50 @@ func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	slog.InfoContext(r.Context(), "request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "form", r.Form, "duration", time.Since(start))
 }
 
-type requestTracker interface {
-	TrackRequest(ctx context.Context, method, url string, duration time.Duration, responseCode string)
-}
-
-type appInsightsTracker struct {
+type telemetryHandler struct {
 	http.Handler
-	tracker requestTracker
+	tracer oteltrace.Tracer
 }
 
-const appInsightsIngestionPath = "/v2/track"
-
-type appInsightsTelemetryTracker struct {
-	client azureappinsights.TelemetryClient
-}
-
-func (t *appInsightsTelemetryTracker) TrackRequest(ctx context.Context, method, url string, duration time.Duration, responseCode string) {
-	request := azureappinsights.NewRequestTelemetry(method, url, duration, responseCode)
-	tags := contracts.ContextTags(request.ContextTags())
-	if operationID, ok := logsetup.OperationIDFromContext(ctx); ok {
-		tags.Operation().SetId(operationID)
-	}
-	if sessionID, ok := logsetup.SessionIDFromContext(ctx); ok {
-		tags.Session().SetId(sessionID)
-	}
-	t.client.Track(request)
-}
-
-func (a *appInsightsTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-	lrw := &loggingResponseWriter{w, http.StatusOK}
-	a.Handler.ServeHTTP(lrw, r)
-
-	a.tracker.TrackRequest(r.Context(), r.Method, r.URL.String(), time.Since(start), strconv.Itoa(lrw.statusCode))
-}
-
-func newAppInsightsTracker(next http.Handler, tracker requestTracker) http.Handler {
-	if tracker == nil {
-		return next
-	}
-
-	return &appInsightsTracker{
+func newTelemetryHandler(next http.Handler) http.Handler {
+	return &telemetryHandler{
 		Handler: next,
-		tracker: tracker,
+		tracer:  otel.Tracer("careme/http"),
 	}
 }
 
-func newRequestTracker(connectionString string) (requestTracker, error) {
-	client, err := newAppInsightsTelemetryClient(connectionString)
-	if err != nil {
-		return nil, err
-	}
-	return &appInsightsTelemetryTracker{client: client}, nil
-}
+func (t *telemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 
-func newRequestTrackerFromEnv() requestTracker {
-	connectionString := os.Getenv(logsetup.AppInsightsConnectionStringEnv)
-	if connectionString == "" {
-		return nil
+	spanName := r.Method + " " + r.URL.Path
+	if r.Pattern != "" {
+		spanName = r.Method + " " + r.Pattern
 	}
 
-	tracker, err := newRequestTracker(connectionString)
-	if err != nil {
-		slog.Error("failed to configure app insights request tracking", "error", err)
-		return nil
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
 	}
 
-	return tracker
-}
+	ctx, span := t.tracer.Start(ctx, spanName, oteltrace.WithSpanKind(oteltrace.SpanKindServer))
+	span.SetAttributes(
+		attribute.String("http.method", r.Method),
+		attribute.String("http.scheme", scheme),
+		attribute.String("http.host", r.Host),
+		attribute.String("http.target", r.URL.RequestURI()),
+	)
 
-func newAppInsightsTelemetryClient(connectionString string) (azureappinsights.TelemetryClient, error) {
-	cfg, err := parseAppInsightsConnectionString(connectionString)
-	if err != nil {
-		return nil, err
+	lrw := &loggingResponseWriter{w, http.StatusOK}
+	t.Handler.ServeHTTP(lrw, r.WithContext(ctx))
+
+	span.SetAttributes(attribute.Int("http.status_code", lrw.statusCode))
+	if r.Pattern != "" {
+		span.SetAttributes(attribute.String("http.route", r.Pattern))
 	}
-	return azureappinsights.NewTelemetryClientFromConfig(cfg), nil
-}
-
-// suprise there is not a parse function here. Chatgpt things github.com/Azure/go-autorest/autorest/azure.ParseConnectionString but codex coudln't find it
-func parseAppInsightsConnectionString(connectionString string) (*azureappinsights.TelemetryConfiguration, error) {
-	connectionString = strings.TrimSpace(connectionString)
-	if connectionString == "" {
-		return nil, errors.New("connection string is empty")
+	if lrw.statusCode >= http.StatusBadRequest {
+		span.SetStatus(codes.Error, http.StatusText(lrw.statusCode))
 	}
-
-	var instrumentationKey string
-	var ingestionEndpoint string
-
-	for _, value := range strings.Split(connectionString, ";") {
-		pair := strings.SplitN(value, "=", 2)
-		if len(pair) != 2 {
-			continue
-		}
-		switch pair[0] {
-		case "InstrumentationKey":
-			instrumentationKey = pair[1]
-		case "IngestionEndpoint":
-			ingestionEndpoint = pair[1]
-		}
-	}
-
-	if instrumentationKey == "" {
-		return nil, errors.New("instrumentation key is missing")
-	}
-	if ingestionEndpoint == "" {
-		return nil, errors.New("ingestion endpoint is missing")
-	}
-
-	ingestionURL, err := url.Parse(ingestionEndpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg := azureappinsights.NewTelemetryConfiguration(instrumentationKey)
-	ingestionURL.Path = appInsightsIngestionPath
-	cfg.EndpointUrl = ingestionURL.String()
-	return cfg, nil
+	span.End()
 }
 
 type recoverer struct {
@@ -176,9 +101,13 @@ type recoverer struct {
 }
 
 func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// app insights could also track this https://github.com/microsoft/ApplicationInsights-Go?tab=readme-ov-file#exceptions
 	defer func() {
 		if err := recover(); err != nil {
+			span := oteltrace.SpanFromContext(req.Context())
+			if span.SpanContext().IsValid() {
+				span.RecordError(fmt.Errorf("panic recovered: %v", err))
+				span.SetStatus(codes.Error, "panic")
+			}
 			slog.ErrorContext(req.Context(), "panic recovered", "error", err, "stack", debug.Stack())
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
@@ -190,9 +119,11 @@ type operationIDHandler struct {
 	http.Handler
 }
 
-// extract or generate an operation ID for the request, add it to the context, and set it in the response header. The operation ID is used for correlating logs and telemetry.
 func (h *operationIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	operationID := uuid.NewString()
+	operationID, ok := logsetup.OperationIDFromContext(r.Context())
+	if !ok {
+		operationID = uuid.NewString()
+	}
 	ctx := logsetup.WithOperationID(r.Context(), operationID)
 	w.Header().Set("X-Operation-ID", operationID)
 	h.Handler.ServeHTTP(w, r.WithContext(ctx))
@@ -232,16 +163,14 @@ func sessionCookie(r *http.Request, sessionID string) *http.Cookie {
 	}
 }
 
-// just recover and log
 func baseMiddleware(h http.Handler) http.Handler {
 	h = &recoverer{h}
 	return &logger{h}
 }
 
-// instrument with app insights and log with operation and session ids.
-func appMiddleware(h http.Handler, tracker requestTracker) http.Handler {
+func appMiddleware(h http.Handler) http.Handler {
 	h = baseMiddleware(h)
-	h = newAppInsightsTracker(h, tracker) // must be "inside" operatid and session handler.
 	h = &operationIDHandler{h}
+	h = newTelemetryHandler(h)
 	return &sessionIDHandler{h}
 }

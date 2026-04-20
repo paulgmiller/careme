@@ -197,7 +197,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
-		return mockAuth.WithAuthHTTP(appMiddleware(h, &fakeRequestTracker{}))
+		return mockAuth.WithAuthHTTP(appMiddleware(h))
 	})
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)

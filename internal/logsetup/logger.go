@@ -2,36 +2,146 @@ package logsetup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime/debug"
+	"strings"
+	"time"
 
-	"github.com/openclosed-dev/slogan/appinsights"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otlplogglobal "go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/propagation"
+	logsdk "go.opentelemetry.io/otel/sdk/log"
+	"go.opentelemetry.io/otel/sdk/resource"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 )
 
-// just app insights for now. Giving up on logsink
-const AppInsightsConnectionStringEnv = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+const (
+	otelServiceNameEnv       = "OTEL_SERVICE_NAME"
+	otelExporterEndpointEnv  = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	otelExporterTracesEnv    = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+	otelExporterLogsEnv      = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
+	telemetryShutdownTimeout = 5 * time.Second
+	loggerName               = "careme/internal/logsetup"
+)
 
 func Configure(ctx context.Context) (func(), error) {
-	handlers := []slog.Handler{newContextHandler(slog.NewTextHandler(os.Stdout, nil))}
+	res, err := newResource()
+	if err != nil {
+		return nil, fmt.Errorf("build telemetry resource: %w", err)
+	}
 
-	closeFn := func() {} // can be a list if we have multiple
+	traceProvider, err := newTracerProvider(ctx, res)
+	if err != nil {
+		return nil, fmt.Errorf("create tracer provider: %w", err)
+	}
+	otel.SetTracerProvider(traceProvider)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 
-	if connectionString := os.Getenv(AppInsightsConnectionStringEnv); connectionString != "" {
-		handler, err := appinsights.NewHandler(connectionString, nil)
-		if err != nil {
-			return nil, fmt.Errorf("create app insights handler: %w", err)
-		}
-		handlers = append(handlers, newContextHandler(handler))
-		closeFn = handler.Close
+	logProvider, err := newLoggerProvider(ctx, res)
+	if err != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), telemetryShutdownTimeout)
+		defer cancel()
+		_ = traceProvider.Shutdown(shutdownCtx)
+		return nil, fmt.Errorf("create logger provider: %w", err)
+	}
+	otlplogglobal.SetLoggerProvider(logProvider)
+
+	handlers := []slog.Handler{
+		newContextHandler(slog.NewTextHandler(os.Stdout, nil)),
+		newContextHandler(otelslog.NewHandler(
+			loggerName,
+			otelslog.WithLoggerProvider(logProvider),
+			otelslog.WithVersion(serviceVersion()),
+		)),
 	}
 
 	slog.SetDefault(slog.New(slog.NewMultiHandler(handlers...)))
-	return recoverAndClose(ctx, closeFn), nil
+	return recoverAndClose(ctx, func(shutdownCtx context.Context) error {
+		return errors.Join(
+			logProvider.Shutdown(shutdownCtx),
+			traceProvider.Shutdown(shutdownCtx),
+		)
+	}), nil
 }
 
-func recoverAndClose(ctx context.Context, closeFn func()) func() {
+func newTracerProvider(ctx context.Context, res *resource.Resource) (*tracesdk.TracerProvider, error) {
+	opts := []tracesdk.TracerProviderOption{tracesdk.WithResource(res)}
+	if telemetryExportEnabled() {
+		exporter, err := otlptracehttp.New(ctx)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, tracesdk.WithBatcher(exporter))
+	}
+	return tracesdk.NewTracerProvider(opts...), nil
+}
+
+func newLoggerProvider(ctx context.Context, res *resource.Resource) (*logsdk.LoggerProvider, error) {
+	opts := []logsdk.LoggerProviderOption{logsdk.WithResource(res)}
+	if telemetryExportEnabled() {
+		exporter, err := otlploghttp.New(ctx)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)))
+	}
+	return logsdk.NewLoggerProvider(opts...), nil
+}
+
+func newResource() (*resource.Resource, error) {
+	attrs := []attribute.KeyValue{semconv.ServiceName(serviceName())}
+	if version := serviceVersion(); version != "" {
+		attrs = append(attrs, semconv.ServiceVersion(version))
+	}
+	return resource.Merge(resource.Default(), resource.NewWithAttributes("", attrs...))
+}
+
+func serviceName() string {
+	if name := strings.TrimSpace(os.Getenv(otelServiceNameEnv)); name != "" {
+		return name
+	}
+	if len(os.Args) == 0 {
+		return "careme"
+	}
+	name := filepath.Base(os.Args[0])
+	name = strings.TrimSpace(strings.TrimSuffix(name, filepath.Ext(name)))
+	if name == "" {
+		return "careme"
+	}
+	return name
+}
+
+func serviceVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	version := strings.TrimSpace(info.Main.Version)
+	if version == "(devel)" {
+		return ""
+	}
+	return version
+}
+
+func telemetryExportEnabled() bool {
+	return strings.TrimSpace(os.Getenv(otelExporterEndpointEnv)) != "" ||
+		strings.TrimSpace(os.Getenv(otelExporterTracesEnv)) != "" ||
+		strings.TrimSpace(os.Getenv(otelExporterLogsEnv)) != ""
+}
+
+func recoverAndClose(ctx context.Context, closeFn func(context.Context) error) func() {
 	return func() {
 		panicValue := recover()
 		if panicValue != nil {
@@ -41,7 +151,11 @@ func recoverAndClose(ctx context.Context, closeFn func()) func() {
 			)
 		}
 
-		closeFn()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), telemetryShutdownTimeout)
+		defer cancel()
+		if err := closeFn(shutdownCtx); err != nil {
+			slog.ErrorContext(ctx, "telemetry shutdown failed", "error", err)
+		}
 
 		if panicValue != nil {
 			panic(panicValue)

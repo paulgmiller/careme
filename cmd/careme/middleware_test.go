@@ -4,159 +4,72 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-	"time"
 
 	"careme/internal/logsetup"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
-type trackedRequest struct {
-	method       string
-	url          string
-	duration     time.Duration
-	responseCode string
-	operationID  string
-	sessionID    string
-}
+func TestTelemetryHandlerRecordsResponseCode(t *testing.T) {
+	recorder := installTestTracerProvider(t)
 
-type fakeRequestTracker struct {
-	calls []trackedRequest
-}
-
-func (f *fakeRequestTracker) TrackRequest(ctx context.Context, method, url string, duration time.Duration, responseCode string) {
-	operationID, _ := logsetup.OperationIDFromContext(ctx)
-	sessionID, _ := logsetup.SessionIDFromContext(ctx)
-	f.calls = append(f.calls, trackedRequest{
-		method:       method,
-		url:          url,
-		duration:     duration,
-		responseCode: responseCode,
-		operationID:  operationID,
-		sessionID:    sessionID,
-	})
-}
-
-func TestAppInsightsTrackerTracksResponseCode(t *testing.T) {
-	tracker := &fakeRequestTracker{}
-	mw := &appInsightsTracker{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusCreated)
-		}),
-		tracker: tracker,
-	}
+	handler := newTelemetryHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	}))
 
 	req := httptest.NewRequest(http.MethodPost, "https://careme.cooking/recipes?vegan=true", nil)
 	rec := httptest.NewRecorder()
-	mw.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 
-	if len(tracker.calls) != 1 {
-		t.Fatalf("expected 1 tracked request, got %d", len(tracker.calls))
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
 	}
 
-	call := tracker.calls[0]
-	if call.method != http.MethodPost {
-		t.Fatalf("expected method %q, got %q", http.MethodPost, call.method)
+	span := spans[0]
+	if span.Name() != "POST /recipes" {
+		t.Fatalf("expected span name %q, got %q", "POST /recipes", span.Name())
 	}
-	if call.url != req.URL.String() {
-		t.Fatalf("expected url %q, got %q", req.URL.String(), call.url)
+	attrs := spanAttributes(span)
+	if got := attrs["http.method"].AsString(); got != http.MethodPost {
+		t.Fatalf("expected http.method %q, got %q", http.MethodPost, got)
 	}
-	if call.responseCode != "201" {
-		t.Fatalf("expected response code 201, got %q", call.responseCode)
-	}
-	if call.duration <= 0 {
-		t.Fatalf("expected positive duration, got %s", call.duration)
+	if got := int(attrs["http.status_code"].AsInt64()); got != http.StatusCreated {
+		t.Fatalf("expected http.status_code %d, got %d", http.StatusCreated, got)
 	}
 }
 
-func TestAppInsightsTrackerDefaultsStatusCodeTo200(t *testing.T) {
-	tracker := &fakeRequestTracker{}
-	mw := &appInsightsTracker{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("ok"))
+func TestTelemetryHandlerRecordsRecoveredPanicAs500(t *testing.T) {
+	recorder := installTestTracerProvider(t)
+
+	handler := newTelemetryHandler(&recoverer{
+		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			panic("boom")
 		}),
-		tracker: tracker,
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/about", nil)
-	rec := httptest.NewRecorder()
-	mw.ServeHTTP(rec, req)
-
-	if len(tracker.calls) != 1 {
-		t.Fatalf("expected 1 tracked request, got %d", len(tracker.calls))
-	}
-	if tracker.calls[0].responseCode != "200" {
-		t.Fatalf("expected response code 200, got %q", tracker.calls[0].responseCode)
-	}
-}
-
-func TestAppInsightsTrackerTracksRecoveredPanicAs500(t *testing.T) {
-	tracker := &fakeRequestTracker{}
-	mw := &appInsightsTracker{
-		Handler: &recoverer{
-			Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-				panic("boom")
-			}),
-		},
-		tracker: tracker,
-	}
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/panic", nil)
 	rec := httptest.NewRecorder()
-	mw.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected status 500, got %d", rec.Code)
 	}
-	if len(tracker.calls) != 1 {
-		t.Fatalf("expected 1 tracked request, got %d", len(tracker.calls))
-	}
-	if tracker.calls[0].responseCode != "500" {
-		t.Fatalf("expected response code 500, got %q", tracker.calls[0].responseCode)
-	}
-}
 
-func TestAppInsightsTrackerReusesOperationIDFromContext(t *testing.T) {
-	tracker := &fakeRequestTracker{}
-	mw := &appInsightsTracker{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusAccepted)
-		}),
-		tracker: tracker,
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
 	}
-
-	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/about", nil)
-	req = req.WithContext(logsetup.WithOperationID(req.Context(), "op-555"))
-	rec := httptest.NewRecorder()
-	mw.ServeHTTP(rec, req)
-
-	if len(tracker.calls) != 1 {
-		t.Fatalf("expected 1 tracked request, got %d", len(tracker.calls))
-	}
-	if tracker.calls[0].operationID != "op-555" {
-		t.Fatalf("expected tracker to receive operation id op-555, got %q", tracker.calls[0].operationID)
-	}
-}
-
-func TestAppInsightsTrackerIncludesSessionIDFromContext(t *testing.T) {
-	tracker := &fakeRequestTracker{}
-	mw := &appInsightsTracker{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusAccepted)
-		}),
-		tracker: tracker,
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "https://careme.cooking/about", nil)
-	req = req.WithContext(logsetup.WithSessionID(req.Context(), "sess-555"))
-	rec := httptest.NewRecorder()
-	mw.ServeHTTP(rec, req)
-
-	if len(tracker.calls) != 1 {
-		t.Fatalf("expected 1 tracked request, got %d", len(tracker.calls))
-	}
-	if tracker.calls[0].sessionID != "sess-555" {
-		t.Fatalf("expected tracker to receive session id sess-555, got %q", tracker.calls[0].sessionID)
+	if spans[0].Status().Code != codes.Error {
+		t.Fatalf("expected span status %v, got %v", codes.Error, spans[0].Status().Code)
 	}
 }
 
@@ -249,14 +162,18 @@ func TestSessionIDHandlerReplacesInvalidCookie(t *testing.T) {
 	}
 }
 
-func TestWithMiddlewareProvidesBothIDs(t *testing.T) {
+func TestWithMiddlewareProvidesTraceBackedOperationID(t *testing.T) {
+	installTestTracerProvider(t)
+
 	var operationID string
 	var sessionID string
+	var traceID string
 	handler := appMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		operationID, _ = logsetup.OperationIDFromContext(r.Context())
 		sessionID, _ = logsetup.SessionIDFromContext(r.Context())
+		traceID = oteltrace.SpanContextFromContext(r.Context()).TraceID().String()
 		w.WriteHeader(http.StatusNoContent)
-	}), &fakeRequestTracker{})
+	}))
 
 	req := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)
 	rec := httptest.NewRecorder()
@@ -264,6 +181,9 @@ func TestWithMiddlewareProvidesBothIDs(t *testing.T) {
 
 	if operationID == "" {
 		t.Fatal("expected operation id in context")
+	}
+	if operationID != traceID {
+		t.Fatalf("expected operation id %q to match trace id %q", operationID, traceID)
 	}
 	if sessionID == "" {
 		t.Fatal("expected session id in context")
@@ -277,34 +197,25 @@ func TestWithMiddlewareProvidesBothIDs(t *testing.T) {
 	}
 }
 
-func TestWithMiddlewareProvidesIDsWithoutTracker(t *testing.T) {
+func TestWithMiddlewarePreservesExplicitOperationID(t *testing.T) {
+	installTestTracerProvider(t)
+
 	var operationID string
-	var sessionID string
 	handler := appMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		operationID, _ = logsetup.OperationIDFromContext(r.Context())
-		sessionID, _ = logsetup.SessionIDFromContext(r.Context())
 		w.WriteHeader(http.StatusNoContent)
-	}), nil)
+	}))
 
 	req := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)
+	req = req.WithContext(logsetup.WithOperationID(req.Context(), "op-555"))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected status 204, got %d", rec.Code)
+	if operationID != "op-555" {
+		t.Fatalf("expected operation id op-555, got %q", operationID)
 	}
-	if operationID == "" {
-		t.Fatal("expected operation id in context")
-	}
-	if sessionID == "" {
-		t.Fatal("expected session id in context")
-	}
-	if rec.Header().Get("X-Operation-ID") != operationID {
-		t.Fatalf("expected X-Operation-ID %q, got %q", operationID, rec.Header().Get("X-Operation-ID"))
-	}
-	cookie := findCookie(t, rec.Result().Cookies(), sessionCookieName)
-	if cookie.Value != sessionID {
-		t.Fatalf("expected session cookie %q, got %q", sessionID, cookie.Value)
+	if rec.Header().Get("X-Operation-ID") != "op-555" {
+		t.Fatalf("expected X-Operation-ID op-555, got %q", rec.Header().Get("X-Operation-ID"))
 	}
 }
 
@@ -331,7 +242,7 @@ func TestRouteScopedMiddlewareSkipsSessionCookieForStaticRoutes(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	rootMux.Handle("/static/", baseMiddleware(infraMux))
-	rootMux.Handle("/", appMiddleware(appMux, &fakeRequestTracker{}))
+	rootMux.Handle("/", appMiddleware(appMux))
 
 	staticReq := httptest.NewRequest(http.MethodGet, "http://careme.cooking/static/app.js", nil)
 	staticRec := httptest.NewRecorder()
@@ -353,57 +264,25 @@ func TestRouteScopedMiddlewareSkipsSessionCookieForStaticRoutes(t *testing.T) {
 	}
 }
 
-func TestParseAppInsightsConnectionString(t *testing.T) {
-	connectionString := "InstrumentationKey=test-key;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=app-id"
-	cfg, err := parseAppInsightsConnectionString(connectionString)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.InstrumentationKey != "test-key" {
-		t.Fatalf("expected instrumentation key test-key, got %q", cfg.InstrumentationKey)
-	}
-	if cfg.EndpointUrl != "https://westus3-1.in.applicationinsights.azure.com/v2/track" {
-		t.Fatalf("unexpected ingestion endpoint: %q", cfg.EndpointUrl)
-	}
+func installTestTracerProvider(t *testing.T) *tracetest.SpanRecorder {
+	t.Helper()
+
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	otel.SetTracerProvider(provider)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		_ = provider.Shutdown(context.Background())
+		otel.SetTracerProvider(noop.NewTracerProvider())
+	})
+
+	return recorder
 }
 
-func TestParseAppInsightsConnectionStringErrors(t *testing.T) {
-	testCases := []struct {
-		name        string
-		value       string
-		wantErrText string
-	}{
-		{
-			name:        "empty",
-			value:       "",
-			wantErrText: "connection string is empty",
-		},
-		{
-			name:        "missing instrumentation key",
-			value:       "IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/",
-			wantErrText: "instrumentation key is missing",
-		},
-		{
-			name:        "missing ingestion endpoint",
-			value:       "InstrumentationKey=test-key",
-			wantErrText: "ingestion endpoint is missing",
-		},
-		{
-			name:        "bad ingestion endpoint",
-			value:       "InstrumentationKey=test-key;IngestionEndpoint=:bad://",
-			wantErrText: "missing protocol scheme",
-		},
+func spanAttributes(span sdktrace.ReadOnlySpan) map[string]attribute.Value {
+	attrs := make(map[string]attribute.Value, len(span.Attributes()))
+	for _, attr := range span.Attributes() {
+		attrs[string(attr.Key)] = attr.Value
 	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := parseAppInsightsConnectionString(tc.value)
-			if err == nil {
-				t.Fatalf("expected error containing %q", tc.wantErrText)
-			}
-			if !strings.Contains(err.Error(), tc.wantErrText) {
-				t.Fatalf("expected error containing %q, got %q", tc.wantErrText, err.Error())
-			}
-		})
-	}
+	return attrs
 }
