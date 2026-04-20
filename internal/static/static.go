@@ -1,12 +1,15 @@
 package static
 
 import (
+	"bytes"
 	"crypto/sha256"
 	_ "embed"
+	"encoding/json"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
-	"strconv"
+	texttemplate "text/template"
 
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -41,6 +44,12 @@ var manifestWebmanifest []byte
 
 //go:embed offline.html
 var offlineHTML []byte
+
+//go:embed sw.js.tmpl
+var serviceWorkerJS []byte
+
+var offlinePageTemplate = template.Must(template.New("offline").Parse(string(offlineHTML)))
+var serviceWorkerTemplate = texttemplate.Must(texttemplate.New("sw").Parse(string(serviceWorkerJS)))
 
 var TailwindAssetPath string
 
@@ -105,7 +114,13 @@ func Register(mux routing.Registrar) {
 	mux.HandleFunc("/offline", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
-		if _, err := w.Write(offlineHTML); err != nil {
+		page, err := renderOfflinePage()
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to render offline page", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+			return
+		}
+		if _, err := w.Write(page); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write offline page", "error", err)
 		}
 	})
@@ -113,7 +128,13 @@ func Register(mux routing.Registrar) {
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
-		if _, err := w.Write([]byte(serviceWorkerScript())); err != nil {
+		script, err := renderServiceWorker()
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to render service worker", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+			return
+		}
+		if _, err := w.Write(script); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write service worker", "error", err)
 		}
 	})
@@ -134,7 +155,26 @@ func faviconBySeason(season seasons.Season) []byte {
 	}
 }
 
-func serviceWorkerScript() string {
+func renderOfflinePage() ([]byte, error) {
+	scheme := seasons.GetCurrentColorScheme()
+	data := struct {
+		TailwindAssetPath string
+		ThemeColor        string
+		Colors            seasons.ColorScheme
+	}{
+		TailwindAssetPath: TailwindAssetPath,
+		ThemeColor:        scheme.C600,
+		Colors:            scheme,
+	}
+
+	var buf bytes.Buffer
+	if err := offlinePageTemplate.Execute(&buf, data); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func renderServiceWorker() ([]byte, error) {
 	precachePaths := []string{
 		"/offline",
 		"/manifest.webmanifest",
@@ -144,90 +184,30 @@ func serviceWorkerScript() string {
 		"/static/htmx@2.0.8.js",
 		TailwindAssetPath,
 	}
+	authPaths := []string{"/sign-in", "/sign-up", "/auth/establish", "/logout"}
 
-	quotedPaths := make([]string, 0, len(precachePaths))
-	for _, path := range precachePaths {
-		quotedPaths = append(quotedPaths, strconv.Quote(path))
+	precacheJSON, err := json.Marshal(precachePaths)
+	if err != nil {
+		return nil, err
+	}
+	authJSON, err := json.Marshal(authPaths)
+	if err != nil {
+		return nil, err
 	}
 
-	return fmt.Sprintf(`const CACHE_NAME = "careme-pwa-v1";
-const PRECACHE_URLS = [%s];
-const AUTH_PATHS = new Set(["/sign-in", "/sign-up", "/auth/establish", "/logout"]);
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting()),
-  );
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)),
-      ),
-    ).then(() => self.clients.claim()),
-  );
-});
-
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  if (request.method !== "GET") {
-    return;
-  }
-
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) {
-    return;
-  }
-  if (AUTH_PATHS.has(url.pathname)) {
-    return;
-  }
-
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request).catch(() => caches.match("/offline")),
-    );
-    return;
-  }
-
-  const isStaticAsset = url.pathname.startsWith("/static/") ||
-    url.pathname === "/favicon.ico" ||
-    url.pathname === "/manifest.webmanifest" ||
-    url.pathname === "/offline";
-  if (!isStaticAsset) {
-    return;
-  }
-
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-
-      return fetch(request).then((response) => {
-        if (!response || !response.ok) {
-          return response;
-        }
-
-        const responseCopy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseCopy));
-        return response;
-      });
-    }),
-  );
-});
-`, joinQuoted(quotedPaths))
-}
-
-func joinQuoted(paths []string) string {
-	if len(paths) == 0 {
-		return ""
+	data := struct {
+		CacheName    string
+		PrecacheURLs string
+		AuthPaths    string
+	}{
+		CacheName:    `"careme-pwa-v1"`,
+		PrecacheURLs: string(precacheJSON),
+		AuthPaths:    string(authJSON),
 	}
 
-	result := paths[0]
-	for _, path := range paths[1:] {
-		result += ", " + path
+	var buf bytes.Buffer
+	if err := serviceWorkerTemplate.Execute(&buf, data); err != nil {
+		return nil, err
 	}
-	return result
+	return buf.Bytes(), nil
 }

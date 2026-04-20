@@ -63,7 +63,7 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			name:        "offline page",
 			path:        "/offline",
 			wantType:    "text/html; charset=utf-8",
-			wantSnippet: "Careme needs a connection.",
+			wantSnippet: TailwindAssetPath,
 		},
 		{
 			name:     "192 icon",
@@ -96,16 +96,28 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			if tt.wantSnippet != "" && !strings.Contains(rec.Body.String(), tt.wantSnippet) {
 				t.Fatalf("GET %s body missing %q", tt.path, tt.wantSnippet)
 			}
+			if tt.path == "/offline" && !strings.Contains(rec.Body.String(), "Careme needs a connection.") {
+				t.Fatalf("GET %s body missing offline copy", tt.path)
+			}
 		})
 	}
 }
 
 func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
-	script := serviceWorkerScript()
+	Init()
+	script, err := renderServiceWorker()
+	if err != nil {
+		t.Fatalf("renderServiceWorker() error = %v", err)
+	}
+	rendered := string(script)
 
 	for _, path := range []string{"/sign-in", "/sign-up", "/auth/establish", "/logout"} {
-		if !strings.Contains(script, path) {
-			t.Fatalf("service worker should bypass %s, script: %s", path, script)
+		if !strings.Contains(rendered, path) {
+			t.Fatalf("service worker should bypass %s, script: %s", path, rendered)
 		}
+	}
+
+	if !strings.Contains(rendered, "Clerk redirects and auth bootstrap should always hit the network.") {
+		t.Fatalf("service worker should keep inline comments for auth behavior, script: %s", rendered)
 	}
 }
