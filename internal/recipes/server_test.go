@@ -602,7 +602,6 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	clone.PriorSavedHashes = append([]string(nil), p.PriorSavedHashes...)
 	clone.Saved = append([]ai.Recipe(nil), p.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), p.Dismissed...)
-	clone.LineageCandidates = append([]RecipeLineageCandidate(nil), p.LineageCandidates...)
 	c.last = &clone
 	c.mu.Unlock()
 	if c.called != nil {
@@ -641,7 +640,6 @@ func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
 	clone.PriorSavedHashes = append([]string(nil), c.last.PriorSavedHashes...)
 	clone.Saved = append([]ai.Recipe(nil), c.last.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), c.last.Dismissed...)
-	clone.LineageCandidates = append([]RecipeLineageCandidate(nil), c.last.LineageCandidates...)
 	return &clone
 }
 
@@ -1697,58 +1695,6 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	if len(captured.Saved) != 2 {
 		t.Fatalf("expected both current saved recipes, got %#v", captured.Saved)
 	}
-}
-
-func TestHandleRegenerate_BuildsLineageCandidatesForUnsavedRecipes(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	storage := users.NewStorage(cacheStore)
-	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
-	s := newTestServer(t,
-		withTestCache(cacheStore),
-		withTestStorage(storage),
-		withTestGenerator(generator),
-	)
-	t.Cleanup(s.Wait)
-
-	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
-	replaceableRecipe := ai.Recipe{
-		Title:       "Spicy Chicken Tacos",
-		Description: "Needs a refresh",
-		Ingredients: []ai.Ingredient{{Name: "chicken"}, {Name: "lime"}},
-		ParentHash:  "older-hash",
-	}
-	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	p.ConversationID = "conv-123"
-	p.Saved = []ai.Recipe{savedRecipe}
-	originHash := p.Hash()
-	require.NoError(t, s.SaveParams(t.Context(), p))
-
-	saveRecipesForOrigin(t, s, originHash, savedRecipe, replaceableRecipe)
-	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:        []ai.Recipe{savedRecipe, replaceableRecipe},
-		ConversationID: "conv-123",
-	}, originHash))
-
-	form := url.Values{"instructions": {"make it faster"}}
-	req := httptest.NewRequest(http.MethodPost, "/recipes/"+originHash+"/regenerate", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("HX-Request", "true")
-	req.SetPathValue("hash", originHash)
-	rr := httptest.NewRecorder()
-
-	s.handleRegenerate(rr, req)
-	require.Equal(t, http.StatusOK, rr.Code)
-
-	select {
-	case <-generator.called:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for generator call")
-	}
-
-	captured := generator.LastParams()
-	require.NotNil(t, captured)
-	require.Len(t, captured.LineageCandidates, 1)
-	assert.Equal(t, replaceableRecipe.ComputeHash(), captured.LineageCandidates[0].Recipe.ComputeHash())
 }
 
 func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {

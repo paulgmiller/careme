@@ -103,13 +103,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
-		var instructions []string
-		for _, dismissed := range p.Dismissed {
-			instructions = append(instructions, "Passed on "+dismissed.Title)
-		}
-		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
-			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
-		}
+		instructions := regenerateInstructions(p)
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
@@ -201,6 +195,20 @@ func titles(prefix string, recipes []ai.Recipe) string {
 	return b.String()
 }
 
+func regenerateInstructions(p *generatorParams) []string {
+	instructions := make([]string, 0, 1+len(p.Dismissed)+len(p.Saved))
+	if trimmed := strings.TrimSpace(p.Instructions); trimmed != "" {
+		instructions = append(instructions, trimmed)
+	}
+	for _, dismissed := range p.Dismissed {
+		instructions = append(instructions, "Passed on "+dismissed.Title)
+	}
+	for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
+		instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
+	}
+	return instructions
+}
+
 func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash string, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
 	if g.critiquer == nil {
 		return shoppingList, nil
@@ -250,27 +258,38 @@ func (g *generatorService) writeStatus(ctx context.Context, hash string, status 
 }
 
 func applyCritiqueRetryLineage(garbage []critique.Result, newRecipes []ai.Recipe) {
-	if len(garbage) == 0 || len(newRecipes) == 0 {
+	parents := make([]ai.Recipe, 0, len(garbage))
+	for _, result := range garbage {
+		if result.Recipe == nil {
+			continue
+		}
+		parents = append(parents, *result.Recipe)
+	}
+	applyParentHashesByTitleMatch(parents, newRecipes)
+}
+
+func applyParentHashesByTitleMatch(parents []ai.Recipe, newRecipes []ai.Recipe) {
+	if len(parents) == 0 || len(newRecipes) == 0 {
 		return
 	}
 
 	type candidateMatch struct {
-		newIndex     int
-		garbageIndex int
-		score        int
+		newIndex    int
+		parentIndex int
+		score       int
 	}
 
-	matches := make([]candidateMatch, 0, len(newRecipes)*len(garbage))
+	matches := make([]candidateMatch, 0, len(newRecipes)*len(parents))
 	for newIndex, recipe := range newRecipes {
-		for garbageIndex, result := range garbage {
-			score := sharedTitleWords(recipe.Title, result.Recipe.Title)
+		for parentIndex, parent := range parents {
+			score := sharedTitleWords(recipe.Title, parent.Title)
 			if score == 0 {
 				continue
 			}
 			matches = append(matches, candidateMatch{
-				newIndex:     newIndex,
-				garbageIndex: garbageIndex,
-				score:        score,
+				newIndex:    newIndex,
+				parentIndex: parentIndex,
+				score:       score,
 			})
 		}
 	}
@@ -282,21 +301,20 @@ func applyCritiqueRetryLineage(garbage []critique.Result, newRecipes []ai.Recipe
 		if a.newIndex != b.newIndex {
 			return a.newIndex - b.newIndex
 		}
-		return a.garbageIndex - b.garbageIndex
+		return a.parentIndex - b.parentIndex
 	})
 
 	usedNew := make(map[int]struct{}, len(newRecipes))
-	usedGarbage := make(map[int]struct{}, len(garbage))
+	usedParents := make(map[int]struct{}, len(parents))
 	for _, match := range matches {
 		if _, ok := usedNew[match.newIndex]; ok {
 			continue
 		}
-		if _, ok := usedGarbage[match.garbageIndex]; ok {
+		if _, ok := usedParents[match.parentIndex]; ok {
 			continue
 		}
 
-		parent := garbage[match.garbageIndex].Recipe
-		parentHash := parent.ComputeHash()
+		parentHash := parents[match.parentIndex].ComputeHash()
 		if parentHash == "" {
 			continue
 		}
@@ -307,7 +325,7 @@ func applyCritiqueRetryLineage(garbage []critique.Result, newRecipes []ai.Recipe
 
 		newRecipes[match.newIndex].ParentHash = parentHash
 		usedNew[match.newIndex] = struct{}{}
-		usedGarbage[match.garbageIndex] = struct{}{}
+		usedParents[match.parentIndex] = struct{}{}
 	}
 }
 

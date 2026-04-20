@@ -398,48 +398,6 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 }
 
-func TestGenerateRecipes_RegenerateBuildsLineageFromCandidates(t *testing.T) {
-	original := ai.Recipe{
-		Title:        "Lemon Chicken Skillet",
-		Description:  "Earlier version",
-		Ingredients:  []ai.Ingredient{{Name: "Chicken thighs"}, {Name: "Lemon"}},
-		Instructions: []string{"Brown the chicken."},
-	}
-	replacement := ai.Recipe{
-		Title:        "Lemon Chicken Skillet Redux",
-		Description:  "Freshened up",
-		Ingredients:  []ai.Ingredient{{Name: "Chicken thighs"}, {Name: "Lemon zest"}},
-		Instructions: []string{"Brown the chicken.", "Finish with lemon zest."},
-	}
-
-	g := &generatorService{
-		aiClient: &captureRegenerateAIClient{
-			shoppingList: &ai.ShoppingList{
-				ConversationID: "conv-123",
-				Recipes:        []ai.Recipe{replacement},
-			},
-		},
-	}
-
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	params.ConversationID = "conv-123"
-	params.Instructions = "make it brighter"
-	params.LineageCandidates = []RecipeLineageCandidate{{
-		Recipe: original,
-	}}
-
-	got, err := g.GenerateRecipes(t.Context(), params)
-	if err != nil {
-		t.Fatalf("GenerateRecipes returned error: %v", err)
-	}
-	if got == nil || len(got.Recipes) != 1 {
-		t.Fatalf("expected one regenerated recipe, got %+v", got)
-	}
-	if got.Recipes[0].ParentHash != original.ComputeHash() {
-		t.Fatalf("expected parent hash %q, got %q", original.ComputeHash(), got.Recipes[0].ParentHash)
-	}
-}
-
 func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	generated := []ai.Recipe{
 		{Title: "Roast Chicken", Description: "Crisp and simple", Instructions: []string{"Roast the chicken."}},
@@ -737,8 +695,8 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 
 func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
-	initial := ai.Recipe{Title: "Needs Work", Description: "First pass"}
-	retried := ai.Recipe{Title: "Ready Now", Description: "Second pass"}
+	initial := ai.Recipe{Title: "Needs Work Dinner", Description: "First pass"}
+	retried := ai.Recipe{Title: "Ready Dinner", Description: "Second pass"}
 
 	aiStub := &sequenceAIClient{
 		regenerateResponses: []*ai.ShoppingList{
@@ -755,7 +713,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	critiquer := &captureCritiqueService{
 		fn: func(recipe ai.Recipe) (*ai.RecipeCritique, error) {
 			switch recipe.Title {
-			case "Needs Work":
+			case "Needs Work Dinner":
 				return &ai.RecipeCritique{
 					SchemaVersion:  "recipe-critique-v1",
 					OverallScore:   5,
@@ -764,7 +722,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 					Issues:         []ai.RecipeCritiqueIssue{{Severity: "medium", Category: "timing", Detail: "Cooking times are inconsistent."}},
 					SuggestedFixes: []string{"make the timing consistent"},
 				}, nil
-			case "Ready Now":
+			case "Ready Dinner":
 				return &ai.RecipeCritique{
 					SchemaVersion:  "recipe-critique-v1",
 					OverallScore:   8,
@@ -797,7 +755,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	if got == nil || len(got.Recipes) != 2 {
 		t.Fatalf("expected regenerated list plus saved recipe, got %+v", got)
 	}
-	if got.Recipes[0].Title != "Ready Now" || got.Recipes[1].Title != "Already Saved" {
+	if got.Recipes[0].Title != "Ready Dinner" || got.Recipes[1].Title != "Already Saved" {
 		t.Fatalf("unexpected recipe order after critique retry: %+v", got.Recipes)
 	}
 	if got.Recipes[0].ParentHash != initial.ComputeHash() {
@@ -814,7 +772,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	}
 	wantRetryInstructions := []string{
 		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below, in the same order. Description should focus on selling the dish not these corrections",
-		"Recipe \"Needs Work\" scored 5/10.\n Issues: [timing/medium] Cooking times are inconsistent.\n Suggested fixes: make the timing consistent",
+		"Recipe \"Needs Work Dinner\" scored 5/10.\n Issues: [timing/medium] Cooking times are inconsistent.\n Suggested fixes: make the timing consistent",
 	}
 	if got := aiStub.regenerateInstructions[1]; !slices.Equal(got, wantRetryInstructions) {
 		t.Fatalf("unexpected critique retry instructions: got %v want %v", got, wantRetryInstructions)
@@ -822,7 +780,6 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 }
 
 func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
-	original := ai.Recipe{Title: "Original Dinner", Description: "Older version"}
 	firstPass := ai.Recipe{Title: "First Pass Dinner", Description: "Needs work"}
 	retried := ai.Recipe{Title: "Second Pass Dinner", Description: "Improved"}
 
@@ -869,10 +826,6 @@ func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.ConversationID = "conv-original"
 	params.Instructions = "make it fresher"
-	params.LineageCandidates = []RecipeLineageCandidate{{
-		Recipe: original,
-	}}
-
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
 		t.Fatalf("GenerateRecipes returned error: %v", err)
