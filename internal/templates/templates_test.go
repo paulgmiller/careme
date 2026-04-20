@@ -214,6 +214,38 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 	}
 }
 
+func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		User            *utypes.User
+		ServerSignedIn  bool
+	}{
+		Style: seasons.GetCurrentStyle(),
+	}
+
+	var buf bytes.Buffer
+	if err := Home.Execute(&buf, data); err != nil {
+		t.Fatalf("Home.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, `<link rel="manifest" href="/manifest.webmanifest">`) {
+		t.Fatalf("home page should include manifest link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<link rel="apple-touch-icon" href="/static/app-icon-192.png">`) {
+		t.Fatalf("home page should include app icon link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `navigator.serviceWorker.register("/sw.js")`) {
+		t.Fatalf("home page should register the service worker, body: %s", rendered)
+	}
+}
+
 func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
