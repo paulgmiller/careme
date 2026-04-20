@@ -246,7 +246,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := rendered.Flush(); err != nil {
 				slog.ErrorContext(ctx, "failed to write recipe response", "hash", hash, "error", err)
-				http.Error(w, "failed to render recipe", http.StatusInternalServerError)
 			}
 			return
 		}
@@ -284,7 +283,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := rendered.Flush(); err != nil {
 		slog.ErrorContext(ctx, "failed to write recipe response", "hash", hash, "error", err)
-		http.Error(w, "failed to render recipe", http.StatusInternalServerError)
 	}
 }
 
@@ -392,7 +390,6 @@ func (s *server) handleGenerateRecipeImage(w http.ResponseWriter, r *http.Reques
 	}
 	if err := rendered.Flush(); err != nil {
 		slog.ErrorContext(ctx, "failed to write recipe image action response", "hash", hash, "error", err)
-		http.Error(w, "failed to render image action", http.StatusInternalServerError)
 	}
 }
 
@@ -472,7 +469,6 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := rendered.Flush(); err != nil {
 		slog.ErrorContext(ctx, "failed to write recipe thread response", "hash", hash, "error", err)
-		http.Error(w, "failed to render question thread", http.StatusInternalServerError)
 	}
 }
 
@@ -507,7 +503,6 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := rendered.Flush(); err != nil {
 				slog.ErrorContext(ctx, "failed to write shopping wine response", "hash", hash, "error", err)
-				http.Error(w, "failed to render wine pick", http.StatusInternalServerError)
 			}
 		} else {
 			rendered := newBufferedHTMLWriter(w)
@@ -518,7 +513,6 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := rendered.Flush(); err != nil {
 				slog.ErrorContext(ctx, "failed to write wine response", "hash", hash, "error", err)
-				http.Error(w, "failed to render wine pick", http.StatusInternalServerError)
 			}
 		}
 		return
@@ -571,7 +565,6 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := rendered.Flush(); err != nil {
 			slog.ErrorContext(ctx, "failed to write shopping wine response", "hash", hash, "error", err)
-			http.Error(w, "failed to render wine pick", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -583,7 +576,6 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := rendered.Flush(); err != nil {
 		slog.ErrorContext(ctx, "failed to write wine response", "hash", hash, "error", err)
-		http.Error(w, "failed to render wine pick", http.StatusInternalServerError)
 	}
 }
 
@@ -1096,7 +1088,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := rendered.Flush(); err != nil {
 			slog.ErrorContext(ctx, "failed to write shopping list response", "hash", hashParam, "error", err)
-			http.Error(w, "failed to render recipes", http.StatusInternalServerError)
 		}
 		return
 	}
