@@ -4,7 +4,6 @@ import (
 	"context"
 	"html/template"
 	"io"
-	"net/http"
 	"slices"
 	"strings"
 
@@ -57,12 +56,12 @@ type shoppingRecipeWineView struct {
 }
 
 // FormatShoppingListHTML renders the multi-recipe shopping list view.
-func FormatShoppingListHTML(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
-	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), writer)
+func FormatShoppingListHTML(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, writer io.Writer) error {
+	return FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), writer)
 }
 
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
-func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
+func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer io.Writer) error {
 	dismissedHashes := make(map[string]bool, len(p.Dismissed))
 	for _, recipe := range p.Dismissed {
 		dismissedHashes[recipe.ComputeHash()] = true
@@ -123,13 +122,11 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		ServerSignedIn:  signedIn,
 	}
 
-	if err := templates.ShoppingList.Execute(writer, data); err != nil {
-		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
-	}
+	return templates.ShoppingList.Execute(writer, data)
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer io.Writer) error {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
@@ -172,9 +169,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore: critiqueScore,
 	}
 
-	if err := templates.Recipe.Execute(writer, data); err != nil {
-		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
-	}
+	return templates.Recipe.Execute(writer, data)
 }
 
 func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeImageView {
@@ -185,7 +180,7 @@ func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeIma
 	}
 }
 
-func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
+func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer io.Writer) error {
 	data := struct {
 		RecipeHash     string
 		RecipeImage    recipeImageView
@@ -196,12 +191,10 @@ func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImag
 		ServerSignedIn: signedIn,
 	}
 
-	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action", data); err != nil {
-		http.Error(writer, "recipe image action template error: "+err.Error(), http.StatusInternalServerError)
-	}
+	return templates.Recipe.ExecuteTemplate(writer, "recipe_image_action", data)
 }
 
-func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
+func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer io.Writer) error {
 	data := struct {
 		RecipeHash     string
 		RecipeImage    recipeImageView
@@ -212,13 +205,11 @@ func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRe
 		ServerSignedIn: signedIn,
 	}
 
-	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action_response", data); err != nil {
-		http.Error(writer, "recipe image response template error: "+err.Error(), http.StatusInternalServerError)
-	}
+	return templates.Recipe.ExecuteTemplate(writer, "recipe_image_action_response", data)
 }
 
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
-func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer http.ResponseWriter) {
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer io.Writer) error {
 	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
@@ -233,13 +224,11 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversat
 		ServerSignedIn: signedIn,
 	}
 
-	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
-		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
-	}
+	return templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data)
 }
 
 // FormatRecipeWineHTML renders the wine recommendation fragment for HTMX swaps.
-func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer http.ResponseWriter) {
+func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer io.Writer) error {
 	data := struct {
 		RecipeHash         string
 		WineRecommendation *ai.WineSelection
@@ -248,13 +237,11 @@ func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer
 		WineRecommendation: selection,
 	}
 
-	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_wine", data); err != nil {
-		http.Error(writer, "recipe wine template error: "+err.Error(), http.StatusInternalServerError)
-	}
+	return templates.Recipe.ExecuteTemplate(writer, "recipe_wine", data)
 }
 
 // FormatShoppingRecipeWineHTML renders the signed-in shopping list wine fragment for HTMX swaps.
-func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSelection, writer http.ResponseWriter) {
+func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSelection, writer io.Writer) error {
 	wineActionID, wineButtonID := shoppingWineDOMIDs(recipeHash)
 	winePreviewID := shoppingWinePreviewDOMID(recipeHash)
 	wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
@@ -282,9 +269,7 @@ func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSel
 		templateName = "shopping_recipe_wine_details_response"
 	}
 
-	if err := templates.ShoppingList.ExecuteTemplate(writer, templateName, data); err != nil {
-		http.Error(writer, "shopping list wine template error: "+err.Error(), http.StatusInternalServerError)
-	}
+	return templates.ShoppingList.ExecuteTemplate(writer, templateName, data)
 }
 
 func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, writer io.Writer) error {

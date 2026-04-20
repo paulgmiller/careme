@@ -1,13 +1,15 @@
 package recipes
 
 import (
-	"net/http/httptest"
+	"bytes"
 	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+
+	"github.com/stretchr/testify/require"
 )
 
 // Test that the HTML contains Save and Dismiss buttons for recipes.
@@ -40,9 +42,10 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, multiRecipeList, true, w)
-	html := w.Body.String()
+	var w bytes.Buffer
+	err := FormatShoppingListHTML(t.Context(), p, multiRecipeList, true, &w)
+	require.NoError(t, err)
+	html := w.String()
 
 	// Verify HTML is valid
 	isValidHTML(t, html)
@@ -126,9 +129,10 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
-	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, listWithSavedRecipe, true, w)
-	html := w.Body.String()
+	var w bytes.Buffer
+	err := FormatShoppingListHTML(t.Context(), p, listWithSavedRecipe, true, &w)
+	require.NoError(t, err)
+	html := w.String()
 
 	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
 		t.Error("HTML should submit finalize with HTMX POST when a recipe is saved")
@@ -154,9 +158,10 @@ func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, list, false, w)
-	html := w.Body.String()
+	var w bytes.Buffer
+	err := FormatShoppingListHTML(t.Context(), p, list, false, &w)
+	require.NoError(t, err)
+	html := w.String()
 
 	if strings.Contains(html, `type="radio"`) {
 		t.Error("HTML should not contain save/dismiss radio inputs when signed out")

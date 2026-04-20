@@ -38,6 +38,18 @@ func setTextContent(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 }
 
+func writeBufferedHTML(w http.ResponseWriter, render func(io.Writer) error) error {
+	var body bytes.Buffer
+	// Buffer template output before touching the real response writer so a render
+	// failure does not leak a partial HTML response before we can return a 500.
+	if err := render(&body); err != nil {
+		return err
+	}
+	setTextContent(w)
+	_, err := w.Write(body.Bytes())
+	return err
+}
+
 func requestURIOrPath(r *http.Request) string {
 	if r == nil {
 		return "/"
@@ -217,7 +229,12 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				ID:   "",
 				Name: "Unknown Location",
 			}, time.Now())
-			FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
+			if err := writeBufferedHTML(w, func(writer io.Writer) error {
+				return FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, writer)
+			}); err != nil {
+				slog.ErrorContext(ctx, "failed to render recipe", "hash", hash, "error", err)
+				http.Error(w, "failed to render recipe", http.StatusInternalServerError)
+			}
 			return
 		}
 		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
@@ -246,7 +263,12 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
+	if err := writeBufferedHTML(w, func(writer io.Writer) error {
+		return FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, writer)
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to render recipe", "hash", hash, "error", err)
+		http.Error(w, "failed to render recipe", http.StatusInternalServerError)
+	}
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
@@ -345,7 +367,12 @@ func (s *server) handleGenerateRecipeImage(w http.ResponseWriter, r *http.Reques
 		hasRecipeImage = true
 	}
 
-	FormatRecipeImageActionResponseHTML(hash, true, hasRecipeImage, w)
+	if err := writeBufferedHTML(w, func(writer io.Writer) error {
+		return FormatRecipeImageActionResponseHTML(hash, true, hasRecipeImage, writer)
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to render recipe image action response", "hash", hash, "error", err)
+		http.Error(w, "failed to render image action", http.StatusInternalServerError)
+	}
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
@@ -416,7 +443,12 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	FormatRecipeThreadHTML(thread, true, conversationID, w)
+	if err := writeBufferedHTML(w, func(writer io.Writer) error {
+		return FormatRecipeThreadHTML(thread, true, conversationID, writer)
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to render recipe thread", "hash", hash, "error", err)
+		http.Error(w, "failed to render question thread", http.StatusInternalServerError)
+	}
 }
 
 func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
@@ -442,9 +474,19 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if renderShoppingVariant {
-			FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
+			if err := writeBufferedHTML(w, func(writer io.Writer) error {
+				return FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, writer)
+			}); err != nil {
+				slog.ErrorContext(ctx, "failed to render shopping wine recommendation", "hash", hash, "error", err)
+				http.Error(w, "failed to render wine pick", http.StatusInternalServerError)
+			}
 		} else {
-			FormatRecipeWineHTML(hash, selection, w)
+			if err := writeBufferedHTML(w, func(writer io.Writer) error {
+				return FormatRecipeWineHTML(hash, selection, writer)
+			}); err != nil {
+				slog.ErrorContext(ctx, "failed to render wine recommendation", "hash", hash, "error", err)
+				http.Error(w, "failed to render wine pick", http.StatusInternalServerError)
+			}
 		}
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
@@ -488,10 +530,20 @@ func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if renderShoppingVariant {
-		FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
+		if err := writeBufferedHTML(w, func(writer io.Writer) error {
+			return FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, writer)
+		}); err != nil {
+			slog.ErrorContext(ctx, "failed to render shopping wine recommendation", "hash", hash, "error", err)
+			http.Error(w, "failed to render wine pick", http.StatusInternalServerError)
+		}
 		return
 	}
-	FormatRecipeWineHTML(hash, selection, w)
+	if err := writeBufferedHTML(w, func(writer io.Writer) error {
+		return FormatRecipeWineHTML(hash, selection, writer)
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to render wine recommendation", "hash", hash, "error", err)
+		http.Error(w, "failed to render wine pick", http.StatusInternalServerError)
+	}
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -995,7 +1047,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}(recipeHash)
 		}
 		wineWG.Wait()
-		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, w)
+		if err := writeBufferedHTML(w, func(writer io.Writer) error {
+			return FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, writer)
+		}); err != nil {
+			slog.ErrorContext(ctx, "failed to render shopping list", "hash", hashParam, "error", err)
+			http.Error(w, "failed to render recipes", http.StatusInternalServerError)
+		}
 		return
 	}
 
