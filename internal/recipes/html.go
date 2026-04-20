@@ -23,6 +23,12 @@ type recipeImageView struct {
 	OutOfBand bool
 }
 
+type RecipeLineageView struct {
+	RecipeURL   string
+	RecipeTitle string
+	CritiqueURL string
+}
+
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
 //
 // We keep ingredient expansion in Go instead of the template because the same derived
@@ -129,11 +135,19 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, critiqueScore *int, originalVersion *RecipeLineageView, hasRecipeImage bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	recipeHash := recipe.ComputeHash()
+	originalRecipeURL := ""
+	originalRecipeTitle := ""
+	originalCritiqueURL := ""
+	if originalVersion != nil {
+		originalRecipeURL = originalVersion.RecipeURL
+		originalRecipeTitle = originalVersion.RecipeTitle
+		originalCritiqueURL = originalVersion.CritiqueURL
+	}
 	data := struct {
 		Location            locations.Location
 		Date                string
@@ -152,6 +166,9 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ServerSignedIn      bool
 		RecipeCritiqueURL   string
 		RecipeCritiqueScore *int
+		PreviousRecipeURL   string
+		PreviousRecipeTitle string
+		PreviousCritiqueURL string
 	}{
 		Location:            *p.Location,
 		Date:                p.Date.Format("2006-01-02"),
@@ -170,6 +187,9 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ServerSignedIn:      signedIn,
 		RecipeCritiqueURL:   "/critiques/" + recipeHash,
 		RecipeCritiqueScore: critiqueScore,
+		PreviousRecipeURL:   originalRecipeURL,
+		PreviousRecipeTitle: originalRecipeTitle,
+		PreviousCritiqueURL: originalCritiqueURL,
 	}
 
 	if err := templates.Recipe.Execute(writer, data); err != nil {

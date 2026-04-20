@@ -53,15 +53,15 @@ type Recipe struct {
 	DrinkPairing string       `json:"drink_pairing"`
 	WineStyles   []string     `json:"wine_styles"`
 	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
+	ParentHash   string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
 	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` // not in schema
 }
 
 // ComputeHash calculates the fnv128 hash of the recipe content
 func (r *Recipe) ComputeHash() string {
-	//these are intentionally dropped as they don't change the content and are metadata
-	// maybe they should have always been outside the struct.
-	/// OriginHash = ""
-	// Saved = false
+	// These fields are intentionally excluded because they describe provenance or UI state,
+	// not the recipe content itself. If ancestor links ever need to affect identity, that
+	// is a separate model change and should not happen implicitly here.
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, r.Title))
 	lo.Must(io.WriteString(fnv, r.Description))

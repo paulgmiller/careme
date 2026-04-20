@@ -100,7 +100,7 @@ func (mc *multiCritiquer) Wait() {
 }
 
 func RetryInstructions(results []Result) []string {
-	revise := fmt.Sprintf("Revise and return exactly %d recipes as replacements for the low-scoring recipes listed below. Description should focus on selling the dish not these corrections", len(results))
+	revise := fmt.Sprintf("Revise and return exactly %d recipes as replacements for the low-scoring recipes listed below, in the same order. Description should focus on selling the dish not these corrections", len(results))
 	instructions := []string{revise}
 	for _, result := range results {
 		instructions = append(instructions, fmt.Sprintf(

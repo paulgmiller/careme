@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/locations"
 )
 
@@ -86,6 +87,20 @@ func TestGeneratorParamsHash_IgnoresPriorSavedHashes(t *testing.T) {
 
 	if before != after {
 		t.Fatalf("expected prior saved hashes not to affect params hash: before=%s after=%s", before, after)
+	}
+}
+
+func TestGeneratorParamsHash_IgnoresLineageCandidates(t *testing.T) {
+	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+
+	before := p.Hash()
+	p.LineageCandidates = []RecipeLineageCandidate{{
+		Recipe: ai.Recipe{Title: "Earlier Dinner", Description: "Prior draft"},
+	}}
+	after := p.Hash()
+
+	if before != after {
+		t.Fatalf("expected lineage candidates not to affect params hash: before=%s after=%s", before, after)
 	}
 }
 

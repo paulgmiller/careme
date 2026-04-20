@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"careme/internal/ai"
 	"careme/internal/kroger"
@@ -102,16 +103,13 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
-		// should never get a conversation id without instructions or saved/dismissed
-		// could assert or warn on that
-		instructions := []string{p.Instructions}
+		var instructions []string
 		for _, dismissed := range p.Dismissed {
 			instructions = append(instructions, "Passed on "+dismissed.Title)
 		}
 		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
 			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
 		}
-		// TODO more guidance on how many recipes to generate?
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
 		if err != nil {
@@ -230,6 +228,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}
 	newRecipes := shoppingList.Recipes
+	applyCritiqueRetryLineage(garbage, newRecipes)
 	shoppingList.Recipes = append(shoppingList.Recipes, good...)
 	shoppingList.Discarded = lo.Map(garbage, func(result critique.Result, _ int) ai.Recipe {
 		return *result.Recipe
@@ -248,4 +247,96 @@ func (g *generatorService) writeStatus(ctx context.Context, hash string, status 
 	if err := g.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
 		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "status", status, "error", err)
 	}
+}
+
+func applyCritiqueRetryLineage(garbage []critique.Result, newRecipes []ai.Recipe) {
+	if len(garbage) == 0 || len(newRecipes) == 0 {
+		return
+	}
+
+	type candidateMatch struct {
+		newIndex     int
+		garbageIndex int
+		score        int
+	}
+
+	matches := make([]candidateMatch, 0, len(newRecipes)*len(garbage))
+	for newIndex, recipe := range newRecipes {
+		for garbageIndex, result := range garbage {
+			score := sharedTitleWords(recipe.Title, result.Recipe.Title)
+			if score == 0 {
+				continue
+			}
+			matches = append(matches, candidateMatch{
+				newIndex:     newIndex,
+				garbageIndex: garbageIndex,
+				score:        score,
+			})
+		}
+	}
+
+	slices.SortFunc(matches, func(a, b candidateMatch) int {
+		if a.score != b.score {
+			return b.score - a.score
+		}
+		if a.newIndex != b.newIndex {
+			return a.newIndex - b.newIndex
+		}
+		return a.garbageIndex - b.garbageIndex
+	})
+
+	usedNew := make(map[int]struct{}, len(newRecipes))
+	usedGarbage := make(map[int]struct{}, len(garbage))
+	for _, match := range matches {
+		if _, ok := usedNew[match.newIndex]; ok {
+			continue
+		}
+		if _, ok := usedGarbage[match.garbageIndex]; ok {
+			continue
+		}
+
+		parent := garbage[match.garbageIndex].Recipe
+		parentHash := parent.ComputeHash()
+		if parentHash == "" {
+			continue
+		}
+		childHash := newRecipes[match.newIndex].ComputeHash()
+		if childHash == "" || childHash == parentHash {
+			continue
+		}
+
+		newRecipes[match.newIndex].ParentHash = parentHash
+		usedNew[match.newIndex] = struct{}{}
+		usedGarbage[match.garbageIndex] = struct{}{}
+	}
+}
+
+func sharedTitleWords(a, b string) int {
+	wordsA := titleWordSet(a)
+	wordsB := titleWordSet(b)
+	if len(wordsA) == 0 || len(wordsB) == 0 {
+		return 0
+	}
+
+	shared := 0
+	for word := range wordsA {
+		if _, ok := wordsB[word]; ok {
+			shared++
+		}
+	}
+	return shared
+}
+
+func titleWordSet(title string) map[string]struct{} {
+	words := make(map[string]struct{})
+	for _, word := range strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	}) {
+		word = strings.TrimSpace(word)
+		if len(word) < 2 {
+			continue
+		}
+		words[word] = struct{}{}
+	}
+	return words
 }

@@ -19,6 +19,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
 	"careme/internal/users"
@@ -479,6 +480,58 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 	}
 }
 
+func TestHandleSingle_ShowsPreviousRecipeLinksFromLineage(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore))
+
+	p := DefaultParams(
+		&locations.Location{ID: "70003002", Name: "Lineage Store"},
+		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+	)
+	p.ConversationID = "conv-lineage"
+	originHash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+
+	original := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Original Roast Chicken",
+		Description:  "First pass.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+		Health:       "High protein",
+		DrinkPairing: "Pinot noir",
+	}
+	current := ai.Recipe{
+		OriginHash:   originHash,
+		Title:        "Second Pass Roast Chicken",
+		Description:  "Improved.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done and rest."},
+		Health:       "High protein",
+		DrinkPairing: "Pinot noir",
+		ParentHash:   original.ComputeHash(),
+	}
+	saveRecipesForOrigin(t, s, originHash, original, current)
+	require.NoError(t, critique.NewStore(cacheStore).Save(t.Context(), original.ComputeHash(), &ai.RecipeCritique{
+		SchemaVersion: "recipe-critique-v1",
+		OverallScore:  8,
+		Summary:       "Solid original.",
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/recipe/"+current.ComputeHash(), nil)
+	req.SetPathValue("hash", current.ComputeHash())
+	rr := httptest.NewRecorder()
+
+	s.handleSingle(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Contains(t, body, "Previous version:")
+	assert.Contains(t, body, "/recipe/"+original.ComputeHash())
+	assert.Contains(t, body, "Original Roast Chicken")
+	assert.Contains(t, body, "/critiques/"+original.ComputeHash())
+}
+
 type noSessionAuth struct{}
 
 func (n noSessionAuth) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {
@@ -549,6 +602,7 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	clone.PriorSavedHashes = append([]string(nil), p.PriorSavedHashes...)
 	clone.Saved = append([]ai.Recipe(nil), p.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), p.Dismissed...)
+	clone.LineageCandidates = append([]RecipeLineageCandidate(nil), p.LineageCandidates...)
 	c.last = &clone
 	c.mu.Unlock()
 	if c.called != nil {
@@ -587,7 +641,37 @@ func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
 	clone.PriorSavedHashes = append([]string(nil), c.last.PriorSavedHashes...)
 	clone.Saved = append([]ai.Recipe(nil), c.last.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), c.last.Dismissed...)
+	clone.LineageCandidates = append([]RecipeLineageCandidate(nil), c.last.LineageCandidates...)
 	return &clone
+}
+
+type fixedShoppingListGenerator struct {
+	shoppingList *ai.ShoppingList
+	called       chan struct{}
+}
+
+func (g *fixedShoppingListGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+	_ = ctx
+	_ = p
+	if g.called != nil {
+		select {
+		case g.called <- struct{}{}:
+		default:
+		}
+	}
+	return g.shoppingList, nil
+}
+
+func (g *fixedShoppingListGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+	panic("unexpected call to AskQuestion")
+}
+
+func (g *fixedShoppingListGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+	panic("unexpected call to GenerateRecipeImage")
+}
+
+func (g *fixedShoppingListGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+	panic("unexpected call to PickAWine")
 }
 
 func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
@@ -1613,6 +1697,58 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	if len(captured.Saved) != 2 {
 		t.Fatalf("expected both current saved recipes, got %#v", captured.Saved)
 	}
+}
+
+func TestHandleRegenerate_BuildsLineageCandidatesForUnsavedRecipes(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+		withTestGenerator(generator),
+	)
+	t.Cleanup(s.Wait)
+
+	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
+	replaceableRecipe := ai.Recipe{
+		Title:       "Spicy Chicken Tacos",
+		Description: "Needs a refresh",
+		Ingredients: []ai.Ingredient{{Name: "chicken"}, {Name: "lime"}},
+		ParentHash:  "older-hash",
+	}
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	p.ConversationID = "conv-123"
+	p.Saved = []ai.Recipe{savedRecipe}
+	originHash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+
+	saveRecipesForOrigin(t, s, originHash, savedRecipe, replaceableRecipe)
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:        []ai.Recipe{savedRecipe, replaceableRecipe},
+		ConversationID: "conv-123",
+	}, originHash))
+
+	form := url.Values{"instructions": {"make it faster"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+originHash+"/regenerate", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", originHash)
+	rr := httptest.NewRecorder()
+
+	s.handleRegenerate(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	select {
+	case <-generator.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for generator call")
+	}
+
+	captured := generator.LastParams()
+	require.NotNil(t, captured)
+	require.Len(t, captured.LineageCandidates, 1)
+	assert.Equal(t, replaceableRecipe.ComputeHash(), captured.LineageCandidates[0].Recipe.ComputeHash())
 }
 
 func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
