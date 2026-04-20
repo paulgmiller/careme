@@ -149,7 +149,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	_, err = s.clerk.GetUserIDFromRequest(r)
 	signedIn := !errors.Is(err, auth.ErrNoSession)
 	var critiqueScore *int
-	var originalVersion *RecipeLineageView
 	feedback := feedback.Feedback{}
 	var thread []RecipeThreadEntry
 	var wineRecommendation *ai.WineSelection
@@ -208,27 +207,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		critiqueScore = &score
 	})
 	loadWG.Wait()
-	parentHash := strings.TrimSpace(recipe.ParentHash)
-	if parentHash != "" && parentHash != hash {
-		originalVersion = &RecipeLineageView{
-			RecipeURL:   "/recipe/" + parentHash,
-			RecipeTitle: "Previous recipe",
-		}
-		if parentRecipe, err := s.SingleFromCache(ctx, parentHash); err == nil {
-			if title := strings.TrimSpace(parentRecipe.Title); title != "" {
-				originalVersion.RecipeTitle = title
-			}
-		} else if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load parent recipe for lineage", "hash", hash, "parent_hash", parentHash, "error", err)
-		}
-		if s.critiques != nil {
-			if _, err := s.critiques.Load(ctx, parentHash); err == nil {
-				originalVersion.CritiqueURL = "/critiques/" + parentHash
-			} else if !errors.Is(err, cache.ErrNotFound) {
-				slog.ErrorContext(ctx, "failed to load parent critique for lineage", "hash", hash, "parent_hash", parentHash, "error", err)
-			}
-		}
-	}
 
 	if recipe.OriginHash == "" {
 		// Would like to make this an error however this in album is missing a origin hash and its too pretty to break
@@ -239,7 +217,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				ID:   "",
 				Name: "Unknown Location",
 			}, time.Now())
-			FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, originalVersion, hasRecipeImage, thread, feedback, wineRecommendation, w)
+			FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
 			return
 		}
 		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
@@ -268,7 +246,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, originalVersion, hasRecipeImage, thread, feedback, wineRecommendation, w)
+	FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {

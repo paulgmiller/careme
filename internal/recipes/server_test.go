@@ -19,7 +19,6 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/locations"
-	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
 	"careme/internal/users"
@@ -480,58 +479,6 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 	}
 }
 
-func TestHandleSingle_ShowsPreviousRecipeLinksFromLineage(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t, withTestCache(cacheStore))
-
-	p := DefaultParams(
-		&locations.Location{ID: "70003002", Name: "Lineage Store"},
-		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
-	)
-	p.ConversationID = "conv-lineage"
-	originHash := p.Hash()
-	require.NoError(t, s.SaveParams(t.Context(), p))
-
-	original := ai.Recipe{
-		OriginHash:   originHash,
-		Title:        "Original Roast Chicken",
-		Description:  "First pass.",
-		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		Instructions: []string{"Roast until done."},
-		Health:       "High protein",
-		DrinkPairing: "Pinot noir",
-	}
-	current := ai.Recipe{
-		OriginHash:   originHash,
-		Title:        "Second Pass Roast Chicken",
-		Description:  "Improved.",
-		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		Instructions: []string{"Roast until done and rest."},
-		Health:       "High protein",
-		DrinkPairing: "Pinot noir",
-		ParentHash:   original.ComputeHash(),
-	}
-	saveRecipesForOrigin(t, s, originHash, original, current)
-	require.NoError(t, critique.NewStore(cacheStore).Save(t.Context(), original.ComputeHash(), &ai.RecipeCritique{
-		SchemaVersion: "recipe-critique-v1",
-		OverallScore:  8,
-		Summary:       "Solid original.",
-	}))
-
-	req := httptest.NewRequest(http.MethodGet, "/recipe/"+current.ComputeHash(), nil)
-	req.SetPathValue("hash", current.ComputeHash())
-	rr := httptest.NewRecorder()
-
-	s.handleSingle(rr, req)
-
-	require.Equal(t, http.StatusOK, rr.Code)
-	body := rr.Body.String()
-	assert.Contains(t, body, "Previous version:")
-	assert.Contains(t, body, "/recipe/"+original.ComputeHash())
-	assert.Contains(t, body, "Original Roast Chicken")
-	assert.Contains(t, body, "/critiques/"+original.ComputeHash())
-}
-
 type noSessionAuth struct{}
 
 func (n noSessionAuth) GetUserEmail(ctx context.Context, clerkUserID string) (string, error) {
@@ -641,35 +588,6 @@ func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
 	clone.Saved = append([]ai.Recipe(nil), c.last.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), c.last.Dismissed...)
 	return &clone
-}
-
-type fixedShoppingListGenerator struct {
-	shoppingList *ai.ShoppingList
-	called       chan struct{}
-}
-
-func (g *fixedShoppingListGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
-	_ = ctx
-	_ = p
-	if g.called != nil {
-		select {
-		case g.called <- struct{}{}:
-		default:
-		}
-	}
-	return g.shoppingList, nil
-}
-
-func (g *fixedShoppingListGenerator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
-	panic("unexpected call to AskQuestion")
-}
-
-func (g *fixedShoppingListGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
-	panic("unexpected call to GenerateRecipeImage")
-}
-
-func (g *fixedShoppingListGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	panic("unexpected call to PickAWine")
 }
 
 func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
