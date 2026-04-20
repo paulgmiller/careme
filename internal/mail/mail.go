@@ -19,12 +19,14 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
@@ -75,7 +77,9 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
-	generator, err := recipes.NewGenerator(ai.NewClient(cfg.AI.APIKey, "TODOMODEL"), mc, staples)
+	ss := recipes.StatusStore(cache)
+	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -121,6 +125,8 @@ func (m *mailer) RunOnce(ctx context.Context) {
 }
 
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
+	ctx = logsetup.WithOperationID(ctx, uuid.NewString())
+
 	if !user.MailOptIn {
 		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)
 		return

@@ -123,3 +123,62 @@ func TestAdminCritiquesPageMethodNotAllowed(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusMethodNotAllowed)
 	}
 }
+
+func TestCritiquePageRendersSingleCritique(t *testing.T) {
+	t.Parallel()
+
+	fc := cache.NewFileCache(t.TempDir())
+	store := critique.NewStore(fc)
+	recipesCache := recipes.IO(fc)
+
+	shoppingList := &ai.ShoppingList{Recipes: []ai.Recipe{
+		{
+			Title:        "Spring Pasta",
+			Description:  "Bright and lemony.",
+			CookTime:     "20 minutes",
+			CostEstimate: "$14-18",
+			Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 box", Price: "$2.99"}},
+			Instructions: []string{"Boil pasta.", "Finish with lemon and herbs."},
+			Health:       "Balanced.",
+			DrinkPairing: "Pinot Grigio",
+		},
+	}}
+	if err := recipesCache.SaveShoppingList(t.Context(), shoppingList, "origin-hash"); err != nil {
+		t.Fatalf("save shopping list: %v", err)
+	}
+	hash := shoppingList.Recipes[0].ComputeHash()
+
+	if err := store.Save(t.Context(), hash, &ai.RecipeCritique{
+		SchemaVersion:  "recipe-critique-v1",
+		OverallScore:   8,
+		Summary:        "Solid weeknight recipe.",
+		Strengths:      []string{"clear instructions"},
+		Issues:         []ai.RecipeCritiqueIssue{{Severity: "low", Category: "seasoning", Detail: "Could use more salt guidance."}},
+		SuggestedFixes: []string{"Add an explicit salting step."},
+	}); err != nil {
+		t.Fatalf("save critique: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/critiques/"+hash, nil)
+	req.SetPathValue("hash", hash)
+	rr := httptest.NewRecorder()
+
+	critique.CritiquePage(store, recipesCache).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		"Spring Pasta",
+		"Score:</strong> 8/10",
+		"Solid weeknight recipe.",
+		"clear instructions",
+		"Could use more salt guidance.",
+		"/recipe/" + hash,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("response body missing %q: %s", want, body)
+		}
+	}
+}

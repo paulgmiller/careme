@@ -56,7 +56,7 @@ func TestProductSearch_BuildsRequestAndDecodesResponse(t *testing.T) {
 
 	client := NewClientWithBaseURL(server.URL, server.Client())
 
-	resp, err := client.ProductSearch(context.Background(), ProductSearchRequest{
+	resp, err := client.productSearch(context.Background(), productSearchRequest{
 		Text:                      " merlot ",
 		OfferListingDiscriminator: " A04C ",
 		Categories:                []string{"18473610011"},
@@ -118,14 +118,14 @@ func TestProductSearch_RequiresTextAndOfferListingDiscriminator(t *testing.T) {
 
 	client := NewClient(nil)
 
-	_, err := client.ProductSearch(context.Background(), ProductSearchRequest{
+	_, err := client.productSearch(context.Background(), productSearchRequest{
 		OfferListingDiscriminator: "A04C",
 	})
 	if err == nil || !strings.Contains(err.Error(), "text is required") {
 		t.Fatalf("unexpected text error: %v", err)
 	}
 
-	_, err = client.ProductSearch(context.Background(), ProductSearchRequest{
+	_, err = client.productSearch(context.Background(), productSearchRequest{
 		Text: "merlot",
 	})
 	if err == nil || !strings.Contains(err.Error(), "offer listing discriminator is required") {
@@ -236,7 +236,7 @@ func TestProductHydration_BuildsRequestAndDecodesResponse(t *testing.T) {
 
 	client := NewClientWithBaseURL(server.URL, server.Client())
 
-	resp, err := client.ProductHydration(context.Background(), ProductHydrationRequest{
+	resp, err := client.productHydration(context.Background(), productHydrationRequest{
 		OfferListingDiscriminator: " A04C ",
 		ASINs:                     []string{"B06WVGV73Z", " B07G4TKBFP "},
 	})
@@ -291,14 +291,14 @@ func TestProductHydration_RequiresOfferListingDiscriminatorAndASINs(t *testing.T
 
 	client := NewClient(nil)
 
-	_, err := client.ProductHydration(context.Background(), ProductHydrationRequest{
+	_, err := client.productHydration(context.Background(), productHydrationRequest{
 		ASINs: []string{"B06WVGV73Z"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "offer listing discriminator is required") {
 		t.Fatalf("unexpected discriminator error: %v", err)
 	}
 
-	_, err = client.ProductHydration(context.Background(), ProductHydrationRequest{
+	_, err = client.productHydration(context.Background(), productHydrationRequest{
 		OfferListingDiscriminator: "A04C",
 	})
 	if err == nil || !strings.Contains(err.Error(), "at least one ASIN is required") {

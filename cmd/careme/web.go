@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
@@ -30,8 +28,6 @@ import (
 	"careme/internal/watchdog"
 
 	cachepkg "careme/internal/cache"
-
-	utypes "careme/internal/users/types"
 )
 
 func runServer(cfg *config.Config, addr string) error {
@@ -51,9 +47,9 @@ func runServer(cfg *config.Config, addr string) error {
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
-		return authClient.WithAuthHTTP(AppMiddleWare(h, newRequestTrackerFromEnv()))
+		return authClient.WithAuthHTTP(appMiddleware(h, newRequestTrackerFromEnv()))
 	})
-	infraRoutes := routing.Wrap(rootMux, BaseMiddleware)
+	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
 	authClient.Register(appRoutes)
 	static.Register(infraRoutes)
@@ -69,15 +65,16 @@ func runServer(cfg *config.Config, addr string) error {
 		generator = recipes.NewMockGenerator()
 	} else {
 		mc := critique.NewManager(cfg, cache)
-		ro.Add(mc)
+		ro.add(mc)
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
-		ro.Add(aiclient)
+		ro.add(aiclient)
 		staples, err := recipes.NewCachedStaplesService(cfg, cache)
 		if err != nil {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}
 		watchdogServer.Add("staples", staples, 6.*time.Hour)
-		generator, err = recipes.NewGenerator(aiclient, mc, staples)
+		ss := recipes.StatusStore(cache)
+		generator, err = recipes.NewGenerator(aiclient, mc, staples, ss)
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
@@ -96,7 +93,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler.Register(appRoutes)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
-	ro.Add(locationServer)
+	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
@@ -115,6 +112,7 @@ func runServer(cfg *config.Config, addr string) error {
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
+	appRoutes.Handle("/critiques/{hash}", critique.CritiquePage(critique.NewStore(cache), recipeIO))
 
 	appRoutes.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -124,51 +122,7 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
-
-	appRoutes.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		currentUser, err := userStorage.FromRequest(ctx, r, authClient)
-		if err != nil {
-			if !errors.Is(err, auth.ErrNoSession) {
-				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
-				http.Error(w, "unable to load account", http.StatusInternalServerError)
-				return
-			}
-			// no user is fine we'll just pass nil currentUser to template
-			// just have two different templates?
-		}
-
-		var favoriteStoreName string
-		if currentUser != nil && currentUser.FavoriteStore != "" {
-			loc, locErr := locationStorage.GetLocationByID(ctx, currentUser.FavoriteStore)
-			if locErr != nil {
-				slog.ErrorContext(ctx, "failed to get location name for favorite store", "location_id", currentUser.FavoriteStore, "error", locErr)
-				// mutation intentionally not saved bac.
-				currentUser.FavoriteStore = ""
-			} else {
-				favoriteStoreName = loc.Name
-			}
-		}
-		data := struct {
-			ClarityScript     template.HTML
-			GoogleTagScript   template.HTML
-			User              *utypes.User
-			FavoriteStoreName string
-			Style             seasons.Style
-			ServerSignedIn    bool
-		}{
-			ClarityScript:     templates.ClarityScript(ctx),
-			GoogleTagScript:   templates.GoogleTagScript(),
-			User:              currentUser,
-			FavoriteStoreName: favoriteStoreName,
-			Style:             seasons.GetCurrentStyle(),
-			ServerSignedIn:    currentUser != nil,
-		}
-		if err := templates.Home.Execute(w, data); err != nil {
-			slog.ErrorContext(ctx, "home template execute error", "error", err)
-			http.Error(w, "template error", http.StatusInternalServerError)
-		}
-	})
+	appRoutes.Handle("/", home{userStorage, locationStorage, authClient})
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})

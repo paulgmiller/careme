@@ -18,7 +18,7 @@ type oncePer struct {
 	dog    watchdog
 }
 
-func NewOncePer(period time.Duration, dog watchdog) oncePer {
+func newOncePer(period time.Duration, dog watchdog) oncePer {
 	return oncePer{
 		period: period,
 		dog:    dog,

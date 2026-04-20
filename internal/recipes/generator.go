@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"careme/internal/ai"
 	"careme/internal/kroger"
@@ -35,14 +36,14 @@ type staplesService interface {
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error)
 }
 
-// TODO unexport?
-type Generator struct {
-	aiClient  aiClient
-	critiquer critique.Service
-	staples   staplesService
+type generatorService struct {
+	aiClient     aiClient
+	critiquer    critique.Service
+	staples      staplesService
+	statusWriter statusWriter
 }
 
-func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService) (*Generator, error) {
+func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService, statuses statusWriter) (*generatorService, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
@@ -52,14 +53,15 @@ func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staples
 	if staples == nil {
 		return nil, fmt.Errorf("staples service is required")
 	}
-	return &Generator{
-		aiClient:  aiClient,
-		critiquer: critiquer,
-		staples:   staples,
+	return &generatorService{
+		aiClient:     aiClient,
+		critiquer:    critiquer,
+		staples:      staples,
+		statusWriter: statuses,
 	}, nil
 }
 
-func (g *Generator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (g *generatorService) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
@@ -95,28 +97,19 @@ func (g *Generator) PickAWine(ctx context.Context, location string, recipe ai.Re
 	return selection, nil
 }
 
-func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	hash := p.Hash()
 	start := time.Now()
 
 	if p.ResponseID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "response_id", p.ResponseID)
-		// should never get a response id without instructions or saved/dismissed
-		// could assert or warn on that
-		instructions := []string{p.Instructions}
-		for _, dismissed := range p.Dismissed {
-			instructions = append(instructions, "Passed on "+dismissed.Title)
-		}
-		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
-			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
-		}
-		// TODO more guidance on how many recipes to generate?
+		instructions := regenerateInstructions(p)
 
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ResponseID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+		shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 		if err != nil {
 			return nil, err
 		}
@@ -131,13 +124,15 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
+	g.writeStatus(ctx, hash, fmt.Sprintf("Looking through %d ingredients", len(ingredients)))
 
 	instructions := []string{p.Directive, p.Instructions}
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
-	shoppingList, err = g.critiqueAndMaybeRetry(ctx, shoppingList)
+
+	shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 	if err != nil {
 		return nil, err
 	}
@@ -147,11 +142,11 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	return shoppingList, nil
 }
 
-func (g *Generator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
 }
 
-func (g *Generator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+func (g *generatorService) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
 	return g.aiClient.GenerateRecipeImage(ctx, recipe)
 }
 
@@ -189,11 +184,36 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 	return lo.Uniq(titles)
 }
 
-func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
+func titles(prefix string, recipes []ai.Recipe) string {
+	var b strings.Builder
+	b.WriteString(prefix)
+	b.WriteString("\n")
+	for _, r := range recipes {
+		b.WriteString(r.Title)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func regenerateInstructions(p *generatorParams) []string {
+	instructions := make([]string, 0, 1+len(p.Dismissed)+len(p.Saved))
+	if trimmed := strings.TrimSpace(p.Instructions); trimmed != "" {
+		instructions = append(instructions, trimmed)
+	}
+	for _, dismissed := range p.Dismissed {
+		instructions = append(instructions, "Passed on "+dismissed.Title)
+	}
+	for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
+		instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
+	}
+	return instructions
+}
+
+func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash string, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
 	if g.critiquer == nil {
 		return shoppingList, nil
 	}
-
+	g.writeStatus(ctx, hash, titles("Getting feeeback on these recipes:", shoppingList.Recipes))
 	results := g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
 	good, garbage := critique.Split(ctx, results, critique.MinimumRecipeScore)
 	for _, result := range garbage {
@@ -202,7 +222,9 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 	if len(garbage) == 0 {
 		return shoppingList, nil
 	}
-	slog.InfoContext(ctx, "regenerating recipes based on critique feedback", "garbage_count", len(garbage), "good_count", len(good))
+	slog.InfoContext(ctx, "Regenerating recipes based on critique feedback:", "garbage_count", len(garbage), "good_count", len(good))
+	garbageRecipes := lo.Map(garbage, func(r critique.Result, _ int) ai.Recipe { return *r.Recipe })
+	g.writeStatus(ctx, hash, titles("Making adjustments to these recipes: ", garbageRecipes))
 
 	if strings.TrimSpace(shoppingList.ResponseID) == "" {
 		return nil, fmt.Errorf("response ID is required for critique retry")
@@ -214,11 +236,109 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}
 	newRecipes := shoppingList.Recipes
+	linkToParents(garbage, recipePtrs(newRecipes))
 	shoppingList.Recipes = append(shoppingList.Recipes, good...)
 	shoppingList.Discarded = lo.Map(garbage, func(result critique.Result, _ int) ai.Recipe {
 		return *result.Recipe
 	})
 
 	_ = g.critiquer.CritiqueRecipes(ctx, newRecipes)
+	// no point in upating as we're async here g.updateGenerationStatus(ctx, hash, "")
 	return shoppingList, nil
+}
+
+// just making this best effort
+func (g *generatorService) writeStatus(ctx context.Context, hash string, status string) {
+	if strings.TrimSpace(hash) == "" {
+		return
+	}
+	if err := g.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
+		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "status", status, "error", err)
+	}
+}
+
+func linkToParents(garbage []critique.Result, newRecipes []*ai.Recipe) {
+	parents := lo.Map(garbage, func(result critique.Result, _ int) *ai.Recipe {
+		return result.Recipe
+	})
+	applyParentHashesByTitleMatch(parents, newRecipes)
+}
+
+func recipePtrs(recipes []ai.Recipe) []*ai.Recipe {
+	ptrs := make([]*ai.Recipe, 0, len(recipes))
+	for i := range recipes {
+		ptrs = append(ptrs, &recipes[i])
+	}
+	return ptrs
+}
+
+func applyParentHashesByTitleMatch(parents []*ai.Recipe, newRecipes []*ai.Recipe) {
+	type candidateMatch struct {
+		new    *ai.Recipe
+		parent *ai.Recipe
+		score  int
+	}
+
+	matches := make([]candidateMatch, 0, len(newRecipes)*len(parents))
+	for _, newRecipe := range newRecipes {
+		for _, parent := range parents {
+			score := sharedWords(newRecipe.Title, parent.Title)
+			if score == 0 {
+				continue
+			}
+			matches = append(matches, candidateMatch{
+				new:    newRecipe,
+				parent: parent,
+				score:  score,
+			})
+		}
+	}
+
+	slices.SortFunc(matches, func(a, b candidateMatch) int {
+		return b.score - a.score
+	})
+
+	used := make(map[*ai.Recipe]bool, len(newRecipes))
+	for _, match := range matches {
+		if match.new == nil || match.parent == nil {
+			continue
+		}
+		if used[match.new] {
+			continue
+		}
+		if used[match.parent] {
+			continue
+		}
+		parentHash := match.parent.ComputeHash()
+		childHash := match.new.ComputeHash()
+		if parentHash == "" || childHash == "" || parentHash == childHash {
+			continue
+		}
+		match.new.ParentHash = parentHash
+		used[match.new] = true
+		used[match.parent] = true
+	}
+}
+
+func sharedWords(a, b string) int {
+	wordsA := wordSet(a)
+	wordsB := wordSet(b)
+	return lo.CountBy(lo.Keys(wordsA), func(word string) bool {
+		return wordsB[word]
+	})
+}
+
+func wordSet(title string) map[string]bool {
+	wordDict := make(map[string]bool)
+	s := strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	for _, word := range s {
+		// tiny words not valuable?
+		if len(word) < 2 {
+			continue
+		}
+		wordDict[word] = true
+	}
+	return wordDict
 }

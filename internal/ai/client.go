@@ -22,7 +22,7 @@ import (
 	"github.com/invopop/jsonschema"
 )
 
-type Client struct {
+type client struct {
 	apiKey     string
 	schema     map[string]any
 	wineSchema map[string]any
@@ -53,15 +53,15 @@ type Recipe struct {
 	WineStyles   []string     `json:"wine_styles"`
 	ResponseID   string       `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
 	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
+	ParentHash   string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
 	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` // not in schema
 }
 
 // ComputeHash calculates the fnv128 hash of the recipe content
 func (r *Recipe) ComputeHash() string {
-	//these are intentionally dropped as they don't change the content and are metadata
-	// maybe they should have always been outside the struct.
-	/// OriginHash = ""
-	// Saved = false
+	// OriginHash, ParentHash, Saved are intentionally excluded because they describe provenance or UI state,
+	// not the recipe content itself. If ancestor links ever need to affect identity, that
+	// is a separate model change and should not happen implicitly here.
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, r.Title))
 	lo.Must(io.WriteString(fnv, r.Description))
@@ -98,7 +98,7 @@ type WineSelection struct {
 }
 
 // ignoring model for now.
-func NewClient(apiKey, _ string) *Client {
+func NewClient(apiKey, _ string) *client {
 	// ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
@@ -112,7 +112,7 @@ func NewClient(apiKey, _ string) *Client {
 	_ = json.Unmarshal(recipesSchemaJSON, &m)
 	var wine map[string]any
 	_ = json.Unmarshal(wineSchemaJSON, &wine)
-	return &Client{
+	return &client{
 		apiKey:     apiKey,
 		schema:     m,
 		wineSchema: wine,
@@ -166,8 +166,8 @@ Generate a realistic overhead food photograph of a single finished plate.
 - Home cooked by a above average cook, not a restaurant or food stylist.
 - Keep plating simple and believable. No tweezers, foam, edible flowers, microgreens, or luxury flourishes unless in recipe instructions.
 - Use a simple kitchen counter, stovetop, sheet pan, wooden table, or casual dining table backdrop.
-- Use natural colors, ordinary cookware or tableware, and realistic portions 
-- Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes 
+- Use natural colors, ordinary cookware or tableware, and realistic portions
+- Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes
 - If the recipe has multiple components, show them plated together
 `
 
@@ -214,7 +214,7 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *Client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*ShoppingList, error) {
+func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*ShoppingList, error) {
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
@@ -239,7 +239,7 @@ func (c *Client) Regenerate(ctx context.Context, instructions []string, previous
 	return responseToShoppingList(ctx, resp)
 }
 
-func (c *Client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
+func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return nil, fmt.Errorf("question is required")
@@ -275,7 +275,7 @@ func (c *Client) AskQuestion(ctx context.Context, question string, previousRespo
 	}, nil
 }
 
-func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*GeneratedImage, error) {
+func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*GeneratedImage, error) {
 	prompt, err := buildRecipeImagePrompt(recipe)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
@@ -339,7 +339,7 @@ func imageUsageLogAttr(usage openai.ImagesResponseUsage) slog.Attr {
 	)
 }
 
-func (c *Client) PickWine(ctx context.Context, recipe Recipe, wines []kroger.Ingredient) (*WineSelection, error) {
+func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []kroger.Ingredient) (*WineSelection, error) {
 	prompt, err := buildWineSelectionPrompt(recipe, wines)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build wine selection prompt: %w", err)
@@ -366,7 +366,7 @@ func (c *Client) PickWine(ctx context.Context, recipe Recipe, wines []kroger.Ing
 }
 
 // is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
-func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -432,7 +432,7 @@ func buildWineSelectionPrompt(recipe Recipe, wines []kroger.Ingredient) (string,
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
+func (c *client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	// constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
@@ -466,7 +466,7 @@ func (c *Client) buildRecipeMessages(location *locations.Location, saleIngredien
 	return messages, nil
 }
 
-func (c *Client) Ready(ctx context.Context) error {
+func (c *client) Ready(ctx context.Context) error {
 	// more CORRECT to do a very simple response request with allowed tokens 1 but this seems cheaper
 	// https://chatgpt.com/share/6984da16-ff88-8009-8486-4e0479ac6a01
 	// could only do it once to ensure startup
