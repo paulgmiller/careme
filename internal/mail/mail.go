@@ -18,6 +18,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/logsetup"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
@@ -25,6 +26,7 @@ import (
 
 	utypes "careme/internal/users/types"
 
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
@@ -123,6 +125,8 @@ func (m *mailer) RunOnce(ctx context.Context) {
 }
 
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
+	ctx = logsetup.WithOperationID(ctx, uuid.NewString())
+
 	if !user.MailOptIn {
 		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)
 		return
