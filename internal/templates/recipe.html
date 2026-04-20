@@ -108,7 +108,7 @@
               <p class="text-xs text-gray-500">Ask about the recipe and share how it turned out.</p>
             </div>
 
-            {{if and .ServerSignedIn .ConversationID}}
+            {{if and .ServerSignedIn .ResponseID}}
             <form method="POST"
                   action="/recipe/{{.RecipeHash}}/question"
                   hx-post="/recipe/{{.RecipeHash}}/question"
@@ -126,7 +126,7 @@
                      placeholder="e.g. Can I swap the protein?"
                      class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
               <input type="hidden" name="recipe_title" value="{{.Recipe.Title}}" />
-              <input type="hidden" name="conversation_id" value="{{.ConversationID}}" />
+              <input type="hidden" name="response_id" value="{{.ResponseID}}" />
               <div class="flex items-center gap-2">
                 <button type="submit"
                         id="ask-question-submit"
@@ -270,7 +270,7 @@
     </div>
     {{end}}
   </div>
-  {{else if and .ServerSignedIn .ConversationID}}
+  {{else if and .ServerSignedIn .ResponseID}}
   <p class="text-sm text-gray-500">No questions yet.</p>
   {{end}}
 </div>

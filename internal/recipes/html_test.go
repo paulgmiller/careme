@@ -206,7 +206,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
+	p.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
@@ -281,7 +281,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
+	p.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := w.Body.String()
@@ -357,7 +357,7 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
+	p.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
@@ -390,7 +390,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
+	p.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	recipe := ai.Recipe{
 		Title:        "Market Greens",
@@ -459,7 +459,7 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
+	p.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	recipe := list.Recipes[0]
 	recipeHash := recipe.ComputeHash()

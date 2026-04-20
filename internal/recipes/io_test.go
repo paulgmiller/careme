@@ -81,7 +81,7 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 
 	hash := "test-hash"
 	list := &ai.ShoppingList{
-		ConversationID: "conversation-123",
+		ResponseID: "resp-123",
 		Recipes: []ai.Recipe{
 			{
 				Title:        "One Pan Chicken",
@@ -109,8 +109,8 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FromCache failed: %v", err)
 	}
-	if got.ConversationID != list.ConversationID {
-		t.Fatalf("expected conversation id %q, got %q", list.ConversationID, got.ConversationID)
+	if got.ResponseID != list.ResponseID {
+		t.Fatalf("expected response id %q, got %q", list.ResponseID, got.ResponseID)
 	}
 }
 
@@ -137,9 +137,9 @@ func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
 	}
 	hash := "test-hash"
 	list := &ai.ShoppingList{
-		ConversationID: "conversation-123",
-		Recipes:        []ai.Recipe{kept},
-		Discarded:      []ai.Recipe{discarded},
+		ResponseID: "resp-123",
+		Recipes:    []ai.Recipe{kept},
+		Discarded:  []ai.Recipe{discarded},
 	}
 
 	if err := rio.SaveShoppingList(t.Context(), list, hash); err != nil {

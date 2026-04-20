@@ -23,8 +23,8 @@ import (
 
 type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
-	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
-	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
+	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error)
+	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error)
 }
@@ -99,9 +99,9 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 	hash := p.Hash()
 	start := time.Now()
 
-	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
-		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
-		// should never get a conversation id without instructions or saved/dismissed
+	if p.ResponseID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
+		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "response_id", p.ResponseID)
+		// should never get a response id without instructions or saved/dismissed
 		// could assert or warn on that
 		instructions := []string{p.Instructions}
 		for _, dismissed := range p.Dismissed {
@@ -112,7 +112,7 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		}
 		// TODO more guidance on how many recipes to generate?
 
-		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
+		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ResponseID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
@@ -142,13 +142,13 @@ func (g *Generator) GenerateRecipes(ctx context.Context, p *generatorParams) (*a
 		return nil, err
 	}
 
-	p.ConversationID = shoppingList.ConversationID
+	p.ResponseID = shoppingList.ResponseID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return shoppingList, nil
 }
 
-func (g *Generator) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
-	return g.aiClient.AskQuestion(ctx, question, conversationID)
+func (g *Generator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
 }
 
 func (g *Generator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
@@ -204,12 +204,12 @@ func (g *Generator) critiqueAndMaybeRetry(ctx context.Context, shoppingList *ai.
 	}
 	slog.InfoContext(ctx, "regenerating recipes based on critique feedback", "garbage_count", len(garbage), "good_count", len(good))
 
-	if strings.TrimSpace(shoppingList.ConversationID) == "" {
-		return nil, fmt.Errorf("conversation ID is required for critique retry")
+	if strings.TrimSpace(shoppingList.ResponseID) == "" {
+		return nil, fmt.Errorf("response ID is required for critique retry")
 	}
 
 	// we could also just give all feedback back if any are below score
-	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ConversationID)
+	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ResponseID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}

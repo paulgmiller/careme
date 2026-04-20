@@ -105,7 +105,6 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Recipes         []shoppingRecipeView
 		ShoppingList    []ai.Ingredient
 		HasSavedRecipes bool
-		ConversationID  string
 		Style           seasons.Style
 		ServerSignedIn  bool
 	}{
@@ -118,7 +117,6 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Recipes:         recipeViews,
 		ShoppingList:    shoppingList,
 		HasSavedRecipes: len(p.Saved) > 0,
-		ConversationID:  l.ConversationID,
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
 	}
@@ -134,6 +132,13 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	recipeHash := recipe.ComputeHash()
+	activeResponseID := recipe.ResponseID
+	if activeResponseID == "" {
+		activeResponseID = p.ResponseID
+	}
+	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
+		activeResponseID = threadResponseID
+	}
 	data := struct {
 		Location           locations.Location
 		Date               string
@@ -142,7 +147,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		Recipe             ai.Recipe
 		DisplayIngredients []ai.Ingredient
 		OriginHash         string
-		ConversationID     string
+		ResponseID         string
 		WineRecommendation *ai.WineSelection
 		Thread             []RecipeThreadEntry
 		Feedback           feedback.Feedback
@@ -158,7 +163,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		Recipe:             recipe,
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		OriginHash:         recipe.OriginHash,
-		ConversationID:     p.ConversationID,
+		ResponseID:         activeResponseID,
 		WineRecommendation: wineRecommendation,
 		Thread:             thread,
 		Feedback:           fb,
@@ -214,17 +219,17 @@ func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRe
 }
 
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
-func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer http.ResponseWriter) {
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseID string, writer http.ResponseWriter) {
 	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	data := struct {
-		ConversationID string
+		ResponseID     string
 		Thread         []RecipeThreadEntry
 		ServerSignedIn bool
 	}{
-		ConversationID: conversationID,
+		ResponseID:     responseID,
 		Thread:         thread,
 		ServerSignedIn: signedIn,
 	}
@@ -293,6 +298,21 @@ func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, write
 	}
 
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_finalize_controls_response", data)
+}
+
+func latestThreadResponseID(thread []RecipeThreadEntry) string {
+	if len(thread) == 0 {
+		return ""
+	}
+	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
+	for _, entry := range thread {
+		if responseID := strings.TrimSpace(entry.ResponseID); responseID != "" {
+			return responseID
+		}
+	}
+	return ""
 }
 
 // drops clarity, instructions and most of shoppinglist

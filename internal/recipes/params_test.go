@@ -65,21 +65,21 @@ func TestParseQueryArgs_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 	}
 }
 
-func TestParseQueryArgs_PopulatesConversationID(t *testing.T) {
+func TestParseQueryArgs_PopulatesResponseID(t *testing.T) {
 	location := &locations.Location{
 		ID:      "store-1",
 		Name:    "Test Store",
 		ZipCode: "10001",
 	}
 
-	req := httptest.NewRequest("GET", "/recipes?location=store-1&conversation_id=conv-123", nil)
+	req := httptest.NewRequest("GET", "/recipes?location=store-1&response_id=resp-123", nil)
 	p, err := ParseQueryArgs(context.Background(), req, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("ParseQueryArgs returned error: %v", err)
 	}
 
-	if got, want := p.ConversationID, "conv-123"; got != want {
-		t.Fatalf("expected conversation id %q, got %q", want, got)
+	if got, want := p.ResponseID, "resp-123"; got != want {
+		t.Fatalf("expected response id %q, got %q", want, got)
 	}
 }
 

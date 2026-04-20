@@ -15,7 +15,6 @@ import (
 	"careme/internal/locations"
 
 	openai "github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/conversations"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
@@ -52,6 +51,7 @@ type Recipe struct {
 	Health       string       `json:"health"`
 	DrinkPairing string       `json:"drink_pairing"`
 	WineStyles   []string     `json:"wine_styles"`
+	ResponseID   string       `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
 	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
 	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` // not in schema
 }
@@ -80,11 +80,16 @@ func (r *Recipe) ComputeHash() string {
 	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-// intionally not including ConversationID to preserve old hashes
+// intentionally not including ResponseID to preserve old hashes
 type ShoppingList struct {
-	ConversationID string   `json:"conversation_id,omitempty" jsonschema:"-"`
-	Recipes        []Recipe `json:"recipes" jsonschema:"required"`
-	Discarded      []Recipe `json:"-" jsonschema:"-"`
+	ResponseID string   `json:"response_id,omitempty" jsonschema:"-"`
+	Recipes    []Recipe `json:"recipes" jsonschema:"required"`
+	Discarded  []Recipe `json:"-" jsonschema:"-"`
+}
+
+type QuestionResponse struct {
+	Answer     string
+	ResponseID string
 }
 
 type WineSelection struct {
@@ -190,10 +195,10 @@ func responseToShoppingList(ctx context.Context, resp *responses.Response) (*Sho
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
 	normalizeWineStyles(&shoppingList)
-	if resp.Conversation.ID == "" {
-		return nil, fmt.Errorf("failed to get conversation ID")
+	if strings.TrimSpace(resp.ID) == "" {
+		return nil, fmt.Errorf("failed to get response ID")
 	}
-	shoppingList.ConversationID = resp.Conversation.ID
+	shoppingList.ResponseID = resp.ID
 
 	return &shoppingList, nil
 }
@@ -209,67 +214,65 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *Client) Regenerate(ctx context.Context, instructions []string, conversationID string) (*ShoppingList, error) {
-	if conversationID == "" {
-		return nil, fmt.Errorf("conversation ID is required for regeneration")
+func (c *Client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*ShoppingList, error) {
+	if previousResponseID == "" {
+		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	messages := cleanInstuctions(instructions)
 
 	params := responses.ResponseNewParams{
-		Model: c.model,
+		Model:              c.model,
+		PreviousResponseID: openai.String(previousResponseID),
 		// only new input
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
 		Store: openai.Bool(true),
-		Conversation: responses.ResponseNewParamsConversationUnion{
-			OfString: openai.String(conversationID),
-		},
-		Text: scheme(c.schema),
+		Text:  scheme(c.schema),
 	}
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
 
-	if resp.Conversation.ID != conversationID {
-		return nil, fmt.Errorf("conversation ID mismatch in regeneration response")
-	}
-
 	return responseToShoppingList(ctx, resp)
 }
 
-func (c *Client) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+func (c *Client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
-		return "", fmt.Errorf("question is required")
+		return nil, fmt.Errorf("question is required")
 	}
-	if conversationID == "" {
-		return "", fmt.Errorf("conversation ID is required for questions")
+	if previousResponseID == "" {
+		return nil, fmt.Errorf("response ID is required for questions")
 	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
 	params := responses.ResponseNewParams{
-		Model:        c.model,
-		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
+		Model:              c.model,
+		PreviousResponseID: openai.String(previousResponseID),
+		Instructions:       openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(question)},
 		},
 		Store: openai.Bool(true),
-		Conversation: responses.ResponseNewParamsConversationUnion{
-			OfString: openai.String(conversationID),
-		},
 	}
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {
-		return "", fmt.Errorf("failed to answer question: %w", err)
+		return nil, fmt.Errorf("failed to answer question: %w", err)
 	}
 	answer := strings.TrimSpace(resp.OutputText())
 	if answer == "" {
-		return "", fmt.Errorf("empty response from model")
+		return nil, fmt.Errorf("empty response from model")
 	}
-	return answer, nil
+	if strings.TrimSpace(resp.ID) == "" {
+		return nil, fmt.Errorf("failed to get response ID for question")
+	}
+	return &QuestionResponse{
+		Answer:     answer,
+		ResponseID: resp.ID,
+	}, nil
 }
 
 func (c *Client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*GeneratedImage, error) {
@@ -370,11 +373,6 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 	}
 
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
-	convo, err := client.Conversations.New(ctx, conversations.ConversationNewParams{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create conversation: %w", err)
-	}
-
 	params := responses.ResponseNewParams{
 		Model:        c.model,
 		Instructions: openai.String(systemMessage),
@@ -383,12 +381,7 @@ func (c *Client) GenerateRecipes(ctx context.Context, location *locations.Locati
 			OfInputItemList: messages,
 		},
 		Store: openai.Bool(true),
-		Conversation: responses.ResponseNewParamsConversationUnion{
-			OfConversationObject: &responses.ResponseConversationParam{
-				ID: convo.ID,
-			},
-		},
-		Text: scheme(c.schema),
+		Text:  scheme(c.schema),
 	}
 	// should we stream. Can we pass past generation.
 

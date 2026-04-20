@@ -74,7 +74,7 @@ type locServer interface {
 
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
-	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
+	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 }
@@ -213,14 +213,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if p.ConversationID == "" {
-		if slist, err := s.FromCache(ctx, recipe.OriginHash); err == nil {
-			p.ConversationID = slist.ConversationID
-		} else if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load conversation id", "hash", recipe.OriginHash, "error", err)
-		}
-	}
-
 	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
 	FormatRecipeHTML(ctx, p, *recipe, signedIn, hasRecipeImage, thread, feedback, wineRecommendation, w)
 }
@@ -356,12 +348,10 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		questionForModel = fmt.Sprintf("Regarding %s: %s", recipeTitle, question)
 	}
 
-	// TODO: conversation id is user-provided form input.
-	// Also still curious if we should fork conversation per recipe
-	conversationID := strings.TrimSpace(r.FormValue("conversation_id"))
-	if conversationID == "" {
-		slog.ErrorContext(ctx, "failed to load conversation id", "hash", hash)
-		http.Error(w, "conversation id not found", http.StatusInternalServerError)
+	responseID := strings.TrimSpace(r.FormValue("response_id"))
+	if responseID == "" {
+		slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
+		http.Error(w, "response id not found", http.StatusInternalServerError)
 		return
 	}
 
@@ -369,7 +359,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	// can't use request context because it will be canceled when request finishes but we want to finish processing question and save it to cache.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 45*time.Second)
 	defer cancel()
-	answer, err := s.generator.AskQuestion(ctx, questionForModel, conversationID)
+	answer, err := s.generator.AskQuestion(ctx, questionForModel, responseID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to answer question", "hash", hash, "error", err)
 		http.Error(w, "failed to answer question", http.StatusInternalServerError)
@@ -383,16 +373,17 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	thread = append(thread, RecipeThreadEntry{
-		Question:  question,
-		Answer:    answer,
-		CreatedAt: time.Now(),
+		Question:   question,
+		Answer:     answer.Answer,
+		ResponseID: answer.ResponseID,
+		CreatedAt:  time.Now(),
 	})
 	if err := s.SaveThread(ctx, hash, thread); err != nil {
 		http.Error(w, "failed to save question", http.StatusInternalServerError)
 		return
 	}
 
-	FormatRecipeThreadHTML(thread, true, conversationID, w)
+	FormatRecipeThreadHTML(thread, true, answer.ResponseID, w)
 }
 
 func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
@@ -798,8 +789,8 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shoppingList := &ai.ShoppingList{
-		Recipes:        p.Saved,
-		ConversationID: p.ConversationID,
+		Recipes:    p.Saved,
+		ResponseID: p.ResponseID,
 	}
 	if err := s.SaveShoppingList(ctx, shoppingList, newHash); err != nil {
 		slog.ErrorContext(ctx, "failed to save finalized shopping list", "hash", newHash, "error", err)
@@ -831,8 +822,8 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	params.Instructions = instructions
 	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
 	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
-	if params.ConversationID == "" {
-		params.ConversationID = currentList.ConversationID
+	if params.ResponseID == "" {
+		params.ResponseID = currentList.ResponseID
 	}
 	return &params, nil
 }
