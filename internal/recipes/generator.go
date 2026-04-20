@@ -273,7 +273,6 @@ func recipePtrs(recipes []ai.Recipe) []*ai.Recipe {
 }
 
 func applyParentHashesByTitleMatch(parents []*ai.Recipe, newRecipes []*ai.Recipe) {
-
 	type candidateMatch struct {
 		new    *ai.Recipe
 		parent *ai.Recipe
@@ -335,7 +334,7 @@ func wordSet(title string) map[string]bool {
 		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
 	})
 	for _, word := range s {
-		//tiny words not valuable?
+		// tiny words not valuable?
 		if len(word) < 2 {
 			continue
 		}
