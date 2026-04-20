@@ -1,15 +1,14 @@
 package recipes
 
 import (
-	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/locations"
-
-	"github.com/stretchr/testify/require"
 )
 
 // Test that the HTML contains Save and Dismiss buttons for recipes.
@@ -42,10 +41,12 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	var w bytes.Buffer
-	err := FormatShoppingListHTMLForHash(t.Context(), p, multiRecipeList, nil, true, p.Hash(), &w)
-	require.NoError(t, err)
-	html := w.String()
+	w := httptest.NewRecorder()
+	FormatShoppingListHTMLForHash(t.Context(), p, multiRecipeList, nil, true, p.Hash(), w)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	html := w.Body.String()
 
 	// Verify HTML is valid
 	isValidHTML(t, html)
@@ -129,10 +130,12 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
-	var w bytes.Buffer
-	err := FormatShoppingListHTMLForHash(t.Context(), p, listWithSavedRecipe, nil, true, p.Hash(), &w)
-	require.NoError(t, err)
-	html := w.String()
+	w := httptest.NewRecorder()
+	FormatShoppingListHTMLForHash(t.Context(), p, listWithSavedRecipe, nil, true, p.Hash(), w)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	html := w.Body.String()
 
 	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
 		t.Error("HTML should submit finalize with HTMX POST when a recipe is saved")
@@ -158,10 +161,12 @@ func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	var w bytes.Buffer
-	err := FormatShoppingListHTMLForHash(t.Context(), p, list, nil, false, p.Hash(), &w)
-	require.NoError(t, err)
-	html := w.String()
+	w := httptest.NewRecorder()
+	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, false, p.Hash(), w)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	html := w.Body.String()
 
 	if strings.Contains(html, `type="radio"`) {
 		t.Error("HTML should not contain save/dismiss radio inputs when signed out")
