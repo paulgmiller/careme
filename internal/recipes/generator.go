@@ -236,7 +236,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}
 	newRecipes := shoppingList.Recipes
-	applyCritiqueRetryLineage(garbage, newRecipes)
+	linkToParents(garbage, newRecipes)
 	shoppingList.Recipes = append(shoppingList.Recipes, good...)
 	shoppingList.Discarded = lo.Map(garbage, func(result critique.Result, _ int) ai.Recipe {
 		return *result.Recipe
@@ -257,104 +257,73 @@ func (g *generatorService) writeStatus(ctx context.Context, hash string, status 
 	}
 }
 
-func applyCritiqueRetryLineage(garbage []critique.Result, newRecipes []ai.Recipe) {
-	parents := make([]ai.Recipe, 0, len(garbage))
-	for _, result := range garbage {
+func linkToParents(garbage []critique.Result, newRecipes []ai.Recipe) {
+	parents := lo.FilterMap(garbage, func(result critique.Result, _ int) (ai.Recipe, bool) {
 		if result.Recipe == nil {
-			continue
+			return ai.Recipe{}, false
 		}
-		parents = append(parents, *result.Recipe)
-	}
+		return *result.Recipe, true
+	})
 	applyParentHashesByTitleMatch(parents, newRecipes)
 }
 
 func applyParentHashesByTitleMatch(parents []ai.Recipe, newRecipes []ai.Recipe) {
-	if len(parents) == 0 || len(newRecipes) == 0 {
-		return
-	}
-
 	type candidateMatch struct {
-		newIndex    int
-		parentIndex int
-		score       int
+		new    *ai.Recipe
+		parent *ai.Recipe
+		score  int
 	}
 
 	matches := make([]candidateMatch, 0, len(newRecipes)*len(parents))
-	for newIndex, recipe := range newRecipes {
-		for parentIndex, parent := range parents {
-			score := sharedTitleWords(recipe.Title, parent.Title)
+	for _, recipe := range newRecipes {
+		for _, parent := range parents {
+			score := sharedWords(recipe.Title, parent.Title)
 			if score == 0 {
 				continue
 			}
 			matches = append(matches, candidateMatch{
-				newIndex:    newIndex,
-				parentIndex: parentIndex,
-				score:       score,
+				new:    &recipe,
+				parent: &parent,
+				score:  score,
 			})
 		}
 	}
 
 	slices.SortFunc(matches, func(a, b candidateMatch) int {
-		if a.score != b.score {
-			return b.score - a.score
-		}
-		if a.newIndex != b.newIndex {
-			return a.newIndex - b.newIndex
-		}
-		return a.parentIndex - b.parentIndex
+		return b.score - a.score
 	})
 
-	usedNew := make(map[int]struct{}, len(newRecipes))
-	usedParents := make(map[int]struct{}, len(parents))
+	used := make(map[*ai.Recipe]bool, len(newRecipes))
 	for _, match := range matches {
-		if _, ok := usedNew[match.newIndex]; ok {
+		if _, ok := used[match.new]; ok {
 			continue
 		}
-		if _, ok := usedParents[match.parentIndex]; ok {
+		if _, ok := used[match.parent]; ok {
 			continue
 		}
-
-		parentHash := parents[match.parentIndex].ComputeHash()
-		if parentHash == "" {
-			continue
-		}
-		childHash := newRecipes[match.newIndex].ComputeHash()
-		if childHash == "" || childHash == parentHash {
-			continue
-		}
-
-		newRecipes[match.newIndex].ParentHash = parentHash
-		usedNew[match.newIndex] = struct{}{}
-		usedParents[match.parentIndex] = struct{}{}
+		match.new.ParentHash = match.parent.ComputeHash()
+		used[match.new] = true
+		used[match.parent] = true
 	}
 }
 
-func sharedTitleWords(a, b string) int {
-	wordsA := titleWordSet(a)
-	wordsB := titleWordSet(b)
-	if len(wordsA) == 0 || len(wordsB) == 0 {
-		return 0
-	}
-
-	shared := 0
-	for word := range wordsA {
-		if _, ok := wordsB[word]; ok {
-			shared++
-		}
-	}
-	return shared
+func sharedWords(a, b string) int {
+	wordsA := wordSet(a)
+	wordsB := wordSet(b)
+	return lo.CountBy(lo.Keys(wordsA), func(word string) bool {
+		return wordsB[word]
+	})
 }
 
-func titleWordSet(title string) map[string]struct{} {
-	words := make(map[string]struct{})
-	for _, word := range strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
-	}) {
-		word = strings.TrimSpace(word)
+func wordSet(title string) map[string]bool {
+	wordDict := make(map[string]bool)
+	s := strings.FieldsFunc(strings.ToLower(title), unicode.IsSpace)
+	for _, word := range s {
+		//tiny words not valuable?
 		if len(word) < 2 {
 			continue
 		}
-		words[word] = struct{}{}
+		wordDict[word] = true
 	}
-	return words
+	return wordDict
 }
