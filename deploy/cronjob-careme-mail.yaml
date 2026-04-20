@@ -42,10 +42,16 @@ spec:
                 - secretRef:
                     name: walmart
               env:
-                - name: OTEL_EXPORTER_OTLP_ENDPOINT
-                  value: "http://otel-collector:4318"
-                - name: OTEL_EXPORTER_OTLP_INSECURE
-                  value: "true"
+                - name: AZURE_MONITOR_OTLP_TRACES_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: ai
+                      key: AZURE_MONITOR_OTLP_TRACES_ENDPOINT
+                - name: AZURE_MONITOR_OTLP_LOGS_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: ai
+                      key: AZURE_MONITOR_OTLP_LOGS_ENDPOINT
                 - name: PUBLIC_ORIGIN
                   value: "https://careme.cooking"
               resources:

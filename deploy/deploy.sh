@@ -4,7 +4,6 @@ set -euo pipefail
 ref="${1:-origin/master}"
 deploy_dir="deploy"
 manifest_files=(
-  "${deploy_dir}/otel-collector.yaml"
   "${deploy_dir}/deploy.yaml"
   "${deploy_dir}/cronjob-careme-mail.yaml"
   "${deploy_dir}/cronjob-albertsons-scrape.yaml"
@@ -44,9 +43,6 @@ echo "Deploying image: ${IMAGE_TAG}"
 for manifest_file in "${manifest_files[@]}"; do
   envsubst '${IMAGE_TAG}' <"${manifest_file}" | kubectl apply -f - -n "${namespace}"
 done
-
-echo "Waiting for rollout of deployment/otel-collector"
-kubectl rollout status deployment/otel-collector -n "${namespace}" -w
 
 echo "Waiting for rollout of deployment/careme"
 kubectl rollout status deployment/careme -n "${namespace}" -w

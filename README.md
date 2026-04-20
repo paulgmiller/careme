@@ -18,14 +18,17 @@ The application is configured via environment variables:
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `GOOGLE_TAG_ID` - Google Ads/gtag ID for web analytics (optional)
 - `GOOGLE_CONVERSION_LABEL` - Google Ads conversion label used on `/auth/establish?signup=true` (optional)
-- `OTEL_EXPORTER_OTLP_ENDPOINT` - OTLP HTTP endpoint for OpenTelemetry export (for deployed app containers this should point at the collector service)
+- `AZURE_MONITOR_OTLP_TRACES_ENDPOINT` - Azure Monitor OTLP HTTPS traces endpoint from the Application Insights "OTLP Connection Info" page
+- `AZURE_MONITOR_OTLP_LOGS_ENDPOINT` - Azure Monitor OTLP HTTPS logs endpoint from the Application Insights "OTLP Connection Info" page
+- `OTEL_EXPORTER_OTLP_ENDPOINT` - generic OTLP HTTP endpoint for non-Azure or local collector setups
 - `OTEL_SERVICE_NAME` - optional override for the reported OpenTelemetry service name (defaults to the current binary name)
 - `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
 - `ALBERTSONS_SEARCH_SUBSCRIPTION_KEY` - Albertsons-family pathway search subscription key
 - `ALBERTSONS_SEARCH_REESE84` - fallback Albertsons-family `reese84` cookie when cache is empty or stale
 - `BRIGHTDATA_BROWSER_WS_ENDPOINT` - Bright Data Browser API websocket endpoint for `cmd/albertsonsreese84`; may include embedded credentials
 - `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY` - enable Azure Blob-backed cache storage
-- `APPLICATIONINSIGHTS_CONNECTION_STRING` - used by the OpenTelemetry Collector deployment to export to Azure Application Insights
+
+Direct Azure OTLP export also requires a Microsoft Entra credential at runtime. In Kubernetes that means workload identity or managed identity, or standard Azure SDK env vars such as `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_CLIENT_SECRET`.
 
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
