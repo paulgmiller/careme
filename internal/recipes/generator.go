@@ -2,10 +2,7 @@ package recipes
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
-	"hash/fnv"
-	"io"
 	"log/slog"
 	"slices"
 	"strings"
@@ -23,8 +20,8 @@ import (
 
 type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
-	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
-	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
+	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error)
+	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error)
 }
@@ -100,27 +97,25 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	hash := p.Hash()
 	start := time.Now()
 
-	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
-		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
-		// should never get a conversation id without instructions or saved/dismissed
-		// could assert or warn on that
-		instructions := []string{p.Instructions}
-		for _, dismissed := range p.Dismissed {
-			instructions = append(instructions, "Passed on "+dismissed.Title)
-		}
-		for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
-			instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
-		}
-		// TODO more guidance on how many recipes to generate?
+	// if we have a response id one of the three should be true? Or did they just not care and hit try again?
+	if p.ResponseID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
+		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "response_id", p.ResponseID)
+		instructions := regenerateInstructions(p)
 
-		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
+		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ResponseID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
+		// would prefer to do this deepe down in client
+		for i := range shoppingList.Recipes {
+			shoppingList.Recipes[i].OriginHash = hash
+		}
+
 		shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 		if err != nil {
 			return nil, err
 		}
+
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
@@ -139,19 +134,24 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
+	// would prefer to do this deepe down in client like response id but have to pass in the hash
+	for i := range shoppingList.Recipes {
+		shoppingList.Recipes[i].OriginHash = hash
+	}
 
 	shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 	if err != nil {
 		return nil, err
 	}
 
-	p.ConversationID = shoppingList.ConversationID
+	p.ResponseID = shoppingList.ResponseID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return shoppingList, nil
 }
 
-func (g *generatorService) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
-	return g.aiClient.AskQuestion(ctx, question, conversationID)
+// generator not prociding a lot of value here. Should sever just hold an ai client?
+func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
 }
 
 func (g *generatorService) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
@@ -169,15 +169,6 @@ func toStr(s *string) string {
 		return "empty"
 	}
 	return *s
-}
-
-func wineIngredientsCacheKey(style, location string, date time.Time) string {
-	normalizedStyle := strings.ToLower(strings.TrimSpace(style))
-	fnv := fnv.New64a()
-	lo.Must(io.WriteString(fnv, location))
-	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, normalizedStyle))
-	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
@@ -203,6 +194,20 @@ func titles(prefix string, recipes []ai.Recipe) string {
 	return b.String()
 }
 
+func regenerateInstructions(p *generatorParams) []string {
+	instructions := make([]string, 0, 1+len(p.Dismissed)+len(p.Saved))
+	if trimmed := strings.TrimSpace(p.Instructions); trimmed != "" {
+		instructions = append(instructions, trimmed)
+	}
+	for _, dismissed := range p.Dismissed {
+		instructions = append(instructions, "Passed on "+dismissed.Title)
+	}
+	for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
+		instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
+	}
+	return instructions
+}
+
 func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash string, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
 	if g.critiquer == nil {
 		return shoppingList, nil
@@ -220,16 +225,20 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	garbageRecipes := lo.Map(garbage, func(r critique.Result, _ int) ai.Recipe { return *r.Recipe })
 	g.writeStatus(ctx, hash, titles("Making adjustments to these recipes: ", garbageRecipes))
 
-	if strings.TrimSpace(shoppingList.ConversationID) == "" {
-		return nil, fmt.Errorf("conversation ID is required for critique retry")
+	if strings.TrimSpace(shoppingList.ResponseID) == "" {
+		return nil, fmt.Errorf("response ID is required for critique retry")
 	}
 
 	// we could also just give all feedback back if any are below score
-	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ConversationID)
+	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ResponseID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}
+	for i := range shoppingList.Recipes {
+		shoppingList.Recipes[i].OriginHash = hash
+	}
 	newRecipes := shoppingList.Recipes
+	linkToParents(garbage, recipePtrs(newRecipes))
 	shoppingList.Recipes = append(shoppingList.Recipes, good...)
 	shoppingList.Discarded = lo.Map(garbage, func(result critique.Result, _ int) ai.Recipe {
 		return *result.Recipe

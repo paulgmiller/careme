@@ -364,10 +364,11 @@ var mockRecipes = []ai.Recipe{
 }
 
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
-	id := p.ConversationID
+	id := p.ResponseID
 	if id == "" {
 		id = uuid.NewString()
 	}
+	originHash := p.Hash()
 	// fake like we're taking time to call an LLM so we get the spinner.
 	time.Sleep(100 * time.Millisecond)
 
@@ -387,6 +388,8 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 		}
 		mr := mockRecipes[idx]
 		if _, found := seen[mr.ComputeHash()]; !found {
+			mr.OriginHash = originHash
+			mr.ResponseID = id
 
 			slog.InfoContext(ctx, "adding", "title", mr.Title)
 			selectedRecipes = append(selectedRecipes, mr)
@@ -401,14 +404,17 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	}
 
 	return &ai.ShoppingList{
-		ConversationID: id,
-		Recipes:        selectedRecipes,
+		ResponseID: id,
+		Recipes:    selectedRecipes,
 	}, nil
 }
 
-func (m mock) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
-	_ = conversationID
-	return fmt.Sprintf("Mock answer: %s", question), nil
+func (m mock) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+	_ = previousResponseID
+	return &ai.QuestionResponse{
+		Answer:     fmt.Sprintf("Mock answer: %s", question),
+		ResponseID: uuid.NewString(),
+	}, nil
 }
 
 func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {

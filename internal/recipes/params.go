@@ -36,7 +36,7 @@ type generatorParams struct {
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
 	LastRecipes  []string `json:"-"`                   // this doesn't get populated until after save.
 	// UserID         string      `json:"user_id,omitempty"`
-	ConversationID string `json:"conversation_id,omitempty"` // Can remove if we pass it in separately to generate recipes?
+	ResponseID string `json:"response_id,omitempty"`
 	// TODO Both should just be title and hash instead of full ai.Recipe
 	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
@@ -63,7 +63,7 @@ func (g *generatorParams) String() string {
 }
 
 // Hash this is how we find shoppinglists and params
-// intentionally not including ConversationID to preserve old hashes
+// intentionally not including ResponseID to preserve old hashes
 func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
@@ -130,7 +130,7 @@ func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*genera
 
 	p := DefaultParams(l, date)
 	p.Instructions = r.URL.Query().Get("instructions")
-	p.ConversationID = strings.TrimSpace(r.URL.Query().Get("conversation_id"))
+	p.ResponseID = strings.TrimSpace(r.URL.Query().Get("response_id"))
 
 	return p, nil
 }

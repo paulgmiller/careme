@@ -84,12 +84,12 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 	// Step 6: ask a question on the finalized single recipe page.
 	question := "Can I use skirt steak instead?"
-	conversationID := extractHiddenValue(t, mustGetBody(t, client, srv.URL+"/recipe/"+url.PathEscape(savedHash)), "conversation_id")
+	responseID := extractHiddenValue(t, mustGetBody(t, client, srv.URL+"/recipe/"+url.PathEscape(savedHash)), "response_id")
 	questionURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/question"
 	questionBody := mustPostFormBodyHTMX(t, client, questionURL, url.Values{
-		"conversation_id": {conversationID},
-		"question":        {question},
-		"recipe_title":    {savedTitle},
+		"response_id":  {responseID},
+		"question":     {question},
+		"recipe_title": {savedTitle},
 	})
 	if !strings.Contains(questionBody, question) {
 		t.Fatalf("expected question thread to include question %q", question)
