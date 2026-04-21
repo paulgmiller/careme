@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -366,17 +367,30 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing question", http.StatusBadRequest)
 		return
 	}
+
 	recipeTitle := strings.TrimSpace(r.FormValue("recipe_title"))
 	questionForModel := question
 	if recipeTitle != "" {
+		// we could drop this after first question
 		questionForModel = fmt.Sprintf("Regarding %s: %s", recipeTitle, question)
 	}
 
 	responseID := strings.TrimSpace(r.FormValue("response_id"))
 	if responseID == "" {
-		slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
-		http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
-		return
+		slog.ErrorContext(ctx, "no response id falling back", "hash", hash)
+		r, err := s.SingleFromCache(ctx, hash)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
+			http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
+			return
+		}
+		rjson, err := json.Marshal(r)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
+			http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
+			return
+		}
+		questionForModel = fmt.Sprintf("Regarding  this json recipe %s: %s", rjson, question)
 	}
 
 	// this is going to take a while. Start a go routine? and spin?
