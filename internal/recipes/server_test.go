@@ -1763,6 +1763,33 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 	}
 }
 
+func TestParamsForAction_UsesLatestShoppingListResponseID(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore))
+
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	p.ResponseID = "resp-stale"
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	recipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved", OriginHash: originHash}
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes:    []ai.Recipe{recipe},
+		ResponseID: "resp-fresh",
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+
+	updated, err := s.paramsForAction(t.Context(), originHash, "user-1", "")
+	if err != nil {
+		t.Fatalf("paramsForAction failed: %v", err)
+	}
+	if got, want := updated.ResponseID, "resp-fresh"; got != want {
+		t.Fatalf("expected latest response id %q, got %q", want, got)
+	}
+}
+
 func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))

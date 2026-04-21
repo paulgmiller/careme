@@ -846,9 +846,7 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	params.Instructions = instructions
 	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
 	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
-	if params.ResponseID == "" {
-		params.ResponseID = currentList.ResponseID
-	}
+	params.ResponseID = currentList.ResponseID
 	return &params, nil
 }
 
