@@ -237,7 +237,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.InfoContext(ctx, "serving shared recipe by hash", "hash", hash, "signedIn", signedIn)
+	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
 	FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
 }
 
@@ -375,7 +375,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	responseID := strings.TrimSpace(r.FormValue("response_id"))
 	if responseID == "" {
 		slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
-		http.Error(w, "response id not found", http.StatusInternalServerError)
+		http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
 		return
 	}
 

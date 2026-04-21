@@ -132,9 +132,6 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 	})
 	recipeHash := recipe.ComputeHash()
 	activeResponseID := recipe.ResponseID
-	if activeResponseID == "" {
-		activeResponseID = p.ResponseID
-	}
 	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
 		activeResponseID = threadResponseID
 	}

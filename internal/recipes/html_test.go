@@ -216,9 +216,10 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ResponseID = "resp-123"
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -294,9 +295,10 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ResponseID = "resp-123"
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -318,11 +320,12 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ResponseID = "resp-123"
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	score := 8
 
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, true, &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -392,9 +395,10 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ResponseID = "resp-123"
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
+	FormatRecipeHTML(t.Context(), p, recipe, true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Oregon Pinot Noir", Price: "$14.99"},
 			{Name: "Backup Chardonnay", Price: "$11.99"},
@@ -425,7 +429,6 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	recipe := ai.Recipe{
 		Title:        "Market Greens",
@@ -438,6 +441,7 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		Instructions: []string{"Wash and plate."},
 		Health:       "Light",
 		DrinkPairing: "Sparkling water",
+		ResponseID:   "resp-123",
 	}
 
 	FormatRecipeHTML(t.Context(), p, recipe, true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
@@ -494,9 +498,9 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
 	recipeHash := recipe.ComputeHash()
 
 	FormatRecipeHTML(t.Context(), p, recipe, true, nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
