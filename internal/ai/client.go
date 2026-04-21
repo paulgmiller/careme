@@ -81,12 +81,15 @@ func (r *Recipe) ComputeHash() string {
 }
 
 // intentionally not including ResponseID to preserve old hashes
+// we used to use conversation id here but then you can end up sharing conversations with strangers which is kind of wierd.
+// now we can reuse first recipes and people can go off in different directions.
 type ShoppingList struct {
 	ResponseID string   `json:"response_id,omitempty" jsonschema:"-"`
 	Recipes    []Recipe `json:"recipes" jsonschema:"required"`
 	Discarded  []Recipe `json:"-" jsonschema:"-"`
 }
 
+// question threads go off from the response that generated the recipe.
 type QuestionResponse struct {
 	Answer     string
 	ResponseID string
@@ -199,6 +202,9 @@ func responseToShoppingList(ctx context.Context, resp *responses.Response) (*Sho
 		return nil, fmt.Errorf("failed to get response ID")
 	}
 	shoppingList.ResponseID = resp.ID
+	for i := range shoppingList.Recipes {
+		shoppingList.Recipes[i].ResponseID = shoppingList.ResponseID
+	}
 
 	return &shoppingList, nil
 }

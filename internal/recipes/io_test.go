@@ -84,6 +84,7 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 		ResponseID: "resp-123",
 		Recipes: []ai.Recipe{
 			{
+				OriginHash:   hash,
 				Title:        "One Pan Chicken",
 				Description:  "Simple weeknight meal",
 				Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
@@ -120,6 +121,7 @@ func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
 	rio := IO(cacheStore)
 
 	kept := ai.Recipe{
+		OriginHash:   "test-hash",
 		Title:        "One Pan Chicken",
 		Description:  "Simple weeknight meal",
 		Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
@@ -128,6 +130,7 @@ func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
 		DrinkPairing: "Chardonnay",
 	}
 	discarded := ai.Recipe{
+		OriginHash:   "test-hash",
 		Title:        "Mushy Pasta",
 		Description:  "Too vague to keep",
 		Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 lb", Price: "1.99"}},

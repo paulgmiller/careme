@@ -2,10 +2,7 @@ package recipes
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
-	"hash/fnv"
-	"io"
 	"log/slog"
 	"slices"
 	"strings"
@@ -100,6 +97,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	hash := p.Hash()
 	start := time.Now()
 
+	// if we have a response id one of the three should be true? Or did they just not care and hit try again?
 	if p.ResponseID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "response_id", p.ResponseID)
 		instructions := regenerateInstructions(p)
@@ -108,10 +106,16 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
+		// would prefer to do this deepe down in client
+		for i := range shoppingList.Recipes {
+			shoppingList.Recipes[i].OriginHash = hash
+		}
+
 		shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 		if err != nil {
 			return nil, err
 		}
+
 		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
 
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
@@ -130,6 +134,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
+	// would prefer to do this deepe down in client like response id but have to pass in the hash
+	for i := range shoppingList.Recipes {
+		shoppingList.Recipes[i].OriginHash = hash
+	}
 
 	shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 	if err != nil {
@@ -141,6 +149,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	return shoppingList, nil
 }
 
+// generator not prociding a lot of value here. Should sever just hold an ai client?
 func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
 }
@@ -160,15 +169,6 @@ func toStr(s *string) string {
 		return "empty"
 	}
 	return *s
-}
-
-func wineIngredientsCacheKey(style, location string, date time.Time) string {
-	normalizedStyle := strings.ToLower(strings.TrimSpace(style))
-	fnv := fnv.New64a()
-	lo.Must(io.WriteString(fnv, location))
-	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, normalizedStyle))
-	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
@@ -233,6 +233,9 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ResponseID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
+	}
+	for i := range shoppingList.Recipes {
+		shoppingList.Recipes[i].OriginHash = hash
 	}
 	newRecipes := shoppingList.Recipes
 	linkToParents(garbage, recipePtrs(newRecipes))

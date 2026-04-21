@@ -2,9 +2,13 @@ package recipes
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +21,7 @@ import (
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 
+	"github.com/samber/lo"
 	"github.com/samber/lo/mutable"
 )
 
@@ -115,6 +120,17 @@ func (s *cachedStaplesService) GetStaples(ctx context.Context, p *GeneratorParam
 		return nil, err
 	}
 	return ingredients, nil
+}
+
+// this is not actually wine specificexcept that GetIngredients only does wine requests from ui
+// command line could still call it kroger style.
+func wineIngredientsCacheKey(style, location string, date time.Time) string {
+	normalizedStyle := strings.ToLower(strings.TrimSpace(style))
+	fnv := fnv.New64a()
+	lo.Must(io.WriteString(fnv, location))
+	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
+	lo.Must(io.WriteString(fnv, normalizedStyle))
+	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error) {
