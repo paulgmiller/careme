@@ -250,19 +250,18 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	if question == "" {
 		return nil, fmt.Errorf("question is required")
 	}
-	if previousResponseID == "" {
-		return nil, fmt.Errorf("response ID is required for questions")
-	}
 	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
 	params := responses.ResponseNewParams{
-		Model:              c.model,
-		PreviousResponseID: openai.String(previousResponseID),
-		Instructions:       openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
+		Model:        c.model,
+		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(question)},
 		},
 		Store: openai.Bool(true),
+	}
+	if previousResponseID != "" {
+		params.PreviousResponseID = openai.String(previousResponseID)
 	}
 	resp, err := client.Responses.New(ctx, params)
 	if err != nil {

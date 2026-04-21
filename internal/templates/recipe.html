@@ -108,7 +108,7 @@
               <p class="text-xs text-gray-500">Ask about the recipe and share how it turned out.</p>
             </div>
 
-            {{if and .ServerSignedIn .ResponseID}}
+            {{if .ServerSignedIn }}
             <form method="POST"
                   action="/recipe/{{.RecipeHash}}/question"
                   hx-post="/recipe/{{.RecipeHash}}/question"
@@ -146,20 +146,6 @@
               </div>
             </form>
             <p id="question-error" class="hidden text-sm font-medium text-red-700">Could not answer your question. Please try again.</p>
-            {{else if .ServerSignedIn}}
-            <div class="flex flex-wrap items-center gap-3">
-              <p class="text-sm text-gray-500">Chef chat isn't available for this recipe yet.</p>
-              <button type="button"
-                      id="cooked-feedback-button"
-                      hx-post="/recipe/{{.RecipeHash}}/feedback"
-                      hx-vals='{"cooked":"true"}'
-                      hx-swap="none"
-                      hx-disabled-elt="#cooked-feedback-button"
-                      onclick="document.getElementById('feedback-panel').classList.remove('hidden'); document.getElementById('feedback-status').textContent='';"
-                      class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-brand-400">
-                {{if .Feedback.Cooked}}Update feedback{{else}}I cooked it!{{end}}
-              </button>
-            </div>
             {{else}}
             <a href="{{SignInPath (print "/recipe/" .RecipeHash)}}"
                class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
