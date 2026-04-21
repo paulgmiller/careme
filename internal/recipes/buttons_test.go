@@ -41,8 +41,8 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, multiRecipeList, true, w)
-	html := w.Body.String()
+	FormatShoppingListHTMLForHash(t.Context(), p, multiRecipeList, nil, true, p.Hash(), w)
+	html := assertHTTPSuccess(t, w)
 
 	// Verify HTML is valid
 	isValidHTML(t, html)
@@ -127,8 +127,8 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, listWithSavedRecipe, true, w)
-	html := w.Body.String()
+	FormatShoppingListHTMLForHash(t.Context(), p, listWithSavedRecipe, nil, true, p.Hash(), w)
+	html := assertHTTPSuccess(t, w)
 
 	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
 		t.Error("HTML should submit finalize with HTMX POST when a recipe is saved")
@@ -155,8 +155,8 @@ func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, list, false, w)
-	html := w.Body.String()
+	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, false, p.Hash(), w)
+	html := assertHTTPSuccess(t, w)
 
 	if strings.Contains(html, `type="radio"`) {
 		t.Error("HTML should not contain save/dismiss radio inputs when signed out")

@@ -56,11 +56,6 @@ type shoppingRecipeWineView struct {
 	Recommendation *ai.WineSelection
 }
 
-// FormatShoppingListHTML renders the multi-recipe shopping list view.
-func FormatShoppingListHTML(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
-	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), writer)
-}
-
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
 	dismissedHashes := make(map[string]bool, len(p.Dismissed))
@@ -121,6 +116,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		ServerSignedIn:  signedIn,
 	}
 
+	setTextContent(writer)
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -177,6 +173,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore: critiqueScore,
 	}
 
+	setTextContent(writer)
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -201,6 +198,7 @@ func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImag
 		ServerSignedIn: signedIn,
 	}
 
+	setTextContent(writer)
 	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action", data); err != nil {
 		http.Error(writer, "recipe image action template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -217,6 +215,7 @@ func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRe
 		ServerSignedIn: signedIn,
 	}
 
+	setTextContent(writer)
 	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action_response", data); err != nil {
 		http.Error(writer, "recipe image response template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -238,6 +237,7 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseI
 		ServerSignedIn: signedIn,
 	}
 
+	setTextContent(writer)
 	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
 		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -253,6 +253,7 @@ func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer
 		WineRecommendation: selection,
 	}
 
+	setTextContent(writer)
 	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_wine", data); err != nil {
 		http.Error(writer, "recipe wine template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -287,6 +288,7 @@ func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSel
 		templateName = "shopping_recipe_wine_details_response"
 	}
 
+	setTextContent(writer)
 	if err := templates.ShoppingList.ExecuteTemplate(writer, templateName, data); err != nil {
 		http.Error(writer, "shopping list wine template error: "+err.Error(), http.StatusInternalServerError)
 	}
