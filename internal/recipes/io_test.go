@@ -81,9 +81,10 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 
 	hash := "test-hash"
 	list := &ai.ShoppingList{
-		ConversationID: "conversation-123",
+		ResponseID: "resp-123",
 		Recipes: []ai.Recipe{
 			{
+				OriginHash:   hash,
 				Title:        "One Pan Chicken",
 				Description:  "Simple weeknight meal",
 				Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
@@ -109,8 +110,8 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FromCache failed: %v", err)
 	}
-	if got.ConversationID != list.ConversationID {
-		t.Fatalf("expected conversation id %q, got %q", list.ConversationID, got.ConversationID)
+	if got.ResponseID != list.ResponseID {
+		t.Fatalf("expected response id %q, got %q", list.ResponseID, got.ResponseID)
 	}
 }
 
@@ -120,6 +121,7 @@ func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
 	rio := IO(cacheStore)
 
 	kept := ai.Recipe{
+		OriginHash:   "test-hash",
 		Title:        "One Pan Chicken",
 		Description:  "Simple weeknight meal",
 		Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
@@ -128,6 +130,7 @@ func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
 		DrinkPairing: "Chardonnay",
 	}
 	discarded := ai.Recipe{
+		OriginHash:   "test-hash",
 		Title:        "Mushy Pasta",
 		Description:  "Too vague to keep",
 		Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 lb", Price: "1.99"}},
@@ -137,9 +140,9 @@ func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
 	}
 	hash := "test-hash"
 	list := &ai.ShoppingList{
-		ConversationID: "conversation-123",
-		Recipes:        []ai.Recipe{kept},
-		Discarded:      []ai.Recipe{discarded},
+		ResponseID: "resp-123",
+		Recipes:    []ai.Recipe{kept},
+		Discarded:  []ai.Recipe{discarded},
 	}
 
 	if err := rio.SaveShoppingList(t.Context(), list, hash); err != nil {

@@ -26,9 +26,9 @@ type captureWineQuestionAIClient struct {
 }
 
 type captureRegenerateAIClient struct {
-	instructions   []string
-	conversationID string
-	shoppingList   *ai.ShoppingList
+	instructions []string
+	responseID   string
+	shoppingList *ai.ShoppingList
 }
 
 type captureGenerateAIClient struct {
@@ -41,7 +41,7 @@ type sequenceAIClient struct {
 	generateInstructions   [][]string
 	regenerateCalls        int
 	regenerateInstructions [][]string
-	regenerateConversation []string
+	regenerateResponseIDs  []string
 	generateResponses      []*ai.ShoppingList
 	regenerateResponses    []*ai.ShoppingList
 }
@@ -63,13 +63,13 @@ func (c *captureWineQuestionAIClient) GenerateRecipes(ctx context.Context, locat
 	panic("unexpected call to GenerateRecipes")
 }
 
-func (c *captureWineQuestionAIClient) Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error) {
+func (c *captureWineQuestionAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error) {
 	panic("unexpected call to Regenerate")
 }
 
-func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	c.question = question
-	return c.answer, nil
+	return &ai.QuestionResponse{Answer: c.answer, ResponseID: "resp-question"}, nil
 }
 
 func (c *captureWineQuestionAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
@@ -95,16 +95,16 @@ func (c *captureRegenerateAIClient) GenerateRecipes(ctx context.Context, locatio
 	panic("unexpected call to GenerateRecipes")
 }
 
-func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error) {
+func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error) {
 	c.instructions = append([]string(nil), newinstructions...)
-	c.conversationID = conversationID
+	c.responseID = previousResponseID
 	if c.shoppingList != nil {
 		return c.shoppingList, nil
 	}
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureRegenerateAIClient) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+func (c *captureRegenerateAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	panic("unexpected call to AskQuestion")
 }
 
@@ -127,11 +127,11 @@ func (c *captureGenerateAIClient) GenerateRecipes(ctx context.Context, location 
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureGenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error) {
+func (c *captureGenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error) {
 	panic("unexpected call to Regenerate")
 }
 
-func (c *captureGenerateAIClient) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+func (c *captureGenerateAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	panic("unexpected call to AskQuestion")
 }
 
@@ -161,13 +161,13 @@ func (c *sequenceAIClient) GenerateRecipes(ctx context.Context, location *locati
 	return resp, nil
 }
 
-func (c *sequenceAIClient) Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error) {
+func (c *sequenceAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.regenerateCalls++
 	c.regenerateInstructions = append(c.regenerateInstructions, append([]string(nil), newinstructions...))
-	c.regenerateConversation = append(c.regenerateConversation, conversationID)
+	c.regenerateResponseIDs = append(c.regenerateResponseIDs, previousResponseID)
 	if len(c.regenerateResponses) == 0 {
 		return &ai.ShoppingList{}, nil
 	}
@@ -176,7 +176,7 @@ func (c *sequenceAIClient) Regenerate(ctx context.Context, newinstructions []str
 	return resp, nil
 }
 
-func (c *sequenceAIClient) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
+func (c *sequenceAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	panic("unexpected call to AskQuestion")
 }
 
@@ -359,8 +359,8 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 
 	aiStub := &captureRegenerateAIClient{
 		shoppingList: &ai.ShoppingList{
-			ConversationID: "conv-123",
-			Recipes:        []ai.Recipe{newResult},
+			ResponseID: "resp-123",
+			Recipes:    []ai.Recipe{newResult},
 		},
 	}
 	g := &generatorService{
@@ -368,7 +368,7 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	params.ConversationID = "conv-123"
+	params.ResponseID = "resp-123"
 	params.Instructions = "make it vegetarian"
 	params.Saved = []ai.Recipe{alreadySaved, newlySaved}
 	params.Dismissed = []ai.Recipe{dismissed}
@@ -387,8 +387,8 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	if !slices.Equal(aiStub.instructions, wantInstructions) {
 		t.Fatalf("unexpected regenerate instructions: got %v want %v", aiStub.instructions, wantInstructions)
 	}
-	if aiStub.conversationID != "conv-123" {
-		t.Fatalf("expected conversation ID %q, got %q", "conv-123", aiStub.conversationID)
+	if aiStub.responseID != "resp-123" {
+		t.Fatalf("expected response ID %q, got %q", "resp-123", aiStub.responseID)
 	}
 	if got == nil || len(got.Recipes) != 3 {
 		t.Fatalf("expected regenerated list plus saved recipes, got %+v", got)
@@ -413,8 +413,8 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 
 	aiStub := &captureGenerateAIClient{
 		shoppingList: &ai.ShoppingList{
-			ConversationID: "conv-123",
-			Recipes:        generated,
+			ResponseID: "resp-123",
+			Recipes:    generated,
 		},
 	}
 	critiquer := &captureCritiqueService{}
@@ -429,8 +429,8 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateRecipes returned error: %v", err)
 	}
-	if got.ConversationID != "conv-123" {
-		t.Fatalf("expected conversation id to survive, got %q", got.ConversationID)
+	if got.ResponseID != "resp-123" {
+		t.Fatalf("expected response id to survive, got %q", got.ResponseID)
 	}
 	if len(critiquer.recipes) != len(generated) {
 		t.Fatalf("expected %d critiques, got %d", len(generated), len(critiquer.recipes))
@@ -450,13 +450,13 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 
 	critiquer := &captureCritiqueService{}
 	g := &generatorService{
-		aiClient:     &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ConversationID: "conv-123", Recipes: []ai.Recipe{newResult}}},
+		aiClient:     &captureRegenerateAIClient{shoppingList: &ai.ShoppingList{ResponseID: "resp-123", Recipes: []ai.Recipe{newResult}}},
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	params.ConversationID = "conv-123"
+	params.ResponseID = "resp-123"
 	params.Saved = []ai.Recipe{alreadySaved}
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -484,12 +484,12 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 
 	aiStub := &sequenceAIClient{
 		generateResponses: []*ai.ShoppingList{{
-			ConversationID: "conv-initial",
-			Recipes:        []ai.Recipe{initial},
+			ResponseID: "resp-initial",
+			Recipes:    []ai.Recipe{initial},
 		}},
 		regenerateResponses: []*ai.ShoppingList{{
-			ConversationID: "conv-retried",
-			Recipes:        []ai.Recipe{retried},
+			ResponseID: "resp-retried",
+			Recipes:    []ai.Recipe{retried},
 		}},
 	}
 	critiquer := &captureCritiqueService{
@@ -534,8 +534,8 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	if got == nil || len(got.Recipes) != 1 || got.Recipes[0].Title != "Better Dinner" {
 		t.Fatalf("expected retried shopping list, got %+v", got)
 	}
-	if got.ConversationID != "conv-retried" {
-		t.Fatalf("expected final conversation ID %q, got %q", "conv-retried", got.ConversationID)
+	if got.ResponseID != "resp-retried" {
+		t.Fatalf("expected final response ID %q, got %q", "resp-retried", got.ResponseID)
 	}
 	if aiStub.regenerateCalls != 1 {
 		t.Fatalf("expected one critique-driven regenerate call, got %d", aiStub.regenerateCalls)
@@ -547,8 +547,8 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	if got := aiStub.regenerateInstructions[0]; !slices.Equal(got, wantInstructions) {
 		t.Fatalf("unexpected critique retry instructions: got %v want %v", got, wantInstructions)
 	}
-	if got := aiStub.regenerateConversation; !slices.Equal(got, []string{"conv-initial"}) {
-		t.Fatalf("unexpected critique retry conversation IDs: got %v", got)
+	if got := aiStub.regenerateResponseIDs; !slices.Equal(got, []string{"resp-initial"}) {
+		t.Fatalf("unexpected critique retry response IDs: got %v", got)
 	}
 	if len(critiquer.recipes) != 2 {
 		t.Fatalf("expected two critique passes, got %d", len(critiquer.recipes))
@@ -572,12 +572,12 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 
 	aiStub := &sequenceAIClient{
 		generateResponses: []*ai.ShoppingList{{
-			ConversationID: "conv-initial",
-			Recipes:        []ai.Recipe{weak, good},
+			ResponseID: "resp-initial",
+			Recipes:    []ai.Recipe{weak, good},
 		}},
 		regenerateResponses: []*ai.ShoppingList{{
-			ConversationID: "conv-retried",
-			Recipes:        []ai.Recipe{retried},
+			ResponseID: "resp-retried",
+			Recipes:    []ai.Recipe{retried},
 		}},
 	}
 	critiquer := &captureCritiqueService{
@@ -638,8 +638,8 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 
 	aiStub := &sequenceAIClient{
 		generateResponses: []*ai.ShoppingList{{
-			ConversationID: "conv-stable",
-			Recipes:        []ai.Recipe{steady},
+			ResponseID: "resp-stable",
+			Recipes:    []ai.Recipe{steady},
 		}},
 	}
 	g := &generatorService{
@@ -683,7 +683,7 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 	statuses := &statusCounter{}
 	g := &generatorService{
 		staples:      &cachedStaplesService{cache: io},
-		aiClient:     &sequenceAIClient{generateResponses: []*ai.ShoppingList{{ConversationID: "conv-stable", Recipes: []ai.Recipe{steady}}}},
+		aiClient:     &sequenceAIClient{generateResponses: []*ai.ShoppingList{{ResponseID: "resp-stable", Recipes: []ai.Recipe{steady}}}},
 		critiquer:    &captureCritiqueService{},
 		statusWriter: statuses,
 	}
@@ -701,12 +701,12 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	aiStub := &sequenceAIClient{
 		regenerateResponses: []*ai.ShoppingList{
 			{
-				ConversationID: "conv-first-pass",
-				Recipes:        []ai.Recipe{initial},
+				ResponseID: "resp-first-pass",
+				Recipes:    []ai.Recipe{initial},
 			},
 			{
-				ConversationID: "conv-second-pass",
-				Recipes:        []ai.Recipe{retried},
+				ResponseID: "resp-second-pass",
+				Recipes:    []ai.Recipe{retried},
 			},
 		},
 	}
@@ -744,7 +744,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	params.ConversationID = "conv-original"
+	params.ResponseID = "resp-original"
 	params.Instructions = "make it vegetarian"
 	params.Saved = []ai.Recipe{alreadySaved}
 
@@ -758,17 +758,17 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	if got.Recipes[0].Title != "Ready Dinner" || got.Recipes[1].Title != "Already Saved" {
 		t.Fatalf("unexpected recipe order after critique retry: %+v", got.Recipes)
 	}
+	if got.ResponseID != "resp-second-pass" {
+		t.Fatalf("expected final response ID %q, got %q", "resp-second-pass", got.ResponseID)
+	}
 	if got.Recipes[0].ParentHash != initial.ComputeHash() {
 		t.Fatalf("expected retried recipe to point to the first-pass recipe, got %+v", got.Recipes[0])
-	}
-	if got.ConversationID != "conv-second-pass" {
-		t.Fatalf("expected final conversation ID %q, got %q", "conv-second-pass", got.ConversationID)
 	}
 	if aiStub.regenerateCalls != 2 {
 		t.Fatalf("expected initial regenerate plus one critique retry, got %d calls", aiStub.regenerateCalls)
 	}
-	if got := aiStub.regenerateConversation; !slices.Equal(got, []string{"conv-original", "conv-first-pass"}) {
-		t.Fatalf("unexpected regenerate conversation IDs: got %v", got)
+	if got := aiStub.regenerateResponseIDs; !slices.Equal(got, []string{"resp-original", "resp-first-pass"}) {
+		t.Fatalf("unexpected regenerate response IDs: got %v", got)
 	}
 	wantRetryInstructions := []string{
 		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below. Description should focus on selling the dish not these corrections",
@@ -786,12 +786,12 @@ func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
 	aiStub := &sequenceAIClient{
 		regenerateResponses: []*ai.ShoppingList{
 			{
-				ConversationID: "conv-first-pass",
-				Recipes:        []ai.Recipe{firstPass},
+				ResponseID: "resp-first-pass",
+				Recipes:    []ai.Recipe{firstPass},
 			},
 			{
-				ConversationID: "conv-second-pass",
-				Recipes:        []ai.Recipe{retried},
+				ResponseID: "resp-second-pass",
+				Recipes:    []ai.Recipe{retried},
 			},
 		},
 	}
@@ -824,7 +824,7 @@ func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	params.ConversationID = "conv-original"
+	params.ResponseID = "resp-original"
 	params.Instructions = "make it fresher"
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
@@ -853,12 +853,12 @@ func TestGenerateRecipes_CritiqueRetryMatchesParentByTitleWords(t *testing.T) {
 
 	aiStub := &sequenceAIClient{
 		generateResponses: []*ai.ShoppingList{{
-			ConversationID: "conv-initial",
-			Recipes:        []ai.Recipe{firstPassChicken, firstPassTacos},
+			ResponseID: "resp-initial",
+			Recipes:    []ai.Recipe{firstPassChicken, firstPassTacos},
 		}},
 		regenerateResponses: []*ai.ShoppingList{{
-			ConversationID: "conv-retried",
-			Recipes:        []ai.Recipe{retriedTacos, retriedChicken},
+			ResponseID: "resp-retried",
+			Recipes:    []ai.Recipe{retriedTacos, retriedChicken},
 		}},
 	}
 	critiquer := &captureCritiqueService{
@@ -920,12 +920,12 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 
 	aiStub := &sequenceAIClient{
 		generateResponses: []*ai.ShoppingList{{
-			ConversationID: "conv-one",
-			Recipes:        []ai.Recipe{initial},
+			ResponseID: "resp-one",
+			Recipes:    []ai.Recipe{initial},
 		}},
 		regenerateResponses: []*ai.ShoppingList{{
-			ConversationID: "conv-two",
-			Recipes:        []ai.Recipe{retried},
+			ResponseID: "resp-two",
+			Recipes:    []ai.Recipe{retried},
 		}},
 	}
 	critiquer := &captureCritiqueService{

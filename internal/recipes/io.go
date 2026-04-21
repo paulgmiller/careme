@@ -158,13 +158,6 @@ func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 }
 
 func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
-	for i := range shoppingList.Recipes {
-		shoppingList.Recipes[i].OriginHash = hash
-	}
-	for i := range shoppingList.Discarded {
-		shoppingList.Discarded[i].OriginHash = hash
-	}
-
 	// Save each recipe separately by its hash
 	if err := rio.saveRecipes(ctx, append(shoppingList.Recipes, shoppingList.Discarded...)); err != nil {
 		return err
