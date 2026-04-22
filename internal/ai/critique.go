@@ -127,7 +127,6 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	return critique, nil
 }
 
-// remove if we get https://github.com/openclosed-dev/slogan/pull/3 in
 func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
 	if usage == nil {
 		return slog.Group("usage", slog.Bool("available", false))

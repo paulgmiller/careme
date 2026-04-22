@@ -313,7 +313,6 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 	}, nil
 }
 
-// remove this and imageUsage if we get https://github.com/openclosed-dev/slogan/pull/3 in
 func responseUsageLogAttr(usage responses.ResponseUsage) slog.Attr {
 	return slog.Group("usage",
 		slog.Int64("inputTokens", usage.InputTokens),
