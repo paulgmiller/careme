@@ -16,8 +16,10 @@ import (
 )
 
 type recipeImageView struct {
-	HasImage bool
-	Hash     string
+	HasImage     bool
+	Hash         string
+	IsGenerating bool
+	ErrorMessage string
 	// OutOfBand lets the shared panel template opt into the HTMX outerHTML swap
 	// used by the image-generation response without duplicating the panel markup.
 	OutOfBand bool
@@ -187,14 +189,14 @@ func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeIma
 	}
 }
 
-func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
+func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, recipeImage recipeImageView, writer http.ResponseWriter) {
 	data := struct {
 		RecipeHash     string
 		RecipeImage    recipeImageView
 		ServerSignedIn bool
 	}{
 		RecipeHash:     recipeHash,
-		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, false),
+		RecipeImage:    recipeImage,
 		ServerSignedIn: signedIn,
 	}
 
@@ -204,14 +206,14 @@ func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImag
 	}
 }
 
-func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
+func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, recipeImage recipeImageView, writer http.ResponseWriter) {
 	data := struct {
 		RecipeHash     string
 		RecipeImage    recipeImageView
 		ServerSignedIn bool
 	}{
 		RecipeHash:     recipeHash,
-		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, true),
+		RecipeImage:    recipeImage,
 		ServerSignedIn: signedIn,
 	}
 

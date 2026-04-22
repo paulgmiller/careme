@@ -92,6 +92,8 @@ type server struct {
 	generator    generator
 	locServer    locServer
 	wg           sync.WaitGroup
+	imageJobsMu  sync.Mutex
+	imageJobs    map[string]struct{}
 	clerk        auth.AuthClient
 	critiques    critiqueStore
 }
@@ -111,6 +113,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		storage:      storage,
 		generator:    generator,
 		locServer:    locServer,
+		imageJobs:    map[string]struct{}{},
 		clerk:        clerkClient,
 		critiques:    critique.NewStore(c),
 	}
@@ -122,6 +125,7 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 	mux.HandleFunc("GET /recipe/{hash}/image", s.handleRecipeImage)
+	mux.HandleFunc("GET /recipe/{hash}/image/action", s.handleRecipeImageAction)
 	mux.HandleFunc("POST /recipe/{hash}/image", s.handleGenerateRecipeImage)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
 	mux.HandleFunc("POST /recipe/{hash}/wine", s.handleWine)
@@ -301,13 +305,13 @@ func (s *server) handleGenerateRecipeImage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	hasRecipeImage, err := s.RecipeImageExists(ctx, hash)
+	recipeImage, err := s.recipeImageView(ctx, hash, true)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", hash, "error", err)
 		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
 		return
 	}
-	if !hasRecipeImage {
+	if !recipeImage.HasImage && !recipeImage.IsGenerating {
 		recipe, err := s.SingleFromCache(ctx, hash)
 		if err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
@@ -319,26 +323,42 @@ func (s *server) handleGenerateRecipeImage(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		// this like wine is slow should we kick it into a go routine and poll? https://htmx.org/docs/#load_polling same for wine?
-		s.wg.Add(1)
-		defer s.wg.Done()
-		generationCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
-		defer cancel()
-		image, err := s.generator.GenerateRecipeImage(generationCtx, *recipe)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to generate recipe image", "hash", hash, "error", err)
-			http.Error(w, "failed to generate recipe image", http.StatusInternalServerError)
-			return
+		if err := s.SaveRecipeImageStatus(ctx, hash, recipeImageStatusRecord{
+			Status:    recipeImageStatusPending,
+			UpdatedAt: time.Now(),
+		}); err != nil {
+			slog.ErrorContext(ctx, "failed to save pending recipe image status", "hash", hash, "error", err)
 		}
-		if err := s.SaveRecipeImage(generationCtx, hash, image); err != nil {
-			slog.ErrorContext(ctx, "failed to save recipe image", "hash", hash, "error", err)
-			http.Error(w, "failed to cache recipe image", http.StatusInternalServerError)
-			return
+		if s.startRecipeImageGeneration(ctx, hash, *recipe) {
+			slog.InfoContext(ctx, "kicked off recipe image generation", "hash", hash)
 		}
-		hasRecipeImage = true
+		recipeImage.IsGenerating = true
+		recipeImage.ErrorMessage = ""
 	}
 
-	FormatRecipeImageActionResponseHTML(hash, true, hasRecipeImage, w)
+	FormatRecipeImageActionResponseHTML(hash, true, recipeImage, w)
+}
+
+func (s *server) handleRecipeImageAction(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	if hash == "" {
+		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		return
+	}
+
+	recipeImage, err := s.recipeImageView(ctx, hash, true)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load recipe image action", "hash", hash, "error", err)
+		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
+		return
+	}
+
+	signedIn := false
+	if _, err := s.clerk.GetUserIDFromRequest(r); err == nil {
+		signedIn = true
+	}
+	FormatRecipeImageActionResponseHTML(hash, signedIn, recipeImage, w)
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
@@ -1144,6 +1164,102 @@ func parseFeedbackBool(value string) (bool, error) {
 
 func (s *server) Wait() {
 	s.wg.Wait()
+}
+
+const (
+	recipeImageGenerationTimeout      = 3 * time.Minute
+	recipeImageGenerationFailureLabel = "Couldn't plate that dish. Try again, chef."
+)
+
+func (s *server) recipeImageView(ctx context.Context, hash string, outOfBand bool) (recipeImageView, error) {
+	hasRecipeImage, err := s.RecipeImageExists(ctx, hash)
+	if err != nil {
+		return recipeImageView{}, err
+	}
+
+	view := recipeImageData(hash, hasRecipeImage, outOfBand)
+	if hasRecipeImage {
+		return view, nil
+	}
+	if s.recipeImageGenerationInFlight(hash) {
+		view.IsGenerating = true
+		return view, nil
+	}
+
+	status, err := s.RecipeImageStatusFromCache(ctx, hash)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			return view, nil
+		}
+		return recipeImageView{}, err
+	}
+	switch status.Status {
+	case recipeImageStatusPending:
+		if time.Since(status.UpdatedAt) <= recipeImageGenerationTimeout+15*time.Second {
+			view.IsGenerating = true
+			break
+		}
+		view.ErrorMessage = recipeImageGenerationFailureLabel
+	case recipeImageStatusFailed:
+		view.ErrorMessage = recipeImageGenerationFailureLabel
+	}
+	return view, nil
+}
+
+func (s *server) startRecipeImageGeneration(ctx context.Context, hash string, recipe ai.Recipe) bool {
+	s.imageJobsMu.Lock()
+	if _, ok := s.imageJobs[hash]; ok {
+		s.imageJobsMu.Unlock()
+		return false
+	}
+	s.imageJobs[hash] = struct{}{}
+	s.imageJobsMu.Unlock()
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer s.finishRecipeImageGeneration(hash)
+
+		generationCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recipeImageGenerationTimeout)
+		defer cancel()
+
+		image, err := s.generator.GenerateRecipeImage(generationCtx, recipe)
+		if err != nil {
+			slog.ErrorContext(generationCtx, "failed to generate recipe image", "hash", hash, "error", err)
+			s.markRecipeImageFailed(generationCtx, hash)
+			return
+		}
+		if err := s.SaveRecipeImage(generationCtx, hash, image); err != nil {
+			slog.ErrorContext(generationCtx, "failed to save recipe image", "hash", hash, "error", err)
+			s.markRecipeImageFailed(generationCtx, hash)
+			return
+		}
+
+		slog.InfoContext(generationCtx, "recipe image generation completed", "hash", hash)
+	}()
+	return true
+}
+
+func (s *server) recipeImageGenerationInFlight(hash string) bool {
+	s.imageJobsMu.Lock()
+	defer s.imageJobsMu.Unlock()
+	_, ok := s.imageJobs[hash]
+	return ok
+}
+
+func (s *server) finishRecipeImageGeneration(hash string) {
+	s.imageJobsMu.Lock()
+	delete(s.imageJobs, hash)
+	s.imageJobsMu.Unlock()
+}
+
+func (s *server) markRecipeImageFailed(ctx context.Context, hash string) {
+	if err := s.SaveRecipeImageStatus(ctx, hash, recipeImageStatusRecord{
+		Status:    recipeImageStatusFailed,
+		UpdatedAt: time.Now(),
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to save failed recipe image status", "hash", hash, "error", err)
+	}
 }
 
 // saveRecipesToUserProfile adds saved recipes to the user's profile
