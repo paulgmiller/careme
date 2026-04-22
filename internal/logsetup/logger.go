@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"time"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	otlplogglobal "go.opentelemetry.io/otel/log/global"
@@ -25,12 +23,10 @@ import (
 )
 
 const (
-	otelServiceNameEnv       = "OTEL_SERVICE_NAME"
 	otelExporterEndpointEnv  = "OTEL_EXPORTER_OTLP_ENDPOINT"
-	otelExporterTracesEnv    = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
-	otelExporterLogsEnv      = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
 	telemetryShutdownTimeout = 5 * time.Second
 	loggerName               = "careme/internal/logsetup"
+	shortCommitLen           = 7
 )
 
 func Configure(ctx context.Context) (func(), error) {
@@ -76,9 +72,34 @@ func Configure(ctx context.Context) (func(), error) {
 	}), nil
 }
 
+func serviceVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+
+	revision := strings.TrimSpace(buildSetting(info, "vcs.revision"))
+	if revision == "" {
+		return "unknown"
+	}
+	if len(revision) <= shortCommitLen {
+		return revision
+	}
+	return revision[:shortCommitLen]
+}
+
+func buildSetting(info *debug.BuildInfo, key string) string {
+	for _, setting := range info.Settings {
+		if setting.Key == key {
+			return setting.Value
+		}
+	}
+	return ""
+}
+
 func newTracerProvider(ctx context.Context, res *resource.Resource) (*tracesdk.TracerProvider, error) {
 	opts := []tracesdk.TracerProviderOption{tracesdk.WithResource(res)}
-	if tracesExportEnabled() {
+	if exportEnabled() {
 		exporter, err := otlptracehttp.New(ctx)
 		if err != nil {
 			return nil, err
@@ -90,7 +111,7 @@ func newTracerProvider(ctx context.Context, res *resource.Resource) (*tracesdk.T
 
 func newLoggerProvider(ctx context.Context, res *resource.Resource) (*logsdk.LoggerProvider, error) {
 	opts := []logsdk.LoggerProviderOption{logsdk.WithResource(res)}
-	if logsExportEnabled() {
+	if exportEnabled() {
 		exporter, err := otlploghttp.New(ctx)
 		if err != nil {
 			return nil, err
@@ -101,48 +122,12 @@ func newLoggerProvider(ctx context.Context, res *resource.Resource) (*logsdk.Log
 }
 
 func newResource() (*resource.Resource, error) {
-	attrs := []attribute.KeyValue{semconv.ServiceName(serviceName())}
-	if version := serviceVersion(); version != "" {
-		attrs = append(attrs, semconv.ServiceVersion(version))
-	}
-	return resource.Merge(resource.Default(), resource.NewWithAttributes("", attrs...))
+	return resource.Merge(resource.Default(), resource.NewWithAttributes("",
+		semconv.ServiceName("careme"), semconv.ServiceVersion(serviceVersion())))
 }
 
-func serviceName() string {
-	if name := strings.TrimSpace(os.Getenv(otelServiceNameEnv)); name != "" {
-		return name
-	}
-	if len(os.Args) == 0 {
-		return "careme"
-	}
-	name := filepath.Base(os.Args[0])
-	name = strings.TrimSpace(strings.TrimSuffix(name, filepath.Ext(name)))
-	if name == "" {
-		return "careme"
-	}
-	return name
-}
-
-func serviceVersion() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return ""
-	}
-	version := strings.TrimSpace(info.Main.Version)
-	if version == "(devel)" {
-		return ""
-	}
-	return version
-}
-
-func tracesExportEnabled() bool {
-	return strings.TrimSpace(os.Getenv(otelExporterEndpointEnv)) != "" ||
-		strings.TrimSpace(os.Getenv(otelExporterTracesEnv)) != ""
-}
-
-func logsExportEnabled() bool {
-	return strings.TrimSpace(os.Getenv(otelExporterEndpointEnv)) != "" ||
-		strings.TrimSpace(os.Getenv(otelExporterLogsEnv)) != ""
+func exportEnabled() bool {
+	return strings.TrimSpace(os.Getenv(otelExporterEndpointEnv)) != ""
 }
 
 func recoverAndClose(ctx context.Context, closeFn func(context.Context) error) func() {

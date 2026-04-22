@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -63,6 +62,7 @@ func newTelemetryHandler(next http.Handler) http.Handler {
 }
 
 func (t *telemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// will propogate if this is a service to service call
 	ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 
 	spanName := r.URL.Path
@@ -109,11 +109,6 @@ type recoverer struct {
 func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
-			span := oteltrace.SpanFromContext(req.Context())
-			if span.SpanContext().IsValid() {
-				span.RecordError(fmt.Errorf("panic recovered: %v", err))
-				span.SetStatus(codes.Error, "panic")
-			}
 			slog.ErrorContext(req.Context(), "panic recovered", "error", err, "stack", debug.Stack())
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
