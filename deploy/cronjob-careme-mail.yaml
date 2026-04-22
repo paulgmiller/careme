@@ -34,6 +34,8 @@ spec:
                 - secretRef:
                     name: auth
                 - secretRef:
+                    name: grafana
+                - secretRef:
                     name: mail
                 - secretRef:
                     name: kroger
@@ -42,16 +44,6 @@ spec:
                 - secretRef:
                     name: walmart
               env:
-                - name: OTEL_EXPORTER_OTLP_ENDPOINT
-                  valueFrom:
-                    secretKeyRef:
-                      name: grafana
-                      key: OTEL_EXPORTER_OTLP_ENDPOINT
-                - name: OTEL_EXPORTER_OTLP_HEADERS
-                  valueFrom:
-                    secretKeyRef:
-                      name: grafana
-                      key: OTEL_EXPORTER_OTLP_HEADERS
                 - name: PUBLIC_ORIGIN
                   value: "https://careme.cooking"
               resources:

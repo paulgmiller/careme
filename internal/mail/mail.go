@@ -110,12 +110,16 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 }
 
 func (m *mailer) RunOnce(ctx context.Context) {
+	ctx, span := otel.Tracer("careme/mail").Start(ctx, "mail_run")
+	defer span.End()
+
 	slog.InfoContext(ctx, "starting user email run")
 	users, err := m.userStorage.List(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to list users", "error", err.Error())
 		return
 	}
+	span.SetAttributes(attribute.Int("mail.user_count", len(users)))
 
 	for _, user := range users {
 		m.sendEmail(ctx, user)
