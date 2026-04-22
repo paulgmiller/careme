@@ -40,7 +40,7 @@ func TestServerRegisterWatchdog(t *testing.T) {
 
 	second := httptest.NewRecorder()
 	mux.ServeHTTP(second, httptest.NewRequest(http.MethodGet, "/watchdogs/staples", nil))
-	if got, want := second.Code, http.StatusServiceUnavailable; got != want {
+	if got, want := second.Code, http.StatusTooManyRequests; got != want {
 		t.Fatalf("second status = %d, want %d", got, want)
 	}
 	if !strings.Contains(second.Body.String(), "can only call watchdog every "+(6*time.Hour).String()) {
