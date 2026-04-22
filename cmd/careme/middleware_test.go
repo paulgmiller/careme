@@ -8,6 +8,7 @@ import (
 
 	"careme/internal/logsetup"
 
+	"github.com/clerk/clerk-sdk-go/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -163,7 +164,7 @@ func TestSessionIDHandlerReplacesInvalidCookie(t *testing.T) {
 }
 
 func TestWithMiddlewareProvidesTraceAndSessionContext(t *testing.T) {
-	installTestTracerProvider(t)
+	recorder := installTestTracerProvider(t)
 
 	var sessionID string
 	var traceID string
@@ -174,6 +175,11 @@ func TestWithMiddlewareProvidesTraceAndSessionContext(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)
+	req = req.WithContext(clerk.ContextWithSessionClaims(req.Context(), &clerk.SessionClaims{
+		RegisteredClaims: clerk.RegisteredClaims{
+			Subject: "user-123",
+		},
+	}))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -186,6 +192,17 @@ func TestWithMiddlewareProvidesTraceAndSessionContext(t *testing.T) {
 	cookie := findCookie(t, rec.Result().Cookies(), sessionCookieName)
 	if cookie.Value != sessionID {
 		t.Fatalf("expected session cookie %q, got %q", sessionID, cookie.Value)
+	}
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+	attrs := spanAttributes(spans[0])
+	if got := attrs["session.id"].AsString(); got != sessionID {
+		t.Fatalf("expected session.id %q, got %q", sessionID, got)
+	}
+	if got := attrs["enduser.id"].AsString(); got != "user-123" {
+		t.Fatalf("expected enduser.id %q, got %q", "user-123", got)
 	}
 }
 

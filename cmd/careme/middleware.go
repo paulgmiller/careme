@@ -82,6 +82,12 @@ func (t *telemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		attribute.String("http.host", r.Host),
 		attribute.String("http.target", r.URL.RequestURI()),
 	)
+	if sessionID, ok := logsetup.SessionIDFromContext(ctx); ok {
+		span.SetAttributes(attribute.String("session.id", sessionID))
+	}
+	if claims, ok := clerk.SessionClaimsFromContext(ctx); ok && claims != nil && claims.Subject != "" {
+		span.SetAttributes(attribute.String("enduser.id", claims.Subject))
+	}
 
 	lrw := &loggingResponseWriter{w, http.StatusOK}
 	t.Handler.ServeHTTP(lrw, r.WithContext(ctx))
