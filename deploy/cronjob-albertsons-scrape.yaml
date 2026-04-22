@@ -29,9 +29,10 @@ spec:
               imagePullPolicy: IfNotPresent
               envFrom:
                 - secretRef:
-                    name: grafana
-                - secretRef:
                     name: storage
+              env:
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: "http://otel-collector:4318"
               resources:
                 requests:
                   cpu: 50m

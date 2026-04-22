@@ -4,6 +4,7 @@ set -euo pipefail
 ref="${1:-origin/master}"
 deploy_dir="deploy"
 manifest_files=(
+  "${deploy_dir}/otel-collector.yaml"
   "${deploy_dir}/deploy.yaml"
   "${deploy_dir}/cronjob-careme-mail.yaml"
   "${deploy_dir}/cronjob-albertsons-scrape.yaml"
@@ -31,6 +32,7 @@ if ! commit_hash="$(git rev-parse --verify "${ref}^{commit}" 2>/dev/null)"; then
 fi
 
 export IMAGE_TAG="${commit_hash:0:${short_len}}"
+export NAMESPACE="${namespace}"
 
 for manifest_file in "${manifest_files[@]}"; do
   if [[ ! -f "${manifest_file}" ]]; then
@@ -41,7 +43,7 @@ done
 
 echo "Deploying image: ${IMAGE_TAG}"
 for manifest_file in "${manifest_files[@]}"; do
-  envsubst '${IMAGE_TAG}' <"${manifest_file}" | kubectl apply -f - -n "${namespace}"
+  envsubst '${IMAGE_TAG} ${NAMESPACE}' <"${manifest_file}" | kubectl apply -f - -n "${namespace}"
 done
 
 echo "Waiting for rollout of deployment/careme"

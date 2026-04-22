@@ -29,11 +29,12 @@ spec:
               imagePullPolicy: IfNotPresent
               envFrom:
                 - secretRef:
-                    name: grafana
-                - secretRef:
                     name: storage
                 - secretRef:
                     name: brightdata-proxy
+              env:
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: "http://otel-collector:4318"
               args: ["wait-ms", "10000"]
               resources:
                 requests:

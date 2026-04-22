@@ -34,8 +34,6 @@ spec:
                 - secretRef:
                     name: auth
                 - secretRef:
-                    name: grafana
-                - secretRef:
                     name: mail
                 - secretRef:
                     name: kroger
@@ -46,6 +44,8 @@ spec:
               env:
                 - name: PUBLIC_ORIGIN
                   value: "https://careme.cooking"
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: "http://otel-collector:4318"
               resources:
                 requests:
                   cpu: 50m

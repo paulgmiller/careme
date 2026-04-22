@@ -36,8 +36,6 @@ spec:
             - secretRef:
                 name: brightdata-proxy
             - secretRef:
-                name: grafana
-            - secretRef:
                 name: kroger
             - secretRef:
                 name: storage
@@ -54,6 +52,8 @@ spec:
               value: "paul.miller@gmail.com"
             - name: PUBLIC_ORIGIN
               value: "https://careme.cooking"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4318"
 
           volumeMounts:
             - name: recipes
