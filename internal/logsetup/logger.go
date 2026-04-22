@@ -32,11 +32,19 @@ const (
 
 func Configure(ctx context.Context) (func(), error) {
 	stdouthandler := newContextHandler(slog.NewTextHandler(os.Stdout, nil))
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 	if !exportEnabled() {
+		traceProvider := tracesdk.NewTracerProvider()
+		otel.SetTracerProvider(traceProvider)
 		stdoutLogger := slog.New(stdouthandler)
 		slog.SetDefault(stdoutLogger)
-		slog.InfoContext(ctx, "not exporting to otel")
-		return func() {}, nil
+		slog.InfoContext(ctx, "otel export disabled; using local trace provider")
+		return recoverAndClose(ctx, func(shutdownCtx context.Context) error {
+			return traceProvider.Shutdown(shutdownCtx)
+		}), nil
 	}
 	if err := validateExportConfig(); err != nil {
 		return nil, err
@@ -52,10 +60,6 @@ func Configure(ctx context.Context) (func(), error) {
 		return nil, fmt.Errorf("create tracer provider: %w", err)
 	}
 	otel.SetTracerProvider(traceProvider)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
 
 	logProvider, err := newLoggerProvider(ctx, res)
 	if err != nil {
@@ -108,23 +112,19 @@ func buildSetting(info *debug.BuildInfo, key string) string {
 }
 
 func newTracerProvider(ctx context.Context, res *resource.Resource) (*tracesdk.TracerProvider, error) {
-	opts := []tracesdk.TracerProviderOption{tracesdk.WithResource(res)}
 	exporter, err := otlptracehttp.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	opts = append(opts, tracesdk.WithBatcher(exporter))
-	return tracesdk.NewTracerProvider(opts...), nil
+	return tracesdk.NewTracerProvider(tracesdk.WithResource(res), tracesdk.WithBatcher(exporter)), nil
 }
 
 func newLoggerProvider(ctx context.Context, res *resource.Resource) (*logsdk.LoggerProvider, error) {
-	opts := []logsdk.LoggerProviderOption{logsdk.WithResource(res)}
 	exporter, err := otlploghttp.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	opts = append(opts, logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)))
-	return logsdk.NewLoggerProvider(opts...), nil
+	return logsdk.NewLoggerProvider(logsdk.WithResource(res), logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter))), nil
 }
 
 func newResource() (*resource.Resource, error) {
