@@ -24,12 +24,24 @@ import (
 
 const (
 	otelExporterEndpointEnv  = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	otelExporterHeadersEnv   = "OTEL_EXPORTER_OTLP_HEADERS"
 	telemetryShutdownTimeout = 5 * time.Second
 	loggerName               = "careme/internal/logsetup"
 	shortCommitLen           = 7
 )
 
 func Configure(ctx context.Context) (func(), error) {
+	stdouthandler := newContextHandler(slog.NewTextHandler(os.Stdout, nil))
+	if !exportEnabled() {
+		stdoutLogger := slog.New(stdouthandler)
+		slog.SetDefault(stdoutLogger)
+		slog.InfoContext(ctx, "not exporting to otel")
+		return func() {}, nil
+	}
+	if err := validateExportConfig(); err != nil {
+		return nil, err
+	}
+
 	res, err := newResource()
 	if err != nil {
 		return nil, fmt.Errorf("build telemetry resource: %w", err)
@@ -54,16 +66,14 @@ func Configure(ctx context.Context) (func(), error) {
 	}
 	otlplogglobal.SetLoggerProvider(logProvider)
 
-	handlers := []slog.Handler{
-		newContextHandler(slog.NewTextHandler(os.Stdout, nil)),
+	slog.SetDefault(slog.New(slog.NewMultiHandler(
+		stdouthandler,
 		newContextHandler(otelslog.NewHandler(
 			loggerName,
 			otelslog.WithLoggerProvider(logProvider),
 			otelslog.WithVersion(serviceVersion()),
 		)),
-	}
-
-	slog.SetDefault(slog.New(slog.NewMultiHandler(handlers...)))
+	)))
 	return recoverAndClose(ctx, func(shutdownCtx context.Context) error {
 		return errors.Join(
 			logProvider.Shutdown(shutdownCtx),
@@ -99,25 +109,21 @@ func buildSetting(info *debug.BuildInfo, key string) string {
 
 func newTracerProvider(ctx context.Context, res *resource.Resource) (*tracesdk.TracerProvider, error) {
 	opts := []tracesdk.TracerProviderOption{tracesdk.WithResource(res)}
-	if exportEnabled() {
-		exporter, err := otlptracehttp.New(ctx)
-		if err != nil {
-			return nil, err
-		}
-		opts = append(opts, tracesdk.WithBatcher(exporter))
+	exporter, err := otlptracehttp.New(ctx)
+	if err != nil {
+		return nil, err
 	}
+	opts = append(opts, tracesdk.WithBatcher(exporter))
 	return tracesdk.NewTracerProvider(opts...), nil
 }
 
 func newLoggerProvider(ctx context.Context, res *resource.Resource) (*logsdk.LoggerProvider, error) {
 	opts := []logsdk.LoggerProviderOption{logsdk.WithResource(res)}
-	if exportEnabled() {
-		exporter, err := otlploghttp.New(ctx)
-		if err != nil {
-			return nil, err
-		}
-		opts = append(opts, logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)))
+	exporter, err := otlploghttp.New(ctx)
+	if err != nil {
+		return nil, err
 	}
+	opts = append(opts, logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)))
 	return logsdk.NewLoggerProvider(opts...), nil
 }
 
@@ -128,6 +134,17 @@ func newResource() (*resource.Resource, error) {
 
 func exportEnabled() bool {
 	return strings.TrimSpace(os.Getenv(otelExporterEndpointEnv)) != ""
+}
+
+func validateExportConfig() error {
+	endpoint := strings.TrimSpace(os.Getenv(otelExporterEndpointEnv))
+	if !strings.Contains(endpoint, "grafana.net") {
+		return nil
+	}
+	if strings.TrimSpace(os.Getenv(otelExporterHeadersEnv)) != "" {
+		return nil
+	}
+	return fmt.Errorf("%s is required when %s points to Grafana Cloud", otelExporterHeadersEnv, otelExporterEndpointEnv)
 }
 
 func recoverAndClose(ctx context.Context, closeFn func(context.Context) error) func() {
