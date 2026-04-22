@@ -18,9 +18,8 @@ The application is configured via environment variables:
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `GOOGLE_TAG_ID` - Google Ads/gtag ID for web analytics (optional)
 - `GOOGLE_CONVERSION_LABEL` - Google Ads conversion label used on `/auth/establish?signup=true` (optional)
-- `AZURE_MONITOR_OTLP_TRACES_ENDPOINT` - Azure Monitor OTLP HTTPS traces endpoint from the Application Insights "OTLP Connection Info" page
-- `AZURE_MONITOR_OTLP_LOGS_ENDPOINT` - Azure Monitor OTLP HTTPS logs endpoint from the Application Insights "OTLP Connection Info" page
-- `OTEL_EXPORTER_OTLP_ENDPOINT` - generic OTLP HTTP endpoint for non-Azure or local collector setups
+- `OTEL_EXPORTER_OTLP_ENDPOINT` - OTLP HTTP endpoint. For Grafana Cloud, use the endpoint from the OpenTelemetry connection tile.
+- `OTEL_EXPORTER_OTLP_HEADERS` - OTLP headers. For Grafana Cloud, use the generated `Authorization=Basic ...` header value from the OpenTelemetry connection tile.
 - `OTEL_SERVICE_NAME` - optional override for the reported OpenTelemetry service name (defaults to the current binary name)
 - `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
 - `ALBERTSONS_SEARCH_SUBSCRIPTION_KEY` - Albertsons-family pathway search subscription key
@@ -28,7 +27,7 @@ The application is configured via environment variables:
 - `BRIGHTDATA_BROWSER_WS_ENDPOINT` - Bright Data Browser API websocket endpoint for `cmd/albertsonsreese84`; may include embedded credentials
 - `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY` - enable Azure Blob-backed cache storage
 
-Direct Azure OTLP export also requires a Microsoft Entra credential at runtime. In Kubernetes that means workload identity or managed identity, or standard Azure SDK env vars such as `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_CLIENT_SECRET`.
+For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry env vars. Grafana's docs provide generated values for `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`.
 
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above

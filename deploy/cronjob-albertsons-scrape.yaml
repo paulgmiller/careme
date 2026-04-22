@@ -31,16 +31,16 @@ spec:
                 - secretRef:
                     name: storage
               env:
-                - name: AZURE_MONITOR_OTLP_TRACES_ENDPOINT
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
                   valueFrom:
                     secretKeyRef:
-                      name: ai
-                      key: AZURE_MONITOR_OTLP_TRACES_ENDPOINT
-                - name: AZURE_MONITOR_OTLP_LOGS_ENDPOINT
+                      name: grafana
+                      key: OTEL_EXPORTER_OTLP_ENDPOINT
+                - name: OTEL_EXPORTER_OTLP_HEADERS
                   valueFrom:
                     secretKeyRef:
-                      name: ai
-                      key: AZURE_MONITOR_OTLP_LOGS_ENDPOINT
+                      name: grafana
+                      key: OTEL_EXPORTER_OTLP_HEADERS
               resources:
                 requests:
                   cpu: 50m
