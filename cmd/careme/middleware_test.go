@@ -35,8 +35,8 @@ func TestTelemetryHandlerRecordsResponseCode(t *testing.T) {
 	}
 
 	span := spans[0]
-	if span.Name() != "POST /recipes" {
-		t.Fatalf("expected span name %q, got %q", "POST /recipes", span.Name())
+	if span.Name() != "/recipes" {
+		t.Fatalf("expected span name %q, got %q", "/recipes", span.Name())
 	}
 	attrs := spanAttributes(span)
 	if got := attrs["http.method"].AsString(); got != http.MethodPost {
@@ -162,14 +162,12 @@ func TestSessionIDHandlerReplacesInvalidCookie(t *testing.T) {
 	}
 }
 
-func TestWithMiddlewareProvidesTraceBackedOperationID(t *testing.T) {
+func TestWithMiddlewareProvidesTraceAndSessionContext(t *testing.T) {
 	installTestTracerProvider(t)
 
-	var operationID string
 	var sessionID string
 	var traceID string
 	handler := appMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		operationID, _ = logsetup.OperationIDFromContext(r.Context())
 		sessionID, _ = logsetup.SessionIDFromContext(r.Context())
 		traceID = oteltrace.SpanContextFromContext(r.Context()).TraceID().String()
 		w.WriteHeader(http.StatusNoContent)
@@ -179,17 +177,11 @@ func TestWithMiddlewareProvidesTraceBackedOperationID(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if operationID == "" {
-		t.Fatal("expected operation id in context")
-	}
-	if operationID != traceID {
-		t.Fatalf("expected operation id %q to match trace id %q", operationID, traceID)
+	if traceID == "" {
+		t.Fatal("expected trace id in context")
 	}
 	if sessionID == "" {
 		t.Fatal("expected session id in context")
-	}
-	if rec.Header().Get("X-Operation-ID") != operationID {
-		t.Fatalf("expected X-Operation-ID %q, got %q", operationID, rec.Header().Get("X-Operation-ID"))
 	}
 	cookie := findCookie(t, rec.Result().Cookies(), sessionCookieName)
 	if cookie.Value != sessionID {
@@ -197,25 +189,27 @@ func TestWithMiddlewareProvidesTraceBackedOperationID(t *testing.T) {
 	}
 }
 
-func TestWithMiddlewarePreservesExplicitOperationID(t *testing.T) {
+func TestWithMiddlewarePreservesIncomingTraceContext(t *testing.T) {
 	installTestTracerProvider(t)
 
-	var operationID string
+	var traceID string
 	handler := appMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		operationID, _ = logsetup.OperationIDFromContext(r.Context())
+		traceID = oteltrace.SpanContextFromContext(r.Context()).TraceID().String()
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)
-	req = req.WithContext(logsetup.WithOperationID(req.Context(), "op-555"))
+	req = req.WithContext(oteltrace.ContextWithSpanContext(req.Context(), oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+		TraceID:    oteltrace.TraceID{1, 2, 3},
+		SpanID:     oteltrace.SpanID{4, 5, 6},
+		TraceFlags: oteltrace.FlagsSampled,
+		Remote:     true,
+	})))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if operationID != "op-555" {
-		t.Fatalf("expected operation id op-555, got %q", operationID)
-	}
-	if rec.Header().Get("X-Operation-ID") != "op-555" {
-		t.Fatalf("expected X-Operation-ID op-555, got %q", rec.Header().Get("X-Operation-ID"))
+	if traceID != "01020300000000000000000000000000" {
+		t.Fatalf("expected preserved trace id, got %q", traceID)
 	}
 }
 

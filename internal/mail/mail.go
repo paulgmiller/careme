@@ -19,18 +19,18 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
-	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 
-	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const mailSentPrefix = "mail/sent/"
@@ -125,7 +125,9 @@ func (m *mailer) RunOnce(ctx context.Context) {
 }
 
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
-	ctx = logsetup.WithOperationID(ctx, uuid.NewString())
+	ctx, span := otel.Tracer("careme/mail").Start(ctx, "send_email")
+	defer span.End()
+	span.SetAttributes(attribute.String("user.id", user.ID))
 
 	if !user.MailOptIn {
 		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)

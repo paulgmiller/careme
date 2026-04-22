@@ -65,9 +65,9 @@ func newTelemetryHandler(next http.Handler) http.Handler {
 func (t *telemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 
-	spanName := r.Method + " " + r.URL.Path
+	spanName := r.URL.Path
 	if r.Pattern != "" {
-		spanName = r.Method + " " + r.Pattern
+		spanName = r.Pattern
 	}
 
 	scheme := "http"
@@ -115,20 +115,6 @@ func (r *recoverer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.Handler.ServeHTTP(w, req)
 }
 
-type operationIDHandler struct {
-	http.Handler
-}
-
-func (h *operationIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	operationID, ok := logsetup.OperationIDFromContext(r.Context())
-	if !ok {
-		operationID = uuid.NewString()
-	}
-	ctx := logsetup.WithOperationID(r.Context(), operationID)
-	w.Header().Set("X-Operation-ID", operationID)
-	h.Handler.ServeHTTP(w, r.WithContext(ctx))
-}
-
 type sessionIDHandler struct {
 	http.Handler
 }
@@ -170,7 +156,6 @@ func baseMiddleware(h http.Handler) http.Handler {
 
 func appMiddleware(h http.Handler) http.Handler {
 	h = baseMiddleware(h)
-	h = &operationIDHandler{h}
 	h = newTelemetryHandler(h)
 	return &sessionIDHandler{h}
 }

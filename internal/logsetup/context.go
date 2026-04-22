@@ -11,32 +11,8 @@ import (
 type contextKey string
 
 const (
-	operationIDContextKey contextKey = "operation_id"
-	sessionIDContextKey   contextKey = "session_id"
+	sessionIDContextKey contextKey = "session_id"
 )
-
-func WithOperationID(ctx context.Context, operationID string) context.Context {
-	if operationID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, operationIDContextKey, operationID)
-}
-
-func OperationIDFromContext(ctx context.Context) (string, bool) {
-	if ctx == nil {
-		return "", false
-	}
-	operationID, ok := ctx.Value(operationIDContextKey).(string)
-	if ok && operationID != "" {
-		return operationID, true
-	}
-
-	spanContext := trace.SpanContextFromContext(ctx)
-	if !spanContext.IsValid() {
-		return "", false
-	}
-	return spanContext.TraceID().String(), true
-}
 
 func WithSessionID(ctx context.Context, sessionID string) context.Context {
 	if sessionID == "" {
@@ -70,9 +46,6 @@ func (h *contextHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *contextHandler) Handle(ctx context.Context, record slog.Record) error {
-	if operationID, ok := OperationIDFromContext(ctx); ok {
-		record.AddAttrs(slog.String("operation_id", operationID))
-	}
 	if sessionID, ok := SessionIDFromContext(ctx); ok {
 		record.AddAttrs(slog.String("session_id", sessionID))
 	}

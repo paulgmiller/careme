@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
-
-	"careme/internal/logsetup"
 )
 
 type readyOnce struct {
@@ -22,7 +20,6 @@ func (r *readyOnce) ready(ctx context.Context) error {
 	if r.done {
 		return nil
 	}
-	ctx = logsetup.WithOperationID(ctx, "readiness_check")
 	for _, check := range r.checks {
 		if err := check.Ready(ctx); err != nil {
 			slog.ErrorContext(ctx, "check failed", "error", err, "check", fmt.Sprintf("%T", check))
