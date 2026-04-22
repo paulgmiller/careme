@@ -673,6 +673,9 @@ type captureQuestionGenerator struct {
 	imageCalls         int
 	panicOnImage       bool
 	imageBody          []byte
+	imageErr           error
+	imageStarted       chan struct{}
+	imageRelease       chan struct{}
 }
 
 func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -695,6 +698,18 @@ func (c *captureQuestionGenerator) GenerateRecipeImage(ctx context.Context, reci
 	_ = ctx
 	_ = recipe
 	c.imageCalls++
+	if c.imageStarted != nil {
+		select {
+		case c.imageStarted <- struct{}{}:
+		default:
+		}
+	}
+	if c.imageRelease != nil {
+		<-c.imageRelease
+	}
+	if c.imageErr != nil {
+		return nil, c.imageErr
+	}
 	body := c.imageBody
 	if len(body) == 0 {
 		body = []byte("webp-bytes")
@@ -1088,11 +1103,22 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 
 func TestHandleGenerateRecipeImage_GeneratesAndCachesOnMiss(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	g := &captureQuestionGenerator{imageBody: []byte("generated-image-bytes")}
+	g := &captureQuestionGenerator{
+		imageBody:    []byte("generated-image-bytes"),
+		imageStarted: make(chan struct{}, 1),
+		imageRelease: make(chan struct{}, 1),
+	}
 	s := newTestServer(t,
 		withTestCache(cacheStore),
 		withTestGenerator(g),
 	)
+	t.Cleanup(func() {
+		select {
+		case g.imageRelease <- struct{}{}:
+		default:
+		}
+		s.Wait()
+	})
 
 	recipe := ai.Recipe{
 		Title:        "Roast Chicken",
@@ -1120,11 +1146,14 @@ func TestHandleGenerateRecipeImage_GeneratesAndCachesOnMiss(t *testing.T) {
 	if !strings.Contains(body, `id="recipe-image-panel"`) || !strings.Contains(body, `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected recipe image panel out-of-band update, got body: %s", body)
 	}
-	if !strings.Contains(body, "/recipe/"+recipeHash+"/image") {
-		t.Fatalf("expected recipe image URL in response, got body: %s", body)
+	if !strings.Contains(body, "/recipe/"+recipeHash+"/image/action") {
+		t.Fatalf("expected recipe image polling URL in response, got body: %s", body)
 	}
-	if got, want := g.imageCalls, 1; got != want {
-		t.Fatalf("expected GenerateRecipeImage call count %d, got %d", want, got)
+
+	select {
+	case <-g.imageStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for image generation to start")
 	}
 
 	req2 := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/image", nil)
@@ -1141,6 +1170,22 @@ func TestHandleGenerateRecipeImage_GeneratesAndCachesOnMiss(t *testing.T) {
 		t.Fatalf("expected cached image to avoid extra generation; got %d calls", got)
 	}
 
+	g.imageRelease <- struct{}{}
+	s.Wait()
+
+	reqStatus := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash+"/image/action", nil)
+	reqStatus.SetPathValue("hash", recipeHash)
+	rrStatus := httptest.NewRecorder()
+
+	s.handleRecipeImageAction(rrStatus, reqStatus)
+
+	if rrStatus.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rrStatus.Code, rrStatus.Body.String())
+	}
+	if !strings.Contains(rrStatus.Body.String(), "/recipe/"+recipeHash+"/image") {
+		t.Fatalf("expected recipe image URL after generation, got body: %s", rrStatus.Body.String())
+	}
+
 	req3 := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash+"/image", nil)
 	req3.SetPathValue("hash", recipeHash)
 	rr3 := httptest.NewRecorder()
@@ -1152,6 +1197,67 @@ func TestHandleGenerateRecipeImage_GeneratesAndCachesOnMiss(t *testing.T) {
 	}
 	if got := rr3.Body.String(); got != "generated-image-bytes" {
 		t.Fatalf("expected cached generated image body, got %q", got)
+	}
+}
+
+func TestHandleRecipeImageAction_ShowsRetryAfterFailure(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	g := &captureQuestionGenerator{
+		imageErr:     context.DeadlineExceeded,
+		imageStarted: make(chan struct{}, 1),
+		imageRelease: make(chan struct{}, 1),
+	}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestGenerator(g),
+	)
+	t.Cleanup(func() {
+		select {
+		case g.imageRelease <- struct{}{}:
+		default:
+		}
+		s.Wait()
+	})
+
+	recipe := ai.Recipe{
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+	}
+	recipeHash := recipe.ComputeHash()
+	saveRecipesForOrigin(t, s, "origin-hash", recipe)
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/image", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleGenerateRecipeImage(rr, req)
+
+	select {
+	case <-g.imageStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for image generation to start")
+	}
+
+	g.imageRelease <- struct{}{}
+	s.Wait()
+
+	statusReq := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash+"/image/action", nil)
+	statusReq.SetPathValue("hash", recipeHash)
+	statusRR := httptest.NewRecorder()
+
+	s.handleRecipeImageAction(statusRR, statusReq)
+
+	if statusRR.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, statusRR.Code, statusRR.Body.String())
+	}
+	if !strings.Contains(statusRR.Body.String(), "Try again, chef.") {
+		t.Fatalf("expected retry message after failed generation, got body: %s", statusRR.Body.String())
+	}
+	if got, want := g.imageCalls, 1; got != want {
+		t.Fatalf("expected GenerateRecipeImage call count %d, got %d", want, got)
 	}
 }
 

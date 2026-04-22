@@ -336,7 +336,27 @@
 {{define "recipe_image_action"}}
 <div id="recipe-image-action">
   {{if .RecipeImage.HasImage}}
+  {{else if .RecipeImage.IsGenerating}}
+  <div hx-get="/recipe/{{.RecipeHash}}/image/action"
+       hx-trigger="load delay:2s"
+       hx-target="#recipe-image-action"
+       hx-swap="outerHTML">
+    <button type="button"
+            disabled
+            class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm disabled:cursor-wait disabled:text-brand-500">
+      <span class="mr-2" aria-hidden="true">
+        <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+        </svg>
+      </span>
+      <span>Plating your dish...</span>
+    </button>
+  </div>
   {{else if .ServerSignedIn}}
+  {{if .RecipeImage.ErrorMessage}}
+  <p class="mb-2 text-sm text-brand-700">{{.RecipeImage.ErrorMessage}}</p>
+  {{end}}
   <button type="button"
           id="recipe-image-generate-button"
           hx-post="/recipe/{{.RecipeHash}}/image"
