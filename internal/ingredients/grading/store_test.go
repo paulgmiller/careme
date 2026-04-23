@@ -20,7 +20,6 @@ func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 	grade := &ai.IngredientGrade{
 		SchemaVersion: "ingredient-grade-v1",
 		Score:         8,
-		Decision:      ai.IngredientDecisionKeep,
 		Reason:        "Fresh produce with broad recipe use.",
 		Ingredient:    ai.IngredientSnapshot{Description: "Asparagus"},
 		GradedAt:      time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC),

@@ -34,7 +34,7 @@ type GeneratedImage struct {
 	Body io.Reader
 }
 
-// todo collapse closer to
+// todo collapse closer to kroger.Ingrededient but bring that up here.
 type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` // should this and price be numbers? need units then

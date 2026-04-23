@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"careme/internal/ai"
-	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
@@ -33,19 +32,14 @@ type staplesService interface {
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error)
 }
 
-type ingredientGradeService interface {
-	PrioritizeIngredients(ctx context.Context, locationHash string, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error)
-}
-
 type generatorService struct {
-	aiClient         aiClient
-	critiquer        critique.Service
-	ingredientGrader ingredientGradeService
-	staples          staplesService
-	statusWriter     statusWriter
+	aiClient     aiClient
+	critiquer    critique.Service
+	staples      staplesService
+	statusWriter statusWriter
 }
 
-func NewGenerator(aiClient aiClient, critiquer critique.Service, ingredientGrader ingredientgrading.Service, staples staplesService, statuses statusWriter) (*generatorService, error) {
+func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService, statuses statusWriter) (*generatorService, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
@@ -56,11 +50,10 @@ func NewGenerator(aiClient aiClient, critiquer critique.Service, ingredientGrade
 		return nil, fmt.Errorf("staples service is required")
 	}
 	return &generatorService{
-		aiClient:         aiClient,
-		critiquer:        critiquer,
-		ingredientGrader: ingredientGrader,
-		staples:          staples,
-		statusWriter:     statuses,
+		aiClient:     aiClient,
+		critiquer:    critiquer,
+		staples:      staples,
+		statusWriter: statuses,
 	}, nil
 }
 
@@ -133,14 +126,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	ingredients, err := g.staples.GetStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
-	}
-	if g.ingredientGrader != nil {
-		prioritized, err := g.ingredientGrader.PrioritizeIngredients(ctx, p.LocationHash(), ingredients)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to prioritize ingredients", "location", p.String(), "error", err)
-		} else {
-			ingredients = prioritized
-		}
 	}
 	g.writeStatus(ctx, hash, fmt.Sprintf("Looking through %d ingredients", len(ingredients)))
 

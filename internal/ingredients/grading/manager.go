@@ -14,7 +14,10 @@ import (
 	"careme/internal/kroger"
 )
 
-const defaultMinimumIngredients = 24
+const (
+	defaultMinimumIngredients = 24
+	ingredientGradeBatchSize  = 30
+)
 
 type Result struct {
 	Ingredient kroger.Ingredient
@@ -34,7 +37,7 @@ type Manager interface {
 }
 
 type grader interface {
-	GradeIngredient(ctx context.Context, key string, ingredient kroger.Ingredient) (*ai.IngredientGrade, error)
+	GradeIngredients(ctx context.Context, locationHash string, ingredients []kroger.Ingredient) ([]Result, error)
 	Ready(ctx context.Context) error
 }
 
@@ -48,7 +51,6 @@ func (r rubberstamp) GradeIngredients(_ context.Context, _ string, ingredients [
 			Grade: &ai.IngredientGrade{
 				SchemaVersion: "ingredient-grade-disabled",
 				Score:         10,
-				Decision:      ai.IngredientDecisionKeep,
 				Reason:        "ingredient grading disabled",
 				Ingredient:    ai.SnapshotFromKrogerIngredient(ingredient),
 			},
@@ -94,24 +96,23 @@ func (m *multiGrader) Wait() {
 
 func (m *multiGrader) GradeIngredients(ctx context.Context, locationHash string, ingredients []kroger.Ingredient) <-chan Result {
 	results := make(chan Result, len(ingredients))
-	m.wg.Add(len(ingredients))
-
-	var localWg sync.WaitGroup
-	for _, ingredient := range ingredients {
-		localWg.Go(func() {
-			defer m.wg.Done()
-			grade, err := m.grader.GradeIngredient(ctx, ingredientKey(locationHash, ingredient), ingredient)
-			results <- Result{
-				Ingredient: ingredient,
-				Grade:      grade,
-				Err:        err,
+	m.wg.Go(func() {
+		graded, err := m.grader.GradeIngredients(ctx, locationHash, ingredients)
+		if err != nil {
+			for _, ingredient := range ingredients {
+				results <- Result{
+					Ingredient: ingredient,
+					Err:        err,
+				}
 			}
-		})
-	}
-	go func() {
-		localWg.Wait()
+			close(results)
+			return
+		}
+		for _, result := range graded {
+			results <- result
+		}
 		close(results)
-	}()
+	})
 	return results
 }
 

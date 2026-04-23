@@ -161,7 +161,6 @@ func TestServerReturnsGradedIngredientsJSON(t *testing.T) {
 					Grade: &ai.IngredientGrade{
 						SchemaVersion: "ingredient-grade-v1",
 						Score:         9,
-						Decision:      ai.IngredientDecisionKeep,
 						Reason:        "Fresh and flexible.",
 						Ingredient:    ai.SnapshotFromKrogerIngredient(ingredients[0]),
 					},
@@ -171,7 +170,6 @@ func TestServerReturnsGradedIngredientsJSON(t *testing.T) {
 					Grade: &ai.IngredientGrade{
 						SchemaVersion: "ingredient-grade-v1",
 						Score:         2,
-						Decision:      ai.IngredientDecisionDrop,
 						Reason:        "Snack food with limited recipe value.",
 						Ingredient:    ai.SnapshotFromKrogerIngredient(ingredients[1]),
 					},

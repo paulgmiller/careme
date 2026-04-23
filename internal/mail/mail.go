@@ -75,13 +75,13 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	userStorage := users.NewStorage(cache)
 	mc := critique.NewManager(cfg, cache)
 	ig := ingredientgrading.NewManager(cfg, cache)
-	staples, err := recipes.NewCachedStaplesService(cfg, cache)
+	staples, err := recipes.NewCachedStaplesService(cfg, cache, ig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
 	ss := recipes.StatusStore(cache)
 	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
-	generator, err := recipes.NewGenerator(aiClient, mc, ig, staples, ss)
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
