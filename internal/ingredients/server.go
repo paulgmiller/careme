@@ -68,19 +68,14 @@ func (s *server) handleGradedIngredients(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := r.Context()
-	locationHash, err := s.loadLocationHash(ctx, r.PathValue("hash"))
+	graded, err := s.grader.GradeIngredients(ctx, ingredients)
 	if err != nil {
-		s.writeIngredientLoadError(w, r, err)
+		slog.ErrorContext(ctx, "failed to grade ingredients", "error", err)
+		http.Error(w, "failed to grade ingredients", http.StatusInternalServerError)
 		return
 	}
-
-	results := make([]ai.IngredientGrade, 0, len(ingredients))
-	for result := range s.grader.GradeIngredients(ctx, locationHash, ingredients) {
-		if result.Err != nil {
-			slog.ErrorContext(ctx, "failed to grade ingredient", "ingredient", strings.TrimSpace(loFromPtr(result.Ingredient.Description)), "error", result.Err)
-			http.Error(w, "failed to grade ingredients", http.StatusInternalServerError)
-			return
-		}
+	results := make([]ai.IngredientGrade, 0, len(graded))
+	for _, result := range graded {
 		if result.Grade == nil {
 			http.Error(w, "ingredient grading returned no result", http.StatusInternalServerError)
 			return
@@ -146,11 +141,4 @@ func (s *server) writeIngredientLoadError(w http.ResponseWriter, r *http.Request
 	default:
 		http.Error(w, "failed to fetch ingredients", http.StatusInternalServerError)
 	}
-}
-
-func loFromPtr(ptr *string) string {
-	if ptr == nil {
-		return ""
-	}
-	return *ptr
 }

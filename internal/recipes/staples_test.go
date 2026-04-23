@@ -9,7 +9,6 @@ import (
 	"careme/internal/ai"
 	"careme/internal/albertsons"
 	"careme/internal/cache"
-	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/kroger"
 	"careme/internal/locations"
 )
@@ -48,10 +47,9 @@ type stubRoutingStaplesProvider struct {
 }
 
 type stubIngredientGrader struct {
-	locationHash string
-	ingredients  []kroger.Ingredient
-	prioritized  []kroger.Ingredient
-	err          error
+	ingredients []kroger.Ingredient
+	prioritized []kroger.Ingredient
+	err         error
 }
 
 func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ string) ([]kroger.Ingredient, error) {
@@ -70,10 +68,10 @@ func (s *stubRoutingStaplesProvider) GetIngredients(_ context.Context, _ string,
 	return slices.Clone(s.ingredients), nil
 }
 
-func (s *stubIngredientGrader) GradeIngredients(_ context.Context, locationHash string, ingredients []kroger.Ingredient) <-chan ingredientgrading.Result {
-	results := make(chan ingredientgrading.Result, len(ingredients))
+func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
+	results := make([]ai.GradedIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
-		results <- ingredientgrading.Result{
+		results = append(results, ai.GradedIngredient{
 			Ingredient: ingredient,
 			Grade: &ai.IngredientGrade{
 				SchemaVersion: "ingredient-grade-v1",
@@ -81,14 +79,12 @@ func (s *stubIngredientGrader) GradeIngredients(_ context.Context, locationHash 
 				Reason:        "stub",
 				Ingredient:    ai.SnapshotFromKrogerIngredient(ingredient),
 			},
-		}
+		})
 	}
-	close(results)
-	return results
+	return results, nil
 }
 
-func (s *stubIngredientGrader) PrioritizeIngredients(_ context.Context, locationHash string, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
-	s.locationHash = locationHash
+func (s *stubIngredientGrader) PrioritizeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
 	s.ingredients = append([]kroger.Ingredient(nil), ingredients...)
 	if s.err != nil {
 		return nil, s.err
@@ -249,9 +245,6 @@ func TestGetStaples_PrioritizesCachedIngredientsBeforeReturning(t *testing.T) {
 	if len(got) != 1 || got[0].Description == nil || *got[0].Description != "Ribeye Steak" {
 		t.Fatalf("unexpected prioritized staples: %+v", got)
 	}
-	if grader.locationHash != params.LocationHash() {
-		t.Fatalf("unexpected location hash: got %q want %q", grader.locationHash, params.LocationHash())
-	}
 	if len(grader.ingredients) != 2 {
 		t.Fatalf("expected grader to see raw cached ingredients, got %d", len(grader.ingredients))
 	}
@@ -260,7 +253,19 @@ func TestGetStaples_PrioritizesCachedIngredientsBeforeReturning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngredientsFromCache returned error: %v", err)
 	}
-	if len(cached) != 2 || cached[0].Description == nil || *cached[0].Description != "Potato Chips" {
+	if len(cached) != 2 {
 		t.Fatalf("expected raw ingredients to stay cached, got %+v", cached)
 	}
+	descriptions := []string{stringPtr(cached[0].Description), stringPtr(cached[1].Description)}
+	slices.Sort(descriptions)
+	if !slices.Equal(descriptions, []string{"Potato Chips", "Ribeye Steak"}) {
+		t.Fatalf("expected raw ingredients to stay cached, got %+v", cached)
+	}
+}
+
+func stringPtr(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

@@ -16,7 +16,7 @@ import (
 func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	store := NewStore(cache.NewFileCache(tmpDir))
-	key := cacheKey("location-hash", "ingredient-hash")
+	key := cacheKey("ingredient-hash")
 	grade := &ai.IngredientGrade{
 		SchemaVersion: "ingredient-grade-v1",
 		Score:         8,
@@ -26,7 +26,7 @@ func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 	}
 
 	require.NoError(t, store.Save(t.Context(), key, grade))
-	_, err := os.Stat(filepath.Join(tmpDir, cachePrefix, "location-hash", "ingredient-hash"))
+	_, err := os.Stat(filepath.Join(tmpDir, cachePrefix, "ingredient-hash"))
 	require.NoError(t, err)
 
 	got, err := store.Load(t.Context(), key)

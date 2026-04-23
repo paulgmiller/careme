@@ -106,7 +106,7 @@ func (s *cachedStaplesService) GetStaples(ctx context.Context, p *GeneratorParam
 
 	if cachedIngredients, err := s.cache.IngredientsFromCache(ctx, lochash); err == nil {
 		slog.InfoContext(ctx, "serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
-		return s.prioritizedStaples(ctx, lochash, cachedIngredients), nil
+		return s.prioritizedStaples(ctx, cachedIngredients), nil
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
@@ -122,7 +122,7 @@ func (s *cachedStaplesService) GetStaples(ctx context.Context, p *GeneratorParam
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
-	return s.prioritizedStaples(ctx, lochash, ingredients), nil
+	return s.prioritizedStaples(ctx, ingredients), nil
 }
 
 // this is not actually wine specificexcept that GetIngredients only does wine requests from ui
@@ -175,13 +175,13 @@ func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
 	return err
 }
 
-func (s *cachedStaplesService) prioritizedStaples(ctx context.Context, locationHash string, ingredients []kroger.Ingredient) []kroger.Ingredient {
+func (s *cachedStaplesService) prioritizedStaples(ctx context.Context, ingredients []kroger.Ingredient) []kroger.Ingredient {
 	if s.grader == nil {
 		return ingredients
 	}
-	prioritized, err := s.grader.PrioritizeIngredients(ctx, locationHash, ingredients)
+	prioritized, err := s.grader.PrioritizeIngredients(ctx, ingredients)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to prioritize cached staples", "location_hash", locationHash, "error", err)
+		slog.ErrorContext(ctx, "failed to prioritize cached staples", "error", err)
 		return ingredients
 	}
 	return prioritized

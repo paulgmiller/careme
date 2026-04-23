@@ -50,47 +50,39 @@ func TestIngredientSnapshotHashStableAcrossCategoryOrder(t *testing.T) {
 func TestBuildIngredientGradePrompt(t *testing.T) {
 	snapshot := IngredientSnapshot{
 		Description: "Asparagus",
+		ProductID:   "foobar",
 		Categories:  []string{"Produce"},
 	}
-	prompt, err := buildIngredientGradePrompt([]ingredientBatchItem{{
-		IngredientID: batchIngredientID(snapshot, 0),
-		Ingredient:   snapshot,
-	}})
+	prompt, err := buildIngredientGradePrompt([]IngredientSnapshot{snapshot})
 	require.NoError(t, err)
-	assert.Contains(t, prompt, "preserving each ingredient_id")
-	assert.Contains(t, prompt, `"ingredient_id": "`)
+	assert.Contains(t, prompt, "preserving each product_id")
+	assert.Contains(t, prompt, `"product_id": "`)
 	assert.Contains(t, prompt, "Return JSON only matching the provided schema.")
 	assert.Contains(t, prompt, `"description": "Asparagus"`)
 	assert.Contains(t, prompt, `"categories": [`)
 }
 
 func TestParseIngredientGrades(t *testing.T) {
-	items := []ingredientBatchItem{{
-		IngredientID: "ingredient-1",
-		Ingredient: IngredientSnapshot{
-			Description: "Asparagus",
-		},
+	items := []IngredientSnapshot{{
+		Description: "Asparagus",
+		ProductID:   "ingredient-1",
 	}}
-	grades, err := parseIngredientGrades(`{"grades":[{"ingredient_id":"ingredient-1","score":8,"reason":"Fresh produce with broad weeknight use."}]}`, items)
+	grades, err := parseIngredientGrades(`{"grades":[{"product_id":"ingredient-1","score":8,"reason":"Fresh produce with broad weeknight use."}]}`, items)
 	require.NoError(t, err)
 	require.Len(t, grades, 1)
 	grade := grades[0]
-	assert.Equal(t, ingredientGradeSchemaV1, grade.SchemaVersion)
 	assert.Equal(t, 8, grade.Score)
 	assert.Equal(t, "Fresh produce with broad weeknight use.", grade.Reason)
 	assert.Equal(t, "Asparagus", grade.Ingredient.Description)
 }
 
 func TestParseIngredientGradesRejectsInvalidResponses(t *testing.T) {
-	items := []ingredientBatchItem{{
-		IngredientID: "ingredient-1",
-		Ingredient:   IngredientSnapshot{},
-	}}
-	_, err := parseIngredientGrades(`{"grades":[{"ingredient_id":"ingredient-1","score":11,"reason":"too high"}]}`, items)
+	items := []IngredientSnapshot{{ProductID: "ingredient-1"}}
+	_, err := parseIngredientGrades(`{"grades":[{"product_id":"ingredient-1","score":11,"reason":"too high"}]}`, items)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "between 0 and 10")
 
-	_, err = parseIngredientGrades(`{"grades":[{"ingredient_id":"ingredient-1","score":3,"reason":"   "}]}`, items)
+	_, err = parseIngredientGrades(`{"grades":[{"product_id":"ingredient-1","score":3,"reason":"   "}]}`, items)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reason is required")
 	_, err = parseIngredientGrades(`{"grades":[]}`, items)
@@ -99,18 +91,18 @@ func TestParseIngredientGradesRejectsInvalidResponses(t *testing.T) {
 }
 
 func TestParseIngredientGradesMatchesByIngredientIDInsteadOfOrder(t *testing.T) {
-	items := []ingredientBatchItem{
-		{IngredientID: "a", Ingredient: IngredientSnapshot{Description: "Asparagus"}},
-		{IngredientID: "b", Ingredient: IngredientSnapshot{Description: "Potato Chips"}},
+	items := []IngredientSnapshot{
+		{Description: "Potato Chips", ProductID: "b"},
+		{Description: "Asparagus", ProductID: "a"},
 	}
 
-	grades, err := parseIngredientGrades(`{"grades":[{"ingredient_id":"b","score":2,"reason":"Snack food."},{"ingredient_id":"a","score":9,"reason":"Fresh vegetable."}]}`, items)
+	grades, err := parseIngredientGrades(`{"grades":[{"product_id":"b","score":2,"reason":"Snack food."},{"product_id":"a","score":9,"reason":"Fresh vegetable."}]}`, items)
 	require.NoError(t, err)
 	require.Len(t, grades, 2)
-	assert.Equal(t, "Asparagus", grades[0].Ingredient.Description)
-	assert.Equal(t, 9, grades[0].Score)
-	assert.Equal(t, "Potato Chips", grades[1].Ingredient.Description)
-	assert.Equal(t, 2, grades[1].Score)
+	assert.Equal(t, "Potato Chips", grades[0].Ingredient.Description)
+	assert.Equal(t, 2, grades[0].Score)
+	assert.Equal(t, "Asparagus", grades[1].Ingredient.Description)
+	assert.Equal(t, 9, grades[1].Score)
 }
 
 func TestIngredientGradeSchemaOmitsOperationalFields(t *testing.T) {

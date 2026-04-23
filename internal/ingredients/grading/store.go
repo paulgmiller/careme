@@ -11,8 +11,8 @@ import (
 
 const cachePrefix = "ingredient_grades/"
 
-func cacheKey(locationHash string, ingredientHash string) string {
-	return cachePrefix + locationHash + "/" + ingredientHash
+func cacheKey(ingredientHash string) string {
+	return cachePrefix + ingredientHash
 }
 
 type store struct {

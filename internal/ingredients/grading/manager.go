@@ -3,6 +3,7 @@ package grading
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -19,34 +20,26 @@ const (
 	ingredientGradeBatchSize  = 30
 )
 
-type Result struct {
-	Ingredient kroger.Ingredient
-	Grade      *ai.IngredientGrade
-	Err        error
-}
-
 type Service interface {
-	GradeIngredients(ctx context.Context, locationHash string, ingredients []kroger.Ingredient) <-chan Result
-	PrioritizeIngredients(ctx context.Context, locationHash string, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error)
+	GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error)
+	PrioritizeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error)
 }
 
 type Manager interface {
 	Service
 	Wait()
-	Ready(ctx context.Context) error
 }
 
 type grader interface {
-	GradeIngredients(ctx context.Context, locationHash string, ingredients []kroger.Ingredient) ([]Result, error)
-	Ready(ctx context.Context) error
+	GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error)
 }
 
 type rubberstamp struct{}
 
-func (r rubberstamp) GradeIngredients(_ context.Context, _ string, ingredients []kroger.Ingredient) <-chan Result {
-	results := make(chan Result, len(ingredients))
+func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
+	results := make([]ai.GradedIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
-		results <- Result{
+		results = append(results, ai.GradedIngredient{
 			Ingredient: ingredient,
 			Grade: &ai.IngredientGrade{
 				SchemaVersion: "ingredient-grade-disabled",
@@ -54,24 +47,21 @@ func (r rubberstamp) GradeIngredients(_ context.Context, _ string, ingredients [
 				Reason:        "ingredient grading disabled",
 				Ingredient:    ai.SnapshotFromKrogerIngredient(ingredient),
 			},
-		}
+		})
 	}
-	close(results)
-	return results
+	return results, nil
 }
 
-func (r rubberstamp) PrioritizeIngredients(_ context.Context, _ string, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
+func (r rubberstamp) PrioritizeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
 	return slices.Clone(ingredients), nil
 }
 
-func (r rubberstamp) Wait()                       {}
-func (r rubberstamp) Ready(context.Context) error { return nil }
+func (r rubberstamp) Wait() {}
 
 type multiGrader struct {
 	grader    grader
 	threshold int
 	minimum   int
-	wg        sync.WaitGroup
 }
 
 func NewManager(cfg *config.Config, c cache.ListCache) Manager {
@@ -86,55 +76,110 @@ func NewManager(cfg *config.Config, c cache.ListCache) Manager {
 	}
 }
 
-func (m *multiGrader) Ready(ctx context.Context) error {
-	return m.grader.Ready(ctx)
+func (m *multiGrader) Wait() {}
+
+func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
+	return m.gradeInParallel(ctx, ingredients)
 }
 
-func (m *multiGrader) Wait() {
-	m.wg.Wait()
-}
+func (m *multiGrader) gradeInParallel(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
+	if len(ingredients) == 0 {
+		return nil, nil
+	}
 
-func (m *multiGrader) GradeIngredients(ctx context.Context, locationHash string, ingredients []kroger.Ingredient) <-chan Result {
-	results := make(chan Result, len(ingredients))
-	m.wg.Go(func() {
-		graded, err := m.grader.GradeIngredients(ctx, locationHash, ingredients)
-		if err != nil {
-			for _, ingredient := range ingredients {
-				results <- Result{
-					Ingredient: ingredient,
-					Err:        err,
-				}
+	type groupedIngredient struct {
+		ingredient kroger.Ingredient
+		positions  []int
+	}
+
+	unique := make([]groupedIngredient, 0, len(ingredients))
+	indexByKey := make(map[string]int, len(ingredients))
+	for i, ingredient := range ingredients {
+		key := ingredientKey(ingredient)
+		if idx, ok := indexByKey[key]; ok {
+			unique[idx].positions = append(unique[idx].positions, i)
+			continue
+		}
+		indexByKey[key] = len(unique)
+		unique = append(unique, groupedIngredient{
+			ingredient: ingredient,
+			positions:  []int{i},
+		})
+	}
+
+	uniqueResults := make([]ai.GradedIngredient, len(unique))
+	errs := make([]error, len(unique))
+	var batches sync.WaitGroup
+	for start := 0; start < len(unique); start += ingredientGradeBatchSize {
+		start := start
+		end := min(start+ingredientGradeBatchSize, len(unique))
+		batches.Go(func() {
+			batchIngredients := make([]kroger.Ingredient, 0, end-start)
+			for _, item := range unique[start:end] {
+				batchIngredients = append(batchIngredients, item.ingredient)
 			}
-			close(results)
-			return
+
+			graded, err := m.grader.GradeIngredients(ctx, batchIngredients)
+			if err != nil {
+				for i := range batchIngredients {
+					errs[start+i] = err
+				}
+				return
+			}
+			if len(graded) != len(batchIngredients) {
+				err := fmt.Errorf("ingredient grader returned %d results for batch of %d", len(graded), len(batchIngredients))
+				for i := range batchIngredients {
+					errs[start+i] = err
+				}
+				return
+			}
+			copy(uniqueResults[start:end], graded)
+		})
+	}
+	batches.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			return nil, fmt.Errorf("grade ingredient %q: %w", ingredientLabel(unique[i].ingredient), err)
 		}
-		for _, result := range graded {
-			results <- result
+		if uniqueResults[i].Grade == nil {
+			return nil, fmt.Errorf("ingredient grader returned no result for %q", ingredientLabel(unique[i].ingredient))
 		}
-		close(results)
-	})
-	return results
+	}
+
+	results := make([]ai.GradedIngredient, len(ingredients))
+	for i, item := range unique {
+		for _, pos := range item.positions {
+			results[pos] = ai.GradedIngredient{
+				Ingredient: ingredients[pos],
+				Grade:      uniqueResults[i].Grade,
+			}
+		}
+	}
+	return results, nil
 }
 
-func (m *multiGrader) PrioritizeIngredients(ctx context.Context, locationHash string, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
+func (m *multiGrader) PrioritizeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
 	type scoredIngredient struct {
 		ingredient kroger.Ingredient
 		score      int
 		keep       bool
-		err        error
 	}
 
-	scored := make([]scoredIngredient, 0, len(ingredients))
-	for result := range m.GradeIngredients(ctx, locationHash, ingredients) {
+	graded, err := m.GradeIngredients(ctx, ingredients)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to grade ingredients", "error", err)
+		return slices.Clone(ingredients), nil
+	}
+
+	scored := make([]scoredIngredient, 0, len(graded))
+	for _, result := range graded {
 		entry := scoredIngredient{
 			ingredient: result.Ingredient,
 			score:      10,
 			keep:       true,
-			err:        result.Err,
 		}
-		if result.Err != nil {
-			slog.ErrorContext(ctx, "failed to grade ingredient", "ingredient", ingredientLabel(result.Ingredient), "error", result.Err)
-		} else if result.Grade != nil {
+		if result.Grade != nil {
 			entry.score = result.Grade.Score
 			entry.keep = result.Grade.Score >= m.threshold
 		}
@@ -171,9 +216,9 @@ func (m *multiGrader) PrioritizeIngredients(ctx context.Context, locationHash st
 	return prioritized, nil
 }
 
-func ingredientKey(locationHash string, ingredient kroger.Ingredient) string {
+func ingredientKey(ingredient kroger.Ingredient) string {
 	snapshot := ai.SnapshotFromKrogerIngredient(ingredient)
-	return cacheKey(strings.TrimSpace(locationHash), snapshot.Hash())
+	return cacheKey(snapshot.Hash())
 }
 
 func ingredientLabel(ingredient kroger.Ingredient) string {

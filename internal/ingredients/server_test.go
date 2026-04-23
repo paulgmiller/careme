@@ -10,30 +10,27 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 )
 
 type stubGrader struct {
-	fn func(locationHash string, ingredients []kroger.Ingredient) []ingredientgrading.Result
+	fn  func(ingredients []kroger.Ingredient) []ai.GradedIngredient
+	err error
 }
 
-func (s stubGrader) GradeIngredients(_ context.Context, locationHash string, ingredients []kroger.Ingredient) <-chan ingredientgrading.Result {
-	results := make(chan ingredientgrading.Result, len(ingredients))
-	var out []ingredientgrading.Result
-	if s.fn != nil {
-		out = s.fn(locationHash, ingredients)
+func (s stubGrader) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
+	if s.err != nil {
+		return nil, s.err
 	}
-	for _, result := range out {
-		results <- result
+	if s.fn == nil {
+		return nil, nil
 	}
-	close(results)
-	return results
+	return s.fn(ingredients), nil
 }
 
-func (s stubGrader) PrioritizeIngredients(_ context.Context, _ string, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
+func (s stubGrader) PrioritizeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
 	return ingredients, nil
 }
 
@@ -151,11 +148,8 @@ func TestServerReturnsGradedIngredientsJSON(t *testing.T) {
 
 	mux := http.NewServeMux()
 	NewHandler(cacheStore, stubGrader{
-		fn: func(locationHash string, ingredients []kroger.Ingredient) []ingredientgrading.Result {
-			if locationHash != params.LocationHash() {
-				t.Fatalf("unexpected location hash: %s", locationHash)
-			}
-			return []ingredientgrading.Result{
+		fn: func(ingredients []kroger.Ingredient) []ai.GradedIngredient {
+			return []ai.GradedIngredient{
 				{
 					Ingredient: ingredients[0],
 					Grade: &ai.IngredientGrade{

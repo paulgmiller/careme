@@ -70,7 +70,6 @@ func runServer(cfg *config.Config, addr string) error {
 		ro.add(mc)
 		ingredientGrader := ingredientgrading.NewManager(cfg, cache)
 		grader = ingredientGrader
-		ro.add(ingredientGrader)
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
 		ro.add(aiclient)
 		staples, err := recipes.NewCachedStaplesService(cfg, cache, ingredientGrader)

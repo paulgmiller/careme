@@ -68,38 +68,33 @@ func SnapshotFromKrogerIngredient(ingredient kroger.Ingredient) IngredientSnapsh
 
 // how are we using htis
 func (s IngredientSnapshot) Hash() string {
+	// ignoring aisle, categories and price.
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(s.ProductID))))
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(s.Brand))))
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(s.Description))))
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(s.Size))))
-	categories := append([]string(nil), s.Categories...)
-	categories = normalizeCategories(categories)
-	for _, category := range categories {
-		lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(category))))
-	}
 	// should we embed model/prompt into this hash to force re greade on changes
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 type IngredientGrade struct {
-	SchemaVersion string             `json:"schema_version"`
-	Score         int                `json:"score"`
-	Reason        string             `json:"reason"`
-	Ingredient    IngredientSnapshot `json:"ingredient"`
-	Model         string             `json:"model,omitempty" jsonschema:"-"`
-	GradedAt      time.Time          `json:"graded_at,omitempty" jsonschema:"-"`
+	Score      int                `json:"score"`
+	Reason     string             `json:"reason"`
+	Ingredient IngredientSnapshot `json:"ingredient"`
+	Model      string             `json:"model,omitempty" jsonschema:"-"`
+	GradedAt   time.Time          `json:"graded_at,omitempty" jsonschema:"-"`
 }
 
-type ingredientBatchItem struct {
-	IngredientID string             `json:"ingredient_id"`
-	Ingredient   IngredientSnapshot `json:"ingredient"`
+type GradedIngredient struct {
+	Ingredient kroger.Ingredient
+	Grade      *IngredientGrade
 }
 
 type ingredientGradeResponseItem struct {
-	IngredientID string `json:"ingredient_id"`
-	Score        int    `json:"score" jsonschema:"minimum=0,maximum=10"`
-	Reason       string `json:"reason"`
+	ProductID string `json:"product_id"`
+	Score     int    `json:"score" jsonschema:"minimum=0,maximum=10"`
+	Reason    string `json:"reason"`
 }
 
 type ingredientBatchGradeResponse struct {
@@ -124,29 +119,16 @@ func NewIngredientGrader(apiKey, model string) *ingredientGrader {
 	}
 }
 
-func (g *ingredientGrader) Ready(ctx context.Context) error {
-	client := openai.NewClient(option.WithAPIKey(g.apiKey))
-	_, err := client.Models.List(ctx)
-	return err
-}
-
 func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]*IngredientGrade, error) {
 	if len(ingredients) == 0 {
 		return nil, nil
 	}
 
-	snapshots := make([]IngredientSnapshot, len(ingredients))
-	items := make([]ingredientBatchItem, len(ingredients))
-	for i, ingredient := range ingredients {
-		snapshot := SnapshotFromKrogerIngredient(ingredient)
-		snapshots[i] = snapshot
-		items[i] = ingredientBatchItem{
-			IngredientID: batchIngredientID(snapshot, i),
-			Ingredient:   snapshot,
-		}
-	}
+	snapshots := lo.Map(ingredients, func(ingredient kroger.Ingredient, _ int) IngredientSnapshot {
+		return SnapshotFromKrogerIngredient(ingredient)
+	})
 
-	prompt, err := buildIngredientGradePrompt(items)
+	prompt, err := buildIngredientGradePrompt(snapshots)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build ingredient grading prompt: %w", err)
 	}
@@ -165,7 +147,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []k
 	}
 	slog.InfoContext(ctx, "Ingredient grading usage", "model", g.model, responseUsageLogAttr(resp.Usage))
 
-	grades, err := parseIngredientGrades(resp.OutputText(), items)
+	grades, err := parseIngredientGrades(resp.OutputText(), snapshots)
 	if err != nil {
 		return nil, err
 	}
@@ -181,15 +163,17 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []k
 	return grades, nil
 }
 
-func buildIngredientGradePrompt(items []ingredientBatchItem) (string, error) {
+func buildIngredientGradePrompt(items []IngredientSnapshot) (string, error) {
+	// TODO tsv instead?
 	body, err := json.MarshalIndent(items, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal ingredient batch: %w", err)
 	}
-	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each ingredient_id exactly.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
+	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each product_id exactly.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
 }
 
-func parseIngredientGrades(body string, items []ingredientBatchItem) ([]*IngredientGrade, error) {
+// recombines by matching on productid
+func parseIngredientGrades(body string, items []IngredientSnapshot) ([]*IngredientGrade, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return nil, fmt.Errorf("empty ingredient grading response from model")
@@ -203,51 +187,44 @@ func parseIngredientGrades(body string, items []ingredientBatchItem) ([]*Ingredi
 		return nil, fmt.Errorf("ingredient grading response count mismatch: got %d want %d", len(parsed.Grades), len(items))
 	}
 
-	grades := make([]*IngredientGrade, len(items))
-	itemIndexByID := make(map[string]int, len(items))
-	for i, item := range items {
-		if strings.TrimSpace(item.IngredientID) == "" {
-			return nil, fmt.Errorf("ingredient batch item %d missing ingredient_id", i)
+	ingMap := lo.SliceToMap(items, func(ing IngredientSnapshot) (string, IngredientSnapshot) {
+		return ing.ProductID, ing
+	})
+
+	var ingrededientGrades []*IngredientGrade
+	seen := map[string]bool{}
+	// should we continue just counting errors and only fail on too many errres?
+	for _, grade := range parsed.Grades {
+		if strings.TrimSpace(grade.ProductID) == "" {
+			return nil, fmt.Errorf("ingredient grade missing ingredient_id")
 		}
-		if _, ok := itemIndexByID[item.IngredientID]; ok {
-			return nil, fmt.Errorf("ingredient batch duplicated ingredient_id %q", item.IngredientID)
-		}
-		itemIndexByID[item.IngredientID] = i
-	}
-	seen := make(map[string]struct{}, len(items))
-	for _, item := range parsed.Grades {
-		ingredientID := strings.TrimSpace(item.IngredientID)
-		if ingredientID == "" {
-			return nil, fmt.Errorf("ingredient grading ingredient_id is required")
-		}
-		index, ok := itemIndexByID[ingredientID]
-		if !ok {
-			return nil, fmt.Errorf("ingredient grading ingredient_id %q not found in request", ingredientID)
-		}
-		if _, ok := seen[ingredientID]; ok {
-			return nil, fmt.Errorf("ingredient grading duplicated ingredient_id %q", ingredientID)
-		}
-		seen[ingredientID] = struct{}{}
-		if item.Score < 0 || item.Score > 10 {
+
+		if grade.Score < 0 || grade.Score > 10 {
 			return nil, fmt.Errorf("ingredient score must be between 0 and 10")
 		}
-		if strings.TrimSpace(item.Reason) == "" {
+
+		if strings.TrimSpace(grade.Reason) == "" {
 			return nil, fmt.Errorf("ingredient grading reason is required")
 		}
-		grades[index] = &IngredientGrade{
-			SchemaVersion: ingredientGradeSchemaV1,
-			Score:         item.Score,
-			Reason:        strings.TrimSpace(item.Reason),
-			Ingredient:    items[index].Ingredient,
+
+		ing, ok := ingMap[grade.ProductID]
+		if !ok {
+			return nil, fmt.Errorf("ingredient batch duplicated ingredient_id %q", grade.ProductID)
 		}
+
+		if seen[grade.ProductID] {
+			return nil, fmt.Errorf("ingredient grading duplicated ingredient_id %q", grade.ProductID)
+		}
+		seen[grade.ProductID] = true
+
+		ingrededientGrades = append(ingrededientGrades, &IngredientGrade{
+			Score:      grade.Score,
+			Reason:     strings.TrimSpace(grade.Reason),
+			Ingredient: ing,
+		})
 	}
 
-	for i, grade := range grades {
-		if grade == nil {
-			return nil, fmt.Errorf("ingredient grading missing ingredient_id %q", items[i].IngredientID)
-		}
-	}
-	return grades, nil
+	return ingrededientGrades, nil
 }
 
 func ingredientGradeJSONSchema() map[string]any {
@@ -296,12 +273,4 @@ func priceToString(price *float32) string {
 		return ""
 	}
 	return fmt.Sprintf("%.2f", *price)
-}
-
-func batchIngredientID(snapshot IngredientSnapshot, index int) string {
-	id := snapshot.Hash()
-	if id == "" {
-		return fmt.Sprintf("ingredient-%d", index)
-	}
-	return id
 }
