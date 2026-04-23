@@ -26,6 +26,7 @@ func loadRuntimeEnv() error {
 			}
 		}
 
+		// TODO make this settable with env var :)
 		if err := loadEncryptedEnv("secrets/envtest"); err != nil {
 			loadErr = err
 		}
@@ -36,10 +37,11 @@ func loadRuntimeEnv() error {
 func loadEncryptedEnv(path string) error {
 	identities, err := loadSSHIdentities()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
 		return fmt.Errorf("load ssh identity for %q: %w", path, err)
+	}
+	if len(identities) == 0 {
+		// should we log
+		return nil
 	}
 
 	return decryptDotEnv(path, identities)
@@ -80,20 +82,24 @@ func loadSSHIdentities() ([]age.Identity, error) {
 	if err != nil || home == "" {
 		return []age.Identity{}, nil
 	}
-	path := filepath.Join(home, ".ssh", "id_ed25519")
-
-	key, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return []age.Identity{}, nil
+	// should we try others
+	paths := []string{filepath.Join(home, ".ssh", "id_ed25519")}
+	var identities []age.Identity
+	for _, path := range paths {
+		key, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
 		}
-		return nil, err
+
+		identity, err := agessh.ParseIdentity(key)
+		if err != nil {
+			return nil, fmt.Errorf("parse ssh identity %q: %w", path, err)
+		}
+		identities = append(identities, identity)
 	}
 
-	identity, err := agessh.ParseIdentity(key)
-	if err != nil {
-		return nil, fmt.Errorf("parse ssh identity %q: %w", path, err)
-	}
-
-	return []age.Identity{identity}, nil
+	return identities, nil
 }
