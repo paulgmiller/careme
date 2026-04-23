@@ -174,6 +174,34 @@ func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
 	}
 }
 
+func TestHomeRoutesAreExplicit(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.Close()
+
+	client := newTestClient(t)
+
+	for _, path := range []string{"/", "/index.html", "/index.htm"} {
+		resp := mustGet(t, client, srv.URL+path)
+		body := readAll(t, resp.Body)
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s expected 200, got %d: %s", path, resp.StatusCode, body)
+		}
+		requireValidHTML(t, path, resp.Header.Get("Content-Type"), body)
+	}
+
+	resp := mustGet(t, client, srv.URL+"/foobar")
+	body := readAll(t, resp.Body)
+	if err := resp.Body.Close(); err != nil {
+		t.Fatalf("failed to close response body: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET /foobar expected 404, got %d: %s", resp.StatusCode, body)
+	}
+}
+
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -197,7 +225,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
-		return mockAuth.WithAuthHTTP(appMiddleware(h, &fakeRequestTracker{}))
+		return mockAuth.WithAuthHTTP(appMiddleware(h))
 	})
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
@@ -205,7 +233,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory).Register(appRoutes)
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth).Register(appRoutes)
-	appRoutes.Handle("/", home{userStorage, locationStorage, mockAuth})
+	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}
 	ro.add(locationServer)

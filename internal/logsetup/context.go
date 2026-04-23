@@ -5,32 +5,14 @@ import (
 	"log/slog"
 
 	"github.com/clerk/clerk-sdk-go/v2"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type contextKey string
 
 const (
-	operationIDContextKey contextKey = "operation_id"
-	sessionIDContextKey   contextKey = "session_id"
+	sessionIDContextKey contextKey = "session_id"
 )
-
-func WithOperationID(ctx context.Context, operationID string) context.Context {
-	if operationID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, operationIDContextKey, operationID)
-}
-
-func OperationIDFromContext(ctx context.Context) (string, bool) {
-	if ctx == nil {
-		return "", false
-	}
-	operationID, ok := ctx.Value(operationIDContextKey).(string)
-	if !ok || operationID == "" {
-		return "", false
-	}
-	return operationID, true
-}
 
 func WithSessionID(ctx context.Context, sessionID string) context.Context {
 	if sessionID == "" {
@@ -64,11 +46,15 @@ func (h *contextHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *contextHandler) Handle(ctx context.Context, record slog.Record) error {
-	if operationID, ok := OperationIDFromContext(ctx); ok {
-		record.AddAttrs(slog.String("operation_id", operationID))
-	}
 	if sessionID, ok := SessionIDFromContext(ctx); ok {
 		record.AddAttrs(slog.String("session_id", sessionID))
+	}
+	spanContext := trace.SpanContextFromContext(ctx)
+	if spanContext.IsValid() {
+		record.AddAttrs(
+			slog.String("trace_id", spanContext.TraceID().String()),
+			slog.String("span_id", spanContext.SpanID().String()),
+		)
 	}
 	// hard dependency on clerk is bad. but plumbg an auth
 	sessionClaims, ok := clerk.SessionClaimsFromContext(ctx)

@@ -48,7 +48,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
-		return authClient.WithAuthHTTP(appMiddleware(h, newRequestTrackerFromEnv()))
+		return authClient.WithAuthHTTP(appMiddleware(h))
 	})
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
@@ -125,7 +125,7 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
-	appRoutes.Handle("/", home{userStorage, locationStorage, authClient})
+	home{userStorage, locationStorage, authClient}.Register(appRoutes)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
