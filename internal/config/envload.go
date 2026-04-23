@@ -84,9 +84,6 @@ func loadSSHIdentities() ([]age.Identity, error) {
 
 	key, err := os.ReadFile(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return []age.Identity{}, nil
-		}
 		return nil, err
 	}
 
