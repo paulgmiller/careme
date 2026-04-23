@@ -26,7 +26,7 @@ func NewStore(c cache.ListCache) store {
 	return store{cache: c}
 }
 
-func (s store) Load(ctx context.Context, key string) (*ai.IngredientGrade, error) {
+func (s store) Load(ctx context.Context, key string) (*ai.InputIngredient, error) {
 	reader, err := s.cache.Get(ctx, key)
 	if err != nil {
 		return nil, err
@@ -35,18 +35,18 @@ func (s store) Load(ctx context.Context, key string) (*ai.IngredientGrade, error
 		_ = reader.Close()
 	}()
 
-	var grade ai.IngredientGrade
-	if err := json.NewDecoder(reader).Decode(&grade); err != nil {
+	var ingredient ai.InputIngredient
+	if err := json.NewDecoder(reader).Decode(&ingredient); err != nil {
 		return nil, err
 	}
-	return &grade, nil
+	return &ingredient, nil
 }
 
-func (s store) Save(ctx context.Context, key string, grade *ai.IngredientGrade) error {
-	if grade == nil {
-		return fmt.Errorf("ingredient grade is required")
+func (s store) Save(ctx context.Context, key string, ingredient *ai.InputIngredient) error {
+	if ingredient == nil {
+		return fmt.Errorf("graded ingredient is required")
 	}
-	body, err := json.Marshal(grade)
+	body, err := json.Marshal(ingredient)
 	if err != nil {
 		return err
 	}

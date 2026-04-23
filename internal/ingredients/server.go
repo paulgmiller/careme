@@ -74,19 +74,27 @@ func (s *server) handleGradedIngredients(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "failed to grade ingredients", http.StatusInternalServerError)
 		return
 	}
-	results := make([]ai.IngredientGrade, 0, len(graded))
+	results := make([]ai.InputIngredient, 0, len(graded))
 	for _, result := range graded {
 		if result.Grade == nil {
 			http.Error(w, "ingredient grading returned no result", http.StatusInternalServerError)
 			return
 		}
-		results = append(results, *result.Grade)
+		results = append(results, result)
 	}
-	slices.SortFunc(results, func(a, b ai.IngredientGrade) int {
-		if a.Score != b.Score {
-			return b.Score - a.Score
+	slices.SortFunc(results, func(a, b ai.InputIngredient) int {
+		ascore := 0
+		bscore := 0
+		if a.Grade != nil {
+			ascore = a.Grade.Score
 		}
-		return strings.Compare(strings.ToLower(a.Ingredient.Description), strings.ToLower(b.Ingredient.Description))
+		if b.Grade != nil {
+			bscore = b.Grade.Score
+		}
+		if ascore != bscore {
+			return bscore - ascore
+		}
+		return strings.Compare(strings.ToLower(a.Description), strings.ToLower(b.Description))
 	})
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

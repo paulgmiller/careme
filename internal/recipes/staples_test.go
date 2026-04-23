@@ -68,17 +68,15 @@ func (s *stubRoutingStaplesProvider) GetIngredients(_ context.Context, _ string,
 	return slices.Clone(s.ingredients), nil
 }
 
-func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
-	results := make([]ai.GradedIngredient, 0, len(ingredients))
+func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
+	results := make([]ai.InputIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
-		results = append(results, ai.GradedIngredient{
-			Ingredient: ingredient,
-			Grade: &ai.IngredientGrade{
-				SchemaVersion: "ingredient-grade-v1",
-				Score:         10,
-				Reason:        "stub",
-				Ingredient:    ai.SnapshotFromKrogerIngredient(ingredient),
-			},
+		results = append(results, ai.InputIngredient{
+			ProductID:   toValue(ingredient.ProductId),
+			Description: toValue(ingredient.Description),
+			Brand:       toValue(ingredient.Brand),
+			Size:        toValue(ingredient.Size),
+			Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 10, Reason: "stub"},
 		})
 	}
 	return results, nil
@@ -264,6 +262,13 @@ func TestGetStaples_PrioritizesCachedIngredientsBeforeReturning(t *testing.T) {
 }
 
 func stringPtr(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func toValue(value *string) string {
 	if value == nil {
 		return ""
 	}

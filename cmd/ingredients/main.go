@@ -58,7 +58,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to grade ingredients: %s", err)
 		}
-		slices.SortFunc(graded, func(a, b ai.GradedIngredient) int {
+		slices.SortFunc(graded, func(a, b ai.InputIngredient) int {
 			ascore := 0
 			bscore := 0
 			if a.Grade != nil {
@@ -70,10 +70,10 @@ func main() {
 			if ascore != bscore {
 				return bscore - ascore
 			}
-			return strings.Compare(strings.ToLower(toString(a.Ingredient.Description)), strings.ToLower(toString(b.Ingredient.Description)))
+			return strings.Compare(strings.ToLower(a.Description), strings.ToLower(b.Description))
 		})
 		for _, result := range graded {
-			for _, cat := range categories(result.Ingredient) {
+			for _, cat := range result.Categories {
 				catMap[cat] += 1
 			}
 			score := 0
@@ -82,7 +82,7 @@ func main() {
 				score = result.Grade.Score
 				reason = result.Grade.Reason
 			}
-			fmt.Printf("%2d/10 %s: %s - %s:($%s) size: %s categories: %v\n", score, toString(result.Ingredient.ProductId), toString(result.Ingredient.Brand), toString(result.Ingredient.Description), toFloat(result.Ingredient.PriceRegular), toString(result.Ingredient.Size), result.Ingredient.Categories)
+			fmt.Printf("%2d/10 %s: %s - %s:($%s) size: %s categories: %v\n", score, result.ProductID, result.Brand, result.Description, result.PriceRegular, result.Size, result.Categories)
 			if strings.TrimSpace(reason) != "" {
 				fmt.Printf("    %s\n", strings.TrimSpace(reason))
 			}

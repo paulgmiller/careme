@@ -8,13 +8,12 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 )
 
 var _ grader = &cachingGrader{}
 
 type baseGrader interface {
-	GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]*ai.IngredientGrade, error)
+	GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error)
 }
 
 type cachingGrader struct {
@@ -32,16 +31,16 @@ func newCachingGrader(grader baseGrader, store store) *cachingGrader {
 	}
 }
 
-func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
-	results := make([]ai.GradedIngredient, len(ingredients))
+func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	results := make([]ai.InputIngredient, len(ingredients))
 	missingIndices := make([]int, 0, len(ingredients))
-	missingIngredients := make([]kroger.Ingredient, 0, len(ingredients))
+	missingIngredients := make([]ai.InputIngredient, 0, len(ingredients))
 
 	for i, ingredient := range ingredients {
 		key := ingredientKey(ingredient)
-		grade, err := c.store.Load(ctx, key)
+		gradedIngredient, err := c.store.Load(ctx, key)
 		if err == nil {
-			results[i] = ai.GradedIngredient{Ingredient: ingredient, Grade: grade}
+			results[i] = *gradedIngredient
 			continue
 		}
 		if !errors.Is(err, cache.ErrNotFound) {
@@ -56,26 +55,23 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []krog
 		return results, nil
 	}
 
-	grades, err := c.grader.GradeIngredients(ctx, missingIngredients)
+	gradedIngredients, err := c.grader.GradeIngredients(ctx, missingIngredients)
 	if err != nil {
 		return nil, err
 	}
-	if len(grades) != len(missingIngredients) {
-		return nil, fmt.Errorf("ingredient grader returned %d grades for %d ingredients", len(grades), len(missingIngredients))
+	if len(gradedIngredients) != len(missingIngredients) {
+		return nil, fmt.Errorf("ingredient grader returned %d ingredients for %d inputs", len(gradedIngredients), len(missingIngredients))
 	}
-	for i, grade := range grades {
+	for i, gradedIngredient := range gradedIngredients {
 		ingredient := missingIngredients[i]
-		if grade == nil {
+		if gradedIngredient.Grade == nil {
 			return nil, fmt.Errorf("ingredient grader returned nil grade for %q", ingredientLabel(ingredient))
 		}
 		key := ingredientKey(ingredient)
-		if err := c.store.Save(ctx, key, grade); err != nil {
+		if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
 			slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(ingredient), "error", err)
 		}
-		results[missingIndices[i]] = ai.GradedIngredient{
-			Ingredient: ingredient,
-			Grade:      grade,
-		}
+		results[missingIndices[i]] = gradedIngredient
 	}
 
 	return results, nil

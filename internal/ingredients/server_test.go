@@ -16,11 +16,11 @@ import (
 )
 
 type stubGrader struct {
-	fn  func(ingredients []kroger.Ingredient) []ai.GradedIngredient
+	fn  func(ingredients []kroger.Ingredient) []ai.InputIngredient
 	err error
 }
 
-func (s stubGrader) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
+func (s stubGrader) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -148,25 +148,17 @@ func TestServerReturnsGradedIngredientsJSON(t *testing.T) {
 
 	mux := http.NewServeMux()
 	NewHandler(cacheStore, stubGrader{
-		fn: func(ingredients []kroger.Ingredient) []ai.GradedIngredient {
-			return []ai.GradedIngredient{
+		fn: func(ingredients []kroger.Ingredient) []ai.InputIngredient {
+			return []ai.InputIngredient{
 				{
-					Ingredient: ingredients[0],
-					Grade: &ai.IngredientGrade{
-						SchemaVersion: "ingredient-grade-v1",
-						Score:         9,
-						Reason:        "Fresh and flexible.",
-						Ingredient:    ai.SnapshotFromKrogerIngredient(ingredients[0]),
-					},
+					ProductID:   "a",
+					Description: "Asparagus",
+					Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 9, Reason: "Fresh and flexible."},
 				},
 				{
-					Ingredient: ingredients[1],
-					Grade: &ai.IngredientGrade{
-						SchemaVersion: "ingredient-grade-v1",
-						Score:         2,
-						Reason:        "Snack food with limited recipe value.",
-						Ingredient:    ai.SnapshotFromKrogerIngredient(ingredients[1]),
-					},
+					ProductID:   "b",
+					Description: "Potato Chips",
+					Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 2, Reason: "Snack food with limited recipe value."},
 				},
 			}
 		},

@@ -21,7 +21,7 @@ const (
 )
 
 type Service interface {
-	GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error)
+	GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error)
 	PrioritizeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error)
 }
 
@@ -31,23 +31,24 @@ type Manager interface {
 }
 
 type grader interface {
-	GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error)
+	GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error)
 }
 
 type rubberstamp struct{}
 
-func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
-	results := make([]ai.GradedIngredient, 0, len(ingredients))
+func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
+	results := make([]ai.InputIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
-		results = append(results, ai.GradedIngredient{
-			Ingredient: ingredient,
-			Grade: &ai.IngredientGrade{
-				SchemaVersion: "ingredient-grade-disabled",
-				Score:         10,
-				Reason:        "ingredient grading disabled",
-				Ingredient:    ai.SnapshotFromKrogerIngredient(ingredient),
-			},
-		})
+		item, err := inputIngredientFromKrogerIngredient(ingredient)
+		if err != nil {
+			return nil, err
+		}
+		item.Grade = &ai.IngredientGrade{
+			SchemaVersion: "ingredient-grade-disabled",
+			Score:         10,
+			Reason:        "ingredient grading disabled",
+		}
+		results = append(results, item)
 	}
 	return results, nil
 }
@@ -78,45 +79,49 @@ func NewManager(cfg *config.Config, c cache.ListCache) Manager {
 
 func (m *multiGrader) Wait() {}
 
-func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
+func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
 	return m.gradeInParallel(ctx, ingredients)
 }
 
-func (m *multiGrader) gradeInParallel(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.GradedIngredient, error) {
+func (m *multiGrader) gradeInParallel(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
 	if len(ingredients) == 0 {
 		return nil, nil
 	}
 
 	type groupedIngredient struct {
-		ingredient kroger.Ingredient
-		positions  []int
+		input     ai.InputIngredient
+		positions []int
 	}
 
 	unique := make([]groupedIngredient, 0, len(ingredients))
 	indexByKey := make(map[string]int, len(ingredients))
 	for i, ingredient := range ingredients {
-		key := ingredientKey(ingredient)
+		input, err := inputIngredientFromKrogerIngredient(ingredient)
+		if err != nil {
+			return nil, err
+		}
+		key := ingredientKey(input)
 		if idx, ok := indexByKey[key]; ok {
 			unique[idx].positions = append(unique[idx].positions, i)
 			continue
 		}
 		indexByKey[key] = len(unique)
 		unique = append(unique, groupedIngredient{
-			ingredient: ingredient,
-			positions:  []int{i},
+			input:     input,
+			positions: []int{i},
 		})
 	}
 
-	uniqueResults := make([]ai.GradedIngredient, len(unique))
+	uniqueResults := make([]ai.InputIngredient, len(unique))
 	errs := make([]error, len(unique))
 	var batches sync.WaitGroup
 	for start := 0; start < len(unique); start += ingredientGradeBatchSize {
 		start := start
 		end := min(start+ingredientGradeBatchSize, len(unique))
 		batches.Go(func() {
-			batchIngredients := make([]kroger.Ingredient, 0, end-start)
+			batchIngredients := make([]ai.InputIngredient, 0, end-start)
 			for _, item := range unique[start:end] {
-				batchIngredients = append(batchIngredients, item.ingredient)
+				batchIngredients = append(batchIngredients, item.input)
 			}
 
 			graded, err := m.grader.GradeIngredients(ctx, batchIngredients)
@@ -140,20 +145,17 @@ func (m *multiGrader) gradeInParallel(ctx context.Context, ingredients []kroger.
 
 	for i, err := range errs {
 		if err != nil {
-			return nil, fmt.Errorf("grade ingredient %q: %w", ingredientLabel(unique[i].ingredient), err)
+			return nil, fmt.Errorf("grade ingredient %q: %w", ingredientLabel(unique[i].input), err)
 		}
 		if uniqueResults[i].Grade == nil {
-			return nil, fmt.Errorf("ingredient grader returned no result for %q", ingredientLabel(unique[i].ingredient))
+			return nil, fmt.Errorf("ingredient grader returned no result for %q", ingredientLabel(unique[i].input))
 		}
 	}
 
-	results := make([]ai.GradedIngredient, len(ingredients))
+	results := make([]ai.InputIngredient, len(ingredients))
 	for i, item := range unique {
 		for _, pos := range item.positions {
-			results[pos] = ai.GradedIngredient{
-				Ingredient: ingredients[pos],
-				Grade:      uniqueResults[i].Grade,
-			}
+			results[pos] = uniqueResults[i]
 		}
 	}
 	return results, nil
@@ -173,9 +175,9 @@ func (m *multiGrader) PrioritizeIngredients(ctx context.Context, ingredients []k
 	}
 
 	scored := make([]scoredIngredient, 0, len(graded))
-	for _, result := range graded {
+	for i, result := range graded {
 		entry := scoredIngredient{
-			ingredient: result.Ingredient,
+			ingredient: ingredients[i],
 			score:      10,
 			keep:       true,
 		}
@@ -190,7 +192,7 @@ func (m *multiGrader) PrioritizeIngredients(ctx context.Context, ingredients []k
 		if a.score != b.score {
 			return b.score - a.score
 		}
-		return strings.Compare(strings.ToLower(ingredientLabel(a.ingredient)), strings.ToLower(ingredientLabel(b.ingredient)))
+		return strings.Compare(strings.ToLower(loFromPtr(a.ingredient.Description)), strings.ToLower(loFromPtr(b.ingredient.Description)))
 	})
 
 	prioritized := make([]kroger.Ingredient, 0, len(scored))
@@ -216,19 +218,36 @@ func (m *multiGrader) PrioritizeIngredients(ctx context.Context, ingredients []k
 	return prioritized, nil
 }
 
-func ingredientKey(ingredient kroger.Ingredient) string {
-	snapshot := ai.SnapshotFromKrogerIngredient(ingredient)
-	return cacheKey(snapshot.Hash())
+func inputIngredientFromKrogerIngredient(ingredient kroger.Ingredient) (ai.InputIngredient, error) {
+	item := ai.InputIngredient{
+		ProductID:    strings.TrimSpace(loFromPtr(ingredient.ProductId)),
+		AisleNumber:  strings.TrimSpace(loFromPtr(ingredient.AisleNumber)),
+		Brand:        strings.TrimSpace(loFromPtr(ingredient.Brand)),
+		Description:  strings.TrimSpace(loFromPtr(ingredient.Description)),
+		Size:         strings.TrimSpace(loFromPtr(ingredient.Size)),
+		PriceRegular: priceToString(ingredient.PriceRegular),
+		PriceSale:    priceToString(ingredient.PriceSale),
+		Categories:   categoriesFromPtr(ingredient.Categories),
+	}
+	item = ai.NormalizeInputIngredient(item)
+	if item.ProductID == "" {
+		return ai.InputIngredient{}, fmt.Errorf("ingredient product_id is required for %q", toStr(ingredient.Description)))
+	}
+	return item, nil
 }
 
-func ingredientLabel(ingredient kroger.Ingredient) string {
-	if value := strings.TrimSpace(loFromPtr(ingredient.Description)); value != "" {
+func ingredientKey(ingredient ai.InputIngredient) string {
+	return cacheKey(ai.NormalizeInputIngredient(ingredient).Hash())
+}
+
+func ingredientLabel(ingredient ai.InputIngredient) string {
+	if value := strings.TrimSpace(ingredient.Description); value != "" {
 		return value
 	}
-	if value := strings.TrimSpace(loFromPtr(ingredient.Brand)); value != "" {
+	if value := strings.TrimSpace(ingredient.Brand); value != "" {
 		return value
 	}
-	return strings.TrimSpace(loFromPtr(ingredient.ProductId))
+	return strings.TrimSpace(ingredient.ProductID)
 }
 
 func loFromPtr(ptr *string) string {
@@ -236,4 +255,21 @@ func loFromPtr(ptr *string) string {
 		return ""
 	}
 	return *ptr
+}
+
+urn "unknown ingredient"
+}
+
+func categoriesFromPtr(ptr *[]string) []string {
+	if ptr == nil {
+		return nil
+	}
+	return append([]string(nil), (*ptr)...)
+}
+
+func priceToString(price *float32) string {
+	if price == nil {
+		return ""
+	}
+	return fmt.Sprintf("%.2f", *price)
 }
