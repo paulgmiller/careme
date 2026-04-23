@@ -16,6 +16,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/config"
 	"careme/internal/ingredients"
+	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
@@ -57,6 +58,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
 	watchdogServer := watchdog.Server{}
+	ingredientGrader := ingredientgrading.NewManager(cfg, cache)
 
 	var generator recipes.ExtGenerator
 	var waitFns []func()
@@ -66,6 +68,7 @@ func runServer(cfg *config.Config, addr string) error {
 	} else {
 		mc := critique.NewManager(cfg, cache)
 		ro.add(mc)
+		ro.add(ingredientGrader)
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
 		ro.add(aiclient)
 		staples, err := recipes.NewCachedStaplesService(cfg, cache)
@@ -74,11 +77,11 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		watchdogServer.Add("staples", staples, 6.*time.Hour)
 		ss := recipes.StatusStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, mc, staples, ss)
+		generator, err = recipes.NewGenerator(aiclient, mc, ingredientGrader, staples, ss)
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
-		waitFns = append(waitFns, mc.Wait)
+		waitFns = append(waitFns, mc.Wait, ingredientGrader.Wait)
 	}
 	watchdogServer.Register(infraRoutes)
 
@@ -109,7 +112,7 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/critiques", critique.AdminCritiquesPage(critique.NewStore(cache), recipeIO))
-	ingredientsHandler := ingredients.NewHandler(cache)
+	ingredientsHandler := ingredients.NewHandler(cache, ingredientGrader)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 	appRoutes.Handle("/critiques/{hash}", critique.CritiquePage(critique.NewStore(cache), recipeIO))

@@ -33,6 +33,7 @@ type captureRegenerateAIClient struct {
 
 type captureGenerateAIClient struct {
 	shoppingList *ai.ShoppingList
+	ingredients  []kroger.Ingredient
 }
 
 type sequenceAIClient struct {
@@ -57,6 +58,13 @@ type captureWineStaplesProvider struct {
 	mu        sync.Mutex
 	searches  []string
 	responses map[string][]kroger.Ingredient
+}
+
+type captureIngredientGrader struct {
+	locationHash string
+	ingredients  []kroger.Ingredient
+	prioritized  []kroger.Ingredient
+	err          error
 }
 
 func (c *captureWineQuestionAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
@@ -121,6 +129,7 @@ func (c *captureRegenerateAIClient) Ready(ctx context.Context) error {
 }
 
 func (c *captureGenerateAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
+	c.ingredients = append([]kroger.Ingredient(nil), ingredients...)
 	if c.shoppingList != nil {
 		return c.shoppingList, nil
 	}
@@ -238,6 +247,18 @@ func (s *captureWineStaplesProvider) GetIngredients(_ context.Context, _ string,
 	return slices.Clone(s.responses[searchTerm]), nil
 }
 
+func (c *captureIngredientGrader) PrioritizeIngredients(_ context.Context, locationHash string, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
+	c.locationHash = locationHash
+	c.ingredients = append([]kroger.Ingredient(nil), ingredients...)
+	if c.err != nil {
+		return nil, c.err
+	}
+	if c.prioritized != nil {
+		return append([]kroger.Ingredient(nil), c.prioritized...), nil
+	}
+	return append([]kroger.Ingredient(nil), ingredients...), nil
+}
+
 func (s *captureWineStaplesProvider) searchTerms() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -349,6 +370,52 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 	if aiStub.recipe.Title != "Salmon" {
 		t.Fatalf("expected recipe title %q, got %q", "Salmon", aiStub.recipe.Title)
 	}
+}
+
+func TestGenerateRecipes_PrioritizesIngredientsBeforeAI(t *testing.T) {
+	params := DefaultParams(&locations.Location{
+		ID:    "70100023",
+		Name:  "Test Store",
+		State: "WA",
+	}, time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC))
+
+	steak := kroger.Ingredient{Description: loPtr("Ribeye Steak")}
+	chips := kroger.Ingredient{Description: loPtr("Potato Chips")}
+	staples := &cachedStaplesService{
+		cache: IO(cache.NewInMemoryCache()),
+		provider: &stubStaplesProvider{
+			ingredients: []kroger.Ingredient{chips, steak},
+		},
+	}
+	aiStub := &captureGenerateAIClient{
+		shoppingList: &ai.ShoppingList{
+			ResponseID: "resp-123",
+			Recipes:    []ai.Recipe{{Title: "Steak Dinner"}},
+		},
+	}
+	grader := &captureIngredientGrader{
+		prioritized: []kroger.Ingredient{steak},
+	}
+	g := &generatorService{
+		aiClient:         aiStub,
+		critiquer:        &captureCritiqueService{},
+		ingredientGrader: grader,
+		staples:          staples,
+		statusWriter:     noopstatuswriter{},
+	}
+
+	got, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Len(t, aiStub.ingredients, 1)
+	require.NotNil(t, aiStub.ingredients[0].Description)
+	assert.Equal(t, "Ribeye Steak", *aiStub.ingredients[0].Description)
+	assert.Equal(t, params.LocationHash(), grader.locationHash)
+	require.Len(t, grader.ingredients, 2)
+	require.NotNil(t, grader.ingredients[0].Description)
+	require.NotNil(t, grader.ingredients[1].Description)
+	assert.Equal(t, "Potato Chips", *grader.ingredients[0].Description)
+	assert.Equal(t, "Ribeye Steak", *grader.ingredients[1].Description)
 }
 
 func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstruction(t *testing.T) {
