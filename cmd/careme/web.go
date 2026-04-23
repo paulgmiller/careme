@@ -122,7 +122,7 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
-	appRoutes.Handle("/", home{userStorage, locationStorage, authClient})
+	home{userStorage, locationStorage, authClient}.Register(appRoutes)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
