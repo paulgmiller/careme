@@ -20,7 +20,6 @@ import (
 
 const (
 	defaultIngredientGradeModel = openai.ChatModelGPT5Mini
-	ingredientGradeSchemaV1     = "ingredient-grade-v1"
 )
 
 const ingredientGradeSystemInstruction = `
@@ -101,16 +100,13 @@ type ingredientBatchGradeResponse struct {
 }
 
 type ingredientGrader struct {
-	apiKey string
-	model  string
-	schema map[string]any
+	apiKey       string
+	model        string
+	cacheVersion string
+	schema       map[string]any
 }
 
-func IngredientGradeCacheVersion(model string) string {
-	return ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction, ingredientGradeSchemaV1)
-}
-
-func ingredientGradeCacheVersion(model, systemInstruction, schemaVersion string) string {
+func ingredientGradeCacheVersion(model, systemInstruction string) string {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		model = defaultIngredientGradeModel
@@ -119,7 +115,6 @@ func ingredientGradeCacheVersion(model, systemInstruction, schemaVersion string)
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, model))
 	lo.Must(io.WriteString(fnv, systemInstruction))
-	lo.Must(io.WriteString(fnv, schemaVersion))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
@@ -129,10 +124,15 @@ func NewIngredientGrader(apiKey, model string) *ingredientGrader {
 		model = defaultIngredientGradeModel
 	}
 	return &ingredientGrader{
-		apiKey: strings.TrimSpace(apiKey),
-		model:  model,
-		schema: ingredientGradeJSONSchema(),
+		apiKey:       strings.TrimSpace(apiKey),
+		model:        model,
+		cacheVersion: ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction),
+		schema:       ingredientGradeJSONSchema(),
 	}
+}
+
+func (g *ingredientGrader) CacheVersion() string {
+	return g.cacheVersion
 }
 
 func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []InputIngredient) ([]InputIngredient, error) {

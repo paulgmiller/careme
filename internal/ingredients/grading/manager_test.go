@@ -22,6 +22,10 @@ type stubGradeBackend struct {
 	calls  [][]ai.InputIngredient
 }
 
+func (s *stubGradeBackend) CacheVersion() string {
+	return testIngredientGradeCacheVersion
+}
+
 func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -52,7 +56,7 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 func TestCachingGraderBatchesMissingIngredientsInChunksOf30(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
-	grader := newCachingGrader(backend, cacheStore, testIngredientGradeCacheVersion)
+	grader := newCachingGrader(backend, cacheStore)
 
 	ingredients := make([]kroger.Ingredient, 65)
 	for i := range ingredients {
@@ -78,7 +82,7 @@ func TestCachingGraderBatchesMissingIngredientsInChunksOf30(t *testing.T) {
 func TestCachingGraderSkipsIngredientsThatAlreadyHaveGrades(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
-	grader := newCachingGrader(backend, cacheStore, testIngredientGradeCacheVersion)
+	grader := newCachingGrader(backend, cacheStore)
 
 	preGraded := ai.InputIngredient{
 		ProductID:   "ingredient-00",
@@ -107,8 +111,7 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
 	manager := &multiGrader{
-		cacheVersion: testIngredientGradeCacheVersion,
-		grader:       newCachingGrader(backend, cacheStore, testIngredientGradeCacheVersion),
+		grader: newCachingGrader(backend, cacheStore),
 	}
 
 	ingredients := make([]kroger.Ingredient, 65)
@@ -131,8 +134,7 @@ func TestMultiGraderDedupesBeforeBatching(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
 	manager := &multiGrader{
-		cacheVersion: testIngredientGradeCacheVersion,
-		grader:       newCachingGrader(backend, cacheStore, testIngredientGradeCacheVersion),
+		grader: newCachingGrader(backend, cacheStore),
 	}
 
 	ingredients := make([]kroger.Ingredient, 0, 70)
@@ -155,8 +157,7 @@ func TestMultiGraderDedupesBeforeBatching(t *testing.T) {
 
 func TestGradeIngredientsRejectsBlankProductID(t *testing.T) {
 	manager := &multiGrader{
-		cacheVersion: testIngredientGradeCacheVersion,
-		grader:       newCachingGrader(&stubGradeBackend{}, NewStore(cache.NewInMemoryCache()), testIngredientGradeCacheVersion),
+		grader: newCachingGrader(&stubGradeBackend{}, NewStore(cache.NewInMemoryCache())),
 	}
 
 	_, err := manager.GradeIngredients(t.Context(), []kroger.Ingredient{{Description: strPtr("Asparagus")}})

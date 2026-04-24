@@ -15,6 +15,7 @@ var _ grader = &cachingGrader{}
 
 type baseGrader interface {
 	GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error)
+	CacheVersion() string
 }
 
 type cachingGrader struct {
@@ -23,10 +24,11 @@ type cachingGrader struct {
 	store        store
 }
 
-func newCachingGrader(grader baseGrader, store store, cacheVersion string) *cachingGrader {
+func newCachingGrader(grader baseGrader, store store) *cachingGrader {
 	if grader == nil {
 		panic("ingredient grader must not be nil")
 	}
+	cacheVersion := grader.CacheVersion()
 	if cacheVersion == "" {
 		panic("ingredient grade cache version must not be empty")
 	}
@@ -48,7 +50,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 			return lookupResult{cached: &ingredient}, nil
 		}
 
-		key := ingredientKey(c.cacheVersion, ingredient)
+		key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
 		gradedIngredient, err := c.store.Load(ctx, key)
 		if err == nil {
 			return lookupResult{cached: gradedIngredient}, nil
@@ -91,7 +93,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 		if gradedIngredient.Grade == nil {
 			return nil, fmt.Errorf("ingredient grader returned nil grade for %q", ingredientLabel(gradedIngredient))
 		}
-		key := ingredientKey(c.cacheVersion, gradedIngredient)
+		key := cacheKey(c.cacheVersion + "/" + ingredientHash(gradedIngredient))
 		if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
 			slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(gradedIngredient), "error", err)
 		}
