@@ -33,7 +33,7 @@ type GeneratedImage struct {
 	Body io.Reader
 }
 
-// todo collapse closer to kroger.Ingrededient but bring that up here.
+// how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` // should this and price be numbers? need units then

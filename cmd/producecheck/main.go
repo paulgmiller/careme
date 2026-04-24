@@ -9,7 +9,6 @@ import (
 	"strings"
 	"unicode"
 
-	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/recipes"
@@ -17,10 +16,6 @@ import (
 	"github.com/samber/lo"
 	"golang.org/x/text/unicode/norm"
 )
-
-type staplesProvider interface {
-	FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
-}
 
 func main() {
 	var locationID string
