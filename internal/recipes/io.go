@@ -9,7 +9,6 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/feedback"
 
@@ -97,8 +96,7 @@ func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generato
 	return &params, nil
 }
 
-func (rio recipeio) IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error) {
-	// honor legacy hashes? I don't think so gets converted in server
+func (rio recipeio) IngredientsFromCache(ctx context.Context, hash string) ([]ai.InputIngredient, error) {
 	primaryKey := ingredientsCachePrefix + hash
 	ingredientBlob, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {
@@ -110,14 +108,15 @@ func (rio recipeio) IngredientsFromCache(ctx context.Context, hash string) ([]kr
 		}
 	}()
 
-	var ingredients []kroger.Ingredient
+	// this should be back compat with kroger.Ingredient
+	var ingredients []ai.InputIngredient
 	if err := json.NewDecoder(ingredientBlob).Decode(&ingredients); err != nil {
 		return nil, err
 	}
 	return ingredients, nil
 }
 
-func (rio recipeio) SaveIngredients(ctx context.Context, hash string, ingredients []kroger.Ingredient) error {
+func (rio recipeio) SaveIngredients(ctx context.Context, hash string, ingredients []ai.InputIngredient) error {
 	ingredientsJSON, err := json.Marshal(ingredients)
 	if err != nil {
 		return err

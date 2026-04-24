@@ -2,7 +2,6 @@ package grading
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"testing"
@@ -49,63 +48,6 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 	return out, nil
 }
 
-func TestPrioritizeIngredientsSortsAndFiltersLowScores(t *testing.T) {
-	good := kroger.Ingredient{ProductId: strPtr("good-1"), Description: strPtr("Asparagus")}
-	bad := kroger.Ingredient{ProductId: strPtr("bad-1"), Description: strPtr("Potato Chips")}
-	goodInput, err := inputIngredientFromKrogerIngredient(good)
-	require.NoError(t, err)
-	badInput, err := inputIngredientFromKrogerIngredient(bad)
-	require.NoError(t, err)
-	backend := &stubGradeBackend{
-		grades: map[string]ai.InputIngredient{
-			ingredientKey(goodInput): {
-				ProductID:   goodInput.ProductID,
-				Description: goodInput.Description,
-				Grade: &ai.IngredientGrade{
-					SchemaVersion: "ingredient-grade-v1",
-					Score:         9,
-					Reason:        "Fresh vegetable.",
-				},
-			},
-			ingredientKey(badInput): {
-				ProductID:   badInput.ProductID,
-				Description: badInput.Description,
-				Grade: &ai.IngredientGrade{
-					SchemaVersion: "ingredient-grade-v1",
-					Score:         1,
-					Reason:        "Snack food.",
-				},
-			},
-		},
-	}
-
-	manager := &multiGrader{
-		grader:    newCachingGrader(backend, NewStore(cache.NewInMemoryCache())),
-		threshold: 3,
-		minimum:   1,
-	}
-
-	got, err := manager.PrioritizeIngredients(t.Context(), []kroger.Ingredient{bad, good})
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, "Asparagus", *got[0].Description)
-}
-
-func TestPrioritizeIngredientsFallsBackToOriginalWhenGradingFails(t *testing.T) {
-	ingredient := kroger.Ingredient{ProductId: strPtr("chicken-1"), Description: strPtr("Chicken")}
-	backend := &stubGradeBackend{err: errors.New("boom")}
-	manager := &multiGrader{
-		grader:    newCachingGrader(backend, NewStore(cache.NewInMemoryCache())),
-		threshold: 3,
-		minimum:   1,
-	}
-
-	got, err := manager.PrioritizeIngredients(t.Context(), []kroger.Ingredient{ingredient})
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, "Chicken", *got[0].Description)
-}
-
 func TestCachingGraderBatchesMissingIngredientsInChunksOf30(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
@@ -120,7 +62,7 @@ func TestCachingGraderBatchesMissingIngredientsInChunksOf30(t *testing.T) {
 
 	inputs := make([]ai.InputIngredient, len(ingredients))
 	for i, ingredient := range ingredients {
-		input, err := inputIngredientFromKrogerIngredient(ingredient)
+		input, err := InputIngredientFromKrogerIngredient(ingredient)
 		require.NoError(t, err)
 		inputs[i] = input
 	}
@@ -136,9 +78,7 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
 	manager := &multiGrader{
-		grader:    newCachingGrader(backend, cacheStore),
-		threshold: 3,
-		minimum:   1,
+		grader: newCachingGrader(backend, cacheStore),
 	}
 
 	ingredients := make([]kroger.Ingredient, 65)
@@ -161,9 +101,7 @@ func TestMultiGraderDedupesBeforeBatching(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
 	manager := &multiGrader{
-		grader:    newCachingGrader(backend, cacheStore),
-		threshold: 3,
-		minimum:   1,
+		grader: newCachingGrader(backend, cacheStore),
 	}
 
 	ingredients := make([]kroger.Ingredient, 0, 70)
@@ -186,9 +124,7 @@ func TestMultiGraderDedupesBeforeBatching(t *testing.T) {
 
 func TestGradeIngredientsRejectsBlankProductID(t *testing.T) {
 	manager := &multiGrader{
-		grader:    newCachingGrader(&stubGradeBackend{}, NewStore(cache.NewInMemoryCache())),
-		threshold: 3,
-		minimum:   1,
+		grader: newCachingGrader(&stubGradeBackend{}, NewStore(cache.NewInMemoryCache())),
 	}
 
 	_, err := manager.GradeIngredients(t.Context(), []kroger.Ingredient{{Description: strPtr("Asparagus")}})

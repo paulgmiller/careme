@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/recipes"
@@ -18,7 +19,7 @@ import (
 )
 
 type staplesProvider interface {
-	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
+	FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
 }
 
 func main() {

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/albertsons"
 	"careme/internal/brightdata"
 	"careme/internal/cache"
@@ -27,7 +28,8 @@ import (
 )
 
 // todo make this a indepenedent ingredient object not kroger.
-type staplesProvider interface {
+// we're cheating and making the cache do the conversion for now but all underlying provider should create input ingredients
+type krogerProvider interface {
 	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
 }
@@ -37,28 +39,16 @@ type identityProvider interface {
 	Signature() string
 }
 
+type backendStaplesProvider interface {
+	identityProvider
+	krogerProvider
+}
+
 type routingStaplesProvider struct {
 	backends []backendStaplesProvider
 }
 
-type backendStaplesProvider interface {
-	IsID(locationID string) bool
-	Signature() string
-	staplesProvider
-}
-
-type ingredientio interface {
-	SaveIngredients(ctx context.Context, hash string, ingredients []kroger.Ingredient) error
-	IngredientsFromCache(ctx context.Context, hash string) ([]kroger.Ingredient, error)
-}
-
-type cachedStaplesService struct {
-	provider staplesProvider
-	cache    ingredientio
-	grader   ingredientgrading.Service
-}
-
-func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
+func NewStaplesProvider(cfg *config.Config) (krogerProvider, error) {
 	kclient, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -70,18 +60,6 @@ func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 
 	return routingStaplesProvider{
 		backends: backends,
-	}, nil
-}
-
-func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader ingredientgrading.Service) (*cachedStaplesService, error) {
-	provider, err := NewStaplesProvider(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create staples provider: %w", err)
-	}
-	return &cachedStaplesService{
-		provider: provider,
-		cache:    IO(c),
-		grader:   grader,
 	}, nil
 }
 
@@ -101,28 +79,61 @@ func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID s
 	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
 }
 
-func (s *cachedStaplesService) GetStaples(ctx context.Context, p *GeneratorParams) ([]kroger.Ingredient, error) {
+type ingredientio interface {
+	SaveIngredients(ctx context.Context, hash string, ingredients []ai.InputIngredient) error
+	IngredientsFromCache(ctx context.Context, hash string) ([]ai.InputIngredient, error)
+}
+
+type cachedStaplesService struct {
+	provider krogerProvider
+	cache    ingredientio
+	grader   ingredientgrading.Service
+}
+
+func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader ingredientgrading.Service) (*cachedStaplesService, error) {
+	provider, err := NewStaplesProvider(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create staples provider: %w", err)
+	}
+	rio := IO(c)
+	return &cachedStaplesService{
+		provider: provider,
+		cache:    rio,
+		grader:   grader,
+	}, nil
+}
+
+func (s *cachedStaplesService) GetStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
 	lochash := p.LocationHash()
 
 	if cachedIngredients, err := s.cache.IngredientsFromCache(ctx, lochash); err == nil {
 		slog.InfoContext(ctx, "serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
-		return s.prioritizedStaples(ctx, cachedIngredients), nil
+		return cachedIngredients, nil
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
 	}
 
+	// this does grading
 	ingredients, err := s.provider.FetchStaples(ctx, p.Location.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", p.Location.ID, err)
 	}
-	ingredients = uniqueByDescription(ingredients)
+	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
+		return *i.ProductId
+	})
 	mutable.Shuffle(ingredients)
 
-	if err := s.cache.SaveIngredients(ctx, lochash, ingredients); err != nil {
+	// does this belong hehe?
+	inputs, err := s.gradeIngredients(ctx, ingredients)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.cache.SaveIngredients(ctx, lochash, inputs); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
-	return s.prioritizedStaples(ctx, ingredients), nil
+	return inputs, nil
 }
 
 // this is not actually wine specificexcept that GetIngredients only does wine requests from ui
@@ -136,7 +147,7 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error) {
+func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error) {
 	cacheKey := wineIngredientsCacheKey(searchTerm, locationID, date)
 	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "style", searchTerm)
 
@@ -149,9 +160,17 @@ func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID st
 		logger.ErrorContext(ctx, "failed to read cached ingredients", "error", err)
 	}
 
-	wines, err = s.provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	krogerwines, err := s.provider.GetIngredients(ctx, locationID, searchTerm, skip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for %q: %w", searchTerm, err)
+	}
+	wines = []ai.InputIngredient{}
+	for _, kwine := range krogerwines {
+		wine, err := ingredientgrading.InputIngredientFromKrogerIngredient(kwine)
+		if err != nil {
+			return nil, err
+		}
+		wines = append(wines, wine)
 	}
 	logger.InfoContext(ctx, "found ingredients", "count", len(wines))
 
@@ -175,16 +194,25 @@ func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
 	return err
 }
 
-func (s *cachedStaplesService) prioritizedStaples(ctx context.Context, ingredients []kroger.Ingredient) []kroger.Ingredient {
-	if s.grader == nil {
-		return ingredients
+// this shold go away when everyone returns inputingredients
+func (s *cachedStaplesService) gradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
+	if s.grader != nil {
+		graded, err := s.grader.GradeIngredients(ctx, ingredients)
+		if err == nil {
+			return graded, nil
+		}
+		slog.ErrorContext(ctx, "failed to grade cached staples", "error", err)
 	}
-	prioritized, err := s.grader.PrioritizeIngredients(ctx, ingredients)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to prioritize cached staples", "error", err)
-		return ingredients
+
+	inputs := make([]ai.InputIngredient, 0, len(ingredients))
+	for _, ingredient := range ingredients {
+		input, err := ingredientgrading.InputIngredientFromKrogerIngredient(ingredient)
+		if err != nil {
+			return nil, err
+		}
+		inputs = append(inputs, input)
 	}
-	return prioritized
+	return inputs, nil
 }
 
 func staplesSignatureForLocation(locationID string) string {

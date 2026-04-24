@@ -58,21 +58,20 @@ func runServer(cfg *config.Config, addr string) error {
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
 	watchdogServer := watchdog.Server{}
+	// TODO  make the mock more transparent?
+	grader := ingredientgrading.NewManager(cfg, cache)
 
 	var generator recipes.ExtGenerator
-	var grader ingredientgrading.Service
 	var waitFns []func()
-
 	if cfg.Mocks.Enable {
 		generator = recipes.NewMockGenerator()
 	} else {
 		mc := critique.NewManager(cfg, cache)
 		ro.add(mc)
-		ingredientGrader := ingredientgrading.NewManager(cfg, cache)
-		grader = ingredientGrader
+
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
 		ro.add(aiclient)
-		staples, err := recipes.NewCachedStaplesService(cfg, cache, ingredientGrader)
+		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
 		if err != nil {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}
@@ -82,7 +81,7 @@ func runServer(cfg *config.Config, addr string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
-		waitFns = append(waitFns, mc.Wait, ingredientGrader.Wait)
+		waitFns = append(waitFns, mc.Wait)
 	}
 	watchdogServer.Register(infraRoutes)
 

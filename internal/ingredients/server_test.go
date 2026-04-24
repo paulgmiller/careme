@@ -1,7 +1,6 @@
 package ingredients
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,29 +9,9 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 )
-
-type stubGrader struct {
-	fn  func(ingredients []kroger.Ingredient) []ai.InputIngredient
-	err error
-}
-
-func (s stubGrader) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
-	if s.fn == nil {
-		return nil, nil
-	}
-	return s.fn(ingredients), nil
-}
-
-func (s stubGrader) PrioritizeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
-	return ingredients, nil
-}
 
 func TestServerReturnsIngredientsJSON(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
@@ -45,14 +24,13 @@ func TestServerReturnsIngredientsJSON(t *testing.T) {
 		t.Fatalf("SaveParams failed: %v", err)
 	}
 
-	description := "Honeycrisp apple"
-	entries := []kroger.Ingredient{{Description: &description}}
+	entries := []ai.InputIngredient{{ProductID: "apple-1", Description: "Honeycrisp apple"}}
 	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
 		t.Fatalf("SaveIngredients failed: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, stubGrader{}).Register(mux)
+	NewHandler(cacheStore, nil).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash(), nil)
 	rr := httptest.NewRecorder()
@@ -80,14 +58,13 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 		t.Fatalf("SaveParams failed: %v", err)
 	}
 
-	description := "Broccoli"
-	entries := []kroger.Ingredient{{Description: &description}}
+	entries := []ai.InputIngredient{{ProductID: "broccoli-1", Description: "Broccoli"}}
 	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
 		t.Fatalf("SaveIngredients failed: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, stubGrader{}).Register(mux)
+	NewHandler(cacheStore, nil).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash()+"?format=tsv", nil)
 	rr := httptest.NewRecorder()
@@ -111,7 +88,7 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 func TestServerReturnsNotFoundWhenParamsMissing(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, stubGrader{}).Register(mux)
+	NewHandler(cacheStore, nil).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/missing-hash", nil)
 	rr := httptest.NewRecorder()
@@ -136,33 +113,24 @@ func TestServerReturnsGradedIngredientsJSON(t *testing.T) {
 		t.Fatalf("SaveParams failed: %v", err)
 	}
 
-	asparagus := "Asparagus"
-	chips := "Potato Chips"
-	entries := []kroger.Ingredient{
-		{Description: &asparagus},
-		{Description: &chips},
+	entries := []ai.InputIngredient{
+		{
+			ProductID:   "a",
+			Description: "Asparagus",
+			Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 9, Reason: "Fresh and flexible."},
+		},
+		{
+			ProductID:   "b",
+			Description: "Potato Chips",
+			Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 2, Reason: "Snack food with limited recipe value."},
+		},
 	}
 	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
 		t.Fatalf("SaveIngredients failed: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, stubGrader{
-		fn: func(ingredients []kroger.Ingredient) []ai.InputIngredient {
-			return []ai.InputIngredient{
-				{
-					ProductID:   "a",
-					Description: "Asparagus",
-					Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 9, Reason: "Fresh and flexible."},
-				},
-				{
-					ProductID:   "b",
-					Description: "Potato Chips",
-					Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 2, Reason: "Snack food with limited recipe value."},
-				},
-			}
-		},
-	}).Register(mux)
+	NewHandler(cacheStore, nil).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash()+"/graded", nil)
 	rr := httptest.NewRecorder()

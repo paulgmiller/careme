@@ -3,6 +3,7 @@ package recipes
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ type stubRoutingStaplesProvider struct {
 
 type stubIngredientGrader struct {
 	ingredients []kroger.Ingredient
-	prioritized []kroger.Ingredient
+	fn          func([]kroger.Ingredient) ([]ai.InputIngredient, error)
 	err         error
 }
 
@@ -69,7 +70,14 @@ func (s *stubRoutingStaplesProvider) GetIngredients(_ context.Context, _ string,
 }
 
 func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
+	s.ingredients = append([]kroger.Ingredient(nil), ingredients...)
 	results := make([]ai.InputIngredient, 0, len(ingredients))
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.fn != nil {
+		return s.fn(ingredients)
+	}
 	for _, ingredient := range ingredients {
 		results = append(results, ai.InputIngredient{
 			ProductID:   toValue(ingredient.ProductId),
@@ -80,17 +88,6 @@ func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients [
 		})
 	}
 	return results, nil
-}
-
-func (s *stubIngredientGrader) PrioritizeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]kroger.Ingredient, error) {
-	s.ingredients = append([]kroger.Ingredient(nil), ingredients...)
-	if s.err != nil {
-		return nil, s.err
-	}
-	if s.prioritized != nil {
-		return append([]kroger.Ingredient(nil), s.prioritized...), nil
-	}
-	return append([]kroger.Ingredient(nil), ingredients...), nil
 }
 
 func TestRoutingStaplesProvider_SelectsProviderByLocationID(t *testing.T) {
@@ -171,9 +168,9 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	provider := &stubRoutingStaplesProvider{
 		ingredients: []kroger.Ingredient{
-			{Description: loPtr("Honeycrisp Apple")},
-			{Description: loPtr("Honeycrisp Apple")},
-			{Description: loPtr("Baby Spinach")},
+			{ProductId: loPtr("apple-1"), Description: loPtr("Honeycrisp Apple")},
+			{ProductId: loPtr("apple-1"), Description: loPtr("Honeycrisp Apple")},
+			{ProductId: loPtr("spinach-1"), Description: loPtr("Baby Spinach")},
 		},
 	}
 	s := &cachedStaplesService{
@@ -196,6 +193,9 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected deduped results, got %d", len(got))
 	}
+	if got[0].ProductID == "" {
+		t.Fatalf("expected input ingredient product id, got %+v", got)
+	}
 
 	cached, err := IO(cacheStore).IngredientsFromCache(t.Context(), params.LocationHash())
 	if err != nil {
@@ -217,11 +217,11 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	}
 }
 
-func TestGetStaples_PrioritizesCachedIngredientsBeforeReturning(t *testing.T) {
+func TestGetStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	grader := &stubIngredientGrader{}
-	steak := kroger.Ingredient{Description: loPtr("Ribeye Steak")}
-	chips := kroger.Ingredient{Description: loPtr("Potato Chips")}
+	steak := kroger.Ingredient{ProductId: loPtr("steak-1"), Description: loPtr("Ribeye Steak")}
+	chips := kroger.Ingredient{ProductId: loPtr("chips-1"), Description: loPtr("Potato Chips")}
 	s := &cachedStaplesService{
 		cache:  IO(cacheStore),
 		grader: grader,
@@ -229,7 +229,6 @@ func TestGetStaples_PrioritizesCachedIngredientsBeforeReturning(t *testing.T) {
 			ingredients: []kroger.Ingredient{chips, steak},
 		},
 	}
-	grader.prioritized = []kroger.Ingredient{steak}
 
 	params := &generatorParams{
 		Location: &locations.Location{ID: "70100023", Name: "Test Store"},
@@ -240,8 +239,17 @@ func TestGetStaples_PrioritizesCachedIngredientsBeforeReturning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStaples returned error: %v", err)
 	}
-	if len(got) != 1 || got[0].Description == nil || *got[0].Description != "Ribeye Steak" {
-		t.Fatalf("unexpected prioritized staples: %+v", got)
+	if len(got) != 2 {
+		t.Fatalf("unexpected graded staples length: %+v", got)
+	}
+	slices.SortFunc(got, func(a, b ai.InputIngredient) int {
+		return strings.Compare(a.Description, b.Description)
+	})
+	if got[0].Description != "Potato Chips" || got[0].Grade == nil || got[0].Grade.Score != 10 {
+		t.Fatalf("unexpected graded staple entry: %+v", got[0])
+	}
+	if got[1].Description != "Ribeye Steak" || got[1].Grade == nil || got[1].Grade.Score != 10 {
+		t.Fatalf("unexpected graded staple entry: %+v", got[1])
 	}
 	if len(grader.ingredients) != 2 {
 		t.Fatalf("expected grader to see raw cached ingredients, got %d", len(grader.ingredients))
@@ -252,20 +260,17 @@ func TestGetStaples_PrioritizesCachedIngredientsBeforeReturning(t *testing.T) {
 		t.Fatalf("IngredientsFromCache returned error: %v", err)
 	}
 	if len(cached) != 2 {
-		t.Fatalf("expected raw ingredients to stay cached, got %+v", cached)
+		t.Fatalf("expected cached ingredients, got %+v", cached)
 	}
-	descriptions := []string{stringPtr(cached[0].Description), stringPtr(cached[1].Description)}
-	slices.Sort(descriptions)
-	if !slices.Equal(descriptions, []string{"Potato Chips", "Ribeye Steak"}) {
-		t.Fatalf("expected raw ingredients to stay cached, got %+v", cached)
+	slices.SortFunc(cached, func(a, b ai.InputIngredient) int {
+		return strings.Compare(a.Description, b.Description)
+	})
+	if cached[0].Description != "Potato Chips" || cached[0].Grade == nil || cached[0].Grade.Score != 10 {
+		t.Fatalf("expected graded chips in cache, got %+v", cached[0])
 	}
-}
-
-func stringPtr(value *string) string {
-	if value == nil {
-		return ""
+	if cached[1].Description != "Ribeye Steak" || cached[1].Grade == nil || cached[1].Grade.Score != 10 {
+		t.Fatalf("expected graded steak in cache, got %+v", cached[1])
 	}
-	return *value
 }
 
 func toValue(value *string) string {

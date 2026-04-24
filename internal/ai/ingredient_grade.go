@@ -8,6 +8,8 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"math"
+	"strconv"
 	"slices"
 	"strings"
 	"time"
@@ -42,14 +44,14 @@ Return JSON only. Be concise.`
 
 // this is wire compatible with kroger.Ingredient eventually it should replace it in what staples returns
 type InputIngredient struct {
-	ProductID    string           `json:"product_id,omitempty"`
-	AisleNumber  string           `json:"aisle_number,omitempty"`
-	Brand        string           `json:"brand,omitempty"`
-	Description  string           `json:"description,omitempty"`
-	Size         string           `json:"size,omitempty"`
-	PriceRegular string           `json:"price_regular,omitempty"`
-	PriceSale    string           `json:"price_sale,omitempty"`
-	Categories   []string         `json:"categories,omitempty"`
+	ProductID    string           `json:"-"`
+	AisleNumber  string           `json:"-"`
+	Brand        string           `json:"-"`
+	Description  string           `json:"-"`
+	Size         string           `json:"-"`
+	PriceRegular string           `json:"-"`
+	PriceSale    string           `json:"-"`
+	Categories   []string         `json:"-"`
 	Grade        *IngredientGrade `json:"grade,omitempty"`
 }
 
@@ -88,6 +90,33 @@ type ingredientGradeResponseItem struct {
 	Reason    string `json:"reason"`
 }
 
+type inputIngredientWire struct {
+	ProductID         string           `json:"id,omitempty"`
+	LegacyProductID   string           `json:"product_id,omitempty"`
+	AisleNumber       string           `json:"number,omitempty"`
+	LegacyAisleNumber string           `json:"aisle_number,omitempty"`
+	Brand             string           `json:"brand,omitempty"`
+	Description       string           `json:"description,omitempty"`
+	Size              string           `json:"size,omitempty"`
+	PriceRegular      *float32         `json:"regularPrice,omitempty"`
+	LegacyPriceRegular string          `json:"price_regular,omitempty"`
+	PriceSale         *float32         `json:"salePrice,omitempty"`
+	LegacyPriceSale   string           `json:"price_sale,omitempty"`
+	Categories        []string         `json:"categories,omitempty"`
+	Grade             *IngredientGrade `json:"grade,omitempty"`
+}
+
+type ingredientGradePromptItem struct {
+	ProductID    string   `json:"product_id"`
+	AisleNumber  string   `json:"aisle_number,omitempty"`
+	Brand        string   `json:"brand,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	Size         string   `json:"size,omitempty"`
+	PriceRegular string   `json:"price_regular,omitempty"`
+	PriceSale    string   `json:"price_sale,omitempty"`
+	Categories   []string `json:"categories,omitempty"`
+}
+
 type ingredientBatchGradeResponse struct {
 	Grades []ingredientGradeResponseItem `json:"grades" jsonschema:"required"`
 }
@@ -119,7 +148,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	for i, ingredient := range ingredients {
 		item := NormalizeInputIngredient(ingredient)
 		if item.Grade != nil {
-			return nil, fmt.Errorf("Already graded ingredient %s", item.ProductID)
+			return nil, fmt.Errorf("already graded ingredient %s", item.ProductID)
 		}
 		items[i] = item
 	}
@@ -151,11 +180,81 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 }
 
 func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
-	body, err := json.MarshalIndent(items, "", "  ")
+	promptItems := make([]ingredientGradePromptItem, len(items))
+	for i, item := range items {
+		promptItems[i] = ingredientGradePromptItem{
+			ProductID:    item.ProductID,
+			AisleNumber:  item.AisleNumber,
+			Brand:        item.Brand,
+			Description:  item.Description,
+			Size:         item.Size,
+			PriceRegular: item.PriceRegular,
+			PriceSale:    item.PriceSale,
+			Categories:   slices.Clone(item.Categories),
+		}
+	}
+
+	body, err := json.MarshalIndent(promptItems, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal ingredient batch: %w", err)
 	}
 	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each product_id exactly.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
+}
+
+func (i InputIngredient) MarshalJSON() ([]byte, error) {
+	wire := inputIngredientWire{
+		ProductID:   strings.TrimSpace(i.ProductID),
+		AisleNumber: strings.TrimSpace(i.AisleNumber),
+		Brand:       strings.TrimSpace(i.Brand),
+		Description: strings.TrimSpace(i.Description),
+		Size:        strings.TrimSpace(i.Size),
+		Categories:  normalizeCategories(i.Categories),
+		Grade:       i.Grade,
+	}
+
+	if price, ok, err := parsePriceString(i.PriceRegular); err != nil {
+		return nil, fmt.Errorf("marshal regular price for %q: %w", i.ProductID, err)
+	} else if ok {
+		wire.PriceRegular = &price
+	}
+	if price, ok, err := parsePriceString(i.PriceSale); err != nil {
+		return nil, fmt.Errorf("marshal sale price for %q: %w", i.ProductID, err)
+	} else if ok {
+		wire.PriceSale = &price
+	}
+
+	return json.Marshal(wire)
+}
+
+func (i *InputIngredient) UnmarshalJSON(data []byte) error {
+	var wire inputIngredientWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+
+	i.ProductID = strings.TrimSpace(lo.CoalesceOrEmpty(wire.ProductID, wire.LegacyProductID))
+	i.AisleNumber = strings.TrimSpace(lo.CoalesceOrEmpty(wire.AisleNumber, wire.LegacyAisleNumber))
+	i.Brand = strings.TrimSpace(wire.Brand)
+	i.Description = strings.TrimSpace(wire.Description)
+	i.Size = strings.TrimSpace(wire.Size)
+	i.Categories = normalizeCategories(wire.Categories)
+	i.Grade = wire.Grade
+
+	switch {
+	case wire.PriceRegular != nil:
+		i.PriceRegular = formatPrice(*wire.PriceRegular)
+	default:
+		i.PriceRegular = strings.TrimSpace(wire.LegacyPriceRegular)
+	}
+	switch {
+	case wire.PriceSale != nil:
+		i.PriceSale = formatPrice(*wire.PriceSale)
+	default:
+		i.PriceSale = strings.TrimSpace(wire.LegacyPriceSale)
+	}
+
+	*i = NormalizeInputIngredient(*i)
+	return nil
 }
 
 func parseIngredientGrades(body string, items []InputIngredient, model string, gradedAt time.Time) ([]InputIngredient, error) {
@@ -264,4 +363,23 @@ func normalizeCategories(categories []string) []string {
 		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
 	})
 	return out
+}
+
+func parsePriceString(price string) (float32, bool, error) {
+	price = strings.TrimSpace(price)
+	if price == "" {
+		return 0, false, nil
+	}
+	parsed, err := strconv.ParseFloat(price, 32)
+	if err != nil {
+		return 0, false, err
+	}
+	return float32(parsed), true, nil
+}
+
+func formatPrice(price float32) string {
+	if math.Mod(float64(price), 1) == 0 {
+		return fmt.Sprintf("%.0f", price)
+	}
+	return fmt.Sprintf("%.2f", price)
 }

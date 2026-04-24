@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"careme/internal/kroger"
-
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
 )
@@ -136,8 +134,8 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 		DrinkPairing: "Pinot Noir",
 		WineStyles:   []string{"Pinot Noir", "Chardonnay"},
 	}
-	wines := []kroger.Ingredient{
-		{Description: strPtr("Pinot Noir"), Size: strPtr("750mL"), PriceRegular: float32Ptr(13.99)},
+	wines := []InputIngredient{
+		{ProductID: "pinot-noir-1", Description: "Pinot Noir", Size: "750mL", PriceRegular: "13.99"},
 	}
 
 	prompt, err := buildWineSelectionPrompt(recipe, wines)
@@ -154,7 +152,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "- Roast until golden.\n- Finish with lemon juice.\n") {
 		t.Fatalf("expected instructions replay in prompt: %s", prompt)
 	}
-	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\n\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
+	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\npinot-noir-1\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
 		t.Fatalf("expected candidate wines TSV in prompt: %s", prompt)
 	}
 }
@@ -225,12 +223,4 @@ func TestImageUsageLogAttr(t *testing.T) {
 	}) {
 		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
-}
-
-func float32Ptr(v float32) *float32 {
-	return &v
 }

@@ -11,19 +11,16 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	ingredientgrading "careme/internal/ingredients/grading"
-	"careme/internal/kroger"
 	"careme/internal/recipes"
 	"careme/internal/routing"
 )
 
 type server struct {
-	cache  cache.Cache
-	grader ingredientgrading.Service
+	cache cache.Cache
 }
 
-func NewHandler(c cache.Cache, grader ingredientgrading.Service) *server {
-	return &server{cache: c, grader: grader}
+func NewHandler(c cache.Cache, _ any) *server {
+	return &server{cache: c}
 }
 
 func (s *server) Register(mux routing.Registrar) {
@@ -41,7 +38,7 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 	slog.Info("serving cached ingredients", "path", r.URL.Path)
 	if r.URL.Query().Get("format") == "tsv" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		if err := kroger.ToTSV(ingredients, w); err != nil {
+		if err := ai.InputIngredientsToTSV(ingredients, w); err != nil {
 			http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
 		}
 		return
@@ -57,25 +54,14 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleGradedIngredients(w http.ResponseWriter, r *http.Request) {
-	if s.grader == nil {
-		http.Error(w, "ingredient grader unavailable", http.StatusServiceUnavailable)
-		return
-	}
 	ingredients, err := s.loadCachedIngredients(r)
 	if err != nil {
 		s.writeIngredientLoadError(w, r, err)
 		return
 	}
 
-	ctx := r.Context()
-	graded, err := s.grader.GradeIngredients(ctx, ingredients)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to grade ingredients", "error", err)
-		http.Error(w, "failed to grade ingredients", http.StatusInternalServerError)
-		return
-	}
-	results := make([]ai.InputIngredient, 0, len(graded))
-	for _, result := range graded {
+	results := make([]ai.InputIngredient, 0, len(ingredients))
+	for _, result := range ingredients {
 		if result.Grade == nil {
 			http.Error(w, "ingredient grading returned no result", http.StatusInternalServerError)
 			return
@@ -105,7 +91,7 @@ func (s *server) handleGradedIngredients(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (s *server) loadCachedIngredients(r *http.Request) ([]kroger.Ingredient, error) {
+func (s *server) loadCachedIngredients(r *http.Request) ([]ai.InputIngredient, error) {
 	ctx := r.Context()
 	hash := r.PathValue("hash")
 	locationHash, err := s.loadLocationHash(ctx, hash)
