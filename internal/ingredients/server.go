@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"careme/internal/cache"
@@ -29,11 +30,13 @@ type inspectorPageData struct {
 	LocationName    string
 	Date            string
 	IngredientCount int
+	ViewLinks       []inspectorLink
 	DatasetLinks    []inspectorLink
 	JSONHref        string
 	TSVHref         string
 	ClerkRefresh    template.HTML
 	Sections        []analysisSectionView
+	Unmatched       *globalUnmatchedView
 }
 
 type inspectorLink struct {
@@ -46,6 +49,12 @@ type analysisSectionView struct {
 	DatasetName  string
 	DatasetLabel string
 	Report       reportView
+}
+
+type globalUnmatchedView struct {
+	MatchedIngredientCount int
+	UnmatchedCount         int
+	Ingredients            []string
 }
 
 type reportView struct {
@@ -96,12 +105,42 @@ var inspectorTemplate = template.Must(template.New("ingredient-inspector").Parse
       <p>Store: <strong>{{if .LocationName}}{{.LocationName}}{{else}}Unknown store{{end}}</strong>{{if .LocationID}} (<code>{{.LocationID}}</code>){{end}} {{if .Date}}for {{.Date}}{{end}}</p>
       <p class="muted">Location ingredient cache <code>{{.LocationHash}}</code> with {{.IngredientCount}} ingredients.</p>
       <div class="pillbar">
+        {{range .ViewLinks}}
+        <a class="pill{{if .Active}} active{{end}}" href="{{.Href}}">{{.Label}}</a>
+        {{end}}
+      </div>
+      {{if .Sections}}
+      <div class="pillbar">
         {{range .DatasetLinks}}
         <a class="pill{{if .Active}} active{{end}}" href="{{.Href}}">{{.Label}}</a>
         {{end}}
       </div>
+      {{end}}
       <p><a href="{{.JSONHref}}">Raw JSON</a> · <a href="{{.TSVHref}}">TSV export</a></p>
     </div>
+
+    {{if .Unmatched}}
+    <section class="panel">
+      <h2>Unmatched Across All Categories</h2>
+      <div class="stats">
+        <div class="stat"><span class="muted">Total ingredients</span><strong>{{.IngredientCount}}</strong><span>cached for this location</span></div>
+        <div class="stat"><span class="muted">Matched anywhere</span><strong>{{.Unmatched.MatchedIngredientCount}}</strong><span>produce, meat, or seafood</span></div>
+        <div class="stat"><span class="muted">No term hits</span><strong>{{.Unmatched.UnmatchedCount}}</strong><span>across all categories</span></div>
+      </div>
+      <div class="listbox">
+        <h3>Ingredients with no term hits anywhere</h3>
+        {{if .Unmatched.Ingredients}}
+        <ul class="tight">
+          {{range .Unmatched.Ingredients}}
+          <li>{{.}}</li>
+          {{end}}
+        </ul>
+        {{else}}
+        <p class="muted">Every ingredient matched at least one produce, meat, or seafood term.</p>
+        {{end}}
+      </div>
+    </section>
+    {{end}}
 
     {{range .Sections}}
     <section class="panel">
@@ -140,10 +179,10 @@ var inspectorTemplate = template.Must(template.New("ingredient-inspector").Parse
           </div>
         </div>
         <div>
-          <h3>Unmatched</h3>
+          <h3>Coverage Gaps</h3>
           <div class="stats">
             <div class="stat"><span class="muted">Missing terms</span><strong>{{len .Report.MissingTerms}}</strong><span>no ingredient hits</span></div>
-            <div class="stat"><span class="muted">Unmatched ingredients</span><strong>{{len .Report.UnmatchedIngredients}}</strong><span>no test terms hit</span></div>
+            <div class="stat"><span class="muted">Matched ingredients</span><strong>{{.Report.MatchedIngredientCount}}</strong><span>items hit by this dataset</span></div>
           </div>
           <div class="listbox">
             <h3>Missing terms</h3>
@@ -155,18 +194,6 @@ var inspectorTemplate = template.Must(template.New("ingredient-inspector").Parse
             </ul>
             {{else}}
             <p class="muted">All terms matched.</p>
-            {{end}}
-          </div>
-          <div class="listbox">
-            <h3>Ingredients with no term hits</h3>
-            {{if .Report.UnmatchedIngredients}}
-            <ul class="tight">
-              {{range .Report.UnmatchedIngredients}}
-              <li>{{.}}</li>
-              {{end}}
-            </ul>
-            {{else}}
-            <p class="muted">Every ingredient matched at least one term.</p>
             {{end}}
           </div>
         </div>
@@ -245,6 +272,11 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	view, err := selectedView(r.URL.Query().Get("view"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	pageData := inspectorPageData{
 		Hash:            hash,
@@ -253,11 +285,16 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 		LocationName:    locationName(params),
 		Date:            params.Date.Format("2006-01-02"),
 		IngredientCount: len(ingredients),
-		DatasetLinks:    buildDatasetLinks(r.URL, selectedDatasetName(r.URL.Query().Get("dataset"))),
+		ViewLinks:       buildViewLinks(r.URL, view),
 		JSONHref:        withQuery(r.URL, map[string]string{"format": "json"}),
 		TSVHref:         withQuery(r.URL, map[string]string{"format": "tsv"}),
 		ClerkRefresh:    templates.ClerkRefreshHTML(true),
-		Sections:        buildSections(selectedDatasets, ingredients),
+	}
+	if view == "coverage" {
+		pageData.DatasetLinks = buildDatasetLinks(r.URL, selectedDatasetName(r.URL.Query().Get("dataset")))
+		pageData.Sections = buildSections(selectedDatasets, ingredients)
+	} else {
+		pageData.Unmatched = buildGlobalUnmatched(ingredients)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -276,12 +313,29 @@ func selectedDatasetName(value string) string {
 	return normalized
 }
 
+func selectedView(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "coverage":
+		return "coverage", nil
+	case "unmatched":
+		return "unmatched", nil
+	default:
+		return "", fmt.Errorf("unsupported view %q", value)
+	}
+}
+
+func buildViewLinks(current *url.URL, active string) []inspectorLink {
+	return []inspectorLink{
+		{Label: "Coverage", Href: withQuery(current, map[string]string{"view": "coverage", "format": ""}), Active: active == "coverage"},
+		{Label: "Unmatched", Href: withQuery(current, map[string]string{"view": "unmatched", "format": ""}), Active: active == "unmatched"},
+	}
+}
+
 func buildDatasetLinks(current *url.URL, active string) []inspectorLink {
 	links := []inspectorLink{
-		{Label: "Produce", Href: withQuery(current, map[string]string{"dataset": "produce", "format": ""}), Active: active == "produce"},
-		{Label: "Meat", Href: withQuery(current, map[string]string{"dataset": "meat", "format": ""}), Active: active == "meat"},
-		{Label: "Seafood", Href: withQuery(current, map[string]string{"dataset": "seafood", "format": ""}), Active: active == "seafood"},
-		{Label: "All", Href: withQuery(current, map[string]string{"dataset": "all", "format": ""}), Active: active == "all"},
+		{Label: "Produce", Href: withQuery(current, map[string]string{"dataset": "produce", "view": "coverage", "format": ""}), Active: active == "produce"},
+		{Label: "Meat", Href: withQuery(current, map[string]string{"dataset": "meat", "view": "coverage", "format": ""}), Active: active == "meat"},
+		{Label: "Seafood", Href: withQuery(current, map[string]string{"dataset": "seafood", "view": "coverage", "format": ""}), Active: active == "seafood"},
 	}
 	return links
 }
@@ -322,6 +376,43 @@ func buildSections(datasets []ingredientcoverage.Dataset, ingredients []kroger.I
 		})
 	}
 	return sections
+}
+
+func buildGlobalUnmatched(ingredients []kroger.Ingredient) *globalUnmatchedView {
+	allDatasets := ingredientcoverage.Datasets()
+	matched := make(map[string]struct{})
+	for _, dataset := range allDatasets {
+		report := ingredientcoverage.Analyze(dataset, ingredients, ingredientcoverage.BaselineMatcher())
+		for _, ingredient := range report.MatchedIngredients {
+			matched[ingredient.Description] = struct{}{}
+		}
+	}
+
+	allDescriptions := make(map[string]struct{})
+	unmatched := make([]string, 0)
+	for _, ingredient := range ingredients {
+		if ingredient.Description == nil {
+			continue
+		}
+		description := strings.TrimSpace(*ingredient.Description)
+		if description == "" {
+			continue
+		}
+		if _, ok := allDescriptions[description]; ok {
+			continue
+		}
+		allDescriptions[description] = struct{}{}
+		if _, ok := matched[description]; ok {
+			continue
+		}
+		unmatched = append(unmatched, description)
+	}
+	slices.Sort(unmatched)
+	return &globalUnmatchedView{
+		MatchedIngredientCount: len(allDescriptions) - len(unmatched),
+		UnmatchedCount:         len(unmatched),
+		Ingredients:            unmatched,
+	}
 }
 
 func reportFromCoverage(report ingredientcoverage.Report) reportView {

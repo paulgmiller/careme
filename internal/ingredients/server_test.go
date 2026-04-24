@@ -89,14 +89,62 @@ func TestServerReturnsIngredientInspectorHTML(t *testing.T) {
 	if !strings.Contains(body, "Honeycrisp apple") {
 		t.Fatalf("expected matched ingredient in body, got %q", body)
 	}
-	if !strings.Contains(body, "Sourdough loaf") {
-		t.Fatalf("expected unmatched ingredient in body, got %q", body)
-	}
 	if !strings.Contains(body, "Produce") {
 		t.Fatalf("expected produce section in body, got %q", body)
 	}
 	if !strings.Contains(body, "/admin/ingredients/"+params.Hash()) {
 		t.Fatalf("expected admin-prefixed ingredient links in body, got %q", body)
+	}
+	if !strings.Contains(body, "view=unmatched") {
+		t.Fatalf("expected unmatched view link in body, got %q", body)
+	}
+}
+
+func TestServerReturnsGlobalUnmatchedHTML(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
+	rio := recipes.IO(cacheStore)
+	params := recipes.DefaultParams(
+		&locations.Location{ID: "70000003", Name: "Store 1"},
+		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
+	)
+	if err := rio.SaveParams(t.Context(), params); err != nil {
+		t.Fatalf("SaveParams failed: %v", err)
+	}
+
+	apple := "Honeycrisp apple"
+	bread := "Sourdough loaf"
+	salmon := "Atlantic salmon fillet"
+	entries := []kroger.Ingredient{
+		{Description: &apple},
+		{Description: &bread},
+		{Description: &salmon},
+	}
+	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
+		t.Fatalf("SaveIngredients failed: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	NewHandler(cacheStore).Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash()+"?view=unmatched", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Unmatched Across All Categories") {
+		t.Fatalf("expected global unmatched heading, got %q", body)
+	}
+	if !strings.Contains(body, "Sourdough loaf") {
+		t.Fatalf("expected globally unmatched ingredient in body, got %q", body)
+	}
+	if strings.Contains(body, "Honeycrisp apple") && !strings.Contains(body, "Matched anywhere") {
+		t.Fatalf("expected matched ingredients to stay out of unmatched list, got %q", body)
+	}
+	if strings.Contains(body, "Atlantic salmon fillet") && !strings.Contains(body, "Matched anywhere") {
+		t.Fatalf("expected seafood match to stay out of unmatched list, got %q", body)
 	}
 }
 
