@@ -31,14 +31,15 @@ Score each item from 0 to 10 for usefulness as an ingredient in home-cooked reci
 
 Strongly reward:
 - raw, fresh, whole, or minimally processed produce, meat, seafood, dairy, grains, legumes, herbs, and spices
-- ingredients that can support many recipe styles or cuisines
+- ingredients that can support many recipe styles or cuisines. Reward diverse ingredients that are hard to make at home.
 - less common but real cooking ingredients, including greens, roots, organ meats, bones, and seasonal produce
 
 Strongly penalize:
-- ready-to-eat foods, meal kits, bowls, snack trays, party trays, dips, sauces, gravies, mixes, and prepared sides
+- ready-to-eat foods, meal kits, bowls, snack trays, party trays, dips, gravies, mixes, and prepared sides
 - items already cooked, heavily seasoned, sauced, breaded, cured, or packaged with dip/sauce
 - formats intended mainly for snacking or immediate eating rather than cooking
 - pre-cut fruit unless it is still broadly useful for cooking or baking
+
 
 Scoring anchors:
 - 9-10: excellent raw/fresh flexible cooking ingredient, e.g. whole vegetables, greens, roots, raw meats, fresh fruit useful in baking/cooking
@@ -55,7 +56,7 @@ Return JSON only. Preserve each input id/index exactly. Be concise.`
 // this is wire compatible with kroger.Ingredient eventually it should replace it in what staples returns
 type InputIngredient struct {
 	ProductID    string           `json:"id,omitempty"`
-	AisleNumber  string           `json:"number,omitempty"` //this is a dumb json name fix it later
+	AisleNumber  string           `json:"number,omitempty"` // this is a dumb json name fix it later
 	Brand        string           `json:"brand,omitempty"`
 	Description  string           `json:"description,omitempty"`
 	Size         string           `json:"size,omitempty"`
@@ -90,6 +91,7 @@ func (i InputIngredient) Hash() string {
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(i.Brand))))
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(i.Description))))
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(i.Size))))
+	lo.Must(io.WriteString(fnv, ingredientGradeSystemInstruction))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
@@ -162,7 +164,6 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 }
 
 func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
-
 	type ingredientGradePromptItem struct {
 		ProductID   string `json:"id"`
 		Brand       string `json:"brand,omitempty"`

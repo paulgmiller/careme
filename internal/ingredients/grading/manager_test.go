@@ -74,6 +74,35 @@ func TestCachingGraderBatchesMissingIngredientsInChunksOf30(t *testing.T) {
 	assert.Len(t, backend.calls[0], 65)
 }
 
+func TestCachingGraderSkipsIngredientsThatAlreadyHaveGrades(t *testing.T) {
+	cacheStore := NewStore(cache.NewInMemoryCache())
+	backend := &stubGradeBackend{}
+	grader := newCachingGrader(backend, cacheStore)
+
+	preGraded := ai.InputIngredient{
+		ProductID:   "ingredient-00",
+		Description: "Ingredient 00",
+		Grade: &ai.IngredientGrade{
+			SchemaVersion: "ingredient-grade-v1",
+			Score:         9,
+			Reason:        "already graded",
+		},
+	}
+	ungraded := ai.InputIngredient{
+		ProductID:   "ingredient-01",
+		Description: "Ingredient 01",
+	}
+
+	results, err := grader.GradeIngredients(t.Context(), []ai.InputIngredient{preGraded, ungraded})
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	require.Len(t, backend.calls, 1)
+	assert.Equal(t, []ai.InputIngredient{ungraded}, backend.calls[0])
+	require.NotNil(t, results[0].Grade)
+	assert.Equal(t, 9, results[0].Grade.Score)
+	require.NotNil(t, results[1].Grade)
+}
+
 func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}

@@ -16,6 +16,7 @@ const (
 	ingredientGradeBatchSize = 30
 )
 
+// collapse this soon as we make all staples return []ai.InputIngredient?
 type Service interface {
 	GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error)
 }

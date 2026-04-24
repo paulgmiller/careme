@@ -8,6 +8,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/parallelism"
 )
 
 var _ grader = &cachingGrader{}
@@ -32,23 +33,41 @@ func newCachingGrader(grader baseGrader, store store) *cachingGrader {
 }
 
 func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
-	results := make([]ai.InputIngredient, len(ingredients))
-	missingIndices := make([]int, 0, len(ingredients))
-	missingIngredients := make([]ai.InputIngredient, 0, len(ingredients))
+	type lookupResult struct {
+		cached  *ai.InputIngredient
+		missing *ai.InputIngredient
+	}
 
-	for i, ingredient := range ingredients {
+	lookups, err := parallelism.MapWithErrors(ingredients, func(ingredient ai.InputIngredient) (lookupResult, error) {
+		if ingredient.Grade != nil {
+			return lookupResult{cached: &ingredient}, nil
+		}
+
 		key := ingredientKey(ingredient)
 		gradedIngredient, err := c.store.Load(ctx, key)
 		if err == nil {
-			results[i] = *gradedIngredient
-			continue
+			return lookupResult{cached: gradedIngredient}, nil
 		}
 		if !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to load cached ingredient grade", "key", key, "error", err)
-			return nil, fmt.Errorf("load cached ingredient grade for %q: %w", ingredientLabel(ingredient), err)
+			return lookupResult{}, fmt.Errorf("load cached ingredient grade for %q: %w", ingredientLabel(ingredient), err)
 		}
-		missingIndices = append(missingIndices, i)
-		missingIngredients = append(missingIngredients, ingredient)
+		return lookupResult{missing: &ingredient}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]ai.InputIngredient, 0, len(ingredients))
+	missingIngredients := make([]ai.InputIngredient, 0, len(ingredients))
+	for _, lookup := range lookups {
+		if lookup.cached != nil {
+			results = append(results, *lookup.cached)
+			continue
+		}
+		if lookup.missing != nil {
+			missingIngredients = append(missingIngredients, *lookup.missing)
+		}
 	}
 
 	if len(missingIngredients) == 0 {
@@ -62,16 +81,16 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	if len(gradedIngredients) != len(missingIngredients) {
 		return nil, fmt.Errorf("ingredient grader returned %d ingredients for %d inputs", len(gradedIngredients), len(missingIngredients))
 	}
-	for i, gradedIngredient := range gradedIngredients {
-		ingredient := missingIngredients[i]
+
+	for _, gradedIngredient := range gradedIngredients {
 		if gradedIngredient.Grade == nil {
-			return nil, fmt.Errorf("ingredient grader returned nil grade for %q", ingredientLabel(ingredient))
+			return nil, fmt.Errorf("ingredient grader returned nil grade for %q", ingredientLabel(gradedIngredient))
 		}
-		key := ingredientKey(ingredient)
+		key := ingredientKey(gradedIngredient)
 		if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
-			slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(ingredient), "error", err)
+			slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(gradedIngredient), "error", err)
 		}
-		results[missingIndices[i]] = gradedIngredient
+		results = append(results, gradedIngredient)
 	}
 
 	return results, nil

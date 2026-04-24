@@ -75,10 +75,7 @@ func main() {
 				catMap[cat] += 1
 			}
 
-			fmt.Printf("%2d/10 %s: %s - %s:($%s) size: %s categories: %v\n", result.Grade.Score, result.ProductID, result.Brand, result.Description, toFloat(result.PriceRegular), result.Size, result.Categories)
-			if strings.TrimSpace(result.Grade.Reason) != "" {
-				fmt.Printf("    %s\n", strings.TrimSpace(result.Grade.Reason))
-			}
+			fmt.Printf("%2d/10: %s - %s: size: %s: %s\n", result.Grade.Score, result.Brand, result.Description, result.Size, result.Grade.Reason)
 		}
 		for cat, count := range catMap {
 			fmt.Printf("Category: %s, Count: %d\n", cat, count)
