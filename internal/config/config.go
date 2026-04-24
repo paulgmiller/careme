@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 
 	"careme/internal/brightdata"
@@ -41,22 +40,8 @@ type AIConfig struct {
 }
 
 type IngredientGradingConfig struct {
-	Enable    bool   `json:"enable"`
-	Model     string `json:"model"`
-	Threshold int    `json:"threshold"`
-}
-
-func (c IngredientGradingConfig) NormalizedThreshold() int {
-	switch {
-	case c.Threshold < 0:
-		return 0
-	case c.Threshold > 10:
-		return 10
-	case c.Threshold == 0:
-		return 3
-	default:
-		return c.Threshold
-	}
+	Enable bool   `json:"enable"`
+	Model  string `json:"model"`
 }
 
 type GeminiConfig struct {
@@ -186,9 +171,8 @@ func Load() (*Config, error) {
 			APIKey: os.Getenv("AI_API_KEY"),
 		},
 		IngredientGrading: IngredientGradingConfig{
-			Enable:    envEnabled("INGREDIENT_GRADING_ENABLE"),
-			Model:     os.Getenv("INGREDIENT_GRADING_MODEL"),
-			Threshold: intEnv("INGREDIENT_GRADING_THRESHOLD"),
+			Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
+			Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
 		},
 		Gemini: GeminiConfig{
 			APIKey:        os.Getenv("GEMINI_API_KEY"),
@@ -245,18 +229,6 @@ func Load() (*Config, error) {
 
 func envEnabled(name string) bool {
 	return os.Getenv(name) != "false"
-}
-
-func intEnv(name string) int {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
-		return 0
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0
-	}
-	return value
 }
 
 func validate(cfg *Config) error {

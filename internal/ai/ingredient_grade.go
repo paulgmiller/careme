@@ -181,6 +181,7 @@ func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
 		}
 	}
 
+	// TSV here instead?
 	body, err := json.MarshalIndent(promptItems, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal ingredient batch: %w", err)
@@ -261,11 +262,4 @@ func ingredientGradeJSONSchema() map[string]any {
 		panic(fmt.Sprintf("decode ingredient grade schema: %v", err))
 	}
 	return out
-}
-
-func priceToString(price *float32) string {
-	if price == nil {
-		return ""
-	}
-	return fmt.Sprintf("%.2f", *price)
 }

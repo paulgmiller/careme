@@ -37,3 +37,10 @@ func InputIngredientsToTSV(ingredients []InputIngredient, w io.Writer) error {
 	csvw.Flush()
 	return csvw.Error()
 }
+
+func priceToString(price *float32) string {
+	if price == nil {
+		return ""
+	}
+	return fmt.Sprintf("%.2f", *price)
+}
