@@ -27,7 +27,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
-| `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or JSON `[]kroger.Ingredient` keyed by wine style/date/location hash for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/generator.go` (`GetStaples`, `PickAWine`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/generator.go` (`GetStaples`, `PickAWine`) and `internal/ingredients/server.go` |
+| `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or JSON `[]kroger.Ingredient` keyed by wine style/date/location hash for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/generator.go` (`FetchStaples`, `PickAWine`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/generator.go` (`FetchStaples`, `PickAWine`) and `internal/ingredients/server.go` |
 | `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
 | `generation_status/` | JSON `recipes.GenerationStatus` (`stage`, `message`, `updated_at`) keyed by shopping hash for spinner progress | `internal/recipes/generation_status.go` (`SaveGenerationStatus`) via `internal/recipes/server.go` (`kickgeneration`) and `internal/recipes/generator.go` (`GenerateRecipes`) | `internal/recipes/generation_status.go` (`GenerationStatusFromCache`) via `internal/recipes/server.go` (`Spin`) |
 | `recipe/` | JSON `ai.Recipe` (one recipe per hash) | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`SingleFromCache`) |
@@ -73,15 +73,15 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 - Publix uses a separate cache created via `cache.EnsureCache("publix")`; it does not share the `recipes` container/directory.
 - Recipe images use a separate cache created via `cache.EnsureCache("recipe-images")`; they do not share the main `recipes` container/directory.
 - Whole Foods uses a separate cache created via `cache.EnsureCache("wholefoods")`; it does not share the `recipes` container/directory.
-- Local cache paths when filesystem backend is used. are 
-  - `recipes/` for most app data, 
+- Local cache paths when filesystem backend is used. are
+  - `recipes/` for most app data,
   - `recipe-images/` for recipe images,
-  - `aldi/` for ALDI data, 
-  - `albertsons/` for Albertsons-family data, 
-  - `heb/` for HEB data, 
-  - `publix/` for Publix data, 
+  - `aldi/` for ALDI data,
+  - `albertsons/` for Albertsons-family data,
+  - `heb/` for HEB data,
+  - `publix/` for Publix data,
   - `wegmans/` for Wegmans data
-  - `wholefoods/` for Whole Foods data 
+  - `wholefoods/` for Whole Foods data
 - Blob names in Azure match the same key strings listed above inside their respective containers.
 - Staple `ingredients/` cache keys derive from location ID, date, and a versioned backend staple signature (for example `kroger-staples-v1` or `wholefoods-staples-v1`), so Kroger and Whole Foods locations do not share staple caches and staple-definition changes can invalidate caches intentionally.
 - Recipe image cache keys are stable per recipe hash, so prompt or model changes do not orphan previously generated images.

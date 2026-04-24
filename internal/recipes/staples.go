@@ -103,7 +103,7 @@ func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader ingredien
 	}, nil
 }
 
-func (s *cachedStaplesService) GetStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
+func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
 	lochash := p.LocationHash()
 
 	if cachedIngredients, err := s.cache.IngredientsFromCache(ctx, lochash); err == nil {

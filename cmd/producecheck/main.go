@@ -91,7 +91,11 @@ type produceFilterStats struct {
 	matchedDescriptions []string
 }
 
-func checkProduceAvailability(ctx context.Context, client staplesProvider, locationID string, produce []string) ([]string, int, error) {
+type krogerProvider interface {
+	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
+}
+
+func checkProduceAvailability(ctx context.Context, client krogerProvider, locationID string, produce []string) ([]string, int, error) {
 	// todo check total number of queries.
 
 	ingredients, err := client.FetchStaples(ctx, locationID)

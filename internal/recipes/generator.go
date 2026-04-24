@@ -26,7 +26,7 @@ type aiClient interface {
 }
 
 type staplesService interface {
-	GetStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error)
+	FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error)
 	// only used for wine. Probably need a refactoro
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error)
 }
@@ -124,7 +124,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	}
 
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
-	ingredients, err := g.staples.GetStaples(ctx, p)
+	ingredients, err := g.staples.FetchStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}

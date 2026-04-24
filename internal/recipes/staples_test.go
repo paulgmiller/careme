@@ -164,7 +164,7 @@ func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T
 	}
 }
 
-func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
+func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	provider := &stubRoutingStaplesProvider{
 		ingredients: []kroger.Ingredient{
@@ -183,9 +183,9 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 		Date:     time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC),
 	}
 
-	got, err := s.GetStaples(t.Context(), params)
+	got, err := s.FetchStaples(t.Context(), params)
 	if err != nil {
-		t.Fatalf("GetStaples returned error: %v", err)
+		t.Fatalf("FetchStaples returned error: %v", err)
 	}
 	if provider.calls != 1 {
 		t.Fatalf("expected provider to be called once, got %d", provider.calls)
@@ -205,9 +205,9 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 		t.Fatalf("expected cached deduped results, got %d", len(cached))
 	}
 
-	gotAgain, err := s.GetStaples(t.Context(), params)
+	gotAgain, err := s.FetchStaples(t.Context(), params)
 	if err != nil {
-		t.Fatalf("GetStaples returned error on cached call: %v", err)
+		t.Fatalf("FetchStaples returned error on cached call: %v", err)
 	}
 	if provider.calls != 1 {
 		t.Fatalf("expected cached call to skip provider, got %d calls", provider.calls)
@@ -217,7 +217,7 @@ func TestGetStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	}
 }
 
-func TestGetStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
+func TestFetchStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	grader := &stubIngredientGrader{}
 	steak := kroger.Ingredient{ProductId: loPtr("steak-1"), Description: loPtr("Ribeye Steak")}
@@ -235,9 +235,9 @@ func TestGetStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
 		Date:     time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC),
 	}
 
-	got, err := s.GetStaples(t.Context(), params)
+	got, err := s.FetchStaples(t.Context(), params)
 	if err != nil {
-		t.Fatalf("GetStaples returned error: %v", err)
+		t.Fatalf("FetchStaples returned error: %v", err)
 	}
 	if len(got) != 2 {
 		t.Fatalf("unexpected graded staples length: %+v", got)
