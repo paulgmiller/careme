@@ -17,7 +17,6 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/config"
-	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/kroger"
 	"careme/internal/parallelism"
 	"careme/internal/walmart"
@@ -113,7 +112,7 @@ func (cp convertingProvider) FetchStaples(ctx context.Context, locationID string
 	}
 	inputs := make([]ai.InputIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
-		input, err := ingredientgrading.InputIngredientFromKrogerIngredient(ingredient)
+		input, err := inputIngredientFromKrogerIngredient(ingredient)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +132,7 @@ func (cp convertingProvider) GetIngredients(ctx context.Context, locationID stri
 	}
 	inputs := make([]ai.InputIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
-		input, err := ingredientgrading.InputIngredientFromKrogerIngredient(ingredient)
+		input, err := inputIngredientFromKrogerIngredient(ingredient)
 		if err != nil {
 			return nil, err
 		}
@@ -144,6 +143,46 @@ func (cp convertingProvider) GetIngredients(ctx context.Context, locationID stri
 		return i.ProductID
 	})
 	return inputs, nil
+}
+
+func inputIngredientFromKrogerIngredient(ingredient kroger.Ingredient) (ai.InputIngredient, error) {
+	item := ai.InputIngredient{
+		ProductID:    strings.TrimSpace(toStr(ingredient.ProductId)),
+		AisleNumber:  strings.TrimSpace(toStr(ingredient.AisleNumber)),
+		Brand:        strings.TrimSpace(toStr(ingredient.Brand)),
+		Description:  strings.TrimSpace(toStr(ingredient.Description)),
+		Size:         strings.TrimSpace(toStr(ingredient.Size)),
+		PriceRegular: clonePrice(ingredient.PriceRegular),
+		PriceSale:    clonePrice(ingredient.PriceSale),
+		Categories:   categoriesFromPtr(ingredient.Categories),
+	}
+	item = ai.NormalizeInputIngredient(item)
+	if item.ProductID == "" {
+		return ai.InputIngredient{}, fmt.Errorf("ingredient product_id is required for %q", toStr(ingredient.Description))
+	}
+	return item, nil
+}
+
+func toStr(ptr *string) string {
+	if ptr == nil {
+		return ""
+	}
+	return *ptr
+}
+
+func categoriesFromPtr(ptr *[]string) []string {
+	if ptr == nil {
+		return nil
+	}
+	return append([]string(nil), (*ptr)...)
+}
+
+func clonePrice(price *float32) *float32 {
+	if price == nil {
+		return nil
+	}
+	value := *price
+	return &value
 }
 
 func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader grader) (*cachedStaplesService, error) {

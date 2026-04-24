@@ -8,7 +8,6 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,16 +57,12 @@ func TestCachingGraderBatchesMissingIngredientsInChunksOf30(t *testing.T) {
 	backend := &stubGradeBackend{}
 	grader := newCachingGrader(backend, cacheStore)
 
-	ingredients := make([]kroger.Ingredient, 65)
-	for i := range ingredients {
-		ingredients[i] = krogerIngredient(fmt.Sprintf("Ingredient %02d", i), fmt.Sprintf("ingredient-%02d", i))
-	}
-
-	inputs := make([]ai.InputIngredient, len(ingredients))
-	for i, ingredient := range ingredients {
-		input, err := InputIngredientFromKrogerIngredient(ingredient)
-		require.NoError(t, err)
-		inputs[i] = input
+	inputs := make([]ai.InputIngredient, 65)
+	for i := range inputs {
+		inputs[i] = ai.InputIngredient{
+			ProductID:   fmt.Sprintf("ingredient-%02d", i),
+			Description: fmt.Sprintf("Ingredient %02d", i),
+		}
 	}
 
 	results, err := grader.GradeIngredients(t.Context(), inputs)
@@ -127,17 +122,4 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	callSizes := []int{len(backend.calls[0]), len(backend.calls[1]), len(backend.calls[2])}
 	slices.Sort(callSizes)
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
-}
-
-func TestInputIngredientFromKrogerIngredientRejectsBlankProductID(t *testing.T) {
-	_, err := InputIngredientFromKrogerIngredient(krogerIngredient("Asparagus", ""))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "product_id is required")
-}
-
-func krogerIngredient(description string, productID string) kroger.Ingredient {
-	return kroger.Ingredient{
-		ProductId:   &productID,
-		Description: &description,
-	}
 }

@@ -2,13 +2,11 @@ package grading
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/kroger"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -68,24 +66,6 @@ func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.Inp
 	return graded, nil
 }
 
-func InputIngredientFromKrogerIngredient(ingredient kroger.Ingredient) (ai.InputIngredient, error) {
-	item := ai.InputIngredient{
-		ProductID:    strings.TrimSpace(toStr(ingredient.ProductId)),
-		AisleNumber:  strings.TrimSpace(toStr(ingredient.AisleNumber)),
-		Brand:        strings.TrimSpace(toStr(ingredient.Brand)),
-		Description:  strings.TrimSpace(toStr(ingredient.Description)),
-		Size:         strings.TrimSpace(toStr(ingredient.Size)),
-		PriceRegular: clonePrice(ingredient.PriceRegular),
-		PriceSale:    clonePrice(ingredient.PriceSale),
-		Categories:   categoriesFromPtr(ingredient.Categories),
-	}
-	item = ai.NormalizeInputIngredient(item)
-	if item.ProductID == "" {
-		return ai.InputIngredient{}, fmt.Errorf("ingredient product_id is required for %q", toStr(ingredient.Description))
-	}
-	return item, nil
-}
-
 func ingredientHash(ingredient ai.InputIngredient) string {
 	return ai.NormalizeInputIngredient(ingredient).Hash()
 }
@@ -98,26 +78,4 @@ func ingredientLabel(ingredient ai.InputIngredient) string {
 		return value
 	}
 	return strings.TrimSpace(ingredient.ProductID)
-}
-
-func toStr(ptr *string) string {
-	if ptr == nil {
-		return ""
-	}
-	return *ptr
-}
-
-func categoriesFromPtr(ptr *[]string) []string {
-	if ptr == nil {
-		return nil
-	}
-	return append([]string(nil), (*ptr)...)
-}
-
-func clonePrice(price *float32) *float32 {
-	if price == nil {
-		return nil
-	}
-	value := *price
-	return &value
 }

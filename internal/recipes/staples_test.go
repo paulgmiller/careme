@@ -149,6 +149,51 @@ func TestRoutingStaplesProvider_GetIngredients_SelectsProviderByLocationID(t *te
 	}
 }
 
+func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
+	regular := float32(4.99)
+	sale := float32(3.49)
+	categories := []string{"Produce", "Fresh Fruit"}
+	ingredient, err := inputIngredientFromKrogerIngredient(kroger.Ingredient{
+		ProductId:    loPtr(" apple-1 "),
+		AisleNumber:  loPtr(" 12 "),
+		Brand:        loPtr(" Orchard Co "),
+		Description:  loPtr(" Honeycrisp Apple "),
+		Size:         loPtr(" 3 lb "),
+		PriceRegular: &regular,
+		PriceSale:    &sale,
+		Categories:   &categories,
+	})
+	if err != nil {
+		t.Fatalf("inputIngredientFromKrogerIngredient returned error: %v", err)
+	}
+
+	if ingredient.ProductID != "apple-1" {
+		t.Fatalf("unexpected product id: %+v", ingredient)
+	}
+	if ingredient.AisleNumber != "12" || ingredient.Brand != "Orchard Co" || ingredient.Description != "Honeycrisp Apple" || ingredient.Size != "3 lb" {
+		t.Fatalf("unexpected normalized ingredient: %+v", ingredient)
+	}
+	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != regular {
+		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
+	}
+	if ingredient.PriceSale == nil || *ingredient.PriceSale != sale {
+		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
+	}
+	if !slices.Equal(ingredient.Categories, categories) {
+		t.Fatalf("unexpected categories: got %v want %v", ingredient.Categories, categories)
+	}
+}
+
+func TestInputIngredientFromKrogerIngredientRejectsBlankProductID(t *testing.T) {
+	_, err := inputIngredientFromKrogerIngredient(kroger.Ingredient{Description: loPtr("Asparagus")})
+	if err == nil {
+		t.Fatal("expected blank product id error")
+	}
+	if !strings.Contains(err.Error(), "product_id is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T) {
 	t.Parallel()
 
