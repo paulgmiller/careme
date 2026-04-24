@@ -8,7 +8,6 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
-	"slices"
 	"strings"
 
 	"github.com/invopop/jsonschema"
@@ -76,7 +75,6 @@ func NormalizeInputIngredient(ingredient InputIngredient) InputIngredient {
 	ingredient.Brand = strings.TrimSpace(ingredient.Brand)
 	ingredient.Description = strings.TrimSpace(ingredient.Description)
 	ingredient.Size = strings.TrimSpace(ingredient.Size)
-	ingredient.Categories = normalizeCategories(ingredient.Categories)
 	return ingredient
 }
 
@@ -107,11 +105,6 @@ type ingredientGrader struct {
 }
 
 func ingredientGradeCacheVersion(model, systemInstruction string) string {
-	model = strings.TrimSpace(model)
-	if model == "" {
-		model = defaultIngredientGradeModel
-	}
-
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, model))
 	lo.Must(io.WriteString(fnv, systemInstruction))
@@ -267,30 +260,6 @@ func ingredientGradeJSONSchema() map[string]any {
 	if err := json.Unmarshal(body, &out); err != nil {
 		panic(fmt.Sprintf("decode ingredient grade schema: %v", err))
 	}
-	return out
-}
-
-func normalizeCategories(categories []string) []string {
-	if len(categories) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(categories))
-	out := make([]string, 0, len(categories))
-	for _, category := range categories {
-		category = strings.TrimSpace(category)
-		if category == "" {
-			continue
-		}
-		key := strings.ToLower(category)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, category)
-	}
-	slices.SortFunc(out, func(a, b string) int {
-		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
-	})
 	return out
 }
 

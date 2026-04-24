@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,7 +28,6 @@ func TestNormalizeInputIngredientNormalizesFieldsAndSetsID(t *testing.T) {
 	require.NotNil(t, ingredient.PriceSale)
 	assert.Equal(t, float32(4.99), *ingredient.PriceRegular)
 	assert.Equal(t, float32(3.49), *ingredient.PriceSale)
-	assert.Equal(t, []string{"greens", "Produce"}, ingredient.Categories)
 }
 
 func float32Ptr(v float32) *float32 {
@@ -53,7 +51,7 @@ func TestInputIngredientHashStableAcrossCategoryOrder(t *testing.T) {
 
 func TestIngredientGradeCacheVersionChangesWhenPromptOrModelChanges(t *testing.T) {
 	base := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion("gpt-5-mini", "prompt a")}).CacheVersion()
-	same := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion(" gpt-5-mini ", "prompt a")}).CacheVersion()
+	same := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion("gpt-5-mini", "prompt a")}).CacheVersion()
 	differentModel := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion("gpt-5-nano", "prompt a")}).CacheVersion()
 	differentPrompt := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion("gpt-5-mini", "prompt b")}).CacheVersion()
 
@@ -148,11 +146,6 @@ func TestIngredientGradeSchemaOmitsOperationalFields(t *testing.T) {
 	require.True(t, ok)
 
 	_, hasSchemaVersion := properties["schema_version"]
-	assert.False(t, hasSchemaVersion)
-}
 
-func TestNormalizeCategoriesRemovesBlanksAndDuplicates(t *testing.T) {
-	got := normalizeCategories([]string{" Produce ", "", "greens", "produce", "Greens"})
-	assert.Equal(t, []string{"greens", "Produce"}, got)
-	assert.True(t, strings.Compare(strings.ToLower(got[0]), strings.ToLower(got[1])) < 0)
+	assert.False(t, hasSchemaVersion)
 }
