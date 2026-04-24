@@ -42,18 +42,18 @@ func (s *stubStaplesProvider) GetIngredients(_ context.Context, _ string, _ stri
 }
 
 type stubRoutingStaplesProvider struct {
-	ingredients []kroger.Ingredient
+	ingredients []ai.InputIngredient
 	err         error
 	calls       int
 }
 
 type stubIngredientGrader struct {
-	ingredients []kroger.Ingredient
-	fn          func([]kroger.Ingredient) ([]ai.InputIngredient, error)
+	ingredients []ai.InputIngredient
+	fn          func([]ai.InputIngredient) ([]ai.InputIngredient, error)
 	err         error
 }
 
-func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ string) ([]kroger.Ingredient, error) {
+func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ string) ([]ai.InputIngredient, error) {
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
@@ -61,7 +61,7 @@ func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ string) (
 	return slices.Clone(s.ingredients), nil
 }
 
-func (s *stubRoutingStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]kroger.Ingredient, error) {
+func (s *stubRoutingStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]ai.InputIngredient, error) {
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
@@ -69,8 +69,8 @@ func (s *stubRoutingStaplesProvider) GetIngredients(_ context.Context, _ string,
 	return slices.Clone(s.ingredients), nil
 }
 
-func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
-	s.ingredients = append([]kroger.Ingredient(nil), ingredients...)
+func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	s.ingredients = append([]ai.InputIngredient(nil), ingredients...)
 	results := make([]ai.InputIngredient, 0, len(ingredients))
 	if s.err != nil {
 		return nil, s.err
@@ -79,13 +79,8 @@ func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients [
 		return s.fn(ingredients)
 	}
 	for _, ingredient := range ingredients {
-		results = append(results, ai.InputIngredient{
-			ProductID:   toValue(ingredient.ProductId),
-			Description: toValue(ingredient.Description),
-			Brand:       toValue(ingredient.Brand),
-			Size:        toValue(ingredient.Size),
-			Grade:       &ai.IngredientGrade{Score: 10, Reason: "stub"},
-		})
+		ingredient.Grade = &ai.IngredientGrade{Score: 10, Reason: "stub"}
+		results = append(results, ingredient)
 	}
 	return results, nil
 }
@@ -166,7 +161,8 @@ func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T
 
 func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
-	provider := &stubRoutingStaplesProvider{
+	provider := &stubStaplesProvider{
+		ids: map[string]bool{"wholefoods_10216": true},
 		ingredients: []kroger.Ingredient{
 			{ProductId: loPtr("apple-1"), Description: loPtr("Honeycrisp Apple")},
 			{ProductId: loPtr("apple-1"), Description: loPtr("Honeycrisp Apple")},
@@ -175,7 +171,8 @@ func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	}
 	s := &cachedStaplesService{
 		cache:    IO(cacheStore),
-		provider: provider,
+		provider: convertingProvider{kprovider: provider},
+		grader:   &stubIngredientGrader{},
 	}
 
 	params := &generatorParams{
@@ -220,13 +217,13 @@ func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 func TestFetchStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	grader := &stubIngredientGrader{}
-	steak := kroger.Ingredient{ProductId: loPtr("steak-1"), Description: loPtr("Ribeye Steak")}
-	chips := kroger.Ingredient{ProductId: loPtr("chips-1"), Description: loPtr("Potato Chips")}
+	steak := ai.InputIngredient{ProductID: "steak-1", Description: "Ribeye Steak"}
+	chips := ai.InputIngredient{ProductID: "chips-1", Description: "Potato Chips"}
 	s := &cachedStaplesService{
 		cache:  IO(cacheStore),
 		grader: grader,
 		provider: &stubRoutingStaplesProvider{
-			ingredients: []kroger.Ingredient{chips, steak},
+			ingredients: []ai.InputIngredient{chips, steak},
 		},
 	}
 
@@ -271,11 +268,4 @@ func TestFetchStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
 	if cached[1].Description != "Ribeye Steak" || cached[1].Grade == nil || cached[1].Grade.Score != 10 {
 		t.Fatalf("expected graded steak in cache, got %+v", cached[1])
 	}
-}
-
-func toValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }

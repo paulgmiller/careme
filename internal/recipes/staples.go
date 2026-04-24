@@ -28,7 +28,8 @@ import (
 )
 
 // todo make this a indepenedent ingredient object not kroger.
-// we're cheating and making the cache do the conversion for now but all underlying provider should create input ingredients
+// we're cheating and making the wrapper here  do the conversion for now but all underlying provider should create input ingredients
+// then this becomes staplesProvider
 type krogerProvider interface {
 	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
@@ -48,7 +49,7 @@ type routingStaplesProvider struct {
 	backends []backendStaplesProvider
 }
 
-func NewStaplesProvider(cfg *config.Config) (krogerProvider, error) {
+func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 	kclient, err := kroger.FromConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -58,9 +59,9 @@ func NewStaplesProvider(cfg *config.Config) (krogerProvider, error) {
 		return nil, err
 	}
 
-	return routingStaplesProvider{
+	return convertingProvider{routingStaplesProvider{
 		backends: backends,
-	}, nil
+	}}, nil
 }
 
 func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
@@ -84,13 +85,68 @@ type ingredientio interface {
 	IngredientsFromCache(ctx context.Context, hash string) ([]ai.InputIngredient, error)
 }
 
-type cachedStaplesService struct {
-	provider krogerProvider
-	cache    ingredientio
-	grader   ingredientgrading.Service
+type grader interface {
+	GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error)
 }
 
-func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader ingredientgrading.Service) (*cachedStaplesService, error) {
+type cachedStaplesService struct {
+	provider staplesProvider
+	cache    ingredientio
+	grader   grader
+}
+
+type staplesProvider interface {
+	FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
+	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error)
+}
+
+type convertingProvider struct {
+	kprovider krogerProvider
+}
+
+var _ staplesProvider = convertingProvider{}
+
+func (cp convertingProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	ingredients, err := cp.kprovider.FetchStaples(ctx, locationID)
+	if err != nil {
+		return nil, err
+	}
+	inputs := make([]ai.InputIngredient, 0, len(ingredients))
+	for _, ingredient := range ingredients {
+		input, err := ingredientgrading.InputIngredientFromKrogerIngredient(ingredient)
+		if err != nil {
+			return nil, err
+		}
+		inputs = append(inputs, input)
+	}
+
+	inputs = lo.UniqBy(inputs, func(i ai.InputIngredient) string {
+		return i.ProductID
+	})
+	return inputs, nil
+}
+
+func (cp convertingProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
+	ingredients, err := cp.kprovider.GetIngredients(ctx, locationID, searchTerm, skip)
+	if err != nil {
+		return nil, err
+	}
+	inputs := make([]ai.InputIngredient, 0, len(ingredients))
+	for _, ingredient := range ingredients {
+		input, err := ingredientgrading.InputIngredientFromKrogerIngredient(ingredient)
+		if err != nil {
+			return nil, err
+		}
+		inputs = append(inputs, input)
+	}
+
+	inputs = lo.UniqBy(inputs, func(i ai.InputIngredient) string {
+		return i.ProductID
+	})
+	return inputs, nil
+}
+
+func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader grader) (*cachedStaplesService, error) {
 	provider, err := NewStaplesProvider(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples provider: %w", err)
@@ -105,35 +161,39 @@ func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader ingredien
 
 func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
 	lochash := p.LocationHash()
+	locationID := p.Location.ID
 
-	if cachedIngredients, err := s.cache.IngredientsFromCache(ctx, lochash); err == nil {
-		slog.InfoContext(ctx, "serving cached ingredients", "location", p.String(), "hash", lochash, "count", len(cachedIngredients))
-		return cachedIngredients, nil
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", p.String(), "error", err)
+	cachedIngredients, err := s.cache.IngredientsFromCache(ctx, lochash)
+	if err == nil {
+		slog.InfoContext(ctx, "serving cached ingredients", "location", locationID, "hash", lochash, "count", len(cachedIngredients))
+		// do we still want this randomness after grading?
+		mutable.Shuffle(cachedIngredients)
+		return s.grader.GradeIngredients(ctx, cachedIngredients)
+		// shoulld we save?
 	}
 
-	// this does grading
-	ingredients, err := s.provider.FetchStaples(ctx, p.Location.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", p.Location.ID, err)
+	if !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", locationID, "error", err)
 	}
-	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
-		return *i.ProductId
-	})
-	mutable.Shuffle(ingredients)
 
-	// does this belong hehe?
-	inputs, err := s.gradeIngredients(ctx, ingredients)
+	ingredients, err := s.provider.FetchStaples(ctx, locationID)
 	if err != nil {
+		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", locationID, err)
+	}
+
+	graded, err := s.grader.GradeIngredients(ctx, ingredients)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to grade cached staples", "error", err)
 		return nil, err
 	}
+	// do we still want this randomness after grading?
+	mutable.Shuffle(graded)
 
-	if err := s.cache.SaveIngredients(ctx, lochash, inputs); err != nil {
+	if err := s.cache.SaveIngredients(ctx, lochash, graded); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
-	return inputs, nil
+	return graded, nil
 }
 
 // this is not actually wine specificexcept that GetIngredients only does wine requests from ui
@@ -160,17 +220,9 @@ func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID st
 		logger.ErrorContext(ctx, "failed to read cached ingredients", "error", err)
 	}
 
-	krogerwines, err := s.provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	wines, err = s.provider.GetIngredients(ctx, locationID, searchTerm, skip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for %q: %w", searchTerm, err)
-	}
-	wines = []ai.InputIngredient{}
-	for _, kwine := range krogerwines {
-		wine, err := ingredientgrading.InputIngredientFromKrogerIngredient(kwine)
-		if err != nil {
-			return nil, err
-		}
-		wines = append(wines, wine)
 	}
 	logger.InfoContext(ctx, "found ingredients", "count", len(wines))
 
@@ -188,31 +240,10 @@ func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
 		"starmarket_3566",
 		"acmemarkets_806",
 	}
-	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]kroger.Ingredient, error) {
+	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]ai.InputIngredient, error) {
 		return s.provider.FetchStaples(ctx, storeID)
 	})
 	return err
-}
-
-// this shold go away when everyone returns inputingredients
-func (s *cachedStaplesService) gradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
-	if s.grader != nil {
-		graded, err := s.grader.GradeIngredients(ctx, ingredients)
-		if err == nil {
-			return graded, nil
-		}
-		slog.ErrorContext(ctx, "failed to grade cached staples", "error", err)
-	}
-
-	inputs := make([]ai.InputIngredient, 0, len(ingredients))
-	for _, ingredient := range ingredients {
-		input, err := ingredientgrading.InputIngredientFromKrogerIngredient(ingredient)
-		if err != nil {
-			return nil, err
-		}
-		inputs = append(inputs, input)
-	}
-	return inputs, nil
 }
 
 func staplesSignatureForLocation(locationID string) string {

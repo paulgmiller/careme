@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"careme/internal/kroger"
+	"careme/internal/ai"
 )
 
 func TestParseProduceList(t *testing.T) {
@@ -52,15 +52,15 @@ func TestNormalizeTerm_RemovesParentheticalAndDiacritics(t *testing.T) {
 }
 
 func TestHasProduce_UsesTokenMatching(t *testing.T) {
-	descriptions := []*string{
-		strPtr("Fresh Seedless Mini Cucumbers"),
-		strPtr("Fresh Jalapeno Peppers"),
-		strPtr("Simple Truth Organic® Whole Baby Bella Mushrooms"),
-		strPtr("Simple Truth Organic® Kiwifruit"),
+	descriptions := []string{
+		"Fresh Seedless Mini Cucumbers",
+		"Fresh Jalapeno Peppers",
+		"Simple Truth Organic® Whole Baby Bella Mushrooms",
+		"Simple Truth Organic® Kiwifruit",
 	}
-	ingredients := make([]kroger.Ingredient, 0, len(descriptions))
+	ingredients := make([]ai.InputIngredient, 0, len(descriptions))
 	for _, d := range descriptions {
-		ingredients = append(ingredients, kroger.Ingredient{Description: d})
+		ingredients = append(ingredients, ai.InputIngredient{Description: d})
 	}
 
 	tests := []struct {
@@ -81,15 +81,15 @@ func TestHasProduce_UsesTokenMatching(t *testing.T) {
 }
 
 func TestSummarizeFilterMatches(t *testing.T) {
-	descriptions := []*string{
-		strPtr("Fresh Seedless Mini Cucumbers"),
-		strPtr("Fresh Mini Cucumbers"),
-		strPtr("Fresh Jalapeno Peppers"),
-		strPtr("Simple Truth Organic® Kiwifruit"),
+	descriptions := []string{
+		"Fresh Seedless Mini Cucumbers",
+		"Fresh Mini Cucumbers",
+		"Fresh Jalapeno Peppers",
+		"Simple Truth Organic® Kiwifruit",
 	}
-	ingredients := make([]kroger.Ingredient, 0, len(descriptions))
+	ingredients := make([]ai.InputIngredient, 0, len(descriptions))
 	for _, d := range descriptions {
-		ingredients = append(ingredients, kroger.Ingredient{Description: d})
+		ingredients = append(ingredients, ai.InputIngredient{Description: d})
 	}
 
 	produce := []string{

@@ -10,7 +10,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
+	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 
@@ -57,7 +57,7 @@ type captureCritiqueService struct {
 type captureWineStaplesProvider struct {
 	mu        sync.Mutex
 	searches  []string
-	responses map[string][]kroger.Ingredient
+	responses map[string][]ai.InputIngredient
 }
 
 func (c *captureWineQuestionAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
@@ -229,11 +229,11 @@ func (c *captureCritiqueService) critiqueFor(recipe ai.Recipe) (*ai.RecipeCritiq
 	}, nil
 }
 
-func (s *captureWineStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
+func (s *captureWineStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	panic("unexpected call to FetchStaples")
 }
 
-func (s *captureWineStaplesProvider) GetIngredients(_ context.Context, _ string, searchTerm string, _ int) ([]kroger.Ingredient, error) {
+func (s *captureWineStaplesProvider) GetIngredients(_ context.Context, _ string, searchTerm string, _ int) ([]ai.InputIngredient, error) {
 	s.mu.Lock()
 	s.searches = append(s.searches, searchTerm)
 	s.mu.Unlock()
@@ -321,10 +321,10 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 		},
 	}
 	staplesStub := &captureWineStaplesProvider{
-		responses: map[string][]kroger.Ingredient{
-			"red-wine":   {{ProductId: loPtr("wholefoods-red"), Description: loPtr("Whole Foods Red")}},
-			"white-wine": {{ProductId: loPtr("wholefoods-white"), Description: loPtr("Whole Foods White")}},
-			"sparkling":  {{ProductId: loPtr("wholefoods-bubbly"), Description: loPtr("Whole Foods Bubbly")}},
+		responses: map[string][]ai.InputIngredient{
+			"red-wine":   {{ProductID: "wholefoods-red", Description: "Whole Foods Red"}},
+			"white-wine": {{ProductID: "wholefoods-white", Description: "Whole Foods White"}},
+			"sparkling":  {{ProductID: "wholefoods-bubbly", Description: "Whole Foods Bubbly"}},
 		},
 	}
 	rio := IO(cache.NewFileCache(t.TempDir()))
@@ -423,7 +423,7 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 	critiquer := &captureCritiqueService{}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -525,7 +525,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -612,7 +612,7 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 		},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -647,7 +647,7 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 		}},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    &captureCritiqueService{},
 		statusWriter: noopstatuswriter{},
@@ -686,7 +686,7 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 
 	statuses := &statusCounter{}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     &sequenceAIClient{generateResponses: []*ai.ShoppingList{{ResponseID: "resp-stable", Recipes: []ai.Recipe{steady}}}},
 		critiquer:    &captureCritiqueService{},
 		statusWriter: statuses,
@@ -890,7 +890,7 @@ func TestGenerateRecipes_CritiqueRetryMatchesParentByTitleWords(t *testing.T) {
 		},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -945,7 +945,7 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 		},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},

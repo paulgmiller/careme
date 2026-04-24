@@ -60,9 +60,7 @@ func TestCachingGraderBatchesMissingIngredientsInChunksOf30(t *testing.T) {
 
 	ingredients := make([]kroger.Ingredient, 65)
 	for i := range ingredients {
-		name := strPtr(fmt.Sprintf("Ingredient %02d", i))
-		id := strPtr(fmt.Sprintf("ingredient-%02d", i))
-		ingredients[i] = kroger.Ingredient{ProductId: id, Description: name}
+		ingredients[i] = krogerIngredient(fmt.Sprintf("Ingredient %02d", i), fmt.Sprintf("ingredient-%02d", i))
 	}
 
 	inputs := make([]ai.InputIngredient, len(ingredients))
@@ -114,11 +112,12 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 		grader: newCachingGrader(backend, cacheStore),
 	}
 
-	ingredients := make([]kroger.Ingredient, 65)
+	ingredients := make([]ai.InputIngredient, 65)
 	for i := range ingredients {
-		name := strPtr(fmt.Sprintf("Ingredient %02d", i))
-		id := strPtr(fmt.Sprintf("ingredient-%02d", i))
-		ingredients[i] = kroger.Ingredient{ProductId: id, Description: name}
+		ingredients[i] = ai.InputIngredient{
+			ProductID:   fmt.Sprintf("ingredient-%02d", i),
+			Description: fmt.Sprintf("Ingredient %02d", i),
+		}
 	}
 
 	results, err := manager.GradeIngredients(t.Context(), ingredients)
@@ -130,41 +129,15 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
 }
 
-func TestMultiGraderDedupesBeforeBatching(t *testing.T) {
-	cacheStore := NewStore(cache.NewInMemoryCache())
-	backend := &stubGradeBackend{}
-	manager := &multiGrader{
-		grader: newCachingGrader(backend, cacheStore),
-	}
-
-	ingredients := make([]kroger.Ingredient, 0, 70)
-	for i := 0; i < 35; i++ {
-		name := strPtr(fmt.Sprintf("Ingredient %02d", i))
-		id := strPtr(fmt.Sprintf("ingredient-%02d", i))
-		ingredient := kroger.Ingredient{ProductId: id, Description: name}
-		ingredients = append(ingredients, ingredient)
-	}
-	ingredients = append(ingredients, slices.Clone(ingredients)...)
-
-	results, err := manager.GradeIngredients(t.Context(), ingredients)
-	require.NoError(t, err)
-	require.Len(t, results, 70)
-	require.Len(t, backend.calls, 2)
-	callSizes := []int{len(backend.calls[0]), len(backend.calls[1])}
-	slices.Sort(callSizes)
-	assert.Equal(t, []int{5, 30}, callSizes)
-}
-
-func TestGradeIngredientsRejectsBlankProductID(t *testing.T) {
-	manager := &multiGrader{
-		grader: newCachingGrader(&stubGradeBackend{}, NewStore(cache.NewInMemoryCache())),
-	}
-
-	_, err := manager.GradeIngredients(t.Context(), []kroger.Ingredient{{Description: strPtr("Asparagus")}})
+func TestInputIngredientFromKrogerIngredientRejectsBlankProductID(t *testing.T) {
+	_, err := InputIngredientFromKrogerIngredient(krogerIngredient("Asparagus", ""))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "product_id is required")
 }
 
-func strPtr(value string) *string {
-	return &value
+func krogerIngredient(description string, productID string) kroger.Ingredient {
+	return kroger.Ingredient{
+		ProductId:   &productID,
+		Description: &description,
+	}
 }

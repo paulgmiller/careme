@@ -12,7 +12,6 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
-	"careme/internal/kroger"
 	"careme/internal/recipes"
 
 	"github.com/samber/lo"
@@ -38,7 +37,7 @@ func main() {
 		log.Fatalf("failed to create recipe generator: %s", err)
 	}
 
-	var ings []kroger.Ingredient
+	var ings []ai.InputIngredient
 	if searchTerm == "" {
 		ings, err = sp.FetchStaples(ctx, location)
 	} else {
@@ -47,10 +46,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to get ingredients: %s", err)
 	}
-
-	ings = lo.UniqBy(ings, func(i kroger.Ingredient) string {
-		return toString(i.ProductId)
-	})
 
 	catMap := make(map[string]int)
 	if cfg.IngredientGrading.Enable {
@@ -96,18 +91,11 @@ func main() {
 		for _, cat := range categories(i) {
 			catMap[cat] += 1
 		}
-		fmt.Printf("%s: %s - %s:($%s) size: %s categories: %v\n", toString(i.ProductId), toString(i.Brand), toString(i.Description), toFloat(i.PriceRegular), toString(i.Size), i.Categories)
+		fmt.Printf("%s: %s - %s:($%s) size: %s categories: %v\n", i.ProductID, i.Brand, i.Description, toFloat(i.PriceRegular), i.Size, i.Categories)
 	}
 	for cat, count := range catMap {
 		fmt.Printf("Category: %s, Count: %d\n", cat, count)
 	}
-}
-
-func toString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
 
 func toFloat(f *float32) string {
@@ -117,9 +105,9 @@ func toFloat(f *float32) string {
 	return fmt.Sprintf("%.2f", *f)
 }
 
-func categories(i kroger.Ingredient) []string {
+func categories(i ai.InputIngredient) []string {
 	if i.Categories == nil {
 		return nil
 	}
-	return *i.Categories
+	return i.Categories
 }

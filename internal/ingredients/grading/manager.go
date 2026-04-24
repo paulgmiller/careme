@@ -4,22 +4,19 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/kroger"
+	"careme/internal/parallelism"
+
+	"github.com/samber/lo"
 )
 
 const (
 	ingredientGradeBatchSize = 30
 )
-
-// collapse this soon as we make all staples return []ai.InputIngredient?
-type Service interface {
-	GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error)
-}
 
 type grader interface {
 	GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error)
@@ -27,18 +24,14 @@ type grader interface {
 
 type rubberstamp struct{}
 
-func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
+func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	results := make([]ai.InputIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
-		item, err := InputIngredientFromKrogerIngredient(ingredient)
-		if err != nil {
-			return nil, err
-		}
-		item.Grade = &ai.IngredientGrade{
+		ingredient.Grade = &ai.IngredientGrade{
 			Score:  10,
 			Reason: "ingredient grading disabled",
 		}
-		results = append(results, item)
+		results = append(results, ingredient)
 	}
 	return results, nil
 }
@@ -47,7 +40,7 @@ type multiGrader struct {
 	grader grader
 }
 
-func NewManager(cfg *config.Config, c cache.ListCache) Service {
+func NewManager(cfg *config.Config, c cache.ListCache) grader {
 	if cfg == nil || !cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "" {
 		return rubberstamp{}
 	}
@@ -57,82 +50,22 @@ func NewManager(cfg *config.Config, c cache.ListCache) Service {
 	}
 }
 
-func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []kroger.Ingredient) ([]ai.InputIngredient, error) {
+func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	if len(ingredients) == 0 {
 		return nil, nil
 	}
 
-	type groupedIngredient struct {
-		input     ai.InputIngredient
-		positions []int
-	}
+	// we assume dedupe before thing come in here
 
-	unique := make([]groupedIngredient, 0, len(ingredients))
-	indexByKey := make(map[string]int, len(ingredients))
-	for i, ingredient := range ingredients {
-		input, err := InputIngredientFromKrogerIngredient(ingredient)
-		if err != nil {
-			return nil, err
-		}
-		key := ingredientHash(input)
-		if idx, ok := indexByKey[key]; ok {
-			unique[idx].positions = append(unique[idx].positions, i)
-			continue
-		}
-		indexByKey[key] = len(unique)
-		unique = append(unique, groupedIngredient{
-			input:     input,
-			positions: []int{i},
-		})
+	batches := lo.Chunk(ingredients, ingredientGradeBatchSize)
+	graded, err := parallelism.Flatten(batches, func(batch []ai.InputIngredient) ([]ai.InputIngredient, error) {
+		return m.grader.GradeIngredients(ctx, batch)
+	})
+	if err != nil {
+		// will have cached these
+		return nil, err
 	}
-
-	uniqueResults := make([]ai.InputIngredient, len(unique))
-	errs := make([]error, len(unique))
-	var batches sync.WaitGroup
-	for start := 0; start < len(unique); start += ingredientGradeBatchSize {
-		start := start
-		end := min(start+ingredientGradeBatchSize, len(unique))
-		batches.Go(func() {
-			batchIngredients := make([]ai.InputIngredient, 0, end-start)
-			for _, item := range unique[start:end] {
-				batchIngredients = append(batchIngredients, item.input)
-			}
-
-			graded, err := m.grader.GradeIngredients(ctx, batchIngredients)
-			if err != nil {
-				for i := range batchIngredients {
-					errs[start+i] = err
-				}
-				return
-			}
-			if len(graded) != len(batchIngredients) {
-				err := fmt.Errorf("ingredient grader returned %d results for batch of %d", len(graded), len(batchIngredients))
-				for i := range batchIngredients {
-					errs[start+i] = err
-				}
-				return
-			}
-			copy(uniqueResults[start:end], graded)
-		})
-	}
-	batches.Wait()
-
-	for i, err := range errs {
-		if err != nil {
-			return nil, fmt.Errorf("grade ingredient %q: %w", ingredientLabel(unique[i].input), err)
-		}
-		if uniqueResults[i].Grade == nil {
-			return nil, fmt.Errorf("ingredient grader returned no result for %q", ingredientLabel(unique[i].input))
-		}
-	}
-
-	results := make([]ai.InputIngredient, len(ingredients))
-	for i, item := range unique {
-		for _, pos := range item.positions {
-			results[pos] = uniqueResults[i]
-		}
-	}
-	return results, nil
+	return graded, nil
 }
 
 func InputIngredientFromKrogerIngredient(ingredient kroger.Ingredient) (ai.InputIngredient, error) {
