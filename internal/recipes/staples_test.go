@@ -84,7 +84,7 @@ func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients [
 			Description: toValue(ingredient.Description),
 			Brand:       toValue(ingredient.Brand),
 			Size:        toValue(ingredient.Size),
-			Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 10, Reason: "stub"},
+			Grade:       &ai.IngredientGrade{Score: 10, Reason: "stub"},
 		})
 	}
 	return results, nil

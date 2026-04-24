@@ -217,7 +217,7 @@ func TestSaveIngredients_PreservesGrade(t *testing.T) {
 			ProductID:   "chicken-1",
 			Description: "Chicken Breast",
 			Size:        "1 lb",
-			Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 9, Reason: "Fresh and flexible."},
+			Grade:       &ai.IngredientGrade{Score: 9, Reason: "Fresh and flexible."},
 		},
 	}
 

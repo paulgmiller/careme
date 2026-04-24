@@ -35,9 +35,8 @@ func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []kroger.In
 			return nil, err
 		}
 		item.Grade = &ai.IngredientGrade{
-			SchemaVersion: "ingredient-grade-disabled",
-			Score:         10,
-			Reason:        "ingredient grading disabled",
+			Score:  10,
+			Reason: "ingredient grading disabled",
 		}
 		results = append(results, item)
 	}
@@ -45,16 +44,19 @@ func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []kroger.In
 }
 
 type multiGrader struct {
-	grader grader
+	cacheVersion string
+	grader       grader
 }
 
 func NewManager(cfg *config.Config, c cache.ListCache) Service {
 	if cfg == nil || !cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "" {
 		return rubberstamp{}
 	}
+	cacheVersion := ai.IngredientGradeCacheVersion(cfg.IngredientGrading.Model)
 	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model)
 	return &multiGrader{
-		grader: newCachingGrader(base, NewStore(c)),
+		cacheVersion: cacheVersion,
+		grader:       newCachingGrader(base, NewStore(c), cacheVersion),
 	}
 }
 
@@ -75,7 +77,7 @@ func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []kroger
 		if err != nil {
 			return nil, err
 		}
-		key := ingredientKey(input)
+		key := ingredientKey(m.cacheVersion, input)
 		if idx, ok := indexByKey[key]; ok {
 			unique[idx].positions = append(unique[idx].positions, i)
 			continue
@@ -154,8 +156,8 @@ func InputIngredientFromKrogerIngredient(ingredient kroger.Ingredient) (ai.Input
 	return item, nil
 }
 
-func ingredientKey(ingredient ai.InputIngredient) string {
-	return cacheKey(ai.NormalizeInputIngredient(ingredient).Hash())
+func ingredientKey(cacheVersion string, ingredient ai.InputIngredient) string {
+	return cacheKey(cacheVersion + "/" + ai.NormalizeInputIngredient(ingredient).Hash())
 }
 
 func ingredientLabel(ingredient ai.InputIngredient) string {

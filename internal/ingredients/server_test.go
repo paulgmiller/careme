@@ -117,12 +117,12 @@ func TestServerReturnsGradedIngredientsJSON(t *testing.T) {
 		{
 			ProductID:   "a",
 			Description: "Asparagus",
-			Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 9, Reason: "Fresh and flexible."},
+			Grade:       &ai.IngredientGrade{Score: 9, Reason: "Fresh and flexible."},
 		},
 		{
 			ProductID:   "b",
 			Description: "Potato Chips",
-			Grade:       &ai.IngredientGrade{SchemaVersion: "ingredient-grade-v1", Score: 2, Reason: "Snack food with limited recipe value."},
+			Grade:       &ai.IngredientGrade{Score: 2, Reason: "Snack food with limited recipe value."},
 		},
 	}
 	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {

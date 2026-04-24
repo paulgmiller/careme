@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/invopop/jsonschema"
 	openai "github.com/openai/openai-go/v3"
@@ -67,11 +66,8 @@ type InputIngredient struct {
 }
 
 type IngredientGrade struct {
-	SchemaVersion string    `json:"schema_version,omitempty"`
-	Score         int       `json:"score"`
-	Reason        string    `json:"reason"`
-	Model         string    `json:"model,omitempty" jsonschema:"-"`
-	GradedAt      time.Time `json:"graded_at,omitempty" jsonschema:"-"`
+	Score  int    `json:"score"`
+	Reason string `json:"reason"`
 }
 
 // Not a big fand of the number of places that normalize should be done once and not always
@@ -91,7 +87,6 @@ func (i InputIngredient) Hash() string {
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(i.Brand))))
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(i.Description))))
 	lo.Must(io.WriteString(fnv, strings.ToLower(strings.TrimSpace(i.Size))))
-	lo.Must(io.WriteString(fnv, ingredientGradeSystemInstruction))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
@@ -109,6 +104,23 @@ type ingredientGrader struct {
 	apiKey string
 	model  string
 	schema map[string]any
+}
+
+func IngredientGradeCacheVersion(model string) string {
+	return ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction, ingredientGradeSchemaV1)
+}
+
+func ingredientGradeCacheVersion(model, systemInstruction, schemaVersion string) string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		model = defaultIngredientGradeModel
+	}
+
+	fnv := fnv.New128a()
+	lo.Must(io.WriteString(fnv, model))
+	lo.Must(io.WriteString(fnv, systemInstruction))
+	lo.Must(io.WriteString(fnv, schemaVersion))
+	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 func NewIngredientGrader(apiKey, model string) *ingredientGrader {
@@ -156,11 +168,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	}
 	slog.InfoContext(ctx, "Ingredient grading usage", "model", g.model, responseUsageLogAttr(resp.Usage))
 
-	model := strings.TrimSpace(resp.Model)
-	if model == "" {
-		model = g.model
-	}
-	return parseIngredientGrades(resp.OutputText(), items, model, time.Now().UTC())
+	return parseIngredientGrades(resp.OutputText(), items)
 }
 
 func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
@@ -187,22 +195,22 @@ func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
 	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each id exactly.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
 }
 
-func parseIngredientGrades(body string, items []InputIngredient, model string, gradedAt time.Time) ([]InputIngredient, error) {
+func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredient, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return nil, fmt.Errorf("empty ingredient grading response from model")
 	}
 
-	itemIndexByProductID := make(map[string]int, len(items))
-	for i, item := range items {
+	itemMap := make(map[string]InputIngredient, len(items))
+	for _, item := range items {
 		productID := strings.TrimSpace(item.ProductID)
 		if productID == "" {
 			return nil, fmt.Errorf("ingredient product_id is required")
 		}
-		if _, ok := itemIndexByProductID[productID]; ok {
+		if _, ok := itemMap[productID]; ok {
 			return nil, fmt.Errorf("ingredient grading duplicated input product_id %q", productID)
 		}
-		itemIndexByProductID[productID] = i
+		itemMap[productID] = item
 	}
 
 	var parsed ingredientBatchGradeResponse
@@ -210,26 +218,24 @@ func parseIngredientGrades(body string, items []InputIngredient, model string, g
 		return nil, fmt.Errorf("failed to parse ingredient grading response: %w", err)
 	}
 	if len(parsed.Grades) != len(items) {
-		gradesjson := lo.Must(json.MarshalIndent(parsed.Grades, "", "  "))
-		itemsjson := lo.Must(json.MarshalIndent(items, "", "  "))
-		return nil, fmt.Errorf("ingredient grading response count mismatch: got %d want %d\nGrades:\n%s\nItems:\n%s", len(parsed.Grades), len(items), gradesjson, itemsjson)
+		return nil, fmt.Errorf("ingredient grading response count mismatch: got %d want %d", len(parsed.Grades), len(items))
 	}
 
-	graded := make([]InputIngredient, len(items))
-	seen := make(map[string]struct{}, len(items))
+	var graded []InputIngredient
+	seen := make(map[string]bool, len(items))
 	for _, result := range parsed.Grades {
 		productID := strings.TrimSpace(result.ProductID)
 		if productID == "" {
 			return nil, fmt.Errorf("ingredient grade missing product_id")
 		}
-		index, ok := itemIndexByProductID[productID]
+		item, ok := itemMap[productID]
 		if !ok {
 			return nil, fmt.Errorf("ingredient grade returned unknown product_id %q", productID)
 		}
-		if _, ok := seen[productID]; ok {
+		if seen[productID] {
 			return nil, fmt.Errorf("ingredient grading duplicated product_id %q", productID)
 		}
-		seen[productID] = struct{}{}
+		seen[productID] = true
 		if result.Score < 0 || result.Score > 10 {
 			return nil, fmt.Errorf("ingredient score must be between 0 and 10")
 		}
@@ -237,22 +243,13 @@ func parseIngredientGrades(body string, items []InputIngredient, model string, g
 			return nil, fmt.Errorf("ingredient grading reason is required")
 		}
 
-		item := items[index]
 		item.Grade = &IngredientGrade{
-			SchemaVersion: ingredientGradeSchemaV1,
-			Score:         result.Score,
-			Reason:        strings.TrimSpace(result.Reason),
-			Model:         model,
-			GradedAt:      gradedAt,
+			Score:  result.Score,
+			Reason: strings.TrimSpace(result.Reason),
 		}
-		graded[index] = item
+		graded = append(graded, item)
 	}
 
-	for i := range graded {
-		if graded[i].Grade == nil {
-			return nil, fmt.Errorf("ingredient grading missing product_id %q", items[i].ProductID)
-		}
-	}
 	return graded, nil
 }
 

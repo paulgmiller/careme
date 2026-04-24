@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -21,10 +20,8 @@ func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 		ProductID:   "ingredient-123",
 		Description: "Asparagus",
 		Grade: &ai.IngredientGrade{
-			SchemaVersion: "ingredient-grade-v1",
-			Score:         8,
-			Reason:        "Fresh produce with broad recipe use.",
-			GradedAt:      time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC),
+			Score:  8,
+			Reason: "Fresh produce with broad recipe use.",
 		},
 	}
 
