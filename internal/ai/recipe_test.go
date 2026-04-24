@@ -135,7 +135,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 		WineStyles:   []string{"Pinot Noir", "Chardonnay"},
 	}
 	wines := []InputIngredient{
-		{ProductID: "pinot-noir-1", Description: "Pinot Noir", Size: "750mL", PriceRegular: "13.99"},
+		{ProductID: "pinot-noir-1", Description: "Pinot Noir", Size: "750mL", PriceRegular: float32Ptr(13.99)},
 	}
 
 	prompt, err := buildWineSelectionPrompt(recipe, wines)

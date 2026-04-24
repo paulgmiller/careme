@@ -14,6 +14,8 @@ import (
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/kroger"
 	"careme/internal/recipes"
+
+	"github.com/samber/lo"
 )
 
 func main() {
@@ -46,6 +48,10 @@ func main() {
 		log.Fatalf("failed to get ingredients: %s", err)
 	}
 
+	ings = lo.UniqBy(ings, func(i kroger.Ingredient) string {
+		return toString(i.ProductId)
+	})
+
 	catMap := make(map[string]int)
 	if cfg.IngredientGrading.Enable {
 		log.Printf("Grading %d ingredients", len(ings))
@@ -59,16 +65,8 @@ func main() {
 			log.Fatalf("failed to grade ingredients: %s", err)
 		}
 		slices.SortFunc(graded, func(a, b ai.InputIngredient) int {
-			ascore := 0
-			bscore := 0
-			if a.Grade != nil {
-				ascore = a.Grade.Score
-			}
-			if b.Grade != nil {
-				bscore = b.Grade.Score
-			}
-			if ascore != bscore {
-				return bscore - ascore
+			if a.Grade.Score != b.Grade.Score {
+				return b.Grade.Score - a.Grade.Score
 			}
 			return strings.Compare(strings.ToLower(a.Description), strings.ToLower(b.Description))
 		})
@@ -76,19 +74,23 @@ func main() {
 			for _, cat := range result.Categories {
 				catMap[cat] += 1
 			}
-			score := 0
-			reason := ""
-			if result.Grade != nil {
-				score = result.Grade.Score
-				reason = result.Grade.Reason
-			}
-			fmt.Printf("%2d/10 %s: %s - %s:($%s) size: %s categories: %v\n", score, result.ProductID, result.Brand, result.Description, result.PriceRegular, result.Size, result.Categories)
-			if strings.TrimSpace(reason) != "" {
-				fmt.Printf("    %s\n", strings.TrimSpace(reason))
+
+			fmt.Printf("%2d/10 %s: %s - %s:($%s) size: %s categories: %v\n", result.Grade.Score, result.ProductID, result.Brand, result.Description, toFloat(result.PriceRegular), result.Size, result.Categories)
+			if strings.TrimSpace(result.Grade.Reason) != "" {
+				fmt.Printf("    %s\n", strings.TrimSpace(result.Grade.Reason))
 			}
 		}
 		for cat, count := range catMap {
 			fmt.Printf("Category: %s, Count: %d\n", cat, count)
+		}
+
+		counts := lo.Reduce(graded, func(counts map[int]int, ingredient ai.InputIngredient, _ int) map[int]int {
+			counts[ingredient.Grade.Score] += 1
+			return counts
+		}, make(map[int]int))
+		fmt.Println("Grade distribution:")
+		for score := 0; score <= 10; score++ {
+			fmt.Printf("Score %2d: %d ingredients\n", score, counts[score])
 		}
 		return
 	}

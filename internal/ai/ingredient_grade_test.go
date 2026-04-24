@@ -16,8 +16,8 @@ func TestNormalizeInputIngredientNormalizesFieldsAndSetsID(t *testing.T) {
 		Brand:        " Farm Stand ",
 		Description:  "  Baby Spinach  ",
 		Size:         " 5 oz ",
-		PriceRegular: " 4.99 ",
-		PriceSale:    " 3.49 ",
+		PriceRegular: float32Ptr(4.99),
+		PriceSale:    float32Ptr(3.49),
 		Categories:   []string{" greens ", "Produce", "produce", ""},
 	})
 
@@ -26,9 +26,15 @@ func TestNormalizeInputIngredientNormalizesFieldsAndSetsID(t *testing.T) {
 	assert.Equal(t, "Farm Stand", ingredient.Brand)
 	assert.Equal(t, "Baby Spinach", ingredient.Description)
 	assert.Equal(t, "5 oz", ingredient.Size)
-	assert.Equal(t, "4.99", ingredient.PriceRegular)
-	assert.Equal(t, "3.49", ingredient.PriceSale)
+	require.NotNil(t, ingredient.PriceRegular)
+	require.NotNil(t, ingredient.PriceSale)
+	assert.Equal(t, float32(4.99), *ingredient.PriceRegular)
+	assert.Equal(t, float32(3.49), *ingredient.PriceSale)
 	assert.Equal(t, []string{"greens", "Produce"}, ingredient.Categories)
+}
+
+func float32Ptr(v float32) *float32 {
+	return &v
 }
 
 func TestInputIngredientHashStableAcrossCategoryOrder(t *testing.T) {
@@ -54,8 +60,8 @@ func TestBuildIngredientGradePrompt(t *testing.T) {
 	})
 	prompt, err := buildIngredientGradePrompt([]InputIngredient{ingredient})
 	require.NoError(t, err)
-	assert.Contains(t, prompt, "preserving each product_id")
-	assert.Contains(t, prompt, `"product_id": "foobar"`)
+	assert.Contains(t, prompt, "preserving each id")
+	assert.Contains(t, prompt, `"id": "foobar"`)
 	assert.Contains(t, prompt, "Return JSON only matching the provided schema.")
 	assert.Contains(t, prompt, `"description": "Asparagus"`)
 }
@@ -66,7 +72,7 @@ func TestParseIngredientGrades(t *testing.T) {
 		ProductID:   "ingredient-1",
 	})}
 	gradedAt := time.Date(2026, 4, 23, 12, 0, 0, 0, time.UTC)
-	graded, err := parseIngredientGrades(`{"grades":[{"product_id":"`+items[0].ProductID+`","score":8,"reason":"Fresh produce with broad weeknight use."}]}`, items, "gpt-test", gradedAt)
+	graded, err := parseIngredientGrades(`{"grades":[{"id":"`+items[0].ProductID+`","score":8,"reason":"Fresh produce with broad weeknight use."}]}`, items, "gpt-test", gradedAt)
 	require.NoError(t, err)
 	require.Len(t, graded, 1)
 	require.NotNil(t, graded[0].Grade)
@@ -79,11 +85,11 @@ func TestParseIngredientGrades(t *testing.T) {
 
 func TestParseIngredientGradesRejectsInvalidResponses(t *testing.T) {
 	items := []InputIngredient{NormalizeInputIngredient(InputIngredient{ProductID: "ingredient-1"})}
-	_, err := parseIngredientGrades(`{"grades":[{"product_id":"`+items[0].ProductID+`","score":11,"reason":"too high"}]}`, items, "", time.Time{})
+	_, err := parseIngredientGrades(`{"grades":[{"id":"`+items[0].ProductID+`","score":11,"reason":"too high"}]}`, items, "", time.Time{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "between 0 and 10")
 
-	_, err = parseIngredientGrades(`{"grades":[{"product_id":"`+items[0].ProductID+`","score":3,"reason":"   "}]}`, items, "", time.Time{})
+	_, err = parseIngredientGrades(`{"grades":[{"id":"`+items[0].ProductID+`","score":3,"reason":"   "}]}`, items, "", time.Time{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reason is required")
 
@@ -98,7 +104,7 @@ func TestParseIngredientGradesMatchesByIDInsteadOfOrder(t *testing.T) {
 		NormalizeInputIngredient(InputIngredient{Description: "Asparagus", ProductID: "a"}),
 	}
 
-	body := `{"grades":[{"product_id":"` + items[1].ProductID + `","score":9,"reason":"Fresh vegetable."},{"product_id":"` + items[0].ProductID + `","score":2,"reason":"Snack food."}]}`
+	body := `{"grades":[{"id":"` + items[1].ProductID + `","score":9,"reason":"Fresh vegetable."},{"id":"` + items[0].ProductID + `","score":2,"reason":"Snack food."}]}`
 	graded, err := parseIngredientGrades(body, items, "", time.Time{})
 	require.NoError(t, err)
 	require.Len(t, graded, 2)

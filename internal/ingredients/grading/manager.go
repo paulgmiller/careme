@@ -142,8 +142,8 @@ func InputIngredientFromKrogerIngredient(ingredient kroger.Ingredient) (ai.Input
 		Brand:        strings.TrimSpace(toStr(ingredient.Brand)),
 		Description:  strings.TrimSpace(toStr(ingredient.Description)),
 		Size:         strings.TrimSpace(toStr(ingredient.Size)),
-		PriceRegular: priceToString(ingredient.PriceRegular),
-		PriceSale:    priceToString(ingredient.PriceSale),
+		PriceRegular: clonePrice(ingredient.PriceRegular),
+		PriceSale:    clonePrice(ingredient.PriceSale),
 		Categories:   categoriesFromPtr(ingredient.Categories),
 	}
 	item = ai.NormalizeInputIngredient(item)
@@ -181,9 +181,10 @@ func categoriesFromPtr(ptr *[]string) []string {
 	return append([]string(nil), (*ptr)...)
 }
 
-func priceToString(price *float32) string {
+func clonePrice(price *float32) *float32 {
 	if price == nil {
-		return ""
+		return nil
 	}
-	return fmt.Sprintf("%.2f", *price)
+	value := *price
+	return &value
 }

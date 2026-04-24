@@ -8,8 +8,6 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
-	"math"
-	"strconv"
 	"slices"
 	"strings"
 	"time"
@@ -22,36 +20,48 @@ import (
 )
 
 const (
-	defaultIngredientGradeModel = openai.ChatModelGPT5Nano
+	defaultIngredientGradeModel = openai.ChatModelGPT5Mini
 	ingredientGradeSchemaV1     = "ingredient-grade-v1"
 )
 
 const ingredientGradeSystemInstruction = `
 You review grocery catalog items before they are shown to a home recipe generator.
 
-Score each ingredient from 0 to 10 for how useful it is in a normal home-cooked recipe while considering:
-- likely freshness and perishability from the catalog wording
-- whether the item is a practical cooking ingredient instead of a novelty, supplement, or ready-to-eat product
-- whether it gives the recipe model flexible cooking options
+Score each item from 0 to 10 for usefulness as an ingredient in home-cooked recipes.
 
-Scoring guidance:
-- 9-10: excellent fresh or versatile cooking ingredient
-- 7-8: strong ingredient with minor limitations
-- 4-6: usable but limited, highly processed, or unclear
-- 0-3: poor fit for home recipe generation
+Strongly reward:
+- raw, fresh, whole, or minimally processed produce, meat, seafood, dairy, grains, legumes, herbs, and spices
+- ingredients that can support many recipe styles or cuisines
+- less common but real cooking ingredients, including greens, roots, organ meats, bones, and seasonal produce
 
-Return JSON only. Be concise.`
+Strongly penalize:
+- ready-to-eat foods, meal kits, bowls, snack trays, party trays, dips, sauces, gravies, mixes, and prepared sides
+- items already cooked, heavily seasoned, sauced, breaded, cured, or packaged with dip/sauce
+- formats intended mainly for snacking or immediate eating rather than cooking
+- pre-cut fruit unless it is still broadly useful for cooking or baking
+
+Scoring anchors:
+- 9-10: excellent raw/fresh flexible cooking ingredient, e.g. whole vegetables, greens, roots, raw meats, fresh fruit useful in baking/cooking
+- 7-8: strong ingredient but with some limitation, e.g. pre-seasoned sausage, niche produce, soup bones, cooked seafood
+- 4-6: usable but narrow, processed, pre-cut, pre-mixed, or convenience-oriented
+- 0-3: ready-to-eat snack/meal/kit/dip/sauce/condiment with little recipe flexibility
+
+Important calibration:
+- Do not downgrade an ingredient just because it is uncommon. Rutabaga, collard greens, artichokes, yuca, pears, soup bones, and chicken livers are valid cooking ingredients.
+- Do downgrade items whose catalog wording implies they are mostly finished foods or snack formats.
+
+Return JSON only. Preserve each input id/index exactly. Be concise.`
 
 // this is wire compatible with kroger.Ingredient eventually it should replace it in what staples returns
 type InputIngredient struct {
-	ProductID    string           `json:"-"`
-	AisleNumber  string           `json:"-"`
-	Brand        string           `json:"-"`
-	Description  string           `json:"-"`
-	Size         string           `json:"-"`
-	PriceRegular string           `json:"-"`
-	PriceSale    string           `json:"-"`
-	Categories   []string         `json:"-"`
+	ProductID    string           `json:"id,omitempty"`
+	AisleNumber  string           `json:"number,omitempty"` //this is a dumb json name fix it later
+	Brand        string           `json:"brand,omitempty"`
+	Description  string           `json:"description,omitempty"`
+	Size         string           `json:"size,omitempty"`
+	PriceRegular *float32         `json:"regularPrice,omitempty"`
+	PriceSale    *float32         `json:"salePrice,omitempty"`
+	Categories   []string         `json:"categories,omitempty"`
 	Grade        *IngredientGrade `json:"grade,omitempty"`
 }
 
@@ -63,14 +73,13 @@ type IngredientGrade struct {
 	GradedAt      time.Time `json:"graded_at,omitempty" jsonschema:"-"`
 }
 
+// Not a big fand of the number of places that normalize should be done once and not always
 func NormalizeInputIngredient(ingredient InputIngredient) InputIngredient {
 	ingredient.ProductID = strings.TrimSpace(ingredient.ProductID)
 	ingredient.AisleNumber = strings.TrimSpace(ingredient.AisleNumber)
 	ingredient.Brand = strings.TrimSpace(ingredient.Brand)
 	ingredient.Description = strings.TrimSpace(ingredient.Description)
 	ingredient.Size = strings.TrimSpace(ingredient.Size)
-	ingredient.PriceRegular = strings.TrimSpace(ingredient.PriceRegular)
-	ingredient.PriceSale = strings.TrimSpace(ingredient.PriceSale)
 	ingredient.Categories = normalizeCategories(ingredient.Categories)
 	return ingredient
 }
@@ -85,36 +94,9 @@ func (i InputIngredient) Hash() string {
 }
 
 type ingredientGradeResponseItem struct {
-	ProductID string `json:"product_id"`
+	ProductID string `json:"id"`
 	Score     int    `json:"score" jsonschema:"minimum=0,maximum=10"`
 	Reason    string `json:"reason"`
-}
-
-type inputIngredientWire struct {
-	ProductID         string           `json:"id,omitempty"`
-	LegacyProductID   string           `json:"product_id,omitempty"`
-	AisleNumber       string           `json:"number,omitempty"`
-	LegacyAisleNumber string           `json:"aisle_number,omitempty"`
-	Brand             string           `json:"brand,omitempty"`
-	Description       string           `json:"description,omitempty"`
-	Size              string           `json:"size,omitempty"`
-	PriceRegular      *float32         `json:"regularPrice,omitempty"`
-	LegacyPriceRegular string          `json:"price_regular,omitempty"`
-	PriceSale         *float32         `json:"salePrice,omitempty"`
-	LegacyPriceSale   string           `json:"price_sale,omitempty"`
-	Categories        []string         `json:"categories,omitempty"`
-	Grade             *IngredientGrade `json:"grade,omitempty"`
-}
-
-type ingredientGradePromptItem struct {
-	ProductID    string   `json:"product_id"`
-	AisleNumber  string   `json:"aisle_number,omitempty"`
-	Brand        string   `json:"brand,omitempty"`
-	Description  string   `json:"description,omitempty"`
-	Size         string   `json:"size,omitempty"`
-	PriceRegular string   `json:"price_regular,omitempty"`
-	PriceSale    string   `json:"price_sale,omitempty"`
-	Categories   []string `json:"categories,omitempty"`
 }
 
 type ingredientBatchGradeResponse struct {
@@ -180,17 +162,20 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 }
 
 func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
+
+	type ingredientGradePromptItem struct {
+		ProductID   string `json:"id"`
+		Brand       string `json:"brand,omitempty"`
+		Description string `json:"description,omitempty"`
+		Size        string `json:"size,omitempty"`
+	}
 	promptItems := make([]ingredientGradePromptItem, len(items))
 	for i, item := range items {
 		promptItems[i] = ingredientGradePromptItem{
-			ProductID:    item.ProductID,
-			AisleNumber:  item.AisleNumber,
-			Brand:        item.Brand,
-			Description:  item.Description,
-			Size:         item.Size,
-			PriceRegular: item.PriceRegular,
-			PriceSale:    item.PriceSale,
-			Categories:   slices.Clone(item.Categories),
+			ProductID:   item.ProductID,
+			Brand:       item.Brand,
+			Description: item.Description,
+			Size:        item.Size,
 		}
 	}
 
@@ -198,77 +183,13 @@ func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal ingredient batch: %w", err)
 	}
-	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each product_id exactly.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
-}
-
-func (i InputIngredient) MarshalJSON() ([]byte, error) {
-	wire := inputIngredientWire{
-		ProductID:   strings.TrimSpace(i.ProductID),
-		AisleNumber: strings.TrimSpace(i.AisleNumber),
-		Brand:       strings.TrimSpace(i.Brand),
-		Description: strings.TrimSpace(i.Description),
-		Size:        strings.TrimSpace(i.Size),
-		Categories:  normalizeCategories(i.Categories),
-		Grade:       i.Grade,
-	}
-
-	if price, ok, err := parsePriceString(i.PriceRegular); err != nil {
-		return nil, fmt.Errorf("marshal regular price for %q: %w", i.ProductID, err)
-	} else if ok {
-		wire.PriceRegular = &price
-	}
-	if price, ok, err := parsePriceString(i.PriceSale); err != nil {
-		return nil, fmt.Errorf("marshal sale price for %q: %w", i.ProductID, err)
-	} else if ok {
-		wire.PriceSale = &price
-	}
-
-	return json.Marshal(wire)
-}
-
-func (i *InputIngredient) UnmarshalJSON(data []byte) error {
-	var wire inputIngredientWire
-	if err := json.Unmarshal(data, &wire); err != nil {
-		return err
-	}
-
-	i.ProductID = strings.TrimSpace(lo.CoalesceOrEmpty(wire.ProductID, wire.LegacyProductID))
-	i.AisleNumber = strings.TrimSpace(lo.CoalesceOrEmpty(wire.AisleNumber, wire.LegacyAisleNumber))
-	i.Brand = strings.TrimSpace(wire.Brand)
-	i.Description = strings.TrimSpace(wire.Description)
-	i.Size = strings.TrimSpace(wire.Size)
-	i.Categories = normalizeCategories(wire.Categories)
-	i.Grade = wire.Grade
-
-	switch {
-	case wire.PriceRegular != nil:
-		i.PriceRegular = formatPrice(*wire.PriceRegular)
-	default:
-		i.PriceRegular = strings.TrimSpace(wire.LegacyPriceRegular)
-	}
-	switch {
-	case wire.PriceSale != nil:
-		i.PriceSale = formatPrice(*wire.PriceSale)
-	default:
-		i.PriceSale = strings.TrimSpace(wire.LegacyPriceSale)
-	}
-
-	*i = NormalizeInputIngredient(*i)
-	return nil
+	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each id exactly.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
 }
 
 func parseIngredientGrades(body string, items []InputIngredient, model string, gradedAt time.Time) ([]InputIngredient, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return nil, fmt.Errorf("empty ingredient grading response from model")
-	}
-
-	var parsed ingredientBatchGradeResponse
-	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
-		return nil, fmt.Errorf("failed to parse ingredient grading response: %w", err)
-	}
-	if len(parsed.Grades) != len(items) {
-		return nil, fmt.Errorf("ingredient grading response count mismatch: got %d want %d", len(parsed.Grades), len(items))
 	}
 
 	itemIndexByProductID := make(map[string]int, len(items))
@@ -281,6 +202,16 @@ func parseIngredientGrades(body string, items []InputIngredient, model string, g
 			return nil, fmt.Errorf("ingredient grading duplicated input product_id %q", productID)
 		}
 		itemIndexByProductID[productID] = i
+	}
+
+	var parsed ingredientBatchGradeResponse
+	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
+		return nil, fmt.Errorf("failed to parse ingredient grading response: %w", err)
+	}
+	if len(parsed.Grades) != len(items) {
+		gradesjson := lo.Must(json.MarshalIndent(parsed.Grades, "", "  "))
+		itemsjson := lo.Must(json.MarshalIndent(items, "", "  "))
+		return nil, fmt.Errorf("ingredient grading response count mismatch: got %d want %d\nGrades:\n%s\nItems:\n%s", len(parsed.Grades), len(items), gradesjson, itemsjson)
 	}
 
 	graded := make([]InputIngredient, len(items))
@@ -365,21 +296,9 @@ func normalizeCategories(categories []string) []string {
 	return out
 }
 
-func parsePriceString(price string) (float32, bool, error) {
-	price = strings.TrimSpace(price)
-	if price == "" {
-		return 0, false, nil
+func priceToString(price *float32) string {
+	if price == nil {
+		return ""
 	}
-	parsed, err := strconv.ParseFloat(price, 32)
-	if err != nil {
-		return 0, false, err
-	}
-	return float32(parsed), true, nil
-}
-
-func formatPrice(price float32) string {
-	if math.Mod(float64(price), 1) == 0 {
-		return fmt.Sprintf("%.0f", price)
-	}
-	return fmt.Sprintf("%.2f", price)
+	return fmt.Sprintf("%.2f", *price)
 }
