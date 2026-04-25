@@ -25,7 +25,6 @@ func NewHandler(c cache.Cache, _ any) *server {
 
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /ingredients/{hash}", s.handleIngredients)
-	mux.HandleFunc("GET /ingredients/{hash}/graded", s.handleGradedIngredients)
 }
 
 func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
@@ -34,6 +33,13 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 		s.writeIngredientLoadError(w, r, err)
 		return
 	}
+
+	slices.SortFunc(ingredients, func(a, b ai.InputIngredient) int {
+		if a.Grade != nil || b.Grade != nil {
+			return strings.Compare(strings.ToLower(a.Description), strings.ToLower(b.Description))
+		}
+		return b.Grade.Score - a.Grade.Score
+	})
 
 	slog.Info("serving cached ingredients", "path", r.URL.Path)
 	if r.URL.Query().Get("format") == "tsv" {
@@ -50,44 +56,6 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 	if err := enc.Encode(ingredients); err != nil {
 		http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
 		return
-	}
-}
-
-func (s *server) handleGradedIngredients(w http.ResponseWriter, r *http.Request) {
-	ingredients, err := s.loadCachedIngredients(r)
-	if err != nil {
-		s.writeIngredientLoadError(w, r, err)
-		return
-	}
-
-	results := make([]ai.InputIngredient, 0, len(ingredients))
-	for _, result := range ingredients {
-		if result.Grade == nil {
-			http.Error(w, "ingredient grading returned no result", http.StatusInternalServerError)
-			return
-		}
-		results = append(results, result)
-	}
-	slices.SortFunc(results, func(a, b ai.InputIngredient) int {
-		ascore := 0
-		bscore := 0
-		if a.Grade != nil {
-			ascore = a.Grade.Score
-		}
-		if b.Grade != nil {
-			bscore = b.Grade.Score
-		}
-		if ascore != bscore {
-			return bscore - ascore
-		}
-		return strings.Compare(strings.ToLower(a.Description), strings.ToLower(b.Description))
-	})
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(results); err != nil {
-		http.Error(w, "failed to encode graded ingredients", http.StatusInternalServerError)
 	}
 }
 
