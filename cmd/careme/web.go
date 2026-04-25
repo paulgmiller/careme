@@ -16,6 +16,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/config"
 	"careme/internal/ingredients"
+	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
@@ -57,18 +58,20 @@ func runServer(cfg *config.Config, addr string) error {
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
 	watchdogServer := watchdog.Server{}
+	// TODO  make the mock more transparent?
+	grader := ingredientgrading.NewManager(cfg, cache)
 
 	var generator recipes.ExtGenerator
 	var waitFns []func()
-
 	if cfg.Mocks.Enable {
 		generator = recipes.NewMockGenerator()
 	} else {
 		mc := critique.NewManager(cfg, cache)
 		ro.add(mc)
+
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
 		ro.add(aiclient)
-		staples, err := recipes.NewCachedStaplesService(cfg, cache)
+		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
 		if err != nil {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}

@@ -9,17 +9,12 @@ import (
 	"strings"
 	"unicode"
 
+	"careme/internal/ai"
 	"careme/internal/config"
-	"careme/internal/kroger"
 	"careme/internal/recipes"
 
-	"github.com/samber/lo"
 	"golang.org/x/text/unicode/norm"
 )
-
-type staplesProvider interface {
-	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
-}
 
 func main() {
 	var locationID string
@@ -90,6 +85,10 @@ type produceFilterStats struct {
 	matchedDescriptions []string
 }
 
+type staplesProvider interface {
+	FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
+}
+
 func checkProduceAvailability(ctx context.Context, client staplesProvider, locationID string, produce []string) ([]string, int, error) {
 	// todo check total number of queries.
 
@@ -106,10 +105,6 @@ func checkProduceAvailability(ctx context.Context, client staplesProvider, locat
 		matchedDescriptions: matchedDescriptions,
 	}
 
-	ingredients = lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
-		return toString(i.ProductId)
-	})
-
 	// TODO have staples return subset of ingredient that can say the search term it go a match on
 	// then we can give info on whats coming from what queries. Could use categories for wholefoods.
 	// annotateUniqueOnlyMatches(stats)
@@ -118,14 +113,7 @@ func checkProduceAvailability(ctx context.Context, client staplesProvider, locat
 	return evaluateProduceAvailability(produce, ingredients), len(ingredients), nil
 }
 
-func toString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
-func evaluateProduceAvailability(produce []string, ingredients []kroger.Ingredient) []string {
+func evaluateProduceAvailability(produce []string, ingredients []ai.InputIngredient) []string {
 	missing := make([]string, 0)
 	for _, term := range produce {
 		matches := hasProduce(ingredients, term)
@@ -141,12 +129,12 @@ func evaluateProduceAvailability(produce []string, ingredients []kroger.Ingredie
 	return missing
 }
 
-func summarizeFilterMatches(produce []string, ingredients []kroger.Ingredient) (int, int) {
+func summarizeFilterMatches(produce []string, ingredients []ai.InputIngredient) (int, int) {
 	matchedTerms, matchedProducts, _ := summarizeFilterMatchesDetailed(produce, ingredients)
 	return matchedTerms, matchedProducts
 }
 
-func summarizeFilterMatchesDetailed(produce []string, ingredients []kroger.Ingredient) (int, int, []string) {
+func summarizeFilterMatchesDetailed(produce []string, ingredients []ai.InputIngredient) (int, int, []string) {
 	matchedTerms := 0
 	matchedProducts := 0
 	descriptions := make(map[string]struct{})
@@ -201,7 +189,7 @@ func printProduceFilterSummary(stat produceFilterStats, totalProduceTerms int) {
 	fmt.Println()
 }
 
-func hasProduce(ingredients []kroger.Ingredient, term string) []string {
+func hasProduce(ingredients []ai.InputIngredient, term string) []string {
 	needleTokens := tokens(normalizeTerm(term))
 	if len(needleTokens) == 0 {
 		return nil
@@ -209,10 +197,7 @@ func hasProduce(ingredients []kroger.Ingredient, term string) []string {
 	seen := make(map[string]struct{})
 	matches := make([]string, 0)
 	for _, ingredient := range ingredients {
-		if ingredient.Description == nil {
-			continue
-		}
-		description := strings.TrimSpace(*ingredient.Description)
+		description := strings.TrimSpace(ingredient.Description)
 		if description == "" {
 			continue
 		}

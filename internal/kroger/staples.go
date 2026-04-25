@@ -83,7 +83,7 @@ func searchIngredients(ctx context.Context, client ClientWithResponsesInterface,
 	if err != nil {
 		return nil, fmt.Errorf("kroger product search request failed: %w", err)
 	}
-	if err := requireSuccess(products.StatusCode(), products.JSON500); err != nil {
+	if err := requireSuccess(products.StatusCode(), productSearchErrorPayload(products)); err != nil {
 		return nil, err
 	}
 
@@ -198,6 +198,25 @@ func requireSuccess(statusCode int, payload any) error {
 		return nil
 	}
 	return krogerError(statusCode, payload)
+}
+
+func productSearchErrorPayload(resp *ProductSearchResponse) any {
+	if resp == nil {
+		return nil
+	}
+	if resp.JSON400 != nil {
+		return resp.JSON400
+	}
+	if resp.JSON401 != nil {
+		return resp.JSON401
+	}
+	if resp.JSON500 != nil {
+		return resp.JSON500
+	}
+	if len(resp.Body) != 0 {
+		return json.RawMessage(resp.Body)
+	}
+	return nil
 }
 
 func mustJSONSignature(value any) string {

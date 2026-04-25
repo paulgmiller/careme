@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/kroger"
 	"careme/internal/locations"
 
 	openai "github.com/openai/openai-go/v3"
@@ -34,7 +33,7 @@ type GeneratedImage struct {
 	Body io.Reader
 }
 
-// todo collapse closer to
+// how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` // should this and price be numbers? need units then
@@ -343,7 +342,7 @@ func imageUsageLogAttr(usage openai.ImagesResponseUsage) slog.Attr {
 	)
 }
 
-func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []kroger.Ingredient) (*WineSelection, error) {
+func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngredient) (*WineSelection, error) {
 	prompt, err := buildWineSelectionPrompt(recipe, wines)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build wine selection prompt: %w", err)
@@ -369,8 +368,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []kroger.Ing
 	return &selection, nil
 }
 
-// is this dependency on krorger unncessary? just pass in a blob of toml or whatever? same with last recipes?
-func (c *client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+func (c *client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -415,9 +413,9 @@ func buildRecipeImagePrompt(recipe Recipe) (string, error) {
 }
 
 // similiar to image generation builder
-func buildWineSelectionPrompt(recipe Recipe, wines []kroger.Ingredient) (string, error) {
+func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, error) {
 	var wineTSV strings.Builder
-	if err := kroger.ToTSV(wines, &wineTSV); err != nil {
+	if err := InputIngredientsToTSV(wines, &wineTSV); err != nil {
 		return "", fmt.Errorf("failed to convert wines to TSV: %w", err)
 	}
 
@@ -436,7 +434,7 @@ func buildWineSelectionPrompt(recipe Recipe, wines []kroger.Ingredient) (string,
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locations.Location, saleIngredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
+func (c *client) buildRecipeMessages(location *locations.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	// constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
@@ -447,7 +445,7 @@ func (c *client) buildRecipeMessages(location *locations.Location, saleIngredien
 
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
 	var buf strings.Builder
-	if err := kroger.ToTSV(saleIngredients, &buf); err != nil {
+	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
 	ingredientsMessage += buf.String()

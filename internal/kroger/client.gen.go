@@ -1044,7 +1044,11 @@ type ChainListResponse struct {
 		} `json:"meta,omitempty"`
 	}
 	JSON400 *struct {
-		Errors *string `json:"errors,omitempty"`
+		Errors *struct {
+			Code      *string  `json:"code,omitempty"`
+			Reason    *string  `json:"reason,omitempty"`
+			Timestamp *float32 `json:"timestamp,omitempty"`
+		} `json:"errors,omitempty"`
 	}
 	JSON401 *struct {
 		Errors *struct {
@@ -1386,7 +1390,11 @@ type LocationListResponse struct {
 		} `json:"meta,omitempty"`
 	}
 	JSON400 *struct {
-		Errors *string `json:"errors,omitempty"`
+		Errors *struct {
+			Code      *string  `json:"code,omitempty"`
+			Reason    *string  `json:"reason,omitempty"`
+			Timestamp *float32 `json:"timestamp,omitempty"`
+		} `json:"errors,omitempty"`
 	}
 	JSON401 *struct {
 		Errors *struct {
@@ -1635,7 +1643,11 @@ type ProductSearchResponse struct {
 		} `json:"meta,omitempty"`
 	}
 	JSON400 *struct {
-		Errors *string `json:"errors,omitempty"`
+		Errors *struct {
+			Code      *string  `json:"code,omitempty"`
+			Reason    *string  `json:"reason,omitempty"`
+			Timestamp *float32 `json:"timestamp,omitempty"`
+		} `json:"errors,omitempty"`
 	}
 	JSON401 *struct {
 		Errors *struct {
@@ -1953,7 +1965,11 @@ func ParseChainListResponse(rsp *http.Response) (*ChainListResponse, error) {
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest struct {
-			Errors *string `json:"errors,omitempty"`
+			Errors *struct {
+				Code      *string  `json:"code,omitempty"`
+				Reason    *string  `json:"reason,omitempty"`
+				Timestamp *float32 `json:"timestamp,omitempty"`
+			} `json:"errors,omitempty"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -2393,7 +2409,11 @@ func ParseLocationListResponse(rsp *http.Response) (*LocationListResponse, error
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest struct {
-			Errors *string `json:"errors,omitempty"`
+			Errors *struct {
+				Code      *string  `json:"code,omitempty"`
+				Reason    *string  `json:"reason,omitempty"`
+				Timestamp *float32 `json:"timestamp,omitempty"`
+			} `json:"errors,omitempty"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -2686,10 +2706,13 @@ func ParseProductSearchResponse(rsp *http.Response) (*ProductSearchResponse, err
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest struct {
-			Errors *string `json:"errors,omitempty"`
+			Errors *struct {
+				Code      *string  `json:"code,omitempty"`
+				Reason    *string  `json:"reason,omitempty"`
+				Timestamp *float32 `json:"timestamp,omitempty"`
+			} `json:"errors,omitempty"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			fmt.Printf("failing at 400: %s\n", bodyBytes)
 			return nil, err
 		}
 		response.JSON400 = &dest

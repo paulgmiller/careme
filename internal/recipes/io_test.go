@@ -10,7 +10,6 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 )
 
@@ -179,10 +178,11 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	rio := IO(cacheStore)
 
 	hash := "ingredient-hash"
-	ingredients := []kroger.Ingredient{
+	ingredients := []ai.InputIngredient{
 		{
-			Description: loPtr("Chicken Breast"),
-			Size:        loPtr("1 lb"),
+			ProductID:   "chicken-1",
+			Description: "Chicken Breast",
+			Size:        "1 lb",
 		},
 	}
 
@@ -201,8 +201,40 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngredientsFromCache failed: %v", err)
 	}
-	if len(got) != 1 || got[0].Description == nil || *got[0].Description != "Chicken Breast" {
+	if len(got) != 1 || got[0].Description != "Chicken Breast" {
 		t.Fatalf("unexpected ingredients payload: %+v", got)
+	}
+}
+
+func TestSaveIngredients_PreservesGrade(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	hash := "ingredient-input-hash"
+	ingredients := []ai.InputIngredient{
+		{
+			ProductID:   "chicken-1",
+			Description: "Chicken Breast",
+			Size:        "1 lb",
+			Grade:       &ai.IngredientGrade{Score: 9, Reason: "Fresh and flexible."},
+		},
+	}
+
+	if err := rio.SaveIngredients(t.Context(), hash, ingredients); err != nil {
+		t.Fatalf("SaveIngredients failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpDir, ingredientsCachePrefix, hash)); err != nil {
+		t.Fatalf("expected ingredients at prefixed key: %v", err)
+	}
+
+	got, err := rio.IngredientsFromCache(t.Context(), hash)
+	if err != nil {
+		t.Fatalf("IngredientsFromCache failed: %v", err)
+	}
+	if len(got) != 1 || got[0].Description != "Chicken Breast" || got[0].Grade == nil || got[0].Grade.Score != 9 {
+		t.Fatalf("unexpected input ingredients payload: %+v", got)
 	}
 }
 

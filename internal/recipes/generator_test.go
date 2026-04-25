@@ -10,7 +10,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
+	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 
@@ -33,6 +33,7 @@ type captureRegenerateAIClient struct {
 
 type captureGenerateAIClient struct {
 	shoppingList *ai.ShoppingList
+	ingredients  []ai.InputIngredient
 }
 
 type sequenceAIClient struct {
@@ -56,10 +57,10 @@ type captureCritiqueService struct {
 type captureWineStaplesProvider struct {
 	mu        sync.Mutex
 	searches  []string
-	responses map[string][]kroger.Ingredient
+	responses map[string][]ai.InputIngredient
 }
 
-func (c *captureWineQuestionAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
+func (c *captureWineQuestionAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
 	panic("unexpected call to GenerateRecipes")
 }
 
@@ -76,7 +77,7 @@ func (c *captureWineQuestionAIClient) GenerateRecipeImage(ctx context.Context, r
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error) {
+func (c *captureWineQuestionAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error) {
 	c.recipe = recipe
 	if c.selection != nil {
 		return c.selection, nil
@@ -91,7 +92,7 @@ func (c *captureWineQuestionAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *captureRegenerateAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
+func (c *captureRegenerateAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
 	panic("unexpected call to GenerateRecipes")
 }
 
@@ -112,7 +113,7 @@ func (c *captureRegenerateAIClient) GenerateRecipeImage(ctx context.Context, rec
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *captureRegenerateAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error) {
+func (c *captureRegenerateAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error) {
 	panic("unexpected call to PickWine")
 }
 
@@ -120,7 +121,8 @@ func (c *captureRegenerateAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *captureGenerateAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
+func (c *captureGenerateAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
+	c.ingredients = append([]ai.InputIngredient(nil), ingredients...)
 	if c.shoppingList != nil {
 		return c.shoppingList, nil
 	}
@@ -139,7 +141,7 @@ func (c *captureGenerateAIClient) GenerateRecipeImage(ctx context.Context, recip
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *captureGenerateAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error) {
+func (c *captureGenerateAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error) {
 	panic("unexpected call to PickWine")
 }
 
@@ -147,7 +149,7 @@ func (c *captureGenerateAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *sequenceAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
+func (c *sequenceAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -184,7 +186,7 @@ func (c *sequenceAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Re
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *sequenceAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error) {
+func (c *sequenceAIClient) PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error) {
 	panic("unexpected call to PickWine")
 }
 
@@ -227,11 +229,11 @@ func (c *captureCritiqueService) critiqueFor(recipe ai.Recipe) (*ai.RecipeCritiq
 	}, nil
 }
 
-func (s *captureWineStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
+func (s *captureWineStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	panic("unexpected call to FetchStaples")
 }
 
-func (s *captureWineStaplesProvider) GetIngredients(_ context.Context, _ string, searchTerm string, _ int) ([]kroger.Ingredient, error) {
+func (s *captureWineStaplesProvider) GetIngredients(_ context.Context, _ string, searchTerm string, _ int) ([]ai.InputIngredient, error) {
 	s.mu.Lock()
 	s.searches = append(s.searches, searchTerm)
 	s.mu.Unlock()
@@ -261,10 +263,11 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 
 	cacheStore := cache.NewFileCache(t.TempDir())
 	rio := IO(cacheStore)
-	cached := []kroger.Ingredient{
+	cached := []ai.InputIngredient{
 		{
-			Description: loPtr("Cached Pinot Noir"),
-			Size:        loPtr("750mL"),
+			ProductID:   "cached-pinot-noir",
+			Description: "Cached Pinot Noir",
+			Size:        "750mL",
 		},
 	}
 	if err := rio.SaveIngredients(t.Context(), wineIngredientsCacheKey(style, location, cacheDate), cached); err != nil {
@@ -318,14 +321,15 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 		},
 	}
 	staplesStub := &captureWineStaplesProvider{
-		responses: map[string][]kroger.Ingredient{
-			"red-wine":   {{Description: loPtr("Whole Foods Red")}},
-			"white-wine": {{Description: loPtr("Whole Foods White")}},
-			"sparkling":  {{Description: loPtr("Whole Foods Bubbly")}},
+		responses: map[string][]ai.InputIngredient{
+			"red-wine":   {{ProductID: "wholefoods-red", Description: "Whole Foods Red"}},
+			"white-wine": {{ProductID: "wholefoods-white", Description: "Whole Foods White"}},
+			"sparkling":  {{ProductID: "wholefoods-bubbly", Description: "Whole Foods Bubbly"}},
 		},
 	}
+	rio := IO(cache.NewFileCache(t.TempDir()))
 	g := &generatorService{
-		staples:  &cachedStaplesService{cache: IO(cache.NewFileCache(t.TempDir())), provider: staplesStub},
+		staples:  &cachedStaplesService{cache: rio, provider: staplesStub},
 		aiClient: aiStub,
 	}
 
@@ -407,7 +411,7 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	io := IO(cacheStore)
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
+	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
 
@@ -419,7 +423,7 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 	critiquer := &captureCritiqueService{}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -478,7 +482,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	io := IO(cacheStore)
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
+	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
 
@@ -521,7 +525,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -566,7 +570,7 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	io := IO(cacheStore)
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
+	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
 
@@ -608,7 +612,7 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 		},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -632,7 +636,7 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	io := IO(cacheStore)
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
+	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
 
@@ -643,7 +647,7 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 		}},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    &captureCritiqueService{},
 		statusWriter: noopstatuswriter{},
@@ -676,13 +680,13 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	io := IO(cacheStore)
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
+	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
 
 	statuses := &statusCounter{}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     &sequenceAIClient{generateResponses: []*ai.ShoppingList{{ResponseID: "resp-stable", Recipes: []ai.Recipe{steady}}}},
 		critiquer:    &captureCritiqueService{},
 		statusWriter: statuses,
@@ -847,7 +851,7 @@ func TestGenerateRecipes_CritiqueRetryMatchesParentByTitleWords(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	io := IO(cacheStore)
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
+	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
 
@@ -886,7 +890,7 @@ func TestGenerateRecipes_CritiqueRetryMatchesParentByTitleWords(t *testing.T) {
 		},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -914,7 +918,7 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 	cacheStore := cache.NewFileCache(t.TempDir())
 	io := IO(cacheStore)
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []kroger.Ingredient{{Description: loPtr("Chicken")}}); err != nil {
+	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
 
@@ -941,7 +945,7 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 		},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},

@@ -18,6 +18,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
+	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
@@ -73,7 +74,8 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 
 	userStorage := users.NewStorage(cache)
 	mc := critique.NewManager(cfg, cache)
-	staples, err := recipes.NewCachedStaplesService(cfg, cache)
+	ig := ingredientgrading.NewManager(cfg, cache)
+	staples, err := recipes.NewCachedStaplesService(cfg, cache, ig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}

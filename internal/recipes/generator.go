@@ -9,27 +9,27 @@ import (
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
+	"github.com/samber/lo/mutable"
 )
 
 type aiClient interface {
-	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
+	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
-	PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error)
+	PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error)
 }
 
 type staplesService interface {
-	GetStaples(ctx context.Context, p *GeneratorParams) ([]kroger.Ingredient, error)
+	FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error)
 	// only used for wine. Probably need a refactoro
-	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error)
+	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error)
 }
 
 type generatorService struct {
@@ -74,7 +74,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
 	}
 
-	wines, err := parallelism.Flatten(styles, func(style string) ([]kroger.Ingredient, error) {
+	wines, err := parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
 		return g.staples.GetIngredients(ctx, location, style, 0, date)
 	})
 	if err != nil {
@@ -84,7 +84,9 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	if len(wines) == 0 {
 		return &ai.WineSelection{Commentary: "no wines found", Wines: []ai.Ingredient{}}, nil
 	}
-	wines = uniqueByDescription(wines)
+	wines = lo.UniqBy(wines, func(i ai.InputIngredient) string {
+		return i.ProductID
+	})
 
 	selection, err := g.aiClient.PickWine(ctx, recipe, wines)
 	if err != nil {
@@ -123,11 +125,16 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	}
 
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
-	ingredients, err := g.staples.GetStaples(ctx, p)
+	ingredients, err := g.staples.FetchStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
 	g.writeStatus(ctx, hash, fmt.Sprintf("Looking through %d ingredients", len(ingredients)))
+	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
+		// TODO make configurable?
+		return ing.Grade == nil || ing.Grade.Score > 5
+	})
+	mutable.Shuffle(ingredients)
 
 	instructions := []string{p.Directive, p.Instructions}
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
@@ -156,19 +163,6 @@ func (g *generatorService) AskQuestion(ctx context.Context, question string, pre
 
 func (g *generatorService) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
 	return g.aiClient.GenerateRecipeImage(ctx, recipe)
-}
-
-func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
-	return lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
-		return toStr(i.Description)
-	})
-}
-
-func toStr(s *string) string {
-	if s == nil {
-		return "empty"
-	}
-	return *s
 }
 
 func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
