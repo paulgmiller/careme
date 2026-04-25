@@ -33,6 +33,11 @@ type GeneratedImage struct {
 	Body io.Reader
 }
 
+const (
+	defaultRecipeModel = "gpt-5.5"
+	defaultWineModel   = openai.ChatModelGPT5Mini
+)
+
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
 	Name     string `json:"name"`
@@ -118,8 +123,8 @@ func NewClient(apiKey, _ string) *client {
 		apiKey:     apiKey,
 		schema:     m,
 		wineSchema: wine,
-		model:      openai.ChatModelGPT5_4,
-		wineModel:  openai.ChatModelGPT5Mini,
+		model:      defaultRecipeModel,
+		wineModel:  defaultWineModel,
 	}
 }
 
