@@ -30,7 +30,7 @@ func TestServerReturnsIngredientsJSON(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, nil).Register(mux)
+	NewHandler(cacheStore).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash(), nil)
 	rr := httptest.NewRecorder()
@@ -64,7 +64,7 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, nil).Register(mux)
+	NewHandler(cacheStore).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash()+"?format=tsv", nil)
 	rr := httptest.NewRecorder()
@@ -88,7 +88,7 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 func TestServerReturnsNotFoundWhenParamsMissing(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, nil).Register(mux)
+	NewHandler(cacheStore).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/missing-hash", nil)
 	rr := httptest.NewRecorder()

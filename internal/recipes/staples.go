@@ -23,7 +23,6 @@ import (
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
-	"github.com/samber/lo/mutable"
 )
 
 // todo make this a indepenedent ingredient object not kroger.
@@ -205,8 +204,6 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 	cachedIngredients, err := s.cache.IngredientsFromCache(ctx, lochash)
 	if err == nil {
 		slog.InfoContext(ctx, "serving cached ingredients", "location", locationID, "hash", lochash, "count", len(cachedIngredients))
-		// do we still want this randomness after grading?
-		mutable.Shuffle(cachedIngredients)
 		return s.grader.GradeIngredients(ctx, cachedIngredients)
 		// shoulld we save?
 	}
@@ -225,8 +222,6 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		slog.ErrorContext(ctx, "failed to grade cached staples", "error", err)
 		return nil, err
 	}
-	// do we still want this randomness after grading?
-	mutable.Shuffle(graded)
 
 	if err := s.cache.SaveIngredients(ctx, lochash, graded); err != nil {
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)

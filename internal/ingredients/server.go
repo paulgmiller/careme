@@ -35,7 +35,7 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slices.SortFunc(ingredients, func(a, b ai.InputIngredient) int {
-		if a.Grade != nil || b.Grade != nil {
+		if a.Grade == nil || b.Grade == nil {
 			return strings.Compare(strings.ToLower(a.Description), strings.ToLower(b.Description))
 		}
 		return b.Grade.Score - a.Grade.Score

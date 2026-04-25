@@ -15,6 +15,7 @@ import (
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
+	"github.com/samber/lo/mutable"
 )
 
 type aiClient interface {
@@ -129,6 +130,11 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
 	g.writeStatus(ctx, hash, fmt.Sprintf("Looking through %d ingredients", len(ingredients)))
+	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
+		// TODO make configurable?
+		return ing.Grade == nil || ing.Grade.Score > 5
+	})
+	mutable.Shuffle(ingredients)
 
 	instructions := []string{p.Directive, p.Instructions}
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
