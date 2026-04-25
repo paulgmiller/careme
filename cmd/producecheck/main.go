@@ -113,13 +113,6 @@ func checkProduceAvailability(ctx context.Context, client staplesProvider, locat
 	return evaluateProduceAvailability(produce, ingredients), len(ingredients), nil
 }
 
-func toString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
 func evaluateProduceAvailability(produce []string, ingredients []ai.InputIngredient) []string {
 	missing := make([]string, 0)
 	for _, term := range produce {

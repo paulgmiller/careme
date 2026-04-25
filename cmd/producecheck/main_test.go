@@ -136,7 +136,3 @@ func TestSummarizeFilterMatches(t *testing.T) {
 		t.Fatalf("stats[2].UniqueOnlyMatches = %d, want %d", stats[2].UniqueOnlyMatches, 1)
 	}
 }*/
-
-func strPtr(s string) *string {
-	return &s
-}
