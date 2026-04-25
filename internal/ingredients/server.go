@@ -19,7 +19,7 @@ type server struct {
 	cache cache.Cache
 }
 
-func NewHandler(c cache.Cache, _ any) *server {
+func NewHandler(c cache.Cache) *server {
 	return &server{cache: c}
 }
 
