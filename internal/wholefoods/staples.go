@@ -108,9 +108,9 @@ func defaultStaples() []string {
 		"shellfish",
 		"goat-lamb-veal",
 		"game-meats",
+		"rice-grains",
+		"pasta-noodles",
 	}
-	// rice-grains?
-	// pasta-noodles
 	// red-wine, white-wine, sparkling
 }
 

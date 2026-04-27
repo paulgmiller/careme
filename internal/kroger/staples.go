@@ -143,7 +143,6 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 			//Taxonomy:  product.,
 			// CountryOrigin: product.CountryOrigin,
 			// Favorite: item.Favorite,
-			// InventoryStockLevel: item.InventoryStockLevel),
 		}
 	}
 
@@ -185,6 +184,15 @@ func defaultStaples() []staplesFilter {
 			Term:   "lamb",
 			Brands: []string{"Simple Truth"},
 		},
+		{
+			Term:   "grains",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "pasta",
+			Brands: []string{"*"}, // Should we just put our thumb on the scale
+		},
+		// TODO dairy, international
 	}...)
 }
 
