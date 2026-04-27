@@ -29,6 +29,10 @@ func main() {
 	flag.Parse()
 	ctx := context.Background()
 
+	if searchTerm != "" {
+		verbose = true
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load configuration: %s", err)
@@ -89,18 +93,4 @@ func main() {
 	}
 	sumGrades := lo.SumBy(graded, func(ing ai.InputIngredient) int { return ing.Grade.Score })
 	fmt.Printf("Total count %d and score %d\n", len(graded), sumGrades)
-}
-
-func toFloat(f *float32) string {
-	if f == nil {
-		return ""
-	}
-	return fmt.Sprintf("%.2f", *f)
-}
-
-func categories(i ai.InputIngredient) []string {
-	if i.Categories == nil {
-		return nil
-	}
-	return i.Categories
 }
