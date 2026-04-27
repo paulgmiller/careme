@@ -11,13 +11,8 @@ import (
 
 const chainName = "kroger"
 
-type locationClient interface {
-	SearchLocationsWithResponse(ctx context.Context, params *krogerlocations.SearchLocationsParams, reqEditors ...krogerlocations.RequestEditorFn) (*krogerlocations.SearchLocationsResponse, error)
-	LocationsGetByIDWithResponse(ctx context.Context, locationId string, reqEditors ...krogerlocations.RequestEditorFn) (*krogerlocations.LocationsGetByIDResponse, error)
-}
-
 type LocationBackend struct {
-	client locationClient
+	client *krogerlocations.ClientWithResponses
 }
 
 func NewLocationBackendFromConfig(cfg *config.Config) (*LocationBackend, error) {
