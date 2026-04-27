@@ -340,11 +340,7 @@ type ProductsProductModel struct {
 	Retstrictions      *ProductsRestrictionsModel `json:"retstrictions,omitempty"`
 
 	// SnapEligible Indicates if the product is eligible for SNAP benefits.
-	SnapEligible      *bool `json:"snapEligible,omitempty"`
-	SweeteningMethods *struct {
-		Code *string `json:"code,omitempty"`
-		Name *string `json:"name,omitempty"`
-	} `json:"sweeteningMethods,omitempty"`
+	SnapEligible *bool `json:"snapEligible,omitempty"`
 
 	// Temperature Information about the item's temperature requirements.
 	Temperature *ProductsProductTemperatureModel `json:"temperature,omitempty"`
