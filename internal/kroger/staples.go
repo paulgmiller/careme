@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 
+	"careme/internal/config"
 	"careme/internal/kroger/products"
 	"careme/internal/parallelism"
 
@@ -47,11 +48,15 @@ func (p identityProvider) IsID(locationID string) bool {
 // internal?
 type StaplesProvider struct {
 	identityProvider
-	client ClientWithResponsesInterface
+	client *products.ClientWithResponses
 }
 
-func NewStaplesProvider(client ClientWithResponsesInterface) StaplesProvider {
-	return StaplesProvider{client: client}
+func NewStaplesProvider(cfg *config.Config) (*StaplesProvider, error) {
+	client, err := NewProductsClientFromConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &StaplesProvider{client: client}, nil
 }
 
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]Ingredient, error) {
@@ -70,7 +75,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	return searchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
 }
 
-func searchIngredients(ctx context.Context, client ClientWithResponsesInterface, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
+func searchIngredients(ctx context.Context, client *products.ClientWithResponses, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
 	limit := 50
 	productResults, err := client.ProductGetWithResponse(ctx, &products.ProductGetParams{
 		FilterLocationId: &locationID,

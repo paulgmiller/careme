@@ -117,10 +117,6 @@ func GetOAuth2Token(ctx context.Context, clientID, clientSecret string) (string,
 	return tm.GetToken(ctx)
 }
 
-type ClientWithResponsesInterface interface {
-	ProductGetWithResponse(ctx context.Context, params *products.ProductGetParams, reqEditors ...products.RequestEditorFn) (*products.ProductGetResponse, error)
-}
-
 func newBearerTokenRequestEditor(cfg *config.Config) func(context.Context, *http.Request) error {
 	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
 
@@ -134,7 +130,7 @@ func newBearerTokenRequestEditor(cfg *config.Config) func(context.Context, *http
 	}
 }
 
-func NewProductsClientFromConfig(cfg *config.Config) (ClientWithResponsesInterface, error) {
+func NewProductsClientFromConfig(cfg *config.Config) (*products.ClientWithResponses, error) {
 	requestEditor := newBearerTokenRequestEditor(cfg)
 	productsClient, err := products.NewClientWithResponses("https://api.kroger.com",
 		products.WithRequestEditorFn(products.RequestEditorFn(requestEditor)),
