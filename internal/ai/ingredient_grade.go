@@ -21,6 +21,7 @@ const (
 	defaultIngredientGradeModel = openai.ChatModelGPT5Mini
 )
 
+// should we have category spefic grading prompts?
 const ingredientGradeSystemInstruction = `
 You review grocery catalog items before they are shown to a home recipe generator.
 
@@ -37,6 +38,36 @@ Strongly penalize:
 - formats intended mainly for snacking or immediate eating rather than cooking
 - pre-cut fruit unless it is still broadly useful for cooking or baking
 
+Additional rules for pasta, grains, and noodles:
+
+Focus on cooking performance, not just nutrition or branding.
+
+- Strongly reward indicators of high-quality pasta/grain texture and starch behavior:
+  bronze-cut, slow-dried, durum semolina, high-protein wheat, whole grain, hulled, pearled
+
+- Prefer traditional wheat pasta and intact grains over substitutes:
+  standard semolina pasta, rice, farro, bulgur, barley, quinoa score higher
+
+- Do NOT over-reward legume-based or alternative pastas (chickpea, lentil, protein pasta):
+  these are useful for dietary needs but generally have worse texture and sauce performance
+  → cap these at 6 unless other strong signals exist
+
+- Fresh or filled pasta (ravioli, tortellini):
+  moderate usefulness due to lower flexibility
+  → typically 5–7
+
+- Pasta shape should not significantly affect score:
+  spaghetti, penne, rigatoni, etc. are similarly versatile
+
+- Strongly penalize highly processed or convenience formats:
+  instant noodles, microwave-ready pasta, pasta kits, flavored noodle packs
+
+- Prepared sauces (marinara, alfredo, pesto):
+  useful but not base ingredients
+  → cap scores at 6 maximum regardless of quality
+
+- Grain and noodle flexibility matters:
+  ingredients usable across many cuisines (rice, pasta, soba, rice noodles) score higher than niche or single-use items
 
 Scoring anchors:
 - 9-10: excellent raw/fresh flexible cooking ingredient, e.g. whole vegetables, greens, roots, raw meats, fresh fruit useful in baking/cooking
