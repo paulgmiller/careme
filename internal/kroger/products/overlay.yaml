@@ -1,0 +1,14 @@
+overlay: 1.0.0
+info:
+  title: Kroger Products client generation overlay
+  version: 0.0.0
+actions:
+  - target: $.components.schemas["products.productModel"].properties.nutritionInformation
+    description: Drop field because Kroger returns both object and array shapes and staples does not use it.
+    remove: true
+  - target: $.components.schemas["products.productItemPriceModel"].properties.expirationDate
+    description: Drop field because Kroger returns date-time strings while the spec declares date-only values and staples does not use it.
+    remove: true
+  - target: $.components.schemas["products.productItemPriceModel"].properties.effectiveDate
+    description: Drop field because Kroger returns date-time strings while the spec declares date-only values and staples does not use it.
+    remove: true
