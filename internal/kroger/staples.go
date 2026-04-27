@@ -75,13 +75,17 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	return searchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
 }
 
+var availableInStore = products.Ais
+
 func searchIngredients(ctx context.Context, client *products.ClientWithResponses, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
 	limit := 50
+
 	productResults, err := client.ProductGetWithResponse(ctx, &products.ProductGetParams{
-		FilterLocationId: &locationID,
-		FilterTerm:       &term,
-		FilterLimit:      &limit,
-		FilterStart:      &skip,
+		FilterLocationId:  &locationID,
+		FilterTerm:        &term,
+		FilterLimit:       &limit,
+		FilterStart:       &skip,
+		FilterFulfillment: &availableInStore,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kroger product search request failed: %w", err)
@@ -106,12 +110,11 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 				continue
 			}
 
-			/* comeback and do in seperate change
-			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == TEMPORARILYOUTOFSTOCK {
-				slog.WarnContext(ctx, "OOS", "description", product.Description)
+			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == products.TEMPORARILYOUTOFSTOCK {
+				// TODO pass along low stock levels to AI to use in recipe planning
+				// slog.WarnContext(ctx, "OOS", "description", *product.Description)
 				continue
 			}
-			*/
 
 			var aisle *string
 			if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
