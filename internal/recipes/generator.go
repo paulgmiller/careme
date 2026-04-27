@@ -104,6 +104,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "response_id", p.ResponseID)
 		instructions := regenerateInstructions(p)
 
+		// TODO give them some sort of status.
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ResponseID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
@@ -129,11 +130,14 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
-	g.writeStatus(ctx, hash, fmt.Sprintf("Looking through %d ingredients", len(ingredients)))
+	ogCount := len(ingredients)
 	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 		// TODO make configurable?
-		return ing.Grade == nil || ing.Grade.Score > 5
+		return ing.Grade == nil || ing.Grade.Score > 6
 	})
+	// having category would be interesing here.
+	g.writeStatus(ctx, hash, fmt.Sprintf("Considering %d out of %d ingredients", len(ingredients), ogCount))
+
 	mutable.Shuffle(ingredients)
 
 	instructions := []string{p.Directive, p.Instructions}
