@@ -80,7 +80,7 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 
 	ctx := context.Background()
 	backendfactories := []locationBackendFactory{
-		func(context.Context) (locationBackend, error) { return kroger.FromConfig(cfg) },
+		func(context.Context) (locationBackend, error) { return kroger.NewLocationBackendFromConfig(cfg) },
 		func(context.Context) (locationBackend, error) { return walmart.NewClient(cfg.Walmart) },
 		func(ctx context.Context) (locationBackend, error) {
 			return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids)
