@@ -39,30 +39,14 @@ Strongly penalize:
 - pre-cut fruit unless it is still broadly useful for cooking or baking
 
 Additional rules for pasta, grains, rice, legumes, and noodles:
-
-- Prefer flexible base carbohydrates (rice, dry pasta, oats, staple grains)
-
-- Use absolute anchors:
-  default dry pasta with no strong quality signals → 6–7
-  only score 8+ with clear quality cues (e.g., bronze-cut, slow-dried, durum, premium/artisan line)
-  reserve 9–10 for clearly high-quality/artisan pasta
-
+- Prefer flexible base carbohydrates - rice, dry pasta, oats, quinoa, farro, freekah 
 - Reward real cooking-performance signals:
   bronze-cut, slow-dried, high-protein durum, whole grain, hulled, pearled
-
-- Do not over-reward alternative pastas (chickpea, lentil, protein, gluten-free)
-  → cap at 6–7
-
-- Slightly reduce specialized grains (arborio, sticky rice, quinoa, farro) vs staple grains
-
-- Bread and baked grain products → cap at 6–7
-
-- Apply a processing penalty:
-  instant, microwave-ready, pre-cooked, or flavored mixes score lower
-  → pre-seasoned mixes typically 4–5
-
-- Prepared sauces (marinara, alfredo, pesto) → cap at 6
-
+- Reward known higher quality brands
+- Penalize  alternative pastas (chickpea, lentil, protein, gluten-free)
+- Penalize Bread and baked grain products
+- Penalize  instant, microwave-ready, pre-cooked, or flavored mixes 
+- Penalize Prepared sauces (marinara, alfredo, pesto)
 - Favor cross-cuisine versatility; ignore pasta shape differences
 
 - Brand is a weak tie-breaker only:
