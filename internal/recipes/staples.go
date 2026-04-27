@@ -19,10 +19,12 @@ import (
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/parallelism"
+	"careme/internal/telemetry"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // todo make this a indepenedent ingredient object not kroger.
@@ -197,25 +199,33 @@ func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader grader) (
 	}, nil
 }
 
-func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
+func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorParams) (results []ai.InputIngredient, err error) {
 	lochash := p.LocationHash()
 	locationID := p.Location.ID
+	ctx, span := telemetry.Start(ctx, "careme/internal/recipes", "recipes.staples.fetch")
+	defer telemetry.End(span, &err)
+	span.SetAttributes(attribute.String("location.provider", safeStaplesSignatureForLocation(locationID)))
 
 	cachedIngredients, err := s.cache.IngredientsFromCache(ctx, lochash)
 	if err == nil {
 		slog.InfoContext(ctx, "serving cached ingredients", "location", locationID, "hash", lochash, "count", len(cachedIngredients))
+		span.SetAttributes(attribute.Bool("cache.hit", true), attribute.Int("staples.cached_count", len(cachedIngredients)))
 		return s.grader.GradeIngredients(ctx, cachedIngredients)
 		// shoulld we save?
 	}
+	span.SetAttributes(attribute.Bool("cache.hit", false))
 
 	if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to read cached ingredients", "location", locationID, "error", err)
 	}
 
-	ingredients, err := s.provider.FetchStaples(ctx, locationID)
+	providerCtx, providerSpan := telemetry.Start(ctx, "careme/internal/recipes", "recipes.staples.provider_fetch")
+	ingredients, err := s.provider.FetchStaples(providerCtx, locationID)
+	telemetry.EndResult(providerSpan, err)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", locationID, err)
 	}
+	span.SetAttributes(attribute.Int("staples.provider_count", len(ingredients)))
 
 	graded, err := s.grader.GradeIngredients(ctx, ingredients)
 	if err != nil {
@@ -227,6 +237,7 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
+	span.SetAttributes(attribute.Int("staples.result_count", len(graded)))
 	return graded, nil
 }
 
@@ -241,24 +252,35 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error) {
+func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) (wines []ai.InputIngredient, err error) {
 	cacheKey := wineIngredientsCacheKey(searchTerm, locationID, date)
 	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "style", searchTerm)
+	ctx, span := telemetry.Start(ctx, "careme/internal/recipes", "recipes.ingredients.lookup")
+	defer telemetry.End(span, &err)
+	span.SetAttributes(
+		attribute.String("location.provider", safeStaplesSignatureForLocation(locationID)),
+		attribute.Int("ingredients.skip", skip),
+	)
 
-	wines, err := s.cache.IngredientsFromCache(ctx, cacheKey)
+	wines, err = s.cache.IngredientsFromCache(ctx, cacheKey)
 	if err == nil {
 		logger.InfoContext(ctx, "serving cached ingredients", "count", len(wines))
+		span.SetAttributes(attribute.Bool("cache.hit", true), attribute.Int("ingredients.result_count", len(wines)))
 		return wines, nil
 	}
+	span.SetAttributes(attribute.Bool("cache.hit", false))
 	if !errors.Is(err, cache.ErrNotFound) {
 		logger.ErrorContext(ctx, "failed to read cached ingredients", "error", err)
 	}
 
-	wines, err = s.provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	providerCtx, providerSpan := telemetry.Start(ctx, "careme/internal/recipes", "recipes.ingredients.provider_lookup")
+	wines, err = s.provider.GetIngredients(providerCtx, locationID, searchTerm, skip)
+	telemetry.EndResult(providerSpan, err)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for %q: %w", searchTerm, err)
 	}
 	logger.InfoContext(ctx, "found ingredients", "count", len(wines))
+	span.SetAttributes(attribute.Int("ingredients.result_count", len(wines)))
 
 	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {
 		logger.ErrorContext(ctx, "failed to cache ingredients", "error", err)

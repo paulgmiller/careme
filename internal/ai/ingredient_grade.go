@@ -10,11 +10,14 @@ import (
 	"log/slog"
 	"strings"
 
+	"careme/internal/telemetry"
+
 	"github.com/invopop/jsonschema"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -128,7 +131,14 @@ func (g *ingredientGrader) CacheVersion() string {
 	return g.cacheVersion
 }
 
-func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []InputIngredient) ([]InputIngredient, error) {
+func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []InputIngredient) (graded []InputIngredient, err error) {
+	ctx, span := telemetry.Start(ctx, "careme/internal/ai", "ai.openai.grade_ingredients")
+	defer telemetry.End(span, &err)
+	span.SetAttributes(
+		attribute.String("ai.model", g.model),
+		attribute.Int("ingredient.count", len(ingredients)),
+	)
+
 	if len(ingredients) == 0 {
 		return nil, nil
 	}
@@ -160,6 +170,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
 	}
 	slog.InfoContext(ctx, "Ingredient grading usage", "model", g.model, responseUsageLogAttr(resp.Usage))
+	span.SetAttributes(responseUsageSpanAttrs(resp.Usage)...)
 
 	return parseIngredientGrades(resp.OutputText(), items)
 }

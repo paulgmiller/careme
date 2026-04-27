@@ -8,7 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"careme/internal/telemetry"
+
 	"github.com/invopop/jsonschema"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/genai"
 )
 
@@ -90,7 +93,15 @@ func (c *critiquer) Ready(ctx context.Context) error {
 	*/
 }
 
-func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, error) {
+func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (critique *RecipeCritique, err error) {
+	ctx, span := telemetry.Start(ctx, "careme/internal/ai", "ai.gemini.critique_recipe")
+	defer telemetry.End(span, &err)
+	span.SetAttributes(
+		attribute.String("ai.model", c.model),
+		attribute.Int("recipe.ingredient_count", len(recipe.Ingredients)),
+		attribute.Int("recipe.instruction_count", len(recipe.Instructions)),
+	)
+
 	prompt, err := buildRecipeCritiquePrompt(recipe)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe critique prompt: %w", err)
@@ -117,8 +128,9 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		"latencyMS", time.Since(start).Milliseconds(),
 		geminiUsageLogAttr(resp.UsageMetadata),
 	)
+	span.SetAttributes(geminiUsageSpanAttrs(resp.UsageMetadata)...)
 
-	critique, err := parseRecipeCritique(resp.Text())
+	critique, err = parseRecipeCritique(resp.Text())
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +158,26 @@ func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.
 	}
 
 	return slog.Group("usage", attrs...)
+}
+
+func geminiUsageSpanAttrs(usage *genai.GenerateContentResponseUsageMetadata) []attribute.KeyValue {
+	if usage == nil {
+		return []attribute.KeyValue{attribute.Bool("ai.usage.available", false)}
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.Bool("ai.usage.available", true),
+		attribute.Int("ai.usage.cached_content_tokens", int(usage.CachedContentTokenCount)),
+		attribute.Int("ai.usage.prompt_tokens", int(usage.PromptTokenCount)),
+		attribute.Int("ai.usage.candidate_tokens", int(usage.CandidatesTokenCount)),
+		attribute.Int("ai.usage.thoughts_tokens", int(usage.ThoughtsTokenCount)),
+		attribute.Int("ai.usage.tool_use_prompt_tokens", int(usage.ToolUsePromptTokenCount)),
+		attribute.Int("ai.usage.total_tokens", int(usage.TotalTokenCount)),
+	}
+	if usage.TrafficType != "" {
+		attrs = append(attrs, attribute.String("ai.usage.traffic_type", string(usage.TrafficType)))
+	}
+	return attrs
 }
 
 func (c *critiquer) newClient(ctx context.Context) (*genai.Client, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"testing"
 
 	"careme/internal/ai"
@@ -16,6 +17,7 @@ import (
 const testIngredientGradeCacheVersion = "test-cache-version"
 
 type stubGradeBackend struct {
+	mu     sync.Mutex
 	grades map[string]ai.InputIngredient
 	err    error
 	calls  [][]ai.InputIngredient
@@ -29,7 +31,9 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 	if s.err != nil {
 		return nil, s.err
 	}
+	s.mu.Lock()
 	s.calls = append(s.calls, append([]ai.InputIngredient(nil), ingredients...))
+	s.mu.Unlock()
 	out := make([]ai.InputIngredient, len(ingredients))
 	for i, ingredient := range ingredients {
 		key := ai.NormalizeInputIngredient(ingredient).Hash()

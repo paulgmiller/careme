@@ -10,6 +10,9 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/telemetry"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const MinimumRecipeScore = 8
@@ -39,6 +42,10 @@ type recipeCritiquer interface {
 type rubberstamp struct{}
 
 func (r rubberstamp) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan Result {
+	_, span := telemetry.Start(ctx, "careme/internal/recipes/critique", "recipes.critique.batch")
+	span.SetAttributes(attribute.Bool("recipe_critique.enabled", false), attribute.Int("recipe.count", len(recipes)))
+	defer span.End()
+
 	results := make(chan Result, len(recipes))
 	for _, recipe := range recipes {
 		results <- Result{
@@ -73,6 +80,9 @@ func (mc *multiCritiquer) Ready(ctx context.Context) error {
 }
 
 func (mc *multiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan Result {
+	ctx, span := telemetry.Start(ctx, "careme/internal/recipes/critique", "recipes.critique.batch")
+	span.SetAttributes(attribute.Bool("recipe_critique.enabled", true), attribute.Int("recipe.count", len(recipes)))
+
 	results := make(chan Result, len(recipes))
 	mc.wg.Add(len(recipes))
 
@@ -80,7 +90,10 @@ func (mc *multiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Reci
 	for _, recipe := range recipes {
 		localWg.Go(func() {
 			defer mc.wg.Done()
-			critique, err := mc.critiquer.CritiqueRecipe(ctx, recipe)
+			recipeCtx, recipeSpan := telemetry.Start(ctx, "careme/internal/recipes/critique", "recipes.critique.one")
+			recipeSpan.SetAttributes(attribute.Int("recipe.instruction_count", len(recipe.Instructions)))
+			critique, err := mc.critiquer.CritiqueRecipe(recipeCtx, recipe)
+			telemetry.EndResult(recipeSpan, err)
 			results <- Result{
 				Recipe:   &recipe,
 				Critique: critique,
@@ -90,6 +103,7 @@ func (mc *multiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Reci
 	}
 	go func() {
 		localWg.Wait()
+		span.End()
 		close(results)
 	}()
 	return results
