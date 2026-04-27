@@ -38,36 +38,32 @@ Strongly penalize:
 - formats intended mainly for snacking or immediate eating rather than cooking
 - pre-cut fruit unless it is still broadly useful for cooking or baking
 
-Additional rules for pasta, grains, and noodles:
+Additional rules for pasta, grains, rice, legumes, and noodles:
 
-Focus on cooking performance, not just nutrition or branding.
+- Prefer flexible base carbohydrates (rice, dry pasta, oats, staple grains); these should score highest
 
-- Strongly reward indicators of high-quality pasta/grain texture and starch behavior:
-  bronze-cut, slow-dried, durum semolina, high-protein wheat, whole grain, hulled, pearled
+- Reward indicators of good cooking performance:
+  bronze-cut, slow-dried, durum semolina, whole grain, hulled, pearled
 
-- Prefer traditional wheat pasta and intact grains over substitutes:
-  standard semolina pasta, rice, farro, bulgur, barley, quinoa score higher
+- Do not over-reward alternative pastas (chickpea, lentil, protein pasta)
+  → cap at 6–7
 
-- Do NOT over-reward legume-based or alternative pastas (chickpea, lentil, protein pasta):
-  these are useful for dietary needs but generally have worse texture and sauce performance
-  → cap these at 6 unless other strong signals exist
+- Slightly reduce scores for specialized grains (arborio, sticky rice, quinoa, farro) vs staple grains
 
-- Fresh or filled pasta (ravioli, tortellini):
-  moderate usefulness due to lower flexibility
-  → typically 5–7
+- Bread and baked grain products: cap at 6–7 (pre-cooked, less flexible)
 
-- Pasta shape should not significantly affect score:
-  spaghetti, penne, rigatoni, etc. are similarly versatile
+- Apply a processing penalty:
+  instant, microwave-ready, pre-cooked, or flavored mixes score lower
+  → pre-seasoned grain/pasta mixes typically 4–5
 
-- Strongly penalize highly processed or convenience formats:
-  instant noodles, microwave-ready pasta, pasta kits, flavored noodle packs
+- Prepared sauces (marinara, alfredo, pesto) → cap at 6
 
-- Prepared sauces (marinara, alfredo, pesto):
-  useful but not base ingredients
-  → cap scores at 6 maximum regardless of quality
+- Favor ingredients usable across many cuisines; ignore pasta shape differences
 
-- Grain and noodle flexibility matters:
-  ingredients usable across many cuisines (rice, pasta, soba, rice noodles) score higher than niche or single-use items
+- When quality signals are similar, use brand as a weak tie-breaker:
+  slight boost for known high-quality pasta makers (e.g., Felicetti, De Cecco, Rummo, Rustichella)
+  do not let brand override texture/processing signals
+
 
 Scoring anchors:
 - 9-10: excellent raw/fresh flexible cooking ingredient, e.g. whole vegetables, greens, roots, raw meats, fresh fruit useful in baking/cooking
