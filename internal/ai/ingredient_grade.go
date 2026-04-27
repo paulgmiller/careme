@@ -40,30 +40,35 @@ Strongly penalize:
 
 Additional rules for pasta, grains, rice, legumes, and noodles:
 
-- Prefer flexible base carbohydrates (rice, dry pasta, oats, staple grains); these should score highest
+- Prefer flexible base carbohydrates (rice, dry pasta, oats, staple grains)
 
-- Reward indicators of good cooking performance:
-  bronze-cut, slow-dried, durum semolina, whole grain, hulled, pearled
+- Use absolute anchors:
+  default dry pasta with no strong quality signals → 6–7
+  only score 8+ with clear quality cues (e.g., bronze-cut, slow-dried, durum, premium/artisan line)
+  reserve 9–10 for clearly high-quality/artisan pasta
 
-- Do not over-reward alternative pastas (chickpea, lentil, protein pasta)
+- Reward real cooking-performance signals:
+  bronze-cut, slow-dried, high-protein durum, whole grain, hulled, pearled
+
+- Do not over-reward alternative pastas (chickpea, lentil, protein, gluten-free)
   → cap at 6–7
 
-- Slightly reduce scores for specialized grains (arborio, sticky rice, quinoa, farro) vs staple grains
+- Slightly reduce specialized grains (arborio, sticky rice, quinoa, farro) vs staple grains
 
-- Bread and baked grain products: cap at 6–7 (pre-cooked, less flexible)
+- Bread and baked grain products → cap at 6–7
 
 - Apply a processing penalty:
   instant, microwave-ready, pre-cooked, or flavored mixes score lower
-  → pre-seasoned grain/pasta mixes typically 4–5
+  → pre-seasoned mixes typically 4–5
 
 - Prepared sauces (marinara, alfredo, pesto) → cap at 6
 
-- Favor ingredients usable across many cuisines; ignore pasta shape differences
+- Favor cross-cuisine versatility; ignore pasta shape differences
 
-- When quality signals are similar, use brand as a weak tie-breaker:
-  slight boost for known high-quality pasta makers (e.g., Felicetti, De Cecco, Rummo, Rustichella)
-  do not let brand override texture/processing signals
-
+- Brand is a weak tie-breaker only:
+  slight boost for known high-quality makers (e.g., Felicetti, De Cecco, Rummo, Rustichella)
+  do not infer quality from generic branding terms
+  when no quality cues are present, slightly prefer premium store brands over mass-market brands
 
 Scoring anchors:
 - 9-10: excellent raw/fresh flexible cooking ingredient, e.g. whole vegetables, greens, roots, raw meats, fresh fruit useful in baking/cooking
