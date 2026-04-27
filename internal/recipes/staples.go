@@ -48,11 +48,7 @@ type routingStaplesProvider struct {
 }
 
 func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
-	kclient, err := kroger.FromConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	backends, err := defaultStaplesBackends(cfg, kclient)
+	backends, err := defaultStaplesBackends(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +299,7 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
-func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) ([]backendStaplesProvider, error) {
+func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error) {
 	// should we do this per request so we get new proxies per user? https://github.com/paulgmiller/careme/issues/443
 	httpClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 	if err != nil {
@@ -316,9 +312,14 @@ func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithRe
 		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
 	}
 
+	krogerProvider, err := kroger.NewStaplesProvider(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create kroger staples provider: %w", err)
+	}
+
 	return []backendStaplesProvider{
-		kroger.NewStaplesProvider(krogerClient),
 		albertsonsProvider,
+		krogerProvider,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(httpClient)),

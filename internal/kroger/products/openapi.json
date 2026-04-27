@@ -9,7 +9,7 @@
       "email": "APISupport@kroger.com",
       "url": "https://developer.kroger.com"
     },
-    "version": "1.2.4"
+    "version": "1.3.0"
   },
   "servers": [
     {
@@ -501,6 +501,14 @@
             "description": "The URI of the product page.",
             "example": "/p/kroger-2-reduced-fat-milk/0001111041700?cid=dis.api.tpi_products-api_20240521_b:all_c:p_t:"
           },
+          "aliasProductIds": {
+            "type": "array",
+            "description": "The alias ProductId of the product to return.",
+            "items": {
+              "type": "string",
+              "example": "0001111060903"
+            }
+          },
           "aisleLocations": {
             "type": "array",
             "items": {
@@ -530,6 +538,100 @@
             "description": "The name of the product.",
             "example": "Kroger 2% Reduced Fat Milk"
           },
+          "alcohol": {
+            "type": "boolean",
+            "description": "Indicates if the product contains alcohol.",
+            "example": false
+          },
+          "alcoholProof": {
+            "type": "integer",
+            "description": "The proof of the alcohol in the product.",
+            "example": 0
+          },
+          "ageRestriction": {
+            "type": "boolean",
+            "description": "Indicates if the product has an age restriction.",
+            "example": false
+          },
+          "snapEligible": {
+            "type": "boolean",
+            "description": "Indicates if the product is eligible for SNAP benefits.",
+            "example": true
+          },
+          "manufacturerDeclarations": {
+            "type": "array",
+            "description": "Any manufacturer declarations for the product.",
+            "example": [
+              "Live Naturally",
+              "Kosher",
+              "Tree Nuts Free"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "sweeteningMethods": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "UNSPECIFIED"
+              },
+              "name": {
+                "type": "string",
+                "example": "Unspecified"
+              }
+            }
+          },
+          "allergens": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/products.allergenModel"
+            }
+          },
+          "allergensDescription": {
+            "type": "string",
+            "description": "The description of the allergens for the product.",
+            "example": "Free from Cereals and Their Derivatives."
+          },
+          "certifiedForPassover": {
+            "type": "boolean",
+            "description": "Indicates if the product is certified for Passover.",
+            "example": false
+          },
+          "hypoallergenic": {
+            "type": "boolean",
+            "description": "Indicates if the product is hypoallergenic.",
+            "example": false
+          },
+          "nonGmo": {
+            "type": "boolean",
+            "description": "Indicates if the product is non-GMO.",
+            "example": false
+          },
+          "nonGmoClaimName": {
+            "type": "string",
+            "description": "The name of the non-GMO claim.",
+            "example": "PRODUCT LABELED WITH NON-GMO CLAIM"
+          },
+          "organicClaimName": {
+            "type": "string",
+            "description": "The name of the organic claim.",
+            "example": "ORGANIC CLAIM AND PRINTED ON PACKAGE"
+          },
+          "receiptDescription": {
+            "type": "string",
+            "description": "The description of the product to appear on the receipt.",
+            "example": "KROGER 2% RF MILK"
+          },
+          "warnings": {
+            "type": "string",
+            "description": "Any warnings for the product.",
+            "example": "KEEP REFRIGERATED"
+          },
+          "retstrictions": {
+            "$ref": "#/components/schemas/products.restrictionsModel"
+          },
           "items": {
             "type": "array",
             "items": {
@@ -552,6 +654,212 @@
             "type": "string",
             "description": "The UPC of the product.",
             "example": "0001111041700"
+          },
+          "ratingsAndReviews": {
+            "type": "object",
+            "properties": {
+              "averageOverallRating": {
+                "type": "number",
+                "description": "The average overall rating of the product.",
+                "example": 4.5
+              },
+              "totalReviewCount": {
+                "type": "integer",
+                "description": "The total number of reviews for the product.",
+                "example": 12
+              }
+            }
+          },
+          "nutritionInformation": {
+            "type": "object",
+            "$ref": "#/components/schemas/products.nutritionInformationModel"
+          }
+        }
+      },
+      "products.restrictionsModel": {
+        "type": "object",
+        "properties": {
+          "maximumOrderQuantity": {
+            "type": "integer",
+            "example": 10
+          },
+          "minimumOrderQuantity": {
+            "type": "integer",
+            "example": 1
+          },
+          "postalCode": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "12345",
+              "67890"
+            ]
+          },
+          "shippable": {
+            "type": "boolean",
+            "example": false
+          },
+          "stateCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "CA",
+              "NY"
+            ]
+          }
+        }
+      },
+      "products.nutritionInformationModel": {
+        "type": "object",
+        "properties": {
+          "ingredientStatement": {
+            "type": "string",
+            "example": "\"Milk, skim milk, vitamin A palmitate, and vitamin D3.CONTAINS: MILK."
+          },
+          "dailyValueIntakeReference": {
+            "type": "string",
+            "example": "Percent Daily Values are based on a 2,000 calorie diet."
+          },
+          "servingSize": {
+            "$ref": "#/components/schemas/products.servingSizeModel"
+          },
+          "nutrients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/products.nutrientModel"
+            }
+          },
+          "preparationState": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "UNPREPARED"
+              },
+              "name": {
+                "type": "string",
+                "example": "Unprepared"
+              }
+            }
+          },
+          "servingsPerPackage": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "example": "8.0 Exact"
+              },
+              "value": {
+                "type": "number",
+                "example": 8
+              }
+            }
+          },
+          "nutritionalRating": {
+            "type": "string",
+            "example": "73"
+          }
+        }
+      },
+      "products.allergenModel": {
+        "type": "object",
+        "properties": {
+          "levelOfContainmentName": {
+            "type": "string",
+            "example": "Free from"
+          },
+          "name": {
+            "type": "string",
+            "example": "Tree Nuts and Their Derivatives"
+          }
+        }
+      },
+      "products.servingSizeModel": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "example": "8 fl oz (240mL)"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 240
+          },
+          "unitOfMeasure": {
+            "type": "object",
+            "properties": {
+              "abbreviation": {
+                "type": "string",
+                "example": "ml"
+              },
+              "code": {
+                "type": "string",
+                "example": "MLT"
+              },
+              "name": {
+                "type": "string",
+                "example": "Millilitre"
+              }
+            }
+          }
+        }
+      },
+      "products.nutrientModel": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "CA"
+          },
+          "description": {
+            "type": "string",
+            "example": "calcium"
+          },
+          "displayName": {
+            "type": "string",
+            "example": "Calcium"
+          },
+          "percentDailyIntake": {
+            "type": "number",
+            "example": 25
+          },
+          "quantity": {
+            "type": "number",
+            "example": 290
+          },
+          "precision": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "APPROXIMATELY"
+              },
+              "name": {
+                "type": "string",
+                "example": "Approximately"
+              }
+            }
+          },
+          "unitOfMeasure": {
+            "type": "object",
+            "properties": {
+              "abbreviation": {
+                "type": "string",
+                "example": "mg"
+              },
+              "code": {
+                "type": "string",
+                "example": "MGM"
+              },
+              "name": {
+                "type": "string",
+                "example": "Milligram"
+              }
+            }
           }
         }
       },
@@ -634,17 +942,32 @@
           "depth": {
             "type": "string",
             "description": "The depth of the product.",
-            "example": "3.5"
+            "example": "6"
           },
           "height": {
             "type": "string",
             "description": "The height of the product.",
-            "example": "2.0"
+            "example": "10"
           },
           "width": {
             "type": "string",
             "description": "The length of the product.",
-            "example": "4.75"
+            "example": "6"
+          },
+          "grossWeight": {
+            "type": "string",
+            "description": "The gross weight of the product.",
+            "example": "8.82 [lb_av]"
+          },
+          "netWeight": {
+            "type": "string",
+            "description": "The net weight of the product.",
+            "example": "8.62 [lb_av]"
+          },
+          "averageWeightPerUnit": {
+            "type": "string",
+            "description": "The average weight per unit of the product.",
+            "example": "8.62 [lb_av]"
           }
         }
       },
@@ -741,6 +1064,26 @@
             "type": "number",
             "description": "The estimated sale price of 1 unit of the item.",
             "example": 1.59
+          },
+          "expirationDate": {
+            "$ref": "#/components/schemas/products.dateValueModel"
+          },
+          "effectiveDate": {
+            "$ref": "#/components/schemas/products.dateValueModel"
+          }
+        }
+      },
+      "products.dateValueModel": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "format": "date",
+            "example": "9999-12-31T00:00:00Z"
+          },
+          "timezone": {
+            "type": "string",
+            "example": "UTC"
           }
         }
       },

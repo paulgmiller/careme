@@ -9,7 +9,7 @@ import (
 func TestClientWithResponsesIsID(t *testing.T) {
 	t.Parallel()
 
-	client := &ClientWithResponses{}
+	client := &LocationBackend{}
 	tests := []struct {
 		id   string
 		want bool
