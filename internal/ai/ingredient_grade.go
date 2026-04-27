@@ -39,20 +39,27 @@ Strongly penalize:
 - pre-cut fruit unless it is still broadly useful for cooking or baking
 
 Additional rules for pasta, grains, rice, legumes, and noodles:
-- Prefer flexible base carbohydrates - rice, dry pasta, oats, quinoa, farro, freekah 
+
+- Prefer flexible base carbohydrates:
+  rice, dry pasta, oats, quinoa, farro, freekah
+
+- Use simple score anchors:
+  standard dry pasta → 6–7
+  premium dry pasta → 8–9
+  alternative pasta (chickpea, lentil, gluten-free) → 5–6
+  bread → 5–6
+  prepared sauces → max 6
+  instant or flavored mixes → 3–5
+
 - Reward real cooking-performance signals:
   bronze-cut, slow-dried, high-protein durum, whole grain, hulled, pearled
-- Reward known higher quality brands
-- Penalize  alternative pastas (chickpea, lentil, protein, gluten-free)
-- Penalize Bread and baked grain products
-- Penalize  instant, microwave-ready, pre-cooked, or flavored mixes 
-- Penalize Prepared sauces (marinara, alfredo, pesto)
-- Favor cross-cuisine versatility; ignore pasta shape differences
 
-- Brand is a weak tie-breaker only:
-  slight boost for known high-quality makers (e.g., Felicetti, De Cecco, Rummo, Rustichella)
-  do not infer quality from generic branding terms
-  when no quality cues are present, slightly prefer premium store brands over mass-market brands
+- Reward known higher-quality brands (e.g., Felicetti, De Cecco, Rummo, Rustichella)
+
+- Do not infer quality from generic terms:
+  "quality", "non-GMO", "organic", "traditional"
+
+- Penalize items that are less flexible or more processed
 
 Scoring anchors:
 - 9-10: excellent raw/fresh flexible cooking ingredient, e.g. whole vegetables, greens, roots, raw meats, fresh fruit useful in baking/cooking
