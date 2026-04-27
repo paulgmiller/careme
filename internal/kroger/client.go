@@ -18,28 +18,8 @@ import (
 //go:generate go generate ./products ./locations
 
 // this wasn't in the swagger? try the jsons added next
-// OAuth2TokenResponse represents the response from Kroger OAuth2 token endpoint
-// LoggingDoer wraps an HttpRequestDoer and logs requests and responses
-type HttpRequestDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-type LoggingDoer struct {
-	Wrapped HttpRequestDoer
-}
-
-func (l *LoggingDoer) Do(req *http.Request) (*http.Response, error) {
-	fmt.Printf("Kroger Request: %s %s\nHeaders: %v\n", req.Method, req.URL.String(), req.Header)
-	resp, err := l.Wrapped.Do(req)
-	if err != nil {
-		fmt.Printf("Kroger Response Error: %v\n", err)
-		return resp, err
-	}
-	fmt.Printf("Kroger Response: %d %s\n", resp.StatusCode, resp.Status)
-	return resp, err
-}
-
-type OAuth2TokenResponse struct {
+// oAuth2TokenResponse represents the response from Kroger OAuth2 token endpoint
+type oAuth2TokenResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 	ExpiresIn   int    `json:"expires_in"`
@@ -100,7 +80,7 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("failed to get token: %s", string(body))
 		}
 
-		var tokenResp OAuth2TokenResponse
+		var tokenResp oAuth2TokenResponse
 		if err := json.Unmarshal(body, &tokenResp); err != nil {
 			return "", err
 		}
