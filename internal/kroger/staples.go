@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"strconv"
 
+	"careme/internal/kroger/products"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -72,24 +72,22 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 
 func searchIngredients(ctx context.Context, client ClientWithResponsesInterface, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
 	limit := 50
-	limitStr := strconv.Itoa(limit)
-	startStr := strconv.Itoa(skip)
-	products, err := client.ProductSearchWithResponse(ctx, &ProductSearchParams{
+	productResults, err := client.ProductGetWithResponse(ctx, &products.ProductGetParams{
 		FilterLocationId: &locationID,
 		FilterTerm:       &term,
-		FilterLimit:      &limitStr,
-		FilterStart:      &startStr,
+		FilterLimit:      &limit,
+		FilterStart:      &skip,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kroger product search request failed: %w", err)
 	}
-	if err := requireSuccess(products.StatusCode(), productSearchErrorPayload(products)); err != nil {
+	if err := requireSuccess(productResults.StatusCode(), productSearchErrorPayload(productResults)); err != nil {
 		return nil, err
 	}
 
 	var ingredients []Ingredient
 
-	for _, product := range *products.JSON200.Data {
+	for _, product := range *productResults.JSON200.Data {
 		wildcard := len(brands) > 0 && brands[0] == "*"
 
 		if product.Brand != nil && !slices.Contains(brands, toStr(product.Brand)) && !wildcard {
@@ -102,6 +100,13 @@ func searchIngredients(ctx context.Context, client ClientWithResponsesInterface,
 			if item.Price == nil {
 				continue
 			}
+
+			/* comeback and do in seperate change
+			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == TEMPORARILYOUTOFSTOCK {
+				slog.WarnContext(ctx, "OOS", "description", product.Description)
+				continue
+			}
+			*/
 
 			var aisle *string
 			if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
@@ -136,7 +141,7 @@ func searchIngredients(ctx context.Context, client ClientWithResponsesInterface,
 
 	// recursion is pretty dumb pagination
 	// kroger limites us to 250
-	if len(*products.JSON200.Data) == limit && skip < 250 {
+	if len(*productResults.JSON200.Data) == limit && skip < 250 {
 		page, err := searchIngredients(ctx, client, locationID, term, brands, frozen, skip+limit)
 		if err == nil {
 			ingredients = append(ingredients, page...)
@@ -200,9 +205,12 @@ func requireSuccess(statusCode int, payload any) error {
 	return krogerError(statusCode, payload)
 }
 
-func productSearchErrorPayload(resp *ProductSearchResponse) any {
+func productSearchErrorPayload(resp *products.ProductGetResponse) any {
 	if resp == nil {
 		return nil
+	}
+	if len(resp.Body) != 0 {
+		return json.RawMessage(resp.Body)
 	}
 	if resp.JSON400 != nil {
 		return resp.JSON400
@@ -212,9 +220,6 @@ func productSearchErrorPayload(resp *ProductSearchResponse) any {
 	}
 	if resp.JSON500 != nil {
 		return resp.JSON500
-	}
-	if len(resp.Body) != 0 {
-		return json.RawMessage(resp.Body)
 	}
 	return nil
 }

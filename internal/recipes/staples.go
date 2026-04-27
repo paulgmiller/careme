@@ -48,7 +48,7 @@ type routingStaplesProvider struct {
 }
 
 func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
-	kclient, err := kroger.FromConfig(cfg)
+	kclient, err := kroger.NewProductsClientFromConfig(cfg)
 	if err != nil {
 		return nil, err
 	}

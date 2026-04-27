@@ -4,12 +4,34 @@ import (
 	"context"
 	"fmt"
 
+	"careme/internal/config"
+	krogerlocations "careme/internal/kroger/locations"
 	locationtypes "careme/internal/locations/types"
 )
 
 const chainName = "kroger"
 
-func (c *ClientWithResponses) IsID(locationID string) bool {
+type locationClient interface {
+	SearchLocationsWithResponse(ctx context.Context, params *krogerlocations.SearchLocationsParams, reqEditors ...krogerlocations.RequestEditorFn) (*krogerlocations.SearchLocationsResponse, error)
+	LocationsGetByIDWithResponse(ctx context.Context, locationId string, reqEditors ...krogerlocations.RequestEditorFn) (*krogerlocations.LocationsGetByIDResponse, error)
+}
+
+type LocationBackend struct {
+	client locationClient
+}
+
+func NewLocationBackendFromConfig(cfg *config.Config) (*LocationBackend, error) {
+	requestEditor := newBearerTokenRequestEditor(cfg)
+	client, err := krogerlocations.NewClientWithResponses("https://api.kroger.com",
+		krogerlocations.WithRequestEditorFn(krogerlocations.RequestEditorFn(requestEditor)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create kroger locations client: %w", err)
+	}
+	return &LocationBackend{client: client}, nil
+}
+
+func (b *LocationBackend) IsID(locationID string) bool {
 	if locationID == "" {
 		return false
 	}
@@ -21,13 +43,12 @@ func (c *ClientWithResponses) IsID(locationID string) bool {
 	return true
 }
 
-// we should hide ClientWithResponses
-func (*ClientWithResponses) HasInventory(locationID string) bool {
+func (*LocationBackend) HasInventory(locationID string) bool {
 	return true
 }
 
-func (c *ClientWithResponses) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
-	resp, err := c.LocationDetailsWithResponse(ctx, locationID)
+func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
+	resp, err := b.client.LocationsGetByIDWithResponse(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +84,11 @@ func (c *ClientWithResponses) GetLocationByID(ctx context.Context, locationID st
 	}, nil
 }
 
-func (c *ClientWithResponses) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	params := &LocationListParams{
+func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
+	params := &krogerlocations.SearchLocationsParams{
 		FilterZipCodeNear: &zipcode,
 	}
-	resp, err := c.LocationListWithResponse(ctx, params)
+	resp, err := b.client.SearchLocationsWithResponse(ctx, params)
 	if err != nil {
 		return nil, err
 	}

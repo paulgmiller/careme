@@ -12,13 +12,18 @@ import (
 	"time"
 
 	"careme/internal/config"
+	"careme/internal/kroger/products"
 )
 
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config cfg.yaml swagger.yaml
+//go:generate go generate ./products ./locations
 
 // this wasn't in the swagger? try the jsons added next
 // OAuth2TokenResponse represents the response from Kroger OAuth2 token endpoint
 // LoggingDoer wraps an HttpRequestDoer and logs requests and responses
+type HttpRequestDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 type LoggingDoer struct {
 	Wrapped HttpRequestDoer
 }
@@ -112,11 +117,14 @@ func GetOAuth2Token(ctx context.Context, clientID, clientSecret string) (string,
 	return tm.GetToken(ctx)
 }
 
-func FromConfig(cfg *config.Config) (*ClientWithResponses, error) {
+type ClientWithResponsesInterface interface {
+	ProductGetWithResponse(ctx context.Context, params *products.ProductGetParams, reqEditors ...products.RequestEditorFn) (*products.ProductGetResponse, error)
+}
+
+func newBearerTokenRequestEditor(cfg *config.Config) func(context.Context, *http.Request) error {
 	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
 
-	// Custom request editor that refreshes token if needed
-	requestEditor := func(editorCtx context.Context, req *http.Request) error {
+	return func(editorCtx context.Context, req *http.Request) error {
 		token, err := tokenManager.GetToken(editorCtx)
 		if err != nil {
 			return err
@@ -124,8 +132,15 @@ func FromConfig(cfg *config.Config) (*ClientWithResponses, error) {
 		req.Header.Set("Authorization", "Bearer "+token)
 		return nil
 	}
+}
 
-	return NewClientWithResponses("https://api.kroger.com/v1",
-		WithRequestEditorFn(requestEditor),
+func NewProductsClientFromConfig(cfg *config.Config) (ClientWithResponsesInterface, error) {
+	requestEditor := newBearerTokenRequestEditor(cfg)
+	productsClient, err := products.NewClientWithResponses("https://api.kroger.com",
+		products.WithRequestEditorFn(products.RequestEditorFn(requestEditor)),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("create kroger products client: %w", err)
+	}
+	return productsClient, nil
 }
