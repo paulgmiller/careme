@@ -10,13 +10,12 @@ import (
 	"careme/internal/ai"
 	"careme/internal/albertsons"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 )
 
 type stubStaplesProvider struct {
 	ids         map[string]bool
-	ingredients []kroger.Ingredient
+	ingredients []ai.InputIngredient
 	err         error
 	calls       int
 }
@@ -29,7 +28,7 @@ func (s *stubStaplesProvider) Signature() string {
 	return "stub-staples-v1"
 }
 
-func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ string) ([]kroger.Ingredient, error) {
+func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ string) ([]ai.InputIngredient, error) {
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
@@ -37,7 +36,7 @@ func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ string) ([]kroge
 	return slices.Clone(s.ingredients), nil
 }
 
-func (s *stubStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]kroger.Ingredient, error) {
+func (s *stubStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]ai.InputIngredient, error) {
 	return s.FetchStaples(context.Background(), "")
 }
 
@@ -86,24 +85,24 @@ func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients [
 }
 
 func TestRoutingStaplesProvider_SelectsProviderByLocationID(t *testing.T) {
-	krogerProvider := &stubStaplesProvider{ids: map[string]bool{"70100023": true}}
+	krogerBackend := &stubStaplesProvider{ids: map[string]bool{"70100023": true}}
 	wholeFoodsProvider := &stubStaplesProvider{ids: map[string]bool{"wholefoods_10216": true}}
 	provider := routingStaplesProvider{
-		backends: []backendStaplesProvider{krogerProvider, wholeFoodsProvider},
+		backends: []backendStaplesProvider{krogerBackend, wholeFoodsProvider},
 	}
 
 	if _, err := provider.FetchStaples(t.Context(), "70100023"); err != nil {
 		t.Fatalf("FetchStaples kroger returned error: %v", err)
 	}
-	if krogerProvider.calls != 1 || wholeFoodsProvider.calls != 0 {
-		t.Fatalf("expected kroger provider to be selected, got kroger=%d wholefoods=%d", krogerProvider.calls, wholeFoodsProvider.calls)
+	if krogerBackend.calls != 1 || wholeFoodsProvider.calls != 0 {
+		t.Fatalf("expected kroger provider to be selected, got kroger=%d wholefoods=%d", krogerBackend.calls, wholeFoodsProvider.calls)
 	}
 
 	if _, err := provider.FetchStaples(t.Context(), "wholefoods_10216"); err != nil {
 		t.Fatalf("FetchStaples whole foods returned error: %v", err)
 	}
-	if krogerProvider.calls != 1 || wholeFoodsProvider.calls != 1 {
-		t.Fatalf("expected whole foods provider to be selected once, got kroger=%d wholefoods=%d", krogerProvider.calls, wholeFoodsProvider.calls)
+	if krogerBackend.calls != 1 || wholeFoodsProvider.calls != 1 {
+		t.Fatalf("expected whole foods provider to be selected once, got kroger=%d wholefoods=%d", krogerBackend.calls, wholeFoodsProvider.calls)
 	}
 }
 
@@ -125,72 +124,27 @@ func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) 
 }
 
 func TestRoutingStaplesProvider_GetIngredients_SelectsProviderByLocationID(t *testing.T) {
-	krogerProvider := &stubStaplesProvider{
+	krogerBackend := &stubStaplesProvider{
 		ids:         map[string]bool{"70100023": true},
-		ingredients: []kroger.Ingredient{{Description: loPtr("Pinot Noir")}},
+		ingredients: []ai.InputIngredient{{Description: "Pinot Noir"}},
 	}
 	wholeFoodsProvider := &stubStaplesProvider{
 		ids:         map[string]bool{"wholefoods_10216": true},
-		ingredients: []kroger.Ingredient{{Description: loPtr("Whole Foods Pinot Noir")}},
+		ingredients: []ai.InputIngredient{{Description: "Whole Foods Pinot Noir"}},
 	}
 	provider := routingStaplesProvider{
-		backends: []backendStaplesProvider{krogerProvider, wholeFoodsProvider},
+		backends: []backendStaplesProvider{krogerBackend, wholeFoodsProvider},
 	}
 
 	got, err := provider.GetIngredients(t.Context(), "wholefoods_10216", "pinot noir", 0)
 	if err != nil {
 		t.Fatalf("GetIngredients returned error: %v", err)
 	}
-	if len(got) != 1 || got[0].Description == nil || *got[0].Description != "Whole Foods Pinot Noir" {
+	if len(got) != 1 || got[0].Description != "Whole Foods Pinot Noir" {
 		t.Fatalf("unexpected ingredients: %+v", got)
 	}
-	if krogerProvider.calls != 0 || wholeFoodsProvider.calls != 1 {
-		t.Fatalf("expected whole foods provider to be selected, got kroger=%d wholefoods=%d", krogerProvider.calls, wholeFoodsProvider.calls)
-	}
-}
-
-func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
-	regular := float32(4.99)
-	sale := float32(3.49)
-	categories := []string{"Produce", "Fresh Fruit"}
-	ingredient, err := inputIngredientFromKrogerIngredient(kroger.Ingredient{
-		ProductId:    loPtr(" apple-1 "),
-		AisleNumber:  loPtr(" 12 "),
-		Brand:        loPtr(" Orchard Co "),
-		Description:  loPtr(" Honeycrisp Apple "),
-		Size:         loPtr(" 3 lb "),
-		PriceRegular: &regular,
-		PriceSale:    &sale,
-		Categories:   &categories,
-	})
-	if err != nil {
-		t.Fatalf("inputIngredientFromKrogerIngredient returned error: %v", err)
-	}
-
-	if ingredient.ProductID != "apple-1" {
-		t.Fatalf("unexpected product id: %+v", ingredient)
-	}
-	if ingredient.AisleNumber != "12" || ingredient.Brand != "Orchard Co" || ingredient.Description != "Honeycrisp Apple" || ingredient.Size != "3 lb" {
-		t.Fatalf("unexpected normalized ingredient: %+v", ingredient)
-	}
-	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != regular {
-		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
-	}
-	if ingredient.PriceSale == nil || *ingredient.PriceSale != sale {
-		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
-	}
-	if !slices.Equal(ingredient.Categories, categories) {
-		t.Fatalf("unexpected categories: got %v want %v", ingredient.Categories, categories)
-	}
-}
-
-func TestInputIngredientFromKrogerIngredientRejectsBlankProductID(t *testing.T) {
-	_, err := inputIngredientFromKrogerIngredient(kroger.Ingredient{Description: loPtr("Asparagus")})
-	if err == nil {
-		t.Fatal("expected blank product id error")
-	}
-	if !strings.Contains(err.Error(), "product_id is required") {
-		t.Fatalf("unexpected error: %v", err)
+	if krogerBackend.calls != 0 || wholeFoodsProvider.calls != 1 {
+		t.Fatalf("expected whole foods provider to be selected, got kroger=%d wholefoods=%d", krogerBackend.calls, wholeFoodsProvider.calls)
 	}
 }
 
@@ -208,15 +162,15 @@ func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	provider := &stubStaplesProvider{
 		ids: map[string]bool{"wholefoods_10216": true},
-		ingredients: []kroger.Ingredient{
-			{ProductId: loPtr("apple-1"), Description: loPtr("Honeycrisp Apple")},
-			{ProductId: loPtr("apple-1"), Description: loPtr("Honeycrisp Apple")},
-			{ProductId: loPtr("spinach-1"), Description: loPtr("Baby Spinach")},
+		ingredients: []ai.InputIngredient{
+			{ProductID: "apple-1", Description: "Honeycrisp Apple"},
+			{ProductID: "apple-1", Description: "Honeycrisp Apple"},
+			{ProductID: "spinach-1", Description: "Baby Spinach"},
 		},
 	}
 	s := &cachedStaplesService{
 		cache:    IO(cacheStore),
-		provider: convertingProvider{kprovider: provider},
+		provider: provider,
 		grader:   &stubIngredientGrader{},
 	}
 

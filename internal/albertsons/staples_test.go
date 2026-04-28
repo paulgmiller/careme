@@ -95,13 +95,13 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	}
 
 	first := got[0]
-	if first.ProductId == nil || *first.ProductId != "veg-1" {
-		t.Fatalf("unexpected product id: %+v", first.ProductId)
+	if first.ProductID != "veg-1" {
+		t.Fatalf("unexpected product id: %+v", first.ProductID)
 	}
-	if first.Description == nil || *first.Description != "Broccoli Crown" {
+	if first.Description != "Broccoli Crown" {
 		t.Fatalf("unexpected description: %+v", first.Description)
 	}
-	if first.Size == nil || *first.Size != "1 EA" {
+	if first.Size != "1 EA" {
 		t.Fatalf("unexpected size: %+v", first.Size)
 	}
 	if first.PriceRegular == nil || *first.PriceRegular != float32(3.49) {
@@ -110,7 +110,7 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	if first.PriceSale == nil || *first.PriceSale != float32(2.99) {
 		t.Fatalf("unexpected sale price: %+v", first.PriceSale)
 	}
-	if first.Categories == nil || !slices.Equal(*first.Categories, []string{"Produce", "Vegetables"}) {
+	if !slices.Equal(first.Categories, []string{"Produce", "Vegetables"}) {
 		t.Fatalf("unexpected categories: %+v", first.Categories)
 	}
 }
@@ -164,7 +164,7 @@ func TestStaplesProvider_GetIngredients_UsesSearchTermAndSkip(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 ingredient after skip, got %d", len(got))
 	}
-	if got[0].Description == nil || *got[0].Description != "Rose Radishes" {
+	if got[0].Description != "Rose Radishes" {
 		t.Fatalf("unexpected description: %+v", got[0].Description)
 	}
 }
@@ -217,7 +217,7 @@ func TestNewStaplesProvider_UsesInjectedHTTPClient(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 ingredient after skip, got %d", len(got))
 	}
-	if got[0].Description == nil || *got[0].Description != "Rose" {
+	if got[0].Description != "Rose" {
 		t.Fatalf("unexpected description: %+v", got[0].Description)
 	}
 }

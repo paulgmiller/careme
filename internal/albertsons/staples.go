@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strings"
 
+	"careme/internal/ai"
 	"careme/internal/albertsons/query"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/kroger"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -79,13 +79,13 @@ var stapleRows = map[string]uint{
 	query.Category_Seafood:    60,
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
+func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	client, storeID, err := p.clientForLocation(locationID)
 	if err != nil {
 		return nil, err
 	}
 
-	return parallelism.Flatten(query.StapleCategories(), func(category string) ([]kroger.Ingredient, error) {
+	return parallelism.Flatten(query.StapleCategories(), func(category string) ([]ai.InputIngredient, error) {
 		payload, err := client.Search(ctx, storeID, category, query.SearchOptions{
 			// how many rows? different per category? Should we paginate
 			Rows: stapleRows[category],
@@ -96,7 +96,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			return nil, err
 		}
 
-		ingredients := lo.Map(payload.Response.Docs, func(product query.PathwaySearchProduct, _ int) kroger.Ingredient {
+		ingredients := lo.Map(payload.Response.Docs, func(product query.PathwaySearchProduct, _ int) ai.InputIngredient {
 			return productToIngredient(product)
 		})
 		slog.InfoContext(ctx, "found albertsons staples for category", "count", len(ingredients), "category", category, "location", locationID)
@@ -105,7 +105,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 }
 
 // since this is mostly used by wine it isn't actuallyt they helpful.
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
+func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
 	client, storeID, err := p.clientForLocation(locationID)
 	if err != nil {
 		return nil, err
@@ -119,11 +119,11 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 		return nil, err
 	}
 
-	ingredients := lo.Map(payload.Response.Docs, func(product query.PathwaySearchProduct, _ int) kroger.Ingredient {
+	ingredients := lo.Map(payload.Response.Docs, func(product query.PathwaySearchProduct, _ int) ai.InputIngredient {
 		return productToIngredient(product)
 	})
 	if skip >= len(ingredients) {
-		return []kroger.Ingredient{}, nil
+		return []ai.InputIngredient{}, nil
 	}
 	return ingredients[skip:], nil
 }
@@ -156,45 +156,31 @@ func searchBaseURLAndStoreID(locationID string) (string, string, bool) {
 	return "", "", false
 }
 
-func productToIngredient(product query.PathwaySearchProduct) kroger.Ingredient {
-	productID := stringPtr(strings.TrimSpace(product.ID))
-	description := stringPtr(strings.TrimSpace(product.Name))
+func productToIngredient(product query.PathwaySearchProduct) ai.InputIngredient {
+	productID := strings.TrimSpace(product.ID)
+	description := strings.TrimSpace(product.Name)
 	size := sizeText(product)
 	regularPrice := float32Ptr(product.BasePrice)
 	salePrice := float32Ptr(product.Price)
 	categories := lo.Compact([]string{product.DepartmentName, product.ShelfName})
 
-	var categoryPtr *[]string
-	if len(categories) > 0 {
-		categoryPtr = &categories
-	}
-
-	return kroger.Ingredient{
-		ProductId:    productID,
+	return ai.NormalizeInputIngredient(ai.InputIngredient{
+		ProductID:    productID,
 		Description:  description,
 		Size:         size,
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
-		Categories:   categoryPtr,
-	}
+		Categories:   categories,
+	})
 }
 
 // this is a bit squirely shouldn't we take one ratehr than joiing both?
-func sizeText(product query.PathwaySearchProduct) *string {
+func sizeText(product query.PathwaySearchProduct) string {
 	sizeParts := lo.Compact([]string{product.ItemSizeQty, product.UnitOfMeasure})
 	if len(sizeParts) == 0 {
-		return nil
+		return ""
 	}
-	size := strings.Join(sizeParts, " ")
-	return &size
-}
-
-func stringPtr(value string) *string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	return &value
+	return strings.Join(sizeParts, " ")
 }
 
 func float32Ptr(value float64) *float32 {

@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"careme/internal/kroger"
+	"careme/internal/ai"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -45,7 +45,7 @@ func (p identityProvider) IsID(locationID string) bool {
 	return ok
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
+func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	if p.client == nil {
 		return nil, fmt.Errorf("whole foods client is required")
 	}
@@ -56,14 +56,14 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
 	}
 
-	return parallelism.Flatten(defaultStaples(), func(category string) ([]kroger.Ingredient, error) {
+	return parallelism.Flatten(defaultStaples(), func(category string) ([]ai.InputIngredient, error) {
 		resp, err := p.client.Category(ctx, category, storeID)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to fetch category", "category", category, "location", locationID, "error", err)
 			return nil, err
 		}
 
-		ingredients := lo.Map(resp, func(product product, _ int) kroger.Ingredient {
+		ingredients := lo.Map(resp, func(product product, _ int) ai.InputIngredient {
 			return productToIngredient(product)
 		})
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category, "location", locationID)
@@ -72,7 +72,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
+func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
 	if p.client == nil {
 		return nil, fmt.Errorf("whole foods client is required")
 	}
@@ -87,11 +87,11 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 		return nil, err
 	}
 
-	ingredients := lo.Map(resp, func(product product, _ int) kroger.Ingredient {
+	ingredients := lo.Map(resp, func(product product, _ int) ai.InputIngredient {
 		return productToIngredient(product)
 	})
 	if skip >= len(ingredients) {
-		return []kroger.Ingredient{}, nil
+		return []ai.InputIngredient{}, nil
 	}
 	return ingredients[skip:], nil
 }
@@ -114,7 +114,7 @@ func defaultStaples() []string {
 	// red-wine, white-wine, sparkling
 }
 
-func productToIngredient(product product) kroger.Ingredient {
+func productToIngredient(product product) ai.InputIngredient {
 	var regularPrice *float32
 	if product.RegularPrice > 0 {
 		price := float32(product.RegularPrice)
@@ -140,20 +140,13 @@ func productToIngredient(product product) kroger.Ingredient {
 	hasher := fnv.New32a()
 	_ = lo.Must(hasher.Write([]byte(product.Slug)))
 	productId := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
-	return kroger.Ingredient{
-		ProductId:   stringPtr(productId),
-		Brand:       stringPtr(strings.TrimSpace(product.Brand)),
-		Description: stringPtr(strings.TrimSpace(product.Name)),
+	return ai.NormalizeInputIngredient(ai.InputIngredient{
+		ProductID:   productId,
+		Brand:       strings.TrimSpace(product.Brand),
+		Description: strings.TrimSpace(product.Name),
 		// Size:         size,
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		// /	Categories:   slicePtr(categories),
-	}
-}
-
-func stringPtr(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
+	})
 }

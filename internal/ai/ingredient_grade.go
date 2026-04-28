@@ -73,7 +73,6 @@ Important calibration:
 
 Return JSON only. Preserve each input id/index exactly. Be concise.`
 
-// this is wire compatible with kroger.Ingredient eventually it should replace it in what staples returns
 type InputIngredient struct {
 	ProductID    string           `json:"id,omitempty"`
 	AisleNumber  string           `json:"number,omitempty"` // this is a dumb json name fix it later

@@ -267,7 +267,3 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 		t.Fatalf("unexpected cached wine recommendation: got %q", got)
 	}
 }
-
-func loPtr(v string) *string {
-	return &v
-}
