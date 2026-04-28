@@ -96,9 +96,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			return nil, err
 		}
 
-		ingredients := lo.Map(payload.Response.Docs, func(product query.PathwaySearchProduct, _ int) ai.InputIngredient {
-			return productToIngredient(product)
-		})
+		ingredients := lo.Map(payload.Response.Docs, productToIngredient)
 		slog.InfoContext(ctx, "found albertsons staples for category", "count", len(ingredients), "category", category, "location", locationID)
 		return ingredients, nil
 	})
@@ -119,9 +117,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 		return nil, err
 	}
 
-	ingredients := lo.Map(payload.Response.Docs, func(product query.PathwaySearchProduct, _ int) ai.InputIngredient {
-		return productToIngredient(product)
-	})
+	ingredients := lo.Map(payload.Response.Docs, productToIngredient)
 	if skip >= len(ingredients) {
 		return []ai.InputIngredient{}, nil
 	}
@@ -156,7 +152,7 @@ func searchBaseURLAndStoreID(locationID string) (string, string, bool) {
 	return "", "", false
 }
 
-func productToIngredient(product query.PathwaySearchProduct) ai.InputIngredient {
+func productToIngredient(product query.PathwaySearchProduct, _ int) ai.InputIngredient {
 	productID := strings.TrimSpace(product.ID)
 	description := strings.TrimSpace(product.Name)
 	size := sizeText(product)
@@ -171,6 +167,7 @@ func productToIngredient(product query.PathwaySearchProduct) ai.InputIngredient 
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		Categories:   categories,
+		AisleNumber:  product.AisleID, // also an aisle name if thats better?
 	})
 }
 
