@@ -169,22 +169,21 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 }
 
 func inputIngredientsFromKrogerIngredients(ingredients []Ingredient) ([]ai.InputIngredient, error) {
-	inputs := make([]ai.InputIngredient, 0, len(ingredients))
-	for _, ingredient := range ingredients {
-		input, err := inputIngredientFromKrogerIngredient(ingredient)
-		if err != nil {
-			return nil, err
-		}
-		inputs = append(inputs, input)
-	}
+	inputs := lo.Map(ingredients, inputIngredientFromKrogerIngredient)
 
-	return lo.UniqBy(inputs, func(i ai.InputIngredient) string {
-		return i.ProductID
-	}), nil
+	bad := lo.Filter(inputs, func(i ai.InputIngredient, _ int) bool {
+		return i.ProductID == ""
+	})
+
+	//move this out to recipes/staples.go?
+	if len(bad) > 0 {
+		return nil, fmt.Errorf("blank product ids: %v", bad)
+	}
+	return inputs, nil
 }
 
-func inputIngredientFromKrogerIngredient(ingredient Ingredient) (ai.InputIngredient, error) {
-	item := ai.InputIngredient{
+func inputIngredientFromKrogerIngredient(ingredient Ingredient, _ int) ai.InputIngredient {
+	return ai.NormalizeInputIngredient(ai.InputIngredient{
 		ProductID:    strings.TrimSpace(toStr(ingredient.ProductId)),
 		AisleNumber:  strings.TrimSpace(toStr(ingredient.AisleNumber)),
 		Brand:        strings.TrimSpace(toStr(ingredient.Brand)),
@@ -193,12 +192,7 @@ func inputIngredientFromKrogerIngredient(ingredient Ingredient) (ai.InputIngredi
 		PriceRegular: clonePrice(ingredient.PriceRegular),
 		PriceSale:    clonePrice(ingredient.PriceSale),
 		Categories:   categoriesFromPtr(ingredient.Categories),
-	}
-	item = ai.NormalizeInputIngredient(item)
-	if item.ProductID == "" {
-		return ai.InputIngredient{}, fmt.Errorf("ingredient product_id is required for %q", toStr(ingredient.Description))
-	}
-	return item, nil
+	})
 }
 
 func categoriesFromPtr(ptr *[]string) []string {

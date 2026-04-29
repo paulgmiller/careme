@@ -73,10 +73,11 @@ func (p identityProvider) IsID(locationID string) bool {
 }
 
 var stapleRows = map[string]uint{
-	query.Category_Vegatables: 150, // do we need way more of this?
-	query.Category_Fruit:      100,
-	query.Category_Meat:       100,
-	query.Category_Seafood:    60,
+	query.Category_Vegatables:   150, // do we need way more of this?
+	query.Category_Fruit:        100,
+	query.Category_Meat:         100,
+	query.Category_Seafood:      60,
+	query.Category_Pasta_Grains: 100, //???
 }
 
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
@@ -111,7 +112,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 
 	// should we just resturn all instead of search term? how many is this?
 	payload, err := client.Search(ctx, storeID, query.Category_Wine, query.SearchOptions{
-		Query: searchTerm, Rows: 100,
+		Query: searchTerm, Rows: 100, Start: uint(skip),
 	})
 	if err != nil {
 		return nil, err
@@ -158,12 +159,13 @@ func productToIngredient(product query.PathwaySearchProduct, _ int) ai.InputIngr
 	size := sizeText(product)
 	regularPrice := float32Ptr(product.BasePrice)
 	salePrice := float32Ptr(product.Price)
+	// how does shelf relate to aisle?
 	categories := lo.Compact([]string{product.DepartmentName, product.ShelfName})
 
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
 		ProductID:    productID,
 		Description:  description,
-		Size:         size,
+		Size:         size, // will product id smash this as a dedupe?
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		Categories:   categories,

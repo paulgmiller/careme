@@ -100,7 +100,7 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	regular := float32(4.99)
 	sale := float32(3.49)
 	categories := []string{"Produce", "Fresh Fruit"}
-	ingredient, err := inputIngredientFromKrogerIngredient(Ingredient{
+	ingredient := inputIngredientFromKrogerIngredient(Ingredient{
 		ProductId:    stringPtr(" apple-1 "),
 		AisleNumber:  stringPtr(" 12 "),
 		Brand:        stringPtr(" Orchard Co "),
@@ -109,10 +109,7 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 		PriceRegular: &regular,
 		PriceSale:    &sale,
 		Categories:   &categories,
-	})
-	if err != nil {
-		t.Fatalf("inputIngredientFromKrogerIngredient returned error: %v", err)
-	}
+	}, 0)
 
 	if ingredient.ProductID != "apple-1" {
 		t.Fatalf("unexpected product id: %+v", ingredient)
@@ -128,16 +125,6 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	}
 	if !slices.Equal(ingredient.Categories, categories) {
 		t.Fatalf("unexpected categories: got %v want %v", ingredient.Categories, categories)
-	}
-}
-
-func TestInputIngredientFromKrogerIngredientRejectsBlankProductID(t *testing.T) {
-	_, err := inputIngredientFromKrogerIngredient(Ingredient{Description: stringPtr("Asparagus")})
-	if err == nil {
-		t.Fatal("expected blank product id error")
-	}
-	if !strings.Contains(err.Error(), "product_id is required") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
