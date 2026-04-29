@@ -81,6 +81,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	if len(missingIngredients) == 0 {
 		return results, nil
 	}
+	slog.InfoContext(ctx, "grading non cached", "cached", len(results), "missing", len(missingIngredients))
 
 	gradedIngredients, err := c.grader.GradeIngredients(ctx, missingIngredients)
 
