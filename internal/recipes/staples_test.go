@@ -148,6 +148,89 @@ func TestRoutingStaplesProvider_GetIngredients_SelectsProviderByLocationID(t *te
 	}
 }
 
+func TestRoutingStaplesProvider_DoesNotDedupeIngredients(t *testing.T) {
+	backend := &stubStaplesProvider{
+		ids: map[string]bool{"70100023": true},
+		ingredients: []ai.InputIngredient{
+			{ProductID: "apple-1", Description: "Honeycrisp Apple"},
+			{ProductID: "apple-1", Description: "Honeycrisp Apple"},
+		},
+	}
+	provider := routingStaplesProvider{
+		backends: []backendStaplesProvider{backend},
+	}
+
+	got, err := provider.FetchStaples(t.Context(), "70100023")
+	if err != nil {
+		t.Fatalf("FetchStaples returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected routing provider to preserve backend ingredients, got %+v", got)
+	}
+}
+
+func TestDedupingStaplesProvider_FetchStaplesDedupesProductIDs(t *testing.T) {
+	provider := dedupingStaplesProvider{
+		provider: &stubRoutingStaplesProvider{
+			ingredients: []ai.InputIngredient{
+				{ProductID: "apple-1", Description: "Honeycrisp Apple"},
+				{ProductID: "apple-1", Description: "Honeycrisp Apple"},
+				{ProductID: "spinach-1", Description: "Baby Spinach"},
+			},
+		},
+	}
+
+	got, err := provider.FetchStaples(t.Context(), "70100023")
+	if err != nil {
+		t.Fatalf("FetchStaples returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected deduped ingredients, got %+v", got)
+	}
+	if got[0].ProductID != "apple-1" || got[1].ProductID != "spinach-1" {
+		t.Fatalf("expected first occurrence of each product id in order, got %+v", got)
+	}
+}
+
+func TestDedupingStaplesProvider_GetIngredientsDedupesProductIDs(t *testing.T) {
+	provider := dedupingStaplesProvider{
+		provider: &stubRoutingStaplesProvider{
+			ingredients: []ai.InputIngredient{
+				{ProductID: "wine-1", Description: "Pinot Noir"},
+				{ProductID: "wine-1", Description: "Pinot Noir"},
+				{ProductID: "wine-2", Description: "Cabernet Sauvignon"},
+			},
+		},
+	}
+
+	got, err := provider.GetIngredients(t.Context(), "70100023", "pinot noir", 0)
+	if err != nil {
+		t.Fatalf("GetIngredients returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected deduped ingredients, got %+v", got)
+	}
+	if got[0].ProductID != "wine-1" || got[1].ProductID != "wine-2" {
+		t.Fatalf("expected first occurrence of each product id in order, got %+v", got)
+	}
+}
+
+func TestDedupingStaplesProvider_RejectsBlankProductID(t *testing.T) {
+	provider := dedupingStaplesProvider{
+		provider: &stubRoutingStaplesProvider{
+			ingredients: []ai.InputIngredient{{Description: "Mystery Ingredient"}},
+		},
+	}
+
+	_, err := provider.FetchStaples(t.Context(), "70100023")
+	if err == nil {
+		t.Fatal("expected blank product id error")
+	}
+	if !strings.Contains(err.Error(), "blank product id for ingredient") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T) {
 	t.Parallel()
 

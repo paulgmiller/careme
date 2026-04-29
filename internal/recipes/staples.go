@@ -35,9 +35,12 @@ type backendStaplesProvider interface {
 	staplesProvider
 }
 
-// sends to the right backend but also dedupes product ids and errors on empty ones.
 type routingStaplesProvider struct {
 	backends []backendStaplesProvider
+}
+
+type dedupingStaplesProvider struct {
+	provider staplesProvider
 }
 
 func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
@@ -46,9 +49,9 @@ func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
 		return nil, err
 	}
 
-	return routingStaplesProvider{
+	return dedupingStaplesProvider{provider: routingStaplesProvider{
 		backends: backends,
-	}, nil
+	}}, nil
 }
 
 func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
@@ -56,11 +59,7 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	if err != nil {
 		return nil, err
 	}
-	ingredients, err := provider.FetchStaples(ctx, locationID)
-	if err != nil {
-		return nil, err
-	}
-	return dedupeInputIngredients(ingredients)
+	return provider.FetchStaples(ctx, locationID)
 }
 
 func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
@@ -68,7 +67,19 @@ func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID s
 	if err != nil {
 		return nil, err
 	}
-	ingredients, err := provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
+}
+
+func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	ingredients, err := p.provider.FetchStaples(ctx, locationID)
+	if err != nil {
+		return nil, err
+	}
+	return dedupeInputIngredients(ingredients)
+}
+
+func (p dedupingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
+	ingredients, err := p.provider.GetIngredients(ctx, locationID, searchTerm, skip)
 	if err != nil {
 		return nil, err
 	}
