@@ -12,7 +12,6 @@ import (
 	"time"
 
 	locationtypes "careme/internal/locations/types"
-	"careme/internal/telemetry"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -20,8 +19,10 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/invopop/jsonschema"
-	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel"
 )
+
+var tracer = otel.Tracer("careme/internal/ai")
 
 type client struct {
 	apiKey     string
@@ -222,13 +223,8 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 }
 
 func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (shoppingList *ShoppingList, err error) {
-	ctx, span := telemetry.Start(ctx, "careme/internal/ai", "ai.openai.regenerate")
-	defer telemetry.End(span, &err)
-	span.SetAttributes(
-		attribute.String("ai.model", c.model),
-		attribute.Int("ai.instruction_count", len(instructions)),
-		attribute.Bool("ai.previous_response_id.present", strings.TrimSpace(previousResponseID) != ""),
-	)
+	ctx, span := tracer.Start(ctx, "ai.openai.regenerate")
+	defer span.End()
 
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
@@ -250,18 +246,13 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
-	span.SetAttributes(responseUsageSpanAttrs(resp.Usage)...)
 
 	return responseToShoppingList(ctx, resp)
 }
 
 func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (response *QuestionResponse, err error) {
-	ctx, span := telemetry.Start(ctx, "careme/internal/ai", "ai.openai.question")
-	defer telemetry.End(span, &err)
-	span.SetAttributes(
-		attribute.String("ai.model", c.model),
-		attribute.Bool("ai.previous_response_id.present", strings.TrimSpace(previousResponseID) != ""),
-	)
+	ctx, span := tracer.Start(ctx, "ai.openai.question")
+	defer span.End()
 
 	question = strings.TrimSpace(question)
 	if question == "" {
@@ -284,7 +275,6 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
 	}
-	span.SetAttributes(responseUsageSpanAttrs(resp.Usage)...)
 	answer := strings.TrimSpace(resp.OutputText())
 	if answer == "" {
 		return nil, fmt.Errorf("empty response from model")
@@ -299,12 +289,8 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 }
 
 func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (image *GeneratedImage, err error) {
-	ctx, span := telemetry.Start(ctx, "careme/internal/ai", "ai.openai.generate_image")
-	defer telemetry.End(span, &err)
-	span.SetAttributes(
-		attribute.String("ai.model", string(recipeImageModel)),
-		attribute.Int("recipe.instruction_count", len(recipe.Instructions)),
-	)
+	ctx, span := tracer.Start(ctx, "ai.openai.generate_image")
+	defer span.End()
 
 	prompt, err := buildRecipeImagePrompt(recipe)
 	if err != nil {
@@ -325,7 +311,6 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (image 
 	}
 
 	slog.InfoContext(ctx, "API usage", imageUsageLogAttr(resp.Usage))
-	span.SetAttributes(imageUsageSpanAttrs(resp.Usage)...)
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("image generation returned no images")
 	}
@@ -353,16 +338,6 @@ func responseUsageLogAttr(usage responses.ResponseUsage) slog.Attr {
 	)
 }
 
-func responseUsageSpanAttrs(usage responses.ResponseUsage) []attribute.KeyValue {
-	return []attribute.KeyValue{
-		attribute.Int64("ai.usage.input_tokens", usage.InputTokens),
-		attribute.Int64("ai.usage.input_cached_tokens", usage.InputTokensDetails.CachedTokens),
-		attribute.Int64("ai.usage.output_tokens", usage.OutputTokens),
-		attribute.Int64("ai.usage.output_reasoning_tokens", usage.OutputTokensDetails.ReasoningTokens),
-		attribute.Int64("ai.usage.total_tokens", usage.TotalTokens),
-	}
-}
-
 func imageUsageLogAttr(usage openai.ImagesResponseUsage) slog.Attr {
 	return slog.Group("usage",
 		slog.Int64("inputTokens", usage.InputTokens),
@@ -379,26 +354,9 @@ func imageUsageLogAttr(usage openai.ImagesResponseUsage) slog.Attr {
 	)
 }
 
-func imageUsageSpanAttrs(usage openai.ImagesResponseUsage) []attribute.KeyValue {
-	return []attribute.KeyValue{
-		attribute.Int64("ai.usage.input_tokens", usage.InputTokens),
-		attribute.Int64("ai.usage.input_image_tokens", usage.InputTokensDetails.ImageTokens),
-		attribute.Int64("ai.usage.input_text_tokens", usage.InputTokensDetails.TextTokens),
-		attribute.Int64("ai.usage.output_tokens", usage.OutputTokens),
-		attribute.Int64("ai.usage.output_image_tokens", usage.OutputTokensDetails.ImageTokens),
-		attribute.Int64("ai.usage.output_text_tokens", usage.OutputTokensDetails.TextTokens),
-		attribute.Int64("ai.usage.total_tokens", usage.TotalTokens),
-	}
-}
-
 func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngredient) (selection *WineSelection, err error) {
-	ctx, span := telemetry.Start(ctx, "careme/internal/ai", "ai.openai.pick_wine")
-	defer telemetry.End(span, &err)
-	span.SetAttributes(
-		attribute.String("ai.model", c.wineModel),
-		attribute.Int("wine.candidate_count", len(wines)),
-		attribute.Int("recipe.instruction_count", len(recipe.Instructions)),
-	)
+	ctx, span := tracer.Start(ctx, "ai.openai.pick_wine")
+	defer span.End()
 
 	prompt, err := buildWineSelectionPrompt(recipe, wines)
 	if err != nil {
@@ -417,7 +375,6 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	if err != nil {
 		return nil, fmt.Errorf("failed to pick wine: %w", err)
 	}
-	span.SetAttributes(responseUsageSpanAttrs(resp.Usage)...)
 
 	var parsed WineSelection
 	if err := json.Unmarshal([]byte(resp.OutputText()), &parsed); err != nil {
@@ -427,17 +384,8 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 }
 
 func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (shoppingList *ShoppingList, err error) {
-	ctx, span := telemetry.Start(ctx, "careme/internal/ai", "ai.openai.generate_recipes")
-	defer telemetry.End(span, &err)
-	span.SetAttributes(
-		attribute.String("ai.model", c.model),
-		attribute.Int("ingredient.count", len(saleIngredients)),
-		attribute.Int("ai.instruction_count", len(instructions)),
-		attribute.Int("recipe.last_count", len(lastRecipes)),
-	)
-	if location != nil {
-		span.SetAttributes(attribute.String("location.state", strings.TrimSpace(location.State)))
-	}
+	ctx, span := tracer.Start(ctx, "ai.openai.generate_recipes")
+	defer span.End()
 
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
@@ -461,7 +409,6 @@ func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Lo
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes: %w", err)
 	}
-	span.SetAttributes(responseUsageSpanAttrs(resp.Usage)...)
 	return responseToShoppingList(ctx, resp)
 }
 

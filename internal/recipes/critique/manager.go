@@ -10,12 +10,13 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/telemetry"
 
-	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel"
 )
 
 const MinimumRecipeScore = 8
+
+var tracer = otel.Tracer("careme/internal/recipes/critique")
 
 type Result struct {
 	Recipe   *ai.Recipe
@@ -42,8 +43,7 @@ type recipeCritiquer interface {
 type rubberstamp struct{}
 
 func (r rubberstamp) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan Result {
-	_, span := telemetry.Start(ctx, "careme/internal/recipes/critique", "recipes.critique.batch")
-	span.SetAttributes(attribute.Bool("recipe_critique.enabled", false), attribute.Int("recipe.count", len(recipes)))
+	_, span := tracer.Start(ctx, "recipes.critique.batch")
 	defer span.End()
 
 	results := make(chan Result, len(recipes))
@@ -80,8 +80,7 @@ func (mc *multiCritiquer) Ready(ctx context.Context) error {
 }
 
 func (mc *multiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan Result {
-	ctx, span := telemetry.Start(ctx, "careme/internal/recipes/critique", "recipes.critique.batch")
-	span.SetAttributes(attribute.Bool("recipe_critique.enabled", true), attribute.Int("recipe.count", len(recipes)))
+	ctx, span := tracer.Start(ctx, "recipes.critique.batch")
 
 	results := make(chan Result, len(recipes))
 	mc.wg.Add(len(recipes))
@@ -90,10 +89,9 @@ func (mc *multiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Reci
 	for _, recipe := range recipes {
 		localWg.Go(func() {
 			defer mc.wg.Done()
-			recipeCtx, recipeSpan := telemetry.Start(ctx, "careme/internal/recipes/critique", "recipes.critique.one")
-			recipeSpan.SetAttributes(attribute.Int("recipe.instruction_count", len(recipe.Instructions)))
+			recipeCtx, recipeSpan := tracer.Start(ctx, "recipes.critique.one")
 			critique, err := mc.critiquer.CritiqueRecipe(recipeCtx, recipe)
-			telemetry.EndResult(recipeSpan, err)
+			recipeSpan.End()
 			results <- Result{
 				Recipe:   &recipe,
 				Critique: critique,

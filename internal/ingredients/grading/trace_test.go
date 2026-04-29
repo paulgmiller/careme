@@ -20,8 +20,11 @@ func recordSpans(t *testing.T) *tracetest.SpanRecorder {
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	previous := otel.GetTracerProvider()
+	previousTracer := tracer
 	otel.SetTracerProvider(provider)
+	tracer = provider.Tracer("careme/internal/ingredients/grading")
 	t.Cleanup(func() {
+		tracer = previousTracer
 		otel.SetTracerProvider(previous)
 		_ = provider.Shutdown(context.Background())
 	})
@@ -37,25 +40,7 @@ func endedSpanNames(recorder *tracetest.SpanRecorder) []string {
 	return names
 }
 
-func endedSpanNamed(recorder *tracetest.SpanRecorder, name string) sdktrace.ReadOnlySpan {
-	for _, span := range recorder.Ended() {
-		if span.Name() == name {
-			return span
-		}
-	}
-	return nil
-}
-
-func spanIntAttr(span sdktrace.ReadOnlySpan, key string) (int64, bool) {
-	for _, attr := range span.Attributes() {
-		if string(attr.Key) == key {
-			return attr.Value.AsInt64(), true
-		}
-	}
-	return 0, false
-}
-
-func TestIngredientGradingSpansRecordCacheMisses(t *testing.T) {
+func TestIngredientGradingEmitsHighLevelLatencySpans(t *testing.T) {
 	recorder := recordSpans(t)
 	backend := &stubGradeBackend{}
 	manager := &multiGrader{
@@ -72,10 +57,4 @@ func TestIngredientGradingSpansRecordCacheMisses(t *testing.T) {
 	assert.Contains(t, names, "ingredients.grade")
 	assert.Contains(t, names, "ingredients.grade.cache")
 	assert.Contains(t, names, "ingredients.grade.external")
-
-	cacheSpan := endedSpanNamed(recorder, "ingredients.grade.cache")
-	require.NotNil(t, cacheSpan)
-	misses, ok := spanIntAttr(cacheSpan, "ingredient.cache_miss_count")
-	require.True(t, ok)
-	assert.Equal(t, int64(2), misses)
 }

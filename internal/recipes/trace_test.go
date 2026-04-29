@@ -2,7 +2,6 @@ package recipes
 
 import (
 	"context"
-	"slices"
 	"testing"
 	"time"
 
@@ -24,8 +23,11 @@ func recordSpans(t *testing.T) *tracetest.SpanRecorder {
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	previous := otel.GetTracerProvider()
+	previousTracer := tracer
 	otel.SetTracerProvider(provider)
+	tracer = provider.Tracer("careme/internal/recipes")
 	t.Cleanup(func() {
+		tracer = previousTracer
 		otel.SetTracerProvider(previous)
 		_ = provider.Shutdown(context.Background())
 	})
@@ -41,24 +43,14 @@ func endedSpanNames(recorder *tracetest.SpanRecorder) []string {
 	return names
 }
 
-func endedSpansNamed(recorder *tracetest.SpanRecorder, name string) []sdktrace.ReadOnlySpan {
-	spans := recorder.Ended()
-	matches := make([]sdktrace.ReadOnlySpan, 0)
-	for _, span := range spans {
+func endedSpanCount(recorder *tracetest.SpanRecorder, name string) int {
+	count := 0
+	for _, span := range recorder.Ended() {
 		if span.Name() == name {
-			matches = append(matches, span)
+			count++
 		}
 	}
-	return matches
-}
-
-func spanBoolAttr(span sdktrace.ReadOnlySpan, key string) (bool, bool) {
-	for _, attr := range span.Attributes() {
-		if string(attr.Key) == key {
-			return attr.Value.AsBool(), true
-		}
-	}
-	return false, false
+	return count
 }
 
 func TestGenerateRecipesEmitsHighLevelLatencySpans(t *testing.T) {
@@ -92,7 +84,7 @@ func TestGenerateRecipesEmitsHighLevelLatencySpans(t *testing.T) {
 	assert.Contains(t, names, "recipes.critique_and_retry")
 }
 
-func TestFetchStaplesSpansRecordCacheHitAndMiss(t *testing.T) {
+func TestFetchStaplesSpansProviderFetchOnlyOnCacheMiss(t *testing.T) {
 	recorder := recordSpans(t)
 	cacheStore := cache.NewInMemoryCache()
 	params := &generatorParams{
@@ -112,21 +104,6 @@ func TestFetchStaplesSpansRecordCacheHitAndMiss(t *testing.T) {
 	_, err = s.FetchStaples(t.Context(), params)
 	require.NoError(t, err)
 
-	var cacheStates []bool
-	for _, span := range endedSpansNamed(recorder, "recipes.staples.fetch") {
-		cacheHit, ok := spanBoolAttr(span, "cache.hit")
-		require.True(t, ok)
-		cacheStates = append(cacheStates, cacheHit)
-	}
-	slices.SortFunc(cacheStates, func(a, b bool) int {
-		if a == b {
-			return 0
-		}
-		if !a {
-			return -1
-		}
-		return 1
-	})
-	assert.Equal(t, []bool{false, true}, cacheStates)
-	assert.Contains(t, endedSpanNames(recorder), "recipes.staples.provider_fetch")
+	assert.Equal(t, 2, endedSpanCount(recorder, "recipes.staples.fetch"))
+	assert.Equal(t, 1, endedSpanCount(recorder, "recipes.staples.provider_fetch"))
 }

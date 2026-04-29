@@ -9,9 +9,6 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/parallelism"
-	"careme/internal/telemetry"
-
-	"go.opentelemetry.io/otel/attribute"
 )
 
 var _ grader = &cachingGrader{}
@@ -43,19 +40,17 @@ func newCachingGrader(grader baseGrader, store store) *cachingGrader {
 }
 
 func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) (results []ai.InputIngredient, err error) {
-	ctx, span := telemetry.Start(ctx, "careme/internal/ingredients/grading", "ingredients.grade.cache")
-	defer telemetry.End(span, &err)
-	span.SetAttributes(attribute.Int("ingredient.count", len(ingredients)))
+	ctx, span := tracer.Start(ctx, "ingredients.grade.cache")
+	defer span.End()
 
 	type lookupResult struct {
-		cached    *ai.InputIngredient
-		missing   *ai.InputIngredient
-		pregraded bool
+		cached  *ai.InputIngredient
+		missing *ai.InputIngredient
 	}
 
 	lookups, err := parallelism.MapWithErrors(ingredients, func(ingredient ai.InputIngredient) (lookupResult, error) {
 		if ingredient.Grade != nil {
-			return lookupResult{cached: &ingredient, pregraded: true}, nil
+			return lookupResult{cached: &ingredient}, nil
 		}
 
 		key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
@@ -75,11 +70,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 
 	results = make([]ai.InputIngredient, 0, len(ingredients))
 	missingIngredients := make([]ai.InputIngredient, 0, len(ingredients))
-	pregradedCount := 0
 	for _, lookup := range lookups {
-		if lookup.pregraded {
-			pregradedCount++
-		}
 		if lookup.cached != nil {
 			results = append(results, *lookup.cached)
 			continue
@@ -88,20 +79,14 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 			missingIngredients = append(missingIngredients, *lookup.missing)
 		}
 	}
-	span.SetAttributes(
-		attribute.Int("ingredient.pregraded_count", pregradedCount),
-		attribute.Int("ingredient.cache_hit_count", len(results)-pregradedCount),
-		attribute.Int("ingredient.cache_miss_count", len(missingIngredients)),
-	)
 
 	if len(missingIngredients) == 0 {
 		return results, nil
 	}
 
-	externalCtx, externalSpan := telemetry.Start(ctx, "careme/internal/ingredients/grading", "ingredients.grade.external")
-	externalSpan.SetAttributes(attribute.Int("ingredient.count", len(missingIngredients)))
+	externalCtx, externalSpan := tracer.Start(ctx, "ingredients.grade.external")
 	gradedIngredients, err := c.grader.GradeIngredients(externalCtx, missingIngredients)
-	telemetry.EndResult(externalSpan, err)
+	externalSpan.End()
 	if err != nil {
 		return nil, err
 	}
