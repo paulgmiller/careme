@@ -80,14 +80,13 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
 	}
 
-	//no pagination so no skip
+	// no pagination so no skip
 	resp, err := p.client.Category(ctx, searchTerm, storeID)
 	if err != nil {
 		return nil, err
 	}
 
 	return lo.Map(resp, productToIngredient), nil
-
 }
 
 func defaultStaples() []string {
@@ -132,7 +131,7 @@ func productToIngredient(product product, _ int) ai.InputIngredient {
 	// categories := compactStrings(localCategory(product))
 
 	hasher := fnv.New32a()
-	//dupes for different units of measure?
+	// dupes for different units of measure?
 	_ = lo.Must(hasher.Write([]byte(product.Slug)))
 	productId := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
