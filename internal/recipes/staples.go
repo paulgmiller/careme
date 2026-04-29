@@ -23,6 +23,7 @@ import (
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type identityProvider interface {
@@ -59,6 +60,9 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	if err != nil {
 		return nil, err
 	}
+	ctx, span := tracer.Start(ctx, "staples.fetchstaples")
+	span.SetAttributes(attribute.String("backend", fmt.Sprintf("%T", provider)))
+	defer span.End()
 	return provider.FetchStaples(ctx, locationID)
 }
 
@@ -67,6 +71,9 @@ func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID s
 	if err != nil {
 		return nil, err
 	}
+	ctx, span := tracer.Start(ctx, "staples.getingredients")
+	span.SetAttributes(attribute.String("backend", fmt.Sprintf("%T", provider)))
+	defer span.End()
 	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
 }
 
@@ -155,6 +162,8 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", locationID, err)
 	}
 
+	ctx, span := tracer.Start(ctx, "staples.gradeingredients")
+	defer span.End()
 	graded, err := s.grader.GradeIngredients(ctx, ingredients)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to grade cached staples", "error", err)

@@ -10,6 +10,8 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
+
+	"go.opentelemetry.io/otel"
 )
 
 const MinimumRecipeScore = 8
@@ -72,6 +74,8 @@ func (mc *multiCritiquer) Ready(ctx context.Context) error {
 	return mc.critiquer.Ready(ctx)
 }
 
+var tracer = otel.Tracer("careme/internal/recipes/critiques")
+
 func (mc *multiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan Result {
 	results := make(chan Result, len(recipes))
 	mc.wg.Add(len(recipes))
@@ -80,6 +84,8 @@ func (mc *multiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Reci
 	for _, recipe := range recipes {
 		localWg.Go(func() {
 			defer mc.wg.Done()
+			ctx, span := tracer.Start(ctx, "critques.recipe")
+			defer span.End()
 			critique, err := mc.critiquer.CritiqueRecipe(ctx, recipe)
 			results <- Result{
 				Recipe:   &recipe,
