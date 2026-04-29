@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"careme/internal/tracedhttp"
 )
 
 // this is a strange set. Actual sub categories don't work but thes aisle-vs ones do.
@@ -77,7 +79,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 20 * time.Second}
+		httpClient = tracedhttp.NewClient(20 * time.Second)
 	}
 
 	return &SearchClient{

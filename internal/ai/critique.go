@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -50,20 +51,22 @@ type RecipeCritique struct {
 }
 
 type critiquer struct {
-	apiKey string
-	model  string
-	schema map[string]any
+	apiKey     string
+	model      string
+	schema     map[string]any
+	httpClient *http.Client
 }
 
-func NewCritiquer(apiKey, model string) *critiquer {
+func NewCritiquer(apiKey, model string, httpClient ...*http.Client) *critiquer {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		model = defaultGeminiCritiqueModel
 	}
 	return &critiquer{
-		apiKey: strings.TrimSpace(apiKey),
-		model:  model,
-		schema: recipeCritiqueJSONSchema(),
+		apiKey:     strings.TrimSpace(apiKey),
+		model:      model,
+		schema:     recipeCritiqueJSONSchema(),
+		httpClient: firstHTTPClient(httpClient),
 	}
 }
 
@@ -150,8 +153,9 @@ func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.
 
 func (c *critiquer) newClient(ctx context.Context) (*genai.Client, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  c.apiKey,
-		Backend: genai.BackendGeminiAPI,
+		APIKey:     c.apiKey,
+		Backend:    genai.BackendGeminiAPI,
+		HTTPClient: c.httpClient,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create Gemini client: %w", err)

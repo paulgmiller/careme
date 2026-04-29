@@ -263,7 +263,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
 	}
 
-	krogerBackend, err := kroger.NewStaplesProvider(cfg)
+	krogerBackend, err := kroger.NewStaplesProvider(cfg, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("create kroger staples provider: %w", err)
 	}

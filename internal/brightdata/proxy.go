@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"os"
 
+	"careme/internal/tracedhttp"
+
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
@@ -47,7 +49,7 @@ func (c ProxyConfig) proxyURL() *url.URL {
 }
 
 func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
-	client := &http.Client{}
+	client := tracedhttp.NewClient(0)
 	if !cfg.Enabled() {
 		return withRetries(client), nil
 	}
@@ -67,7 +69,7 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = http.ProxyURL(cfg.proxyURL())
 	transport.TLSClientConfig = &tls.Config{RootCAs: rootCAs}
-	client.Transport = transport
+	client.Transport = tracedhttp.NewTransport(transport)
 	return withRetries(client), nil
 }
 

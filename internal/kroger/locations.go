@@ -3,10 +3,12 @@ package kroger
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"careme/internal/config"
 	krogerlocations "careme/internal/kroger/locations"
 	locationtypes "careme/internal/locations/types"
+	"careme/internal/tracedhttp"
 )
 
 const chainName = "kroger"
@@ -15,15 +17,20 @@ type LocationBackend struct {
 	client *krogerlocations.ClientWithResponses
 }
 
-func NewLocationBackendFromConfig(cfg *config.Config) (*LocationBackend, error) {
-	requestEditor := newBearerTokenRequestEditor(cfg)
-	client, err := krogerlocations.NewClientWithResponses("https://api.kroger.com",
+func NewLocationBackendFromConfig(cfg *config.Config, httpClient ...*http.Client) (*LocationBackend, error) {
+	client := firstHTTPClient(httpClient)
+	if client == nil {
+		client = tracedhttp.NewClient(0)
+	}
+	requestEditor := newBearerTokenRequestEditor(cfg, client)
+	locationsClient, err := krogerlocations.NewClientWithResponses("https://api.kroger.com",
+		krogerlocations.WithHTTPClient(client),
 		krogerlocations.WithRequestEditorFn(krogerlocations.RequestEditorFn(requestEditor)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create kroger locations client: %w", err)
 	}
-	return &LocationBackend{client: client}, nil
+	return &LocationBackend{client: locationsClient}, nil
 }
 
 func (b *LocationBackend) IsID(locationID string) bool {

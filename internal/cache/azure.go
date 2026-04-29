@@ -9,7 +9,10 @@ import (
 	"os"
 	"strings"
 
+	"careme/internal/tracedhttp"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
@@ -40,7 +43,11 @@ func NewBlobCache(container string) (*BlobCache, error) {
 	}
 
 	// The service URL for blob endpoints is usually in the form: http(s)://<account>.blob.core.windows.net/
-	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName), cred, nil)
+	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName), cred, &azblob.ClientOptions{
+		ClientOptions: policy.ClientOptions{
+			Transport: tracedhttp.NewClient(0),
+		},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create blob client: %w", err)
 	}

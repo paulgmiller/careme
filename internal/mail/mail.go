@@ -22,6 +22,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/tracedhttp"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
@@ -73,14 +74,15 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	userStorage := users.NewStorage(cache)
-	mc := critique.NewManager(cfg, cache)
-	ig := ingredientgrading.NewManager(cfg, cache)
+	aiHTTPClient := tracedhttp.NewClient(0)
+	mc := critique.NewManager(cfg, cache, aiHTTPClient)
+	ig := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 	staples, err := recipes.NewCachedStaplesService(cfg, cache, ig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
 	ss := recipes.StatusStore(cache)
-	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
+	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient)
 	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)

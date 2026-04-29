@@ -8,10 +8,12 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
 	locationtypes "careme/internal/locations/types"
+	"careme/internal/tracedhttp"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -27,6 +29,7 @@ type client struct {
 	wineSchema map[string]any
 	model      string
 	wineModel  string
+	httpClient *http.Client
 }
 
 type GeneratedImage struct {
@@ -100,7 +103,7 @@ type WineSelection struct {
 }
 
 // ignoring model for now.
-func NewClient(apiKey, _ string) *client {
+func NewClient(apiKey, _ string, httpClient ...*http.Client) *client {
 	// ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
@@ -120,7 +123,27 @@ func NewClient(apiKey, _ string) *client {
 		wineSchema: wine,
 		model:      openai.ChatModelGPT5_4,
 		wineModel:  openai.ChatModelGPT5Mini,
+		httpClient: firstHTTPClient(httpClient),
 	}
+}
+
+func (c *client) openAIClient() openai.Client {
+	return newOpenAIClient(c.apiKey, c.httpClient)
+}
+
+func firstHTTPClient(clients []*http.Client) *http.Client {
+	if len(clients) == 0 || clients[0] == nil {
+		return tracedhttp.NewClient(0)
+	}
+	return clients[0]
+}
+
+func newOpenAIClient(apiKey string, httpClient *http.Client) openai.Client {
+	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	if httpClient != nil {
+		opts = append(opts, option.WithHTTPClient(httpClient))
+	}
+	return openai.NewClient(opts...)
 }
 
 const systemMessage = `
@@ -223,7 +246,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	client := c.openAIClient()
 	messages := cleanInstuctions(instructions)
 
 	params := responses.ResponseNewParams{
@@ -249,7 +272,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	if question == "" {
 		return nil, fmt.Errorf("question is required")
 	}
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	client := c.openAIClient()
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
@@ -285,7 +308,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
 	}
 
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	client := c.openAIClient()
 	resp, err := client.Images.Generate(ctx, openai.ImageGenerateParams{
 		Prompt:       prompt,
 		Model:        recipeImageModel,
@@ -347,7 +370,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	if err != nil {
 		return nil, fmt.Errorf("failed to build wine selection prompt: %w", err)
 	}
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	client := c.openAIClient()
 	params := responses.ResponseNewParams{
 		Model:        c.wineModel,
 		Instructions: openai.String(winePrompt),
@@ -374,7 +397,7 @@ func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Lo
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
 	}
 
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	client := c.openAIClient()
 	params := responses.ResponseNewParams{
 		Model:        c.model,
 		Instructions: openai.String(systemMessage),
@@ -472,7 +495,7 @@ func (c *client) Ready(ctx context.Context) error {
 	// more CORRECT to do a very simple response request with allowed tokens 1 but this seems cheaper
 	// https://chatgpt.com/share/6984da16-ff88-8009-8486-4e0479ac6a01
 	// could only do it once to ensure startup
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
+	client := c.openAIClient()
 	_, err := client.Models.List(ctx)
 	return err
 }

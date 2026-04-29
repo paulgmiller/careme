@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"careme/internal/tracedhttp"
 )
 
 const (
@@ -145,7 +147,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 		baseURL = DefaultBaseURL
 	}
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 20 * time.Second}
+		httpClient = tracedhttp.NewClient(20 * time.Second)
 	}
 
 	return &client{

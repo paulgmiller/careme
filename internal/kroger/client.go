@@ -13,6 +13,7 @@ import (
 
 	"careme/internal/config"
 	"careme/internal/kroger/products"
+	"careme/internal/tracedhttp"
 )
 
 //go:generate go generate ./products ./locations
@@ -32,13 +33,19 @@ type KrogerTokenManager struct {
 	expiresAt    time.Time
 	clientID     string
 	clientSecret string
+	httpClient   *http.Client
 	mu           sync.Mutex
 }
 
-func NewKrogerTokenManager(clientID, clientSecret string) *KrogerTokenManager {
+func NewKrogerTokenManager(clientID, clientSecret string, httpClient ...*http.Client) *KrogerTokenManager {
+	client := firstHTTPClient(httpClient)
+	if client == nil {
+		client = tracedhttp.NewClient(0)
+	}
 	return &KrogerTokenManager{
 		clientID:     clientID,
 		clientSecret: clientSecret,
+		httpClient:   client,
 	}
 }
 
@@ -61,7 +68,7 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.SetBasicAuth(m.clientID, m.clientSecret)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := m.httpClient.Do(req)
 		if err != nil {
 			return "", err
 		}
@@ -97,8 +104,8 @@ func GetOAuth2Token(ctx context.Context, clientID, clientSecret string) (string,
 	return tm.GetToken(ctx)
 }
 
-func newBearerTokenRequestEditor(cfg *config.Config) func(context.Context, *http.Request) error {
-	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
+func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) func(context.Context, *http.Request) error {
+	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient)
 
 	return func(editorCtx context.Context, req *http.Request) error {
 		token, err := tokenManager.GetToken(editorCtx)
@@ -110,13 +117,25 @@ func newBearerTokenRequestEditor(cfg *config.Config) func(context.Context, *http
 	}
 }
 
-func NewProductsClientFromConfig(cfg *config.Config) (*products.ClientWithResponses, error) {
-	requestEditor := newBearerTokenRequestEditor(cfg)
+func NewProductsClientFromConfig(cfg *config.Config, httpClient ...*http.Client) (*products.ClientWithResponses, error) {
+	client := firstHTTPClient(httpClient)
+	if client == nil {
+		client = tracedhttp.NewClient(0)
+	}
+	requestEditor := newBearerTokenRequestEditor(cfg, client)
 	productsClient, err := products.NewClientWithResponses("https://api.kroger.com",
+		products.WithHTTPClient(client),
 		products.WithRequestEditorFn(products.RequestEditorFn(requestEditor)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create kroger products client: %w", err)
 	}
 	return productsClient, nil
+}
+
+func firstHTTPClient(clients []*http.Client) *http.Client {
+	if len(clients) == 0 {
+		return nil
+	}
+	return clients[0]
 }
