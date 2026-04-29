@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/locations"
+	locationtypes "careme/internal/locations/types"
 	"careme/internal/telemetry"
 
 	openai "github.com/openai/openai-go/v3"
@@ -426,7 +426,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	return &parsed, nil
 }
 
-func (c *client) GenerateRecipes(ctx context.Context, location *locations.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (shoppingList *ShoppingList, err error) {
+func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (shoppingList *ShoppingList, err error) {
 	ctx, span := telemetry.Start(ctx, "careme/internal/ai", "ai.openai.generate_recipes")
 	defer telemetry.End(span, &err)
 	span.SetAttributes(
@@ -505,7 +505,7 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locations.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
+func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	// constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))

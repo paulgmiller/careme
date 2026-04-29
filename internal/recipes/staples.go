@@ -27,14 +27,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// todo make this a indepenedent ingredient object not kroger.
-// we're cheating and making the wrapper here  do the conversion for now but all underlying provider should create input ingredients
-// then this becomes staplesProvider
-type krogerProvider interface {
-	FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error)
-	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error)
-}
-
 type identityProvider interface {
 	IsID(locationID string) bool
 	Signature() string
@@ -42,42 +34,47 @@ type identityProvider interface {
 
 type backendStaplesProvider interface {
 	identityProvider
-	krogerProvider
+	staplesProvider
 }
 
+// sends to the right backend but also dedupes product ids and errors on empty ones.
 type routingStaplesProvider struct {
 	backends []backendStaplesProvider
 }
 
 func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
-	kclient, err := kroger.FromConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	backends, err := defaultStaplesBackends(cfg, kclient)
+	backends, err := defaultStaplesBackends(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return convertingProvider{routingStaplesProvider{
+	return routingStaplesProvider{
 		backends: backends,
-	}}, nil
+	}, nil
 }
 
-func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]kroger.Ingredient, error) {
+func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	provider, err := p.providerForLocation(locationID)
 	if err != nil {
 		return nil, err
 	}
-	return provider.FetchStaples(ctx, locationID)
+	ingredients, err := provider.FetchStaples(ctx, locationID)
+	if err != nil {
+		return nil, err
+	}
+	return dedupeInputIngredients(ingredients)
 }
 
-func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
+func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
 	provider, err := p.providerForLocation(locationID)
 	if err != nil {
 		return nil, err
 	}
-	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	ingredients, err := provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	if err != nil {
+		return nil, err
+	}
+	return dedupeInputIngredients(ingredients)
 }
 
 type ingredientio interface {
@@ -100,90 +97,20 @@ type staplesProvider interface {
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error)
 }
 
-type convertingProvider struct {
-	kprovider krogerProvider
-}
-
-var _ staplesProvider = convertingProvider{}
-
-func (cp convertingProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	ingredients, err := cp.kprovider.FetchStaples(ctx, locationID)
-	if err != nil {
-		return nil, err
-	}
-	inputs := make([]ai.InputIngredient, 0, len(ingredients))
+func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	seen := map[string]bool{}
+	var deduped []ai.InputIngredient
 	for _, ingredient := range ingredients {
-		input, err := inputIngredientFromKrogerIngredient(ingredient)
-		if err != nil {
-			return nil, err
+		if ingredient.ProductID == "" {
+			return nil, fmt.Errorf("blank product id for ingredient: %+v", ingredient)
 		}
-		inputs = append(inputs, input)
-	}
-
-	inputs = lo.UniqBy(inputs, func(i ai.InputIngredient) string {
-		return i.ProductID
-	})
-	return inputs, nil
-}
-
-func (cp convertingProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
-	ingredients, err := cp.kprovider.GetIngredients(ctx, locationID, searchTerm, skip)
-	if err != nil {
-		return nil, err
-	}
-	inputs := make([]ai.InputIngredient, 0, len(ingredients))
-	for _, ingredient := range ingredients {
-		input, err := inputIngredientFromKrogerIngredient(ingredient)
-		if err != nil {
-			return nil, err
+		if seen[ingredient.ProductID] {
+			continue
 		}
-		inputs = append(inputs, input)
+		seen[ingredient.ProductID] = true
+		deduped = append(deduped, ingredient)
 	}
-
-	inputs = lo.UniqBy(inputs, func(i ai.InputIngredient) string {
-		return i.ProductID
-	})
-	return inputs, nil
-}
-
-func inputIngredientFromKrogerIngredient(ingredient kroger.Ingredient) (ai.InputIngredient, error) {
-	item := ai.InputIngredient{
-		ProductID:    strings.TrimSpace(toStr(ingredient.ProductId)),
-		AisleNumber:  strings.TrimSpace(toStr(ingredient.AisleNumber)),
-		Brand:        strings.TrimSpace(toStr(ingredient.Brand)),
-		Description:  strings.TrimSpace(toStr(ingredient.Description)),
-		Size:         strings.TrimSpace(toStr(ingredient.Size)),
-		PriceRegular: clonePrice(ingredient.PriceRegular),
-		PriceSale:    clonePrice(ingredient.PriceSale),
-		Categories:   categoriesFromPtr(ingredient.Categories),
-	}
-	item = ai.NormalizeInputIngredient(item)
-	if item.ProductID == "" {
-		return ai.InputIngredient{}, fmt.Errorf("ingredient product_id is required for %q", toStr(ingredient.Description))
-	}
-	return item, nil
-}
-
-func toStr(ptr *string) string {
-	if ptr == nil {
-		return ""
-	}
-	return *ptr
-}
-
-func categoriesFromPtr(ptr *[]string) []string {
-	if ptr == nil {
-		return nil
-	}
-	return append([]string(nil), (*ptr)...)
-}
-
-func clonePrice(price *float32) *float32 {
-	if price == nil {
-		return nil
-	}
-	value := *price
-	return &value
+	return deduped, nil
 }
 
 func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader grader) (*cachedStaplesService, error) {
@@ -325,7 +252,7 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
-func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithResponsesInterface) ([]backendStaplesProvider, error) {
+func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error) {
 	// should we do this per request so we get new proxies per user? https://github.com/paulgmiller/careme/issues/443
 	httpClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 	if err != nil {
@@ -338,9 +265,14 @@ func defaultStaplesBackends(cfg *config.Config, krogerClient kroger.ClientWithRe
 		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
 	}
 
+	krogerBackend, err := kroger.NewStaplesProvider(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create kroger staples provider: %w", err)
+	}
+
 	return []backendStaplesProvider{
-		kroger.NewStaplesProvider(krogerClient),
 		albertsonsProvider,
+		krogerBackend,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(httpClient)),

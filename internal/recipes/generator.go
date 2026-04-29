@@ -161,13 +161,16 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
-	g.writeStatus(ctx, hash, fmt.Sprintf("Looking through %d ingredients", len(ingredients)))
 	span.SetAttributes(attribute.Int("generation.ingredient_count", len(ingredients)))
+	ogCount := len(ingredients)
 	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 		// TODO make configurable?
-		return ing.Grade == nil || ing.Grade.Score > 5
+		return ing.Grade == nil || ing.Grade.Score > 6
 	})
 	span.SetAttributes(attribute.Int("generation.filtered_ingredient_count", len(ingredients)))
+	// having category would be interesing here.
+	g.writeStatus(ctx, hash, fmt.Sprintf("Considering %d out of %d ingredients", len(ingredients), ogCount))
+
 	mutable.Shuffle(ingredients)
 
 	instructions := []string{p.Directive, p.Instructions}
