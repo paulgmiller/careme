@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"careme/internal/kroger"
+	"careme/internal/ai"
 )
 
 const UnsupportedStaplesSignature = "unsupported-staples-v1"
@@ -48,10 +48,10 @@ func (p identityProvider) Signature() string {
 	return UnsupportedStaplesSignature
 }
 
-func (p StaplesProvider) FetchStaples(_ context.Context, locationID string) ([]kroger.Ingredient, error) {
+func (p StaplesProvider) FetchStaples(_ context.Context, locationID string) ([]ai.InputIngredient, error) {
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
-func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, searchTerm string, skip int) ([]kroger.Ingredient, error) {
+func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
 	return nil, fmt.Errorf("ingredient search is not supported for location %q and term %q", locationID, searchTerm)
 }

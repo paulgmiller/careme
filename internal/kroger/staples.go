@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 
+	"careme/internal/ai"
 	"careme/internal/config"
 	"careme/internal/kroger/products"
 	"careme/internal/parallelism"
@@ -59,20 +61,24 @@ func NewStaplesProvider(cfg *config.Config) (*StaplesProvider, error) {
 	return &StaplesProvider{client: client}, nil
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]Ingredient, error) {
-	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]Ingredient, error) {
+func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to fetch category", "category", category.Term, "location", locationID, "error", err)
 			return nil, err
 		}
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category.Term, "location", locationID)
-		return ingredients, nil
+		return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
 	})
 }
 
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]Ingredient, error) {
-	return searchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
+func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
+	ingredients, err := searchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
+	if err != nil {
+		return nil, err
+	}
+	return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
 }
 
 var availableInStore = products.Ais
@@ -156,6 +162,34 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 	}
 
 	return ingredients, nil
+}
+
+func inputIngredientFromKrogerIngredient(ingredient Ingredient, _ int) ai.InputIngredient {
+	return ai.NormalizeInputIngredient(ai.InputIngredient{
+		ProductID:    strings.TrimSpace(toStr(ingredient.ProductId)),
+		AisleNumber:  strings.TrimSpace(toStr(ingredient.AisleNumber)),
+		Brand:        strings.TrimSpace(toStr(ingredient.Brand)),
+		Description:  strings.TrimSpace(toStr(ingredient.Description)),
+		Size:         strings.TrimSpace(toStr(ingredient.Size)),
+		PriceRegular: clonePrice(ingredient.PriceRegular),
+		PriceSale:    clonePrice(ingredient.PriceSale),
+		Categories:   categoriesFromPtr(ingredient.Categories),
+	})
+}
+
+func categoriesFromPtr(ptr *[]string) []string {
+	if ptr == nil {
+		return nil
+	}
+	return append([]string(nil), (*ptr)...)
+}
+
+func clonePrice(price *float32) *float32 {
+	if price == nil {
+		return nil
+	}
+	value := *price
+	return &value
 }
 
 func defaultStaples() []staplesFilter {

@@ -108,7 +108,6 @@ func (rio recipeio) IngredientsFromCache(ctx context.Context, hash string) ([]ai
 		}
 	}()
 
-	// this should be back compat with kroger.Ingredient
 	var ingredients []ai.InputIngredient
 	if err := json.NewDecoder(ingredientBlob).Decode(&ingredients); err != nil {
 		return nil, err
