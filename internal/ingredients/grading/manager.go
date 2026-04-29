@@ -35,7 +35,11 @@ func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []ai.InputI
 }
 
 type multiGrader struct {
-	grader grader
+	grader baseGrader
+}
+
+func (m *multiGrader) CacheVersion() string {
+	return m.grader.CacheVersion()
 }
 
 func NewManager(cfg *config.Config, c cache.ListCache) grader {
@@ -43,9 +47,7 @@ func NewManager(cfg *config.Config, c cache.ListCache) grader {
 		return rubberstamp{}
 	}
 	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model)
-	return &multiGrader{
-		grader: newCachingGrader(base, NewStore(c)),
-	}
+	return newCachingGrader(&multiGrader{grader: base}, NewStore(c))
 }
 
 func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
@@ -54,16 +56,11 @@ func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.Inp
 	}
 
 	// we assume dedupe before thing come in here
-
 	batches := lo.Chunk(ingredients, ingredientGradeBatchSize)
-	graded, err := parallelism.Flatten(batches, func(batch []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	// return partial results so we can cache them
+	return parallelism.Flatten(batches, func(batch []ai.InputIngredient) ([]ai.InputIngredient, error) {
 		return m.grader.GradeIngredients(ctx, batch)
 	})
-	if err != nil {
-		// will have cached these
-		return nil, err
-	}
-	return graded, nil
 }
 
 func ingredientHash(ingredient ai.InputIngredient) string {

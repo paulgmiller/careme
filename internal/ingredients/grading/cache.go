@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -82,22 +83,29 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	}
 
 	gradedIngredients, err := c.grader.GradeIngredients(ctx, missingIngredients)
-	if err != nil {
-		return nil, err
-	}
-	if len(gradedIngredients) != len(missingIngredients) {
-		return nil, fmt.Errorf("ingredient grader returned %d ingredients for %d inputs", len(gradedIngredients), len(missingIngredients))
-	}
 
+	// might get partial results back save those.
+	var wg sync.WaitGroup
 	for _, gradedIngredient := range gradedIngredients {
 		if gradedIngredient.Grade == nil {
 			return nil, fmt.Errorf("ingredient grader returned nil grade for %q", ingredientLabel(gradedIngredient))
 		}
-		key := cacheKey(c.cacheVersion + "/" + ingredientHash(gradedIngredient))
-		if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
-			slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(gradedIngredient), "error", err)
-		}
 		results = append(results, gradedIngredient)
+		wg.Go(func() {
+			ctx := context.WithoutCancel(ctx)
+			key := cacheKey(c.cacheVersion + "/" + ingredientHash(gradedIngredient))
+			if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
+				slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(gradedIngredient), "error", err)
+			}
+		})
+	}
+	wg.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(gradedIngredients) != len(missingIngredients) {
+		return nil, fmt.Errorf("ingredient grader returned %d ingredients for %d inputs", len(gradedIngredients), len(missingIngredients))
 	}
 
 	return results, nil
