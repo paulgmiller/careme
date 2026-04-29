@@ -117,12 +117,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	if err != nil {
 		return nil, err
 	}
-
-	ingredients := lo.Map(payload.Response.Docs, productToIngredient)
-	if skip >= len(ingredients) {
-		return []ai.InputIngredient{}, nil
-	}
-	return ingredients[skip:], nil
+	return lo.Map(payload.Response.Docs, productToIngredient), nil
 }
 
 // clientForLocation takes a prefixed store id and looks up chaing base url and returnes unprefixed id.
