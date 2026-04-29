@@ -63,9 +63,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			return nil, err
 		}
 
-		ingredients := lo.Map(resp, func(product product, _ int) ai.InputIngredient {
-			return productToIngredient(product)
-		})
+		ingredients := lo.Map(resp, productToIngredient)
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category, "location", locationID)
 
 		return ingredients, nil
@@ -87,9 +85,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 		return nil, err
 	}
 
-	ingredients := lo.Map(resp, func(product product, _ int) ai.InputIngredient {
-		return productToIngredient(product)
-	})
+	ingredients := lo.Map(resp, productToIngredient)
 	if skip >= len(ingredients) {
 		return []ai.InputIngredient{}, nil
 	}
@@ -114,7 +110,7 @@ func defaultStaples() []string {
 	// red-wine, white-wine, sparkling
 }
 
-func productToIngredient(product product) ai.InputIngredient {
+func productToIngredient(product product, _ int) ai.InputIngredient {
 	var regularPrice *float32
 	if product.RegularPrice > 0 {
 		price := float32(product.RegularPrice)
