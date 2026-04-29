@@ -134,6 +134,7 @@ func productToIngredient(product product, _ int) ai.InputIngredient {
 	// categories := compactStrings(localCategory(product))
 
 	hasher := fnv.New32a()
+	//dupes for different units of measure?
 	_ = lo.Must(hasher.Write([]byte(product.Slug)))
 	productId := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
