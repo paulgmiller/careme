@@ -36,7 +36,8 @@ func Configure(ctx context.Context) (func(), error) {
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
-	if !exportEnabled() {
+	switch selectedTelemetryMode() {
+	case telemetryModeLocal:
 		traceProvider := tracesdk.NewTracerProvider()
 		otel.SetTracerProvider(traceProvider)
 		stdoutLogger := slog.New(stdouthandler)
@@ -45,9 +46,10 @@ func Configure(ctx context.Context) (func(), error) {
 		return recoverAndClose(ctx, func(shutdownCtx context.Context) error {
 			return traceProvider.Shutdown(shutdownCtx)
 		}), nil
-	}
-	if err := validateExportConfig(); err != nil {
-		return nil, err
+	case telemetryModeOTLP:
+		if err := validateExportConfig(); err != nil {
+			return nil, err
+		}
 	}
 
 	res, err := newResource()
@@ -55,13 +57,13 @@ func Configure(ctx context.Context) (func(), error) {
 		return nil, fmt.Errorf("build telemetry resource: %w", err)
 	}
 
-	traceProvider, err := newTracerProvider(ctx, res)
+	traceProvider, err := newTraceProvider(ctx, res)
 	if err != nil {
 		return nil, fmt.Errorf("create tracer provider: %w", err)
 	}
 	otel.SetTracerProvider(traceProvider)
 
-	logProvider, err := newLoggerProvider(ctx, res)
+	logProvider, err := newLogProvider(ctx, res)
 	if err != nil {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), telemetryShutdownTimeout)
 		defer cancel()
@@ -84,6 +86,24 @@ func Configure(ctx context.Context) (func(), error) {
 			traceProvider.Shutdown(shutdownCtx),
 		)
 	}), nil
+}
+
+func newTraceProvider(ctx context.Context, res *resource.Resource) (*tracesdk.TracerProvider, error) {
+	switch selectedTelemetryMode() {
+	case telemetryModeAppInsights:
+		return newAppInsightsTracerProvider(res)
+	default:
+		return newTracerProvider(ctx, res)
+	}
+}
+
+func newLogProvider(ctx context.Context, res *resource.Resource) (*logsdk.LoggerProvider, error) {
+	switch selectedTelemetryMode() {
+	case telemetryModeAppInsights:
+		return newAppInsightsLoggerProvider(res)
+	default:
+		return newLoggerProvider(ctx, res)
+	}
 }
 
 func serviceVersion() string {
