@@ -632,9 +632,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	}
 
 	captured := generator.LastParams()
-	if captured == nil {
-		t.Fatal("expected captured params")
-	}
+	require.NotNil(t, captured)
 	if got, want := captured.LastRecipes, []string{"Cooked Recently"}; !slices.Equal(got, want) {
 		t.Fatalf("expected only recently cooked recipes in avoid list, got %v", got)
 	}
@@ -1610,9 +1608,7 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	}
 
 	captured := generator.LastParams()
-	if captured == nil {
-		t.Fatal("expected captured params")
-	}
+	require.NotNil(t, captured)
 	if got, want := captured.PriorSavedHashes, []string{alreadySaved.ComputeHash()}; !slices.Equal(got, want) {
 		t.Fatalf("expected prior saved hashes %v, got %v", want, got)
 	}
