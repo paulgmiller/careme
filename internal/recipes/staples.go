@@ -35,6 +35,7 @@ type backendStaplesProvider interface {
 	staplesProvider
 }
 
+// sends to the right backend but also dedupes product ids and errors on empty ones.
 type routingStaplesProvider struct {
 	backends []backendStaplesProvider
 }
@@ -59,7 +60,7 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	if err != nil {
 		return nil, err
 	}
-	return dedupeInputIngredients(ingredients), nil
+	return dedupeInputIngredients(ingredients)
 }
 
 func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
@@ -71,7 +72,7 @@ func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID s
 	if err != nil {
 		return nil, err
 	}
-	return dedupeInputIngredients(ingredients), nil
+	return dedupeInputIngredients(ingredients)
 }
 
 type ingredientio interface {
@@ -94,10 +95,20 @@ type staplesProvider interface {
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error)
 }
 
-func dedupeInputIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
-	return lo.UniqBy(ingredients, func(i ai.InputIngredient) string {
-		return i.ProductID
-	})
+func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	seen := map[string]bool{}
+	var deduped []ai.InputIngredient
+	for _, ingredient := range ingredients {
+		if ingredient.ProductID == "" {
+			return nil, fmt.Errorf("blank product id for ingredient: %+v", ingredient)
+		}
+		if seen[ingredient.ProductID] {
+			continue
+		}
+		seen[ingredient.ProductID] = true
+		deduped = append(deduped, ingredient)
+	}
+	return deduped, nil
 }
 
 func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader grader) (*cachedStaplesService, error) {
@@ -132,7 +143,6 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", locationID, err)
 	}
-	ingredients = dedupeInputIngredients(ingredients)
 
 	graded, err := s.grader.GradeIngredients(ctx, ingredients)
 	if err != nil {
@@ -175,7 +185,6 @@ func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID st
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingredients for %q: %w", searchTerm, err)
 	}
-	wines = dedupeInputIngredients(wines)
 	logger.InfoContext(ctx, "found ingredients", "count", len(wines))
 
 	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {

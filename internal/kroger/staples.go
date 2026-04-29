@@ -62,19 +62,15 @@ func NewStaplesProvider(cfg *config.Config) (*StaplesProvider, error) {
 }
 
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	ingredients, err := parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]Ingredient, error) {
+	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to fetch category", "category", category.Term, "location", locationID, "error", err)
 			return nil, err
 		}
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category.Term, "location", locationID)
-		return ingredients, nil
+		return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return inputIngredientsFromKrogerIngredients(ingredients)
 }
 
 func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
@@ -82,7 +78,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	if err != nil {
 		return nil, err
 	}
-	return inputIngredientsFromKrogerIngredients(ingredients)
+	return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
 }
 
 var availableInStore = products.Ais
@@ -166,20 +162,6 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 	}
 
 	return ingredients, nil
-}
-
-func inputIngredientsFromKrogerIngredients(ingredients []Ingredient) ([]ai.InputIngredient, error) {
-	inputs := lo.Map(ingredients, inputIngredientFromKrogerIngredient)
-
-	bad := lo.Filter(inputs, func(i ai.InputIngredient, _ int) bool {
-		return i.ProductID == ""
-	})
-
-	//move this out to recipes/staples.go?
-	if len(bad) > 0 {
-		return nil, fmt.Errorf("blank product ids: %v", bad)
-	}
-	return inputs, nil
 }
 
 func inputIngredientFromKrogerIngredient(ingredient Ingredient, _ int) ai.InputIngredient {

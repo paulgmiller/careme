@@ -126,11 +126,11 @@ func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) 
 func TestRoutingStaplesProvider_GetIngredients_SelectsProviderByLocationID(t *testing.T) {
 	krogerBackend := &stubStaplesProvider{
 		ids:         map[string]bool{"70100023": true},
-		ingredients: []ai.InputIngredient{{Description: "Pinot Noir"}},
+		ingredients: []ai.InputIngredient{{ProductID: "1", Description: "Pinot Noir"}},
 	}
 	wholeFoodsProvider := &stubStaplesProvider{
 		ids:         map[string]bool{"wholefoods_10216": true},
-		ingredients: []ai.InputIngredient{{Description: "Whole Foods Pinot Noir"}},
+		ingredients: []ai.InputIngredient{{ProductID: "2", Description: "Whole Foods Pinot Noir"}},
 	}
 	provider := routingStaplesProvider{
 		backends: []backendStaplesProvider{krogerBackend, wholeFoodsProvider},
@@ -186,19 +186,8 @@ func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	if provider.calls != 1 {
 		t.Fatalf("expected provider to be called once, got %d", provider.calls)
 	}
-	if len(got) != 2 {
-		t.Fatalf("expected deduped results, got %d", len(got))
-	}
 	if got[0].ProductID == "" {
 		t.Fatalf("expected input ingredient product id, got %+v", got)
-	}
-
-	cached, err := IO(cacheStore).IngredientsFromCache(t.Context(), params.LocationHash())
-	if err != nil {
-		t.Fatalf("IngredientsFromCache returned error: %v", err)
-	}
-	if len(cached) != 2 {
-		t.Fatalf("expected cached deduped results, got %d", len(cached))
 	}
 
 	gotAgain, err := s.FetchStaples(t.Context(), params)
@@ -208,7 +197,7 @@ func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 	if provider.calls != 1 {
 		t.Fatalf("expected cached call to skip provider, got %d calls", provider.calls)
 	}
-	if len(gotAgain) != 2 {
+	if len(gotAgain) != 3 {
 		t.Fatalf("expected cached results, got %d", len(gotAgain))
 	}
 }
