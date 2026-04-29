@@ -57,14 +57,10 @@ func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.Inp
 
 	// we assume dedupe before thing come in here
 	batches := lo.Chunk(ingredients, ingredientGradeBatchSize)
-	graded, err := parallelism.Flatten(batches, func(batch []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	// return partial results so we can cache them
+	return parallelism.Flatten(batches, func(batch []ai.InputIngredient) ([]ai.InputIngredient, error) {
 		return m.grader.GradeIngredients(ctx, batch)
 	})
-	if err != nil {
-		// will have cached these
-		return nil, err
-	}
-	return graded, nil
 }
 
 func ingredientHash(ingredient ai.InputIngredient) string {
