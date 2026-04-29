@@ -17,12 +17,9 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
-	"go.opentelemetry.io/otel"
 
 	"github.com/invopop/jsonschema"
 )
-
-var tracer = otel.Tracer("careme/internal/ai")
 
 type client struct {
 	apiKey     string
