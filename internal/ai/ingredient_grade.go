@@ -21,6 +21,7 @@ const (
 	defaultIngredientGradeModel = openai.ChatModelGPT5Mini
 )
 
+// should we have category spefic grading prompts?
 const ingredientGradeSystemInstruction = `
 You review grocery catalog items before they are shown to a home recipe generator.
 
@@ -37,6 +38,28 @@ Strongly penalize:
 - formats intended mainly for snacking or immediate eating rather than cooking
 - pre-cut fruit unless it is still broadly useful for cooking or baking
 
+Additional rules for pasta, grains, rice, legumes, and noodles:
+
+- Prefer flexible base carbohydrates:
+  rice, dry pasta, oats, quinoa, farro, freekah
+
+- Use simple score anchors:
+  standard dry pasta → 6–7
+  premium dry pasta → 8–9
+  alternative pasta (chickpea, lentil, gluten-free) → 5–6
+  bread → 5–6
+  prepared sauces → max 6
+  instant or flavored mixes → 3–5
+
+- Reward real cooking-performance signals:
+  bronze-cut, slow-dried, high-protein durum, whole grain, hulled, pearled
+
+- Reward known higher-quality brands (e.g., Felicetti, De Cecco, Rummo, Rustichella)
+
+- Do not infer quality from generic terms:
+  "quality", "non-GMO", "organic", "traditional"
+
+- Penalize items that are less flexible or more processed
 
 Scoring anchors:
 - 9-10: excellent raw/fresh flexible cooking ingredient, e.g. whole vegetables, greens, roots, raw meats, fresh fruit useful in baking/cooking
@@ -50,7 +73,6 @@ Important calibration:
 
 Return JSON only. Preserve each input id/index exactly. Be concise.`
 
-// this is wire compatible with kroger.Ingredient eventually it should replace it in what staples returns
 type InputIngredient struct {
 	ProductID    string           `json:"id,omitempty"`
 	AisleNumber  string           `json:"number,omitempty"` // this is a dumb json name fix it later

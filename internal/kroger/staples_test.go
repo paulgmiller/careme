@@ -3,6 +3,7 @@ package kroger
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -93,4 +94,40 @@ func TestProductSearchErrorPayloadPrefersRawBody(t *testing.T) {
 	if !strings.Contains(krogerError(http.StatusBadRequest, payload).Error(), "PRODUCT-2011") {
 		t.Fatalf("expected krogerError to include decoded payload, got %v", krogerError(http.StatusBadRequest, payload))
 	}
+}
+
+func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
+	regular := float32(4.99)
+	sale := float32(3.49)
+	categories := []string{"Produce", "Fresh Fruit"}
+	ingredient := inputIngredientFromKrogerIngredient(Ingredient{
+		ProductId:    stringPtr(" apple-1 "),
+		AisleNumber:  stringPtr(" 12 "),
+		Brand:        stringPtr(" Orchard Co "),
+		Description:  stringPtr(" Honeycrisp Apple "),
+		Size:         stringPtr(" 3 lb "),
+		PriceRegular: &regular,
+		PriceSale:    &sale,
+		Categories:   &categories,
+	}, 0)
+
+	if ingredient.ProductID != "apple-1" {
+		t.Fatalf("unexpected product id: %+v", ingredient)
+	}
+	if ingredient.AisleNumber != "12" || ingredient.Brand != "Orchard Co" || ingredient.Description != "Honeycrisp Apple" || ingredient.Size != "3 lb" {
+		t.Fatalf("unexpected normalized ingredient: %+v", ingredient)
+	}
+	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != regular {
+		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
+	}
+	if ingredient.PriceSale == nil || *ingredient.PriceSale != sale {
+		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
+	}
+	if !slices.Equal(ingredient.Categories, categories) {
+		t.Fatalf("unexpected categories: got %v want %v", ingredient.Categories, categories)
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
