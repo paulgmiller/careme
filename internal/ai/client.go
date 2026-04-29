@@ -222,7 +222,7 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (shoppingList *ShoppingList, err error) {
+func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*ShoppingList, error) {
 	ctx, span := tracer.Start(ctx, "ai.openai.regenerate")
 	defer span.End()
 
@@ -250,7 +250,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	return responseToShoppingList(ctx, resp)
 }
 
-func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (response *QuestionResponse, err error) {
+func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
 	ctx, span := tracer.Start(ctx, "ai.openai.question")
 	defer span.End()
 
@@ -288,7 +288,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	}, nil
 }
 
-func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (image *GeneratedImage, err error) {
+func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*GeneratedImage, error) {
 	ctx, span := tracer.Start(ctx, "ai.openai.generate_image")
 	defer span.End()
 
@@ -354,7 +354,7 @@ func imageUsageLogAttr(usage openai.ImagesResponseUsage) slog.Attr {
 	)
 }
 
-func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngredient) (selection *WineSelection, err error) {
+func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngredient) (*WineSelection, error) {
 	ctx, span := tracer.Start(ctx, "ai.openai.pick_wine")
 	defer span.End()
 
@@ -383,7 +383,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	return &parsed, nil
 }
 
-func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (shoppingList *ShoppingList, err error) {
+func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
 	ctx, span := tracer.Start(ctx, "ai.openai.generate_recipes")
 	defer span.End()
 

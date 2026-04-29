@@ -124,7 +124,7 @@ func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader grader) (
 	}, nil
 }
 
-func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorParams) (results []ai.InputIngredient, err error) {
+func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
 	lochash := p.LocationHash()
 	locationID := p.Location.ID
 	ctx, span := tracer.Start(ctx, "recipes.staples.fetch")
@@ -172,13 +172,13 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) (wines []ai.InputIngredient, err error) {
+func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error) {
 	cacheKey := wineIngredientsCacheKey(searchTerm, locationID, date)
 	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "style", searchTerm)
 	ctx, span := tracer.Start(ctx, "recipes.ingredients.lookup")
 	defer span.End()
 
-	wines, err = s.cache.IngredientsFromCache(ctx, cacheKey)
+	wines, err := s.cache.IngredientsFromCache(ctx, cacheKey)
 	if err == nil {
 		logger.InfoContext(ctx, "serving cached ingredients", "count", len(wines))
 		return wines, nil

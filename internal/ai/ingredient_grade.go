@@ -150,7 +150,7 @@ func (g *ingredientGrader) CacheVersion() string {
 	return g.cacheVersion
 }
 
-func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []InputIngredient) (graded []InputIngredient, err error) {
+func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []InputIngredient) ([]InputIngredient, error) {
 	ctx, span := tracer.Start(ctx, "ai.openai.grade_ingredients")
 	defer span.End()
 

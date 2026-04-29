@@ -60,7 +60,7 @@ func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staples
 	}, nil
 }
 
-func (g *generatorService) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (selection *ai.WineSelection, err error) {
+func (g *generatorService) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	ctx, span := tracer.Start(ctx, "recipes.wine.pick")
 	defer span.End()
 
@@ -95,7 +95,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	})
 
 	aiCtx, aiSpan := tracer.Start(ctx, "recipes.ai.pick_wine")
-	selection, err = g.aiClient.PickWine(aiCtx, recipe, wines)
+	selection, err := g.aiClient.PickWine(aiCtx, recipe, wines)
 	aiSpan.End()
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	return selection, nil
 }
 
-func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (shoppingList *ai.ShoppingList, err error) {
+func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	hash := p.Hash()
 	start := time.Now()
 	ctx, span := tracer.Start(ctx, "recipes.generate")
@@ -115,7 +115,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		instructions := regenerateInstructions(p)
 
 		aiCtx, aiSpan := tracer.Start(ctx, "recipes.ai.regenerate")
-		shoppingList, err = g.aiClient.Regenerate(aiCtx, instructions, p.ResponseID)
+		shoppingList, err := g.aiClient.Regenerate(aiCtx, instructions, p.ResponseID)
 		aiSpan.End()
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
@@ -153,7 +153,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 	instructions := []string{p.Directive, p.Instructions}
 	aiCtx, aiSpan := tracer.Start(ctx, "recipes.ai.generate")
-	shoppingList, err = g.aiClient.GenerateRecipes(aiCtx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
+	shoppingList, err := g.aiClient.GenerateRecipes(aiCtx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	aiSpan.End()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
@@ -174,13 +174,13 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 }
 
 // generator not prociding a lot of value here. Should sever just hold an ai client?
-func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (response *ai.QuestionResponse, err error) {
+func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	ctx, span := tracer.Start(ctx, "recipes.question")
 	defer span.End()
 	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
 }
 
-func (g *generatorService) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (image *ai.GeneratedImage, err error) {
+func (g *generatorService) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
 	ctx, span := tracer.Start(ctx, "recipes.image.generate")
 	defer span.End()
 	return g.aiClient.GenerateRecipeImage(ctx, recipe)
@@ -223,7 +223,7 @@ func regenerateInstructions(p *generatorParams) []string {
 	return instructions
 }
 
-func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash string, shoppingList *ai.ShoppingList) (result *ai.ShoppingList, err error) {
+func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash string, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
 	ctx, span := tracer.Start(ctx, "recipes.critique_and_retry")
 	defer span.End()
 	if g.critiquer == nil {
@@ -248,7 +248,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 
 	// we could also just give all feedback back if any are below score
 	aiCtx, aiSpan := tracer.Start(ctx, "recipes.ai.critique_retry")
-	shoppingList, err = g.aiClient.Regenerate(aiCtx, critique.RetryInstructions(garbage), shoppingList.ResponseID)
+	shoppingList, err := g.aiClient.Regenerate(aiCtx, critique.RetryInstructions(garbage), shoppingList.ResponseID)
 	aiSpan.End()
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)

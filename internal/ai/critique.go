@@ -90,7 +90,7 @@ func (c *critiquer) Ready(ctx context.Context) error {
 	*/
 }
 
-func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (critique *RecipeCritique, err error) {
+func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, error) {
 	ctx, span := tracer.Start(ctx, "ai.gemini.critique_recipe")
 	defer span.End()
 
@@ -121,7 +121,7 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (critique
 		geminiUsageLogAttr(resp.UsageMetadata),
 	)
 
-	critique, err = parseRecipeCritique(resp.Text())
+	critique, err := parseRecipeCritique(resp.Text())
 	if err != nil {
 		return nil, err
 	}

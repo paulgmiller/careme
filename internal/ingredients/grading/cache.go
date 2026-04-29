@@ -39,7 +39,7 @@ func newCachingGrader(grader baseGrader, store store) *cachingGrader {
 	}
 }
 
-func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) (results []ai.InputIngredient, err error) {
+func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	ctx, span := tracer.Start(ctx, "ingredients.grade.cache")
 	defer span.End()
 
@@ -68,7 +68,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 		return nil, err
 	}
 
-	results = make([]ai.InputIngredient, 0, len(ingredients))
+	results := make([]ai.InputIngredient, 0, len(ingredients))
 	missingIngredients := make([]ai.InputIngredient, 0, len(ingredients))
 	for _, lookup := range lookups {
 		if lookup.cached != nil {

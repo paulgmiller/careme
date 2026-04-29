@@ -31,12 +31,12 @@ func (c *cachingCritiquer) Ready(ctx context.Context) error {
 	return c.critiquer.Ready(ctx)
 }
 
-func (c *cachingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (critique *ai.RecipeCritique, err error) {
+func (c *cachingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
 	ctx, span := tracer.Start(ctx, "recipes.critique.cache")
 	defer span.End()
 
 	hash := recipe.ComputeHash()
-	critique, err = c.store.Load(ctx, hash)
+	critique, err := c.store.Load(ctx, hash)
 	if err == nil {
 		return critique, nil
 	}

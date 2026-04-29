@@ -25,11 +25,11 @@ type grader interface {
 
 type rubberstamp struct{}
 
-func (r rubberstamp) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) (results []ai.InputIngredient, err error) {
+func (r rubberstamp) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	_, span := tracer.Start(ctx, "ingredients.grade")
 	defer span.End()
 
-	results = make([]ai.InputIngredient, 0, len(ingredients))
+	results := make([]ai.InputIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
 		ingredient.Grade = &ai.IngredientGrade{
 			Score:  10,
@@ -54,7 +54,7 @@ func NewManager(cfg *config.Config, c cache.ListCache) grader {
 	}
 }
 
-func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) (graded []ai.InputIngredient, err error) {
+func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	ctx, span := tracer.Start(ctx, "ingredients.grade")
 	defer span.End()
 	if len(ingredients) == 0 {
@@ -64,7 +64,7 @@ func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.Inp
 	// we assume dedupe before thing come in here
 
 	batches := lo.Chunk(ingredients, ingredientGradeBatchSize)
-	graded, err = parallelism.Flatten(batches, func(batch []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	graded, err := parallelism.Flatten(batches, func(batch []ai.InputIngredient) ([]ai.InputIngredient, error) {
 		return m.grader.GradeIngredients(ctx, batch)
 	})
 	if err != nil {
