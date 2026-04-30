@@ -16,7 +16,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type BlobCache struct {
@@ -157,7 +156,8 @@ func EnsureCache(container string) (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
 		slog.Info("Using Azure Blob Storage for cache", "container", container)
-		return NewBlobCache(container, otelhttp.NewTransport(http.DefaultTransport))
+		// can pas in  otelhttp.NewTransport(http.DefaultTransport) but it creates a lot of noise
+		return NewBlobCache(container, http.DefaultTransport)
 	}
 	return NewFileCache(container), nil
 }
