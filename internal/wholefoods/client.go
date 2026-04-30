@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -146,7 +144,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 		baseURL = DefaultBaseURL
 	}
 	if httpClient == nil {
-		httpClient = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+		httpClient = http.DefaultClient
 	}
 
 	return &client{

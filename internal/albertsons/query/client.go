@@ -76,7 +76,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{}
+		httpClient = http.DefaultClient
 	}
 
 	return &SearchClient{
