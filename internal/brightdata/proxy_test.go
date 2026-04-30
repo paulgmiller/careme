@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"careme/internal/tracedhttp"
-
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func TestProxyConfigValidate_AllowsDisabled(t *testing.T) {
@@ -68,13 +67,18 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 		t.Fatalf("expected *retryablehttp.RoundTripper, got %T", client.Transport)
 	}
 
-	tracingTransport, ok := retryTransport.Client.HTTPClient.Transport.(*tracedhttp.Transport)
-	if !ok {
+	if _, ok := retryTransport.Client.HTTPClient.Transport.(*otelhttp.Transport); !ok {
 		t.Fatalf("expected traced transport, got %T", retryTransport.Client.HTTPClient.Transport)
 	}
-	transport, ok := tracingTransport.Base.(*http.Transport)
-	if !ok {
-		t.Fatalf("expected traced base *http.Transport, got %T", tracingTransport.Base)
+
+	transport, err := newProxyTransport(ProxyConfig{
+		Host:     "brd.superproxy.io",
+		Port:     "33335",
+		Username: "user-name",
+		Password: "secret-pass",
+	})
+	if err != nil {
+		t.Fatalf("newProxyTransport() error = %v", err)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, "https://www.example.com/products", nil)
@@ -110,12 +114,8 @@ func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *retryablehttp.RoundTripper when proxy disabled, got %T", client.Transport)
 	}
-	tracingTransport, ok := retryTransport.Client.HTTPClient.Transport.(*tracedhttp.Transport)
-	if !ok {
+	if _, ok := retryTransport.Client.HTTPClient.Transport.(*otelhttp.Transport); !ok {
 		t.Fatalf("expected traced transport when proxy disabled, got %T", retryTransport.Client.HTTPClient.Transport)
-	}
-	if _, ok := tracingTransport.Base.(*http.Transport); !ok {
-		t.Fatalf("expected default base *http.Transport, got %T", tracingTransport.Base)
 	}
 }
 

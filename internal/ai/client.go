@@ -13,12 +13,12 @@ import (
 	"time"
 
 	locationtypes "careme/internal/locations/types"
-	"careme/internal/tracedhttp"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/invopop/jsonschema"
 )
@@ -133,7 +133,7 @@ func (c *client) openAIClient() openai.Client {
 
 func ensureHTTPClient(client *http.Client) *http.Client {
 	if client == nil {
-		return tracedhttp.NewClient(0)
+		return &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	}
 	return client
 }

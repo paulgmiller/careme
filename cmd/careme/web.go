@@ -25,11 +25,11 @@ import (
 	"careme/internal/sitemap"
 	"careme/internal/static"
 	"careme/internal/templates"
-	"careme/internal/tracedhttp"
 	"careme/internal/users"
 	"careme/internal/watchdog"
 
 	cachepkg "careme/internal/cache"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func runServer(cfg *config.Config, addr string) error {
@@ -59,7 +59,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
 	watchdogServer := watchdog.Server{}
-	aiHTTPClient := tracedhttp.NewClient(0)
+	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	// TODO  make the mock more transparent?
 	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 

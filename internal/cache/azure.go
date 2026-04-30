@@ -6,10 +6,9 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
-
-	"careme/internal/tracedhttp"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -17,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type BlobCache struct {
@@ -45,7 +45,7 @@ func NewBlobCache(container string) (*BlobCache, error) {
 	// The service URL for blob endpoints is usually in the form: http(s)://<account>.blob.core.windows.net/
 	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName), cred, &azblob.ClientOptions{
 		ClientOptions: policy.ClientOptions{
-			Transport: tracedhttp.NewClient(0),
+			Transport: &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
 		},
 	})
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sort"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
-	"careme/internal/tracedhttp"
 	"careme/internal/walmart"
 	"careme/internal/wegmans"
 	"careme/internal/wholefoods"
@@ -27,6 +27,7 @@ import (
 	locationtypes "careme/internal/locations/types"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -80,7 +81,7 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 	}
 
 	ctx := context.Background()
-	httpClient := tracedhttp.NewClient(0)
+	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	backendfactories := []locationBackendFactory{
 		func(context.Context) (locationBackend, error) {
 			return kroger.NewLocationBackendFromConfig(cfg, httpClient)

@@ -9,9 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
-	"careme/internal/tracedhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -147,7 +146,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 		baseURL = DefaultBaseURL
 	}
 	if httpClient == nil {
-		httpClient = tracedhttp.NewClient(20 * time.Second)
+		httpClient = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	}
 
 	return &client{

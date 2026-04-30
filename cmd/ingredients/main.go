@@ -13,7 +13,6 @@ import (
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/recipes"
-	"careme/internal/tracedhttp"
 
 	"github.com/samber/lo"
 )
@@ -61,7 +60,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create cache for ingredient grading: %s", err)
 	}
-	grader := ingredientgrading.NewManager(cfg, cacheStore, tracedhttp.NewClient(0))
+	grader := ingredientgrading.NewManager(cfg, cacheStore, nil)
 	graded, err := grader.GradeIngredients(ctx, ings)
 	if err != nil {
 		log.Fatalf("failed to grade ingredients: %s", err)

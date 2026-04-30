@@ -8,7 +8,6 @@ import (
 	"careme/internal/config"
 	krogerlocations "careme/internal/kroger/locations"
 	locationtypes "careme/internal/locations/types"
-	"careme/internal/tracedhttp"
 )
 
 const chainName = "kroger"
@@ -19,7 +18,7 @@ type LocationBackend struct {
 
 func NewLocationBackendFromConfig(cfg *config.Config, httpClient *http.Client) (*LocationBackend, error) {
 	if httpClient == nil {
-		httpClient = tracedhttp.NewClient(0)
+		httpClient = newTracedHTTPClient()
 	}
 	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
 	locationsClient, err := krogerlocations.NewClientWithResponses("https://api.kroger.com",

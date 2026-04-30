@@ -22,7 +22,6 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
-	"careme/internal/tracedhttp"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
@@ -31,6 +30,7 @@ import (
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -74,7 +74,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	userStorage := users.NewStorage(cache)
-	aiHTTPClient := tracedhttp.NewClient(0)
+	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	mc := critique.NewManager(cfg, cache, aiHTTPClient)
 	ig := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 	staples, err := recipes.NewCachedStaplesService(cfg, cache, ig)
