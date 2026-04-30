@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"cmp"
 	"context"
 	"html/template"
 	"io"
@@ -13,6 +14,8 @@ import (
 	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
 	"careme/internal/templates"
+
+	"github.com/samber/lo"
 )
 
 type recipeImageView struct {
@@ -57,7 +60,10 @@ type shoppingRecipeWineView struct {
 }
 
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
-func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
+// should shove wine recs into recipe instead of having them seperate.
+func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, inputs []ai.InputIngredient, writer http.ResponseWriter,
+) {
 	dismissedHashes := make(map[string]bool, len(p.Dismissed))
 	for _, recipe := range p.Dismissed {
 		dismissedHashes[recipe.ComputeHash()] = true
@@ -89,7 +95,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		})
 		combinedIngredients = append(combinedIngredients, displayIngredients...)
 	}
-	shoppingList := shoppingListForDisplay(combinedIngredients)
+	shoppingList := shoppingListForDisplay(combinedIngredients, inputs)
 	data := struct {
 		Location        locations.Location
 		Date            string
@@ -344,12 +350,8 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 	return templates.Mail.Execute(writer, data)
 }
 
-func shoppingListForDisplay(ingredients []ai.Ingredient) []ai.Ingredient {
-	if len(ingredients) == 0 {
-		return nil
-	}
+func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngredient) []ai.Ingredient {
 	items := make(map[string]*ai.Ingredient)
-	order := make([]string, 0)
 
 	for _, ingredient := range ingredients {
 		name := strings.ToLower(strings.TrimSpace(ingredient.Name))
@@ -362,7 +364,7 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []ai.Ingredient {
 				Name:     ingredient.Name,
 				Quantity: strings.TrimSpace(ingredient.Quantity),
 			}
-			order = append(order, name)
+
 			continue
 		}
 		qty := strings.TrimSpace(ingredient.Quantity)
@@ -376,10 +378,19 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []ai.Ingredient {
 		existing.Quantity = existing.Quantity + ", " + qty
 	}
 
-	combined := make([]ai.Ingredient, 0, len(order))
-	for _, name := range order {
-		combined = append(combined, *items[name])
+	// kind of big to do each time but we're fast right?
+	// better to do product here
+	aisles := lo.SliceToMap(inputs, func(ii ai.InputIngredient) (string, string) {
+		return ii.Description, ii.AisleNumber
+	})
+
+	var combined []ai.Ingredient
+	for _, ing := range items {
+		combined = append(combined, *ing)
 	}
+	slices.SortStableFunc(combined, func(a, b ai.Ingredient) int {
+		return cmp.Compare(aisles[a.Name], aisles[b.Name])
+	})
 	return combined
 }
 

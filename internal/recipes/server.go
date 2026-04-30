@@ -998,7 +998,14 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}(recipeHash)
 		}
 		wineWG.Wait()
-		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, w)
+
+		var ings []ai.InputIngredient
+		ings, err = s.IngredientsFromCache(ctx, p.LocationHash())
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to grab cached ingredients", "error", err)
+			// go anways we just lose aisle sorting
+		}
+		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, ings, w)
 		return
 	}
 

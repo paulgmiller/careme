@@ -35,9 +35,24 @@ func TestShoppingListForDisplay(t *testing.T) {
 		},
 	}
 
+	input := []ai.InputIngredient{
+		{
+			Description: "Onion",
+			AisleNumber: "1",
+		},
+		{
+			Description: "Garlic",
+			AisleNumber: "2",
+		},
+		{
+			Description: "Basil",
+			AisleNumber: "3",
+		},
+	}
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := shoppingListForDisplay(tc.ingredients)
+			got := shoppingListForDisplay(tc.ingredients, input)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("shoppingListForDisplay() = %#v, want %#v", got, tc.want)
 			}
