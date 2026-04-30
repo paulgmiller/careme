@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // this is a strange set. Actual sub categories don't work but thes aisle-vs ones do.
@@ -88,6 +89,9 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 }
 
 func (c *SearchClient) Search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
+	defer cancel()
+
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")

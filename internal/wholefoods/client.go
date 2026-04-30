@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 const (
@@ -156,6 +157,9 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 // Category fetches category products and follows limit/offset pagination until
 // the API returns fewer items than the requested page size.
 func (c *client) Category(ctx context.Context, queryterm, store string) ([]product, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
+	defer cancel()
+
 	queryterm = strings.TrimSpace(queryterm)
 	if queryterm == "" {
 		return nil, errors.New("queryterm is required")
