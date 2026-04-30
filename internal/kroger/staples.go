@@ -53,8 +53,8 @@ type StaplesProvider struct {
 	client *products.ClientWithResponses
 }
 
-func NewStaplesProvider(cfg *config.Config) (*StaplesProvider, error) {
-	client, err := NewProductsClientFromConfig(cfg)
+func NewStaplesProvider(cfg *config.Config, httpClient *http.Client) (*StaplesProvider, error) {
+	client, err := NewProductsClientFromConfig(cfg, httpClient)
 	if err != nil {
 		return nil, err
 	}

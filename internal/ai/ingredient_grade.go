@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/invopop/jsonschema"
@@ -120,10 +121,10 @@ type ingredientBatchGradeResponse struct {
 }
 
 type ingredientGrader struct {
-	apiKey       string
 	model        string
 	cacheVersion string
 	schema       map[string]any
+	oai          openai.Client
 }
 
 func ingredientGradeCacheVersion(model, systemInstruction string) string {
@@ -133,13 +134,19 @@ func ingredientGradeCacheVersion(model, systemInstruction string) string {
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-func NewIngredientGrader(apiKey, model string) *ingredientGrader {
+func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredientGrader {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}
+	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	if httpClient != nil {
+		opts = append(opts, option.WithHTTPClient(httpClient))
+	}
+	aiClient := openai.NewClient(opts...)
+
 	return &ingredientGrader{
-		apiKey:       strings.TrimSpace(apiKey),
+		oai:          aiClient,
 		model:        model,
 		cacheVersion: ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction),
 		schema:       ingredientGradeJSONSchema(),
@@ -169,8 +176,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 		return nil, fmt.Errorf("failed to build ingredient grading prompt: %w", err)
 	}
 
-	client := openai.NewClient(option.WithAPIKey(g.apiKey))
-	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
+	resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
 		Model:        g.model,
 		Instructions: openai.String(ingredientGradeSystemInstruction),
 		Input: responses.ResponseNewParamsInputUnion{

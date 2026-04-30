@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -20,14 +21,6 @@ import (
 
 	"github.com/invopop/jsonschema"
 )
-
-type client struct {
-	apiKey     string
-	schema     map[string]any
-	wineSchema map[string]any
-	model      string
-	wineModel  string
-}
 
 type GeneratedImage struct {
 	Body io.Reader
@@ -99,8 +92,16 @@ type WineSelection struct {
 	Commentary string       `json:"commentary"`
 }
 
+type client struct {
+	schema     map[string]any
+	wineSchema map[string]any
+	model      string
+	wineModel  string
+	oai        openai.Client
+}
+
 // ignoring model for now.
-func NewClient(apiKey, _ string) *client {
+func NewClient(apiKey, _ string, httpClient *http.Client) *client {
 	// ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
@@ -114,8 +115,13 @@ func NewClient(apiKey, _ string) *client {
 	_ = json.Unmarshal(recipesSchemaJSON, &m)
 	var wine map[string]any
 	_ = json.Unmarshal(wineSchemaJSON, &wine)
+	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	if httpClient != nil {
+		opts = append(opts, option.WithHTTPClient(httpClient))
+	}
+	aiClient := openai.NewClient(opts...)
 	return &client{
-		apiKey:     apiKey,
+		oai:        aiClient,
 		schema:     m,
 		wineSchema: wine,
 		model:      openai.ChatModelGPT5_4,
@@ -223,7 +229,6 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	messages := cleanInstuctions(instructions)
 
 	params := responses.ResponseNewParams{
@@ -236,7 +241,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		Store: openai.Bool(true),
 		Text:  scheme(c.schema),
 	}
-	resp, err := client.Responses.New(ctx, params)
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
@@ -249,7 +254,6 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	if question == "" {
 		return nil, fmt.Errorf("question is required")
 	}
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
@@ -262,7 +266,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	if previousResponseID != "" {
 		params.PreviousResponseID = openai.String(previousResponseID)
 	}
-	resp, err := client.Responses.New(ctx, params)
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
 	}
@@ -285,8 +289,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
 	}
 
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
-	resp, err := client.Images.Generate(ctx, openai.ImageGenerateParams{
+	resp, err := c.oai.Images.Generate(ctx, openai.ImageGenerateParams{
 		Prompt:       prompt,
 		Model:        recipeImageModel,
 		N:            openai.Int(1),
@@ -347,7 +350,6 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	if err != nil {
 		return nil, fmt.Errorf("failed to build wine selection prompt: %w", err)
 	}
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	params := responses.ResponseNewParams{
 		Model:        c.wineModel,
 		Instructions: openai.String(winePrompt),
@@ -356,7 +358,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 		},
 		Text: scheme(c.wineSchema),
 	}
-	resp, err := client.Responses.New(ctx, params)
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pick wine: %w", err)
 	}
@@ -374,7 +376,6 @@ func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Lo
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
 	}
 
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
 	params := responses.ResponseNewParams{
 		Model:        c.model,
 		Instructions: openai.String(systemMessage),
@@ -387,7 +388,7 @@ func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Lo
 	}
 	// should we stream. Can we pass past generation.
 
-	resp, err := client.Responses.New(ctx, params)
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes: %w", err)
 	}
@@ -472,8 +473,7 @@ func (c *client) Ready(ctx context.Context) error {
 	// more CORRECT to do a very simple response request with allowed tokens 1 but this seems cheaper
 	// https://chatgpt.com/share/6984da16-ff88-8009-8486-4e0479ac6a01
 	// could only do it once to ensure startup
-	client := openai.NewClient(option.WithAPIKey(c.apiKey))
-	_, err := client.Models.List(ctx)
+	_, err := c.oai.Models.List(ctx)
 	return err
 }
 

@@ -77,7 +77,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 20 * time.Second}
+		httpClient = http.DefaultClient
 	}
 
 	return &SearchClient{
@@ -89,6 +89,9 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 }
 
 func (c *SearchClient) Search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
+	defer cancel()
+
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")

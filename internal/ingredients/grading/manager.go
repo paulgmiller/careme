@@ -2,6 +2,7 @@ package grading
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"careme/internal/ai"
@@ -42,11 +43,11 @@ func (m *multiGrader) CacheVersion() string {
 	return m.grader.CacheVersion()
 }
 
-func NewManager(cfg *config.Config, c cache.ListCache) grader {
+func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) grader {
 	if cfg == nil || !cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "" {
 		return rubberstamp{}
 	}
-	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model)
+	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model, httpClient)
 	return newCachingGrader(&multiGrader{grader: base}, NewStore(c))
 }
 

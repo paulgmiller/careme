@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -60,7 +61,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create cache for ingredient grading: %s", err)
 	}
-	grader := ingredientgrading.NewManager(cfg, cacheStore)
+	grader := ingredientgrading.NewManager(cfg, cacheStore, http.DefaultClient)
 	graded, err := grader.GradeIngredients(ctx, ings)
 	if err != nil {
 		log.Fatalf("failed to grade ingredients: %s", err)

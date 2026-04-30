@@ -47,11 +47,21 @@ func (c ProxyConfig) proxyURL() *url.URL {
 }
 
 func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
-	client := &http.Client{}
-	if !cfg.Enabled() {
-		return withRetries(client), nil
+	transport := http.DefaultTransport
+	if cfg.Enabled() {
+		var err error
+		transport, err = newProxyTransport(cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
+	client := &http.Client{Transport: transport}
+
+	return withRetries(client), nil
+}
+
+func newProxyTransport(cfg ProxyConfig) (*http.Transport, error) {
 	rootCAs, err := proxyRootCAs()
 	if err != nil {
 		return nil, err
@@ -64,11 +74,11 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 		"username", cfg.Username,
 	)
 
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = http.ProxyURL(cfg.proxyURL())
-	transport.TLSClientConfig = &tls.Config{RootCAs: rootCAs}
-	client.Transport = transport
-	return withRetries(client), nil
+	// this feels funny
+	proxyTransport := http.DefaultTransport.(*http.Transport).Clone()
+	proxyTransport.Proxy = http.ProxyURL(cfg.proxyURL())
+	proxyTransport.TLSClientConfig = &tls.Config{RootCAs: rootCAs}
+	return proxyTransport, nil
 }
 
 // this would be nice but it logs all retries as errors which sets off alerts.
