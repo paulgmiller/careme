@@ -13,8 +13,6 @@ import (
 
 	"careme/internal/config"
 	"careme/internal/kroger/products"
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 //go:generate go generate ./products ./locations
@@ -40,7 +38,7 @@ type KrogerTokenManager struct {
 
 func NewKrogerTokenManager(clientID, clientSecret string, httpClient *http.Client) *KrogerTokenManager {
 	if httpClient == nil {
-		httpClient = newTracedHTTPClient()
+		httpClient = http.DefaultClient
 	}
 	return &KrogerTokenManager{
 		clientID:     clientID,
@@ -119,7 +117,7 @@ func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) fu
 
 func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*products.ClientWithResponses, error) {
 	if httpClient == nil {
-		httpClient = newTracedHTTPClient()
+		httpClient = http.DefaultClient
 	}
 	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
 	productsClient, err := products.NewClientWithResponses("https://api.kroger.com",
@@ -130,8 +128,4 @@ func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*
 		return nil, fmt.Errorf("create kroger products client: %w", err)
 	}
 	return productsClient, nil
-}
-
-func newTracedHTTPClient() *http.Client {
-	return &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 }
