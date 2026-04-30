@@ -18,7 +18,7 @@ type LocationBackend struct {
 
 func NewLocationBackendFromConfig(cfg *config.Config, httpClient *http.Client) (*LocationBackend, error) {
 	if httpClient == nil {
-		httpClient = newTracedHTTPClient()
+		httpClient = http.DefaultClient
 	}
 	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
 	locationsClient, err := krogerlocations.NewClientWithResponses("https://api.kroger.com",
