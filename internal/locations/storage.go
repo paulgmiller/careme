@@ -19,6 +19,7 @@ import (
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
+	"careme/internal/tracedhttp"
 	"careme/internal/walmart"
 	"careme/internal/wegmans"
 	"careme/internal/wholefoods"
@@ -79,8 +80,11 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 	}
 
 	ctx := context.Background()
+	httpClient := tracedhttp.NewClient(0)
 	backendfactories := []locationBackendFactory{
-		func(context.Context) (locationBackend, error) { return kroger.NewLocationBackendFromConfig(cfg) },
+		func(context.Context) (locationBackend, error) {
+			return kroger.NewLocationBackendFromConfig(cfg, httpClient)
+		},
 		func(context.Context) (locationBackend, error) { return walmart.NewClient(cfg.Walmart) },
 		func(ctx context.Context) (locationBackend, error) {
 			return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids)

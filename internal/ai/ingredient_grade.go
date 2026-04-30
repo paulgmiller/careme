@@ -134,7 +134,7 @@ func ingredientGradeCacheVersion(model, systemInstruction string) string {
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-func NewIngredientGrader(apiKey, model string, httpClient ...*http.Client) *ingredientGrader {
+func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredientGrader {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		model = defaultIngredientGradeModel
@@ -144,7 +144,7 @@ func NewIngredientGrader(apiKey, model string, httpClient ...*http.Client) *ingr
 		model:        model,
 		cacheVersion: ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction),
 		schema:       ingredientGradeJSONSchema(),
-		httpClient:   firstHTTPClient(httpClient),
+		httpClient:   ensureHTTPClient(httpClient),
 	}
 }
 

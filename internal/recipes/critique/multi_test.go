@@ -45,7 +45,7 @@ func TestMultiCritiquerCritiquesEachRecipe(t *testing.T) {
 func TestNewServiceReturnsRubberstampWithoutGemini(t *testing.T) {
 	t.Parallel()
 
-	svc := NewManager(&config.Config{}, cache.NewFileCache(t.TempDir()))
+	svc := NewManager(&config.Config{}, cache.NewFileCache(t.TempDir()), nil)
 
 	results := svc.CritiqueRecipes(t.Context(), []ai.Recipe{{Title: "Weeknight Pasta"}})
 	result, ok := <-results

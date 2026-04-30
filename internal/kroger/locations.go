@@ -17,14 +17,13 @@ type LocationBackend struct {
 	client *krogerlocations.ClientWithResponses
 }
 
-func NewLocationBackendFromConfig(cfg *config.Config, httpClient ...*http.Client) (*LocationBackend, error) {
-	client := firstHTTPClient(httpClient)
-	if client == nil {
-		client = tracedhttp.NewClient(0)
+func NewLocationBackendFromConfig(cfg *config.Config, httpClient *http.Client) (*LocationBackend, error) {
+	if httpClient == nil {
+		httpClient = tracedhttp.NewClient(0)
 	}
-	requestEditor := newBearerTokenRequestEditor(cfg, client)
+	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
 	locationsClient, err := krogerlocations.NewClientWithResponses("https://api.kroger.com",
-		krogerlocations.WithHTTPClient(client),
+		krogerlocations.WithHTTPClient(httpClient),
 		krogerlocations.WithRequestEditorFn(krogerlocations.RequestEditorFn(requestEditor)),
 	)
 	if err != nil {

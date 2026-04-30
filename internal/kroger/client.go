@@ -37,15 +37,14 @@ type KrogerTokenManager struct {
 	mu           sync.Mutex
 }
 
-func NewKrogerTokenManager(clientID, clientSecret string, httpClient ...*http.Client) *KrogerTokenManager {
-	client := firstHTTPClient(httpClient)
-	if client == nil {
-		client = tracedhttp.NewClient(0)
+func NewKrogerTokenManager(clientID, clientSecret string, httpClient *http.Client) *KrogerTokenManager {
+	if httpClient == nil {
+		httpClient = tracedhttp.NewClient(0)
 	}
 	return &KrogerTokenManager{
 		clientID:     clientID,
 		clientSecret: clientSecret,
-		httpClient:   client,
+		httpClient:   httpClient,
 	}
 }
 
@@ -100,7 +99,7 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 // GetOAuth2Token fetches an access token using client credentials grant
 // Deprecated: use KrogerTokenManager instead
 func GetOAuth2Token(ctx context.Context, clientID, clientSecret string) (string, error) {
-	tm := NewKrogerTokenManager(clientID, clientSecret)
+	tm := NewKrogerTokenManager(clientID, clientSecret, nil)
 	return tm.GetToken(ctx)
 }
 
@@ -117,25 +116,17 @@ func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) fu
 	}
 }
 
-func NewProductsClientFromConfig(cfg *config.Config, httpClient ...*http.Client) (*products.ClientWithResponses, error) {
-	client := firstHTTPClient(httpClient)
-	if client == nil {
-		client = tracedhttp.NewClient(0)
+func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*products.ClientWithResponses, error) {
+	if httpClient == nil {
+		httpClient = tracedhttp.NewClient(0)
 	}
-	requestEditor := newBearerTokenRequestEditor(cfg, client)
+	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
 	productsClient, err := products.NewClientWithResponses("https://api.kroger.com",
-		products.WithHTTPClient(client),
+		products.WithHTTPClient(httpClient),
 		products.WithRequestEditorFn(products.RequestEditorFn(requestEditor)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create kroger products client: %w", err)
 	}
 	return productsClient, nil
-}
-
-func firstHTTPClient(clients []*http.Client) *http.Client {
-	if len(clients) == 0 {
-		return nil
-	}
-	return clients[0]
 }

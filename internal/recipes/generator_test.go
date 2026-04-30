@@ -423,7 +423,7 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 	critiquer := &captureCritiqueService{}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -525,7 +525,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -612,7 +612,7 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 		},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -647,7 +647,7 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 		}},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    &captureCritiqueService{},
 		statusWriter: noopstatuswriter{},
@@ -686,7 +686,7 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 
 	statuses := &statusCounter{}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
 		aiClient:     &sequenceAIClient{generateResponses: []*ai.ShoppingList{{ResponseID: "resp-stable", Recipes: []ai.Recipe{steady}}}},
 		critiquer:    &captureCritiqueService{},
 		statusWriter: statuses,
@@ -890,7 +890,7 @@ func TestGenerateRecipes_CritiqueRetryMatchesParentByTitleWords(t *testing.T) {
 		},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},
@@ -945,7 +945,7 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 		},
 	}
 	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil)},
+		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
 		aiClient:     aiStub,
 		critiquer:    critiquer,
 		statusWriter: noopstatuswriter{},

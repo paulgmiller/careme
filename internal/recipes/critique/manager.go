@@ -61,11 +61,11 @@ type multiCritiquer struct {
 	wg        sync.WaitGroup
 }
 
-func NewManager(cfg *config.Config, c cache.ListCache, httpClient ...*http.Client) Manager {
+func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) Manager {
 	if !cfg.Gemini.IsEnabled() {
 		return rubberstamp{}
 	}
-	crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel, httpClient...)
+	crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel, httpClient)
 	return &multiCritiquer{
 		critiquer: newCachingCritiquer(crit, NewStore(c)),
 	}

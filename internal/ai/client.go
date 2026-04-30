@@ -103,7 +103,7 @@ type WineSelection struct {
 }
 
 // ignoring model for now.
-func NewClient(apiKey, _ string, httpClient ...*http.Client) *client {
+func NewClient(apiKey, _ string, httpClient *http.Client) *client {
 	// ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
@@ -123,7 +123,7 @@ func NewClient(apiKey, _ string, httpClient ...*http.Client) *client {
 		wineSchema: wine,
 		model:      openai.ChatModelGPT5_4,
 		wineModel:  openai.ChatModelGPT5Mini,
-		httpClient: firstHTTPClient(httpClient),
+		httpClient: ensureHTTPClient(httpClient),
 	}
 }
 
@@ -131,11 +131,11 @@ func (c *client) openAIClient() openai.Client {
 	return newOpenAIClient(c.apiKey, c.httpClient)
 }
 
-func firstHTTPClient(clients []*http.Client) *http.Client {
-	if len(clients) == 0 || clients[0] == nil {
+func ensureHTTPClient(client *http.Client) *http.Client {
+	if client == nil {
 		return tracedhttp.NewClient(0)
 	}
-	return clients[0]
+	return client
 }
 
 func newOpenAIClient(apiKey string, httpClient *http.Client) openai.Client {

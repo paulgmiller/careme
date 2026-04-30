@@ -57,7 +57,7 @@ type critiquer struct {
 	httpClient *http.Client
 }
 
-func NewCritiquer(apiKey, model string, httpClient ...*http.Client) *critiquer {
+func NewCritiquer(apiKey, model string, httpClient *http.Client) *critiquer {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		model = defaultGeminiCritiqueModel
@@ -66,7 +66,7 @@ func NewCritiquer(apiKey, model string, httpClient ...*http.Client) *critiquer {
 		apiKey:     strings.TrimSpace(apiKey),
 		model:      model,
 		schema:     recipeCritiqueJSONSchema(),
-		httpClient: firstHTTPClient(httpClient),
+		httpClient: ensureHTTPClient(httpClient),
 	}
 }
 
