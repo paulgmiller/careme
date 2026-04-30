@@ -13,7 +13,6 @@ import (
 	"os"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 //go:embed brightdata.crt
@@ -48,16 +47,18 @@ func (c ProxyConfig) proxyURL() *url.URL {
 }
 
 func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
-	if !cfg.Enabled() {
-		return withRetries(newTracedClient(http.DefaultTransport)), nil
+	transport := http.DefaultTransport
+	if cfg.Enabled() {
+		var err error
+		transport, err = newProxyTransport(cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	transport, err := newProxyTransport(cfg)
-	if err != nil {
-		return nil, err
-	}
+	client := &http.Client{Transport: transport}
 
-	return withRetries(newTracedClient(transport)), nil
+	return withRetries(client), nil
 }
 
 func newProxyTransport(cfg ProxyConfig) (*http.Transport, error) {
@@ -73,14 +74,11 @@ func newProxyTransport(cfg ProxyConfig) (*http.Transport, error) {
 		"username", cfg.Username,
 	)
 
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = http.ProxyURL(cfg.proxyURL())
-	transport.TLSClientConfig = &tls.Config{RootCAs: rootCAs}
-	return transport, nil
-}
-
-func newTracedClient(base http.RoundTripper) *http.Client {
-	return &http.Client{Transport: otelhttp.NewTransport(base)}
+	// this feels funny
+	proxyTransport := http.DefaultTransport.(*http.Transport).Clone()
+	proxyTransport.Proxy = http.ProxyURL(cfg.proxyURL())
+	proxyTransport.TLSClientConfig = &tls.Config{RootCAs: rootCAs}
+	return proxyTransport, nil
 }
 
 // this would be nice but it logs all retries as errors which sets off alerts.

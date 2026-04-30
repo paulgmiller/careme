@@ -25,7 +25,7 @@ type BlobCache struct {
 
 var _ ListCache = (*BlobCache)(nil)
 
-func NewBlobCache(container string) (*BlobCache, error) {
+func NewBlobCache(container string, transport http.RoundTripper) (*BlobCache, error) {
 	// Should come from config
 	accountName, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if !ok {
@@ -41,11 +41,14 @@ func NewBlobCache(container string) (*BlobCache, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shared key credential: %w", err)
 	}
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
 
 	// The service URL for blob endpoints is usually in the form: http(s)://<account>.blob.core.windows.net/
 	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName), cred, &azblob.ClientOptions{
 		ClientOptions: policy.ClientOptions{
-			Transport: &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
+			Transport: &http.Client{Transport: transport},
 		},
 	})
 	if err != nil {
@@ -149,11 +152,12 @@ func MakeCache() (ListCache, error) {
 	return EnsureCache("recipes")
 }
 
+// take transport here?
 func EnsureCache(container string) (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
 		slog.Info("Using Azure Blob Storage for cache", "container", container)
-		return NewBlobCache(container)
+		return NewBlobCache(container, otelhttp.NewTransport(http.DefaultTransport))
 	}
 	return NewFileCache(container), nil
 }

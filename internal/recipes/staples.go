@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -250,19 +252,23 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
+// should we pass in a wrapper/roundtripper
 func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error) {
 	// should we do this per request so we get new proxies per user? https://github.com/paulgmiller/careme/issues/443
-	httpClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
+	brightdataClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 	if err != nil {
 		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
 	}
+	brightdataClient.Transport = otelhttp.NewTransport(brightdataClient.Transport)
 
 	// only returns an err because it ensures a cache for reese84 tokens.
-	albertsonsProvider, err := albertsons.NewStaplesProvider(cfg.Albertsons, httpClient)
+	albertsonsProvider, err := albertsons.NewStaplesProvider(cfg.Albertsons, brightdataClient)
 	if err != nil {
 		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
 	}
 
+	// we should not use brightdata for koger
+	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	krogerBackend, err := kroger.NewStaplesProvider(cfg, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("create kroger staples provider: %w", err)
@@ -273,7 +279,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		krogerBackend,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
-		wholefoods.NewStaplesProvider(wholefoods.NewClient(httpClient)),
+		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
 	}, nil
 }
 

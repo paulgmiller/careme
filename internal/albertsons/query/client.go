@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // this is a strange set. Actual sub categories don't work but thes aisle-vs ones do.
@@ -78,7 +76,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+		httpClient = &http.Client{}
 	}
 
 	return &SearchClient{
