@@ -13,6 +13,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
 )
@@ -120,11 +121,10 @@ type ingredientBatchGradeResponse struct {
 }
 
 type ingredientGrader struct {
-	apiKey       string
 	model        string
 	cacheVersion string
 	schema       map[string]any
-	httpClient   *http.Client
+	oai          openai.Client
 }
 
 func ingredientGradeCacheVersion(model, systemInstruction string) string {
@@ -139,12 +139,17 @@ func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredi
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}
+	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	if httpClient != nil {
+		opts = append(opts, option.WithHTTPClient(httpClient))
+	}
+	aiClient := openai.NewClient(opts...)
+
 	return &ingredientGrader{
-		apiKey:       strings.TrimSpace(apiKey),
+		oai:          aiClient,
 		model:        model,
 		cacheVersion: ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction),
 		schema:       ingredientGradeJSONSchema(),
-		httpClient:   ensureHTTPClient(httpClient),
 	}
 }
 
@@ -171,8 +176,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 		return nil, fmt.Errorf("failed to build ingredient grading prompt: %w", err)
 	}
 
-	client := newOpenAIClient(g.apiKey, g.httpClient)
-	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
+	resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
 		Model:        g.model,
 		Instructions: openai.String(ingredientGradeSystemInstruction),
 		Input: responses.ResponseNewParamsInputUnion{
