@@ -95,13 +95,6 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 	return m.token, nil
 }
 
-// GetOAuth2Token fetches an access token using client credentials grant
-// Deprecated: use KrogerTokenManager instead
-func GetOAuth2Token(ctx context.Context, clientID, clientSecret string) (string, error) {
-	tm := NewKrogerTokenManager(clientID, clientSecret, nil)
-	return tm.GetToken(ctx)
-}
-
 func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) func(context.Context, *http.Request) error {
 	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient)
 
