@@ -335,29 +335,6 @@
 
 {{define "recipe_image_action"}}
 <div id="recipe-image-action">
-  {{if .RecipeImage.HasImage}}
-  {{else if .ServerSignedIn}}
-  <button type="button"
-          id="recipe-image-generate-button"
-          hx-post="/recipe/{{.RecipeHash}}/image"
-          hx-target="#recipe-image-action"
-          hx-swap="outerHTML"
-          hx-disabled-elt="#recipe-image-generate-button"
-          class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-brand-400">
-    <span class="htmx-indicator mr-2" aria-hidden="true">
-      <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-      </svg>
-    </span>
-    <span>See plated dish</span>
-  </button>
-  {{else}}
-  <a href="{{SignInPath (print "/recipe/" .RecipeHash)}}"
-     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    Sign in to see plated dish
-  </a>
-  {{end}}
 </div>
 {{end}}
 

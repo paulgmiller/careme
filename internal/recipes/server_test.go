@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1188,12 +1189,13 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	s.handleSaveRecipe(rr, req)
+	s.Wait()
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Saved to kitchen") {
-		t.Fatalf("expected success response, got body: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), `Dismiss`) || !strings.Contains(rr.Body.String(), `/dismiss"`) {
+		t.Fatalf("expected dismiss action replacement, got body: %s", rr.Body.String())
 	}
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
@@ -1273,6 +1275,7 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	s.handleSaveRecipe(rr, req)
+	s.Wait()
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
@@ -1291,6 +1294,59 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	if !staleSelection.Empty() {
 		t.Fatalf("expected no selection under stale origin hash, got %#v", staleSelection)
 	}
+}
+
+func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	g := &captureQuestionGenerator{
+		wineRecommendation: "Bright enough for dinner.",
+		imageBody:          []byte("saved-image-bytes"),
+	}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+		withTestGenerator(g),
+	)
+
+	recipe := ai.Recipe{
+		Title:       "Background Save",
+		Description: "Recipe to save",
+	}
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	originHash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	recipeHash := recipe.ComputeHash()
+	saveRecipesForOrigin(t, s, originHash, recipe)
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, originHash))
+
+	form := url.Values{"h": {originHash}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSaveRecipe(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.Contains(t, rr.Body.String(), `Dismiss`)
+
+	s.Wait()
+	assert.Equal(t, 1, g.winePickCalls)
+	assert.Equal(t, 1, g.imageCalls)
+
+	wine, err := s.WineFromCache(t.Context(), recipeHash)
+	require.NoError(t, err)
+	require.NotNil(t, wine)
+	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
+
+	imageBody, err := s.RecipeImageFromCache(t.Context(), recipeHash)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, imageBody.Close()) }()
+	gotImage, err := io.ReadAll(imageBody)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("saved-image-bytes"), gotImage)
 }
 
 func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
@@ -1355,8 +1411,8 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Removed from kitchen") {
-		t.Fatalf("expected dismiss response, got body: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), `Save`) || !strings.Contains(rr.Body.String(), `/save"`) {
+		t.Fatalf("expected save action replacement, got body: %s", rr.Body.String())
 	}
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())

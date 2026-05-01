@@ -45,7 +45,18 @@ type shoppingRecipeView struct {
 	ServerSignedIn     bool
 	DisplayIngredients []ai.Ingredient // merged food and wine
 	Dismissed          bool            // saved already in recipe
+	Action             shoppingRecipeActionView
 	Wine               shoppingRecipeWineView
+}
+
+type shoppingRecipeActionView struct {
+	Hash             string
+	ShoppingListHash string
+	ServerSignedIn   bool
+	Saved            bool
+	ActionID         string
+	SaveButtonID     string
+	DismissButtonID  string
 }
 
 // shoppingRecipeWineView holds the template-only state for the shopping list wine UI.
@@ -70,14 +81,21 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	for _, recipe := range p.Dismissed {
 		dismissedHashes[recipe.ComputeHash()] = true
 	}
+	savedHashes := make(map[string]bool, len(p.Saved))
+	for _, recipe := range p.Saved {
+		savedHashes[recipe.ComputeHash()] = true
+	}
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	for _, recipe := range l.Recipes {
 		recipeHash := recipe.ComputeHash()
+		saved := recipe.Saved || savedHashes[recipeHash]
 		wineRecommendation := wineRecommendations[recipeHash]
 		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
 		wineActionID, wineButtonID := shoppingWineDOMIDs(recipeHash)
 		wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
+		action := shoppingRecipeActionData(recipeHash, hash, signedIn, saved)
+		recipe.Saved = saved
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
 			Hash:               recipeHash,
@@ -85,6 +103,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			ServerSignedIn:     signedIn,
 			DisplayIngredients: displayIngredients,
 			Dismissed:          dismissedHashes[recipeHash],
+			Action:             action,
 			Wine: shoppingRecipeWineView{
 				ActionID:       wineActionID,
 				ActionButtonID: wineButtonID,
@@ -314,6 +333,10 @@ func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, write
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_finalize_controls_response", data)
 }
 
+func RenderShoppingRecipeActionHTML(recipeHash, shoppingListHash string, signedIn, saved bool, writer io.Writer) error {
+	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_save_action", shoppingRecipeActionData(recipeHash, shoppingListHash, signedIn, saved))
+}
+
 func latestThreadResponseID(thread []RecipeThreadEntry) string {
 	if len(thread) == 0 {
 		return ""
@@ -457,6 +480,24 @@ func shoppingWinePreviewDOMID(hash string) string {
 func shoppingWineDetailDOMIDs(hash string) (containerID string, buttonID string) {
 	safeHash := shoppingWineSafeHash(hash)
 	return "shopping-wine-details-" + safeHash, "shopping-wine-details-picker-" + safeHash
+}
+
+func shoppingRecipeActionData(recipeHash, shoppingListHash string, signedIn, saved bool) shoppingRecipeActionView {
+	actionID, saveButtonID, dismissButtonID := shoppingRecipeActionDOMIDs(recipeHash)
+	return shoppingRecipeActionView{
+		Hash:             recipeHash,
+		ShoppingListHash: shoppingListHash,
+		ServerSignedIn:   signedIn,
+		Saved:            saved,
+		ActionID:         actionID,
+		SaveButtonID:     saveButtonID,
+		DismissButtonID:  dismissButtonID,
+	}
+}
+
+func shoppingRecipeActionDOMIDs(hash string) (containerID string, saveButtonID string, dismissButtonID string) {
+	safeHash := shoppingWineSafeHash(hash)
+	return "shopping-recipe-action-" + safeHash, "shopping-recipe-save-" + safeHash, "shopping-recipe-dismiss-" + safeHash
 }
 
 func shoppingWineSafeHash(hash string) string {

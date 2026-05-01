@@ -649,8 +649,8 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var response bytes.Buffer
-	if _, err := fmt.Fprint(&response, `<span class="text-xs font-medium text-action-green-700">Saved to kitchen</span>`); err != nil {
-		slog.ErrorContext(ctx, "failed to build save response", "hash", recipeHash, "error", err)
+	if err := RenderShoppingRecipeActionHTML(recipeHash, selectionHash, true, true, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render save action response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -659,6 +659,8 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
+
+	s.startSavedRecipeBackgroundGeneration(ctx, recipeHash, *recipe, p)
 
 	setTextContent(w)
 	_, err = w.Write(response.Bytes())
@@ -727,8 +729,8 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var response bytes.Buffer
-	if _, err := fmt.Fprint(&response, `<span class="text-xs font-medium text-action-red-700">Removed from kitchen</span>`); err != nil {
-		slog.ErrorContext(ctx, "failed to build dismiss response", "hash", recipeHash, "error", err)
+	if err := RenderShoppingRecipeActionHTML(recipeHash, selectionHash, true, false, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render dismiss action response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -743,6 +745,71 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
+	}
+}
+
+func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, p *generatorParams) {
+	if p == nil || p.Location == nil {
+		slog.WarnContext(ctx, "skipping saved recipe background generation without params", "hash", recipeHash)
+		return
+	}
+
+	locationID := p.Location.ID
+	date := p.Date
+	s.wg.Go(func() {
+		bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+		defer cancel()
+		s.ensureSavedRecipeWine(bgctx, recipeHash, locationID, recipe, date)
+	})
+	s.wg.Go(func() {
+		bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+		defer cancel()
+		s.ensureSavedRecipeImage(bgctx, recipeHash, recipe)
+	})
+}
+
+func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, locationID string, recipe ai.Recipe, date time.Time) {
+	if selection, err := s.WineFromCache(ctx, recipeHash); err == nil {
+		if selection == nil {
+			slog.WarnContext(ctx, "cached wine recommendation was nil", "hash", recipeHash)
+		}
+		return
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to check cached wine recommendation after save", "hash", recipeHash, "error", err)
+		return
+	}
+
+	selection, err := s.generator.PickAWine(ctx, locationID, recipe, date)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
+		return
+	}
+	if selection == nil {
+		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", "nil selection")
+		return
+	}
+	if err := s.SaveWine(ctx, recipeHash, selection); err != nil {
+		slog.ErrorContext(ctx, "failed to save wine recommendation after save", "hash", recipeHash, "error", err)
+	}
+}
+
+func (s *server) ensureSavedRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe) {
+	exists, err := s.RecipeImageExists(ctx, recipeHash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check cached recipe image after save", "hash", recipeHash, "error", err)
+		return
+	}
+	if exists {
+		return
+	}
+
+	image, err := s.generator.GenerateRecipeImage(ctx, recipe)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to generate recipe image after save", "hash", recipeHash, "error", err)
+		return
+	}
+	if err := s.SaveRecipeImage(ctx, recipeHash, image); err != nil {
+		slog.ErrorContext(ctx, "failed to save recipe image after save", "hash", recipeHash, "error", err)
 	}
 }
 

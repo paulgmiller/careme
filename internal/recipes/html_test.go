@@ -254,11 +254,8 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, "Choose a wine") {
 		t.Error("recipe HTML should include choose wine button")
 	}
-	if !strings.Contains(html, "See plated dish") {
-		t.Error("recipe HTML should include see plated dish button")
-	}
-	if !strings.Contains(html, "htmx-indicator") {
-		t.Error("recipe HTML should include button spinners for async actions")
+	if strings.Contains(html, "See plated dish") || strings.Contains(html, "Sign in to see plated dish") {
+		t.Error("recipe HTML should not include manual image generation actions")
 	}
 	if !strings.Contains(html, "Cook time:") {
 		t.Error("recipe HTML should contain cook time")
@@ -519,7 +516,7 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	}
 }
 
-func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *testing.T) {
+func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	multi := ai.ShoppingList{
@@ -561,35 +558,32 @@ func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *te
 
 	isValidHTML(t, html)
 
-	if !strings.Contains(html, `id="`+pickerActionID+`"`) {
-		t.Fatalf("shopping list should include action wine container for recipe without selection, body: %s", html)
+	if strings.Contains(html, `id="`+pickerActionID+`"`) {
+		t.Fatalf("shopping list should not include action wine container in collapsed controls, body: %s", html)
 	}
-	if !strings.Contains(html, `id="`+pickerButtonID+`"`) {
-		t.Fatalf("shopping list should include compact wine picker for recipe without selection, body: %s", html)
+	if strings.Contains(html, `id="`+pickerButtonID+`"`) {
+		t.Fatalf("shopping list should not include compact wine picker, body: %s", html)
 	}
-	if !strings.Contains(html, `id="`+pickerPreviewID+`"`) {
-		t.Fatalf("shopping list should include preview wine container for recipe without selection, body: %s", html)
+	if strings.Contains(html, `id="`+pickerPreviewID+`"`) {
+		t.Fatalf("shopping list should not include collapsed wine preview, body: %s", html)
 	}
 	if !strings.Contains(html, `id="`+pickerDetailID+`"`) {
 		t.Fatalf("shopping list should include details wine container for recipe without selection, body: %s", html)
 	}
-	if !strings.Contains(html, `id="`+pickerDetailButtonID+`"`) {
-		t.Fatalf("shopping list should include details wine picker for recipe without selection, body: %s", html)
+	if strings.Contains(html, `id="`+pickerDetailButtonID+`"`) {
+		t.Fatalf("shopping list should not include details wine picker for recipe without selection, body: %s", html)
 	}
 	if _, wineButtonID := shoppingWineDOMIDs(wineHash); strings.Contains(html, `id="`+wineButtonID+`"`) {
 		t.Fatalf("shopping list should not include picker for recipe with cached wine, body: %s", html)
 	}
-	if !strings.Contains(html, `aria-label="Choose wine"`) {
-		t.Fatalf("shopping list should include accessible wine picker label, body: %s", html)
+	if strings.Contains(html, `aria-label="Choose wine"`) {
+		t.Fatalf("shopping list should not include wine picker controls, body: %s", html)
 	}
-	if strings.Index(html, `aria-live="polite"`) > strings.Index(html, `id="`+pickerPreviewID+`"`) {
-		t.Fatalf("shopping list should render wine preview beneath the action row, body: %s", html)
+	if got := strings.Count(html, "Cellar Red"); got != 3 {
+		t.Fatalf("shopping list should show selected wine in ingredients, recommendation, and combined list; got count %d, body: %s", got, html)
 	}
-	if got := strings.Count(html, "Cellar Red"); got != 4 {
-		t.Fatalf("shopping list should show selected wine in ingredients, preview, recommendation, and combined list; got count %d, body: %s", got, html)
-	}
-	if got := strings.Count(html, "Second Bottle"); got != 2 {
-		t.Fatalf("shopping list should only add the second wine to preview and recommendation; got count %d, body: %s", got, html)
+	if got := strings.Count(html, "Second Bottle"); got != 1 {
+		t.Fatalf("shopping list should only add the second wine to recommendation; got count %d, body: %s", got, html)
 	}
 	if got := strings.Count(html, "Good with roasted flavors."); got != 1 {
 		t.Fatalf("shopping list should render wine commentary once in details; got count %d, body: %s", got, html)
@@ -599,7 +593,7 @@ func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *te
 	}
 }
 
-func TestFormatShoppingRecipeWineHTML_RendersPicker(t *testing.T) {
+func TestFormatShoppingRecipeWineHTML_RendersNoPicker(t *testing.T) {
 	w := httptest.NewRecorder()
 	FormatShoppingRecipeWineHTML("recipe-hash", "action", nil, w)
 	body := assertHTTPSuccess(t, w)
@@ -613,11 +607,11 @@ func TestFormatShoppingRecipeWineHTML_RendersPicker(t *testing.T) {
 	if !strings.Contains(body, `id="`+previewID+`"`) || !strings.Contains(body, `id="`+detailContainerID+`"`) || !strings.Contains(body, `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected shopping wine preview and details fragments to update out-of-band, got body: %s", body)
 	}
-	if !strings.Contains(body, `aria-label="Choose wine"`) {
-		t.Fatalf("expected accessible wine picker in response, got body: %s", body)
+	if strings.Contains(body, `aria-label="Choose wine"`) || strings.Contains(body, `Choose a wine`) {
+		t.Fatalf("expected no shopping wine picker in response, got body: %s", body)
 	}
-	if !strings.Contains(body, `hx-post="/recipe/recipe-hash/wine?view=shopping&slot=action"`) {
-		t.Fatalf("expected shopping wine endpoint in response, got body: %s", body)
+	if strings.Contains(body, `hx-post="/recipe/recipe-hash/wine?view=shopping`) {
+		t.Fatalf("expected no shopping wine endpoint in response, got body: %s", body)
 	}
 }
 

@@ -10,8 +10,7 @@ import (
 	"careme/internal/locations"
 )
 
-// Test that the HTML contains Save and Dismiss buttons for recipes.
-func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
+func TestFormatShoppingListHTML_ContainsSaveAndDetailsButtons(t *testing.T) {
 	// Create a shopping list with multiple recipes
 	multiRecipeList := ai.ShoppingList{
 		Recipes: []ai.Recipe{
@@ -47,29 +46,24 @@ func TestFormatShoppingListHTML_ContainsSaveAndDismissButtons(t *testing.T) {
 	// Verify HTML is valid
 	isValidHTML(t, html)
 
-	// Check for radio buttons
-	if !strings.Contains(html, `type="radio"`) {
-		t.Error("HTML should contain radio button inputs")
-	}
 	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/save"`) {
 		t.Error("HTML should contain HTMX save action")
 	}
-	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/dismiss"`) {
-		t.Error("HTML should contain HTMX dismiss action")
-	}
-	if !strings.Contains(html, `hx-trigger="click"`) {
-		t.Error("HTML should trigger HTMX requests on click")
+	if strings.Contains(html, `/dismiss"`) {
+		t.Error("HTML should not contain initial HTMX dismiss action")
 	}
 
-	// Check for Save and Dismiss labels.
 	if !strings.Contains(html, `Save`) {
 		t.Error("HTML should contain Save label text")
 	}
-	if !strings.Contains(html, `Dismis`) {
-		t.Error("HTML should contain Dismiss label text")
+	if strings.Contains(html, `Dismiss`) {
+		t.Error("HTML should not contain initial Dismiss label text")
 	}
 	if !strings.Contains(html, `Details`) {
 		t.Error("HTML should contain Details button text")
+	}
+	if strings.Contains(html, `<details open`) {
+		t.Error("recipe details should start collapsed")
 	}
 
 	// Check that "Try again, chef" button exists
@@ -132,6 +126,12 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 
 	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
 		t.Error("HTML should submit finalize with HTMX POST when a recipe is saved")
+	}
+	if !strings.Contains(html, `/dismiss"`) {
+		t.Error("saved recipe should show a dismiss action")
+	}
+	if strings.Contains(html, `<details open`) {
+		t.Error("saved recipe details should start collapsed")
 	}
 	if strings.Contains(html, `id="finalize-help"`) {
 		t.Error("HTML should not render finalize helper text when button is enabled")
