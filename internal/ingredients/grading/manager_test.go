@@ -20,9 +20,7 @@ func float32Ptr(v float32) *float32 {
 }
 
 type stubGradeBackend struct {
-	grades map[string]ai.InputIngredient
-	err    error
-	calls  [][]ai.InputIngredient
+	calls [][]ai.InputIngredient
 }
 
 func (s *stubGradeBackend) CacheVersion() string {
@@ -30,28 +28,15 @@ func (s *stubGradeBackend) CacheVersion() string {
 }
 
 func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
 	s.calls = append(s.calls, append([]ai.InputIngredient(nil), ingredients...))
 	out := make([]ai.InputIngredient, len(ingredients))
 	for i, ingredient := range ingredients {
-		key := ai.NormalizeInputIngredient(ingredient).Hash()
-		if gradedIngredient, ok := s.grades[key]; ok {
-			out[i] = gradedIngredient
-			continue
+		ingredient.Grade = &ai.IngredientGrade{
+			Score:  10,
+			Reason: "default",
 		}
-		out[i] = ai.InputIngredient{
-			ProductID:   ingredient.ProductID,
-			Brand:       ingredient.Brand,
-			Description: ingredient.Description,
-			Size:        ingredient.Size,
-			Categories:  slices.Clone(ingredient.Categories),
-			Grade: &ai.IngredientGrade{
-				Score:  10,
-				Reason: "default",
-			},
-		}
+		// this should be closer to whats in actual grader.
+		out[i] = ingredient
 	}
 	return out, nil
 }
@@ -115,8 +100,8 @@ func TestCachingGraderOverlaysCachedGradeOnCurrentIngredientMetadata(t *testing.
 		Brand:        "Whole Foods Market",
 		Description:  "Organic Asparagus",
 		Size:         "1 lb",
-		PriceRegular: float32Ptr(5.99),
-		PriceSale:    float32Ptr(4.99),
+		PriceRegular: new(float32(5.99)),
+		PriceSale:    new(float32(4.99)),
 		Categories:   []string{"Produce"},
 	}
 	cached := ai.InputIngredient{
