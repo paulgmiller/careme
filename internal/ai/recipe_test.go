@@ -65,7 +65,7 @@ func TestRecipeHashLength(t *testing.T) {
 }
 
 func TestNewClientUsesGPT55ForRecipeFlow(t *testing.T) {
-	client := NewClient("test-key", "ignored")
+	client := NewClient("test-key", "ignored", nil)
 
 	if client.model != "gpt-5.5" {
 		t.Fatalf("expected primary recipe model to be gpt-5.5, got %q", client.model)
