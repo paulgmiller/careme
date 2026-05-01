@@ -30,6 +30,7 @@ import (
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -73,14 +74,15 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	userStorage := users.NewStorage(cache)
-	mc := critique.NewManager(cfg, cache)
-	ig := ingredientgrading.NewManager(cfg, cache)
+	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	mc := critique.NewManager(cfg, cache, aiHTTPClient)
+	ig := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 	staples, err := recipes.NewCachedStaplesService(cfg, cache, ig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
 	ss := recipes.StatusStore(cache)
-	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
+	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient)
 	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)

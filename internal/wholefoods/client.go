@@ -145,7 +145,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 		baseURL = DefaultBaseURL
 	}
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 20 * time.Second}
+		httpClient = http.DefaultClient
 	}
 
 	return &client{
@@ -157,6 +157,9 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 // Category fetches category products and follows limit/offset pagination until
 // the API returns fewer items than the requested page size.
 func (c *client) Category(ctx context.Context, queryterm, store string) ([]product, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
+	defer cancel()
+
 	queryterm = strings.TrimSpace(queryterm)
 	if queryterm == "" {
 		return nil, errors.New("queryterm is required")

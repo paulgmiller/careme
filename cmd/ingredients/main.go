@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -20,12 +21,18 @@ import (
 func main() {
 	var searchTerm string
 	var location string
+	var verbose bool
 	flag.StringVar(&searchTerm, "ingredient", "", "Search term for ingredient lookup")
 	flag.StringVar(&searchTerm, "i", "", "Search term for ingredient lookup")
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
+	flag.BoolVar(&verbose, "verbose", false, "dump all ingredients and grades")
 	flag.Parse()
 	ctx := context.Background()
+
+	if searchTerm != "" {
+		verbose = true
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -48,66 +55,43 @@ func main() {
 	}
 
 	catMap := make(map[string]int)
-	if cfg.IngredientGrading.Enable {
-		log.Printf("Grading %d ingredients", len(ings))
-		cacheStore, err := cache.MakeCache()
-		if err != nil {
-			log.Fatalf("failed to create cache for ingredient grading: %s", err)
-		}
-		grader := ingredientgrading.NewManager(cfg, cacheStore)
-		graded, err := grader.GradeIngredients(ctx, ings)
-		if err != nil {
-			log.Fatalf("failed to grade ingredients: %s", err)
-		}
-		slices.SortFunc(graded, func(a, b ai.InputIngredient) int {
-			if a.Grade.Score != b.Grade.Score {
-				return b.Grade.Score - a.Grade.Score
-			}
-			return strings.Compare(strings.ToLower(a.Description), strings.ToLower(b.Description))
-		})
-		for _, result := range graded {
-			for _, cat := range result.Categories {
-				catMap[cat] += 1
-			}
 
-			fmt.Printf("%2d/10: %s - %s: size: %s: %s\n", result.Grade.Score, result.Brand, result.Description, result.Size, result.Grade.Reason)
-		}
-		for cat, count := range catMap {
-			fmt.Printf("Category: %s, Count: %d\n", cat, count)
-		}
-
-		counts := lo.Reduce(graded, func(counts map[int]int, ingredient ai.InputIngredient, _ int) map[int]int {
-			counts[ingredient.Grade.Score] += 1
-			return counts
-		}, make(map[int]int))
-		fmt.Println("Grade distribution:")
-		for score := 0; score <= 10; score++ {
-			fmt.Printf("Score %2d: %d ingredients\n", score, counts[score])
-		}
-		return
+	log.Printf("Grading %d ingredients", len(ings))
+	cacheStore, err := cache.MakeCache()
+	if err != nil {
+		log.Fatalf("failed to create cache for ingredient grading: %s", err)
 	}
-
-	for _, i := range ings {
-		for _, cat := range categories(i) {
+	grader := ingredientgrading.NewManager(cfg, cacheStore, http.DefaultClient)
+	graded, err := grader.GradeIngredients(ctx, ings)
+	if err != nil {
+		log.Fatalf("failed to grade ingredients: %s", err)
+	}
+	slices.SortFunc(graded, func(a, b ai.InputIngredient) int {
+		if a.Grade.Score != b.Grade.Score {
+			return b.Grade.Score - a.Grade.Score
+		}
+		return strings.Compare(strings.ToLower(a.Description), strings.ToLower(b.Description))
+	})
+	for _, result := range graded {
+		for _, cat := range result.Categories {
 			catMap[cat] += 1
 		}
-		fmt.Printf("%s: %s - %s:($%s) size: %s categories: %v\n", i.ProductID, i.Brand, i.Description, toFloat(i.PriceRegular), i.Size, i.Categories)
+		if verbose {
+			fmt.Printf("%2d/10: %s - %s: size: %s: %s\n", result.Grade.Score, result.Brand, result.Description, result.Size, result.Grade.Reason)
+		}
 	}
 	for cat, count := range catMap {
 		fmt.Printf("Category: %s, Count: %d\n", cat, count)
 	}
-}
 
-func toFloat(f *float32) string {
-	if f == nil {
-		return ""
+	counts := lo.Reduce(graded, func(counts map[int]int, ingredient ai.InputIngredient, _ int) map[int]int {
+		counts[ingredient.Grade.Score] += 1
+		return counts
+	}, make(map[int]int))
+	fmt.Println("Grade distribution:")
+	for score := range 10 {
+		fmt.Printf("Score %2d: %d ingredients\n", score, counts[score])
 	}
-	return fmt.Sprintf("%.2f", *f)
-}
-
-func categories(i ai.InputIngredient) []string {
-	if i.Categories == nil {
-		return nil
-	}
-	return i.Categories
+	sumGrades := lo.SumBy(graded, func(ing ai.InputIngredient) int { return ing.Grade.Score })
+	fmt.Printf("Total count %d and score %d\n", len(graded), sumGrades)
 }

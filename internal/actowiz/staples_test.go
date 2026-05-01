@@ -25,13 +25,13 @@ func TestStaplesProvider_FetchStaplesReturnsEmbeddedIngredients(t *testing.T) {
 	}
 
 	first := got[0]
-	if first.ProductId == nil || *first.ProductId == "" {
-		t.Fatalf("unexpected product id: %+v", first.ProductId)
+	if first.ProductID == "" {
+		t.Fatalf("unexpected product id: %+v", first.ProductID)
 	}
-	if first.Description == nil || *first.Description == "" {
+	if first.Description == "" {
 		t.Fatalf("unexpected description: %+v", first.Description)
 	}
-	if first.Categories == nil || len(*first.Categories) == 0 {
+	if len(first.Categories) == 0 {
 		t.Fatalf("unexpected categories: %+v", first.Categories)
 	}
 }
@@ -58,7 +58,7 @@ func TestStaplesProvider_GetIngredientsFiltersAndSkips(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("expected filtered ingredients after skip")
 	}
-	if got[0].Description == nil {
+	if got[0].Description == "" {
 		t.Fatalf("missing description: %+v", got[0])
 	}
 }

@@ -3,8 +3,11 @@ package kroger
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+
+	"careme/internal/kroger/products"
 )
 
 func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
@@ -16,47 +19,72 @@ func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
 	}
 }
 
-func TestParseProductSearchResponse_DecodesStructuredJSON400(t *testing.T) {
+func TestParseProductGetResponse_KeepsJSON400Body(t *testing.T) {
 	rsp := httptest.NewRecorder()
 	rsp.Header().Set("Content-Type", "application/json")
 	rsp.WriteHeader(http.StatusBadRequest)
 	_, _ = rsp.WriteString(`{"errors":{"timestamp":1776969026460,"code":"PRODUCT-2011","reason":"Field 'locationId' must have a length of 8 alphanumeric characters"}}`)
 
-	parsed, err := ParseProductSearchResponse(rsp.Result())
+	parsed, err := products.ParseProductGetResponse(rsp.Result())
 	if err != nil {
-		t.Fatalf("ParseProductSearchResponse returned error: %v", err)
+		t.Fatalf("ParseProductGetResponse returned error: %v", err)
 	}
-	if parsed.JSON400 == nil || parsed.JSON400.Errors == nil {
-		t.Fatalf("expected JSON400 error payload, got %+v", parsed.JSON400)
+	if parsed.JSON400 == nil {
+		t.Fatalf("expected JSON400 marker, got %+v", parsed.JSON400)
 	}
-	if got, want := toStr(parsed.JSON400.Errors.Code), "PRODUCT-2011"; got != want {
-		t.Fatalf("unexpected error code: got %q want %q", got, want)
-	}
-	if got := toStr(parsed.JSON400.Errors.Reason); !strings.Contains(got, "length of 8") {
-		t.Fatalf("unexpected error reason: %q", got)
+	if got := string(parsed.Body); !strings.Contains(got, "PRODUCT-2011") || !strings.Contains(got, "length of 8") {
+		t.Fatalf("expected raw body to include kroger error details, got %q", got)
 	}
 }
 
-func TestProductSearchErrorPayloadPrefersDecodedJSON400(t *testing.T) {
-	code := "PRODUCT-2011"
-	reason := "Field 'locationId' must have a length of 8 alphanumeric characters"
-	resp := &ProductSearchResponse{
-		JSON400: &struct {
-			Errors *struct {
-				Code      *string  `json:"code,omitempty"`
-				Reason    *string  `json:"reason,omitempty"`
-				Timestamp *float32 `json:"timestamp,omitempty"`
-			} `json:"errors,omitempty"`
-		}{
-			Errors: &struct {
-				Code      *string  `json:"code,omitempty"`
-				Reason    *string  `json:"reason,omitempty"`
-				Timestamp *float32 `json:"timestamp,omitempty"`
-			}{
-				Code:   &code,
-				Reason: &reason,
-			},
-		},
+func TestParseProductGetResponse_IgnoresUnusedPriceDateTimes(t *testing.T) {
+	rsp := httptest.NewRecorder()
+	rsp.Header().Set("Content-Type", "application/json")
+	rsp.WriteHeader(http.StatusOK)
+	_, _ = rsp.WriteString(`{
+		"data": [{
+			"items": [{
+				"price": {
+					"expirationDate": {"value": "9999-12-31T00:00:00Z", "timezone": "UTC"},
+					"effectiveDate": {"value": "2026-04-29T03:59:59.999Z", "timezone": "UTC"}
+				}
+			}]
+		}]
+	}`)
+
+	parsed, err := products.ParseProductGetResponse(rsp.Result())
+	if err != nil {
+		t.Fatalf("ParseProductGetResponse returned error: %v", err)
+	}
+	if parsed.JSON200 == nil || parsed.JSON200.Data == nil {
+		t.Fatalf("expected JSON200 payload, got %+v", parsed.JSON200)
+	}
+}
+
+func TestParseProductGetResponse_IgnoresUnusedNutritionInformationArray(t *testing.T) {
+	rsp := httptest.NewRecorder()
+	rsp.Header().Set("Content-Type", "application/json")
+	rsp.WriteHeader(http.StatusOK)
+	_, _ = rsp.WriteString(`{
+		"data": [{
+			"nutritionInformation": [{
+				"ingredientStatement": "beef"
+			}]
+		}]
+	}`)
+
+	parsed, err := products.ParseProductGetResponse(rsp.Result())
+	if err != nil {
+		t.Fatalf("ParseProductGetResponse returned error: %v", err)
+	}
+	if parsed.JSON200 == nil || parsed.JSON200.Data == nil {
+		t.Fatalf("expected JSON200 payload, got %+v", parsed.JSON200)
+	}
+}
+
+func TestProductSearchErrorPayloadPrefersRawBody(t *testing.T) {
+	resp := &products.ProductGetResponse{
+		Body: []byte(`{"errors":{"code":"PRODUCT-2011","reason":"Field 'locationId' must have a length of 8 alphanumeric characters"}}`),
 	}
 
 	payload := productSearchErrorPayload(resp)
@@ -66,4 +94,40 @@ func TestProductSearchErrorPayloadPrefersDecodedJSON400(t *testing.T) {
 	if !strings.Contains(krogerError(http.StatusBadRequest, payload).Error(), "PRODUCT-2011") {
 		t.Fatalf("expected krogerError to include decoded payload, got %v", krogerError(http.StatusBadRequest, payload))
 	}
+}
+
+func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
+	regular := float32(4.99)
+	sale := float32(3.49)
+	categories := []string{"Produce", "Fresh Fruit"}
+	ingredient := inputIngredientFromKrogerIngredient(Ingredient{
+		ProductId:    stringPtr(" apple-1 "),
+		AisleNumber:  stringPtr(" 12 "),
+		Brand:        stringPtr(" Orchard Co "),
+		Description:  stringPtr(" Honeycrisp Apple "),
+		Size:         stringPtr(" 3 lb "),
+		PriceRegular: &regular,
+		PriceSale:    &sale,
+		Categories:   &categories,
+	}, 0)
+
+	if ingredient.ProductID != "apple-1" {
+		t.Fatalf("unexpected product id: %+v", ingredient)
+	}
+	if ingredient.AisleNumber != "12" || ingredient.Brand != "Orchard Co" || ingredient.Description != "Honeycrisp Apple" || ingredient.Size != "3 lb" {
+		t.Fatalf("unexpected normalized ingredient: %+v", ingredient)
+	}
+	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != regular {
+		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
+	}
+	if ingredient.PriceSale == nil || *ingredient.PriceSale != sale {
+		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
+	}
+	if !slices.Equal(ingredient.Categories, categories) {
+		t.Fatalf("unexpected categories: got %v want %v", ingredient.Categories, categories)
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
 }

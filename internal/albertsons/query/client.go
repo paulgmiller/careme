@@ -12,12 +12,16 @@ import (
 	"time"
 )
 
+// this is a strange set. Actual sub categories don't work but thes aisle-vs ones do.
+// for en example broke sub category here is beef https://www.safeway.com/shop/aisles/meat-seafood/beef.html?sort=&page=1&loc=1142
 const (
-	Category_Vegatables = "GR-C-categ-8c62c848"
-	Category_Fruit      = "GR-C-categ-a8eea474"
-	Category_Seafood    = "GR-C-Categ-6090cd27"
-	Category_Meat       = "GR-MeatF-fffc8662"
-	Category_Wine       = "GR-S-Searc-db592d50"
+	Category_Vegatables   = "GR-C-categ-8c62c848"
+	Category_Fruit        = "GR-C-categ-a8eea474"
+	Category_Seafood      = "GR-C-Categ-6090cd27" //  https://www.safeway.com/aisle-vs/meat-seafood/seafood-favorites.html
+	Category_Meat         = "GR-MeatF-fffc8662"   // https://www.safeway.com/aisle-vs/meat-seafood/meat-favorites.html
+	Category_Wine         = "GR-S-Searc-db592d50"
+	Category_Pasta_Grains = "GR-C-Categ-77b9d5dd" // https://www.safeway.com/aisle-vs/grains-pasta-sides/best-sellers.html
+	Category_Dairy        = "GR-C-Categ-f210e5cd" // new and trending seems dubious https://www.safeway.com/aisle-vs/dairy-eggs-cheese/new-trending.html
 )
 
 func StapleCategories() []string {
@@ -26,6 +30,7 @@ func StapleCategories() []string {
 		Category_Fruit,
 		Category_Seafood,
 		Category_Meat,
+		Category_Pasta_Grains,
 	}
 }
 
@@ -72,7 +77,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 20 * time.Second}
+		httpClient = http.DefaultClient
 	}
 
 	return &SearchClient{
@@ -84,6 +89,9 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 }
 
 func (c *SearchClient) Search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
+	defer cancel()
+
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")

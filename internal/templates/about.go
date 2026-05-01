@@ -77,4 +77,5 @@ var defaultAboutAlbumPhotos = []AboutAlbumPhoto{
 	{Comment: "half eaten lamb chopps", ImageID: "AP1GczOMjRr7tmZ5xxPzXsUHOip34t32QHfZJrQFsj6bo_FeU3P38DoRsHP-iAqxZMgj_WPE3XiJRMpDM6ezi8f8Q1pd1d92EnFacQF-vkgy6qv2ULgct8qh", RecipeHash: "cbycxIAij_RK6vD4BfptFQ=="},
 	{Comment: "chicken thights fennel and carrots", ImageID: "AP1GczO4qkM5zaXym17qH8Cy2IpWW_SHdWDmkKMiRx_VcN4ZBG9_dwI3ybDdri2v8n9XFNdCprnv72kD2JCwMnSkz38Mqa95OORDDjppLMGimj0DLbQATOf3", RecipeHash: "7AvK-N9pE6lJY0S40JK23A=="},
 	{Comment: "sausage, mushrooms and kale pasta", ImageID: "AP1GczMxEf7tY7cpxOuJnHlzJw48xq-JtP_x5XVjNCzs8m_a6HuizPEVgjWKsuVs84WNwa181arukeILhn32Lx6u_XwjDamwRUMnVylxChG8i7K_-fK56ztG", RecipeHash: "HZsnsGnH739VEKUrE18KGg=="},
+	{Comment: "Tomato Basil Salmon and Sweet Potato Mash", ImageID: "AP1GczNEyUDLKFjvq-MkU1NXbNTrLss1qybDKLggOjzz96uSZ3MeCJloup4WSCQnx_1OEYPeZIzyHDvZJTKngMVsAw23z5Qwu3o1sdQ2iClGgdtqA05E9TTF", RecipeHash: "bqkbPEAEaKH-P0IgDogzcQ=="},
 }
