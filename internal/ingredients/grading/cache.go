@@ -57,7 +57,8 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 			if gradedIngredient.Grade == nil {
 				return lookupResult{missing: &ingredient}, nil
 			}
-			ingredient = withIngredientGrade(ingredient, gradedIngredient.Grade)
+			// should probably only cache grade as rest of ingredient may change
+			ingredient.Grade = gradedIngredient.Grade
 			return lookupResult{cached: &ingredient}, nil
 		}
 		if !errors.Is(err, cache.ErrNotFound) {
@@ -88,10 +89,6 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	slog.InfoContext(ctx, "grading non cached", "cached", len(results), "missing", len(missingIngredients))
 
 	gradedIngredients, err := c.grader.GradeIngredients(ctx, missingIngredients)
-	missingByHash := make(map[string]ai.InputIngredient, len(missingIngredients))
-	for _, ingredient := range missingIngredients {
-		missingByHash[ingredientHash(ingredient)] = ingredient
-	}
 
 	// might get partial results back save those.
 	var wg sync.WaitGroup
@@ -99,12 +96,10 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 		if gradedIngredient.Grade == nil {
 			return nil, fmt.Errorf("ingredient grader returned nil grade for %q", ingredientLabel(gradedIngredient))
 		}
-		if current, ok := missingByHash[ingredientHash(gradedIngredient)]; ok {
-			gradedIngredient = withIngredientGrade(current, gradedIngredient.Grade)
-		}
 		results = append(results, gradedIngredient)
 		wg.Go(func() {
 			ctx := context.WithoutCancel(ctx)
+			// could just save grade rather than whole ingredient
 			key := cacheKey(c.cacheVersion + "/" + ingredientHash(gradedIngredient))
 			if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
 				slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(gradedIngredient), "error", err)
@@ -121,20 +116,4 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	}
 
 	return results, nil
-}
-
-func withIngredientGrade(ingredient ai.InputIngredient, grade *ai.IngredientGrade) ai.InputIngredient {
-	ingredient = ai.NormalizeInputIngredient(ingredient)
-	ingredient.Grade = cloneIngredientGrade(grade)
-	return ingredient
-}
-
-func cloneIngredientGrade(grade *ai.IngredientGrade) *ai.IngredientGrade {
-	if grade == nil {
-		return nil
-	}
-	return &ai.IngredientGrade{
-		Score:  grade.Score,
-		Reason: grade.Reason,
-	}
 }

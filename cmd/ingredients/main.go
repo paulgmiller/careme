@@ -77,7 +77,7 @@ func main() {
 			catMap[cat] += 1
 		}
 		if verbose {
-			fmt.Printf("%2d/10: %s - %s: ailse: %s: %s\n", result.Grade.Score, result.Brand, result.Description, result.AisleNumber, result.Grade.Reason)
+			fmt.Printf("%2d/10: %s - %s: size: %s: %s\n", result.Grade.Score, result.Brand, result.Description, result.Size, result.Grade.Reason)
 		}
 	}
 	for cat, count := range catMap {
