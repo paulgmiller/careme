@@ -71,15 +71,15 @@ func TestShoppingListForDisplay_SortsByAisleWithMissingAtBottom(t *testing.T) {
 		{Description: "aisle ten rice", AisleNumber: "10"},
 		{Description: "Aisle Two Beans", AisleNumber: "2"},
 		{Description: "Basil", AisleNumber: "fresh-herbs"},
-		{Description: "Butter", AisleNumber: "Dairy & Eggs"},
+		{Description: "Butter", AisleNumber: "dairy-eggs"},
 	}
 
 	got := shoppingListForDisplay(ingredients, inputs)
 	assert.Equal(t, []*ai.Ingredient{
-		{Name: "Aisle Ten Rice", Quantity: "1 cup"},
 		{Name: "Aisle Two Beans", Quantity: "1 can"},
-		{Name: "Basil", Quantity: "1 bunch"},
+		{Name: "Aisle Ten Rice", Quantity: "1 cup"},
 		{Name: "Butter", Quantity: "2 tbsp"},
+		{Name: "Basil", Quantity: "1 bunch"},
 		{Name: "Pantry Salt", Quantity: "1 tsp"},
 	}, got)
 }

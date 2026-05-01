@@ -419,8 +419,8 @@ func compareShoppingAisles(a, b string) int {
 	}
 	aint, aerr := strconv.Atoi(a)
 	bint, berr := strconv.Atoi(b)
-	if aerr != nil && berr != nil {
-		return aint - bint
+	if aerr == nil && berr == nil {
+		return cmp.Compare(aint, bint)
 	}
 	return cmp.Compare(a, b)
 }
