@@ -36,6 +36,7 @@ type Ingredient struct {
 	Name     string `json:"name"`
 	Quantity string `json:"quantity"` // should this and price be numbers? need units then
 	Price    string `json:"price"`    // TODO exclude empty
+	// product id so we can associate back with input ingredient
 }
 
 type Recipe struct {
@@ -52,6 +53,7 @@ type Recipe struct {
 	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
 	ParentHash   string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
 	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` // not in schema
+	// Shove wine selection in here
 }
 
 // ComputeHash calculates the fnv128 hash of the recipe content

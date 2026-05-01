@@ -63,7 +63,9 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			return nil, err
 		}
 
-		ingredients := lo.Map(resp, productToIngredient)
+		ingredients := lo.Map(resp, func(p product, _ int) ai.InputIngredient {
+			return productToIngredient(p, category)
+		})
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category, "location", locationID)
 
 		return ingredients, nil
@@ -86,7 +88,9 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 		return nil, err
 	}
 
-	return lo.Map(resp, productToIngredient), nil
+	return lo.Map(resp, func(p product, _ int) ai.InputIngredient {
+		return productToIngredient(p, searchTerm)
+	}), nil
 }
 
 func defaultStaples() []string {
@@ -107,7 +111,7 @@ func defaultStaples() []string {
 	// red-wine, white-wine, sparkling
 }
 
-func productToIngredient(product product, _ int) ai.InputIngredient {
+func productToIngredient(product product, category string) ai.InputIngredient {
 	var regularPrice *float32
 	if product.RegularPrice > 0 {
 		price := float32(product.RegularPrice)
@@ -128,8 +132,6 @@ func productToIngredient(product product, _ int) ai.InputIngredient {
 		size = &sizeText
 	}*/
 
-	// categories := compactStrings(localCategory(product))
-
 	hasher := fnv.New32a()
 	// dupes for different units of measure?
 	_ = lo.Must(hasher.Write([]byte(product.Slug)))
@@ -141,6 +143,6 @@ func productToIngredient(product product, _ int) ai.InputIngredient {
 		// Size:         size,
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
-		// /	Categories:   slicePtr(categories),
+		AisleNumber:  category, // not as good as an actual aisle but still lets us sort
 	})
 }

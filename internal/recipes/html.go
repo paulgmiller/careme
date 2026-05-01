@@ -1,18 +1,23 @@
 package recipes
 
 import (
+	"cmp"
 	"context"
 	"html/template"
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
 	"careme/internal/templates"
+
+	"github.com/samber/lo"
 )
 
 type recipeImageView struct {
@@ -57,7 +62,10 @@ type shoppingRecipeWineView struct {
 }
 
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
-func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
+// should shove wine recs into recipe instead of having them seperate.
+func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, inputs []ai.InputIngredient, writer http.ResponseWriter,
+) {
 	dismissedHashes := make(map[string]bool, len(p.Dismissed))
 	for _, recipe := range p.Dismissed {
 		dismissedHashes[recipe.ComputeHash()] = true
@@ -89,7 +97,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		})
 		combinedIngredients = append(combinedIngredients, displayIngredients...)
 	}
-	shoppingList := shoppingListForDisplay(combinedIngredients)
+	shoppingList := shoppingListForDisplay(combinedIngredients, inputs)
 	data := struct {
 		Location        locations.Location
 		Date            string
@@ -98,7 +106,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Instructions    string
 		Hash            string
 		Recipes         []shoppingRecipeView
-		ShoppingList    []ai.Ingredient
+		ShoppingList    []*ai.Ingredient
 		HasSavedRecipes bool
 		Style           seasons.Style
 		ServerSignedIn  bool
@@ -344,25 +352,24 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 	return templates.Mail.Execute(writer, data)
 }
 
-func shoppingListForDisplay(ingredients []ai.Ingredient) []ai.Ingredient {
-	if len(ingredients) == 0 {
-		return nil
-	}
+func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngredient) []*ai.Ingredient {
 	items := make(map[string]*ai.Ingredient)
-	order := make([]string, 0)
+	var combined []*ai.Ingredient // maintain original ordering after deduping
 
 	for _, ingredient := range ingredients {
-		name := strings.ToLower(strings.TrimSpace(ingredient.Name))
+		name := normalizeShoppingListName(ingredient.Name)
 		if name == "" {
 			continue
 		}
 		existing, ok := items[name]
 		if !ok {
-			items[name] = &ai.Ingredient{
-				Name:     ingredient.Name,
+			item := &ai.Ingredient{
+				Name:     ingredient.Name, // show non normalized
 				Quantity: strings.TrimSpace(ingredient.Quantity),
 			}
-			order = append(order, name)
+			items[name] = item
+			combined = append(combined, item)
+
 			continue
 		}
 		qty := strings.TrimSpace(ingredient.Quantity)
@@ -376,11 +383,46 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []ai.Ingredient {
 		existing.Quantity = existing.Quantity + ", " + qty
 	}
 
-	combined := make([]ai.Ingredient, 0, len(order))
-	for _, name := range order {
-		combined = append(combined, *items[name])
-	}
+	// kind of big to do each time but we're fast right?
+	// better to do product here
+	aisles := lo.SliceToMap(inputs, func(ing ai.InputIngredient) (string, string) {
+		return normalizeShoppingListName(ing.Description), strings.TrimSpace(ing.AisleNumber)
+	})
+
+	slices.SortStableFunc(combined, func(a, b *ai.Ingredient) int {
+		return compareShoppingAisles(aisles[normalizeShoppingListName(a.Name)], aisles[normalizeShoppingListName(b.Name)])
+	})
+
 	return combined
+}
+
+// should only be used for internal matching otherwise violate some kroger must show names unaltered agreement
+func normalizeShoppingListName(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return ' '
+	}, name)
+	return strings.ToLower(strings.Join(strings.Fields(name), " "))
+}
+
+func compareShoppingAisles(a, b string) int {
+	if a == "" && b == "" {
+		return 0
+	}
+	if a == "" {
+		return 1
+	}
+	if b == "" {
+		return -1
+	}
+	aint, aerr := strconv.Atoi(a)
+	bint, berr := strconv.Atoi(b)
+	if aerr == nil && berr == nil {
+		return cmp.Compare(aint, bint)
+	}
+	return cmp.Compare(a, b)
 }
 
 func ingredientsForDisplay(base []ai.Ingredient, wineRecommendation *ai.WineSelection) []ai.Ingredient {

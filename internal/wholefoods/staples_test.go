@@ -88,6 +88,9 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	if ingredient.ProductID != "odQxPA" {
 		t.Fatalf("unexpected product id: %+v", ingredient.ProductID)
 	}
+	if ingredient.AisleNumber != "fresh-vegetables" {
+		t.Fatalf("unexpected aisle number: %+v", ingredient.AisleNumber)
+	}
 	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != float32(5.99) {
 		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
 	}
@@ -131,6 +134,9 @@ func TestStaplesProvider_GetIngredients_UsesSearchTerm(t *testing.T) {
 	}
 	if got[0].Description != "Pinot Noir" {
 		t.Fatalf("unexpected ingredient description: %+v", got[0].Description)
+	}
+	if got[0].AisleNumber != "pinot noir" {
+		t.Fatalf("unexpected aisle number: %+v", got[0].AisleNumber)
 	}
 	if got := client.callCount(); got != 1 {
 		t.Fatalf("expected 1 category call, got %d", got)
