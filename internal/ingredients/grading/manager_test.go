@@ -15,10 +15,6 @@ import (
 
 const testIngredientGradeCacheVersion = "test-cache-version"
 
-func float32Ptr(v float32) *float32 {
-	return &v
-}
-
 type stubGradeBackend struct {
 	calls [][]ai.InputIngredient
 }
@@ -29,14 +25,14 @@ func (s *stubGradeBackend) CacheVersion() string {
 
 func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	s.calls = append(s.calls, append([]ai.InputIngredient(nil), ingredients...))
-	out := make([]ai.InputIngredient, len(ingredients))
-	for i, ingredient := range ingredients {
+	var out []ai.InputIngredient
+	for _, ingredient := range ingredients {
 		ingredient.Grade = &ai.IngredientGrade{
 			Score:  10,
 			Reason: "default",
 		}
 		// this should be closer to whats in actual grader.
-		out[i] = ingredient
+		out = append(out, ingredient)
 	}
 	return out, nil
 }

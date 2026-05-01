@@ -16,6 +16,8 @@ import (
 	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
 	"careme/internal/templates"
+
+	"github.com/samber/lo"
 )
 
 type recipeImageView struct {
@@ -104,7 +106,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Instructions    string
 		Hash            string
 		Recipes         []shoppingRecipeView
-		ShoppingList    []ai.Ingredient
+		ShoppingList    []*ai.Ingredient
 		HasSavedRecipes bool
 		Style           seasons.Style
 		ServerSignedIn  bool
@@ -350,9 +352,9 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 	return templates.Mail.Execute(writer, data)
 }
 
-func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngredient) []ai.Ingredient {
+func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngredient) []*ai.Ingredient {
 	items := make(map[string]*ai.Ingredient)
-	var itemOrder []string
+	var combined []*ai.Ingredient // maintain original ordering after deduping
 
 	for _, ingredient := range ingredients {
 		name := normalizeShoppingListName(ingredient.Name)
@@ -361,11 +363,12 @@ func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngred
 		}
 		existing, ok := items[name]
 		if !ok {
-			itemOrder = append(itemOrder, name)
-			items[name] = &ai.Ingredient{
-				Name:     ingredient.Name,
+			item := &ai.Ingredient{
+				Name:     ingredient.Name, // show non normalized
 				Quantity: strings.TrimSpace(ingredient.Quantity),
 			}
+			items[name] = item
+			combined = append(combined, item)
 
 			continue
 		}
@@ -382,91 +385,18 @@ func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngred
 
 	// kind of big to do each time but we're fast right?
 	// better to do product here
-	aisles := newShoppingListAisleIndex(inputs)
-
-	var combined []ai.Ingredient
-	for _, key := range itemOrder {
-		ing := items[key]
-		combined = append(combined, *ing)
-	}
-
-	slices.SortStableFunc(combined, func(a, b ai.Ingredient) int {
-		return compareShoppingAisles(aisles.aisleFor(a.Name), aisles.aisleFor(b.Name))
+	aisles := lo.SliceToMap(inputs, func(ing ai.InputIngredient) (string, string) {
+		return normalizeShoppingListName(ing.Description), strings.TrimSpace(ing.AisleNumber)
 	})
+
+	slices.SortStableFunc(combined, func(a, b *ai.Ingredient) int {
+		return compareShoppingAisles(aisles[normalizeShoppingListName(a.Name)], aisles[normalizeShoppingListName(b.Name)])
+	})
+
 	return combined
 }
 
-type shoppingListAisleIndex struct {
-	exact      map[string]string
-	candidates []shoppingListAisleCandidate
-}
-
-type shoppingListAisleCandidate struct {
-	description string
-	aisle       string
-}
-
-func newShoppingListAisleIndex(inputs []ai.InputIngredient) shoppingListAisleIndex {
-	index := shoppingListAisleIndex{
-		exact: make(map[string]string, len(inputs)),
-	}
-	for _, input := range inputs {
-		key := normalizeShoppingListName(input.Description)
-		if key == "" {
-			continue
-		}
-		aisle := shoppingListAisle(input)
-		if aisle == "" {
-			continue
-		}
-		if _, ok := index.exact[key]; !ok {
-			index.exact[key] = aisle
-		}
-		index.candidates = append(index.candidates, shoppingListAisleCandidate{
-			description: key,
-			aisle:       aisle,
-		})
-	}
-	return index
-}
-
-func (index shoppingListAisleIndex) aisleFor(name string) string {
-	name = normalizeShoppingListName(name)
-	if name == "" {
-		return ""
-	}
-	if aisle := index.exact[name]; aisle != "" {
-		return aisle
-	}
-
-	var matchedAisle string
-	for _, candidate := range index.candidates {
-		if !shoppingListNameMatchesDescription(name, candidate.description) {
-			continue
-		}
-		if matchedAisle == "" {
-			matchedAisle = candidate.aisle
-			continue
-		}
-		if !strings.EqualFold(matchedAisle, candidate.aisle) {
-			return ""
-		}
-	}
-	return matchedAisle
-}
-
-func shoppingListAisle(input ai.InputIngredient) string {
-	if aisle := strings.TrimSpace(input.AisleNumber); aisle != "" {
-		return aisle
-	}
-	for _, category := range input.Categories {
-		if category = strings.TrimSpace(category); category != "" {
-			return category
-		}
-	}
-	return ""
-}
-
+// should only be used for internal matching otherwise violate some kroger must show names unaltered agreement
 func normalizeShoppingListName(name string) string {
 	name = strings.Map(func(r rune) rune {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
@@ -477,27 +407,7 @@ func normalizeShoppingListName(name string) string {
 	return strings.ToLower(strings.Join(strings.Fields(name), " "))
 }
 
-func shoppingListNameMatchesDescription(name, description string) bool {
-	return containsWordPhrase(description, name) || containsWordPhrase(name, description)
-}
-
-func containsWordPhrase(haystack, needle string) bool {
-	haystackWords := strings.Fields(haystack)
-	needleWords := strings.Fields(needle)
-	if len(needleWords) == 0 || len(needleWords) > len(haystackWords) {
-		return false
-	}
-	for i := 0; i <= len(haystackWords)-len(needleWords); i++ {
-		if slices.Equal(haystackWords[i:i+len(needleWords)], needleWords) {
-			return true
-		}
-	}
-	return false
-}
-
 func compareShoppingAisles(a, b string) int {
-	a = strings.TrimSpace(a)
-	b = strings.TrimSpace(b)
 	if a == "" && b == "" {
 		return 0
 	}
@@ -507,41 +417,12 @@ func compareShoppingAisles(a, b string) int {
 	if b == "" {
 		return -1
 	}
-	return compareAisleLabels(a, b)
-}
-
-func compareAisleLabels(a, b string) int {
-	aNumber, aSuffix, aOK := splitAisleNumber(a)
-	bNumber, bSuffix, bOK := splitAisleNumber(b)
-	if aOK && bOK {
-		if diff := cmp.Compare(aNumber, bNumber); diff != 0 {
-			return diff
-		}
-		return cmp.Compare(strings.ToLower(aSuffix), strings.ToLower(bSuffix))
+	aint, aerr := strconv.Atoi(a)
+	bint, berr := strconv.Atoi(b)
+	if aerr != nil && berr != nil {
+		return aint - bint
 	}
-	if aOK != bOK {
-		if aOK {
-			return -1
-		}
-		return 1
-	}
-	return cmp.Compare(strings.ToLower(a), strings.ToLower(b))
-}
-
-func splitAisleNumber(label string) (int, string, bool) {
-	label = strings.TrimSpace(label)
-	if label == "" || label[0] < '0' || label[0] > '9' {
-		return 0, "", false
-	}
-	i := 0
-	for i < len(label) && label[i] >= '0' && label[i] <= '9' {
-		i++
-	}
-	number, err := strconv.Atoi(label[:i])
-	if err != nil {
-		return 0, "", false
-	}
-	return number, strings.TrimSpace(label[i:]), true
+	return cmp.Compare(a, b)
 }
 
 func ingredientsForDisplay(base []ai.Ingredient, wineRecommendation *ai.WineSelection) []ai.Ingredient {

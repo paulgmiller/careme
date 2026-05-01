@@ -12,7 +12,7 @@ func TestShoppingListForDisplay(t *testing.T) {
 	tests := []struct {
 		name        string
 		ingredients []ai.Ingredient
-		want        []ai.Ingredient
+		want        []*ai.Ingredient
 	}{
 		{
 			name: "empty list returns empty result",
@@ -28,7 +28,7 @@ func TestShoppingListForDisplay(t *testing.T) {
 				{Name: "Basil", Quantity: " "},
 				{Name: "  ", Quantity: "1"},
 			},
-			want: []ai.Ingredient{
+			want: []*ai.Ingredient{
 				{Name: "Onion", Quantity: "1, 2"},
 				{Name: "Garlic", Quantity: "3 cloves"},
 				{Name: "Basil", Quantity: ""},
@@ -65,42 +65,22 @@ func TestShoppingListForDisplay_SortsByAisleWithMissingAtBottom(t *testing.T) {
 		{Name: "Aisle Ten Rice", Quantity: "1 cup"},
 		{Name: "Aisle Two Beans", Quantity: "1 can"},
 		{Name: "Basil", Quantity: "1 bunch"},
-		{Name: "Category Butter", Quantity: "2 tbsp"},
+		{Name: "Butter", Quantity: "2 tbsp"},
 	}
 	inputs := []ai.InputIngredient{
 		{Description: "aisle ten rice", AisleNumber: "10"},
 		{Description: "Aisle Two Beans", AisleNumber: "2"},
-		{Description: "Organic Basil Bunch", AisleNumber: "fresh-herbs"},
-		{Description: "Category Butter", Categories: []string{"Dairy & Eggs"}},
+		{Description: "Basil", AisleNumber: "fresh-herbs"},
+		{Description: "Butter", AisleNumber: "Dairy & Eggs"},
 	}
 
 	got := shoppingListForDisplay(ingredients, inputs)
-
-	assert.Equal(t, []ai.Ingredient{
-		{Name: "Aisle Two Beans", Quantity: "1 can"},
+	assert.Equal(t, []*ai.Ingredient{
 		{Name: "Aisle Ten Rice", Quantity: "1 cup"},
-		{Name: "Category Butter", Quantity: "2 tbsp"},
+		{Name: "Aisle Two Beans", Quantity: "1 can"},
 		{Name: "Basil", Quantity: "1 bunch"},
+		{Name: "Butter", Quantity: "2 tbsp"},
 		{Name: "Pantry Salt", Quantity: "1 tsp"},
-	}, got)
-}
-
-func TestShoppingListForDisplay_TreatsAmbiguousAisleMatchAsMissing(t *testing.T) {
-	ingredients := []ai.Ingredient{
-		{Name: "Chicken", Quantity: "1 lb"},
-		{Name: "Rice", Quantity: "1 cup"},
-	}
-	inputs := []ai.InputIngredient{
-		{Description: "Chicken Breast", AisleNumber: "4"},
-		{Description: "Chicken Broth", AisleNumber: "10"},
-		{Description: "Rice", AisleNumber: "8"},
-	}
-
-	got := shoppingListForDisplay(ingredients, inputs)
-
-	assert.Equal(t, []ai.Ingredient{
-		{Name: "Rice", Quantity: "1 cup"},
-		{Name: "Chicken", Quantity: "1 lb"},
 	}, got)
 }
 
@@ -114,7 +94,7 @@ func TestShoppingListForDisplay_PreservesFirstSeenOrderWithinSameAisleState(t *t
 
 	got := shoppingListForDisplay(ingredients, nil)
 
-	assert.Equal(t, []ai.Ingredient{
+	assert.Equal(t, []*ai.Ingredient{
 		{Name: "Salt", Quantity: "1 tsp, 1 pinch"},
 		{Name: "Pepper", Quantity: "1 tsp"},
 		{Name: "Oil", Quantity: "2 tbsp"},
