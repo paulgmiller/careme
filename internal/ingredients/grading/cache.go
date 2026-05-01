@@ -54,7 +54,11 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 		key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
 		gradedIngredient, err := c.store.Load(ctx, key)
 		if err == nil {
-			return lookupResult{cached: gradedIngredient}, nil
+			if gradedIngredient.Grade == nil {
+				return lookupResult{missing: &ingredient}, nil
+			}
+			ingredient = withIngredientGrade(ingredient, gradedIngredient.Grade)
+			return lookupResult{cached: &ingredient}, nil
 		}
 		if !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to load cached ingredient grade", "key", key, "error", err)
@@ -84,12 +88,19 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	slog.InfoContext(ctx, "grading non cached", "cached", len(results), "missing", len(missingIngredients))
 
 	gradedIngredients, err := c.grader.GradeIngredients(ctx, missingIngredients)
+	missingByHash := make(map[string]ai.InputIngredient, len(missingIngredients))
+	for _, ingredient := range missingIngredients {
+		missingByHash[ingredientHash(ingredient)] = ingredient
+	}
 
 	// might get partial results back save those.
 	var wg sync.WaitGroup
 	for _, gradedIngredient := range gradedIngredients {
 		if gradedIngredient.Grade == nil {
 			return nil, fmt.Errorf("ingredient grader returned nil grade for %q", ingredientLabel(gradedIngredient))
+		}
+		if current, ok := missingByHash[ingredientHash(gradedIngredient)]; ok {
+			gradedIngredient = withIngredientGrade(current, gradedIngredient.Grade)
 		}
 		results = append(results, gradedIngredient)
 		wg.Go(func() {
@@ -110,4 +121,20 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	}
 
 	return results, nil
+}
+
+func withIngredientGrade(ingredient ai.InputIngredient, grade *ai.IngredientGrade) ai.InputIngredient {
+	ingredient = ai.NormalizeInputIngredient(ingredient)
+	ingredient.Grade = cloneIngredientGrade(grade)
+	return ingredient
+}
+
+func cloneIngredientGrade(grade *ai.IngredientGrade) *ai.IngredientGrade {
+	if grade == nil {
+		return nil
+	}
+	return &ai.IngredientGrade{
+		Score:  grade.Score,
+		Reason: grade.Reason,
+	}
 }
