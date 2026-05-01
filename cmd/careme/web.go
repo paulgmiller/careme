@@ -29,6 +29,7 @@ import (
 	"careme/internal/watchdog"
 
 	cachepkg "careme/internal/cache"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func runServer(cfg *config.Config, addr string) error {
@@ -58,18 +59,19 @@ func runServer(cfg *config.Config, addr string) error {
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
 	watchdogServer := watchdog.Server{}
+	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	// TODO  make the mock more transparent?
-	grader := ingredientgrading.NewManager(cfg, cache)
+	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 
 	var generator recipes.ExtGenerator
 	var waitFns []func()
 	if cfg.Mocks.Enable {
 		generator = recipes.NewMockGenerator()
 	} else {
-		mc := critique.NewManager(cfg, cache)
+		mc := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(mc)
 
-		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
+		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient)
 		ro.add(aiclient)
 		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
 		if err != nil {

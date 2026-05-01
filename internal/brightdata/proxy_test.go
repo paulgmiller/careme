@@ -68,7 +68,7 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 
 	transport, ok := retryTransport.Client.HTTPClient.Transport.(*http.Transport)
 	if !ok {
-		t.Fatalf("expected wrapped base *http.Transport, got %T", retryTransport.Client.HTTPClient.Transport)
+		t.Fatalf("expected proxy *http.Transport, got %T", retryTransport.Client.HTTPClient.Transport)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, "https://www.example.com/products", nil)
@@ -104,8 +104,8 @@ func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *retryablehttp.RoundTripper when proxy disabled, got %T", client.Transport)
 	}
-	if retryTransport.Client.HTTPClient.Transport != nil {
-		t.Fatalf("expected default base transport via nil transport, got %T", retryTransport.Client.HTTPClient.Transport)
+	if retryTransport.Client.HTTPClient.Transport != http.DefaultTransport {
+		t.Fatalf("expected default base transport, got %T", retryTransport.Client.HTTPClient.Transport)
 	}
 }
 

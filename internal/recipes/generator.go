@@ -16,6 +16,8 @@ import (
 
 	"github.com/samber/lo"
 	"github.com/samber/lo/mutable"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type aiClient interface {
@@ -39,6 +41,8 @@ type generatorService struct {
 	statusWriter statusWriter
 }
 
+var tracer = otel.Tracer("careme/internal/recipes")
+
 func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService, statuses statusWriter) (*generatorService, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
@@ -58,6 +62,8 @@ func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staples
 }
 
 func (g *generatorService) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+	ctx, span := tracer.Start(ctx, "recipes.pickawine")
+	defer span.End()
 	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
@@ -102,6 +108,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	// if we have a response id one of the three should be true? Or did they just not care and hit try again?
 	if p.ResponseID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "response_id", p.ResponseID)
+		ctx, span := tracer.Start(ctx, "recipes.regenerate")
+		defer span.End()
 		instructions := regenerateInstructions(p)
 
 		// TODO give them some sort of status.
@@ -125,6 +133,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		return shoppingList, nil
 	}
 
+	ctx, span := tracer.Start(ctx, "recipes.generate")
+	defer span.End()
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
 	ingredients, err := g.staples.FetchStaples(ctx, p)
 	if err != nil {
@@ -141,6 +151,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	mutable.Shuffle(ingredients)
 
 	instructions := []string{p.Directive, p.Instructions}
+
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
@@ -210,6 +221,9 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	if g.critiquer == nil {
 		return shoppingList, nil
 	}
+	ctx, span := tracer.Start(ctx, "recipes.critique")
+	defer span.End()
+
 	g.writeStatus(ctx, hash, titles("Getting feeeback on these recipes:", shoppingList.Recipes))
 	results := g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
 	good, garbage := critique.Split(ctx, results, critique.MinimumRecipeScore)
@@ -219,6 +233,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	if len(garbage) == 0 {
 		return shoppingList, nil
 	}
+	span.SetAttributes(attribute.Bool("regenaftercrique", true))
 	slog.InfoContext(ctx, "Regenerating recipes based on critique feedback:", "garbage_count", len(garbage), "good_count", len(good))
 	garbageRecipes := lo.Map(garbage, func(r critique.Result, _ int) ai.Recipe { return *r.Recipe })
 	g.writeStatus(ctx, hash, titles("Making adjustments to these recipes: ", garbageRecipes))

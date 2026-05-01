@@ -103,9 +103,7 @@ func TestCachingGraderSkipsIngredientsThatAlreadyHaveGrades(t *testing.T) {
 func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
-	manager := &multiGrader{
-		grader: newCachingGrader(backend, cacheStore),
-	}
+	manager := newCachingGrader(&multiGrader{backend}, cacheStore)
 
 	ingredients := make([]ai.InputIngredient, 65)
 	for i := range ingredients {

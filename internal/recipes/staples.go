@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,8 @@ import (
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type identityProvider interface {
@@ -59,6 +62,9 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	if err != nil {
 		return nil, err
 	}
+	ctx, span := tracer.Start(ctx, "staples.fetchstaples")
+	span.SetAttributes(attribute.String("backend", fmt.Sprintf("%T", provider)))
+	defer span.End()
 	return provider.FetchStaples(ctx, locationID)
 }
 
@@ -67,6 +73,9 @@ func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID s
 	if err != nil {
 		return nil, err
 	}
+	ctx, span := tracer.Start(ctx, "staples.getingredients")
+	span.SetAttributes(attribute.String("backend", fmt.Sprintf("%T", provider)))
+	defer span.End()
 	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
 }
 
@@ -155,6 +164,8 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		return nil, fmt.Errorf("failed to get ingredients for staples for %s: %w", locationID, err)
 	}
 
+	ctx, span := tracer.Start(ctx, "staples.gradeingredients")
+	defer span.End()
 	graded, err := s.grader.GradeIngredients(ctx, ingredients)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to grade cached staples", "error", err)
@@ -241,20 +252,24 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
+// should we pass in a wrapper/roundtripper
 func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error) {
 	// should we do this per request so we get new proxies per user? https://github.com/paulgmiller/careme/issues/443
-	httpClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
+	brightdataClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 	if err != nil {
 		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
 	}
+	brightdataClient.Transport = otelhttp.NewTransport(brightdataClient.Transport)
 
 	// only returns an err because it ensures a cache for reese84 tokens.
-	albertsonsProvider, err := albertsons.NewStaplesProvider(cfg.Albertsons, httpClient)
+	albertsonsProvider, err := albertsons.NewStaplesProvider(cfg.Albertsons, brightdataClient)
 	if err != nil {
 		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
 	}
 
-	krogerBackend, err := kroger.NewStaplesProvider(cfg)
+	// we should not use brightdata for koger
+	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	krogerBackend, err := kroger.NewStaplesProvider(cfg, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("create kroger staples provider: %w", err)
 	}
@@ -264,7 +279,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		krogerBackend,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
-		wholefoods.NewStaplesProvider(wholefoods.NewClient(httpClient)),
+		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
 	}, nil
 }
 
