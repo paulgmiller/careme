@@ -199,12 +199,6 @@
 </div>
 {{end}}
 
-{{define "shopping_finalize_controls_oob"}}
-<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" class="mt-10 flex flex-wrap items-center gap-4">
-  {{template "shopping_finalize_controls_content" .}}
-</div>
-{{end}}
-
 {{define "shopping_finalize_controls_content"}}
   {{if .ServerSignedIn}}
   {{template "shopping_finalize_controls_signed_in_content" .}}
