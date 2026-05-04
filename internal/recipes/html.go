@@ -70,20 +70,14 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	for _, recipe := range p.Dismissed {
 		dismissedHashes[recipe.ComputeHash()] = true
 	}
-	savedHashes := make(map[string]bool, len(p.Saved))
-	for _, recipe := range p.Saved {
-		savedHashes[recipe.ComputeHash()] = true
-	}
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	for _, recipe := range l.Recipes {
 		recipeHash := recipe.ComputeHash()
-		saved := recipe.Saved || savedHashes[recipeHash]
 		wineRecommendation := wineRecommendations[recipeHash]
 		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
 		wineActionID, wineButtonID := shoppingWineDOMIDs(recipeHash)
 		wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
-		recipe.Saved = saved
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
 			Hash:               recipeHash,
