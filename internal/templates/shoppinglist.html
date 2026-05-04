@@ -235,11 +235,6 @@
 
 {{define "shopping_recipe_save_action"}}
 <div class="shopping-recipe-action">
-  {{template "shopping_recipe_save_action_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_save_action_content"}}
   {{if .ServerSignedIn}}
   {{if .Saved}}
   <button type="button"
@@ -263,6 +258,7 @@
   </button>
   {{end}}
   {{end}}
+</div>
 {{end}}
 
 {{define "shopping_recipe_wine_action"}}

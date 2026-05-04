@@ -28,6 +28,10 @@ func (rio recipeio) WineFromCache(ctx context.Context, hash string) (*ai.WineSel
 	return &selection, err
 }
 
+func (rio recipeio) WineExists(ctx context.Context, hash string) (bool, error) {
+	return rio.Cache.Exists(ctx, recipeWineCacheKey(hash))
+}
+
 func (rio recipeio) SaveWine(ctx context.Context, hash string, selection *ai.WineSelection) error {
 	if selection == nil {
 		return fmt.Errorf("wine selection is required")

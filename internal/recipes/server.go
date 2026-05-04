@@ -660,7 +660,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.startSavedRecipeBackgroundGeneration(ctx, recipeHash, *recipe, p)
+	s.startSavedRecipeBackgroundGeneration(ctx, recipeHash, *recipe, p.Location.ID, p.Date)
 
 	setTextContent(w)
 	_, err = w.Write(response.Bytes())
@@ -748,14 +748,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, p *generatorParams) {
-	if p == nil || p.Location == nil {
-		slog.WarnContext(ctx, "skipping saved recipe background generation without params", "hash", recipeHash)
-		return
-	}
-
-	locationID := p.Location.ID
-	date := p.Date
+func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, locationID string, date time.Time) {
 	s.wg.Go(func() {
 		bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 		defer cancel()
@@ -769,23 +762,18 @@ func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recip
 }
 
 func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, locationID string, recipe ai.Recipe, date time.Time) {
-	if selection, err := s.WineFromCache(ctx, recipeHash); err == nil {
-		if selection == nil {
-			slog.WarnContext(ctx, "cached wine recommendation was nil", "hash", recipeHash)
-		}
+	exists, err := s.WineExists(ctx, recipeHash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check cached wine selection after save", "hash", recipeHash, "error", err)
 		return
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to check cached wine recommendation after save", "hash", recipeHash, "error", err)
+	}
+	if exists {
 		return
 	}
 
 	selection, err := s.generator.PickAWine(ctx, locationID, recipe, date)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
-		return
-	}
-	if selection == nil {
-		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", "nil selection")
 		return
 	}
 	if err := s.SaveWine(ctx, recipeHash, selection); err != nil {
