@@ -97,6 +97,17 @@
                 </div>
               </header>
 
+              <div class="space-y-2 text-sm text-ink-600">
+                {{if .CookTime}}
+                <p><span class="font-semibold text-brand-700">Cook time:</span> {{.CookTime}}</p>
+                {{end}}
+                {{if .CostEstimate}}
+                <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.CostEstimate}}</p>
+                {{end}}
+                <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
+                <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
+              </div>
+
               <details class="space-y-4">
                 <summary class="hidden">Details</summary>
                 <section class="space-y-6">
@@ -136,14 +147,6 @@
                 </div>
 
                 <div class="space-y-2 text-sm text-ink-600">
-                  {{if .CookTime}}
-                  <p><span class="font-semibold text-brand-700">Cook time:</span> {{.CookTime}}</p>
-                  {{end}}
-                  {{if .CostEstimate}}
-                  <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.CostEstimate}}</p>
-                  {{end}}
-                  <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
-                  <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
                   {{template "shopping_recipe_wine_details" .}}
                 </div>
               </section>
@@ -261,71 +264,13 @@
 </div>
 {{end}}
 
-{{define "shopping_recipe_wine_action"}}
-<div id="{{.Wine.ActionID}}" class="shopping-wine-action">
-  {{template "shopping_recipe_wine_action_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_wine_action_oob"}}
-<div id="{{.Wine.ActionID}}" hx-swap-oob="outerHTML" class="shopping-wine-action">
-  {{template "shopping_recipe_wine_action_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_wine_action_content"}}
-{{end}}
-
-{{define "shopping_recipe_wine_preview"}}
-<div id="{{.Wine.PreviewID}}" class="shopping-wine-preview">
-  {{template "shopping_recipe_wine_preview_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_wine_preview_oob"}}
-<div id="{{.Wine.PreviewID}}" hx-swap-oob="outerHTML" class="shopping-wine-preview">
-  {{template "shopping_recipe_wine_preview_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_wine_preview_content"}}
-  {{if .Wine.Recommendation}}
-  <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-900">
-    {{if .Wine.Preview}}
-    <p class="font-semibold text-brand-700">Wine picks:</p>
-    <ul class="mt-1 space-y-1">
-      {{range .Wine.Preview}}
-      <li class="flex flex-wrap items-baseline gap-x-2">
-        <span class="font-medium text-brand-800">{{.Name}}</span>
-        {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
-        {{if .Quantity}}<span class="text-brand-600">{{.Quantity}}</span>{{end}}
-      </li>
-      {{end}}
-    </ul>
-    {{end}}
-  </div>
-  {{end}}
-{{end}}
-
 {{define "shopping_recipe_wine_details"}}
-<div id="{{.Wine.DetailID}}" class="shopping-wine-details pt-2">
-  {{template "shopping_recipe_wine_details_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_wine_details_oob"}}
-<div id="{{.Wine.DetailID}}" hx-swap-oob="outerHTML" class="shopping-wine-details pt-2">
-  {{template "shopping_recipe_wine_details_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_wine_details_content"}}
-  {{if .Wine.Recommendation}}
+  {{if .WineRecommendation}}
   <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
-    {{if .Wine.Recommendation.Wines}}
+    {{if .WineRecommendation.Wines}}
     <p class="font-semibold text-brand-700">Wine picks:</p>
     <ul class="mt-1 space-y-1">
-      {{range .Wine.Recommendation.Wines}}
+      {{range .WineRecommendation.Wines}}
       <li class="flex flex-wrap items-baseline gap-x-2">
         <span class="font-medium text-brand-800">{{.Name}}</span>
         {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
@@ -334,24 +279,12 @@
       {{end}}
     </ul>
     {{end}}
-    {{if .Wine.Recommendation.Commentary}}
-    <p class="{{if .Wine.Recommendation.Wines}}mt-2{{end}}">
+    {{if .WineRecommendation.Commentary}}
+    <p class="{{if .WineRecommendation.Wines}}mt-2{{end}}">
       <span class="font-semibold text-brand-700">Why it works:</span>
-      <span class="whitespace-pre-line">{{.Wine.Recommendation.Commentary}}</span>
+      <span class="whitespace-pre-line">{{.WineRecommendation.Commentary}}</span>
     </p>
     {{end}}
   </div>
   {{end}}
-{{end}}
-
-{{define "shopping_recipe_wine_action_response"}}
-{{template "shopping_recipe_wine_action" .}}
-{{template "shopping_recipe_wine_preview_oob" .}}
-{{template "shopping_recipe_wine_details_oob" .}}
-{{end}}
-
-{{define "shopping_recipe_wine_details_response"}}
-{{template "shopping_recipe_wine_action_oob" .}}
-{{template "shopping_recipe_wine_preview_oob" .}}
-{{template "shopping_recipe_wine_details" .}}
 {{end}}
