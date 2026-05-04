@@ -122,9 +122,7 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 	mux.HandleFunc("GET /recipe/{hash}/image", s.handleRecipeImage)
-	mux.HandleFunc("POST /recipe/{hash}/image", s.handleGenerateRecipeImage)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
-	mux.HandleFunc("POST /recipe/{hash}/wine", s.handleWine)
 	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
 	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
 	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
@@ -147,7 +145,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "recipe not found", http.StatusNotFound)
 		return
 	}
-	_, err = s.clerk.GetUserIDFromRequest(r)
+	userID, err := s.clerk.GetUserIDFromRequest(r)
 	signedIn := !errors.Is(err, auth.ErrNoSession)
 	var critiqueScore *int
 	feedback := feedback.Feedback{}
@@ -237,6 +235,19 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "recipe not found or expired", http.StatusInternalServerError)
 		return
 	}
+	if signedIn && userID != "" {
+		selection, selErr := s.loadRecipeSelection(ctx, userID, recipe.OriginHash)
+		if selErr != nil {
+			slog.ErrorContext(ctx, "failed to load recipe selection for single recipe render", "hash", recipe.OriginHash, "error", selErr)
+			http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
+			return
+		}
+		s.mergeParamsWithSelection(ctx, p, selection, []ai.Recipe{*recipe})
+		// this is a bit wierd can we update recipe some other way  https://github.com/paulgmiller/careme/issues/542
+		recipeForSavedState := []ai.Recipe{*recipe}
+		applySavedToRecipes(recipeForSavedState, p)
+		recipe = &recipeForSavedState[0]
+	}
 
 	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
 	FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
@@ -283,62 +294,6 @@ func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.ErrorContext(ctx, "failed to stream cached recipe image", "hash", hash, "error", err)
 	}
-}
-
-func (s *server) handleGenerateRecipeImage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	if !isHTMXRequest(r) {
-		http.Error(w, "htmx request required", http.StatusBadRequest)
-		return
-	}
-	hash := strings.TrimSpace(r.PathValue("hash"))
-	if hash == "" {
-		http.Error(w, "missing recipe hash", http.StatusBadRequest)
-		return
-	}
-	if _, err := s.clerk.GetUserIDFromRequest(r); err != nil {
-		redirectToSignIn(w, r, http.StatusUnauthorized)
-		return
-	}
-
-	hasRecipeImage, err := s.RecipeImageExists(ctx, hash)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", hash, "error", err)
-		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
-		return
-	}
-	if !hasRecipeImage {
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			if errors.Is(err, cache.ErrNotFound) {
-				http.Error(w, "recipe not found", http.StatusNotFound)
-				return
-			}
-			slog.ErrorContext(ctx, "failed to load recipe for image generation", "hash", hash, "error", err)
-			http.Error(w, "failed to load recipe", http.StatusInternalServerError)
-			return
-		}
-
-		// this like wine is slow should we kick it into a go routine and poll? https://htmx.org/docs/#load_polling same for wine?
-		s.wg.Add(1)
-		defer s.wg.Done()
-		generationCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
-		defer cancel()
-		image, err := s.generator.GenerateRecipeImage(generationCtx, *recipe)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to generate recipe image", "hash", hash, "error", err)
-			http.Error(w, "failed to generate recipe image", http.StatusInternalServerError)
-			return
-		}
-		if err := s.SaveRecipeImage(generationCtx, hash, image); err != nil {
-			slog.ErrorContext(ctx, "failed to save recipe image", "hash", hash, "error", err)
-			http.Error(w, "failed to cache recipe image", http.StatusInternalServerError)
-			return
-		}
-		hasRecipeImage = true
-	}
-
-	FormatRecipeImageActionResponseHTML(hash, true, hasRecipeImage, w)
 }
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
@@ -422,81 +377,6 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	FormatRecipeThreadHTML(thread, true, answer.ResponseID, w)
-}
-
-func (s *server) handleWine(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	if !isHTMXRequest(r) {
-		http.Error(w, "htmx request required", http.StatusBadRequest)
-		return
-	}
-	renderShoppingVariant := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("view")), "shopping")
-	shoppingSlot := strings.TrimSpace(r.URL.Query().Get("slot"))
-	hash := strings.TrimSpace(r.PathValue("hash"))
-	if hash == "" {
-		http.Error(w, "missing recipe hash", http.StatusBadRequest)
-		return
-	}
-	if _, err := s.clerk.GetUserIDFromRequest(r); err != nil {
-		redirectToSignIn(w, r, http.StatusUnauthorized)
-		return
-	}
-	if selection, err := s.WineFromCache(ctx, hash); err == nil {
-		if selection == nil {
-			http.Error(w, "failed to load wine recommendation", http.StatusInternalServerError)
-			return
-		}
-		if renderShoppingVariant {
-			FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
-		} else {
-			FormatRecipeWineHTML(hash, selection, w)
-		}
-		return
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
-		http.Error(w, "failed to load wine pick", http.StatusInternalServerError)
-		return // this means there is garbage in the cache dont generate juar replace
-	}
-
-	recipe, err := s.SingleFromCache(ctx, hash)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			http.Error(w, "recipe not found", http.StatusNotFound)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load recipe for wine pick", "hash", hash, "error", err)
-		http.Error(w, "failed to load recipe", http.StatusInternalServerError)
-		return
-	}
-
-	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for wine pick", "hash", recipe.OriginHash, "error", err)
-		http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
-	defer cancel()
-	selection, err := s.generator.PickAWine(ctx, p.Location.ID, *recipe, p.Date)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to pick wine", "hash", hash, "error", err)
-		http.Error(w, "failed to pick wine", http.StatusInternalServerError)
-		return
-	}
-	if selection == nil {
-		http.Error(w, "failed to pick wine", http.StatusInternalServerError)
-		return
-	}
-	if err := s.SaveWine(ctx, hash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to save wine recommendation", "hash", hash, "error", err)
-	}
-
-	if renderShoppingVariant {
-		FormatShoppingRecipeWineHTML(hash, shoppingSlot, selection, w)
-		return
-	}
-	FormatRecipeWineHTML(hash, selection, w)
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -649,8 +529,8 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var response bytes.Buffer
-	if _, err := fmt.Fprint(&response, `<span class="text-xs font-medium text-action-green-700">Saved to kitchen</span>`); err != nil {
-		slog.ErrorContext(ctx, "failed to build save response", "hash", recipeHash, "error", err)
+	if err := RenderShoppingRecipeActionHTML(recipeHash, selectionHash, true, true, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render save action response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -659,6 +539,8 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
+
+	s.startSavedRecipeBackgroundGeneration(ctx, recipeHash, *recipe, p.Location.ID, p.Date)
 
 	setTextContent(w)
 	_, err = w.Write(response.Bytes())
@@ -727,8 +609,8 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var response bytes.Buffer
-	if _, err := fmt.Fprint(&response, `<span class="text-xs font-medium text-action-red-700">Removed from kitchen</span>`); err != nil {
-		slog.ErrorContext(ctx, "failed to build dismiss response", "hash", recipeHash, "error", err)
+	if err := RenderShoppingRecipeActionHTML(recipeHash, selectionHash, true, false, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render dismiss action response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -743,6 +625,59 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
+	}
+}
+
+func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, locationID string, date time.Time) {
+	s.wg.Go(func() {
+		bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+		defer cancel()
+		s.ensureSavedRecipeWine(bgctx, recipeHash, locationID, recipe, date)
+	})
+	s.wg.Go(func() {
+		bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+		defer cancel()
+		s.ensureSavedRecipeImage(bgctx, recipeHash, recipe)
+	})
+}
+
+func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, locationID string, recipe ai.Recipe, date time.Time) {
+	exists, err := s.WineExists(ctx, recipeHash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check cached wine selection after save", "hash", recipeHash, "error", err)
+		return
+	}
+	if exists {
+		return
+	}
+
+	selection, err := s.generator.PickAWine(ctx, locationID, recipe, date)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
+		return
+	}
+	if err := s.SaveWine(ctx, recipeHash, selection); err != nil {
+		slog.ErrorContext(ctx, "failed to save wine recommendation after save", "hash", recipeHash, "error", err)
+	}
+}
+
+func (s *server) ensureSavedRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe) {
+	exists, err := s.RecipeImageExists(ctx, recipeHash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check cached recipe image after save", "hash", recipeHash, "error", err)
+		return
+	}
+	if exists {
+		return
+	}
+
+	image, err := s.generator.GenerateRecipeImage(ctx, recipe)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to generate recipe image after save", "hash", recipeHash, "error", err)
+		return
+	}
+	if err := s.SaveRecipeImage(ctx, recipeHash, image); err != nil {
+		slog.ErrorContext(ctx, "failed to save recipe image after save", "hash", recipeHash, "error", err)
 	}
 }
 

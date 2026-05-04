@@ -49,7 +49,7 @@
             <header class="space-y-2">
               <h2 class="text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
               <p class="text-sm text-gray-500">{{.Recipe.Description}}</p>
-              {{template "recipe_image_action" .}}
+              {{template "recipe_save_action" .}}
             </header>
 
             {{template "recipe_image_panel" .}}
@@ -299,27 +299,36 @@
     </p>
     {{end}}
   </div>
-  {{else}}
-  {{if .ServerSignedIn}}
-  <button type="button"
-          id="wine-picker-button"
-          hx-post="/recipe/{{.RecipeHash}}/wine"
-          hx-target="#wine-recommendation"
-          hx-swap="outerHTML"
-          hx-disabled-elt="#wine-picker-button"
-          hx-on::before-request="this.textContent='Choosing 🍷 ...';"
-          hx-on::response-error="this.textContent='wine failure 😞';"
-          class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    🍷 Choose a wine
-  </button>
-  {{else}}
-  <a href="{{SignInPath (print "/recipe/" .RecipeHash)}}"
-     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    Sign in for wine picks
-  </a>
-  {{end}}
   {{end}}
 </div>
+{{end}}
+
+{{define "recipe_save_action"}}
+{{if and .ServerSignedIn .OriginHash}}
+<div class="recipe-save-action pt-2">
+  {{if .Recipe.Saved}}
+  <button type="button"
+          hx-post="/recipe/{{.RecipeHash}}/dismiss"
+          hx-vals='{"h":"{{.OriginHash}}"}'
+          hx-target="closest .recipe-save-action"
+          hx-swap="outerHTML"
+          hx-disabled-elt="this"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 focus:outline-none focus:ring-2 focus:ring-action-red-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
+    Dismiss
+  </button>
+  {{else}}
+  <button type="button"
+          hx-post="/recipe/{{.RecipeHash}}/save"
+          hx-vals='{"h":"{{.OriginHash}}"}'
+          hx-target="closest .recipe-save-action"
+          hx-swap="outerHTML"
+          hx-disabled-elt="this"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
+    Save
+  </button>
+  {{end}}
+</div>
+{{end}}
 {{end}}
 
 {{define "recipe_image_panel"}}
@@ -331,37 +340,4 @@
        loading="lazy" />
   {{end}}
 </div>
-{{end}}
-
-{{define "recipe_image_action"}}
-<div id="recipe-image-action">
-  {{if .RecipeImage.HasImage}}
-  {{else if .ServerSignedIn}}
-  <button type="button"
-          id="recipe-image-generate-button"
-          hx-post="/recipe/{{.RecipeHash}}/image"
-          hx-target="#recipe-image-action"
-          hx-swap="outerHTML"
-          hx-disabled-elt="#recipe-image-generate-button"
-          class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-brand-400">
-    <span class="htmx-indicator mr-2" aria-hidden="true">
-      <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-      </svg>
-    </span>
-    <span>See plated dish</span>
-  </button>
-  {{else}}
-  <a href="{{SignInPath (print "/recipe/" .RecipeHash)}}"
-     class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-    Sign in to see plated dish
-  </a>
-  {{end}}
-</div>
-{{end}}
-
-{{define "recipe_image_action_response"}}
-{{template "recipe_image_action" .}}
-{{template "recipe_image_panel" .}}
 {{end}}

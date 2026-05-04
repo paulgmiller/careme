@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -846,204 +847,6 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	}
 }
 
-func TestHandleWine_RejectsNonHTMXRequest(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t, withTestCache(cacheStore))
-
-	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/wine", nil)
-	req.SetPathValue("hash", "hash")
-	rr := httptest.NewRecorder()
-
-	s.handleWine(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
-	}
-}
-
-func TestHandleWine_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
-
-	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/wine?view=shopping", nil)
-	req.Header.Set("HX-Request", "true")
-	req.SetPathValue("hash", "hash")
-	rr := httptest.NewRecorder()
-
-	s.handleWine(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
-	}
-	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/wine?view=shopping"); got != want {
-		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
-	}
-}
-
-func TestHandleWine_HTMXReturnsWineFragment(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	g := &captureQuestionGenerator{}
-	s := newTestServer(t,
-		withTestCache(cacheStore),
-		withTestGenerator(g),
-	)
-
-	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Wine Test Store"}, time.Now())
-	originHash := p.Hash()
-	if err := s.SaveParams(t.Context(), p); err != nil {
-		t.Fatalf("failed to save params: %v", err)
-	}
-	recipe := ai.Recipe{
-		OriginHash:   originHash,
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		Instructions: []string{"Roast until done."},
-		WineStyles:   []string{"pinot noir"},
-	}
-	recipeHash := recipe.ComputeHash()
-	saveRecipesForOrigin(t, s, originHash, recipe)
-
-	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine", nil)
-	req.Header.Set("HX-Request", "true")
-	req.SetPathValue("hash", recipeHash)
-	rr := httptest.NewRecorder()
-
-	s.handleWine(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr.Code, rr.Body.String())
-	}
-	body := rr.Body.String()
-	if !strings.Contains(body, `id="wine-recommendation"`) {
-		t.Fatalf("expected wine fragment container in response, got body: %s", body)
-	}
-	if !strings.Contains(body, "Try a chilled sauvignon blanc.") {
-		t.Fatalf("expected wine recommendation in response, got body: %s", body)
-	}
-	if got, want := g.lastWinePick.recipeTitle, "Roast Chicken"; got != want {
-		t.Fatalf("expected recipe title %q, got %q", want, got)
-	}
-	if got, want := g.lastWinePick.date.Format("2006-01-02"), p.Date.Format("2006-01-02"); got != want {
-		t.Fatalf("expected wine date %q, got %q", want, got)
-	}
-	if got, want := g.winePickCalls, 1; got != want {
-		t.Fatalf("expected PickAWine call count %d, got %d", want, got)
-	}
-}
-
-func TestHandleWine_ShoppingVariantReturnsShoppingFragment(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	g := &captureQuestionGenerator{}
-	s := newTestServer(t,
-		withTestCache(cacheStore),
-		withTestGenerator(g),
-	)
-
-	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Wine Test Store"}, time.Now())
-	originHash := p.Hash()
-	if err := s.SaveParams(t.Context(), p); err != nil {
-		t.Fatalf("failed to save params: %v", err)
-	}
-	recipe := ai.Recipe{
-		OriginHash:   originHash,
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		Instructions: []string{"Roast until done."},
-		WineStyles:   []string{"pinot noir"},
-	}
-	recipeHash := recipe.ComputeHash()
-	saveRecipesForOrigin(t, s, originHash, recipe)
-
-	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine?view=shopping", nil)
-	req.Header.Set("HX-Request", "true")
-	req.SetPathValue("hash", recipeHash)
-	rr := httptest.NewRecorder()
-
-	s.handleWine(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr.Code, rr.Body.String())
-	}
-	body := rr.Body.String()
-	actionID, _ := shoppingWineDOMIDs(recipeHash)
-	previewID := shoppingWinePreviewDOMID(recipeHash)
-	detailContainerID, _ := shoppingWineDetailDOMIDs(recipeHash)
-	if !strings.Contains(body, `id="`+actionID+`"`) {
-		t.Fatalf("expected shopping wine fragment container in response, got body: %s", body)
-	}
-	if !strings.Contains(body, `id="`+previewID+`"`) || !strings.Contains(body, `id="`+detailContainerID+`"`) || !strings.Contains(body, `hx-swap-oob="outerHTML"`) {
-		t.Fatalf("expected shopping wine response to update preview and details containers out-of-band, got body: %s", body)
-	}
-	if !strings.Contains(body, "Try a chilled sauvignon blanc.") {
-		t.Fatalf("expected wine recommendation in response, got body: %s", body)
-	}
-}
-
-func TestHandleWine_UsesCachedWineRecommendation(t *testing.T) {
-	cacheStore := cache.NewInMemoryCache()
-	g1 := &captureQuestionGenerator{wineRecommendation: "Try a crisp riesling."}
-	s1 := newTestServer(t,
-		withTestCache(cacheStore),
-		withTestGenerator(g1),
-	)
-
-	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Wine Test Store"}, time.Now())
-	originHash := p.Hash()
-	if err := s1.SaveParams(t.Context(), p); err != nil {
-		t.Fatalf("failed to save params: %v", err)
-	}
-	recipe := ai.Recipe{
-		OriginHash:   originHash,
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		Instructions: []string{"Roast until done."},
-		WineStyles:   []string{"pinot noir"},
-	}
-	recipeHash := recipe.ComputeHash()
-	saveRecipesForOrigin(t, s1, originHash, recipe)
-
-	req1 := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine", nil)
-	req1.Header.Set("HX-Request", "true")
-	req1.SetPathValue("hash", recipeHash)
-	rr1 := httptest.NewRecorder()
-	s1.handleWine(rr1, req1)
-
-	if rr1.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr1.Code, rr1.Body.String())
-	}
-	if !strings.Contains(rr1.Body.String(), "Try a crisp riesling.") {
-		t.Fatalf("expected initial recommendation in response, got body: %s", rr1.Body.String())
-	}
-	if got, want := g1.winePickCalls, 1; got != want {
-		t.Fatalf("expected PickAWine call count %d, got %d", want, got)
-	}
-
-	g2 := &captureQuestionGenerator{panicOnWine: true}
-	s2 := newTestServer(t,
-		withTestCache(cacheStore),
-		withTestGenerator(g2),
-	)
-
-	req2 := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/wine", nil)
-	req2.Header.Set("HX-Request", "true")
-	req2.SetPathValue("hash", recipeHash)
-	rr2 := httptest.NewRecorder()
-	s2.handleWine(rr2, req2)
-
-	if rr2.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr2.Code, rr2.Body.String())
-	}
-	if !strings.Contains(rr2.Body.String(), "Try a crisp riesling.") {
-		t.Fatalf("expected cached recommendation in response, got body: %s", rr2.Body.String())
-	}
-	if got, want := g2.winePickCalls, 0; got != want {
-		t.Fatalf("expected PickAWine call count %d, got %d", want, got)
-	}
-}
-
 func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	g := &captureQuestionGenerator{panicOnImage: true}
@@ -1084,75 +887,6 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	}
 }
 
-func TestHandleGenerateRecipeImage_GeneratesAndCachesOnMiss(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	g := &captureQuestionGenerator{imageBody: []byte("generated-image-bytes")}
-	s := newTestServer(t,
-		withTestCache(cacheStore),
-		withTestGenerator(g),
-	)
-
-	recipe := ai.Recipe{
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		Instructions: []string{"Roast until done."},
-	}
-	recipeHash := recipe.ComputeHash()
-	saveRecipesForOrigin(t, s, "origin-hash", recipe)
-
-	req1 := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/image", nil)
-	req1.Header.Set("HX-Request", "true")
-	req1.SetPathValue("hash", recipeHash)
-	rr1 := httptest.NewRecorder()
-
-	s.handleGenerateRecipeImage(rr1, req1)
-
-	if rr1.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr1.Code, rr1.Body.String())
-	}
-	body := rr1.Body.String()
-	if !strings.Contains(body, `id="recipe-image-action"`) {
-		t.Fatalf("expected recipe image action fragment, got body: %s", body)
-	}
-	if !strings.Contains(body, `id="recipe-image-panel"`) || !strings.Contains(body, `hx-swap-oob="outerHTML"`) {
-		t.Fatalf("expected recipe image panel out-of-band update, got body: %s", body)
-	}
-	if !strings.Contains(body, "/recipe/"+recipeHash+"/image") {
-		t.Fatalf("expected recipe image URL in response, got body: %s", body)
-	}
-	if got, want := g.imageCalls, 1; got != want {
-		t.Fatalf("expected GenerateRecipeImage call count %d, got %d", want, got)
-	}
-
-	req2 := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/image", nil)
-	req2.Header.Set("HX-Request", "true")
-	req2.SetPathValue("hash", recipeHash)
-	rr2 := httptest.NewRecorder()
-
-	s.handleGenerateRecipeImage(rr2, req2)
-
-	if rr2.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr2.Code, rr2.Body.String())
-	}
-	if got, want := g.imageCalls, 1; got != want {
-		t.Fatalf("expected cached image to avoid extra generation; got %d calls", got)
-	}
-
-	req3 := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash+"/image", nil)
-	req3.SetPathValue("hash", recipeHash)
-	rr3 := httptest.NewRecorder()
-
-	s.handleRecipeImage(rr3, req3)
-
-	if rr3.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d, body: %s", http.StatusOK, rr3.Code, rr3.Body.String())
-	}
-	if got := rr3.Body.String(); got != "generated-image-bytes" {
-		t.Fatalf("expected cached generated image body, got %q", got)
-	}
-}
-
 func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -1188,12 +922,13 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	s.handleSaveRecipe(rr, req)
+	s.Wait()
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Saved to kitchen") {
-		t.Fatalf("expected success response, got body: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), `Dismiss`) || !strings.Contains(rr.Body.String(), `/dismiss"`) {
+		t.Fatalf("expected dismiss action replacement, got body: %s", rr.Body.String())
 	}
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
@@ -1273,6 +1008,7 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	s.handleSaveRecipe(rr, req)
+	s.Wait()
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
@@ -1291,6 +1027,59 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	if !staleSelection.Empty() {
 		t.Fatalf("expected no selection under stale origin hash, got %#v", staleSelection)
 	}
+}
+
+func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	g := &captureQuestionGenerator{
+		wineRecommendation: "Bright enough for dinner.",
+		imageBody:          []byte("saved-image-bytes"),
+	}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+		withTestGenerator(g),
+	)
+
+	recipe := ai.Recipe{
+		Title:       "Background Save",
+		Description: "Recipe to save",
+	}
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	originHash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	recipeHash := recipe.ComputeHash()
+	saveRecipesForOrigin(t, s, originHash, recipe)
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, originHash))
+
+	form := url.Values{"h": {originHash}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSaveRecipe(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.Contains(t, rr.Body.String(), `Dismiss`)
+
+	s.Wait()
+	assert.Equal(t, 1, g.winePickCalls)
+	assert.Equal(t, 1, g.imageCalls)
+
+	wine, err := s.WineFromCache(t.Context(), recipeHash)
+	require.NoError(t, err)
+	require.NotNil(t, wine)
+	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
+
+	imageBody, err := s.RecipeImageFromCache(t.Context(), recipeHash)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, imageBody.Close()) }()
+	gotImage, err := io.ReadAll(imageBody)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("saved-image-bytes"), gotImage)
 }
 
 func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
@@ -1355,8 +1144,8 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Removed from kitchen") {
-		t.Fatalf("expected dismiss response, got body: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), `Save`) || !strings.Contains(rr.Body.String(), `/save"`) {
+		t.Fatalf("expected save action replacement, got body: %s", rr.Body.String())
 	}
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
