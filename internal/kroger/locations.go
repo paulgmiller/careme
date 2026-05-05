@@ -20,6 +20,7 @@ func NewLocationBackendFromConfig(cfg *config.Config, httpClient *http.Client) (
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
+	httpClient = withProductRetries(httpClient)
 	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
 	locationsClient, err := krogerlocations.NewClientWithResponses("https://api.kroger.com",
 		krogerlocations.WithHTTPClient(httpClient),
