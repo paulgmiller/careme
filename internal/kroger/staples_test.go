@@ -1,10 +1,12 @@
 package kroger
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"careme/internal/kroger/products"
@@ -79,6 +81,52 @@ func TestParseProductGetResponse_IgnoresUnusedNutritionInformationArray(t *testi
 	}
 	if parsed.JSON200 == nil || parsed.JSON200.Data == nil {
 		t.Fatalf("expected JSON200 payload, got %+v", parsed.JSON200)
+	}
+}
+
+func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
+	var calls atomic.Int32
+	baseClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		call := calls.Add(1)
+		if call < 3 {
+			return jsonResponse(req, http.StatusServiceUnavailable, `{"errors":{"code":"PRODUCT-4109-500","reason":"Service Unavailable"}}`), nil
+		}
+		return jsonResponse(req, http.StatusOK, `{"data":[]}`), nil
+	})}
+
+	client, err := products.NewClientWithResponses(
+		"https://kroger.test",
+		products.WithHTTPClient(withRetries(baseClient)),
+	)
+	if err != nil {
+		t.Fatalf("NewClientWithResponses returned error: %v", err)
+	}
+
+	got, err := searchIngredients(t.Context(), client, "70500874", "pork", []string{"*"}, false, 0)
+	if err != nil {
+		t.Fatalf("searchIngredients returned error after transient 503s: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty ingredient list from test payload, got %+v", got)
+	}
+	if gotCalls := calls.Load(); gotCalls != 3 {
+		t.Fatalf("expected 2 retries before success, got %d calls", gotCalls)
+	}
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
+func jsonResponse(req *http.Request, statusCode int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: statusCode,
+		Status:     http.StatusText(statusCode),
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "Retry-After": []string{"0"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Request:    req,
 	}
 }
 
