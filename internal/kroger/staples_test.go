@@ -96,7 +96,7 @@ func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
 
 	client, err := products.NewClientWithResponses(
 		"https://kroger.test",
-		products.WithHTTPClient(withProductRetries(baseClient)),
+		products.WithHTTPClient(withRetries(baseClient)),
 	)
 	if err != nil {
 		t.Fatalf("NewClientWithResponses returned error: %v", err)

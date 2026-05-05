@@ -104,11 +104,11 @@ type SlogPrintf struct{}
 
 func (l SlogPrintf) Printf(format string, args ...interface{}) {
 	// missing context sadly so no operation id
-	slog.With().Info(fmt.Sprintf(format, args...), "source", "retryablehttp")
+	slog.Info(fmt.Sprintf(format, args...), "source", "retryablehttp")
 }
 
 // similiar but less customiszed that bright data.
-func withProductRetries(baseClient *http.Client) *http.Client {
+func withRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
 	retryClient.Logger = SlogPrintf{}
@@ -132,7 +132,7 @@ func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	httpClient = withProductRetries(httpClient)
+	httpClient = withRetries(httpClient)
 	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
 	productsClient, err := products.NewClientWithResponses("https://api.kroger.com",
 		products.WithHTTPClient(httpClient),
