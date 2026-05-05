@@ -206,19 +206,37 @@ func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, write
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_finalize_controls_response", data)
 }
 
-func RenderShoppingRecipeActionHTML(recipeHash, shoppingListHash string, signedIn, saved bool, writer io.Writer) error {
-	data := struct {
-		Hash             string
-		ShoppingListHash string
-		ServerSignedIn   bool
-		Saved            bool
-	}{
-		Hash:             recipeHash,
-		ShoppingListHash: shoppingListHash,
-		ServerSignedIn:   signedIn,
-		Saved:            saved,
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, p *generatorParams, shoppingListHash string, signedIn bool, wineRecommendation *ai.WineSelection, writer io.Writer) error {
+	data := shoppingRecipeViewForCard(recipe, p, shoppingListHash, signedIn, wineRecommendation)
+	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
+}
+
+func shoppingRecipeViewForCard(recipe ai.Recipe, p *generatorParams, shoppingListHash string, signedIn bool, wineRecommendation *ai.WineSelection) shoppingRecipeView {
+	recipeHash := recipe.ComputeHash()
+	var dismissed bool
+	if p != nil {
+		recipe.Saved = selectedRecipe(recipeHash, p.Saved)
+		dismissed = selectedRecipe(recipeHash, p.Dismissed)
 	}
-	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_save_action", data)
+
+	return shoppingRecipeView{
+		Recipe:             recipe,
+		Hash:               recipeHash,
+		ShoppingListHash:   shoppingListHash,
+		ServerSignedIn:     signedIn,
+		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		Dismissed:          dismissed,
+		WineRecommendation: wineRecommendation,
+	}
+}
+
+func selectedRecipe(recipeHash string, recipes []ai.Recipe) bool {
+	for _, recipe := range recipes {
+		if recipe.ComputeHash() == recipeHash {
+			return true
+		}
+	}
+	return false
 }
 
 func latestThreadResponseID(thread []RecipeThreadEntry) string {

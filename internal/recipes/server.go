@@ -534,9 +534,14 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cardRecipe := *recipe
+	if selected, ok := recipeFromSelectionParams(recipeHash, p); ok {
+		cardRecipe = selected
+	}
+
 	var response bytes.Buffer
-	if err := RenderShoppingRecipeActionHTML(recipeHash, selectionHash, true, true, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render save action response", "hash", recipeHash, "error", err)
+	if err := RenderShoppingRecipeCardHTML(cardRecipe, p, selectionHash, true, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render save card response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -614,9 +619,24 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cardRecipe, ok := recipeFromSelectionParams(recipeHash, p)
+	if !ok {
+		recipe, recipeErr := s.SingleFromCache(ctx, recipeHash)
+		if recipeErr != nil {
+			if errors.Is(recipeErr, cache.ErrNotFound) {
+				http.Error(w, "recipe not found", http.StatusNotFound)
+				return
+			}
+			slog.ErrorContext(ctx, "failed to load recipe for dismiss response", "hash", recipeHash, "error", recipeErr)
+			http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
+			return
+		}
+		cardRecipe = *recipe
+	}
+
 	var response bytes.Buffer
-	if err := RenderShoppingRecipeActionHTML(recipeHash, selectionHash, true, false, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render dismiss action response", "hash", recipeHash, "error", err)
+	if err := RenderShoppingRecipeCardHTML(cardRecipe, p, selectionHash, true, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render dismiss card response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -632,6 +652,34 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
+}
+
+func recipeFromSelectionParams(recipeHash string, p *generatorParams) (ai.Recipe, bool) {
+	if p == nil {
+		return ai.Recipe{}, false
+	}
+	for _, recipe := range p.Saved {
+		if recipe.ComputeHash() == recipeHash {
+			return recipe, true
+		}
+	}
+	for _, recipe := range p.Dismissed {
+		if recipe.ComputeHash() == recipeHash {
+			return recipe, true
+		}
+	}
+	return ai.Recipe{}, false
+}
+
+func (s *server) wineRecommendationForCard(ctx context.Context, recipeHash string) *ai.WineSelection {
+	wineRecommendation, err := s.WineFromCache(ctx, recipeHash)
+	if err != nil {
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to load cached wine recommendation for recipe card render", "recipe_hash", recipeHash, "error", err)
+		}
+		return nil
+	}
+	return wineRecommendation
 }
 
 func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, locationID string, date time.Time) {

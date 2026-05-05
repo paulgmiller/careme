@@ -49,15 +49,15 @@ func TestFormatShoppingListHTML_ContainsSaveAndDetailsButtons(t *testing.T) {
 	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/save"`) {
 		t.Error("HTML should contain HTMX save action")
 	}
-	if strings.Contains(html, `/dismiss"`) {
-		t.Error("HTML should not contain initial HTMX dismiss action")
+	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/dismiss"`) {
+		t.Error("HTML should contain HTMX dismiss action")
 	}
 
 	if !strings.Contains(html, `Save`) {
 		t.Error("HTML should contain Save label text")
 	}
-	if strings.Contains(html, `Dismiss`) {
-		t.Error("HTML should not contain initial Dismiss label text")
+	if !strings.Contains(html, `Dismiss`) {
+		t.Error("HTML should contain Dismiss label text")
 	}
 	if !strings.Contains(html, `Details`) {
 		t.Error("HTML should contain Details button text")
@@ -131,8 +131,17 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	if !strings.Contains(html, `/dismiss"`) {
 		t.Error("saved recipe should show a dismiss action")
 	}
-	if strings.Contains(html, `<details open`) {
+	if strings.Contains(html, `/save"`) {
+		t.Error("saved recipe should not show an active save action")
+	}
+	if !strings.Contains(html, `Saved`) {
+		t.Error("saved recipe should show saved state")
+	}
+	if strings.Contains(html, `<details class="space-y-4" open`) {
 		t.Error("saved recipe details should start collapsed")
+	}
+	if !strings.Contains(html, `<details open>`) {
+		t.Error("shopping list should start expanded when a recipe is saved")
 	}
 	if strings.Contains(html, `id="finalize-help"`) {
 		t.Error("HTML should not render finalize helper text when button is enabled")
