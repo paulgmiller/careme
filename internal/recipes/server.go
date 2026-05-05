@@ -77,15 +77,20 @@ type locServer interface {
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
-	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 }
 
 type ExtGenerator = generator
 
+// should probably be in ai package?
+type ImageGen interface {
+	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
+}
+
 type server struct {
 	recipeio
 	imageio
+	imagegen     ImageGen
 	statusReader statusReader
 	cfg          *config.Config
 	storage      *users.Storage
@@ -102,10 +107,11 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
 	return &server{
 		recipeio:     IO(c),
 		imageio:      imageio{Cache: imageCache},
+		imagegen:     imagegen,
 		statusReader: StatusStore(c),
 		cfg:          cfg,
 		storage:      storage,
@@ -671,7 +677,7 @@ func (s *server) ensureSavedRecipeImage(ctx context.Context, recipeHash string, 
 		return
 	}
 
-	image, err := s.generator.GenerateRecipeImage(ctx, recipe)
+	image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to generate recipe image after save", "hash", recipeHash, "error", err)
 		return

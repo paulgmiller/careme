@@ -29,6 +29,7 @@ import (
 	"careme/internal/watchdog"
 
 	cachepkg "careme/internal/cache"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -64,14 +65,17 @@ func runServer(cfg *config.Config, addr string) error {
 	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 
 	var generator recipes.ExtGenerator
+	var imageGen recipes.ImageGen
 	var waitFns []func()
 	if cfg.Mocks.Enable {
 		generator = recipes.NewMockGenerator()
+		imageGen = recipes.NewMockGenerator()
 	} else {
 		mc := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(mc)
 
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient)
+		imageGen = aiclient
 		ro.add(aiclient)
 		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
 		if err != nil {
@@ -104,7 +108,7 @@ func runServer(cfg *config.Config, addr string) error {
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
 	sitemapHandler.Register(infraRoutes)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
 	waitFns = append([]func(){recipeHandler.Wait}, waitFns...)
 
