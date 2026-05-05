@@ -656,7 +656,7 @@ func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, location
 	if exists {
 		return
 	}
-
+	slog.InfoContext(ctx, "generating wine picks on save", "hash", recipeHash)
 	selection, err := s.generator.PickAWine(ctx, locationID, recipe, date)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
@@ -676,7 +676,7 @@ func (s *server) ensureSavedRecipeImage(ctx context.Context, recipeHash string, 
 	if exists {
 		return
 	}
-
+	slog.InfoContext(ctx, "generating new image on save", "hash", recipeHash)
 	image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to generate recipe image after save", "hash", recipeHash, "error", err)
