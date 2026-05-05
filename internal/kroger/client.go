@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,6 +14,8 @@ import (
 
 	"careme/internal/config"
 	"careme/internal/kroger/products"
+
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 //go:generate go generate ./products ./locations
@@ -95,6 +98,23 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 	return m.token, nil
 }
 
+// this would be nice but it logs all retries as errors which sets off alerts.
+// var _ retryablehttp.LeveledLogger = slog.Default()
+type SlogPrintf struct{}
+
+func (l SlogPrintf) Printf(format string, args ...interface{}) {
+	// missing context sadly so no operation id
+	slog.Info(fmt.Sprintf(format, args...), "source", "retryablehttp")
+}
+
+// similiar but less customiszed that bright data.
+func withRetries(baseClient *http.Client) *http.Client {
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient = baseClient
+	retryClient.Logger = SlogPrintf{}
+	return retryClient.StandardClient()
+}
+
 func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) func(context.Context, *http.Request) error {
 	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient)
 
@@ -112,6 +132,7 @@ func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
+	httpClient = withRetries(httpClient)
 	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
 	productsClient, err := products.NewClientWithResponses("https://api.kroger.com",
 		products.WithHTTPClient(httpClient),

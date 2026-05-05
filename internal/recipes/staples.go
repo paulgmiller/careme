@@ -267,7 +267,8 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
 	}
 
-	// we should not use brightdata for koger
+	// Kroger is a public API integration, not a scraper. Keep it off Bright Data;
+	// retries are added in the Kroger client.
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	krogerBackend, err := kroger.NewStaplesProvider(cfg, httpClient)
 	if err != nil {
