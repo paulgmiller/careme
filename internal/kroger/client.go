@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -97,14 +98,20 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 	return m.token, nil
 }
 
-func withProductRetries(baseClient *http.Client) *http.Client {
-	if baseClient == nil {
-		baseClient = http.DefaultClient
-	}
+// this would be nice but it logs all retries as errors which sets off alerts.
+// var _ retryablehttp.LeveledLogger = slog.Default()
+type SlogPrintf struct{}
 
+func (l SlogPrintf) Printf(format string, args ...interface{}) {
+	// missing context sadly so no operation id
+	slog.With().Info(fmt.Sprintf(format, args...), "source", "retryablehttp")
+}
+
+// similiar but less customiszed that bright data.
+func withProductRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
-	retryClient.Logger = nil
+	retryClient.Logger = SlogPrintf{}
 	return retryClient.StandardClient()
 }
 
