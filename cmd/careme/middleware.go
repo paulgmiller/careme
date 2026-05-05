@@ -46,7 +46,7 @@ func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	lrw := &loggingResponseWriter{w, http.StatusOK}
 	l.Handler.ServeHTTP(lrw, r)
 
-	slog.InfoContext(r.Context(), "request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "form", r.Form, "duration", time.Since(start))
+	slog.InfoContext(r.Context(), "request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "user_agent", r.UserAgent(), "form", r.Form, "duration", time.Since(start))
 }
 
 type telemetryHandler struct {
@@ -81,6 +81,7 @@ func (t *telemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		attribute.String("http.scheme", scheme),
 		attribute.String("http.host", r.Host),
 		attribute.String("http.target", r.URL.RequestURI()),
+		attribute.String("user_agent.original", r.UserAgent()),
 	)
 	if sessionID, ok := logsetup.SessionIDFromContext(ctx); ok {
 		span.SetAttributes(attribute.String("session.id", sessionID))

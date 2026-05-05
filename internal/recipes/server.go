@@ -226,7 +226,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
-		http.Error(w, "recipe not found or expired", http.StatusInternalServerError)
+		http.Error(w, "no orginin hash", http.StatusInternalServerError)
 		return
 	}
 	// we didn't go back and update old recipes's  with new hash so have to handle that here. Could still backfill
@@ -238,7 +238,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	p, err := s.ParamsFromCache(ctx, recipe.OriginHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load params for hash", "origin hash", recipe.OriginHash, "hash", hash, "error", err)
-		http.Error(w, "recipe not found or expired", http.StatusInternalServerError)
+		http.Error(w, "recipe's origin shpppinglist not found or expired", http.StatusInternalServerError)
 		return
 	}
 	if signedIn && userID != "" {
@@ -863,6 +863,13 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	hashParam := r.URL.Query().Get(queryArgHash)
 	// okay give them a new start time.
 	if startArg == "" {
+		// don't restart clock if we don't have the params. How did we even get here though.
+		_, err := s.ParamsFromCache(ctx, hashParam)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
+			return
+		}
 		redirectToHash(w, r, hashParam, true /*useStart*/)
 		return
 	}
@@ -883,7 +890,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	p, err := s.ParamsFromCache(ctx, hashParam)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
-		http.Error(w, "recipe not found or expired", http.StatusNotFound)
+		http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 		return
 	}
 
@@ -902,6 +909,8 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	s.kickgeneration(ctx, p, currentUser)
 	redirectToHash(w, r, p.Hash(), true /*useStart*/)
 }
+
+var lastlocationHashInvalidation = lo.Must(time.Parse(time.DateOnly, "2026-03-09"))
 
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// The shopping list page is mutated in-place via HTMX (save/dismiss/wine picks).
@@ -991,7 +1000,14 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		var ings []ai.InputIngredient
 		ings, err = s.IngredientsFromCache(ctx, p.LocationHash())
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to grab cached ingredients", "error", err)
+			// getting not fouind here and its driving up error count but why?
+			// shoppinglists from before
+			// commit 3ffe17773d6dd5dae886f0e5c04d0046e743a9b5
+			// Author: Paul Miller <paul.miller@gmail.com>
+			// Date:   Mon Mar 9 15:15:24 2026 -0700
+			if !errors.Is(err, cache.ErrNotFound) || p.Date.After(lastlocationHashInvalidation) {
+				slog.ErrorContext(ctx, "failed to grab cached ingredients", "error", err, "hash", hashParam)
+			}
 			// go anways we just lose aisle sorting
 		}
 		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, ings, w)
