@@ -27,6 +27,7 @@ func TestTelemetryHandlerRecordsResponseCode(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, "https://careme.cooking/recipes?vegan=true", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 test browser")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -45,6 +46,9 @@ func TestTelemetryHandlerRecordsResponseCode(t *testing.T) {
 	}
 	if got := int(attrs["http.status_code"].AsInt64()); got != http.StatusCreated {
 		t.Fatalf("expected http.status_code %d, got %d", http.StatusCreated, got)
+	}
+	if got := attrs["user_agent.original"].AsString(); got != "Mozilla/5.0 test browser" {
+		t.Fatalf("expected user_agent.original %q, got %q", "Mozilla/5.0 test browser", got)
 	}
 }
 
