@@ -82,6 +82,8 @@
             {{template "shopping_recipe_card" .}}
             {{end}}
 
+            {{template "shopping_finalize_controls" .}}
+
             {{if .ShoppingList}}
             <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
               <details{{if .HasSavedRecipes}} open{{end}}>
@@ -108,8 +110,6 @@
             </section>
             {{end}}
           </div>
-
-          {{template "shopping_finalize_controls" .}}
         </div>
       </div>
 
@@ -138,7 +138,7 @@
             aria-disabled="true"
             aria-describedby="finalize-help"{{end}}
             class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if .HasSavedRecipes}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
-      Assemble Shopping List
+      Build Shopping List
     </button>
   </span>
   {{if not .HasSavedRecipes}}

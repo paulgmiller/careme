@@ -71,9 +71,9 @@ func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
 		t.Error("HTML should contain Try again, chef button")
 	}
 
-	// Check that "Save my picks" button exists.
-	if !strings.Contains(html, `Assemble Shopping List`) {
-		t.Error("HTML should contain Assemble Shopping List button")
+	// Check that build button exists.
+	if !strings.Contains(html, `Build Shopping List`) {
+		t.Error("HTML should contain Build Shopping List button")
 	}
 	if !strings.Contains(html, `disabled`) {
 		t.Error("HTML should disable finalize button when no recipes are saved")
@@ -160,6 +160,11 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	if strings.Contains(html, `id="finalize-help"`) {
 		t.Error("HTML should not render finalize helper text when button is enabled")
 	}
+	finalizeIndex := strings.Index(html, `id="shopping-finalize-controls"`)
+	shoppingListIndex := strings.Index(html, `Shopping list`)
+	if finalizeIndex == -1 || shoppingListIndex == -1 || finalizeIndex > shoppingListIndex {
+		t.Error("build shopping list controls should render above the shopping list section")
+	}
 }
 
 func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
@@ -232,7 +237,7 @@ func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
 	if strings.Contains(html, `Try again, chef`) {
 		t.Error("HTML should not contain regenerate action text when signed out")
 	}
-	if strings.Contains(html, `Assemble Shopping List`) {
+	if strings.Contains(html, `Build Shopping List`) {
 		t.Error("HTML should not contain finalize action text when signed out")
 	}
 	if strings.Contains(html, `Add`) {

@@ -81,8 +81,8 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("shopping list HTML should include htmx script")
 	}
-	if !strings.Contains(html, "Shopping list") {
-		t.Error("shopping list HTML should render the shopping list section for a single recipe")
+	if strings.Contains(html, "Shopping list") {
+		t.Error("shopping list HTML should not render the shopping list section before a recipe is added")
 	}
 	if !strings.Contains(html, `sm:grid-cols-[minmax(0,1fr)_10rem_5rem]`) {
 		t.Error("shopping list HTML should render ingredient rows with responsive aligned columns")
@@ -95,6 +95,44 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	}
 	if !strings.Contains(html, `disabled`) {
 		t.Error("shopping list HTML should disable finalize button when nothing is saved")
+	}
+}
+
+func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	addedRecipe := ai.Recipe{
+		Title:        "Added Bowl",
+		Description:  "Selected dinner",
+		Ingredients:  []ai.Ingredient{{Name: "Added carrots", Quantity: "2 cups"}},
+		Instructions: []string{"Cook."},
+		Health:       "Balanced",
+		DrinkPairing: "Water",
+	}
+	unaddedRecipe := ai.Recipe{
+		Title:        "Maybe Pasta",
+		Description:  "Not selected",
+		Ingredients:  []ai.Ingredient{{Name: "Unadded noodles", Quantity: "1 box"}},
+		Instructions: []string{"Boil."},
+		Health:       "Filling",
+		DrinkPairing: "Tea",
+	}
+	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{addedRecipe, unaddedRecipe}}
+	p := DefaultParams(&loc, time.Now())
+	p.Saved = []ai.Recipe{addedRecipe}
+
+	w := httptest.NewRecorder()
+	FormatShoppingListHTMLForHash(t.Context(), p, shoppingList, nil, true, p.Hash(), nil, w)
+	html := assertHTTPSuccess(t, w)
+
+	isValidHTML(t, html)
+	if !strings.Contains(html, "Shopping list") {
+		t.Fatal("shopping list HTML should render the shopping list section when a recipe is added")
+	}
+	if got := strings.Count(html, "Added carrots"); got != 2 {
+		t.Fatalf("added recipe ingredient should render in recipe details and shopping list, got count %d", got)
+	}
+	if got := strings.Count(html, "Unadded noodles"); got != 1 {
+		t.Fatalf("unadded recipe ingredient should render only in recipe details, got count %d", got)
 	}
 }
 
@@ -382,7 +420,7 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, "Try again, chef") {
 		t.Error("shopping list HTML should hide regenerate action when signed out")
 	}
-	if strings.Contains(html, "Assemble Shopping List") {
+	if strings.Contains(html, "Build Shopping List") {
 		t.Error("shopping list HTML should hide finalize action when signed out")
 	}
 	if strings.Contains(html, `id="save-`) {
@@ -544,6 +582,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 		},
 	}
 	wineHash := multi.Recipes[0].ComputeHash()
+	p.Saved = []ai.Recipe{multi.Recipes[0]}
 	w := httptest.NewRecorder()
 	FormatShoppingListHTMLForHash(t.Context(), p, multi, map[string]*ai.WineSelection{
 		wineHash: {
