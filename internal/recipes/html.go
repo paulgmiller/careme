@@ -53,10 +53,9 @@ type shoppingRecipeView struct {
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
 	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, inputs []ai.InputIngredient, writer http.ResponseWriter,
 ) {
-	dismissedHashes := make(map[string]bool, len(p.Dismissed))
-	for _, recipe := range p.Dismissed {
-		dismissedHashes[recipe.ComputeHash()] = true
-	}
+	dismissedHashes := lo.SliceToMap(p.Dismissed, func(r ai.Recipe) (string, bool) {
+		return r.ComputeHash(), true
+	})
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	for _, recipe := range l.Recipes {
@@ -72,7 +71,9 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			Dismissed:          dismissedHashes[recipeHash],
 			WineRecommendation: wineRecommendation,
 		})
-		combinedIngredients = append(combinedIngredients, displayIngredients...)
+		if recipe.Saved {
+			combinedIngredients = append(combinedIngredients, displayIngredients...)
+		}
 	}
 	shoppingList := shoppingListForDisplay(combinedIngredients, inputs)
 	data := struct {
@@ -194,31 +195,29 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseI
 	}
 }
 
-func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, writer io.Writer) error {
+func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 	data := struct {
 		Hash            string
 		HasSavedRecipes bool
 	}{
 		Hash:            hash,
-		HasSavedRecipes: hasSavedRecipes,
+		HasSavedRecipes: true,
 	}
 
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_finalize_controls_response", data)
 }
 
-func RenderShoppingRecipeActionHTML(recipeHash, shoppingListHash string, signedIn, saved bool, writer io.Writer) error {
-	data := struct {
-		Hash             string
-		ShoppingListHash string
-		ServerSignedIn   bool
-		Saved            bool
-	}{
-		Hash:             recipeHash,
-		ShoppingListHash: shoppingListHash,
-		ServerSignedIn:   signedIn,
-		Saved:            saved,
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
+	data := shoppingRecipeView{
+		Recipe:             recipe,
+		Hash:               recipe.ComputeHash(),
+		ShoppingListHash:   shoppingListHash,
+		ServerSignedIn:     true, // have to be signed in to toggle
+		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		Dismissed:          !recipe.Saved, // no inbetween state left.
+		WineRecommendation: wineRecommendation,
 	}
-	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_save_action", data)
+	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
 }
 
 func latestThreadResponseID(thread []RecipeThreadEntry) string {

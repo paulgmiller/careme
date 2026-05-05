@@ -930,9 +930,11 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), `Dismiss`) || !strings.Contains(rr.Body.String(), `/dismiss"`) {
-		t.Fatalf("expected dismiss action replacement, got body: %s", rr.Body.String())
-	}
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `✓ Added`)
+	require.Contains(t, rr.Body.String(), `Hide`)
+	require.Contains(t, rr.Body.String(), `/dismiss"`)
+	require.NotContains(t, rr.Body.String(), `/save"`)
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
 	}
@@ -1032,6 +1034,58 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	}
 }
 
+func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+	)
+
+	recipe := ai.Recipe{
+		Title:        "Recovered Recipe",
+		Description:  "Recipe to recover",
+		Ingredients:  []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+		Instructions: []string{"Step 1"},
+		Health:       "Healthy",
+		DrinkPairing: "Water",
+	}
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	originHash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	recipeHash := recipe.ComputeHash()
+	saveRecipesForOrigin(t, s, originHash, recipe)
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, originHash))
+	require.NoError(t, s.saveRecipeSelection(t.Context(), "mock-clerk-user-id", originHash, recipeSelection{
+		DismissedHashes: []string{recipeHash},
+	}))
+
+	form := url.Values{"h": {originHash}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSaveRecipe(rr, req)
+	s.Wait()
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `Recipe to recover`)
+	require.Contains(t, rr.Body.String(), `Details`)
+	require.Contains(t, rr.Body.String(), `✓ Added`)
+	require.Contains(t, rr.Body.String(), `Hide`)
+	require.Contains(t, rr.Body.String(), `/dismiss"`)
+	require.NotContains(t, rr.Body.String(), `Set aside for this round.`)
+	require.NotContains(t, rr.Body.String(), `/save"`)
+
+	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", originHash)
+	require.NoError(t, err)
+	require.Equal(t, []string{recipeHash}, selection.SavedHashes)
+	require.Empty(t, selection.DismissedHashes)
+}
+
 func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -1069,7 +1123,9 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	s.handleSaveRecipe(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	require.Contains(t, rr.Body.String(), `Dismiss`)
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `✓ Added`)
+	require.Contains(t, rr.Body.String(), `/dismiss"`)
 
 	s.Wait()
 	assert.Equal(t, 1, g.winePickCalls)
@@ -1150,14 +1206,16 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), `Save`) || !strings.Contains(rr.Body.String(), `/save"`) {
-		t.Fatalf("expected save action replacement, got body: %s", rr.Body.String())
-	}
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `/save"`)
+	require.Contains(t, rr.Body.String(), `Restore`)
+	require.NotContains(t, rr.Body.String(), `Dismissed`)
+	require.NotContains(t, rr.Body.String(), `Hide`)
+	require.NotContains(t, rr.Body.String(), `✓ Added`)
+	require.NotContains(t, rr.Body.String(), `Recipe to dismiss`)
+	require.NotContains(t, rr.Body.String(), `Details`)
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
-	}
-	if !strings.Contains(rr.Body.String(), `disabled`) || !strings.Contains(rr.Body.String(), `Save at least one recipe to assemble your shopping list.`) {
-		t.Fatalf("expected finalize button to become disabled after dismiss, got body: %s", rr.Body.String())
 	}
 
 	updated, err := storage.GetByID("mock-clerk-user-id")
