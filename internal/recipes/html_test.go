@@ -118,7 +118,7 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	}
 	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{addedRecipe, unaddedRecipe}}
 	p := DefaultParams(&loc, time.Now())
-	p.Saved = []ai.Recipe{addedRecipe}
+	shoppingList.Recipes[0].Saved = true
 
 	w := httptest.NewRecorder()
 	FormatShoppingListHTMLForHash(t.Context(), p, shoppingList, nil, true, p.Hash(), nil, w)
@@ -582,7 +582,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 		},
 	}
 	wineHash := multi.Recipes[0].ComputeHash()
-	p.Saved = []ai.Recipe{multi.Recipes[0]}
+	multi.Recipes[0].Saved = true
 	w := httptest.NewRecorder()
 	FormatShoppingListHTMLForHash(t.Context(), p, multi, map[string]*ai.WineSelection{
 		wineHash: {

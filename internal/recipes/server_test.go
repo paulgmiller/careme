@@ -1217,9 +1217,6 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), `disabled`) || !strings.Contains(rr.Body.String(), `Add at least one recipe to assemble your shopping list.`) {
-		t.Fatalf("expected finalize button to become disabled after dismiss, got body: %s", rr.Body.String())
-	}
 
 	updated, err := storage.GetByID("mock-clerk-user-id")
 	if err != nil {

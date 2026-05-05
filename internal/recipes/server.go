@@ -491,20 +491,20 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	selectionHash := strings.TrimSpace(r.FormValue(queryArgHash))
-	if selectionHash == "" {
+	shoppingListHash := strings.TrimSpace(r.FormValue(queryArgHash))
+	if shoppingListHash == "" {
 		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
 		return
 	}
-	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, selectionHash)
+	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, shoppingListHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load recipe selection for save", "selection_hash", selectionHash, "error", err)
+		slog.ErrorContext(ctx, "failed to load recipe selection for save", "shoppingListHash", shoppingListHash, "error", err)
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
 	selection.markSaved(recipeHash)
-	if err := s.saveRecipeSelection(ctx, currentUser.ID, selectionHash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe selection", "selection_hash", selectionHash, "error", err)
+	if err := s.saveRecipeSelection(ctx, currentUser.ID, shoppingListHash, selection); err != nil {
+		slog.ErrorContext(ctx, "failed to save recipe selection", "shoppingListHash", shoppingListHash, "error", err)
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
@@ -527,27 +527,27 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := s.paramsForAction(ctx, selectionHash, currentUser.ID, "")
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for save response", "selection_hash", selectionHash, "error", err)
-		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
-		return
-	}
-
-	cardRecipe := *recipe
-	if selected, ok := recipeFromSelectionParams(recipeHash, p); ok {
-		cardRecipe = selected
-	}
+	recipe.Saved = true
 
 	var response bytes.Buffer
-	if err := RenderShoppingRecipeCardHTML(cardRecipe, p, selectionHash, true, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+	if err := RenderShoppingRecipeCardHTML(*recipe, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
 		slog.ErrorContext(ctx, "failed to render save card response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
-	if err := RenderShoppingFinalizeControlsHTML(selectionHash, len(p.Saved) > 0, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after save", "selection_hash", selectionHash, "error", err)
+
+	// want to kill this and make it dynmic for now on any save or dmiss we allow build
+	if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render finalize controls after save", "shoppingListHash", shoppingListHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
+		return
+	}
+
+	// move into startSavedRecipeBackgroundGeneration
+	p, err := s.ParamsFromCache(ctx, shoppingListHash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load params for save response", "shoppingListHash", shoppingListHash, "error", err)
+		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
 
@@ -612,35 +612,28 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := s.paramsForAction(ctx, selectionHash, currentUser.ID, "")
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for dismiss response", "selection_hash", selectionHash, "error", err)
+	recipe, recipeErr := s.SingleFromCache(ctx, recipeHash)
+	if recipeErr != nil {
+		if errors.Is(recipeErr, cache.ErrNotFound) {
+			http.Error(w, "recipe not found", http.StatusNotFound)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load recipe for dismiss response", "hash", recipeHash, "error", recipeErr)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
 
-	cardRecipe, ok := recipeFromSelectionParams(recipeHash, p)
-	if !ok {
-		recipe, recipeErr := s.SingleFromCache(ctx, recipeHash)
-		if recipeErr != nil {
-			if errors.Is(recipeErr, cache.ErrNotFound) {
-				http.Error(w, "recipe not found", http.StatusNotFound)
-				return
-			}
-			slog.ErrorContext(ctx, "failed to load recipe for dismiss response", "hash", recipeHash, "error", recipeErr)
-			http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
-			return
-		}
-		cardRecipe = *recipe
-	}
+	recipe.Saved = false
 
 	var response bytes.Buffer
-	if err := RenderShoppingRecipeCardHTML(cardRecipe, p, selectionHash, true, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+	if err := RenderShoppingRecipeCardHTML(*recipe, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
 		slog.ErrorContext(ctx, "failed to render dismiss card response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
-	if err := RenderShoppingFinalizeControlsHTML(selectionHash, len(p.Saved) > 0, &response); err != nil {
+
+	// want to kill this and make it dynmic for now on any save or dmiss we allow build
+	if err := RenderShoppingFinalizeControlsHTML(selectionHash, &response); err != nil {
 		slog.ErrorContext(ctx, "failed to render finalize controls after dismiss", "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
