@@ -130,7 +130,7 @@
 {{end}}
 
 {{define "shopping_finalize_controls_content"}}
-  <span class="inline-flex" {{if not .HasSavedRecipes}}title="Save at least one recipe to assemble your shopping list."{{end}}>
+  <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to assemble your shopping list."{{end}}>
     <button type="button"
             id="finalizeButton"
             {{if .HasSavedRecipes}}hx-post="/recipes/{{.Hash}}/finalize"
@@ -143,7 +143,7 @@
   </span>
   {{if not .HasSavedRecipes}}
   <p id="finalize-help" class="text-sm text-ink-600">
-    Save at least one recipe to assemble your shopping list.
+    Add at least one recipe to assemble your shopping list.
   </p>
   {{end}}
 {{end}}
@@ -162,7 +162,6 @@
       <a href="/recipe/{{.Hash}}" class="block truncate text-lg font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
         {{.Title}}
       </a>
-      <p class="mt-1 text-sm text-ink-500">Set aside for this round.</p>
     </div>
     {{template "shopping_recipe_actions" .}}
   </div>
@@ -247,6 +246,17 @@
 {{define "shopping_recipe_actions"}}
 <div class="shopping-recipe-actions flex flex-wrap items-center gap-3">
   {{if .ServerSignedIn}}
+  {{if .Dismissed}}
+  <button type="button"
+          hx-post="/recipe/{{.Hash}}/save"
+          hx-vals='{"h":"{{.ShoppingListHash}}"}'
+          hx-target="closest .shopping-recipe-card"
+          hx-swap="outerHTML"
+          hx-disabled-elt="this"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
+    Restore
+  </button>
+  {{else}}
   {{if not .Saved}}
   <button type="button"
           hx-post="/recipe/{{.Hash}}/save"
@@ -255,17 +265,14 @@
           hx-swap="outerHTML"
           hx-disabled-elt="this"
           class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
-    Save
+    Add
   </button>
   {{else}}
-  <button type="button"
-          disabled
-          aria-disabled="true"
-          class="inline-flex cursor-not-allowed items-center justify-center rounded-lg border-2 border-action-green-200 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 opacity-80">
-    Saved
-  </button>
+  <span aria-label="Recipe added"
+        class="inline-flex items-center text-sm font-semibold text-action-green-700">
+    ✓ Added
+  </span>
   {{end}}
-  {{if not .Dismissed}}
   <button type="button"
           hx-post="/recipe/{{.Hash}}/dismiss"
           hx-vals='{"h":"{{.ShoppingListHash}}"}'
@@ -273,14 +280,7 @@
           hx-swap="outerHTML"
           hx-disabled-elt="this"
           class="inline-flex items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 focus:outline-none focus:ring-2 focus:ring-action-red-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
-    Dismiss
-  </button>
-  {{else}}
-  <button type="button"
-          disabled
-          aria-disabled="true"
-          class="inline-flex cursor-not-allowed items-center justify-center rounded-lg border-2 border-action-red-200 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 opacity-80">
-    Dismissed
+    Hide
   </button>
   {{end}}
   {{end}}

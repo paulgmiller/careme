@@ -931,7 +931,8 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
-	require.Contains(t, rr.Body.String(), `Saved`)
+	require.Contains(t, rr.Body.String(), `✓ Added`)
+	require.Contains(t, rr.Body.String(), `Hide`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 	require.NotContains(t, rr.Body.String(), `/save"`)
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
@@ -1073,7 +1074,8 @@ func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
 	require.Contains(t, rr.Body.String(), `Recipe to recover`)
 	require.Contains(t, rr.Body.String(), `Details`)
-	require.Contains(t, rr.Body.String(), `Saved`)
+	require.Contains(t, rr.Body.String(), `✓ Added`)
+	require.Contains(t, rr.Body.String(), `Hide`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 	require.NotContains(t, rr.Body.String(), `Set aside for this round.`)
 	require.NotContains(t, rr.Body.String(), `/save"`)
@@ -1122,7 +1124,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
-	require.Contains(t, rr.Body.String(), `Saved`)
+	require.Contains(t, rr.Body.String(), `✓ Added`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 
 	s.Wait()
@@ -1205,15 +1207,17 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
-	require.Contains(t, rr.Body.String(), `Set aside for this round.`)
 	require.Contains(t, rr.Body.String(), `/save"`)
-	require.Contains(t, rr.Body.String(), `Dismissed`)
+	require.Contains(t, rr.Body.String(), `Restore`)
+	require.NotContains(t, rr.Body.String(), `Dismissed`)
+	require.NotContains(t, rr.Body.String(), `Hide`)
+	require.NotContains(t, rr.Body.String(), `✓ Added`)
 	require.NotContains(t, rr.Body.String(), `Recipe to dismiss`)
 	require.NotContains(t, rr.Body.String(), `Details`)
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), `disabled`) || !strings.Contains(rr.Body.String(), `Save at least one recipe to assemble your shopping list.`) {
+	if !strings.Contains(rr.Body.String(), `disabled`) || !strings.Contains(rr.Body.String(), `Add at least one recipe to assemble your shopping list.`) {
 		t.Fatalf("expected finalize button to become disabled after dismiss, got body: %s", rr.Body.String())
 	}
 
