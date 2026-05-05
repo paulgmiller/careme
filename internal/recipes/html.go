@@ -220,15 +220,6 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, shoppingListHash string, win
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
 }
 
-func selectedRecipe(recipeHash string, recipes []ai.Recipe) bool {
-	for _, recipe := range recipes {
-		if recipe.ComputeHash() == recipeHash {
-			return true
-		}
-	}
-	return false
-}
-
 func latestThreadResponseID(thread []RecipeThreadEntry) string {
 	if len(thread) == 0 {
 		return ""
