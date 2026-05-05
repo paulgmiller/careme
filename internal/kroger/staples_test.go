@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"careme/internal/kroger/products"
 )
@@ -85,17 +84,6 @@ func TestParseProductGetResponse_IgnoresUnusedNutritionInformationArray(t *testi
 	}
 }
 
-func TestNewDirectHTTPClient_DisablesProxy(t *testing.T) {
-	client := NewDirectHTTPClient()
-	transport, ok := client.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("expected *http.Transport, got %T", client.Transport)
-	}
-	if transport.Proxy != nil {
-		t.Fatal("expected direct Kroger client to disable proxies")
-	}
-}
-
 func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
 	var calls atomic.Int32
 	baseClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
@@ -108,7 +96,7 @@ func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
 
 	client, err := products.NewClientWithResponses(
 		"https://kroger.test",
-		products.WithHTTPClient(withProductRetriesAndBackoff(baseClient, 3, time.Millisecond, time.Millisecond)),
+		products.WithHTTPClient(withProductRetries(baseClient)),
 	)
 	if err != nil {
 		t.Fatalf("NewClientWithResponses returned error: %v", err)
@@ -136,7 +124,7 @@ func jsonResponse(req *http.Request, statusCode int, body string) *http.Response
 	return &http.Response{
 		StatusCode: statusCode,
 		Status:     http.StatusText(statusCode),
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "Retry-After": []string{"0"}},
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Request:    req,
 	}

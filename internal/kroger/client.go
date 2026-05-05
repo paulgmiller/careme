@@ -40,7 +40,7 @@ type KrogerTokenManager struct {
 
 func NewKrogerTokenManager(clientID, clientSecret string, httpClient *http.Client) *KrogerTokenManager {
 	if httpClient == nil {
-		httpClient = NewDirectHTTPClient()
+		httpClient = http.DefaultClient
 	}
 	return &KrogerTokenManager{
 		clientID:     clientID,
@@ -97,49 +97,14 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 	return m.token, nil
 }
 
-// NewDirectHTTPClient returns a Kroger API client that does not use Bright Data
-// or environment-configured HTTP proxies.
-func NewDirectHTTPClient() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	return &http.Client{Transport: transport}
-}
-
 func withProductRetries(baseClient *http.Client) *http.Client {
-	return withProductRetriesAndBackoff(baseClient, 3, 500*time.Millisecond, 4*time.Second)
-}
-
-func withProductRetriesAndBackoff(baseClient *http.Client, retryMax int, retryWaitMin, retryWaitMax time.Duration) *http.Client {
 	if baseClient == nil {
-		baseClient = NewDirectHTTPClient()
+		baseClient = http.DefaultClient
 	}
 
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
 	retryClient.Logger = nil
-	retryClient.RetryMax = retryMax
-	retryClient.RetryWaitMin = retryWaitMin
-	retryClient.RetryWaitMax = retryWaitMax
-	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
-		if ctx.Err() != nil {
-			return false, ctx.Err()
-		}
-		if err != nil {
-			return true, err
-		}
-		if resp == nil || resp.Request == nil {
-			return false, nil
-		}
-		if resp.Request.Method != http.MethodGet {
-			return false, nil
-		}
-		switch resp.StatusCode {
-		case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-			return true, nil
-		default:
-			return false, nil
-		}
-	}
 	return retryClient.StandardClient()
 }
 
@@ -158,7 +123,7 @@ func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) fu
 
 func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*products.ClientWithResponses, error) {
 	if httpClient == nil {
-		httpClient = NewDirectHTTPClient()
+		httpClient = http.DefaultClient
 	}
 	httpClient = withProductRetries(httpClient)
 	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
