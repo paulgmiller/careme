@@ -1,4 +1,4 @@
-package logsetup
+package appinsightsexport
 
 import (
 	"context"
@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	appInsightsConnectionStringEnv = "APPLICATIONINSIGHTS_CONNECTION_STRING"
-	appInsightsTrackPath           = "/v2/track"
-	appInsightsBatchSize           = 1024
-	appInsightsBatchInterval       = 10 * time.Second
+	ConnectionStringEnv      = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+	appInsightsTrackPath     = "/v2/track"
+	appInsightsBatchSize     = 1024
+	appInsightsBatchInterval = 10 * time.Second
 )
 
 const (
@@ -45,15 +45,7 @@ const (
 	propertyDroppedAttrCount = "otel.dropped_attributes"
 )
 
-type telemetryMode int
-
-const (
-	telemetryModeLocal telemetryMode = iota
-	telemetryModeAppInsights
-	telemetryModeOTLP
-)
-
-type appInsightsConfig struct {
+type Config struct {
 	InstrumentationKey string
 	IngestionEndpoint  *url.URL
 	Client             *http.Client
@@ -73,21 +65,11 @@ type appInsightsLogExporter struct {
 	once    sync.Once
 }
 
-func selectedTelemetryMode() telemetryMode {
-	if appInsightsEnabled() {
-		return telemetryModeAppInsights
-	}
-	if exportEnabled() {
-		return telemetryModeOTLP
-	}
-	return telemetryModeLocal
+func Enabled() bool {
+	return strings.TrimSpace(os.Getenv(ConnectionStringEnv)) != ""
 }
 
-func appInsightsEnabled() bool {
-	return strings.TrimSpace(os.Getenv(appInsightsConnectionStringEnv)) != ""
-}
-
-func parseAppInsightsConnectionString(connectionString string) (*appInsightsConfig, error) {
+func ParseConnectionString(connectionString string) (*Config, error) {
 	connectionString = strings.TrimSpace(connectionString)
 	if connectionString == "" {
 		return nil, errors.New("connection string is empty")
@@ -119,63 +101,51 @@ func parseAppInsightsConnectionString(connectionString string) (*appInsightsConf
 	if err != nil {
 		return nil, fmt.Errorf("ingestion endpoint is not a valid URL: %w", err)
 	}
-	return &appInsightsConfig{
+	return &Config{
 		InstrumentationKey: instrumentationKey,
 		IngestionEndpoint:  u,
 	}, nil
 }
 
-func loadAppInsightsConfig() (*appInsightsConfig, error) {
-	return parseAppInsightsConnectionString(os.Getenv(appInsightsConnectionStringEnv))
+func LoadConfig() (*Config, error) {
+	return ParseConnectionString(os.Getenv(ConnectionStringEnv))
 }
 
-func newAppInsightsTracerProvider(res *resource.Resource) (*tracesdk.TracerProvider, error) {
-	cfg, err := loadAppInsightsConfig()
+func NewTraceExporterFromEnv(res *resource.Resource, serviceVersion string) (tracesdk.SpanExporter, error) {
+	cfg, err := LoadConfig()
 	if err != nil {
 		return nil, err
 	}
-	exporter, err := newAppInsightsTraceExporter(cfg, res)
-	if err != nil {
-		return nil, err
-	}
-	return tracesdk.NewTracerProvider(
-		tracesdk.WithResource(res),
-		tracesdk.WithBatcher(exporter),
-	), nil
+	return NewTraceExporter(cfg, res, serviceVersion)
 }
 
-func newAppInsightsLoggerProvider(res *resource.Resource) (*logsdk.LoggerProvider, error) {
-	cfg, err := loadAppInsightsConfig()
+func NewLogExporterFromEnv(res *resource.Resource, serviceVersion string) (logsdk.Exporter, error) {
+	cfg, err := LoadConfig()
 	if err != nil {
 		return nil, err
 	}
-	exporter, err := newAppInsightsLogExporter(cfg, res)
-	if err != nil {
-		return nil, err
-	}
-	return logsdk.NewLoggerProvider(
-		logsdk.WithResource(res),
-		logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)),
-	), nil
+	return NewLogExporter(cfg, res, serviceVersion)
 }
 
-func newAppInsightsTraceExporter(cfg *appInsightsConfig, res *resource.Resource) (*appInsightsTraceExporter, error) {
-	client, err := newAppInsightsTelemetryClient(cfg, res)
+func NewTraceExporter(cfg *Config, res *resource.Resource, serviceVersion string) (tracesdk.SpanExporter, error) {
+	client, err := newAppInsightsTelemetryClient(cfg)
 	if err != nil {
 		return nil, err
 	}
+	applyAppInsightsClientContext(client, res, serviceVersion)
 	return &appInsightsTraceExporter{client: client}, nil
 }
 
-func newAppInsightsLogExporter(cfg *appInsightsConfig, res *resource.Resource) (*appInsightsLogExporter, error) {
-	client, err := newAppInsightsTelemetryClient(cfg, res)
+func NewLogExporter(cfg *Config, res *resource.Resource, serviceVersion string) (logsdk.Exporter, error) {
+	client, err := newAppInsightsTelemetryClient(cfg)
 	if err != nil {
 		return nil, err
 	}
+	applyAppInsightsClientContext(client, res, serviceVersion)
 	return &appInsightsLogExporter{client: client}, nil
 }
 
-func newAppInsightsTelemetryClient(cfg *appInsightsConfig, res *resource.Resource) (msappinsights.TelemetryClient, error) {
+func newAppInsightsTelemetryClient(cfg *Config) (msappinsights.TelemetryClient, error) {
 	if cfg == nil {
 		return nil, errors.New("app insights config is required")
 	}
@@ -194,11 +164,10 @@ func newAppInsightsTelemetryClient(cfg *appInsightsConfig, res *resource.Resourc
 	}
 
 	client := msappinsights.NewTelemetryClientFromConfig(telemetryConfig)
-	applyAppInsightsClientContext(client, res)
 	return client, nil
 }
 
-func applyAppInsightsClientContext(client msappinsights.TelemetryClient, res *resource.Resource) {
+func applyAppInsightsClientContext(client msappinsights.TelemetryClient, res *resource.Resource, serviceVersion string) {
 	if client == nil {
 		return
 	}
@@ -208,7 +177,7 @@ func applyAppInsightsClientContext(client msappinsights.TelemetryClient, res *re
 	}
 
 	ctx.Tags.Cloud().SetRole(resourceString(res, attrServiceName, "careme"))
-	if version := resourceString(res, attrServiceVersion, serviceVersion()); version != "" {
+	if version := resourceString(res, attrServiceVersion, serviceVersion); version != "" {
 		ctx.CommonProperties[attrServiceVersion] = version
 	}
 	if service := resourceString(res, attrServiceName, "careme"); service != "" {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"careme/internal/appinsightsexport"
+
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
@@ -36,8 +38,7 @@ func Configure(ctx context.Context) (func(), error) {
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
-	switch selectedTelemetryMode() {
-	case telemetryModeLocal:
+	if !exportEnabled() && !appinsightsexport.Enabled() {
 		traceProvider := tracesdk.NewTracerProvider()
 		otel.SetTracerProvider(traceProvider)
 		stdoutLogger := slog.New(stdouthandler)
@@ -46,7 +47,8 @@ func Configure(ctx context.Context) (func(), error) {
 		return recoverAndClose(ctx, func(shutdownCtx context.Context) error {
 			return traceProvider.Shutdown(shutdownCtx)
 		}), nil
-	case telemetryModeOTLP:
+	}
+	if exportEnabled() {
 		if err := validateExportConfig(); err != nil {
 			return nil, err
 		}
@@ -89,21 +91,47 @@ func Configure(ctx context.Context) (func(), error) {
 }
 
 func newTraceProvider(ctx context.Context, res *resource.Resource) (*tracesdk.TracerProvider, error) {
-	switch selectedTelemetryMode() {
-	case telemetryModeAppInsights:
-		return newAppInsightsTracerProvider(res)
-	default:
-		return newTracerProvider(ctx, res)
+	opts := []tracesdk.TracerProviderOption{tracesdk.WithResource(res)}
+
+	if exportEnabled() {
+		exporter, err := newOTLPTraceExporter(ctx)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, tracesdk.WithBatcher(exporter))
 	}
+
+	if appinsightsexport.Enabled() {
+		exporter, err := appinsightsexport.NewTraceExporterFromEnv(res, serviceVersion())
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, tracesdk.WithBatcher(exporter))
+	}
+
+	return tracesdk.NewTracerProvider(opts...), nil
 }
 
 func newLogProvider(ctx context.Context, res *resource.Resource) (*logsdk.LoggerProvider, error) {
-	switch selectedTelemetryMode() {
-	case telemetryModeAppInsights:
-		return newAppInsightsLoggerProvider(res)
-	default:
-		return newLoggerProvider(ctx, res)
+	opts := []logsdk.LoggerProviderOption{logsdk.WithResource(res)}
+
+	if exportEnabled() {
+		exporter, err := newOTLPLogExporter(ctx)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)))
 	}
+
+	if appinsightsexport.Enabled() {
+		exporter, err := appinsightsexport.NewLogExporterFromEnv(res, serviceVersion())
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)))
+	}
+
+	return logsdk.NewLoggerProvider(opts...), nil
 }
 
 func serviceVersion() string {
@@ -131,20 +159,12 @@ func buildSetting(info *debug.BuildInfo, key string) string {
 	return ""
 }
 
-func newTracerProvider(ctx context.Context, res *resource.Resource) (*tracesdk.TracerProvider, error) {
-	exporter, err := otlptracehttp.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return tracesdk.NewTracerProvider(tracesdk.WithResource(res), tracesdk.WithBatcher(exporter)), nil
+func newOTLPTraceExporter(ctx context.Context) (tracesdk.SpanExporter, error) {
+	return otlptracehttp.New(ctx)
 }
 
-func newLoggerProvider(ctx context.Context, res *resource.Resource) (*logsdk.LoggerProvider, error) {
-	exporter, err := otlploghttp.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return logsdk.NewLoggerProvider(logsdk.WithResource(res), logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter))), nil
+func newOTLPLogExporter(ctx context.Context) (logsdk.Exporter, error) {
+	return otlploghttp.New(ctx)
 }
 
 func newResource() (*resource.Resource, error) {

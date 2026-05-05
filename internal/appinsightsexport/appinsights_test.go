@@ -1,4 +1,4 @@
-package logsetup
+package appinsightsexport
 
 import (
 	"compress/gzip"
@@ -91,33 +91,29 @@ func (t recorderTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func TestParseAppInsightsConnectionString(t *testing.T) {
-	cfg, err := parseAppInsightsConnectionString("InstrumentationKey=ikey;IngestionEndpoint=https://westus.applicationinsights.azure.com/")
+	cfg, err := ParseConnectionString("InstrumentationKey=ikey;IngestionEndpoint=https://westus.applicationinsights.azure.com/")
 	require.NoError(t, err)
 	assert.Equal(t, "ikey", cfg.InstrumentationKey)
 	assert.Equal(t, "https://westus.applicationinsights.azure.com/", cfg.IngestionEndpoint.String())
 }
 
 func TestParseAppInsightsConnectionStringErrors(t *testing.T) {
-	_, err := parseAppInsightsConnectionString("")
+	_, err := ParseConnectionString("")
 	require.EqualError(t, err, "connection string is empty")
 
-	_, err = parseAppInsightsConnectionString("IngestionEndpoint=https://example.com/")
+	_, err = ParseConnectionString("IngestionEndpoint=https://example.com/")
 	require.EqualError(t, err, "instrumentation key is missing")
 
-	_, err = parseAppInsightsConnectionString("InstrumentationKey=ikey")
+	_, err = ParseConnectionString("InstrumentationKey=ikey")
 	require.EqualError(t, err, "ingestion endpoint is missing")
 }
 
-func TestSelectedTelemetryMode(t *testing.T) {
-	t.Setenv(appInsightsConnectionStringEnv, "")
-	t.Setenv(otelExporterEndpointEnv, "")
-	assert.Equal(t, telemetryModeLocal, selectedTelemetryMode())
+func TestEnabled(t *testing.T) {
+	t.Setenv(ConnectionStringEnv, "")
+	assert.False(t, Enabled())
 
-	t.Setenv(otelExporterEndpointEnv, "https://example.com")
-	assert.Equal(t, telemetryModeOTLP, selectedTelemetryMode())
-
-	t.Setenv(appInsightsConnectionStringEnv, "InstrumentationKey=ikey;IngestionEndpoint=https://example.com/")
-	assert.Equal(t, telemetryModeAppInsights, selectedTelemetryMode())
+	t.Setenv(ConnectionStringEnv, "InstrumentationKey=ikey;IngestionEndpoint=https://example.com/")
+	assert.True(t, Enabled())
 }
 
 func TestAppInsightsTraceExporterExportsServerAndChildSpans(t *testing.T) {
@@ -128,7 +124,7 @@ func TestAppInsightsTraceExporterExportsServerAndChildSpans(t *testing.T) {
 		attribute.String(attrServiceVersion, "test-version"),
 	)
 	cfg := testAppInsightsConfig(t, recorder)
-	exporter, err := newAppInsightsTraceExporter(cfg, res)
+	exporter, err := NewTraceExporter(cfg, res, "test-version")
 	require.NoError(t, err)
 
 	provider := tracesdk.NewTracerProvider(tracesdk.WithSpanProcessor(tracesdk.NewSimpleSpanProcessor(exporter)))
@@ -182,7 +178,7 @@ func TestAppInsightsLogExporterExportsTraceTelemetry(t *testing.T) {
 		attribute.String(attrServiceVersion, "test-version"),
 	)
 	cfg := testAppInsightsConfig(t, recorder)
-	exporter, err := newAppInsightsLogExporter(cfg, res)
+	exporter, err := NewLogExporter(cfg, res, "test-version")
 	require.NoError(t, err)
 
 	provider := logsdk.NewLoggerProvider(
@@ -226,14 +222,6 @@ func TestAppInsightsLogExporterExportsTraceTelemetry(t *testing.T) {
 	assert.Equal(t, "2", properties["attempt"])
 }
 
-func TestConfigurePrefersAppInsightsOverOTLP(t *testing.T) {
-	t.Setenv(appInsightsConnectionStringEnv, "InstrumentationKey=ikey;IngestionEndpoint=https://example.com/")
-	t.Setenv(otelExporterEndpointEnv, "https://grafana.net/otlp")
-	t.Setenv(otelExporterHeadersEnv, "")
-
-	assert.Equal(t, telemetryModeAppInsights, selectedTelemetryMode())
-}
-
 func findEnvelopeByBaseType(t *testing.T, envelopes []telemetryEnvelope, baseType string) telemetryEnvelope {
 	t.Helper()
 	for _, envelope := range envelopes {
@@ -256,11 +244,11 @@ func nestedStringMap(value any) map[string]string {
 	return out
 }
 
-func testAppInsightsConfig(t *testing.T, recorder *ingestionRecorder) *appInsightsConfig {
+func testAppInsightsConfig(t *testing.T, recorder *ingestionRecorder) *Config {
 	t.Helper()
 	ingestionURL, err := url.Parse("https://applicationinsights.test")
 	require.NoError(t, err)
-	return &appInsightsConfig{
+	return &Config{
 		InstrumentationKey: "ikey",
 		IngestionEndpoint:  ingestionURL,
 		Client:             recorder.Client(),
