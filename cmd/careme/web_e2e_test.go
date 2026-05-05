@@ -55,7 +55,10 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 	// Step 4: persist selection immediately via HTMX.
 	saveURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/save"
-	_ = mustPostFormBodyHTMX(t, client, saveURL, url.Values{"h": {recipesHash}})
+	saveBody := mustPostFormBodyHTMX(t, client, saveURL, url.Values{"h": {recipesHash}})
+	if !strings.Contains(saveBody, `id="shopping-list-panel"`) || !strings.Contains(saveBody, `hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected save response to include dynamic shopping list panel, got %s", saveBody)
+	}
 	for _, dismissed := range dismissedHashes {
 		dismissURL := srv.URL + "/recipe/" + url.PathEscape(dismissed) + "/dismiss"
 		_ = mustPostFormBodyHTMX(t, client, dismissURL, url.Values{"h": {recipesHash}})

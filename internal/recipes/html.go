@@ -57,7 +57,6 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		return r.ComputeHash(), true
 	})
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
-	combinedIngredients := make([]ai.Ingredient, 0)
 	for _, recipe := range l.Recipes {
 		recipeHash := recipe.ComputeHash()
 		wineRecommendation := wineRecommendations[recipeHash]
@@ -71,11 +70,8 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			Dismissed:          dismissedHashes[recipeHash],
 			WineRecommendation: wineRecommendation,
 		})
-		if recipe.Saved {
-			combinedIngredients = append(combinedIngredients, displayIngredients...)
-		}
 	}
-	shoppingList := shoppingListForDisplay(combinedIngredients, inputs)
+	shoppingList := selectedShoppingListForDisplay(l.Recipes, wineRecommendations, inputs)
 	data := struct {
 		Location        locations.Location
 		Date            string
@@ -195,16 +191,28 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseI
 	}
 }
 
-func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
+func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, writer io.Writer) error {
 	data := struct {
 		Hash            string
 		HasSavedRecipes bool
 	}{
 		Hash:            hash,
-		HasSavedRecipes: true,
+		HasSavedRecipes: hasSavedRecipes,
 	}
 
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_finalize_controls_response", data)
+}
+
+func RenderShoppingListPanelHTML(shoppingList []*ai.Ingredient, writer io.Writer) error {
+	data := struct {
+		ShoppingList    []*ai.Ingredient
+		HasSavedRecipes bool
+	}{
+		ShoppingList:    shoppingList,
+		HasSavedRecipes: len(shoppingList) > 0,
+	}
+
+	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_list_panel_response", data)
 }
 
 func RenderShoppingRecipeCardHTML(recipe ai.Recipe, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
@@ -256,6 +264,17 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 	}
 
 	return templates.Mail.Execute(writer, data)
+}
+
+func selectedShoppingListForDisplay(recipes []ai.Recipe, wineRecommendations map[string]*ai.WineSelection, inputs []ai.InputIngredient) []*ai.Ingredient {
+	combinedIngredients := make([]ai.Ingredient, 0)
+	for _, recipe := range recipes {
+		if !recipe.Saved {
+			continue
+		}
+		combinedIngredients = append(combinedIngredients, ingredientsForDisplay(recipe.Ingredients, wineRecommendations[recipe.ComputeHash()])...)
+	}
+	return shoppingListForDisplay(combinedIngredients, inputs)
 }
 
 func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngredient) []*ai.Ingredient {

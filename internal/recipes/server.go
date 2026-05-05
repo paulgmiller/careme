@@ -536,18 +536,16 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// want to kill this and make it dynmic for now on any save or dmiss we allow build
-	if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after save", "shoppingListHash", shoppingListHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
-	}
-
-	// move into startSavedRecipeBackgroundGeneration
 	p, err := s.ParamsFromCache(ctx, shoppingListHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load params for save response", "shoppingListHash", shoppingListHash, "error", err)
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.renderShoppingSelectionFragments(ctx, currentUser.ID, shoppingListHash, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render shopping selection after save", "shoppingListHash", shoppingListHash, "error", err)
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
 
@@ -632,9 +630,8 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// want to kill this and make it dynmic for now on any save or dmiss we allow build
-	if err := RenderShoppingFinalizeControlsHTML(selectionHash, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after dismiss", "selection_hash", selectionHash, "error", err)
+	if err := s.renderShoppingSelectionFragments(ctx, currentUser.ID, selectionHash, &response); err != nil {
+		slog.ErrorContext(ctx, "failed to render shopping selection after dismiss", "selection_hash", selectionHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -645,6 +642,62 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
+}
+
+func (s *server) renderShoppingSelectionFragments(ctx context.Context, userID, hash string, response io.Writer) error {
+	hasSavedRecipes, shoppingList, err := s.currentShoppingSelection(ctx, userID, hash)
+	if err != nil {
+		return err
+	}
+	if err := RenderShoppingFinalizeControlsHTML(hash, hasSavedRecipes, response); err != nil {
+		return fmt.Errorf("render finalize controls: %w", err)
+	}
+	if err := RenderShoppingListPanelHTML(shoppingList, response); err != nil {
+		return fmt.Errorf("render shopping list panel: %w", err)
+	}
+	return nil
+}
+
+func (s *server) currentShoppingSelection(ctx context.Context, userID, hash string) (bool, []*ai.Ingredient, error) {
+	baseParams, err := s.ParamsFromCache(ctx, hash)
+	if err != nil {
+		return false, nil, fmt.Errorf("load recipe parameters: %w", err)
+	}
+	currentList, err := s.FromCache(ctx, hash)
+	if err != nil {
+		return false, nil, fmt.Errorf("load recipe list: %w", err)
+	}
+	selection, err := s.loadRecipeSelection(ctx, userID, hash)
+	if err != nil {
+		return false, nil, fmt.Errorf("load recipe selection: %w", err)
+	}
+
+	params := *baseParams
+	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
+	applySavedToRecipes(currentList.Recipes, &params)
+
+	wineRecommendations := make(map[string]*ai.WineSelection, len(params.Saved))
+	for _, recipe := range params.Saved {
+		recipeHash := recipe.ComputeHash()
+		wineRecommendation, wineErr := s.WineFromCache(ctx, recipeHash)
+		if wineErr != nil {
+			if !errors.Is(wineErr, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to load cached wine recommendation for shopping list fragment", "recipe_hash", recipeHash, "error", wineErr)
+			}
+			continue
+		}
+		wineRecommendations[recipeHash] = wineRecommendation
+	}
+
+	var inputs []ai.InputIngredient
+	inputs, err = s.IngredientsFromCache(ctx, params.LocationHash())
+	if err != nil {
+		if !errors.Is(err, cache.ErrNotFound) || params.Date.After(lastlocationHashInvalidation) {
+			slog.ErrorContext(ctx, "failed to grab cached ingredients for shopping list fragment", "error", err, "hash", hash)
+		}
+	}
+
+	return len(params.Saved) > 0, selectedShoppingListForDisplay(currentList.Recipes, wineRecommendations, inputs), nil
 }
 
 func (s *server) wineRecommendationForCard(ctx context.Context, recipeHash string) *ai.WineSelection {

@@ -90,6 +90,9 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
 		t.Error("shopping list HTML should no longer use the old wrapped ingredient row layout")
 	}
+	if !strings.Contains(html, `id="shopping-list-panel"`) {
+		t.Error("shopping list HTML should include stable shopping list panel")
+	}
 	if !strings.Contains(html, `id="finalize-help"`) {
 		t.Error("shopping list HTML should include helper text for disabled finalize state")
 	}
@@ -420,7 +423,7 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, "Try again, chef") {
 		t.Error("shopping list HTML should hide regenerate action when signed out")
 	}
-	if strings.Contains(html, "Build Shopping List") {
+	if strings.Contains(html, "Save list") {
 		t.Error("shopping list HTML should hide finalize action when signed out")
 	}
 	if strings.Contains(html, `id="save-`) {

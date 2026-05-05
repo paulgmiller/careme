@@ -901,6 +901,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	recipe := ai.Recipe{
 		Title:       "Save Me",
 		Description: "Recipe to save",
+		Ingredients: []ai.Ingredient{{Name: "tomatoes", Quantity: "2 cups"}},
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.ResponseID = "resp-123"
@@ -941,6 +942,10 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), `/recipes/`+originHash+`/finalize`) {
 		t.Fatalf("expected finalize button to become enabled after save, got body: %s", rr.Body.String())
 	}
+	if !strings.Contains(rr.Body.String(), `id="shopping-list-panel"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected shopping list panel oob response, got body: %s", rr.Body.String())
+	}
+	require.Contains(t, rr.Body.String(), `tomatoes`)
 
 	user, err := storage.GetByID("mock-clerk-user-id")
 	if err != nil {
@@ -1155,6 +1160,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	recipe := ai.Recipe{
 		Title:       "Dismiss Recipe",
 		Description: "Recipe to dismiss",
+		Ingredients: []ai.Ingredient{{Name: "noodles", Quantity: "1 pound"}},
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.ResponseID = "resp-123"
@@ -1217,6 +1223,12 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), `id="shopping-finalize-controls"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
 		t.Fatalf("expected finalize controls oob response, got body: %s", rr.Body.String())
 	}
+	if !strings.Contains(rr.Body.String(), `id="shopping-list-panel"`) || !strings.Contains(rr.Body.String(), `hx-swap-oob="outerHTML"`) {
+		t.Fatalf("expected shopping list panel oob response, got body: %s", rr.Body.String())
+	}
+	require.Contains(t, rr.Body.String(), `id="finalize-help"`)
+	require.NotContains(t, rr.Body.String(), `Shopping list`)
+	require.NotContains(t, rr.Body.String(), `noodles`)
 
 	updated, err := storage.GetByID("mock-clerk-user-id")
 	if err != nil {

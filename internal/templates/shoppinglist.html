@@ -84,31 +84,7 @@
 
             {{template "shopping_finalize_controls" .}}
 
-            {{if .ShoppingList}}
-            <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-              <details{{if .HasSavedRecipes}} open{{end}}>
-                <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Shopping list
-                </summary>
-                <div class="mt-4">
-                <ul class="space-y-2 text-ink-700">
-                  {{range .ShoppingList}}
-                  <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                    <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
-                      <span class="font-medium text-brand-700">{{.Name}}</span>
-                      {{if .Quantity}}
-                      <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
-                      {{else}}
-                      <span class="hidden sm:block" aria-hidden="true"></span>
-                      {{end}}
-                    </div>
-                  </li>
-                  {{end}}
-                </ul>
-                </div>
-              </details>
-            </section>
-            {{end}}
+            {{template "shopping_list_panel" .}}
           </div>
         </div>
       </div>
@@ -130,7 +106,7 @@
 {{end}}
 
 {{define "shopping_finalize_controls_content"}}
-  <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to assemble your shopping list."{{end}}>
+  <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to save your list."{{end}}>
     <button type="button"
             id="finalizeButton"
             {{if .HasSavedRecipes}}hx-post="/recipes/{{.Hash}}/finalize"
@@ -138,12 +114,12 @@
             aria-disabled="true"
             aria-describedby="finalize-help"{{end}}
             class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if .HasSavedRecipes}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
-      Build Shopping List
+      Save list
     </button>
   </span>
   {{if not .HasSavedRecipes}}
   <p id="finalize-help" class="text-sm text-ink-600">
-    Add at least one recipe to assemble your shopping list.
+    Add at least one recipe to save your list.
   </p>
   {{end}}
 {{end}}
@@ -152,6 +128,44 @@
 <div id="shopping-finalize-controls" hx-swap-oob="outerHTML" class="mt-10 flex flex-wrap items-center gap-4">
   {{template "shopping_finalize_controls_content" .}}
 </div>
+{{end}}
+
+{{define "shopping_list_panel"}}
+<section id="shopping-list-panel" class="{{if not .ShoppingList}}hidden {{end}}rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  {{template "shopping_list_panel_content" .}}
+</section>
+{{end}}
+
+{{define "shopping_list_panel_response"}}
+<section id="shopping-list-panel" hx-swap-oob="outerHTML" class="{{if not .ShoppingList}}hidden {{end}}rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  {{template "shopping_list_panel_content" .}}
+</section>
+{{end}}
+
+{{define "shopping_list_panel_content"}}
+  {{if .ShoppingList}}
+  <details{{if .HasSavedRecipes}} open{{end}}>
+    <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+      Shopping list
+    </summary>
+    <div class="mt-4">
+    <ul class="space-y-2 text-ink-700">
+      {{range .ShoppingList}}
+      <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+        <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
+          <span class="font-medium text-brand-700">{{.Name}}</span>
+          {{if .Quantity}}
+          <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
+          {{else}}
+          <span class="hidden sm:block" aria-hidden="true"></span>
+          {{end}}
+        </div>
+      </li>
+      {{end}}
+    </ul>
+    </div>
+  </details>
+  {{end}}
 {{end}}
 
 {{define "shopping_recipe_card"}}
