@@ -669,9 +669,6 @@ type captureQuestionGenerator struct {
 	wineRecommendation string
 	winePickCalls      int
 	panicOnWine        bool
-	imageCalls         int
-	panicOnImage       bool
-	imageBody          []byte
 }
 
 func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -684,22 +681,6 @@ func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question str
 	return &ai.QuestionResponse{
 		Answer:     "Try chicken thighs at the same cook time.",
 		ResponseID: "resp-next",
-	}, nil
-}
-
-func (c *captureQuestionGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
-	if c.panicOnImage {
-		panic("unexpected call to GenerateRecipeImage")
-	}
-	_ = ctx
-	_ = recipe
-	c.imageCalls++
-	body := c.imageBody
-	if len(body) == 0 {
-		body = []byte("webp-bytes")
-	}
-	return &ai.GeneratedImage{
-		Body: bytes.NewReader(body),
 	}, nil
 }
 
@@ -719,6 +700,28 @@ func (c *captureQuestionGenerator) PickAWine(ctx context.Context, location strin
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
 	return nil
+}
+
+type countingImageGenerator struct {
+	imageCalls   int
+	panicOnImage bool
+	imageBody    []byte
+}
+
+func (c *countingImageGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+	if c.panicOnImage {
+		panic("unexpected call to GenerateRecipeImage")
+	}
+	_ = ctx
+	_ = recipe
+	c.imageCalls++
+	body := c.imageBody
+	if len(body) == 0 {
+		body = []byte("webp-bytes")
+	}
+	return &ai.GeneratedImage{
+		Body: bytes.NewReader(body),
+	}, nil
 }
 
 func seedQuestionConversation(t *testing.T, s *server, responseID string) string {
@@ -849,10 +852,10 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 
 func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	g := &captureQuestionGenerator{panicOnImage: true}
+	g := &countingImageGenerator{panicOnImage: true}
 	s := newTestServer(t,
 		withTestCache(cacheStore),
-		withTestGenerator(g),
+		withImageGenerator(g),
 	)
 
 	recipe := ai.Recipe{
@@ -1034,12 +1037,15 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	storage := users.NewStorage(cacheStore)
 	g := &captureQuestionGenerator{
 		wineRecommendation: "Bright enough for dinner.",
-		imageBody:          []byte("saved-image-bytes"),
+	}
+	ig := &countingImageGenerator{
+		imageBody: []byte("saved-image-bytes"),
 	}
 	s := newTestServer(t,
 		withTestCache(cacheStore),
 		withTestStorage(storage),
 		withTestGenerator(g),
+		withImageGenerator(ig),
 	)
 
 	recipe := ai.Recipe{
@@ -1067,7 +1073,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 
 	s.Wait()
 	assert.Equal(t, 1, g.winePickCalls)
-	assert.Equal(t, 1, g.imageCalls)
+	assert.Equal(t, 1, ig.imageCalls)
 
 	wine, err := s.WineFromCache(t.Context(), recipeHash)
 	require.NoError(t, err)

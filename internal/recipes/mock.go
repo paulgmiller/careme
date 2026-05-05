@@ -15,7 +15,7 @@ import (
 
 type mock struct{}
 
-func NewMockGenerator() generator {
+func NewMockGenerator() mock {
 	return mock{}
 }
 

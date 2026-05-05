@@ -24,7 +24,6 @@ type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
 	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
-	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error)
 }
 
@@ -174,10 +173,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 // generator not prociding a lot of value here. Should sever just hold an ai client?
 func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
-}
-
-func (g *generatorService) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
-	return g.aiClient.GenerateRecipeImage(ctx, recipe)
 }
 
 func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
