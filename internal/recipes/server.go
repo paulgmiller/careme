@@ -647,23 +647,6 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func recipeFromSelectionParams(recipeHash string, p *generatorParams) (ai.Recipe, bool) {
-	if p == nil {
-		return ai.Recipe{}, false
-	}
-	for _, recipe := range p.Saved {
-		if recipe.ComputeHash() == recipeHash {
-			return recipe, true
-		}
-	}
-	for _, recipe := range p.Dismissed {
-		if recipe.ComputeHash() == recipeHash {
-			return recipe, true
-		}
-	}
-	return ai.Recipe{}, false
-}
-
 func (s *server) wineRecommendationForCard(ctx context.Context, recipeHash string) *ai.WineSelection {
 	wineRecommendation, err := s.WineFromCache(ctx, recipeHash)
 	if err != nil {
