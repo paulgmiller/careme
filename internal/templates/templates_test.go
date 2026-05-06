@@ -63,11 +63,38 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
 		t.Fatalf("about page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
 	}
-	if !strings.Contains(rendered, `id="album"`) {
-		t.Fatalf("about page should include album section, body: %s", rendered)
+	for _, sectionID := range []string{`id="album"`, `id="ethos"`, `id="follow"`, `id="faq"`, `id="github"`} {
+		if !strings.Contains(rendered, sectionID) {
+			t.Fatalf("about page should include %s section, body: %s", sectionID, rendered)
+		}
 	}
-	if !strings.Contains(rendered, "Recipe Photo Album") {
-		t.Fatalf("about page should include album heading, body: %s", rendered)
+	for _, heading := range []string{">Album</h2>", "Ethos", ">Follow Careme</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
+		if !strings.Contains(rendered, heading) {
+			t.Fatalf("about page should include %q heading, body: %s", heading, rendered)
+		}
+	}
+	for _, link := range []string{
+		"https://github.com/paulgmiller/careme/issues/472",
+		"https://www.facebook.com/careme.cooking",
+		"https://bsky.app/profile/northbriton.net",
+		"https://github.com/paulgmiller/careme",
+	} {
+		if !strings.Contains(rendered, link) {
+			t.Fatalf("about page should include %q link, body: %s", link, rendered)
+		}
+	}
+	for _, label := range []string{`aria-label="Facebook"`, `aria-label="Instagram coming soon"`, `aria-label="Bluesky"`} {
+		if !strings.Contains(rendered, label) {
+			t.Fatalf("about page should include %s social label, body: %s", label, rendered)
+		}
+	}
+	if strings.Contains(rendered, `id="privacy"`) {
+		t.Fatalf("about page should not include old privacy section, body: %s", rendered)
+	}
+	for _, oldHeading := range []string{"1. Album", "2. Ethos", "3. Follow Careme", "4. FAQ", "5. GitHub"} {
+		if strings.Contains(rendered, oldHeading) {
+			t.Fatalf("about page should not include numbered heading %q, body: %s", oldHeading, rendered)
+		}
 	}
 	if got := strings.Count(rendered, `data-full="`); got != len(data.AlbumPhotos) {
 		t.Fatalf("about page should render %d album photos, got %d", len(data.AlbumPhotos), got)

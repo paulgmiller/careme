@@ -32,16 +32,16 @@
             </a>
           </div>
           <nav class="mt-6 flex flex-wrap gap-2">
-            <a href="#album" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Recipe Album</a>
-            <a href="#privacy" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Privacy</a>
-            <a href="#github" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">GitHub</a>
+            <a href="#album" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Album</a>
+            <a href="#ethos" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Ethos</a>
+            <a href="#follow" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Follow</a>
             <a href="#faq" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">FAQ</a>
+            <a href="#github" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">GitHub</a>
           </nav>
         </header>
 
         <section id="album" class="border-b border-brand-100 p-8">
-          <h2 class="text-2xl font-bold text-brand-700">1. Recipe Photo Album</h2>
-          <p class="mt-2 text-gray-600">Click caption to open recipe.</p>
+          <h2 class="text-2xl font-bold text-brand-700">Album</h2>
           <div class="mt-6 overflow-hidden rounded-xl border border-brand-100 bg-white p-4" >
             <div class="fotorama" data-shuffle="true" data-allowfullscreen="true" data-nav="thumbs" data-width="100%">
               {{range .AlbumPhotos}}
@@ -52,34 +52,122 @@
               {{end}}
             </div>
           </div>
-          <p class="mt-3 text-sm text-gray-500">
-            Photo source:
-            <a class="font-medium text-brand-700 hover:underline" href="https://blog.northbriton.net/posts/2026-01-24-careme-photos/" target="_blank" rel="noreferrer">
-              careme beta testing (January 24, 2026)
+        </section>
+
+        <section id="ethos" class="border-b border-brand-100 p-8">
+          <h2 class="text-2xl font-bold text-brand-700">
+            <a href="https://github.com/paulgmiller/careme/issues/472" target="_blank" rel="noreferrer" class="hover:underline">
+              Ethos
             </a>
-          </p>
+          </h2>
+          <div class="mt-4 grid gap-4 md:grid-cols-2">
+            <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <h3 class="font-semibold text-brand-700">Home cooking wins the week.</h3>
+              <p class="mt-2 text-sm leading-6 text-gray-700">
+                Cooking at home is tastier, healthier, and cheaper. It builds real kitchen skills, gets partners and kids involved, and leaves room in the budget for the restaurants that are truly worth it.
+              </p>
+            </div>
+            <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <h3 class="font-semibold text-brand-700">Fresh matters most.</h3>
+              <p class="mt-2 text-sm leading-6 text-gray-700">
+                Fresh ingredients taste better, usually mean more vegetables and fewer preservatives, and arrive at the table hotter and prettier than food in a takeout tray.
+              </p>
+            </div>
+            <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <h3 class="font-semibold text-brand-700">The grocery store is part of cooking.</h3>
+              <p class="mt-2 text-sm leading-6 text-gray-700">
+                Local stores can have excellent produce, useful deals, and ingredients from nearby farms and faraway places. Seeing the green beans or salmon before buying still matters.
+              </p>
+            </div>
+            <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <h3 class="font-semibold text-brand-700">Restaurants and meal kits have a place.</h3>
+              <p class="mt-2 text-sm leading-6 text-gray-700">
+                Great restaurants are great. Meal kits can be useful. Careme aims for the everyday middle: more local, less packaging, lower cost, and food you are proud to put on a plate.
+              </p>
+            </div>
+          </div>
         </section>
 
-        <section id="privacy" class="border-b border-brand-100 p-8">
-          <h2 class="text-2xl font-bold text-brand-700">2. Privacy Policy</h2>
-          <p class="mt-3 text-gray-700">
-            This is a plain-language privacy summary for Careme:
-          </p>
-          <ul class="mt-3 list-disc space-y-2 pl-6 text-gray-700">
-            <li>We store only the data needed to run the app, such as account information, saved recipes, and optional feedback.</li>
-            <li>We do not sell personal information.</li>
-            <li>If analytics are enabled, they are used to improve reliability and usability.</li>
-            <li>We work with trusted partners for sign-in, storage, and ai/large language models</li>
-            <li>You can request account data removal by opening a GitHub issue on the project repository.</li>
-          </ul>
-          <p class="mt-3 text-sm text-gray-500">
-            This policy may be updated as features evolve. Last updated: February 16, 2026.
-          </p>
+        <section id="follow" class="border-b border-brand-100 p-8">
+          <h2 class="text-2xl font-bold text-brand-700">Follow Careme</h2>
+          <p class="mt-2 text-gray-600">Find updates, kitchen notes, and project news.</p>
+          <div class="mt-4 flex flex-wrap gap-3">
+            <a href="https://www.facebook.com/careme.cooking" target="_blank" rel="noreferrer" aria-label="Facebook"
+               class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="h-7 w-7" fill="currentColor">
+                <path d="M22 12.06C22 6.51 17.52 2 12 2S2 6.51 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.52 1.49-3.91 3.77-3.91 1.09 0 2.23.2 2.23.2v2.47h-1.26c-1.24 0-1.63.78-1.63 1.57v1.88h2.77l-.44 2.91h-2.33V22C18.34 21.24 22 17.08 22 12.06Z" />
+              </svg>
+            </a>
+            <a href="#" aria-label="Instagram coming soon" aria-disabled="true"
+               class="inline-flex h-14 w-14 cursor-not-allowed items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-500">
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="5" />
+                <circle cx="12" cy="12" r="4" />
+                <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+              </svg>
+            </a>
+            <a href="https://bsky.app/profile/northbriton.net" target="_blank" rel="noreferrer" aria-label="Bluesky"
+               class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="h-7 w-7" fill="currentColor">
+                <path d="M6.45 4.04C8.7 5.72 11.13 9.12 12 10.95c.87-1.83 3.3-5.23 5.55-6.91 1.63-1.22 4.27-2.16 4.27.84 0 .6-.34 5.05-.54 5.77-.7 2.52-3.24 3.16-5.51 2.77 3.96.67 4.96 2.91 2.79 5.15-4.11 4.26-5.91-1.07-6.37-2.43-.08-.25-.12-.36-.19-.36s-.11.11-.19.36c-.46 1.36-2.26 6.69-6.37 2.43-2.17-2.24-1.17-4.48 2.79-5.15-2.27.39-4.81-.25-5.51-2.77-.2-.72-.54-5.17-.54-5.77 0-3 2.64-2.06 4.27-.84Z" />
+              </svg>
+            </a>
+          </div>
         </section>
 
-        <section id="github" class="border-b border-brand-100 p-8">
-          <h2 class="text-2xl font-bold text-brand-700">3. GitHub Links</h2>
-          <p class="mt-2 text-gray-600">Where to explore the project and share ideas.</p>
+        <section id="faq" class="border-b border-brand-100 p-8">
+          <h2 class="text-2xl font-bold text-brand-700">FAQ</h2>
+          <div class="mt-4 space-y-3">
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">How does this work</summary>
+              <ol class="mt-2 list-decimal space-y-2 pl-5 text-gray-700">
+                <li>Careme checks a specific grocery store for vegetables, fruit, meat, seafood, and a few other categories.</li>
+                <li>A lightweight model ranks ingredients for cooking fresh food at home, keeping the best options.</li>
+                <li>The latest reasoning AI model then uses those ingredients to produce a varied set of recipes. <a href="https://github.com/paulgmiller/careme/blob/22d9486f6c1c4a6009bfb4a03ab88d0377e50c81/internal/ai/client.go#L139">Example prompt.</a></li>
+                <li>A different AI model, Gemini, critiques the recipes for <a href="https://github.com/paulgmiller/careme/blob/22d9486f6c1c4a6009bfb4a03ab88d0377e50c81/internal/ai/critique.go#L22">cookability</a>.</li>
+                <li>You add or hide recipes and build a shopping list. Don't like them? Give some guidance and tell the chef to try again.</li>
+                <li>The recipes you add are saved to your kitchen, with a generated image and wine pairing based on what is in stock at the same store.</li>
+                <li>You can keep asking questions on the recipe page, and the model will have context on the recipe and ingredients.</li>
+              </ol>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Is this free?</summary>
+              <p class="mt-2 text-gray-700">For now. The plan is to charge a very small monthly subscription to cover LLM costs. We could try advertising or affiliate links, but we want to focus on making good meals. If you're not the customer, you're the product.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Do I need an account?</summary>
+              <p class="mt-2 text-gray-700">You can view existing recipes and shopping lists, but you need an account to generate new recipes, save them, leave feedback, or ask questions.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Can I share a recipe or shopping list?</summary>
+              <p class="mt-2 text-gray-700">Yes. Every recipe page and shopping list has its own public link that we'll try to keep alive forever.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Is this an evil corporation that will sell my data?</summary>
+              <p class="mt-2 text-gray-700">So far, Careme is backed by one person. I have an LLC, but we have no intention of using anything except your feedback to improve your recipes and other people's recipes.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">How do I suggest improvements?</summary>
+              <p class="mt-2 text-gray-700">If you're comfortable with GitHub, use the links below. Otherwise, email chef@careme.cooking for now.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">How is this different than a meal kit?</summary>
+              <p class="mt-2 text-gray-700">Meal kits are great; my wife and I used Blue Apron for many years. But we hope Careme can be more varied, more customized to you and your local produce, cheaper, and less packaging-intensive.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Is this like Instacart?</summary>
+              <p class="mt-2 text-gray-700">No. See the ethos section above: we want you in the grocery store so you can get the best it has to offer. Instacart recipes are mostly prewritten, which may be very good, but they are tailored to neither you nor the store.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Can't I just use ChatGPT?</summary>
+              <p class="mt-2 text-gray-700">That's where this started, but I found ChatGPT did much better with real ingredients, both as a constraint and as a reason to explore. The critiquing agent and recipe questions also add a lot of value. Lastly, we can focus the UI more tightly around cooking.</p>
+            </details>
+          </div>
+        </section>
+
+        <section id="github" class="p-8">
+          <h2 class="text-2xl font-bold text-brand-700">GitHub</h2>
+          <p class="mt-2 text-gray-600">Explore the project, file issues, or read the license.</p>
           <div class="mt-4 grid gap-3 sm:grid-cols-2">
             <a href="https://github.com/paulgmiller/careme" target="_blank" rel="noreferrer"
                class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
@@ -96,28 +184,6 @@
               <h3 class="font-semibold text-brand-700">License</h3>
               <p class="mt-1 text-sm text-gray-600">Project licensing terms.</p>
             </a>
-          </div>
-        </section>
-
-        <section id="faq" class="p-8">
-          <h2 class="text-2xl font-bold text-brand-700">4. General FAQ</h2>
-          <div class="mt-4 space-y-3">
-            <details class="rounded-xl border border-brand-100 bg-white p-4">
-              <summary class="cursor-pointer font-semibold text-brand-700">What is Careme?</summary>
-              <p class="mt-2 text-gray-700">Careme is a recipe planning app that uses store availability and seasonal ingredients to suggest practical weekly meals.</p>
-            </details>
-            <details class="rounded-xl border border-brand-100 bg-white p-4">
-              <summary class="cursor-pointer font-semibold text-brand-700">Do I need an account?</summary>
-              <p class="mt-2 text-gray-700">You can browse some pages without signing in, but an account is needed to save recipes, track favorites, and keep history.</p>
-            </details>
-            <details class="rounded-xl border border-brand-100 bg-white p-4">
-              <summary class="cursor-pointer font-semibold text-brand-700">Can I share a recipe page?</summary>
-              <p class="mt-2 text-gray-700">Yes. Every recipe page has its own shareable link.</p>
-            </details>
-            <details class="rounded-xl border border-brand-100 bg-white p-4">
-              <summary class="cursor-pointer font-semibold text-brand-700">How do I suggest improvements?</summary>
-              <p class="mt-2 text-gray-700">Use the GitHub page to share ideas, report problems, or ask questions.</p>
-            </details>
           </div>
         </section>
       </div>
