@@ -241,19 +241,17 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "recipe's origin shpppinglist not found or expired", http.StatusInternalServerError)
 		return
 	}
+	selection := selectionFromParams(p)
 	if signedIn && userID != "" {
-		selection, selErr := s.loadRecipeSelection(ctx, userID, recipe.OriginHash)
+		latestSel, selErr := s.loadRecipeSelection(ctx, userID, recipe.OriginHash)
 		if selErr != nil {
 			slog.ErrorContext(ctx, "failed to load recipe selection for single recipe render", "hash", recipe.OriginHash, "error", selErr)
 			http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
 			return
 		}
-		s.mergeParamsWithSelection(ctx, p, selection, []ai.Recipe{*recipe})
-		// this is a bit wierd can we update recipe some other way  https://github.com/paulgmiller/careme/issues/542
-		recipeForSavedState := []ai.Recipe{*recipe}
-		applySavedToRecipes(recipeForSavedState, p)
-		recipe = &recipeForSavedState[0]
+		selection = selection.override(latestSel)
 	}
+	recipe.Saved = selection.IsSaved(recipe.ComputeHash())
 
 	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
 	FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
@@ -824,7 +822,9 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	params := *baseParams
 	params.Instructions = instructions
 	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
-	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
+	selection = selectionFromParams(baseParams).override(selection)
+	applySelectionToParams(&params, selection, currentList.Recipes)
+
 	params.ResponseID = currentList.ResponseID
 	return &params, nil
 }
@@ -926,14 +926,15 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		userID, err := s.clerk.GetUserIDFromRequest(r)
 		signedIn := !errors.Is(err, auth.ErrNoSession)
+		selection := selectionFromParams(p)
 		if signedIn {
-			fromStore, selErr := s.loadRecipeSelection(ctx, userID, hashParam)
-			if selErr != nil {
-				slog.ErrorContext(ctx, "failed to load recipe selection for render", "hash", hashParam, "error", selErr)
+			userSelection, err := s.loadRecipeSelection(ctx, userID, hashParam)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to load recipe selection for render", "hash", hashParam, "error", err)
 				http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
 				return
 			}
-			s.mergeParamsWithSelection(ctx, p, fromStore, slist.Recipes)
+			selection = selection.override(userSelection)
 		}
 		if r.URL.Query().Get("mail") == "true" {
 			tf := users.NewUnsubscribeTokenFactory(*s.cfg)
@@ -950,7 +951,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		applySavedToRecipes(slist.Recipes, p)
+		applySelectionToParams(p, selection, slist.Recipes)
+		applySavedToRecipes(slist.Recipes, selection)
 		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
 		var wineWG sync.WaitGroup
 		var wineMu sync.Mutex

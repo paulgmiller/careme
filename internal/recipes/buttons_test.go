@@ -113,14 +113,13 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 				},
 				Health:       "Healthy",
 				DrinkPairing: "Water",
+				Saved:        true,
 			},
 		},
 	}
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
-	applySavedToRecipes(listWithSavedRecipe.Recipes, p)
 	w := httptest.NewRecorder()
 	FormatShoppingListHTMLForHash(t.Context(), p, listWithSavedRecipe, nil, true, p.Hash(), nil, w)
 	html := assertHTTPSuccess(t, w)

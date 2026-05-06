@@ -58,6 +58,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	})
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
+	hasSavedRecipes := false
 	for _, recipe := range l.Recipes {
 		recipeHash := recipe.ComputeHash()
 		wineRecommendation := wineRecommendations[recipeHash]
@@ -72,6 +73,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			WineRecommendation: wineRecommendation,
 		})
 		if recipe.Saved {
+			hasSavedRecipes = true
 			combinedIngredients = append(combinedIngredients, displayIngredients...)
 		}
 	}
@@ -97,7 +99,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Hash:            hash,
 		Recipes:         recipeViews,
 		ShoppingList:    shoppingList,
-		HasSavedRecipes: len(p.Saved) > 0,
+		HasSavedRecipes: hasSavedRecipes,
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
 	}
