@@ -530,17 +530,25 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	recipe.Saved = true
 
 	var response bytes.Buffer
-	if err := RenderShoppingRecipeCardHTML(*recipe, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render save card response", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
-	}
+	if isSingleRecipeAction(r, recipeHash) {
+		if err := RenderRecipeSaveActionHTML(*recipe, shoppingListHash, &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render save action response", "hash", recipeHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := RenderShoppingRecipeCardHTML(*recipe, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render save card response", "hash", recipeHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
 
-	// want to kill this and make it dynmic for now on any save or dmiss we allow build
-	if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after save", "shoppingListHash", shoppingListHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
+		// want to kill this and make it dynmic for now on any save or dmiss we allow build
+		if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render finalize controls after save", "shoppingListHash", shoppingListHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// move into startSavedRecipeBackgroundGeneration
@@ -626,17 +634,25 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	recipe.Saved = false
 
 	var response bytes.Buffer
-	if err := RenderShoppingRecipeCardHTML(*recipe, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render dismiss card response", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
-	}
+	if isSingleRecipeAction(r, recipeHash) {
+		if err := RenderRecipeSaveActionHTML(*recipe, selectionHash, &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render dismiss action response", "hash", recipeHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := RenderShoppingRecipeCardHTML(*recipe, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render dismiss card response", "hash", recipeHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
 
-	// want to kill this and make it dynmic for now on any save or dmiss we allow build
-	if err := RenderShoppingFinalizeControlsHTML(selectionHash, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after dismiss", "selection_hash", selectionHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
+		// want to kill this and make it dynmic for now on any save or dmiss we allow build
+		if err := RenderShoppingFinalizeControlsHTML(selectionHash, &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render finalize controls after dismiss", "selection_hash", selectionHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	setTextContent(w)
@@ -1117,6 +1133,21 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStar
 
 func isHTMXRequest(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
+}
+
+func isSingleRecipeAction(r *http.Request, recipeHash string) bool {
+	if strings.EqualFold(strings.TrimSpace(r.FormValue("source")), "recipe") {
+		return true
+	}
+	currentURL := strings.TrimSpace(r.Header.Get("HX-Current-URL"))
+	if currentURL == "" {
+		return false
+	}
+	parsed, err := url.Parse(currentURL)
+	if err != nil {
+		return false
+	}
+	return parsed.Path == "/recipe/"+recipeHash
 }
 
 func parseFeedbackBool(value string) (bool, error) {

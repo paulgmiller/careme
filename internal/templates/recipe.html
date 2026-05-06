@@ -309,7 +309,7 @@
   {{if .Recipe.Saved}}
   <button type="button"
           hx-post="/recipe/{{.RecipeHash}}/dismiss"
-          hx-vals='{"h":"{{.OriginHash}}"}'
+          hx-vals='{"h":"{{.OriginHash}}","source":"recipe"}'
           hx-target="closest .recipe-save-action"
           hx-swap="outerHTML"
           hx-disabled-elt="this"
@@ -319,7 +319,7 @@
   {{else}}
   <button type="button"
           hx-post="/recipe/{{.RecipeHash}}/save"
-          hx-vals='{"h":"{{.OriginHash}}"}'
+          hx-vals='{"h":"{{.OriginHash}}","source":"recipe"}'
           hx-target="closest .recipe-save-action"
           hx-swap="outerHTML"
           hx-disabled-elt="this"

@@ -1086,6 +1086,50 @@ func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
 	require.Empty(t, selection.DismissedHashes)
 }
 
+func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+	)
+
+	recipe := ai.Recipe{
+		Title:        "Single Recipe",
+		Description:  "Recipe to save from detail page",
+		Ingredients:  []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+		Instructions: []string{"Step 1"},
+		Health:       "Healthy",
+		DrinkPairing: "Water",
+	}
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	originHash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	recipeHash := recipe.ComputeHash()
+	saveRecipesForOrigin(t, s, originHash, recipe)
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, originHash))
+
+	form := url.Values{"h": {originHash}, "source": {"recipe"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleSaveRecipe(rr, req)
+	s.Wait()
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.Contains(t, rr.Body.String(), `class="recipe-save-action pt-2"`)
+	require.Contains(t, rr.Body.String(), `Dismiss`)
+	require.Contains(t, rr.Body.String(), `/dismiss"`)
+	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
+	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.NotContains(t, rr.Body.String(), `Recipe to save from detail page`)
+	require.NotContains(t, rr.Body.String(), `id="shopping-finalize-controls"`)
+	require.NotContains(t, rr.Body.String(), `/save"`)
+}
+
 func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -1235,6 +1279,61 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if len(selection.DismissedHashes) != 1 || selection.DismissedHashes[0] != recipeHash {
 		t.Fatalf("expected dismissed selection with hash %q, got %#v", recipeHash, selection.DismissedHashes)
 	}
+}
+
+func TestHandleDismissRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+	)
+
+	recipe := ai.Recipe{
+		Title:       "Single Recipe",
+		Description: "Recipe to dismiss from detail page",
+	}
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	p.Saved = []ai.Recipe{recipe}
+	originHash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	recipeHash := recipe.ComputeHash()
+	saveRecipesForOrigin(t, s, originHash, recipe)
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, originHash))
+
+	user := &utypes.User{
+		ID:          "mock-clerk-user-id",
+		Email:       []string{"you@careme.cooking"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{
+			{
+				Title:     "Single Recipe",
+				Hash:      recipeHash,
+				CreatedAt: time.Now(),
+			},
+		},
+	}
+	require.NoError(t, storage.Update(user))
+
+	form := url.Values{"h": {originHash}, "source": {"recipe"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/dismiss", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", recipeHash)
+	rr := httptest.NewRecorder()
+
+	s.handleDismissRecipe(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.Contains(t, rr.Body.String(), `class="recipe-save-action pt-2"`)
+	require.Contains(t, rr.Body.String(), `Save`)
+	require.Contains(t, rr.Body.String(), `/save"`)
+	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
+	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.NotContains(t, rr.Body.String(), `Recipe to dismiss from detail page`)
+	require.NotContains(t, rr.Body.String(), `id="shopping-finalize-controls"`)
+	require.NotContains(t, rr.Body.String(), `/dismiss"`)
 }
 
 func TestHandleDismissRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {

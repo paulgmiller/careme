@@ -220,6 +220,21 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, shoppingListHash string, win
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
 }
 
+func RenderRecipeSaveActionHTML(recipe ai.Recipe, originHash string, writer io.Writer) error {
+	data := struct {
+		Recipe         ai.Recipe
+		OriginHash     string
+		RecipeHash     string
+		ServerSignedIn bool
+	}{
+		Recipe:         recipe,
+		OriginHash:     originHash,
+		RecipeHash:     recipe.ComputeHash(),
+		ServerSignedIn: true,
+	}
+	return templates.Recipe.ExecuteTemplate(writer, "recipe_save_action", data)
+}
+
 func latestThreadResponseID(thread []RecipeThreadEntry) string {
 	if len(thread) == 0 {
 		return ""
