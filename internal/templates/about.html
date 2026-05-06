@@ -32,16 +32,16 @@
             </a>
           </div>
           <nav class="mt-6 flex flex-wrap gap-2">
-            <a href="#album" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Recipe Album</a>
-            <a href="#privacy" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Privacy</a>
-            <a href="#github" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">GitHub</a>
+            <a href="#album" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Album</a>
+            <a href="#ethos" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Ethos</a>
+            <a href="#follow" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Follow</a>
             <a href="#faq" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">FAQ</a>
+            <a href="#github" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">GitHub</a>
           </nav>
         </header>
 
         <section id="album" class="border-b border-brand-100 p-8">
-          <h2 class="text-2xl font-bold text-brand-700">1. Recipe Photo Album</h2>
-          <p class="mt-2 text-gray-600">Click caption to open recipe.</p>
+          <h2 class="text-2xl font-bold text-brand-700">Album</h2>
           <div class="mt-6 overflow-hidden rounded-xl border border-brand-100 bg-white p-4" >
             <div class="fotorama" data-shuffle="true" data-allowfullscreen="true" data-nav="thumbs" data-width="100%">
               {{range .AlbumPhotos}}
@@ -52,55 +52,71 @@
               {{end}}
             </div>
           </div>
-          <p class="mt-3 text-sm text-gray-500">
-            Photo source:
-            <a class="font-medium text-brand-700 hover:underline" href="https://blog.northbriton.net/posts/2026-01-24-careme-photos/" target="_blank" rel="noreferrer">
-              careme beta testing (January 24, 2026)
-            </a>
-          </p>
         </section>
 
-        <section id="privacy" class="border-b border-brand-100 p-8">
-          <h2 class="text-2xl font-bold text-brand-700">2. Privacy Policy</h2>
-          <p class="mt-3 text-gray-700">
-            This is a plain-language privacy summary for Careme:
-          </p>
-          <ul class="mt-3 list-disc space-y-2 pl-6 text-gray-700">
-            <li>We store only the data needed to run the app, such as account information, saved recipes, and optional feedback.</li>
-            <li>We do not sell personal information.</li>
-            <li>If analytics are enabled, they are used to improve reliability and usability.</li>
-            <li>We work with trusted partners for sign-in, storage, and ai/large language models</li>
-            <li>You can request account data removal by opening a GitHub issue on the project repository.</li>
-          </ul>
-          <p class="mt-3 text-sm text-gray-500">
-            This policy may be updated as features evolve. Last updated: February 16, 2026.
-          </p>
+        <section id="ethos" class="border-b border-brand-100 p-8">
+          <h2 class="text-2xl font-bold text-brand-700">
+            <a href="https://github.com/paulgmiller/careme/issues/472" target="_blank" rel="noreferrer" class="hover:underline">
+              Ethos
+            </a>
+          </h2>
+          <div class="mt-4 grid gap-4 md:grid-cols-2">
+            <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <h3 class="font-semibold text-brand-700">Home cooking wins the week.</h3>
+              <p class="mt-2 text-sm leading-6 text-gray-700">
+                Cooking at home is tastier, healthier, and cheaper. It builds real kitchen skills, gets partners and kids involved, and leaves room in the budget for the restaurants that are truly worth it.
+              </p>
+            </div>
+            <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <h3 class="font-semibold text-brand-700">Fresh matters most.</h3>
+              <p class="mt-2 text-sm leading-6 text-gray-700">
+                Fresh ingredients taste better, usually mean more vegetables and fewer preservatives, and arrive at the table hotter and prettier than food in a takeout tray.
+              </p>
+            </div>
+            <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <h3 class="font-semibold text-brand-700">The grocery store is part of cooking.</h3>
+              <p class="mt-2 text-sm leading-6 text-gray-700">
+                Local stores can have excellent produce, useful deals, and ingredients from nearby farms and faraway places. Seeing the green beans or salmon before buying still matters.
+              </p>
+            </div>
+            <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+              <h3 class="font-semibold text-brand-700">Restaurants and meal kits have a place.</h3>
+              <p class="mt-2 text-sm leading-6 text-gray-700">
+                Great restaurants are great. Meal kits can be useful. Careme aims for the everyday middle: more local, less packaging, lower cost, and food you are proud to put on a plate.
+              </p>
+            </div>
+          </div>
         </section>
 
-        <section id="github" class="border-b border-brand-100 p-8">
-          <h2 class="text-2xl font-bold text-brand-700">3. GitHub Links</h2>
-          <p class="mt-2 text-gray-600">Where to explore the project and share ideas.</p>
-          <div class="mt-4 grid gap-3 sm:grid-cols-2">
-            <a href="https://github.com/paulgmiller/careme" target="_blank" rel="noreferrer"
-               class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
-              <h3 class="font-semibold text-brand-700">Repository</h3>
-              <p class="mt-1 text-sm text-gray-600">Source code, README, and release history.</p>
+        <section id="follow" class="border-b border-brand-100 p-8">
+          <h2 class="text-2xl font-bold text-brand-700">Follow Careme</h2>
+          <p class="mt-2 text-gray-600">Find updates, kitchen notes, and project news.</p>
+          <div class="mt-4 flex flex-wrap gap-3">
+            <a href="https://www.facebook.com/careme.cooking" target="_blank" rel="noreferrer" aria-label="Facebook"
+               class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="h-7 w-7" fill="currentColor">
+                <path d="M22 12.06C22 6.51 17.52 2 12 2S2 6.51 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.52 1.49-3.91 3.77-3.91 1.09 0 2.23.2 2.23.2v2.47h-1.26c-1.24 0-1.63.78-1.63 1.57v1.88h2.77l-.44 2.91h-2.33V22C18.34 21.24 22 17.08 22 12.06Z" />
+              </svg>
             </a>
-            <a href="https://github.com/paulgmiller/careme/issues" target="_blank" rel="noreferrer"
-               class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
-              <h3 class="font-semibold text-brand-700">Issues</h3>
-              <p class="mt-1 text-sm text-gray-600">Bug reports and feature requests.</p>
+            <a href="#" aria-label="Instagram coming soon" aria-disabled="true"
+               class="inline-flex h-14 w-14 cursor-not-allowed items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-500">
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="5" />
+                <circle cx="12" cy="12" r="4" />
+                <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+              </svg>
             </a>
-            <a href="https://github.com/paulgmiller/careme/blob/master/Liscence" target="_blank" rel="noreferrer"
-               class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
-              <h3 class="font-semibold text-brand-700">License</h3>
-              <p class="mt-1 text-sm text-gray-600">Project licensing terms.</p>
+            <a href="https://bsky.app/profile/northbriton.net" target="_blank" rel="noreferrer" aria-label="Bluesky"
+               class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="h-7 w-7" fill="currentColor">
+                <path d="M6.45 4.04C8.7 5.72 11.13 9.12 12 10.95c.87-1.83 3.3-5.23 5.55-6.91 1.63-1.22 4.27-2.16 4.27.84 0 .6-.34 5.05-.54 5.77-.7 2.52-3.24 3.16-5.51 2.77 3.96.67 4.96 2.91 2.79 5.15-4.11 4.26-5.91-1.07-6.37-2.43-.08-.25-.12-.36-.19-.36s-.11.11-.19.36c-.46 1.36-2.26 6.69-6.37 2.43-2.17-2.24-1.17-4.48 2.79-5.15-2.27.39-4.81-.25-5.51-2.77-.2-.72-.54-5.17-.54-5.77 0-3 2.64-2.06 4.27-.84Z" />
+              </svg>
             </a>
           </div>
         </section>
 
-        <section id="faq" class="p-8">
-          <h2 class="text-2xl font-bold text-brand-700">4. General FAQ</h2>
+        <section id="faq" class="border-b border-brand-100 p-8">
+          <h2 class="text-2xl font-bold text-brand-700">FAQ</h2>
           <div class="mt-4 space-y-3">
             <details class="rounded-xl border border-brand-100 bg-white p-4">
               <summary class="cursor-pointer font-semibold text-brand-700">What is Careme?</summary>
@@ -118,6 +134,28 @@
               <summary class="cursor-pointer font-semibold text-brand-700">How do I suggest improvements?</summary>
               <p class="mt-2 text-gray-700">Use the GitHub page to share ideas, report problems, or ask questions.</p>
             </details>
+          </div>
+        </section>
+
+        <section id="github" class="p-8">
+          <h2 class="text-2xl font-bold text-brand-700">GitHub</h2>
+          <p class="mt-2 text-gray-600">Explore the project, file issues, or read the license.</p>
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <a href="https://github.com/paulgmiller/careme" target="_blank" rel="noreferrer"
+               class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
+              <h3 class="font-semibold text-brand-700">Repository</h3>
+              <p class="mt-1 text-sm text-gray-600">Source code, README, and release history.</p>
+            </a>
+            <a href="https://github.com/paulgmiller/careme/issues" target="_blank" rel="noreferrer"
+               class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
+              <h3 class="font-semibold text-brand-700">Issues</h3>
+              <p class="mt-1 text-sm text-gray-600">Bug reports and feature requests.</p>
+            </a>
+            <a href="https://github.com/paulgmiller/careme/blob/master/Liscence" target="_blank" rel="noreferrer"
+               class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
+              <h3 class="font-semibold text-brand-700">License</h3>
+              <p class="mt-1 text-sm text-gray-600">Project licensing terms.</p>
+            </a>
           </div>
         </section>
       </div>
