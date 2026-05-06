@@ -530,7 +530,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	recipe.Saved = true
 
 	var response bytes.Buffer
-	if isSingleRecipeAction(r, recipeHash) {
+	if isSingleRecipeAction(r) {
 		if err := RenderRecipeSaveActionHTML(*recipe, shoppingListHash, &response); err != nil {
 			slog.ErrorContext(ctx, "failed to render save action response", "hash", recipeHash, "error", err)
 			http.Error(w, "failed to write response", http.StatusInternalServerError)
@@ -634,7 +634,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	recipe.Saved = false
 
 	var response bytes.Buffer
-	if isSingleRecipeAction(r, recipeHash) {
+	if isSingleRecipeAction(r) {
 		if err := RenderRecipeSaveActionHTML(*recipe, selectionHash, &response); err != nil {
 			slog.ErrorContext(ctx, "failed to render dismiss action response", "hash", recipeHash, "error", err)
 			http.Error(w, "failed to write response", http.StatusInternalServerError)
@@ -1135,19 +1135,8 @@ func isHTMXRequest(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
 
-func isSingleRecipeAction(r *http.Request, recipeHash string) bool {
-	if strings.EqualFold(strings.TrimSpace(r.FormValue("source")), "recipe") {
-		return true
-	}
-	currentURL := strings.TrimSpace(r.Header.Get("HX-Current-URL"))
-	if currentURL == "" {
-		return false
-	}
-	parsed, err := url.Parse(currentURL)
-	if err != nil {
-		return false
-	}
-	return parsed.Path == "/recipe/"+recipeHash
+func isSingleRecipeAction(r *http.Request) bool {
+	return strings.EqualFold(strings.TrimSpace(r.FormValue("source")), "recipe")
 }
 
 func parseFeedbackBool(value string) (bool, error) {
