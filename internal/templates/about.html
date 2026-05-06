@@ -119,20 +119,48 @@
           <h2 class="text-2xl font-bold text-brand-700">FAQ</h2>
           <div class="mt-4 space-y-3">
             <details class="rounded-xl border border-brand-100 bg-white p-4">
-              <summary class="cursor-pointer font-semibold text-brand-700">What is Careme?</summary>
-              <p class="mt-2 text-gray-700">Careme is a recipe planning app that uses store availability and seasonal ingredients to suggest practical weekly meals.</p>
+              <summary class="cursor-pointer font-semibold text-brand-700">How does this work</summary>
+              <ol class="mt-2 list-decimal space-y-2 pl-5 text-gray-700">
+                <li>Careme checks a specific grocery store for vegetables, fruit, meat, seafood, and a few other categories.</li>
+                <li>A lightweight model ranks ingredients for cooking fresh food at home, keeping the best options.</li>
+                <li>The latest reasoning AI model then uses those ingredients to produce a varied set of recipes. <a href="https://github.com/paulgmiller/careme/blob/22d9486f6c1c4a6009bfb4a03ab88d0377e50c81/internal/ai/client.go#L139">Example prompt.</a></li>
+                <li>A different AI model, Gemini, critiques the recipes for <a href="https://github.com/paulgmiller/careme/blob/22d9486f6c1c4a6009bfb4a03ab88d0377e50c81/internal/ai/critique.go#L22">cookability</a>.</li>
+                <li>You add or hide recipes and build a shopping list. Don't like them? Give some guidance and tell the chef to try again.</li>
+                <li>The recipes you add are saved to your kitchen, with a generated image and wine pairing based on what is in stock at the same store.</li>
+                <li>You can keep asking questions on the recipe page, and the model will have context on the recipe and ingredients.</li>
+              </ol>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Is this free?</summary>
+              <p class="mt-2 text-gray-700">For now. The plan is to charge a very small monthly subscription to cover LLM costs. We could try advertising or affiliate links, but we want to focus on making good meals. If you're not the customer, you're the product.</p>
             </details>
             <details class="rounded-xl border border-brand-100 bg-white p-4">
               <summary class="cursor-pointer font-semibold text-brand-700">Do I need an account?</summary>
-              <p class="mt-2 text-gray-700">You can browse some pages without signing in, but an account is needed to save recipes, track favorites, and keep history.</p>
+              <p class="mt-2 text-gray-700">You can view existing recipes and shopping lists, but you need an account to generate new recipes, save them, leave feedback, or ask questions.</p>
             </details>
             <details class="rounded-xl border border-brand-100 bg-white p-4">
-              <summary class="cursor-pointer font-semibold text-brand-700">Can I share a recipe page?</summary>
-              <p class="mt-2 text-gray-700">Yes. Every recipe page has its own shareable link.</p>
+              <summary class="cursor-pointer font-semibold text-brand-700">Can I share a recipe or shopping list?</summary>
+              <p class="mt-2 text-gray-700">Yes. Every recipe page and shopping list has its own public link that we'll try to keep alive forever.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Is this an evil corporation that will sell my data?</summary>
+              <p class="mt-2 text-gray-700">So far, Careme is backed by one person. I have an LLC, but we have no intention of using anything except your feedback to improve your recipes and other people's recipes.</p>
             </details>
             <details class="rounded-xl border border-brand-100 bg-white p-4">
               <summary class="cursor-pointer font-semibold text-brand-700">How do I suggest improvements?</summary>
-              <p class="mt-2 text-gray-700">Use the GitHub page to share ideas, report problems, or ask questions.</p>
+              <p class="mt-2 text-gray-700">If you're comfortable with GitHub, use the links below. Otherwise, email chef@careme.cooking for now.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">How is this different than a meal kit?</summary>
+              <p class="mt-2 text-gray-700">Meal kits are great; my wife and I used Blue Apron for many years. But we hope Careme can be more varied, more customized to you and your local produce, cheaper, and less packaging-intensive.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Is this like Instacart?</summary>
+              <p class="mt-2 text-gray-700">No. See the ethos section above: we want you in the grocery store so you can get the best it has to offer. Instacart recipes are mostly prewritten, which may be very good, but they are tailored to neither you nor the store.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Can't I just use ChatGPT?</summary>
+              <p class="mt-2 text-gray-700">That's where this started, but I found ChatGPT did much better with real ingredients, both as a constraint and as a reason to explore. The critiquing agent and recipe questions also add a lot of value. Lastly, we can focus the UI more tightly around cooking.</p>
             </details>
           </div>
         </section>
