@@ -4,6 +4,10 @@ Careme is your personal chef and sommilier. It will
 2. Check the stores inventory for fresh meat and seasonal produce
 3. Generate a weekly meal plan from a variety of cuisines and cooking styles.
 
+![Go](https://img.shields.io/badge/Go-1.26-blue)
+![License](https://img.shields.io/github/license/paulgmiller/careme)
+![Last Commit](https://img.shields.io/github/last-commit/paulgmiller/careme)
+![CI](https://github.com/paulgmiller/careme/actions/workflows/ci.yml/badge.svg)
 
 ## Configuration
 
