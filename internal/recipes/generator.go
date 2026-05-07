@@ -112,6 +112,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		instructions := regenerateInstructions(p)
 
 		// TODO give them some sort of status.
+		ctx = ai.WithPromptMetadata(ctx, ai.PromptMetadata{
+			ShoppingHash: hash,
+			Operation:    ai.RecipePromptOperationRegenerate,
+		})
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ResponseID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
@@ -151,6 +155,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 	instructions := []string{p.Directive, p.Instructions}
 
+	ctx = ai.WithPromptMetadata(ctx, ai.PromptMetadata{
+		ShoppingHash: hash,
+		Operation:    ai.RecipePromptOperationGenerate,
+	})
 	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
@@ -238,6 +246,10 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	}
 
 	// we could also just give all feedback back if any are below score
+	ctx = ai.WithPromptMetadata(ctx, ai.PromptMetadata{
+		ShoppingHash: hash,
+		Operation:    ai.RecipePromptOperationCritiqueRetry,
+	})
 	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ResponseID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)

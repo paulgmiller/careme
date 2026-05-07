@@ -29,11 +29,13 @@ type captureRegenerateAIClient struct {
 	instructions []string
 	responseID   string
 	shoppingList *ai.ShoppingList
+	metadata     ai.PromptMetadata
 }
 
 type captureGenerateAIClient struct {
 	shoppingList *ai.ShoppingList
 	ingredients  []ai.InputIngredient
+	metadata     ai.PromptMetadata
 }
 
 type sequenceAIClient struct {
@@ -43,6 +45,8 @@ type sequenceAIClient struct {
 	regenerateCalls        int
 	regenerateInstructions [][]string
 	regenerateResponseIDs  []string
+	generateMetadata       []ai.PromptMetadata
+	regenerateMetadata     []ai.PromptMetadata
 	generateResponses      []*ai.ShoppingList
 	regenerateResponses    []*ai.ShoppingList
 }
@@ -99,6 +103,7 @@ func (c *captureRegenerateAIClient) GenerateRecipes(ctx context.Context, locatio
 func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error) {
 	c.instructions = append([]string(nil), newinstructions...)
 	c.responseID = previousResponseID
+	c.metadata = ai.PromptMetadataFromContext(ctx)
 	if c.shoppingList != nil {
 		return c.shoppingList, nil
 	}
@@ -123,6 +128,7 @@ func (c *captureRegenerateAIClient) Ready(ctx context.Context) error {
 
 func (c *captureGenerateAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
 	c.ingredients = append([]ai.InputIngredient(nil), ingredients...)
+	c.metadata = ai.PromptMetadataFromContext(ctx)
 	if c.shoppingList != nil {
 		return c.shoppingList, nil
 	}
@@ -155,6 +161,7 @@ func (c *sequenceAIClient) GenerateRecipes(ctx context.Context, location *locati
 
 	c.generateCalls++
 	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
+	c.generateMetadata = append(c.generateMetadata, ai.PromptMetadataFromContext(ctx))
 	if len(c.generateResponses) == 0 {
 		return &ai.ShoppingList{}, nil
 	}
@@ -170,6 +177,7 @@ func (c *sequenceAIClient) Regenerate(ctx context.Context, newinstructions []str
 	c.regenerateCalls++
 	c.regenerateInstructions = append(c.regenerateInstructions, append([]string(nil), newinstructions...))
 	c.regenerateResponseIDs = append(c.regenerateResponseIDs, previousResponseID)
+	c.regenerateMetadata = append(c.regenerateMetadata, ai.PromptMetadataFromContext(ctx))
 	if len(c.regenerateResponses) == 0 {
 		return &ai.ShoppingList{}, nil
 	}
@@ -394,6 +402,9 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	if aiStub.responseID != "resp-123" {
 		t.Fatalf("expected response ID %q, got %q", "resp-123", aiStub.responseID)
 	}
+	if aiStub.metadata.Operation != ai.RecipePromptOperationRegenerate || aiStub.metadata.ShoppingHash != params.Hash() {
+		t.Fatalf("unexpected regenerate prompt metadata: %#v", aiStub.metadata)
+	}
 	if got == nil || len(got.Recipes) != 3 {
 		t.Fatalf("expected regenerated list plus saved recipes, got %+v", got)
 	}
@@ -435,6 +446,9 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 	if got.ResponseID != "resp-123" {
 		t.Fatalf("expected response id to survive, got %q", got.ResponseID)
+	}
+	if aiStub.metadata.Operation != ai.RecipePromptOperationGenerate || aiStub.metadata.ShoppingHash != params.Hash() {
+		t.Fatalf("unexpected generate prompt metadata: %#v", aiStub.metadata)
 	}
 	if len(critiquer.recipes) != len(generated) {
 		t.Fatalf("expected %d critiques, got %d", len(generated), len(critiquer.recipes))
@@ -553,6 +567,16 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 	if got := aiStub.regenerateResponseIDs; !slices.Equal(got, []string{"resp-initial"}) {
 		t.Fatalf("unexpected critique retry response IDs: got %v", got)
+	}
+	if len(aiStub.generateMetadata) != 1 ||
+		aiStub.generateMetadata[0].Operation != ai.RecipePromptOperationGenerate ||
+		aiStub.generateMetadata[0].ShoppingHash != params.Hash() {
+		t.Fatalf("unexpected generate prompt metadata: %#v", aiStub.generateMetadata)
+	}
+	if len(aiStub.regenerateMetadata) != 1 ||
+		aiStub.regenerateMetadata[0].Operation != ai.RecipePromptOperationCritiqueRetry ||
+		aiStub.regenerateMetadata[0].ShoppingHash != params.Hash() {
+		t.Fatalf("unexpected critique retry prompt metadata: %#v", aiStub.regenerateMetadata)
 	}
 	if len(critiquer.recipes) != 2 {
 		t.Fatalf("expected two critique passes, got %d", len(critiquer.recipes))

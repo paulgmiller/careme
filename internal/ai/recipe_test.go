@@ -6,6 +6,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	locationtypes "careme/internal/locations/types"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
@@ -165,6 +168,44 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\npinot-noir-1\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
 		t.Fatalf("expected candidate wines TSV in prompt: %s", prompt)
+	}
+}
+
+func TestBuildRecipePromptMessages(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	location := &locationtypes.Location{State: "WA"}
+	ingredients := []InputIngredient{
+		{ProductID: "chicken-1", Brand: "Store", Description: "Chicken Thighs", Size: "2 lb", PriceRegular: float32Ptr(9.99), PriceSale: float32Ptr(6.99)},
+	}
+	instructions := []string{"", "make it spicy"}
+	lastRecipes := []string{"Chicken Tacos"}
+
+	messages, err := client.buildRecipePromptMessages(location, ingredients, instructions, time.Date(2026, time.May, 7, 0, 0, 0, 0, time.UTC), lastRecipes)
+	if err != nil {
+		t.Fatalf("buildRecipePromptMessages returned error: %v", err)
+	}
+
+	if len(messages) != 8 {
+		t.Fatalf("expected 8 user messages, got %d: %#v", len(messages), messages)
+	}
+	for _, message := range messages {
+		if message.Role != "user" {
+			t.Fatalf("expected only user prompt messages, got %#v", messages)
+		}
+	}
+	if !strings.Contains(messages[0].Content, "May 7nd in WA") {
+		t.Fatalf("expected seasonal location prompt, got %q", messages[0].Content)
+	}
+	if !strings.Contains(messages[5].Content, "1 ingredients available in TSV format with header") ||
+		!strings.Contains(messages[5].Content, "chicken-1") ||
+		!strings.Contains(messages[5].Content, "Chicken Thighs") {
+		t.Fatalf("expected ingredient TSV prompt, got %q", messages[5].Content)
+	}
+	if !strings.Contains(messages[6].Content, "Avoid recipes similar to these previously cooked:\nChicken Tacos\n") {
+		t.Fatalf("expected recent recipe prompt, got %q", messages[6].Content)
+	}
+	if messages[7].Content != "make it spicy" {
+		t.Fatalf("expected trimmed user instruction, got %q", messages[7].Content)
 	}
 }
 
