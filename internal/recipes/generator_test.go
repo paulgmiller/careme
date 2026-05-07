@@ -376,7 +376,8 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		},
 	}
 	g := &generatorService{
-		aiClient: aiStub,
+		aiClient:     aiStub,
+		statusWriter: noopstatuswriter{},
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())

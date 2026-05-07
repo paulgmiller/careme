@@ -156,6 +156,39 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
+		RefreshInterval string
+		StatusMessage   string
+	}{
+		Style:           seasons.GetCurrentStyle(),
+		ServerSignedIn:  false,
+		RefreshInterval: "10",
+		StatusMessage:   "Considering ingredients\nHalf Off Spinach",
+	}
+
+	var buf bytes.Buffer
+	if err := Spin.Execute(&buf, data); err != nil {
+		t.Fatalf("Spin.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, "whitespace-pre-line") {
+		t.Fatalf("spinner status should render line breaks with CSS, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, data.StatusMessage) {
+		t.Fatalf("spinner status should keep newline text, body: %s", rendered)
+	}
+}
+
 func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
