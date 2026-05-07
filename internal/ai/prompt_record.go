@@ -2,11 +2,8 @@ package ai
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -14,12 +11,6 @@ import (
 )
 
 const (
-	PromptRecordSchemaVersion = "recipe-prompt-v1"
-
-	RecipePromptOperationGenerate      = "generate_recipes"
-	RecipePromptOperationRegenerate    = "regenerate_recipes"
-	RecipePromptOperationCritiqueRetry = "critique_retry"
-
 	RecipePromptCachePrefix = "recipe_prompts/"
 )
 
@@ -29,36 +20,16 @@ type PromptMessage struct {
 }
 
 type PromptRecord struct {
-	SchemaVersion      string          `json:"schema_version"`
-	Operation          string          `json:"operation"`
-	ShoppingHash       string          `json:"shopping_hash,omitempty"`
-	Model              string          `json:"model"`
 	CreatedAt          time.Time       `json:"created_at"`
+	ResponseID         string          `json:"response_id"`
+	Model              string          `json:"model"`
+	Instructions       string          `json:"instructions,omitempty"`
 	PreviousResponseID string          `json:"previous_response_id,omitempty"`
-	ResponseID         string          `json:"response_id,omitempty"`
-	ResponseSchemaName string          `json:"response_schema_name,omitempty"`
-	Messages           []PromptMessage `json:"messages"`
-	Error              string          `json:"error,omitempty"`
+	Input              []PromptMessage `json:"input"`
 }
 
 type PromptRecorder interface {
 	RecordPrompt(ctx context.Context, record *PromptRecord) error
-}
-
-type promptMetadataKey struct{}
-
-type PromptMetadata struct {
-	ShoppingHash string
-	Operation    string
-}
-
-func WithPromptMetadata(ctx context.Context, metadata PromptMetadata) context.Context {
-	return context.WithValue(ctx, promptMetadataKey{}, metadata)
-}
-
-func PromptMetadataFromContext(ctx context.Context) PromptMetadata {
-	metadata, _ := ctx.Value(promptMetadataKey{}).(PromptMetadata)
-	return metadata
 }
 
 type cachePromptRecorder struct {
@@ -89,11 +60,12 @@ func (r cachePromptRecorder) RecordPrompt(ctx context.Context, record *PromptRec
 		return nil
 	}
 	normalized := *record
-	if normalized.SchemaVersion == "" {
-		normalized.SchemaVersion = PromptRecordSchemaVersion
-	}
 	if normalized.CreatedAt.IsZero() {
 		normalized.CreatedAt = r.now()
+	}
+	normalized.ResponseID = strings.TrimSpace(normalized.ResponseID)
+	if normalized.ResponseID == "" {
+		return nil
 	}
 
 	body, err := json.Marshal(normalized)
@@ -107,21 +79,7 @@ func (r cachePromptRecorder) RecordPrompt(ctx context.Context, record *PromptRec
 }
 
 func promptRecordCacheKey(record PromptRecord) string {
-	shoppingHash := strings.TrimSpace(record.ShoppingHash)
-	if shoppingHash == "" {
-		shoppingHash = "unknown"
-	}
-	operation := strings.TrimSpace(record.Operation)
-	if operation == "" {
-		operation = "unknown"
-	}
-	return fmt.Sprintf("%s%s/%s_%s_%s.json",
-		RecipePromptCachePrefix,
-		cacheSafePathPart(shoppingHash),
-		record.CreatedAt.UTC().Format("20060102T150405.000000000Z"),
-		cacheSafePathPart(operation),
-		randomHex(4),
-	)
+	return RecipePromptCachePrefix + cacheSafePathPart(record.ResponseID) + ".json"
 }
 
 func cacheSafePathPart(part string) string {
@@ -131,16 +89,4 @@ func cacheSafePathPart(part string) string {
 	}
 	replacer := strings.NewReplacer("/", "_", "\\", "_", ":", "_")
 	return replacer.Replace(part)
-}
-
-func randomHex(bytesLen int) string {
-	if bytesLen <= 0 {
-		bytesLen = 4
-	}
-	buf := make([]byte, bytesLen)
-	if _, err := rand.Read(buf); err != nil {
-		slog.Warn("failed to generate random prompt record suffix", "error", err)
-		return fmt.Sprintf("%d", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(buf)
 }

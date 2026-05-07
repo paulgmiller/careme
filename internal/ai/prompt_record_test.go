@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/cache"
+
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/responses"
 )
 
 func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
@@ -22,15 +24,10 @@ func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
 	}
 
 	record := &PromptRecord{
-		Operation:          RecipePromptOperationGenerate,
-		ShoppingHash:       "shopping/hash",
-		Model:              "gpt-test",
-		ResponseID:         "resp-123",
-		ResponseSchemaName: "recipes",
-		Messages: []PromptMessage{
-			{Role: "system", Content: "cook well"},
-			{Role: "user", Content: "make dinner"},
-		},
+		ResponseID:   "resp-123",
+		Model:        "gpt-test",
+		Instructions: []string{"cook well"},
+		Input:        []PromptMessage{userPromptMessage("make dinner")},
 	}
 
 	if err := recorder.RecordPrompt(context.Background(), record); err != nil {
@@ -44,7 +41,7 @@ func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
 	if len(keys) != 1 {
 		t.Fatalf("expected one prompt record, got %d: %v", len(keys), keys)
 	}
-	if !strings.HasPrefix(keys[0], "shopping_hash/20260507T123000.000000000Z_generate_recipes_") {
+	if keys[0] != "resp-123.json" {
 		t.Fatalf("unexpected prompt cache key: %s", keys[0])
 	}
 
@@ -66,17 +63,14 @@ func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("failed to decode prompt record: %v", err)
 	}
-	if got.SchemaVersion != PromptRecordSchemaVersion {
-		t.Fatalf("expected schema version %q, got %q", PromptRecordSchemaVersion, got.SchemaVersion)
-	}
-	if got.ShoppingHash != "shopping/hash" {
-		t.Fatalf("expected original shopping hash to be stored, got %q", got.ShoppingHash)
-	}
 	if got.ResponseID != "resp-123" {
 		t.Fatalf("expected response id to be stored, got %q", got.ResponseID)
 	}
-	if len(got.Messages) != 2 || got.Messages[0].Role != "system" || got.Messages[1].Content != "make dinner" {
-		t.Fatalf("unexpected messages: %#v", got.Messages)
+	if got.Model != "gpt-test" || len(got.Instructions) != 1 || got.Instructions[0] != "cook well" {
+		t.Fatalf("unexpected prompt fields: %#v", got)
+	}
+	if len(got.Input) != 1 || got.Input[0].Content != "make dinner" {
+		t.Fatalf("unexpected input: %#v", got.Input)
 	}
 }
 
@@ -87,35 +81,45 @@ type capturePromptRecorder struct {
 
 func (r *capturePromptRecorder) RecordPrompt(_ context.Context, record *PromptRecord) error {
 	clone := *record
-	clone.Messages = append([]PromptMessage(nil), record.Messages...)
+	clone.Instructions = append([]string(nil), record.Instructions...)
+	clone.Input = append([]PromptMessage(nil), record.Input...)
 	r.record = &clone
 	return r.err
 }
 
-func TestRecordRecipePromptUsesContextMetadata(t *testing.T) {
+func TestRecordRecipePromptStoresResponseParams(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	c := &client{
 		model:          "gpt-test",
 		promptRecorder: recorder,
 	}
-	ctx := WithPromptMetadata(context.Background(), PromptMetadata{
-		ShoppingHash: "shopping-hash",
-		Operation:    RecipePromptOperationCritiqueRetry,
-	})
+	ctx := context.Background()
+	params := responses.ResponseNewParams{
+		Model:              "gpt-test",
+		Instructions:       openai.String("cook well"),
+		PreviousResponseID: openai.String("resp-before"),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user("try again")},
+		},
+		Store: openai.Bool(true),
+	}
 
-	c.recordRecipePrompt(ctx, "resp-before", "resp-after", []PromptMessage{{Role: "user", Content: "try again"}}, nil)
+	c.recordRecipePrompt(ctx, "resp-after", params, []PromptMessage{userPromptMessage("try again")})
 
 	if recorder.record == nil {
 		t.Fatal("expected prompt record")
 	}
-	if recorder.record.Operation != RecipePromptOperationCritiqueRetry {
-		t.Fatalf("expected critique retry operation, got %q", recorder.record.Operation)
+	if recorder.record.ResponseID != "resp-after" {
+		t.Fatalf("unexpected response id: %#v", recorder.record)
 	}
-	if recorder.record.ShoppingHash != "shopping-hash" {
-		t.Fatalf("expected shopping hash, got %q", recorder.record.ShoppingHash)
+	if recorder.record.Model != "gpt-test" || recorder.record.PreviousResponseID != "resp-before" {
+		t.Fatalf("unexpected prompt record: %#v", recorder.record)
 	}
-	if recorder.record.PreviousResponseID != "resp-before" || recorder.record.ResponseID != "resp-after" {
-		t.Fatalf("unexpected response ids: %#v", recorder.record)
+	if len(recorder.record.Instructions) != 1 || recorder.record.Instructions[0] != "cook well" {
+		t.Fatalf("unexpected instructions: %#v", recorder.record.Instructions)
+	}
+	if len(recorder.record.Input) != 1 || recorder.record.Input[0].Content != "try again" {
+		t.Fatalf("unexpected input: %#v", recorder.record.Input)
 	}
 }
 
@@ -126,15 +130,23 @@ func TestRecordRecipePromptIgnoresRecorderErrors(t *testing.T) {
 		promptRecorder: recorder,
 	}
 
-	c.recordRecipePrompt(context.Background(), "", "", []PromptMessage{{Role: "user", Content: "make dinner"}}, errors.New("api failed"))
+	c.recordRecipePrompt(context.Background(), "resp-123", responses.ResponseNewParams{Model: "gpt-test"}, []PromptMessage{userPromptMessage("make dinner")})
 
 	if recorder.record == nil {
-		t.Fatal("expected prompt record even when recorder returns an error")
+		t.Fatal("expected prompt record")
 	}
-	if recorder.record.Operation != RecipePromptOperationGenerate {
-		t.Fatalf("expected generate operation fallback, got %q", recorder.record.Operation)
+}
+
+func TestRecordRecipePromptSkipsMissingResponseID(t *testing.T) {
+	recorder := &capturePromptRecorder{}
+	c := &client{
+		model:          "gpt-test",
+		promptRecorder: recorder,
 	}
-	if recorder.record.Error != "api failed" {
-		t.Fatalf("expected API error to be stored, got %q", recorder.record.Error)
+
+	c.recordRecipePrompt(context.Background(), "", responses.ResponseNewParams{Model: "gpt-test"}, []PromptMessage{userPromptMessage("make dinner")})
+
+	if recorder.record != nil {
+		t.Fatalf("expected missing response ID to skip prompt record, got %#v", recorder.record)
 	}
 }

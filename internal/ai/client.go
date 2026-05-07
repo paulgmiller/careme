@@ -249,11 +249,10 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
-		c.recordRecipePrompt(ctx, previousResponseID, "", promptMessages, err)
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
 
-	c.recordRecipePrompt(ctx, previousResponseID, resp.ID, promptMessages, nil)
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 	return responseToShoppingList(ctx, resp)
 }
 
@@ -399,10 +398,9 @@ func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Lo
 
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
-		c.recordRecipePrompt(ctx, "", "", append([]PromptMessage{{Role: "system", Content: systemMessage}}, promptMessages...), err)
 		return nil, fmt.Errorf("failed to generate recipes: %w", err)
 	}
-	c.recordRecipePrompt(ctx, "", resp.ID, append([]PromptMessage{{Role: "system", Content: systemMessage}}, promptMessages...), nil)
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 	return responseToShoppingList(ctx, resp)
 }
 
@@ -515,32 +513,27 @@ func messagesToInput(messages []PromptMessage) []responses.ResponseInputItemUnio
 	return input
 }
 
-func (c *client) recordRecipePrompt(ctx context.Context, previousResponseID, responseID string, messages []PromptMessage, callErr error) {
-	metadata := PromptMetadataFromContext(ctx)
-	operation := strings.TrimSpace(metadata.Operation)
-	if operation == "" {
-		if previousResponseID == "" {
-			operation = RecipePromptOperationGenerate
-		} else {
-			operation = RecipePromptOperationRegenerate
+func (c *client) recordRecipePrompt(ctx context.Context, responseID string, params responses.ResponseNewParams, input []PromptMessage) {
+	responseID = strings.TrimSpace(responseID)
+	if responseID == "" {
+		return
+	}
+	var instructions []string
+	if params.Instructions.Valid() {
+		instruction := strings.TrimSpace(params.Instructions.Value)
+		if instruction != "" {
+			instructions = append(instructions, instruction)
 		}
 	}
 	record := &PromptRecord{
-		SchemaVersion:      PromptRecordSchemaVersion,
-		Operation:          operation,
-		ShoppingHash:       metadata.ShoppingHash,
-		Model:              c.model,
-		CreatedAt:          time.Now().UTC(),
-		PreviousResponseID: previousResponseID,
-		ResponseID:         strings.TrimSpace(responseID),
-		ResponseSchemaName: "recipes",
-		Messages:           append([]PromptMessage(nil), messages...),
-	}
-	if callErr != nil {
-		record.Error = callErr.Error()
+		ResponseID:         responseID,
+		Model:              string(params.Model),
+		Instructions:       strings.TrimSpace(params.Instructions.Or("")),
+		PreviousResponseID: strings.TrimSpace(params.PreviousResponseID.Or("")),
+		Input:              append([]PromptMessage(nil), input...),
 	}
 	if err := c.promptRecorder.RecordPrompt(ctx, record); err != nil {
-		slog.ErrorContext(ctx, "failed to record recipe prompt", "operation", operation, "shopping_hash", metadata.ShoppingHash, "error", err)
+		slog.ErrorContext(ctx, "failed to record recipe prompt", "response_id", responseID, "error", err)
 	}
 }
 
