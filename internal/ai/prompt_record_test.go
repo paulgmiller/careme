@@ -26,7 +26,7 @@ func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
 	record := &PromptRecord{
 		ResponseID:   "resp-123",
 		Model:        "gpt-test",
-		Instructions: []string{"cook well"},
+		Instructions: "cook well",
 		Input:        []PromptMessage{userPromptMessage("make dinner")},
 	}
 
@@ -66,7 +66,7 @@ func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
 	if got.ResponseID != "resp-123" {
 		t.Fatalf("expected response id to be stored, got %q", got.ResponseID)
 	}
-	if got.Model != "gpt-test" || len(got.Instructions) != 1 || got.Instructions[0] != "cook well" {
+	if got.Model != "gpt-test" || got.Instructions != "cook well" {
 		t.Fatalf("unexpected prompt fields: %#v", got)
 	}
 	if len(got.Input) != 1 || got.Input[0].Content != "make dinner" {
@@ -81,7 +81,6 @@ type capturePromptRecorder struct {
 
 func (r *capturePromptRecorder) RecordPrompt(_ context.Context, record *PromptRecord) error {
 	clone := *record
-	clone.Instructions = append([]string(nil), record.Instructions...)
 	clone.Input = append([]PromptMessage(nil), record.Input...)
 	r.record = &clone
 	return r.err
@@ -115,7 +114,7 @@ func TestRecordRecipePromptStoresResponseParams(t *testing.T) {
 	if recorder.record.Model != "gpt-test" || recorder.record.PreviousResponseID != "resp-before" {
 		t.Fatalf("unexpected prompt record: %#v", recorder.record)
 	}
-	if len(recorder.record.Instructions) != 1 || recorder.record.Instructions[0] != "cook well" {
+	if recorder.record.Instructions != "cook well" {
 		t.Fatalf("unexpected instructions: %#v", recorder.record.Instructions)
 	}
 	if len(recorder.record.Input) != 1 || recorder.record.Input[0].Content != "try again" {

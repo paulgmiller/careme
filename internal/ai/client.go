@@ -109,7 +109,7 @@ type client struct {
 }
 
 // ignoring model for now.
-func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorders ...PromptRecorder) *client {
+func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
 	// ignor model for now.
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
@@ -128,10 +128,7 @@ func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorders ...Pro
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
 	aiClient := openai.NewClient(opts...)
-	promptRecorder := PromptRecorder(noopPromptRecorder{})
-	if len(promptRecorders) > 0 && promptRecorders[0] != nil {
-		promptRecorder = promptRecorders[0]
-	}
+
 	return &client{
 		oai:            aiClient,
 		schema:         m,

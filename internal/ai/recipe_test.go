@@ -68,7 +68,7 @@ func TestRecipeHashLength(t *testing.T) {
 }
 
 func TestNewClientUsesGPT55ForRecipeFlow(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil)
+	client := NewClient("test-key", "ignored", nil, &capturePromptRecorder{})
 
 	if client.model != "gpt-5.5" {
 		t.Fatalf("expected primary recipe model to be gpt-5.5, got %q", client.model)
@@ -172,7 +172,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 }
 
 func TestBuildRecipePromptMessages(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil)
+	client := NewClient("test-key", "ignored", nil, &cachePromptRecorder{})
 	location := &locationtypes.Location{State: "WA"}
 	ingredients := []InputIngredient{
 		{ProductID: "chicken-1", Brand: "Store", Description: "Chicken Thighs", Size: "2 lb", PriceRegular: float32Ptr(9.99), PriceSale: float32Ptr(6.99)},
