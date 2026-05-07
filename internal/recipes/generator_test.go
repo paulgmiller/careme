@@ -987,8 +987,8 @@ func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
 	})
 
 	assert.Equal(t, []string{
-		"Half Off Spinach 50% off at 5.000000",
-		"Twenty Off Salmon 20% off at 8.000000",
+		"Half Off Spinach 50% off at 5.00",
+		"Twenty Off Salmon 20% off at 8.00",
 	}, got)
 }
 

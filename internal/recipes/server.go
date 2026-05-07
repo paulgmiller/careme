@@ -858,7 +858,10 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		// don't restart clock if we don't have the params. How did we even get here though.
 		_, err := s.ParamsFromCache(ctx, hashParam)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+			// not erroring because any rando on internet can send us things AND we seem to be missing
+			// at least http://careme.cooking/recipes?h=3i3rbrZv0mk seems permabroke but very old
+			// but a high level of these could signal a bug.
+			slog.InfoContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 			return
 		}

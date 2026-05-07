@@ -192,7 +192,7 @@ func sales(ings []ai.InputIngredient) []string {
 	})
 
 	return lo.Take(lo.Map(sales, func(ing ai.InputIngredient, _ int) string {
-		return fmt.Sprintf("%s %.0f%% off at %f", ing.Description, ing.PercentOff(), *ing.PriceSale)
+		return fmt.Sprintf("%s %.0f%% off at %.2f", ing.Description, ing.PercentOff(), *ing.PriceSale)
 	}), 5)
 }
 
