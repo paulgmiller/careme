@@ -7,7 +7,7 @@ Careme is your personal chef and sommilier. It will
 ![Go](https://img.shields.io/badge/Go-1.26-blue)
 ![License](https://img.shields.io/github/license/paulgmiller/careme)
 ![Last Commit](https://img.shields.io/github/last-commit/paulgmiller/careme)
-![CI](https://github.com/paulgmiller/careme/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/paulgmiller/careme/actions/workflows/go.yml/badge.svg)](https://github.com/paulgmiller/careme/actions/workflows/go.yml)
 
 ## Configuration
 
