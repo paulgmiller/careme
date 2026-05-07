@@ -86,6 +86,13 @@ type InputIngredient struct {
 	Grade        *IngredientGrade `json:"grade,omitempty"`
 }
 
+func (ii InputIngredient) PercentOff() float32 {
+	if ii.PriceSale == nil || ii.PriceRegular == nil {
+		return 0
+	}
+	return (1.0 - (*ii.PriceSale / *ii.PriceRegular)) * 100
+}
+
 type IngredientGrade struct {
 	Score  int    `json:"score"`
 	Reason string `json:"reason"`

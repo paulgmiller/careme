@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -144,9 +145,16 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		// TODO make configurable?
 		return ing.Grade == nil || ing.Grade.Score > 6
 	})
-	// having category would be interesing here.
-	g.writeStatus(ctx, hash, fmt.Sprintf("Considering %d out of %d ingredients", len(ingredients), ogCount))
 
+	// having category would be interesing here.
+	var status strings.Builder
+	fmt.Fprintf(&status, "Considering %d out of %d ingredients", len(ingredients), ogCount)
+	for _, sale := range sales(ingredients) {
+		status.WriteString("\n")
+		status.WriteString(sale)
+	}
+
+	g.writeStatus(ctx, hash, status.String())
 	mutable.Shuffle(ingredients)
 
 	instructions := []string{p.Directive, p.Instructions}
@@ -173,6 +181,19 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 // generator not prociding a lot of value here. Should sever just hold an ai client?
 func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
+}
+
+func sales(ings []ai.InputIngredient) []string {
+	sales := lo.Filter(ings, func(ing ai.InputIngredient, _ int) bool {
+		return ing.PercentOff() > 0
+	})
+	slices.SortFunc(sales, func(a, b ai.InputIngredient) int {
+		return cmp.Compare(b.PercentOff(), a.PercentOff()) // descending
+	})
+
+	return lo.Take(lo.Map(sales, func(ing ai.InputIngredient, _ int) string {
+		return fmt.Sprintf("%s %.0f%% off at %f", ing.Description, ing.PercentOff(), *ing.PriceSale)
+	}), 5)
 }
 
 func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
