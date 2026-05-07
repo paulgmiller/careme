@@ -368,7 +368,8 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		},
 	}
 	g := &generatorService{
-		aiClient: aiStub,
+		aiClient:     aiStub,
+		statusWriter: noopstatuswriter{},
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
@@ -961,39 +962,6 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 	if aiStub.regenerateCalls != 1 {
 		t.Fatalf("expected exactly one critique-driven retry, got %d", aiStub.regenerateCalls)
 	}
-}
-
-func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
-	got := sales([]ai.InputIngredient{
-		{
-			Description:  "Full Price Chicken",
-			PriceRegular: recipeFloat32(10),
-		},
-		{
-			Description:  "Half Off Spinach",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(5),
-		},
-		{
-			Description:  "Same Price Pasta",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(10),
-		},
-		{
-			Description:  "Twenty Off Salmon",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(8),
-		},
-	})
-
-	assert.Equal(t, []string{
-		"Half Off Spinach 50% off at 5.00",
-		"Twenty Off Salmon 20% off at 8.00",
-	}, got)
-}
-
-func recipeFloat32(v float32) *float32 {
-	return &v
 }
 
 func TestNewlySaved(t *testing.T) {

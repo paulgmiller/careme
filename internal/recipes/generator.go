@@ -1,7 +1,6 @@
 package recipes
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -13,6 +12,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/status"
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
@@ -106,18 +106,20 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	start := time.Now()
 
 	// if we have a response id one of the three should be true? Or did they just not care and hit try again?
+
 	if p.ResponseID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "response_id", p.ResponseID)
 		ctx, span := tracer.Start(ctx, "recipes.regenerate")
 		defer span.End()
 		instructions := regenerateInstructions(p)
 
-		// TODO give them some sort of status.
+		g.writeStatus(ctx, hash, status.Regen(p.Instructions, p.Dismissed))
+
 		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ResponseID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
-		// would prefer to do this deepe down in client
+		// would prefer to do this deeper down in client
 		for i := range shoppingList.Recipes {
 			shoppingList.Recipes[i].OriginHash = hash
 		}
@@ -146,15 +148,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		return ing.Grade == nil || ing.Grade.Score > 6
 	})
 
-	// having category would be interesing here.
-	var status strings.Builder
-	fmt.Fprintf(&status, "Considering %d out of %d ingredients", len(ingredients), ogCount)
-	for _, sale := range sales(ingredients) {
-		status.WriteString("\n")
-		status.WriteString(sale)
-	}
-
-	g.writeStatus(ctx, hash, status.String())
+	g.writeStatus(ctx, hash, status.Ingredients(ingredients, ogCount))
 	mutable.Shuffle(ingredients)
 
 	instructions := []string{p.Directive, p.Instructions}
@@ -183,19 +177,6 @@ func (g *generatorService) AskQuestion(ctx context.Context, question string, pre
 	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
 }
 
-func sales(ings []ai.InputIngredient) []string {
-	sales := lo.Filter(ings, func(ing ai.InputIngredient, _ int) bool {
-		return ing.PercentOff() > 0
-	})
-	slices.SortFunc(sales, func(a, b ai.InputIngredient) int {
-		return cmp.Compare(b.PercentOff(), a.PercentOff()) // descending
-	})
-
-	return lo.Take(lo.Map(sales, func(ing ai.InputIngredient, _ int) string {
-		return fmt.Sprintf("%s %.0f%% off at %.2f", ing.Description, ing.PercentOff(), *ing.PriceSale)
-	}), 5)
-}
-
 func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 	titles := make([]string, 0, len(saved))
 	for _, recipe := range saved {
@@ -206,17 +187,6 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 		titles = append(titles, recipe.Title)
 	}
 	return lo.Uniq(titles)
-}
-
-func titles(prefix string, recipes []ai.Recipe) string {
-	var b strings.Builder
-	b.WriteString(prefix)
-	b.WriteString("\n")
-	for _, r := range recipes {
-		b.WriteString(r.Title)
-		b.WriteString("\n")
-	}
-	return b.String()
 }
 
 func regenerateInstructions(p *generatorParams) []string {
@@ -240,7 +210,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	ctx, span := tracer.Start(ctx, "recipes.critique")
 	defer span.End()
 
-	g.writeStatus(ctx, hash, titles("Getting feeeback on these recipes:", shoppingList.Recipes))
+	g.writeStatus(ctx, hash, status.Titles("Getting feeeback on these recipes:", shoppingList.Recipes))
 	results := g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
 	good, garbage := critique.Split(ctx, results, critique.MinimumRecipeScore)
 	for _, result := range garbage {
@@ -252,7 +222,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	span.SetAttributes(attribute.Bool("regenaftercrique", true))
 	slog.InfoContext(ctx, "Regenerating recipes based on critique feedback:", "garbage_count", len(garbage), "good_count", len(good))
 	garbageRecipes := lo.Map(garbage, func(r critique.Result, _ int) ai.Recipe { return *r.Recipe })
-	g.writeStatus(ctx, hash, titles("Making adjustments to these recipes: ", garbageRecipes))
+	g.writeStatus(ctx, hash, status.Titles("Making adjustments to these recipes: ", garbageRecipes))
 
 	if strings.TrimSpace(shoppingList.ResponseID) == "" {
 		return nil, fmt.Errorf("response ID is required for critique retry")
