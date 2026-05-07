@@ -963,6 +963,39 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 	}
 }
 
+func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
+	got := sales([]ai.InputIngredient{
+		{
+			Description:  "Full Price Chicken",
+			PriceRegular: recipeFloat32(10),
+		},
+		{
+			Description:  "Half Off Spinach",
+			PriceRegular: recipeFloat32(10),
+			PriceSale:    recipeFloat32(5),
+		},
+		{
+			Description:  "Same Price Pasta",
+			PriceRegular: recipeFloat32(10),
+			PriceSale:    recipeFloat32(10),
+		},
+		{
+			Description:  "Twenty Off Salmon",
+			PriceRegular: recipeFloat32(10),
+			PriceSale:    recipeFloat32(8),
+		},
+	})
+
+	assert.Equal(t, []string{
+		"Half Off Spinach 50% off at 5.00",
+		"Twenty Off Salmon 20% off at 8.00",
+	}, got)
+}
+
+func recipeFloat32(v float32) *float32 {
+	return &v
+}
+
 func TestNewlySaved(t *testing.T) {
 	foo := ai.Recipe{Title: "foo", Description: "blah"}
 	salmon := ai.Recipe{Title: "Salmon", Description: "previusly saved"}
