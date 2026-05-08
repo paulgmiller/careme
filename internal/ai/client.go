@@ -157,16 +157,19 @@ Create distinct, practical recipes using the provided sale ingredients, seasonal
 # Field Guidance
 - title: use a short, appetizing name.
 - description: make the dish sound appealing and note what makes it practical, special, or seasonal.
-- cook_time: provide a realistic estimate such as "35 minutes".
+- cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: include quantities; include prices only when present in the input; common pantry items are allowed.
-- instructions: start with prep and end with plating; repeat amounts and prep details; do not include prices; do not prefix steps with numbers.
+- instructions: the first steps must be preparation steps before any cooking begins; end with plating; repeat amounts and prep details; do not include prices; do not prefix steps with numbers.
 - health: include plausible calories and macro notes for the stated servings.
 - drink_pairing: give concise sommelier guidance tied to the dish.
 - wine_styles: at most two searchable consumer wine styles, such as "Pinot Noir" or "Sauvignon Blanc"; no regions, parenthetical notes, commas, "or", or "*-style blend" phrasing.
 
 # Quality Checks
-Before responding, ensure recipes are cookable, realistic, non-contradictory, varied, correctly priced, safe, and visually appealing after plating. Do not include these checks in the output.`
+Before responding, ensure recipes are cookable, realistic, non-contradictory, varied, correctly priced, safe, and visually appealing after plating.
+Ensure the first instruction steps are prep steps.
+Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.
+Do not include these checks in the output.`
 
 const recipeImagePromptInstructions = `
 Generate a realistic overhead food photograph of a single finished plate.
@@ -440,7 +443,7 @@ func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngre
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
 	messages = append(messages, user("Default: each recipe should serve 2 people."))
 	messages = append(messages, user("Default: generate 3 recipes"))
-	messages = append(messages, user("Default: prep and cook time under 1 hour"))
+	messages = append(messages, user("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
 	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
 
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
