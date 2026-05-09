@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"strings"
 	"time"
 
@@ -189,6 +190,7 @@ Also for fancier/more expensive dishes consider more expensive wines.
 
 const (
 	recipeImageModel = "gpt-image-2" // dalle-3 is getting deprecated. 1.5 seems way better than 1.
+	recipePlanModel  = openai.ChatModelGPT5Mini
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
 	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
 	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
@@ -370,28 +372,108 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 }
 
 func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
-	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
+	plan, err := c.planRecipeVariety(ctx, saleIngredients)
+	if err != nil {
+		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
+	}
+
+	messagesByPlan, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
 	}
 
-	params := responses.ResponseNewParams{
-		Model:        c.model,
-		Instructions: openai.String(systemMessage),
+	recipes := make([]Recipe, len(messagesByPlan))
+	responseIDs := make([]string, len(messagesByPlan))
+	errs := make([]error, len(messagesByPlan))
+	var wg sync.WaitGroup
+	for i := range messagesByPlan {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+				Model:        c.model,
+				Instructions: openai.String(systemMessage),
+				Input: responses.ResponseNewParamsInputUnion{
+					OfInputItemList: messagesByPlan[idx],
+				},
+				Store: openai.Bool(true),
+				Text:  scheme(c.schema),
+			})
+			if err != nil {
+				errs[idx] = fmt.Errorf("failed recipe generation for plan %d: %w", idx, err)
+				return
+			}
+			list, err := responseToShoppingList(ctx, resp)
+			if err != nil {
+				errs[idx] = fmt.Errorf("failed to parse recipe generation for plan %d: %w", idx, err)
+				return
+			}
+			if len(list.Recipes) == 0 {
+				errs[idx] = fmt.Errorf("plan %d returned no recipes", idx)
+				return
+			}
+			recipes[idx] = list.Recipes[0]
+			responseIDs[idx] = list.ResponseID
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return nil, err
+		}
+	}
+	out := &ShoppingList{Recipes: recipes}
+	for _, id := range responseIDs {
+		if strings.TrimSpace(id) != "" {
+			out.ResponseID = id
+			break
+		}
+	}
+	return out, nil
+}
 
+type recipeVarietyPlan struct {
+	Plans []recipePlan `json:"plans"`
+}
+
+type recipePlan struct {
+	Cuisine string `json:"cuisine"`
+	Protein string `json:"protein"`
+}
+
+func (c *client) planRecipeVariety(ctx context.Context, saleIngredients []InputIngredient) (*recipeVarietyPlan, error) {
+	var buf strings.Builder
+	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
+		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
+	}
+	prompt := "Pick exactly 3 distinct cuisine/protein pairs that best fit these sale ingredients.\n" +
+		"Return JSON only in this format: {\"plans\":[{\"cuisine\":\"...\",\"protein\":\"...\"},{\"cuisine\":\"...\",\"protein\":\"...\"},{\"cuisine\":\"...\",\"protein\":\"...\"}]}\n" +
+		"Keep names short and practical.\n\nIngredients TSV:\n" + buf.String()
+
+	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+		Model: recipePlanModel,
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messages,
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
 		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.schema),
-	}
-	// should we stream. Can we pass past generation.
-
-	resp, err := c.oai.Responses.New(ctx, params)
+		Store: openai.Bool(false),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate recipes: %w", err)
+		return nil, err
 	}
-	return responseToShoppingList(ctx, resp)
+
+	var plan recipeVarietyPlan
+	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
+		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
+	}
+	if len(plan.Plans) != 3 {
+		return nil, fmt.Errorf("expected 3 plans, got %d", len(plan.Plans))
+	}
+	for i, item := range plan.Plans {
+		if strings.TrimSpace(item.Cuisine) == "" || strings.TrimSpace(item.Protein) == "" {
+			return nil, fmt.Errorf("plan %d has empty cuisine or protein", i)
+		}
+	}
+	return &plan, nil
 }
 
 func user(msg string) responses.ResponseInputItemUnionParam {
@@ -434,38 +516,41 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (responses.ResponseInputParam, error) {
-	var messages []responses.ResponseInputItemUnionParam
-	// constants we might make variable later
-	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
-	messages = append(messages, user("Default: each recipe should serve 2 people."))
-	messages = append(messages, user("Default: generate 3 recipes"))
-	messages = append(messages, user("Default: prep and cook time under 1 hour"))
-	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
+func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan *recipeVarietyPlan) ([]responses.ResponseInputParam, error) {
+	var allMessages []responses.ResponseInputParam
+	for _, planItem := range plan.Plans {
+		var messages []responses.ResponseInputItemUnionParam
+		// constants we might make variable later
+		messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
+		messages = append(messages, user("Default: each recipe should serve 2 people."))
+		messages = append(messages, user("Default: generate exactly 1 recipe"))
+		messages = append(messages, user(fmt.Sprintf("Cuisine direction for this recipe: %s.", planItem.Cuisine)))
+		messages = append(messages, user(fmt.Sprintf("Protein direction for this recipe: %s.", planItem.Protein)))
+		messages = append(messages, user("Default: prep and cook time under 1 hour"))
+		messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
 
-	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
-	var buf strings.Builder
-	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
-		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
-	}
-	ingredientsMessage += buf.String()
-	messages = append(messages, user(ingredientsMessage))
-
-	// Previously cooked recipes to avoid (if any).
-	if len(lastRecipes) > 0 {
-		var prevRecipesMsg strings.Builder
-		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
-		for _, recipe := range lastRecipes {
-			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
+		ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
+		var buf strings.Builder
+		if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
+			return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 		}
-		messages = append(messages, user(prevRecipesMsg.String()))
+		ingredientsMessage += buf.String()
+		messages = append(messages, user(ingredientsMessage))
+
+		if len(lastRecipes) > 0 {
+			var prevRecipesMsg strings.Builder
+			prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
+			for _, recipe := range lastRecipes {
+				fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
+			}
+			messages = append(messages, user(prevRecipesMsg.String()))
+		}
+
+		messages = append(messages, cleanInstuctions(instructions)...)
+		allMessages = append(allMessages, messages)
 	}
 
-	// Additional user instructions (if any)
-
-	messages = append(messages, cleanInstuctions(instructions)...)
-
-	return messages, nil
+	return allMessages, nil
 }
 
 func (c *client) Ready(ctx context.Context) error {
