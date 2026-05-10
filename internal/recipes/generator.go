@@ -23,7 +23,7 @@ import (
 
 type aiClient interface {
 	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
-	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.ShoppingList, error)
+	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error)
 }
@@ -101,21 +101,25 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	return selection, nil
 }
 
-func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams, previous *ai.ShoppingList) (*ai.ShoppingList, error) {
 	hash := p.Hash()
 	start := time.Now()
 
 	// if we have a response id one of the three should be true? Or did they just not care and hit try again?
 
-	if p.ResponseID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
-		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "response_id", p.ResponseID)
+	if previous != nil {
+		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "response_id", previous)
 		ctx, span := tracer.Start(ctx, "recipes.regenerate")
 		defer span.End()
 		instructions := regenerateInstructions(p)
 
 		g.writeStatus(ctx, hash, status.Regen(p.Instructions, p.Dismissed))
 
-		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ResponseID)
+		for _, dimiss := range p.Dismissed {
+			slog.InfoContext(ctx, "dismissed recipe", "hash", dimiss.ComputeHash(), "title", dimiss.Title)
+			recipe, err := g.aiClient.Regenerate(ctx, instructions, dimsiss.ResponseID)
+		}
+
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
 		}
@@ -123,7 +127,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		for i := range shoppingList.Recipes {
 			shoppingList.Recipes[i].OriginHash = hash
 		}
-
+		// this should proceed as soon as recipes
 		shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
 		if err != nil {
 			return nil, err
@@ -167,7 +171,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		return nil, err
 	}
 
-	p.ResponseID = shoppingList.ResponseID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return shoppingList, nil
 }
@@ -210,8 +213,14 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	ctx, span := tracer.Start(ctx, "recipes.critique")
 	defer span.End()
 
+	//var good
 	g.writeStatus(ctx, hash, status.Titles("Getting feeeback on these recipes:", shoppingList.Recipes))
-	results := g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
+	for _, recipe := range shoppingList.Recipes {
+		go func() {
+			result := <-g.critiquer.CritiqueRecipe(ctx, recipe)
+			//if
+		}()
+	}
 	good, garbage := critique.Split(ctx, results, critique.MinimumRecipeScore)
 	for _, result := range garbage {
 		slog.InfoContext(ctx, "low scoring recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
@@ -225,7 +234,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	g.writeStatus(ctx, hash, status.Titles("Making adjustments to these recipes: ", garbageRecipes))
 
 	// we could also just give all feedback back if any are below score
-	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ResponseID)
+	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
 	}

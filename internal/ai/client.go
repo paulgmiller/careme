@@ -55,7 +55,6 @@ type Recipe struct {
 	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
 	ParentHash   string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
 	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` // not in schema
-
 	// Shove wine selection in here
 }
 
@@ -86,7 +85,7 @@ func (r *Recipe) ComputeHash() string {
 type ShoppingList struct {
 	Recipes   []Recipe  `json:"recipes" jsonschema:"required"`
 	Discarded []Recipe  `json:"-" jsonschema:"-"`
-	Plan      *menuPlan `json:"plan"`
+	Plan      *MenuPlan `json:"plan"`
 }
 
 // question threads go off from the response that generated the recipe.
@@ -120,7 +119,7 @@ func NewClient(apiKey, _ string, httpClient *http.Client) *client {
 	recipeSchemaJSON, _ := json.Marshal(recipeSchema)
 	wineSchema := r.Reflect(&WineSelection{})
 	wineSchemaJSON, _ := json.Marshal(wineSchema)
-	menuSchema := r.Reflect(&menuPlan{})
+	menuSchema := r.Reflect(&MenuPlan{})
 	menuSchemaJson, _ := json.Marshal(menuSchema)
 	var recipe map[string]any
 	_ = json.Unmarshal(recipeSchemaJSON, &recipe)
@@ -229,7 +228,7 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*Recipe, error) {
+func (c *client) Regenerate(ctx context.Context, instructions []string, previous *MenuPlan) (*Recipe, error) {
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
@@ -374,13 +373,14 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	return &selection, nil
 }
 
-func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
-	menuplan, err := c.planRecipeVariety(ctx, saleIngredients, date, location)
+func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
+	instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
+	MenuPlan, err := c.planRecipeVariety(ctx, saleIngredients, date, location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
-	mutable.Shuffle(menuplan.Plans)
-	recipeplans := lo.Take(menuplan.Plans, 3)
+	mutable.Shuffle(MenuPlan.Plans)
+	recipeplans := lo.Take(MenuPlan.Plans, 3)
 
 	recipes, err := parallelism.MapWithErrors(recipeplans, func(plan recipePlan) (*Recipe, error) {
 		messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
@@ -404,10 +404,10 @@ func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Lo
 		return responseToRecipe(ctx, resp)
 	})
 
-	return &ShoppingList{Recipes: lo.FromSlicePtr(recipes), Plan: menuplan}, nil
+	return &ShoppingList{Recipes: lo.FromSlicePtr(recipes), Plan: MenuPlan}, nil
 }
 
-type menuPlan struct {
+type MenuPlan struct {
 	Plans []recipePlan `json:"plans"`
 	Notes string
 }
@@ -426,7 +426,7 @@ var example = recipePlan{
 
 var examplStr, _ = json.Marshal(example)
 
-func (c *client) planRecipeVariety(ctx context.Context, saleIngredients []InputIngredient, date time.Time, location *locationtypes.Location) (*menuPlan, error) {
+func (c *client) planRecipeVariety(ctx context.Context, saleIngredients []InputIngredient, date time.Time, location *locationtypes.Location) (*MenuPlan, error) {
 	var buf strings.Builder
 	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
@@ -452,7 +452,7 @@ func (c *client) planRecipeVariety(ctx context.Context, saleIngredients []InputI
 		return nil, err
 	}
 
-	var plan menuPlan
+	var plan MenuPlan
 	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
 	}

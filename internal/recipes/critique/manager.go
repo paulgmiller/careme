@@ -24,7 +24,7 @@ type Result struct {
 }
 
 type Service interface {
-	CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan Result
+	CritiqueRecipe(ctx context.Context, recipes ai.Recipe) <-chan Result
 }
 
 // if we have web.go make rubbertamp directly this goes away
@@ -41,16 +41,13 @@ type recipeCritiquer interface {
 
 type rubberstamp struct{}
 
-func (r rubberstamp) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan Result {
-	results := make(chan Result, len(recipes))
-	for _, recipe := range recipes {
-		results <- Result{
-			Critique: &ai.RecipeCritique{OverallScore: 10},
-			Recipe:   &recipe,
-		}
+func (r rubberstamp) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) <-chan Result {
+	result := make(chan Result)
+	result <- Result{
+		Critique: &ai.RecipeCritique{OverallScore: 10},
+		Recipe:   &recipe,
 	}
-	close(results)
-	return results
+	return result
 }
 
 func (r rubberstamp) Wait()                           {}
@@ -77,29 +74,21 @@ func (mc *multiCritiquer) Ready(ctx context.Context) error {
 
 var tracer = otel.Tracer("careme/internal/recipes/critiques")
 
-func (mc *multiCritiquer) CritiqueRecipes(ctx context.Context, recipes []ai.Recipe) <-chan Result {
-	results := make(chan Result, len(recipes))
-	mc.wg.Add(len(recipes))
+func (mc *multiCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) <-chan Result {
+	result := make(chan Result)
+	mc.wg.Go(func() {
+		defer mc.wg.Done()
+		ctx, span := tracer.Start(ctx, "critques.recipe")
+		defer span.End()
+		critique, err := mc.critiquer.CritiqueRecipe(ctx, recipe)
+		result <- Result{
+			Recipe:   &recipe,
+			Critique: critique,
+			Err:      err,
+		}
+	})
 
-	var localWg sync.WaitGroup
-	for _, recipe := range recipes {
-		localWg.Go(func() {
-			defer mc.wg.Done()
-			ctx, span := tracer.Start(ctx, "critques.recipe")
-			defer span.End()
-			critique, err := mc.critiquer.CritiqueRecipe(ctx, recipe)
-			results <- Result{
-				Recipe:   &recipe,
-				Critique: critique,
-				Err:      err,
-			}
-		})
-	}
-	go func() {
-		localWg.Wait()
-		close(results)
-	}()
-	return results
+	return result
 }
 
 func (mc *multiCritiquer) Wait() {
