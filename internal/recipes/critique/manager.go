@@ -42,11 +42,12 @@ type recipeCritiquer interface {
 type rubberstamp struct{}
 
 func (r rubberstamp) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) <-chan Result {
-	result := make(chan Result)
+	result := make(chan Result, 1)
 	result <- Result{
 		Critique: &ai.RecipeCritique{OverallScore: 10},
 		Recipe:   &recipe,
 	}
+	close(result)
 	return result
 }
 
@@ -77,7 +78,7 @@ var tracer = otel.Tracer("careme/internal/recipes/critiques")
 func (mc *multiCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) <-chan Result {
 	result := make(chan Result)
 	mc.wg.Go(func() {
-		defer mc.wg.Done()
+		defer close(result)
 		ctx, span := tracer.Start(ctx, "critques.recipe")
 		defer span.End()
 		critique, err := mc.critiquer.CritiqueRecipe(ctx, recipe)

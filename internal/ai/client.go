@@ -228,7 +228,7 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *client) Regenerate(ctx context.Context, instructions []string, previous *MenuPlan) (*Recipe, error) {
+func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*Recipe, error) {
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
@@ -403,6 +403,9 @@ func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Lo
 
 		return responseToRecipe(ctx, resp)
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate recipes: %w", err)
+	}
 
 	return &ShoppingList{Recipes: lo.FromSlicePtr(recipes), Plan: MenuPlan}, nil
 }

@@ -80,10 +80,10 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 
 	hash := "test-hash"
 	list := &ai.ShoppingList{
-		ResponseID: "resp-123",
 		Recipes: []ai.Recipe{
 			{
 				OriginHash:   hash,
+				ResponseID:   "resp-123",
 				Title:        "One Pan Chicken",
 				Description:  "Simple weeknight meal",
 				Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
@@ -109,8 +109,8 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FromCache failed: %v", err)
 	}
-	if got.ResponseID != list.ResponseID {
-		t.Fatalf("expected response id %q, got %q", list.ResponseID, got.ResponseID)
+	if got.Recipes[0].ResponseID != list.Recipes[0].ResponseID {
+		t.Fatalf("expected recipe response id %q, got %q", list.Recipes[0].ResponseID, got.Recipes[0].ResponseID)
 	}
 }
 
@@ -139,9 +139,8 @@ func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
 	}
 	hash := "test-hash"
 	list := &ai.ShoppingList{
-		ResponseID: "resp-123",
-		Recipes:    []ai.Recipe{kept},
-		Discarded:  []ai.Recipe{discarded},
+		Recipes:   []ai.Recipe{kept},
+		Discarded: []ai.Recipe{discarded},
 	}
 
 	if err := rio.SaveShoppingList(t.Context(), list, hash); err != nil {

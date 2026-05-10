@@ -754,6 +754,14 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if len(p.Dismissed) == 0 {
+		currentList, err := s.FromCache(ctx, hash)
+		if err != nil {
+			http.Error(w, "failed to load recipe list", http.StatusBadRequest)
+			return
+		}
+		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
+	}
 	newHash := p.Hash()
 
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
@@ -768,6 +776,17 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, newHash, true /*useStart*/)
+}
+
+func recipesNotSaved(recipes []ai.Recipe, saved []ai.Recipe) []ai.Recipe {
+	savedByHash := make(map[string]struct{}, len(saved))
+	for _, recipe := range saved {
+		savedByHash[recipe.ComputeHash()] = struct{}{}
+	}
+	return lo.Filter(recipes, func(recipe ai.Recipe, _ int) bool {
+		_, ok := savedByHash[recipe.ComputeHash()]
+		return !ok
+	})
 }
 
 func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
@@ -808,8 +827,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shoppingList := &ai.ShoppingList{
-		Recipes:    p.Saved,
-		ResponseID: p.ResponseID,
+		Recipes: p.Saved,
 	}
 	if err := s.SaveShoppingList(ctx, shoppingList, newHash); err != nil {
 		slog.ErrorContext(ctx, "failed to save finalized shopping list", "hash", newHash, "error", err)
@@ -841,7 +859,6 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	params.Instructions = instructions
 	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
 	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
-	params.ResponseID = currentList.ResponseID
 	return &params, nil
 }
 
