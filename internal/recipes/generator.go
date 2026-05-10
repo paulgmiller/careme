@@ -224,10 +224,6 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 	garbageRecipes := lo.Map(garbage, func(r critique.Result, _ int) ai.Recipe { return *r.Recipe })
 	g.writeStatus(ctx, hash, status.Titles("Making adjustments to these recipes: ", garbageRecipes))
 
-	if strings.TrimSpace(shoppingList.ResponseID) == "" {
-		return nil, fmt.Errorf("response ID is required for critique retry")
-	}
-
 	// we could also just give all feedback back if any are below score
 	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ResponseID)
 	if err != nil {

@@ -9,16 +9,17 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sync"
 	"strings"
 	"time"
 
 	locationtypes "careme/internal/locations/types"
+	"careme/internal/parallelism"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
+	"github.com/samber/lo/mutable"
 
 	"github.com/invopop/jsonschema"
 )
@@ -54,6 +55,7 @@ type Recipe struct {
 	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
 	ParentHash   string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
 	Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` // not in schema
+
 	// Shove wine selection in here
 }
 
@@ -80,13 +82,11 @@ func (r *Recipe) ComputeHash() string {
 	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-// intentionally not including ResponseID to preserve old hashes
-// we used to use conversation id here but then you can end up sharing conversations with strangers which is kind of wierd.
 // now we can reuse first recipes and people can go off in different directions.
 type ShoppingList struct {
-	ResponseID string   `json:"response_id,omitempty" jsonschema:"-"`
-	Recipes    []Recipe `json:"recipes" jsonschema:"required"`
-	Discarded  []Recipe `json:"-" jsonschema:"-"`
+	Recipes   []Recipe  `json:"recipes" jsonschema:"required"`
+	Discarded []Recipe  `json:"-" jsonschema:"-"`
+	Plan      *menuPlan `json:"plan"`
 }
 
 // question threads go off from the response that generated the recipe.
@@ -103,6 +103,7 @@ type WineSelection struct {
 type client struct {
 	schema     map[string]any
 	wineSchema map[string]any
+	menuSchema map[string]any
 	model      string
 	wineModel  string
 	oai        openai.Client
@@ -115,14 +116,19 @@ func NewClient(apiKey, _ string, httpClient *http.Client) *client {
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
 	}
-	recipesSchema := r.Reflect(&ShoppingList{})
-	recipesSchemaJSON, _ := json.Marshal(recipesSchema)
+	recipeSchema := r.Reflect(&Recipe{})
+	recipeSchemaJSON, _ := json.Marshal(recipeSchema)
 	wineSchema := r.Reflect(&WineSelection{})
 	wineSchemaJSON, _ := json.Marshal(wineSchema)
-	var m map[string]any
-	_ = json.Unmarshal(recipesSchemaJSON, &m)
+	menuSchema := r.Reflect(&menuPlan{})
+	menuSchemaJson, _ := json.Marshal(menuSchema)
+	var recipe map[string]any
+	_ = json.Unmarshal(recipeSchemaJSON, &recipe)
 	var wine map[string]any
 	_ = json.Unmarshal(wineSchemaJSON, &wine)
+	var menu map[string]any
+	_ = json.Unmarshal(menuSchemaJson, &menu)
+
 	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
@@ -130,8 +136,9 @@ func NewClient(apiKey, _ string, httpClient *http.Client) *client {
 	aiClient := openai.NewClient(opts...)
 	return &client{
 		oai:        aiClient,
-		schema:     m,
+		schema:     recipe,
 		wineSchema: wine,
+		menuSchema: menu,
 		model:      defaultRecipeModel,
 		wineModel:  defaultWineModel,
 	}
@@ -197,22 +204,18 @@ const (
 	recipeImageSize         = openai.ImageGenerateParamsSize1024x1024
 )
 
-func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
+func responseToRecipe(ctx context.Context, resp *responses.Response) (*Recipe, error) {
 	slog.InfoContext(ctx, "API usage", responseUsageLogAttr(resp.Usage))
-	var shoppingList ShoppingList
-	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
+	var recipe Recipe
+	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
-	normalizeWineStyles(&shoppingList)
+	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")
 	}
-	shoppingList.ResponseID = resp.ID
-	for i := range shoppingList.Recipes {
-		shoppingList.Recipes[i].ResponseID = shoppingList.ResponseID
-	}
-
-	return &shoppingList, nil
+	recipe.ResponseID = resp.ID
+	return &recipe, nil
 }
 
 func scheme(schema map[string]any) responses.ResponseTextConfigParam {
@@ -226,7 +229,7 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*ShoppingList, error) {
+func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*Recipe, error) {
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
@@ -247,7 +250,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
 
-	return responseToShoppingList(ctx, resp)
+	return responseToRecipe(ctx, resp)
 }
 
 func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
@@ -372,106 +375,86 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 }
 
 func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
-	plan, err := c.planRecipeVariety(ctx, saleIngredients)
+	menuplan, err := c.planRecipeVariety(ctx, saleIngredients, date, location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
+	mutable.Shuffle(menuplan.Plans)
+	recipeplans := lo.Take(menuplan.Plans, 3)
 
-	messagesByPlan, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
-	}
+	recipes, err := parallelism.MapWithErrors(recipeplans, func(plan recipePlan) (*Recipe, error) {
+		messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build recipe messages: %w", err)
+		}
 
-	recipes := make([]Recipe, len(messagesByPlan))
-	responseIDs := make([]string, len(messagesByPlan))
-	errs := make([]error, len(messagesByPlan))
-	var wg sync.WaitGroup
-	for i := range messagesByPlan {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
-				Model:        c.model,
-				Instructions: openai.String(systemMessage),
-				Input: responses.ResponseNewParamsInputUnion{
-					OfInputItemList: messagesByPlan[idx],
-				},
-				Store: openai.Bool(true),
-				Text:  scheme(c.schema),
-			})
-			if err != nil {
-				errs[idx] = fmt.Errorf("failed recipe generation for plan %d: %w", idx, err)
-				return
-			}
-			list, err := responseToShoppingList(ctx, resp)
-			if err != nil {
-				errs[idx] = fmt.Errorf("failed to parse recipe generation for plan %d: %w", idx, err)
-				return
-			}
-			if len(list.Recipes) == 0 {
-				errs[idx] = fmt.Errorf("plan %d returned no recipes", idx)
-				return
-			}
-			recipes[idx] = list.Recipes[0]
-			responseIDs[idx] = list.ResponseID
-		}(i)
-	}
-	wg.Wait()
-	for _, err := range errs {
+		resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+			Model:        c.model,
+			Instructions: openai.String(systemMessage),
+			Input: responses.ResponseNewParamsInputUnion{
+				OfInputItemList: messages,
+			},
+			Store: openai.Bool(true),
+			Text:  scheme(c.schema),
+		})
 		if err != nil {
 			return nil, err
 		}
-	}
-	out := &ShoppingList{Recipes: recipes}
-	for _, id := range responseIDs {
-		if strings.TrimSpace(id) != "" {
-			out.ResponseID = id
-			break
-		}
-	}
-	return out, nil
+
+		return responseToRecipe(ctx, resp)
+	})
+
+	return &ShoppingList{Recipes: lo.FromSlicePtr(recipes), Plan: menuplan}, nil
 }
 
-type recipeVarietyPlan struct {
+type menuPlan struct {
 	Plans []recipePlan `json:"plans"`
+	Notes string
 }
 
 type recipePlan struct {
-	Cuisine string `json:"cuisine"`
-	Protein string `json:"protein"`
+	Cuisine          string `json:"cuisine"`
+	AnchorIngredient string `json:"anchor_ingredient"`
+	Technique        string `json:"technique"`
 }
 
-func (c *client) planRecipeVariety(ctx context.Context, saleIngredients []InputIngredient) (*recipeVarietyPlan, error) {
+var example = recipePlan{
+	Cuisine:          "French Bistro",
+	AnchorIngredient: "chicken thighs",
+	Technique:        "braise",
+}
+
+var examplStr, _ = json.Marshal(example)
+
+func (c *client) planRecipeVariety(ctx context.Context, saleIngredients []InputIngredient, date time.Time, location *locationtypes.Location) (*menuPlan, error) {
 	var buf strings.Builder
 	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
-	prompt := "Pick exactly 3 distinct cuisine/protein pairs that best fit these sale ingredients.\n" +
-		"Return JSON only in this format: {\"plans\":[{\"cuisine\":\"...\",\"protein\":\"...\"},{\"cuisine\":\"...\",\"protein\":\"...\"},{\"cuisine\":\"...\",\"protein\":\"...\"}]}\n" +
-		"Keep names short and practical.\n\nIngredients TSV:\n" + buf.String()
-
+	var prompt = []responses.ResponseInputItemUnionParam{
+		user("Pick exactly 7 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best" +
+			"fit these ingredients based on seasonality and price. Example: " + string(examplStr)),
+		user("Prioritize ingredients that are in season for the current date and user's state location " + date.Format("January 2nd") + " in " + location.State + "."),
+		// useful constraint? ser("Default: prep and cook time under 1 hour"),
+		user("Default: cooking methods: oven, stove, grill, slow cooker"),
+		user("Ingredients TSV:\n" + buf.String()),
+	}
+	//user instructions?
 	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
 		Model: recipePlanModel,
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
+			OfInputItemList: prompt,
 		},
-		Store: openai.Bool(false),
+		Store: openai.Bool(true),
+		Text:  scheme(c.menuSchema),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	var plan recipeVarietyPlan
+	var plan menuPlan
 	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
-	}
-	if len(plan.Plans) != 3 {
-		return nil, fmt.Errorf("expected 3 plans, got %d", len(plan.Plans))
-	}
-	for i, item := range plan.Plans {
-		if strings.TrimSpace(item.Cuisine) == "" || strings.TrimSpace(item.Protein) == "" {
-			return nil, fmt.Errorf("plan %d has empty cuisine or protein", i)
-		}
 	}
 	return &plan, nil
 }
@@ -516,41 +499,36 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan *recipeVarietyPlan) ([]responses.ResponseInputParam, error) {
-	var allMessages []responses.ResponseInputParam
-	for _, planItem := range plan.Plans {
-		var messages []responses.ResponseInputItemUnionParam
-		// constants we might make variable later
-		messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
-		messages = append(messages, user("Default: each recipe should serve 2 people."))
-		messages = append(messages, user("Default: generate exactly 1 recipe"))
-		messages = append(messages, user(fmt.Sprintf("Cuisine direction for this recipe: %s.", planItem.Cuisine)))
-		messages = append(messages, user(fmt.Sprintf("Protein direction for this recipe: %s.", planItem.Protein)))
-		messages = append(messages, user("Default: prep and cook time under 1 hour"))
-		messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
+func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan recipePlan) ([]responses.ResponseInputItemUnionParam, error) {
+	var messages []responses.ResponseInputItemUnionParam
+	// constants we might make variable later
+	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
+	messages = append(messages, user("Default: each recipe should serve 2 people."))
+	messages = append(messages, user("Default: prep and cook time under 1 hour"))
+	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
+	messages = append(messages, user(fmt.Sprintf("Cuisine direction for this recipe: %s.", plan.Cuisine)))
+	messages = append(messages, user(fmt.Sprintf("Anchor Ingredient direction for this recipe: %s.", plan.AnchorIngredient)))
+	messages = append(messages, user(fmt.Sprintf("Suggested tecnique for this recipe: %s.", plan.Technique)))
 
-		ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
-		var buf strings.Builder
-		if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
-			return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
+	//todo resuse context via response id?
+	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
+	var buf strings.Builder
+	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
+		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
+	}
+	ingredientsMessage += buf.String()
+	messages = append(messages, user(ingredientsMessage))
+
+	if len(lastRecipes) > 0 {
+		var prevRecipesMsg strings.Builder
+		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
+		for _, recipe := range lastRecipes {
+			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
 		}
-		ingredientsMessage += buf.String()
-		messages = append(messages, user(ingredientsMessage))
-
-		if len(lastRecipes) > 0 {
-			var prevRecipesMsg strings.Builder
-			prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
-			for _, recipe := range lastRecipes {
-				fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
-			}
-			messages = append(messages, user(prevRecipesMsg.String()))
-		}
-
-		messages = append(messages, cleanInstuctions(instructions)...)
-		allMessages = append(allMessages, messages)
+		messages = append(messages, user(prevRecipesMsg.String()))
 	}
 
-	return allMessages, nil
+	return append(messages, cleanInstuctions(instructions)...), nil
 }
 
 func (c *client) Ready(ctx context.Context) error {
@@ -571,15 +549,6 @@ func cleanInstuctions(instructions []string) []responses.ResponseInputItemUnionP
 		responses = append(responses, user(i))
 	}
 	return responses
-}
-
-func normalizeWineStyles(shoppingList *ShoppingList) {
-	if shoppingList == nil {
-		return
-	}
-	for i := range shoppingList.Recipes {
-		shoppingList.Recipes[i].WineStyles = normalizeRecipeWineStyles(shoppingList.Recipes[i].WineStyles)
-	}
 }
 
 func normalizeRecipeWineStyles(styles []string) []string {
