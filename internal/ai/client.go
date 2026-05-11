@@ -100,12 +100,12 @@ type WineSelection struct {
 }
 
 type client struct {
-	schema     map[string]any
-	wineSchema map[string]any
-	menuSchema map[string]any
-	model      string
-	wineModel  string
-	oai        openai.Client
+	recipeSchema map[string]any
+	wineSchema   map[string]any
+	menuSchema   map[string]any
+	model        string
+	wineModel    string
+	oai          openai.Client
 }
 
 // ignoring model for now.
@@ -134,12 +134,12 @@ func NewClient(apiKey, _ string, httpClient *http.Client) *client {
 	}
 	aiClient := openai.NewClient(opts...)
 	return &client{
-		oai:        aiClient,
-		schema:     recipe,
-		wineSchema: wine,
-		menuSchema: menu,
-		model:      defaultRecipeModel,
-		wineModel:  defaultWineModel,
+		oai:          aiClient,
+		recipeSchema: recipe,
+		wineSchema:   wine,
+		menuSchema:   menu,
+		model:        defaultRecipeModel,
+		wineModel:    defaultWineModel,
 	}
 }
 
@@ -242,7 +242,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 			OfInputItemList: messages,
 		},
 		Store: openai.Bool(true),
-		Text:  scheme(c.schema),
+		Text:  scheme(c.recipeSchema),
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
@@ -375,12 +375,12 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 
 func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
-	MenuPlan, err := c.planRecipeVariety(ctx, saleIngredients, date, location)
+	menuPlan, err := c.planRecipeVariety(ctx, saleIngredients, date, location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
-	mutable.Shuffle(MenuPlan.Plans)
-	recipeplans := lo.Take(MenuPlan.Plans, 3)
+	mutable.Shuffle(menuPlan.Plans)
+	recipeplans, leftovers := menuPlan.Plans[:3], menuPlan.Plans[3:]
 
 	recipes, err := parallelism.MapWithErrors(recipeplans, func(plan recipePlan) (*Recipe, error) {
 		messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
@@ -395,7 +395,7 @@ func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Lo
 				OfInputItemList: messages,
 			},
 			Store: openai.Bool(true),
-			Text:  scheme(c.schema),
+			Text:  scheme(c.recipeSchema),
 		})
 		if err != nil {
 			return nil, err
@@ -407,7 +407,7 @@ func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Lo
 		return nil, fmt.Errorf("failed to generate recipes: %w", err)
 	}
 
-	return &ShoppingList{Recipes: lo.FromSlicePtr(recipes), Plan: MenuPlan}, nil
+	return &ShoppingList{Recipes: lo.FromSlicePtr(recipes), Plan: &MenuPlan{Plans: leftovers, Notes: menuPlan.Notes}}, nil
 }
 
 type MenuPlan struct {

@@ -380,8 +380,8 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 
 	wantInstructions := []string{
 		"make it vegetarian",
-		"Passed on Dismissed Recipe",
 		"Enjoyed and saved so don't repeat: Newly Saved",
+		"Passed on Dismissed Recipe",
 	}
 	if !slices.Equal(aiStub.instructions, wantInstructions) {
 		t.Fatalf("unexpected regenerate instructions: got %v want %v", aiStub.instructions, wantInstructions)
@@ -533,8 +533,8 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 		t.Fatalf("expected one critique-driven regenerate call, got %d", aiStub.regenerateCalls)
 	}
 	wantInstructions := []string{
-		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below. Description should focus on selling the dish not these corrections",
-		"Recipe \"Weak Dinner\" scored 6/10.\n Issues: [clarity/high] The sauce step is vague.\n Suggested fixes: clarify when to reduce the sauce",
+		"Revise recipe. Description should focus on selling the dish not these corrections.",
+		"scored 6/10.\n Issues: [clarity/high] The sauce step is vague.\n Suggested fixes: clarify when to reduce the sauce",
 	}
 	if got := aiStub.regenerateInstructions[0]; !slices.Equal(got, wantInstructions) {
 		t.Fatalf("unexpected critique retry instructions: got %v want %v", got, wantInstructions)
@@ -750,8 +750,8 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 		t.Fatalf("unexpected regenerate response IDs: got %v", got)
 	}
 	wantRetryInstructions := []string{
-		"Revise and return exactly 1 recipes as replacements for the low-scoring recipes listed below. Description should focus on selling the dish not these corrections",
-		"Recipe \"Needs Work Dinner\" scored 5/10.\n Issues: [timing/medium] Cooking times are inconsistent.\n Suggested fixes: make the timing consistent",
+		"Revise recipe. Description should focus on selling the dish not these corrections.",
+		"scored 5/10.\n Issues: [timing/medium] Cooking times are inconsistent.\n Suggested fixes: make the timing consistent",
 	}
 	if got := aiStub.regenerateInstructions[1]; !slices.Equal(got, wantRetryInstructions) {
 		t.Fatalf("unexpected critique retry instructions: got %v want %v", got, wantRetryInstructions)

@@ -96,19 +96,13 @@ func (mc *multiCritiquer) Wait() {
 	mc.wg.Wait()
 }
 
-func RetryInstructions(results []Result) []string {
-	revise := fmt.Sprintf("Revise and return exactly %d recipes as replacements for the low-scoring recipes listed below. Description should focus on selling the dish not these corrections", len(results))
-	instructions := []string{revise}
-	for _, result := range results {
-		instructions = append(instructions, fmt.Sprintf(
-			"Recipe %q scored %d/10.\n Issues: %s\n Suggested fixes: %s",
-			result.Recipe.Title,
+func RetryInstructions(result Result) []string {
+	return []string{"Revise recipe. Description should focus on selling the dish not these corrections.",
+		fmt.Sprintf("scored %d/10.\n Issues: %s\n Suggested fixes: %s",
 			result.Critique.OverallScore,
 			formatIssues(result.Critique.Issues),
-			formatSuggestedFixes(result.Critique.SuggestedFixes),
-		))
+			formatSuggestedFixes(result.Critique.SuggestedFixes)),
 	}
-	return instructions
 }
 
 func Split(ctx context.Context, results <-chan Result, minimumScore int) (accepted []ai.Recipe, retry []Result) {

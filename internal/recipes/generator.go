@@ -118,14 +118,15 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 				return ai.Recipe{}, fmt.Errorf("recipe %q is missing response ID for regeneration", dismissed.Title)
 			}
 			slog.InfoContext(ctx, "dismissed recipe", "hash", dismissed.ComputeHash(), "title", dismissed.Title)
+
+			instructions = append(instructions, "Passed on "+dismissed.Title)
+			//todo add in alternate menu plan?
 			recipe, err := g.aiClient.Regenerate(ctx, instructions, dismissed.ResponseID)
 			if err != nil {
 				return ai.Recipe{}, err
 			}
 			recipe.OriginHash = hash
-			if parentHash := dismissed.ComputeHash(); parentHash != "" && parentHash != recipe.ComputeHash() {
-				recipe.ParentHash = parentHash
-			}
+			recipe.ParentHash = dismissed.ComputeHash()
 			return *recipe, nil
 		})
 		if err != nil {
@@ -206,9 +207,6 @@ func regenerateInstructions(p *generatorParams) []string {
 	if trimmed := strings.TrimSpace(p.Instructions); trimmed != "" {
 		instructions = append(instructions, trimmed)
 	}
-	for _, dismissed := range p.Dismissed {
-		instructions = append(instructions, "Passed on "+dismissed.Title)
-	}
 	for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
 		instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
 	}
@@ -248,7 +246,7 @@ func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash strin
 		if strings.TrimSpace(recipe.ResponseID) == "" {
 			return nil, nil, fmt.Errorf("recipe %q is missing response ID for critique retry", recipe.Title)
 		}
-		retry, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions([]critique.Result{result}), recipe.ResponseID)
+		retry, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(result), recipe.ResponseID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to regenerate recipe %q from critique feedback: %w", recipe.Title, err)
 		}
