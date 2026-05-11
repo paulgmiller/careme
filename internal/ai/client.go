@@ -18,7 +18,6 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
-	"github.com/samber/lo/mutable"
 
 	"github.com/invopop/jsonschema"
 )
@@ -30,6 +29,7 @@ type GeneratedImage struct {
 const (
 	defaultRecipeModel = "gpt-5.5"
 	defaultWineModel   = openai.ChatModelGPT5Mini
+	recipePlanModel    = openai.ChatModelGPT5Mini // need to play witht this
 )
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
@@ -147,7 +147,7 @@ const systemMessage = `
 You are a professional chef and recipe developer helping working families cook varied weeknight dinners.
 
 # Outcome
-Create practical, flavorful recipe using the provided sale ingredients, seasonal context, user preferences, recent-recipe history, cuisien and anchor ingredient.
+Create a practical, flavorful recipe using the provided sale ingredients, seasonal context, user preferences, recent-recipe history, cuisine and anchor ingredient.
 
 # Recipe Requirements
 - User instructions override defaults unless they make a recipe unsafe, uncookable, or impossible with the available ingredients.
@@ -164,14 +164,14 @@ Create practical, flavorful recipe using the provided sale ingredients, seasonal
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: include quantities; include prices only when present in the input; common pantry items are allowed.
-- instructions: the first steps must be preparation steps before any cooking begins; end with plating; repeat amounts and prep details; do not include prices; do not prefix steps with numbers.
+- instructions: the first steps must be preparation steps before any cooking begins such as preheating and slicing; end with plating; repeat amounts and prep details; do not include prices; do not prefix steps with numbers.
 - health: include plausible calories and macro notes for the stated servings.
 - drink_pairing: give concise sommelier guidance tied to the dish.
 - wine_styles: at most two searchable consumer wine styles, such as "Pinot Noir" or "Sauvignon Blanc"; no regions, parenthetical notes, commas, "or", or "*-style blend" phrasing.
 
 # Quality Checks
 Before responding, ensure recipe is cookable, realistic, non-contradictory, correctly priced, safe, and visually appealing after plating.
-Ensure the first instruction steps are prep steps.
+Ensure the first instructions say what prep can be done ahead of time.
 Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.
 Do not include these checks in the output.`
 
@@ -196,7 +196,6 @@ Also for fancier/more expensive dishes consider more expensive wines.
 
 const (
 	recipeImageModel = "gpt-image-2" // dalle-3 is getting deprecated. 1.5 seems way better than 1.
-	recipePlanModel  = openai.ChatModelGPT5Mini
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
 	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
 	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
@@ -417,7 +416,6 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
 	}
 	plan.ResponseId = resp.ID
-	mutable.Shuffle(plan.Plans)
 	slog.InfoContext(ctx, "generated menu plan", "plan", lo.Must(json.Marshal(plan)))
 	return &plan, nil
 }

@@ -844,6 +844,7 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	if err != nil {
 		return nil, fmt.Errorf("failed to load recipe parameters")
 	}
+	// good place to fetch meal plan? except we want to kill paramsForAction?
 	currentList, err := s.FromCache(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load recipe list")
