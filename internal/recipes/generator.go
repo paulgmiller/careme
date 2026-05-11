@@ -122,6 +122,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 		g.writeStatus(ctx, hash, status.Regen(p.Instructions, p.Dismissed))
 
+		// Should get more menup plans here.
+		// https://github.com/paulgmiller/careme/issues/570
+
 		baseInstructions := regenerateInstructions(p)
 		results, err := parallelism.MapWithErrors(p.Dismissed, func(dismissed ai.Recipe) (*ai.Recipe, error) {
 			if strings.TrimSpace(dismissed.ResponseID) == "" {
