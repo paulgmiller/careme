@@ -81,9 +81,10 @@ func (r *Recipe) ComputeHash() string {
 }
 
 // now we can reuse first recipes and people can go off in different directions.
+// Mostly a collection of generaetd things could live in recipes instead of here.
 type ShoppingList struct {
-	Recipes   []Recipe  `json:"recipes" jsonschema:"required"`
-	Discarded []Recipe  `json:"-" jsonschema:"-"`
+	Recipes   []Recipe  `json:"recipes"`
+	Discarded []Recipe  `json:"-"` // temporary so we can see dismissed
 	Plan      *MenuPlan `json:"plan"`
 }
 
@@ -373,8 +374,9 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 }
 
 type MenuPlan struct {
-	Plans []RecipePlan `json:"plans"`
-	Notes string
+	Plans      []RecipePlan `json:"plans"`
+	Notes      string
+	ResponseId string
 }
 
 type RecipePlan struct {
@@ -391,20 +393,13 @@ var example = RecipePlan{
 
 var examplStr, _ = json.Marshal(example)
 
-func (c *client) CreateMenuPlan(ctx context.Context, saleIngredients []InputIngredient, date time.Time, location *locationtypes.Location) (*MenuPlan, error) {
-	var buf strings.Builder
-	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
-		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
+func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
+	instructions []string, date time.Time, lastRecipes []string,
+) (*MenuPlan, error) {
+	prompt, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build menu plan messages: %w", err)
 	}
-	var prompt = []responses.ResponseInputItemUnionParam{
-		user("Pick exactly 7 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best" +
-			"fit these ingredients based on seasonality and price. Example: " + string(examplStr)),
-		user("Prioritize ingredients that are in season for the current date and user's state location " + date.Format("January 2nd") + " in " + location.State + "."),
-		// useful constraint? ser("Default: prep and cook time under 1 hour"),
-		user("Default: cooking methods: oven, stove, grill, slow cooker"),
-		user("Ingredients TSV:\n" + buf.String()),
-	}
-	//user instructions?
 	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
 		Model: recipePlanModel,
 		Input: responses.ResponseNewParamsInputUnion{
@@ -421,13 +416,32 @@ func (c *client) CreateMenuPlan(ctx context.Context, saleIngredients []InputIngr
 	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
 	}
+	plan.ResponseId = resp.ID
 	mutable.Shuffle(plan.Plans)
 	slog.InfoContext(ctx, "generated menu plan", "plan", lo.Must(json.Marshal(plan)))
 	return &plan, nil
 }
 
+func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
+	instructions []string, date time.Time, lastRecipes []string,
+) ([]responses.ResponseInputItemUnionParam, error) {
+	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return nil, err
+	}
+	messages = append(messages,
+		user("Pick exactly 7 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best"+
+			"fit these ingredients based on seasonality and price. Example: "+string(examplStr)),
+		user("Plan the full set for variety across cuisines, cooking methods, textures, colors, and composition types like pastas, noodles, stir-fries, stews, braises, curries, or casseroles."),
+		user("Each plan should be practical, cookable, realistic, and able to become a recipe with a protein plus at least one vegetable or starch component."),
+		user("Include one richer or more special plan when it fits the budget and ingredients."),
+	)
+	return messages, nil
+}
+
 func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string, plan RecipePlan) (*Recipe, error) {
+	instructions []string, date time.Time, lastRecipes []string, plan RecipePlan,
+) (*Recipe, error) {
 	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
@@ -490,17 +504,25 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
 func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan RecipePlan) ([]responses.ResponseInputItemUnionParam, error) {
+	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return nil, err
+	}
+	messages = append(messages, user(fmt.Sprintf("Cuisine direction for this recipe: %s.", plan.Cuisine)))
+	messages = append(messages, user(fmt.Sprintf("Anchor Ingredient direction for this recipe: %s.", plan.AnchorIngredient)))
+	messages = append(messages, user(fmt.Sprintf("Suggested tecnique for this recipe: %s.", plan.Technique)))
+	return messages, nil
+}
+
+func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]responses.ResponseInputItemUnionParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	// constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
 	messages = append(messages, user("Default: each recipe should serve 2 people."))
 	messages = append(messages, user("Default: prep and cook time under 1 hour"))
 	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
-	messages = append(messages, user(fmt.Sprintf("Cuisine direction for this recipe: %s.", plan.Cuisine)))
-	messages = append(messages, user(fmt.Sprintf("Anchor Ingredient direction for this recipe: %s.", plan.AnchorIngredient)))
-	messages = append(messages, user(fmt.Sprintf("Suggested tecnique for this recipe: %s.", plan.Technique)))
 
-	//todo resuse context via response id?
+	// todo resuse context via response id?
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
 	var buf strings.Builder
 	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {

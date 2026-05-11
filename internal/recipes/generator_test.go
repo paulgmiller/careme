@@ -34,6 +34,8 @@ type captureRegenerateAIClient struct {
 type captureGenerateAIClient struct {
 	shoppingList *ai.ShoppingList
 	ingredients  []ai.InputIngredient
+	instructions [][]string
+	lastRecipes  []string
 	mu           sync.Mutex
 }
 
@@ -62,7 +64,7 @@ type captureWineStaplesProvider struct {
 	responses map[string][]ai.InputIngredient
 }
 
-func (c *captureWineQuestionAIClient) CreateMenuPlan(ctx context.Context, ingredients []ai.InputIngredient, date time.Time, location *locations.Location) (*ai.MenuPlan, error) {
+func (c *captureWineQuestionAIClient) CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.MenuPlan, error) {
 	panic("unexpected call to CreateMenuPlan")
 }
 
@@ -98,7 +100,7 @@ func (c *captureWineQuestionAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *captureRegenerateAIClient) CreateMenuPlan(ctx context.Context, ingredients []ai.InputIngredient, date time.Time, location *locations.Location) (*ai.MenuPlan, error) {
+func (c *captureRegenerateAIClient) CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.MenuPlan, error) {
 	panic("unexpected call to CreateMenuPlan")
 }
 
@@ -131,11 +133,13 @@ func (c *captureRegenerateAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *captureGenerateAIClient) CreateMenuPlan(ctx context.Context, ingredients []ai.InputIngredient, date time.Time, location *locations.Location) (*ai.MenuPlan, error) {
+func (c *captureGenerateAIClient) CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.MenuPlan, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.ingredients = append([]ai.InputIngredient(nil), ingredients...)
+	c.instructions = append(c.instructions, append([]string(nil), instructions...))
+	c.lastRecipes = append([]string(nil), lastRecipes...)
 	if c.shoppingList != nil {
 		return menuPlanForRecipes(c.shoppingList.Recipes), nil
 	}
@@ -177,11 +181,12 @@ func (c *captureGenerateAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *sequenceAIClient) CreateMenuPlan(ctx context.Context, ingredients []ai.InputIngredient, date time.Time, location *locations.Location) (*ai.MenuPlan, error) {
+func (c *sequenceAIClient) CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.MenuPlan, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.generateCalls++
+	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
 	if len(c.generateResponses) == 0 {
 		c.plannedRecipes = nil
 		return &ai.MenuPlan{}, nil

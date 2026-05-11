@@ -22,7 +22,7 @@ import (
 )
 
 type aiClient interface {
-	CreateMenuPlan(ctx context.Context, ingredients []ai.InputIngredient, date time.Time, location *locations.Location) (*ai.MenuPlan, error)
+	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.MenuPlan, error)
 	GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan ai.RecipePlan) (*ai.Recipe, error)
 	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
@@ -173,7 +173,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 	instructions := []string{p.Directive, p.Instructions}
 
-	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, ingredients, p.Date, p.Location)
+	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
