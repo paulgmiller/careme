@@ -428,7 +428,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 		return nil, err
 	}
 	messages = append(messages,
-		user("Pick exactly 7 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best"+
+		user("Pick exactly 3 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best"+
 			"fit these ingredients based on seasonality and price. Example: "+string(examplStr)),
 		user("Plan the full set for variety across cuisines, cooking methods, textures, colors, and composition types like pastas, noodles, stir-fries, stews, braises, curries, or casseroles."),
 		user("Each plan should be practical, cookable, realistic, and able to become a recipe with a protein plus at least one vegetable or starch component."),
