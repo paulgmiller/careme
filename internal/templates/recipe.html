@@ -261,13 +261,23 @@
   {{end}}
   {{if .Thread}}
   <div class="space-y-4">
-    {{range .Thread}}
-    <div class="rounded-xl border border-brand-100 bg-brand-50/70 p-4">
-      <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">You asked</p>
-      <p class="mt-1 text-sm text-gray-700">{{.Question}}</p>
-      <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Careme</p>
-      <p class="mt-1 whitespace-pre-line text-sm text-gray-700">{{.Answer}}</p>
-    </div>
+    {{range $index, $entry := .Thread}}
+    <details class="group rounded-xl border border-brand-100 bg-brand-50/70 p-4" {{if eq $index 0}}open{{end}}>
+      <summary class="list-none cursor-pointer">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">You asked</p>
+            <p class="mt-1 text-sm text-gray-700">{{$entry.Question}}</p>
+          </div>
+          <span class="mt-0.5 text-xs font-semibold uppercase tracking-wide text-brand-700 group-open:hidden">Show answer</span>
+          <span class="mt-0.5 hidden text-xs font-semibold uppercase tracking-wide text-brand-700 group-open:inline">Hide answer</span>
+        </div>
+      </summary>
+      <div class="mt-3 border-t border-brand-100 pt-3">
+        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Careme</p>
+        <p class="mt-1 whitespace-pre-line text-sm text-gray-700">{{$entry.Answer}}</p>
+      </div>
+    </details>
     {{end}}
   </div>
   {{else if and .ServerSignedIn .ResponseID}}
