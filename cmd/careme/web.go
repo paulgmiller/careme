@@ -68,8 +68,8 @@ func runServer(cfg *config.Config, addr string) error {
 	var imageGen recipes.ImageGen
 	var waitFns []func()
 	if cfg.Mocks.Enable {
-		generator = recipes.NewMockGenerator()
-		imageGen = recipes.NewMockGenerator()
+		generator = recipes.NewMockGenerator(recipes.IO(cache))
+		imageGen = recipes.NewMockImageGen()
 	} else {
 		mc := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(mc)
@@ -83,7 +83,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		watchdogServer.Add("staples", staples, 6.*time.Hour)
 		ss := recipes.StatusStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, mc, staples, ss)
+		generator, err = recipes.NewGenerator(aiclient, mc, staples, ss, recipes.IO(cache))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}

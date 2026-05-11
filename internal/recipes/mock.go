@@ -13,9 +13,15 @@ import (
 	"github.com/google/uuid"
 )
 
-type mock struct{}
+type mock struct {
+	saver recipeSaver
+}
 
-func NewMockGenerator() mock {
+func NewMockGenerator(saver recipeSaver) mock {
+	return mock{saver: saver}
+}
+
+func NewMockImageGen() mock {
 	return mock{}
 }
 
@@ -397,6 +403,14 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 		slog.InfoContext(ctx, "keeping", "title", s.Title)
 		s.Saved = true
 		selectedRecipes = append(selectedRecipes, s)
+	}
+
+	if m.saver != nil {
+		for _, recipe := range selectedRecipes {
+			if err := m.saver.SaveRecipe(ctx, recipe); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return &ai.ShoppingList{

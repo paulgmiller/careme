@@ -46,6 +46,12 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 			DrinkPairing: "Pinot Grigio",
 		},
 	}
+	for _, r := range recipeList {
+		if err := recipesCache.SaveRecipe(t.Context(), r); err != nil {
+			t.Fatalf("save recipe: %v", err)
+		}
+	}
+
 	if err := recipesCache.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: recipeList}, "origin-hash"); err != nil {
 		t.Fatalf("save shopping list: %v", err)
 	}
@@ -131,22 +137,20 @@ func TestCritiquePageRendersSingleCritique(t *testing.T) {
 	store := critique.NewStore(fc)
 	recipesCache := recipes.IO(fc)
 
-	shoppingList := &ai.ShoppingList{Recipes: []ai.Recipe{
-		{
-			Title:        "Spring Pasta",
-			Description:  "Bright and lemony.",
-			CookTime:     "20 minutes",
-			CostEstimate: "$14-18",
-			Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 box", Price: "$2.99"}},
-			Instructions: []string{"Boil pasta.", "Finish with lemon and herbs."},
-			Health:       "Balanced.",
-			DrinkPairing: "Pinot Grigio",
-		},
-	}}
-	if err := recipesCache.SaveShoppingList(t.Context(), shoppingList, "origin-hash"); err != nil {
+	recipe := ai.Recipe{
+		Title:        "Spring Pasta",
+		Description:  "Bright and lemony.",
+		CookTime:     "20 minutes",
+		CostEstimate: "$14-18",
+		Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 box", Price: "$2.99"}},
+		Instructions: []string{"Boil pasta.", "Finish with lemon and herbs."},
+		Health:       "Balanced.",
+		DrinkPairing: "Pinot Grigio",
+	}
+	if err := recipesCache.SaveRecipe(t.Context(), recipe); err != nil {
 		t.Fatalf("save shopping list: %v", err)
 	}
-	hash := shoppingList.Recipes[0].ComputeHash()
+	hash := recipe.ComputeHash()
 
 	if err := store.Save(t.Context(), hash, &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",

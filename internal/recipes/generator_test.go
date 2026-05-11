@@ -64,6 +64,41 @@ type captureWineStaplesProvider struct {
 	responses map[string][]ai.InputIngredient
 }
 
+type panicStaplesService struct{}
+
+type noopRecipeSaver struct{}
+
+type captureRecipeSaver struct {
+	mu      sync.Mutex
+	recipes []ai.Recipe
+}
+
+func newTestGenerator(
+	t *testing.T,
+	aiClient aiClient,
+	critiquer critique.Service,
+	staples staplesService,
+	statuses statusWriter,
+	saver recipeSaver,
+) *generatorService {
+	t.Helper()
+	if critiquer == nil {
+		critiquer = &captureCritiqueService{}
+	}
+	if staples == nil {
+		staples = panicStaplesService{}
+	}
+	if statuses == nil {
+		statuses = noopstatuswriter{}
+	}
+	if saver == nil {
+		saver = noopRecipeSaver{}
+	}
+	g, err := NewGenerator(aiClient, critiquer, staples, statuses, saver)
+	require.NoError(t, err)
+	return g
+}
+
 func (c *captureWineQuestionAIClient) CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.MenuPlan, error) {
 	panic("unexpected call to CreateMenuPlan")
 }
@@ -327,6 +362,35 @@ func (s *captureWineStaplesProvider) searchTerms() []string {
 	return slices.Clone(s.searches)
 }
 
+func (panicStaplesService) FetchStaples(context.Context, *GeneratorParams) ([]ai.InputIngredient, error) {
+	panic("unexpected call to FetchStaples")
+}
+
+func (panicStaplesService) GetIngredients(context.Context, string, string, int, time.Time) ([]ai.InputIngredient, error) {
+	panic("unexpected call to GetIngredients")
+}
+
+func (noopRecipeSaver) SaveRecipe(context.Context, ai.Recipe) error {
+	return nil
+}
+
+func (s *captureRecipeSaver) SaveRecipe(_ context.Context, recipe ai.Recipe) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.recipes = append(s.recipes, recipe)
+	return nil
+}
+
+func (s *captureRecipeSaver) titles() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	titles := make([]string, 0, len(s.recipes))
+	for _, recipe := range s.recipes {
+		titles = append(titles, recipe.Title)
+	}
+	return titles
+}
+
 func TestWineIngredientsCacheKey_UsesStyleDateAndLocation(t *testing.T) {
 	got := wineIngredientsCacheKey(" Pinot Noir ", "70500874", time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC))
 	want := "wines/0XY3COdxwHk"
@@ -362,10 +426,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 			Commentary: "Great with your dish.",
 		},
 	}
-	g := &generatorService{
-		staples:  &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}},
-		aiClient: aiStub,
-	}
+	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}}, nil, nil)
 
 	got, err := g.PickAWine(t.Context(), location, ai.Recipe{
 		Title:      "Roast Chicken",
@@ -409,10 +470,7 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 		},
 	}
 	rio := IO(cache.NewFileCache(t.TempDir()))
-	g := &generatorService{
-		staples:  &cachedStaplesService{cache: rio, provider: staplesStub},
-		aiClient: aiStub,
-	}
+	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: staplesStub}, nil, nil)
 
 	got, err := g.PickAWine(t.Context(), "wholefoods_10216", ai.Recipe{
 		Title:      "Salmon",
@@ -445,10 +503,7 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	aiStub := &captureRegenerateAIClient{
 		recipe: &newResult,
 	}
-	g := &generatorService{
-		aiClient:     aiStub,
-		statusWriter: noopstatuswriter{},
-	}
+	g := newTestGenerator(t, aiStub, nil, nil, noopstatuswriter{}, nil)
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "make it vegetarian"
@@ -499,12 +554,8 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 		},
 	}
 	critiquer := &captureCritiqueService{}
-	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
-		aiClient:     aiStub,
-		critiquer:    critiquer,
-		statusWriter: noopstatuswriter{},
-	}
+	saver := &captureRecipeSaver{}
+	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, saver)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
@@ -541,11 +592,7 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
 
 	critiquer := &captureCritiqueService{}
-	g := &generatorService{
-		aiClient:     &captureRegenerateAIClient{recipe: &newResult},
-		critiquer:    critiquer,
-		statusWriter: noopstatuswriter{},
-	}
+	g := newTestGenerator(t, &captureRegenerateAIClient{recipe: &newResult}, critiquer, nil, noopstatuswriter{}, nil)
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Saved = []ai.Recipe{alreadySaved}
@@ -608,12 +655,8 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 		},
 	}
 
-	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
-		aiClient:     aiStub,
-		critiquer:    critiquer,
-		statusWriter: noopstatuswriter{},
-	}
+	saver := &captureRecipeSaver{}
+	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, saver)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
@@ -640,6 +683,9 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 	if got := critiquer.recipes[1].Title; got != "Better Dinner" {
 		t.Fatalf("expected retried recipe to be critiqued again, got %q", got)
+	}
+	if got := saver.titles(); !slices.Equal(got, []string{"Weak Dinner", "Better Dinner"}) {
+		t.Fatalf("expected original and retried recipes to be saved, got %v", got)
 	}
 }
 
@@ -688,12 +734,7 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 			}
 		},
 	}
-	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
-		aiClient:     aiStub,
-		critiquer:    critiquer,
-		statusWriter: noopstatuswriter{},
-	}
+	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, nil)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
@@ -722,12 +763,7 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 			Recipes: []ai.Recipe{steady},
 		}},
 	}
-	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
-		aiClient:     aiStub,
-		critiquer:    &captureCritiqueService{},
-		statusWriter: noopstatuswriter{},
-	}
+	g := newTestGenerator(t, aiStub, &captureCritiqueService{}, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, nil)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
@@ -761,12 +797,7 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 	}
 
 	statuses := &statusCounter{}
-	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
-		aiClient:     &sequenceAIClient{generateResponses: []*ai.ShoppingList{{Recipes: []ai.Recipe{steady}}}},
-		critiquer:    &captureCritiqueService{},
-		statusWriter: statuses,
-	}
+	g := newTestGenerator(t, &sequenceAIClient{generateResponses: []*ai.ShoppingList{{Recipes: []ai.Recipe{steady}}}}, &captureCritiqueService{}, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, statuses, nil)
 
 	_, err := g.GenerateRecipes(t.Context(), params)
 	require.NoError(t, err)
@@ -812,11 +843,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 			}
 		},
 	}
-	g := &generatorService{
-		aiClient:     aiStub,
-		critiquer:    critiquer,
-		statusWriter: noopstatuswriter{},
-	}
+	g := newTestGenerator(t, aiStub, critiquer, nil, noopstatuswriter{}, nil)
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "make it vegetarian"
@@ -884,11 +911,7 @@ func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
 			}, nil
 		},
 	}
-	g := &generatorService{
-		aiClient:     aiStub,
-		critiquer:    critiquer,
-		statusWriter: noopstatuswriter{},
-	}
+	g := newTestGenerator(t, aiStub, critiquer, nil, noopstatuswriter{}, nil)
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "make it fresher"
@@ -948,12 +971,7 @@ func TestGenerateRecipes_CritiqueRetryMatchesParentByTitleWords(t *testing.T) {
 			}
 		},
 	}
-	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
-		aiClient:     aiStub,
-		critiquer:    critiquer,
-		statusWriter: noopstatuswriter{},
-	}
+	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, nil)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
@@ -999,12 +1017,7 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 			}, nil
 		},
 	}
-	g := &generatorService{
-		staples:      &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
-		aiClient:     aiStub,
-		critiquer:    critiquer,
-		statusWriter: noopstatuswriter{},
-	}
+	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, nil)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
