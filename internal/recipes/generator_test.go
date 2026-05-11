@@ -535,6 +535,23 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 }
 
+func TestGenerateRecipes_RegenerateWithOnlySavedRecipesPreservesSavedRecipes(t *testing.T) {
+	saved := ai.Recipe{Title: "Saved Dinner", Description: "Keep this one"}
+	g := newTestGenerator(t, &captureGenerateAIClient{}, nil, nil, noopstatuswriter{}, nil)
+
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params.Instructions = "make the next round brighter"
+	params.Saved = []ai.Recipe{saved}
+
+	got, err := g.GenerateRecipes(t.Context(), params)
+	if err != nil {
+		t.Fatalf("GenerateRecipes returned error: %v", err)
+	}
+	if got == nil || len(got.Recipes) != 1 || got.Recipes[0].ComputeHash() != saved.ComputeHash() {
+		t.Fatalf("expected saved recipe to be preserved, got %+v", got)
+	}
+}
+
 func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	generated := []ai.Recipe{
 		{Title: "Roast Chicken", Description: "Crisp and simple", Instructions: []string{"Roast the chicken."}, ResponseID: "resp-chicken"},

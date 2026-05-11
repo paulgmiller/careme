@@ -769,10 +769,6 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
-	// so we have a choice we could save slection here matching params
-	// or backfill it on first load after regeneration Backfilling is a little more resilient
-	// selection := recipeSelectionFromParams(p)
-	// if err := s.saveRecipeSelection(ctx, currentUser.ID, newHash, selection);
 	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, newHash, true /*useStart*/)
@@ -838,7 +834,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, newHash, false /*useStart*/)
 }
 
-// paramsForAction merges selction, old params, and selection(saved/dismissed) into a new params
+// paramsForAction merges old saved params with current saved/dismissed selection into new params.
 func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions string) (*generatorParams, error) {
 	baseParams, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {

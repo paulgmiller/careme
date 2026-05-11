@@ -225,7 +225,7 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"the first steps must be preparation steps before any cooking begins",
 		"provide the total elapsed recipe time",
-		"Ensure the first instruction steps are prep steps.",
+		"Ensure the first instructions say what prep can be done ahead of time.",
 		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
 	} {
 		if !strings.Contains(systemMessage, want) {
