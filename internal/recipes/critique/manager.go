@@ -3,7 +3,6 @@ package critique
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -54,6 +53,8 @@ func (r rubberstamp) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) <-cha
 func (r rubberstamp) Wait()                           {}
 func (r rubberstamp) Ready(ctx context.Context) error { return nil }
 
+// mostly exists to wait on final criques before shutdown.
+// TODO waiting Critiquer
 type multiCritiquer struct {
 	critiquer recipeCritiquer
 	wg        sync.WaitGroup
@@ -97,30 +98,13 @@ func (mc *multiCritiquer) Wait() {
 }
 
 func RetryInstructions(result Result) []string {
-	return []string{"Revise recipe. Description should focus on selling the dish not these corrections.",
+	return []string{
+		"Revise recipe. Description should focus on selling the dish not these corrections.",
 		fmt.Sprintf("scored %d/10.\n Issues: %s\n Suggested fixes: %s",
 			result.Critique.OverallScore,
 			formatIssues(result.Critique.Issues),
 			formatSuggestedFixes(result.Critique.SuggestedFixes)),
 	}
-}
-
-func Split(ctx context.Context, results <-chan Result, minimumScore int) (accepted []ai.Recipe, retry []Result) {
-	for result := range results {
-		if result.Err != nil {
-			slog.ErrorContext(ctx, "failed to critique recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "error", result.Err)
-			accepted = append(accepted, *result.Recipe)
-			continue
-		}
-
-		if result.Critique.OverallScore >= minimumScore {
-			accepted = append(accepted, *result.Recipe)
-			continue
-		}
-
-		retry = append(retry, result)
-	}
-	return accepted, retry
 }
 
 func formatIssues(issues []ai.RecipeCritiqueIssue) string {

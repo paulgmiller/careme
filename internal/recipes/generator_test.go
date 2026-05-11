@@ -2,8 +2,8 @@ package recipes
 
 import (
 	"context"
-	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +34,7 @@ type captureRegenerateAIClient struct {
 type captureGenerateAIClient struct {
 	shoppingList *ai.ShoppingList
 	ingredients  []ai.InputIngredient
+	mu           sync.Mutex
 }
 
 type sequenceAIClient struct {
@@ -44,6 +45,7 @@ type sequenceAIClient struct {
 	regenerateInstructions [][]string
 	regenerateResponseIDs  []string
 	generateResponses      []*ai.ShoppingList
+	plannedRecipes         []ai.Recipe
 	regenerateResponses    []*ai.Recipe
 }
 
@@ -60,8 +62,12 @@ type captureWineStaplesProvider struct {
 	responses map[string][]ai.InputIngredient
 }
 
-func (c *captureWineQuestionAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
-	panic("unexpected call to GenerateRecipes")
+func (c *captureWineQuestionAIClient) CreateMenuPlan(ctx context.Context, ingredients []ai.InputIngredient, date time.Time, location *locations.Location) (*ai.MenuPlan, error) {
+	panic("unexpected call to CreateMenuPlan")
+}
+
+func (c *captureWineQuestionAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan ai.RecipePlan) (*ai.Recipe, error) {
+	panic("unexpected call to GenerateRecipe")
 }
 
 func (c *captureWineQuestionAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
@@ -92,8 +98,12 @@ func (c *captureWineQuestionAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *captureRegenerateAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
-	panic("unexpected call to GenerateRecipes")
+func (c *captureRegenerateAIClient) CreateMenuPlan(ctx context.Context, ingredients []ai.InputIngredient, date time.Time, location *locations.Location) (*ai.MenuPlan, error) {
+	panic("unexpected call to CreateMenuPlan")
+}
+
+func (c *captureRegenerateAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan ai.RecipePlan) (*ai.Recipe, error) {
+	panic("unexpected call to GenerateRecipe")
 }
 
 func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
@@ -121,12 +131,30 @@ func (c *captureRegenerateAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *captureGenerateAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
+func (c *captureGenerateAIClient) CreateMenuPlan(ctx context.Context, ingredients []ai.InputIngredient, date time.Time, location *locations.Location) (*ai.MenuPlan, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.ingredients = append([]ai.InputIngredient(nil), ingredients...)
 	if c.shoppingList != nil {
-		return c.shoppingList, nil
+		return menuPlanForRecipes(c.shoppingList.Recipes), nil
 	}
-	return &ai.ShoppingList{}, nil
+	return &ai.MenuPlan{}, nil
+}
+
+func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan ai.RecipePlan) (*ai.Recipe, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.shoppingList == nil {
+		return &ai.Recipe{}, nil
+	}
+	for _, recipe := range c.shoppingList.Recipes {
+		if recipe.Title == plan.AnchorIngredient {
+			return &recipe, nil
+		}
+	}
+	return &ai.Recipe{}, nil
 }
 
 func (c *captureGenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
@@ -149,18 +177,32 @@ func (c *captureGenerateAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *sequenceAIClient) GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error) {
+func (c *sequenceAIClient) CreateMenuPlan(ctx context.Context, ingredients []ai.InputIngredient, date time.Time, location *locations.Location) (*ai.MenuPlan, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.generateCalls++
-	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
 	if len(c.generateResponses) == 0 {
-		return &ai.ShoppingList{}, nil
+		c.plannedRecipes = nil
+		return &ai.MenuPlan{}, nil
 	}
 	resp := c.generateResponses[0]
 	c.generateResponses = c.generateResponses[1:]
-	return resp, nil
+	c.plannedRecipes = slices.Clone(resp.Recipes)
+	return menuPlanForRecipes(resp.Recipes), nil
+}
+
+func (c *sequenceAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan ai.RecipePlan) (*ai.Recipe, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
+	for _, recipe := range c.plannedRecipes {
+		if recipe.Title == plan.AnchorIngredient {
+			return &recipe, nil
+		}
+	}
+	return &ai.Recipe{}, nil
 }
 
 func (c *sequenceAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
@@ -173,9 +215,45 @@ func (c *sequenceAIClient) Regenerate(ctx context.Context, newinstructions []str
 	if len(c.regenerateResponses) == 0 {
 		return &ai.Recipe{}, nil
 	}
+	resp := c.regenerateResponse(previousResponseID)
+	return resp, nil
+}
+
+func (c *sequenceAIClient) regenerateResponse(previousResponseID string) *ai.Recipe {
+	for i, resp := range c.regenerateResponses {
+		if regenerateResponseMatches(*resp, previousResponseID) {
+			c.regenerateResponses = append(c.regenerateResponses[:i], c.regenerateResponses[i+1:]...)
+			return resp
+		}
+	}
 	resp := c.regenerateResponses[0]
 	c.regenerateResponses = c.regenerateResponses[1:]
-	return resp, nil
+	return resp
+}
+
+func regenerateResponseMatches(recipe ai.Recipe, previousResponseID string) bool {
+	previousResponseID = strings.ToLower(previousResponseID)
+	haystack := strings.ToLower(recipe.ResponseID + " " + recipe.Title)
+	for _, token := range strings.FieldsFunc(previousResponseID, func(r rune) bool {
+		return r == '-' || r == '_' || r == ' '
+	}) {
+		if len(token) > 2 && token != "resp" && strings.Contains(haystack, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func menuPlanForRecipes(recipes []ai.Recipe) *ai.MenuPlan {
+	plans := make([]ai.RecipePlan, 0, len(recipes))
+	for _, recipe := range recipes {
+		plans = append(plans, ai.RecipePlan{
+			Cuisine:          "test",
+			AnchorIngredient: recipe.Title,
+			Technique:        "test",
+		})
+	}
+	return &ai.MenuPlan{Plans: plans}
 }
 
 func (c *sequenceAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
@@ -433,8 +511,18 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	if len(critiquer.recipes) != len(generated) {
 		t.Fatalf("expected %d critiques, got %d", len(generated), len(critiquer.recipes))
 	}
-	if !reflect.DeepEqual(critiquer.recipes, generated) {
-		t.Fatalf("unexpected critiqued recipes: got %+v want %+v", critiquer.recipes, generated)
+	critiquedByTitle := map[string]ai.Recipe{}
+	for _, recipe := range critiquer.recipes {
+		critiquedByTitle[recipe.Title] = recipe
+	}
+	for _, want := range generated {
+		recipe, ok := critiquedByTitle[want.Title]
+		if !ok {
+			t.Fatalf("expected recipe %q to be critiqued, got %+v", want.Title, critiquer.recipes)
+		}
+		if recipe.OriginHash != params.Hash() {
+			t.Fatalf("expected critiqued recipe to include origin hash %q, got %+v", params.Hash(), recipe)
+		}
 	}
 }
 

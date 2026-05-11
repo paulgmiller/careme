@@ -13,7 +13,6 @@ import (
 	"time"
 
 	locationtypes "careme/internal/locations/types"
-	"careme/internal/parallelism"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -373,55 +372,18 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	return &selection, nil
 }
 
-func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
-	menuPlan, err := c.planRecipeVariety(ctx, saleIngredients, date, location)
-	if err != nil {
-		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
-	}
-	mutable.Shuffle(menuPlan.Plans)
-	recipeplans, leftovers := menuPlan.Plans[:3], menuPlan.Plans[3:]
-
-	recipes, err := parallelism.MapWithErrors(recipeplans, func(plan recipePlan) (*Recipe, error) {
-		messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build recipe messages: %w", err)
-		}
-
-		resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
-			Model:        c.model,
-			Instructions: openai.String(systemMessage),
-			Input: responses.ResponseNewParamsInputUnion{
-				OfInputItemList: messages,
-			},
-			Store: openai.Bool(true),
-			Text:  scheme(c.recipeSchema),
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return responseToRecipe(ctx, resp)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate recipes: %w", err)
-	}
-
-	return &ShoppingList{Recipes: lo.FromSlicePtr(recipes), Plan: &MenuPlan{Plans: leftovers, Notes: menuPlan.Notes}}, nil
-}
-
 type MenuPlan struct {
-	Plans []recipePlan `json:"plans"`
+	Plans []RecipePlan `json:"plans"`
 	Notes string
 }
 
-type recipePlan struct {
+type RecipePlan struct {
 	Cuisine          string `json:"cuisine"`
 	AnchorIngredient string `json:"anchor_ingredient"`
 	Technique        string `json:"technique"`
 }
 
-var example = recipePlan{
+var example = RecipePlan{
 	Cuisine:          "French Bistro",
 	AnchorIngredient: "chicken thighs",
 	Technique:        "braise",
@@ -429,7 +391,7 @@ var example = recipePlan{
 
 var examplStr, _ = json.Marshal(example)
 
-func (c *client) planRecipeVariety(ctx context.Context, saleIngredients []InputIngredient, date time.Time, location *locationtypes.Location) (*MenuPlan, error) {
+func (c *client) CreateMenuPlan(ctx context.Context, saleIngredients []InputIngredient, date time.Time, location *locationtypes.Location) (*MenuPlan, error) {
 	var buf strings.Builder
 	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
@@ -459,7 +421,32 @@ func (c *client) planRecipeVariety(ctx context.Context, saleIngredients []InputI
 	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
 	}
+	mutable.Shuffle(plan.Plans)
+	slog.InfoContext(ctx, "generated menu plan", "plan", lo.Must(json.Marshal(plan)))
 	return &plan, nil
+}
+
+func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
+	instructions []string, date time.Time, lastRecipes []string, plan RecipePlan) (*Recipe, error) {
+	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
+	}
+
+	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+		Model:        c.model,
+		Instructions: openai.String(systemMessage),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Store: openai.Bool(true),
+		Text:  scheme(c.recipeSchema),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return responseToRecipe(ctx, resp)
 }
 
 func user(msg string) responses.ResponseInputItemUnionParam {
@@ -502,7 +489,7 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan recipePlan) ([]responses.ResponseInputItemUnionParam, error) {
+func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan RecipePlan) ([]responses.ResponseInputItemUnionParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	// constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
