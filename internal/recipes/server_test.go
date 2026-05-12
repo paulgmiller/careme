@@ -341,7 +341,6 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 		&locations.Location{ID: "70002001", Name: "Canonical Test Store"},
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
 	)
-	p.ResponseID = "resp-canonical"
 	canonicalHash := p.Hash()
 	legacyHash, ok := legacyRecipeHash(canonicalHash)
 	if !ok {
@@ -433,7 +432,6 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 		&locations.Location{ID: "70003001", Name: "Wine Store"},
 		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 	)
-	p.ResponseID = "resp-wine-single"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
@@ -441,6 +439,7 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 
 	recipe := ai.Recipe{
 		OriginHash:   originHash,
+		ResponseID:   "resp-wine-single",
 		Title:        "Roast Chicken",
 		Description:  "Crisp skin and herbs.",
 		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
@@ -742,8 +741,7 @@ func seedQuestionConversation(t *testing.T, s *server, responseID string) string
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{recipe},
-		ResponseID: responseID,
+		Recipes: []ai.Recipe{recipe},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -901,9 +899,9 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	recipe := ai.Recipe{
 		Title:       "Save Me",
 		Description: "Recipe to save",
+		ResponseID:  "resp-123",
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	p.ResponseID = "resp-123"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
@@ -911,8 +909,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{recipe},
-		ResponseID: "resp-123",
+		Recipes: []ai.Recipe{recipe},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -991,9 +988,9 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	recipe := ai.Recipe{
 		Title:       "Save Me",
 		Description: "Recipe to save",
+		ResponseID:  "resp-123",
 	}
 	currentParams := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	currentParams.ResponseID = "resp-123"
 	currentHash := currentParams.Hash()
 	if err := s.SaveParams(t.Context(), currentParams); err != nil {
 		t.Fatalf("failed to save params: %v", err)
@@ -1001,8 +998,7 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, "stale-origin-hash", recipe)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{recipe},
-		ResponseID: "resp-123",
+		Recipes: []ai.Recipe{recipe},
 	}, currentHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -1199,9 +1195,9 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	recipe := ai.Recipe{
 		Title:       "Dismiss Recipe",
 		Description: "Recipe to dismiss",
+		ResponseID:  "resp-123",
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	p.ResponseID = "resp-123"
 	p.Saved = []ai.Recipe{recipe}
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
@@ -1210,8 +1206,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{recipe},
-		ResponseID: "resp-123",
+		Recipes: []ai.Recipe{recipe},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -1366,9 +1361,9 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	recipe := ai.Recipe{
 		Title:       "Dismiss Recipe",
 		Description: "Recipe to dismiss",
+		ResponseID:  "resp-123",
 	}
 	currentParams := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	currentParams.ResponseID = "resp-123"
 	currentHash := currentParams.Hash()
 	if err := s.SaveParams(t.Context(), currentParams); err != nil {
 		t.Fatalf("failed to save params: %v", err)
@@ -1376,8 +1371,7 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, "stale-origin-hash", recipe)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{recipe},
-		ResponseID: "resp-123",
+		Recipes: []ai.Recipe{recipe},
 	}, currentHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -1435,18 +1429,16 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 	t.Cleanup(s.Wait)
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	p.ResponseID = "resp-123"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
 
-	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
-	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
+	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved", ResponseID: "resp-saved"}
+	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed", ResponseID: "resp-dismissed"}
 	saveRecipesForOrigin(t, s, originHash, savedRecipe, dismissedRecipe)
 	shoppingList := &ai.ShoppingList{
-		Recipes:    []ai.Recipe{savedRecipe, dismissedRecipe},
-		ResponseID: "resp-123",
+		Recipes: []ai.Recipe{savedRecipe, dismissedRecipe},
 	}
 	if err := s.SaveShoppingList(t.Context(), shoppingList, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
@@ -1514,12 +1506,11 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	)
 	t.Cleanup(s.Wait)
 
-	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
-	newlySaved := ai.Recipe{Title: "Newly Saved", Description: "Saved now"}
-	available := ai.Recipe{Title: "Still Available", Description: "Fresh"}
+	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier", ResponseID: "resp-already"}
+	newlySaved := ai.Recipe{Title: "Newly Saved", Description: "Saved now", ResponseID: "resp-newly"}
+	available := ai.Recipe{Title: "Still Available", Description: "Fresh", ResponseID: "resp-available"}
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	p.ResponseID = "resp-123"
 	p.Saved = []ai.Recipe{alreadySaved}
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
@@ -1528,8 +1519,7 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 
 	saveRecipesForOrigin(t, s, originHash, alreadySaved, newlySaved, available)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{alreadySaved, newlySaved, available},
-		ResponseID: "resp-123",
+		Recipes: []ai.Recipe{alreadySaved, newlySaved, available},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -1567,6 +1557,65 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	if len(captured.Saved) != 2 {
 		t.Fatalf("expected both current saved recipes, got %#v", captured.Saved)
 	}
+	if len(captured.Dismissed) != 1 || captured.Dismissed[0].ComputeHash() != available.ComputeHash() {
+		t.Fatalf("expected only unsaved current recipes to be dismissed, got %#v", captured.Dismissed)
+	}
+}
+
+func TestHandleRegenerate_AllRecipesSavedDoesNotCarryBaseDismissed(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+		withTestGenerator(generator),
+	)
+	t.Cleanup(s.Wait)
+
+	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved", ResponseID: "resp-saved"}
+	staleDismissedRecipe := ai.Recipe{Title: "Old Dismissed Recipe", Description: "Dismissed earlier", ResponseID: "resp-old"}
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	p.Saved = []ai.Recipe{savedRecipe}
+	p.Dismissed = []ai.Recipe{staleDismissedRecipe}
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+
+	saveRecipesForOrigin(t, s, originHash, savedRecipe, staleDismissedRecipe)
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes: []ai.Recipe{savedRecipe},
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+
+	form := url.Values{"instructions": {"make it brighter"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+originHash+"/regenerate", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", originHash)
+	rr := httptest.NewRecorder()
+
+	s.handleRegenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	select {
+	case <-generator.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for generator call")
+	}
+
+	captured := generator.LastParams()
+	require.NotNil(t, captured)
+	if len(captured.Saved) != 1 || captured.Saved[0].ComputeHash() != savedRecipe.ComputeHash() {
+		t.Fatalf("expected saved recipe to persist, got %#v", captured.Saved)
+	}
+	if len(captured.Dismissed) != 0 {
+		t.Fatalf("expected stale dismissed recipe to be dropped, got %#v", captured.Dismissed)
+	}
 }
 
 func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
@@ -1578,18 +1627,16 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 	)
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	p.ResponseID = "resp-123"
 	originHash := p.Hash()
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
 
-	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
-	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
+	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved", ResponseID: "resp-saved"}
+	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed", ResponseID: "resp-dismissed"}
 	saveRecipesForOrigin(t, s, originHash, savedRecipe, dismissedRecipe)
 	shoppingList := &ai.ShoppingList{
-		Recipes:    []ai.Recipe{savedRecipe, dismissedRecipe},
-		ResponseID: "resp-123",
+		Recipes: []ai.Recipe{savedRecipe, dismissedRecipe},
 	}
 	if err := s.SaveShoppingList(t.Context(), shoppingList, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
@@ -1635,7 +1682,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 	}
 }
 
-func TestParamsForAction_PreservesBaseSelectionWhenSelectionCacheEmpty(t *testing.T) {
+func TestParamsForAction_PreservesBaseSavedSelectionAndDropsBaseDismissedWhenSelectionCacheEmpty(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -1649,8 +1696,7 @@ func TestParamsForAction_PreservesBaseSelectionWhenSelectionCacheEmpty(t *testin
 		t.Fatalf("failed to save params: %v", err)
 	}
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{savedRecipe, dismissedRecipe},
-		ResponseID: "resp-1",
+		Recipes: []ai.Recipe{savedRecipe, dismissedRecipe},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -1666,8 +1712,8 @@ func TestParamsForAction_PreservesBaseSelectionWhenSelectionCacheEmpty(t *testin
 	if len(updated.Saved) != 1 || updated.Saved[0].ComputeHash() != savedRecipe.ComputeHash() {
 		t.Fatalf("expected saved recipes from params to persist, got %#v", updated.Saved)
 	}
-	if len(updated.Dismissed) != 1 || updated.Dismissed[0].ComputeHash() != dismissedRecipe.ComputeHash() {
-		t.Fatalf("expected dismissed recipes from params to persist, got %#v", updated.Dismissed)
+	if len(updated.Dismissed) != 0 {
+		t.Fatalf("expected dismissed recipes from params to be dropped, got %#v", updated.Dismissed)
 	}
 }
 
@@ -1685,8 +1731,7 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 		t.Fatalf("failed to save params: %v", err)
 	}
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{savedRecipe, dismissedRecipe},
-		ResponseID: "resp-1",
+		Recipes: []ai.Recipe{savedRecipe, dismissedRecipe},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -1708,33 +1753,6 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 	}
 	if len(updated.Dismissed) != 1 || updated.Dismissed[0].ComputeHash() != savedRecipe.ComputeHash() {
 		t.Fatalf("expected selection to move saved recipe into dismissed, got %#v", updated.Dismissed)
-	}
-}
-
-func TestParamsForAction_UsesLatestShoppingListResponseID(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t, withTestCache(cacheStore))
-
-	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	p.ResponseID = "resp-stale"
-	originHash := p.Hash()
-	if err := s.SaveParams(t.Context(), p); err != nil {
-		t.Fatalf("failed to save params: %v", err)
-	}
-	recipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved", OriginHash: originHash}
-	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{recipe},
-		ResponseID: "resp-fresh",
-	}, originHash); err != nil {
-		t.Fatalf("failed to save shopping list: %v", err)
-	}
-
-	updated, err := s.paramsForAction(t.Context(), originHash, "user-1", "")
-	if err != nil {
-		t.Fatalf("paramsForAction failed: %v", err)
-	}
-	if got, want := updated.ResponseID, "resp-fresh"; got != want {
-		t.Fatalf("expected latest response id %q, got %q", want, got)
 	}
 }
 

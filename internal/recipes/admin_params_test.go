@@ -24,7 +24,6 @@ func TestAdminParamsJSON(t *testing.T) {
 		ZipCode: "98101",
 	}, time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	params.Instructions = "make it vegetarian"
-	params.ResponseID = "resp-123"
 	require.NoError(t, IO(cacheStore).SaveParams(t.Context(), params))
 
 	mux := http.NewServeMux()
@@ -44,7 +43,6 @@ func TestAdminParamsJSON(t *testing.T) {
 	require.NotNil(t, got.Location)
 	assert.Equal(t, "loc-123", got.Location.ID)
 	assert.Equal(t, "make it vegetarian", got.Instructions)
-	assert.Equal(t, "resp-123", got.ResponseID)
 }
 
 func TestAdminParamsJSONMissingHash(t *testing.T) {

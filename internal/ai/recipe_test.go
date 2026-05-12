@@ -1,11 +1,15 @@
 package ai
 
 import (
+	"encoding/json"
 	"log/slog"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	locationtypes "careme/internal/locations/types"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
@@ -165,6 +169,68 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\npinot-noir-1\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
 		t.Fatalf("expected candidate wines TSV in prompt: %s", prompt)
+	}
+}
+
+func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	location := &locationtypes.Location{State: "WA"}
+	ingredients := []InputIngredient{
+		{ProductID: "chicken-1", Description: "Chicken thighs", Size: "2 lb", PriceRegular: float32Ptr(8.99)},
+		{ProductID: "beans-1", Description: "Green beans", Size: "12 oz", PriceRegular: float32Ptr(2.99)},
+	}
+	instructions := []string{"make it high protein"}
+	lastRecipes := []string{"Lemon chicken pasta"}
+	date := time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC)
+
+	contextMessages, err := client.buildRecipeContextMessages(location, ingredients, instructions, date, lastRecipes)
+	if err != nil {
+		t.Fatalf("buildRecipeContextMessages returned error: %v", err)
+	}
+	menuMessages, err := client.buildMenuPlanMessages(location, ingredients, instructions, date, lastRecipes)
+	if err != nil {
+		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
+	}
+	recipeMessages, err := client.buildRecipeMessages(location, ingredients, instructions, date, lastRecipes, RecipePlan{
+		Cuisine:          "Korean",
+		AnchorIngredient: "chicken thighs",
+		Technique:        "stir-fry",
+	})
+	if err != nil {
+		t.Fatalf("buildRecipeMessages returned error: %v", err)
+	}
+
+	prefixLen := len(contextMessages)
+	if prefixLen == 0 {
+		t.Fatal("expected shared context prefix")
+	}
+	if got, want := mustJSON(t, menuMessages[:prefixLen]), mustJSON(t, recipeMessages[:prefixLen]); got != want {
+		t.Fatalf("menu planning and recipe generation should share prompt prefix:\ngot  %s\nwant %s", got, want)
+	}
+	if got, want := mustJSON(t, contextMessages), mustJSON(t, recipeMessages[:prefixLen]); got != want {
+		t.Fatalf("recipe generation prefix should match shared context:\ngot  %s\nwant %s", got, want)
+	}
+}
+
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+	body, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal JSON: %v", err)
+	}
+	return string(body)
+}
+
+func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
+	for _, want := range []string{
+		"the first steps must be preparation steps before any cooking begins",
+		"provide the total elapsed recipe time",
+		"Ensure the first instructions say what prep can be done ahead of time.",
+		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
+	} {
+		if !strings.Contains(systemMessage, want) {
+			t.Fatalf("expected system message to contain %q", want)
+		}
 	}
 }
 

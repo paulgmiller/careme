@@ -49,6 +49,15 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 	}
 }
 
+func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
+	for _, want := range []string{
+		"do the instructions begin with preparation before active cooking starts",
+		"does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
+	}
+}
+
 func TestParseRecipeCritique(t *testing.T) {
 	critique, err := parseRecipeCritique(`{
 		"schema_version": "recipe-critique-v1",

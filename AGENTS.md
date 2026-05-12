@@ -33,6 +33,7 @@
 - Prefer simple html to javascript frameworks
 - For UI copy, prefer plain culinary language over technical terms (example: use "Try again, chef" instead of "Regenerate", and "make it vegetarian" instead of "prefer vegetarian").
 - Nothing is used outside of this repository so if a method is only used in tests it can be removed even if its public
+- Do not use variadic parameters to fake optional constructor arguments. Pass dependencies explicitly, or introduce a config/options struct when a constructor needs several optional settings.
 
 ## Testing Guidelines
 - Always run tests after making code changes. Default to `go test ./...`; use a narrower `go test ./... -run TestName` only when appropriate for quick iteration. If you cannot run tests, explicitly say why.
