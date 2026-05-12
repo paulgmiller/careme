@@ -26,10 +26,9 @@ func TestMultiCritiquerCritiquesEachRecipe(t *testing.T) {
 		{Title: "Two"},
 	}
 
-	results := mc.CritiqueRecipes(t.Context(), recipes)
-
 	var got []Result
-	for result := range results {
+	for _, recipe := range recipes {
+		result := <-mc.CritiqueRecipe(t.Context(), recipe)
 		got = append(got, result)
 	}
 	mc.Wait()
@@ -47,7 +46,7 @@ func TestNewServiceReturnsRubberstampWithoutGemini(t *testing.T) {
 
 	svc := NewManager(&config.Config{}, cache.NewFileCache(t.TempDir()), nil)
 
-	results := svc.CritiqueRecipes(t.Context(), []ai.Recipe{{Title: "Weeknight Pasta"}})
+	results := svc.CritiqueRecipe(t.Context(), ai.Recipe{Title: "Weeknight Pasta"})
 	result, ok := <-results
 	if !ok {
 		t.Fatal("expected critique result")

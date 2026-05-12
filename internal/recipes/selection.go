@@ -83,6 +83,10 @@ func (rio recipeio) saveRecipeSelection(ctx context.Context, userID, originHash 
 }
 
 func selectionFromParams(p *generatorParams) recipeSelection {
+	if p == nil {
+		return recipeSelection{}
+	}
+
 	var selection recipeSelection
 	for _, s := range p.Saved {
 		selection.markSaved(s.ComputeHash())
@@ -93,11 +97,10 @@ func selectionFromParams(p *generatorParams) recipeSelection {
 	return selection
 }
 
-func selectionRecipes(hashes []string, current []ai.Recipe) []ai.Recipe {
+func (s *server) selectionRecipes(ctx context.Context, hashes []string, current []ai.Recipe) []ai.Recipe {
 	if len(hashes) == 0 {
 		return nil
 	}
-
 	currentByHash := make(map[string]ai.Recipe, len(current))
 	for _, recipe := range current {
 		currentByHash[recipe.ComputeHash()] = recipe
@@ -107,18 +110,37 @@ func selectionRecipes(hashes []string, current []ai.Recipe) []ai.Recipe {
 	for _, hash := range hashes {
 		if recipe, ok := currentByHash[hash]; ok {
 			recipes = append(recipes, recipe)
+			continue
 		}
+		recipe, err := s.SingleFromCache(ctx, hash)
+		if err != nil {
+			continue
+		}
+		recipes = append(recipes, *recipe)
 	}
 	return recipes
 }
 
-func applySelectionToParams(p *generatorParams, selection recipeSelection, current []ai.Recipe) {
+func (s *server) mergeParamsWithSelection(ctx context.Context, p *generatorParams, selection recipeSelection, current []ai.Recipe) {
 	if p == nil {
 		return
 	}
 
-	p.Saved = selectionRecipes(selection.SavedHashes, current)
-	p.Dismissed = selectionRecipes(selection.DismissedHashes, current)
+	merged := recipeSelection{
+		SavedHashes: make([]string, 0, len(p.Saved)),
+	}
+	for _, r := range p.Saved {
+		merged.SavedHashes = append(merged.SavedHashes, r.ComputeHash())
+	}
+	for _, hash := range selection.SavedHashes {
+		merged.markSaved(hash)
+	}
+	for _, hash := range selection.DismissedHashes {
+		merged.markDismissed(hash)
+	}
+
+	p.Saved = s.selectionRecipes(ctx, merged.SavedHashes, current)
+	p.Dismissed = s.selectionRecipes(ctx, merged.DismissedHashes, current)
 }
 
 func (selection recipeSelection) override(new recipeSelection) recipeSelection {
@@ -140,9 +162,13 @@ func (selection recipeSelection) IsSaved(hash string) bool {
 	return false
 }
 
-func applySavedToRecipes(recipes []ai.Recipe, selection recipeSelection) {
+func applySavedToRecipes(recipes []ai.Recipe, p *generatorParams) {
+	saved := make(map[string]struct{}, len(p.Saved))
+	for _, r := range p.Saved {
+		saved[r.ComputeHash()] = struct{}{}
+	}
 	for i := range recipes {
 		hash := recipes[i].ComputeHash()
-		recipes[i].Saved = selection.IsSaved(hash)
+		_, recipes[i].Saved = saved[hash]
 	}
 }

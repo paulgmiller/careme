@@ -27,9 +27,8 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 	t.Helper()
 
 	cfg := testServerConfig{
-		cache:     cache.NewFileCache(filepath.Join(t.TempDir(), "cache")),
-		generator: mock{},
-		clerk:     auth.DefaultMock(),
+		cache: cache.NewFileCache(filepath.Join(t.TempDir(), "cache")),
+		clerk: auth.DefaultMock(),
 	}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -39,6 +38,9 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 	}
 	if cfg.storage == nil {
 		cfg.storage = users.NewStorage(cfg.cache)
+	}
+	if cfg.generator == nil {
+		cfg.generator = NewMockGenerator(IO(cfg.cache))
 	}
 
 	if cfg.imagegen == nil {

@@ -72,8 +72,8 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), nil, w)
 	html := assertHTTPSuccess(t, w)
 	isValidHTML(t, html)
-	if !strings.Contains(html, "Cook time:") {
-		t.Error("shopping list HTML should contain cook time")
+	if !strings.Contains(html, "Total time:") {
+		t.Error("shopping list HTML should contain total time")
 	}
 	if !strings.Contains(html, "Estimated cost:") {
 		t.Error("shopping list HTML should contain estimated cost")
@@ -296,8 +296,8 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if strings.Contains(html, "See plated dish") || strings.Contains(html, "Sign in to see plated dish") {
 		t.Error("recipe HTML should not include manual image generation actions")
 	}
-	if !strings.Contains(html, "Cook time:") {
-		t.Error("recipe HTML should contain cook time")
+	if !strings.Contains(html, "Total time:") {
+		t.Error("recipe HTML should contain total time")
 	}
 	if !strings.Contains(html, "Estimated cost:") {
 		t.Error("recipe HTML should contain estimated cost")

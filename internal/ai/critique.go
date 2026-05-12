@@ -25,8 +25,10 @@ You are a strict recipe editor reviewing AI-generated recipes before they are gi
 Judge the recipe like an experienced chef helping create recipes to teach home cooks:
 - is it realistic to cook as written
 - are the instructions coherent and complete
+- do the instructions begin with preparation before active cooking starts
 - are the applications of salt, acid, fat, and heat appropriate
 - are the timing and cost estimates plausible
+- does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 

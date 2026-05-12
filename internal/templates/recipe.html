@@ -91,7 +91,7 @@
 
             <div class="space-y-2 text-sm text-gray-600">
               {{if .Recipe.CookTime}}
-              <p><span class="font-semibold text-brand-700">Cook time:</span> {{.Recipe.CookTime}}</p>
+              <p><span class="font-semibold text-brand-700">Total time:</span> {{.Recipe.CookTime}}</p>
               {{end}}
               {{if .Recipe.CostEstimate}}
               <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.Recipe.CostEstimate}}</p>
@@ -309,7 +309,7 @@
   {{if .Recipe.Saved}}
   <button type="button"
           hx-post="/recipe/{{.RecipeHash}}/dismiss"
-          hx-vals='{"h":"{{.OriginHash}}"}'
+          hx-vals='{"h":"{{.OriginHash}}","source":"recipe"}'
           hx-target="closest .recipe-save-action"
           hx-swap="outerHTML"
           hx-disabled-elt="this"
@@ -319,7 +319,7 @@
   {{else}}
   <button type="button"
           hx-post="/recipe/{{.RecipeHash}}/save"
-          hx-vals='{"h":"{{.OriginHash}}"}'
+          hx-vals='{"h":"{{.OriginHash}}","source":"recipe"}'
           hx-target="closest .recipe-save-action"
           hx-swap="outerHTML"
           hx-disabled-elt="this"

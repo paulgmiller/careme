@@ -528,17 +528,25 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	recipe.Saved = true
 
 	var response bytes.Buffer
-	if err := RenderShoppingRecipeCardHTML(*recipe, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render save card response", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
-	}
+	if isSingleRecipeAction(r) {
+		if err := RenderRecipeSaveActionHTML(*recipe, shoppingListHash, &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render save action response", "hash", recipeHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := RenderShoppingRecipeCardHTML(*recipe, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render save card response", "hash", recipeHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
 
-	// want to kill this and make it dynmic for now on any save or dmiss we allow build
-	if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after save", "shoppingListHash", shoppingListHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
+		// want to kill this and make it dynmic for now on any save or dmiss we allow build
+		if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render finalize controls after save", "shoppingListHash", shoppingListHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// move into startSavedRecipeBackgroundGeneration
@@ -624,17 +632,25 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	recipe.Saved = false
 
 	var response bytes.Buffer
-	if err := RenderShoppingRecipeCardHTML(*recipe, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render dismiss card response", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
-	}
+	if isSingleRecipeAction(r) {
+		if err := RenderRecipeSaveActionHTML(*recipe, selectionHash, &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render dismiss action response", "hash", recipeHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := RenderShoppingRecipeCardHTML(*recipe, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render dismiss card response", "hash", recipeHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
 
-	// want to kill this and make it dynmic for now on any save or dmiss we allow build
-	if err := RenderShoppingFinalizeControlsHTML(selectionHash, &response); err != nil {
-		slog.ErrorContext(ctx, "failed to render finalize controls after dismiss", "selection_hash", selectionHash, "error", err)
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
+		// want to kill this and make it dynmic for now on any save or dmiss we allow build
+		if err := RenderShoppingFinalizeControlsHTML(selectionHash, &response); err != nil {
+			slog.ErrorContext(ctx, "failed to render finalize controls after dismiss", "selection_hash", selectionHash, "error", err)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	setTextContent(w)
@@ -736,6 +752,14 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if len(p.Dismissed) == 0 {
+		currentList, err := s.FromCache(ctx, hash)
+		if err != nil {
+			http.Error(w, "failed to load recipe list", http.StatusBadRequest)
+			return
+		}
+		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
+	}
 	newHash := p.Hash()
 
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
@@ -743,13 +767,20 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
-	// so we have a choice we could save slection here matching params
-	// or backfill it on first load after regeneration Backfilling is a little more resilient
-	// selection := recipeSelectionFromParams(p)
-	// if err := s.saveRecipeSelection(ctx, currentUser.ID, newHash, selection);
 	s.kickgeneration(ctx, p, currentUser)
 
 	redirectToHash(w, r, newHash, true /*useStart*/)
+}
+
+func recipesNotSaved(recipes []ai.Recipe, saved []ai.Recipe) []ai.Recipe {
+	savedByHash := make(map[string]struct{}, len(saved))
+	for _, recipe := range saved {
+		savedByHash[recipe.ComputeHash()] = struct{}{}
+	}
+	return lo.Filter(recipes, func(recipe ai.Recipe, _ int) bool {
+		_, ok := savedByHash[recipe.ComputeHash()]
+		return !ok
+	})
 }
 
 func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
@@ -790,8 +821,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shoppingList := &ai.ShoppingList{
-		Recipes:    p.Saved,
-		ResponseID: p.ResponseID,
+		Recipes: p.Saved,
 	}
 	if err := s.SaveShoppingList(ctx, shoppingList, newHash); err != nil {
 		slog.ErrorContext(ctx, "failed to save finalized shopping list", "hash", newHash, "error", err)
@@ -802,12 +832,13 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, newHash, false /*useStart*/)
 }
 
-// paramsForAction merges selction, old params, and selection(saved/dismissed) into a new params
+// paramsForAction merges old saved params with current saved/dismissed selection into new params.
 func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions string) (*generatorParams, error) {
 	baseParams, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load recipe parameters")
 	}
+	// good place to fetch meal plan? except we want to kill paramsForAction?
 	currentList, err := s.FromCache(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load recipe list")
@@ -822,9 +853,7 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	params := *baseParams
 	params.Instructions = instructions
 	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
-	selection = selectionFromParams(baseParams).override(selection)
-	applySelectionToParams(&params, selection, currentList.Recipes)
-
+	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
 	params.ResponseID = currentList.ResponseID
 	return &params, nil
 }
@@ -842,7 +871,10 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		// don't restart clock if we don't have the params. How did we even get here though.
 		_, err := s.ParamsFromCache(ctx, hashParam)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+			// not erroring because any rando on internet can send us things AND we seem to be missing
+			// at least http://careme.cooking/recipes?h=3i3rbrZv0mk seems permabroke but very old
+			// but a high level of these could signal a bug.
+			slog.InfoContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 			return
 		}
@@ -951,8 +983,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		applySelectionToParams(p, selection, slist.Recipes)
-		applySavedToRecipes(slist.Recipes, selection)
+		s.mergeParamsWithSelection(ctx, p, selection, slist.Recipes)
+		applySavedToRecipes(slist.Recipes, p)
 		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
 		var wineWG sync.WaitGroup
 		var wineMu sync.Mutex
@@ -1063,7 +1095,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 			return
 		}
 
-		// should save be inside generator or shouild saved merging happen out here?
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			return
@@ -1119,6 +1150,10 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStar
 
 func isHTMXRequest(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
+}
+
+func isSingleRecipeAction(r *http.Request) bool {
+	return strings.EqualFold(strings.TrimSpace(r.FormValue("source")), "recipe")
 }
 
 func parseFeedbackBool(value string) (bool, error) {
