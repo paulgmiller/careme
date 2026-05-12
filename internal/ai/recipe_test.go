@@ -187,15 +187,16 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRecipeContextMessages returned error: %v", err)
 	}
-	menuMessages, err := client.buildMenuPlanMessages(location, ingredients, instructions, date, lastRecipes)
+	menuMessages, err := client.buildMenuPlanMessages(location, ingredients, instructions, date, lastRecipes, 3)
 	if err != nil {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
-	recipeMessages, err := client.buildRecipeMessages(location, ingredients, instructions, date, lastRecipes, RecipePlan{
+	recipeInstructions := append(slices.Clone(instructions), RecipePlan{
 		Cuisine:          "Korean",
 		AnchorIngredient: "chicken thighs",
 		Technique:        "stir-fry",
-	})
+	}.Instructions()...)
+	recipeMessages, err := client.buildRecipeMessages(location, ingredients, recipeInstructions, date, lastRecipes)
 	if err != nil {
 		t.Fatalf("buildRecipeMessages returned error: %v", err)
 	}
@@ -209,6 +210,98 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	}
 	if got, want := mustJSON(t, contextMessages), mustJSON(t, recipeMessages[:prefixLen]); got != want {
 		t.Fatalf("recipe generation prefix should match shared context:\ngot  %s\nwant %s", got, want)
+	}
+}
+
+func TestBuildMenuPlanMessagesUsesRequestedCount(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	location := &locationtypes.Location{State: "WA"}
+	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 2)
+	if err != nil {
+		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
+	}
+	body := mustJSON(t, messages)
+	if !strings.Contains(body, "Build a menu plan with exactly 2 distinct recipe plans") {
+		t.Fatalf("expected requested menu plan count in prompt: %s", body)
+	}
+	if strings.Contains(body, "Include one fancy plan") {
+		t.Fatalf("did not expect fancy-plan requirement for a two-plan request: %s", body)
+	}
+}
+
+func TestCreateMenuPlanRejectsNonPositiveCount(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	_, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, nil, nil, time.Now(), nil, 0)
+	if err == nil || !strings.Contains(err.Error(), "menu plan count must be greater than zero") {
+		t.Fatalf("expected count error, got %v", err)
+	}
+}
+
+func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
+	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
+	body := mustJSON(t, messages)
+	if !strings.Contains(body, "Pick exactly 1 replacement recipe plans") {
+		t.Fatalf("expected replacement count in prompt: %s", body)
+	}
+	if !strings.Contains(body, "Treat passed-on recipe titles as ideas to avoid") {
+		t.Fatalf("expected replacement-specific guidance in prompt: %s", body)
+	}
+	if !strings.Contains(body, "make it vegetarian") || !strings.Contains(body, "Passed on roast chicken") {
+		t.Fatalf("expected feedback instructions in prompt: %s", body)
+	}
+}
+
+func TestRecipePlanInstructions(t *testing.T) {
+	plan := RecipePlan{
+		Cuisine:          "Korean",
+		AnchorIngredient: "tofu",
+		Technique:        "stir-fry",
+		Fancy:            true,
+	}
+	got := plan.Instructions()
+	if len(got) != 4 {
+		t.Fatalf("expected four plan instructions, got %v", got)
+	}
+	for _, phrase := range []string{
+		"Cuisine direction for this recipe: Korean.",
+		"Anchor ingredient direction for this recipe: tofu.",
+		"Suggested technique for this recipe: stir-fry.",
+		"fancier",
+	} {
+		if !strings.Contains(strings.Join(got, "\n"), phrase) {
+			t.Fatalf("expected plan instructions to contain %q, got %v", phrase, got)
+		}
+	}
+}
+
+func TestRegenerateMenuPlanRejectsNonPositiveCount(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	_, err := client.RegenerateMenuPlan(t.Context(), nil, "resp-menu", 0)
+	if err == nil || !strings.Contains(err.Error(), "menu plan count must be greater than zero") {
+		t.Fatalf("expected count error, got %v", err)
+	}
+}
+
+func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
+	if !strings.Contains(menuPlanSystemMessage, "Create concise recipe directions, not full recipes") {
+		t.Fatalf("expected menu planner system prompt to describe plan creation")
+	}
+	if !strings.Contains(menuPlanSystemMessage, "Use notes only for brief planning rationale") {
+		t.Fatalf("expected menu planner system prompt to constrain notes")
+	}
+	if !strings.Contains(menuPlanSystemMessage, "Do not write recipe steps") {
+		t.Fatalf("expected menu planner system prompt to prevent full recipes in plan metadata")
+	}
+}
+
+func TestMenuPlanSchemaExcludesResponseID(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	body := mustJSON(t, client.menuSchema)
+	if !strings.Contains(body, "notes") {
+		t.Fatalf("menu plan schema should expose short notes to the model: %s", body)
+	}
+	if strings.Contains(body, "response_id") {
+		t.Fatalf("menu plan schema should not expose response_id to the model: %s", body)
 	}
 }
 

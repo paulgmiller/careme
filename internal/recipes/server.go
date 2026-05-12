@@ -855,6 +855,9 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	params := *baseParams
 	params.Instructions = instructions
 	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
+	if currentList.Plan != nil {
+		params.PreviousMenuPlanResponseID = strings.TrimSpace(currentList.Plan.ResponseID)
+	}
 	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
 	return &params, nil
 }

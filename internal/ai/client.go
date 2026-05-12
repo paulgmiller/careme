@@ -374,8 +374,18 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 
 type MenuPlan struct {
 	Plans      []RecipePlan `json:"plans"`
-	Notes      string
-	ResponseId string
+	Notes      string       `json:"notes"`
+	ResponseID string       `json:"response_id,omitempty" jsonschema:"-"`
+}
+
+// meant for status
+func (p MenuPlan) String() string {
+	var sb strings.Builder
+	for _, rp := range p.Plans {
+		fmt.Fprintf(&sb, "%s using %s\n", rp.Cuisine, rp.AnchorIngredient)
+	}
+	sb.WriteString(p.Notes)
+	return sb.String()
 }
 
 type RecipePlan struct {
@@ -383,6 +393,18 @@ type RecipePlan struct {
 	AnchorIngredient string `json:"anchor_ingredient"`
 	Technique        string `json:"technique"`
 	Fancy            bool   `json:"fancy"`
+}
+
+func (p RecipePlan) Instructions() []string {
+	instructions := []string{
+		fmt.Sprintf("Cuisine direction for this recipe: %s.", p.Cuisine),
+		fmt.Sprintf("Anchor ingredient direction for this recipe: %s.", p.AnchorIngredient),
+		fmt.Sprintf("Suggested technique for this recipe: %s.", p.Technique),
+	}
+	if p.Fancy {
+		instructions = append(instructions, "This meal should be fancier, so it can be more expensive, longer, or richer.")
+	}
+	return instructions
 }
 
 var example = RecipePlan{
@@ -393,15 +415,27 @@ var example = RecipePlan{
 
 var examplStr, _ = json.Marshal(example)
 
+const menuPlanSystemMessage = `
+You are a menu planner for a recipe generator.
+
+Create concise recipe directions, not full recipes. Each plan should give enough direction for a chef model to write one complete recipe later.
+Prioritize seasonal ingredients, good sale value, practical weeknight cooking, and variety across cuisines, anchor ingredients, and techniques.
+Use notes only for brief planning rationale, 1 to 2 short sentences. Do not write recipe steps, prep instructions, shopping lists, or long prose.`
+
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
+	instructions []string, date time.Time, lastRecipes []string, count int,
 ) (*MenuPlan, error) {
-	prompt, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if count < 1 {
+		return nil, fmt.Errorf("menu plan count must be greater than zero")
+	}
+
+	prompt, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes, count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build menu plan messages: %w", err)
 	}
 	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
-		Model: recipePlanModel,
+		Model:        recipePlanModel,
+		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: prompt,
 		},
@@ -412,37 +446,79 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		return nil, err
 	}
 
+	return responseToMenuPlan(ctx, resp)
+}
+
+func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*MenuPlan, error) {
+	if previousResponseID == "" {
+		return nil, fmt.Errorf("response ID is required for menu plan regeneration")
+	}
+	if count < 1 {
+		return nil, fmt.Errorf("menu plan count must be greater than zero")
+	}
+	messages := buildRegenerateMenuPlanMessages(instructions, count)
+
+	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+		Model:              recipePlanModel,
+		PreviousResponseID: openai.String(previousResponseID),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Store: openai.Bool(true),
+		Text:  scheme(c.menuSchema),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
+	}
+	return responseToMenuPlan(ctx, resp)
+}
+
+func responseToMenuPlan(ctx context.Context, resp *responses.Response) (*MenuPlan, error) {
 	var plan MenuPlan
 	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
 	}
-	plan.ResponseId = resp.ID
+	if strings.TrimSpace(resp.ID) == "" {
+		return nil, fmt.Errorf("failed to get menu plan response ID")
+	}
+	plan.ResponseID = resp.ID
 	slog.InfoContext(ctx, "generated menu plan", "plan", lo.Must(json.Marshal(plan)))
 	return &plan, nil
 }
 
 func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
+	instructions []string, date time.Time, lastRecipes []string, count int,
 ) ([]responses.ResponseInputItemUnionParam, error) {
 	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
-	// should we generate more for higher variety
 	messages = append(messages,
-		user("Pick exactly 3 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best"+
-			"fit these ingredients based on seasonality and price. Example: "+string(examplStr)),
-		user("Goal is variety across cuisines, cooking methods and ingredients in addition to practicality"),
-		// user("Anchor ingredient should default to Proteins unless vegatarian")
-		user("Include one fancy plan that will be more expensive, longer, and/or richer."),
+		user(fmt.Sprintf("Build a menu plan with exactly %d distinct recipe plans. Each plan needs a cuisine, anchor ingredient, and technique that fit the available ingredients, seasonality, and price. Example: %s", count, string(examplStr))),
+		user("Balance practicality with variety across cuisines, cooking methods, and main ingredients."),
 	)
+	if count >= 3 {
+		messages = append(messages, user("Include one fancy plan that can be more expensive, longer, and/or richer than the others."))
+	}
 	return messages, nil
 }
 
+func buildRegenerateMenuPlanMessages(instructions []string, count int) []responses.ResponseInputItemUnionParam {
+	messages := cleanInstuctions(instructions)
+	messages = append(messages,
+		user(fmt.Sprintf("Pick exactly %d replacement recipe plans. Each replacement needs a cuisine, anchor ingredient, and technique, and should be a better fit given the user's feedback. Example: %s", count, string(examplStr))),
+		user("Treat passed-on recipe titles as ideas to avoid, not ingredients to reuse. Keep the replacements varied and practical."),
+	)
+	if count >= 3 {
+		messages = append(messages, user("Include one replacement plan that is a little fancier, richer, longer, or more expensive than the others."))
+	}
+	return messages
+}
+
 func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string, plan RecipePlan,
+	instructions []string, date time.Time, lastRecipes []string,
 ) (*Recipe, error) {
-	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
+	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
 	}
@@ -503,18 +579,12 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan RecipePlan) ([]responses.ResponseInputItemUnionParam, error) {
+func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]responses.ResponseInputItemUnionParam, error) {
 	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
 	messages = append(messages, user("Default: each recipe should serve 2 people."))
-	messages = append(messages, user(fmt.Sprintf("Cuisine direction for this recipe: %s.", plan.Cuisine)))
-	messages = append(messages, user(fmt.Sprintf("Anchor Ingredient direction for this recipe: %s.", plan.AnchorIngredient)))
-	messages = append(messages, user(fmt.Sprintf("Suggested tecnique for this recipe: %s.", plan.Technique)))
-	if plan.Fancy {
-		messages = append(messages, user("this meal should be fancier so ignore limits on price, time or calories"))
-	}
 	return messages, nil
 }
 
