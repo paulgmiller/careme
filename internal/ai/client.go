@@ -403,6 +403,10 @@ Use notes only for brief planning rationale, 1 to 2 short sentences. Do not writ
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string, count int,
 ) (*MenuPlan, error) {
+	if count < 1 {
+		return nil, fmt.Errorf("menu plan count must be greater than zero")
+	}
+
 	prompt, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes, count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build menu plan messages: %w", err)
@@ -426,6 +430,9 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*MenuPlan, error) {
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for menu plan regeneration")
+	}
+	if count < 1 {
+		return nil, fmt.Errorf("menu plan count must be greater than zero")
 	}
 	messages := buildRegenerateMenuPlanMessages(instructions, count)
 
@@ -464,7 +471,6 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	if err != nil {
 		return nil, err
 	}
-	count = normalizeMenuPlanCount(count)
 	messages = append(messages,
 		user(fmt.Sprintf("Build a menu plan with exactly %d distinct recipe plans. Each plan needs a cuisine, anchor ingredient, and technique that fit the available ingredients, seasonality, and price. Example: %s", count, string(examplStr))),
 		user("Balance practicality with variety across cuisines, cooking methods, and main ingredients."),
@@ -476,7 +482,6 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 }
 
 func buildRegenerateMenuPlanMessages(instructions []string, count int) []responses.ResponseInputItemUnionParam {
-	count = normalizeMenuPlanCount(count)
 	messages := cleanInstuctions(instructions)
 	messages = append(messages,
 		user(fmt.Sprintf("Pick exactly %d replacement recipe plans. Each replacement needs a cuisine, anchor ingredient, and technique, and should be a better fit given the user's feedback. Example: %s", count, string(examplStr))),
@@ -486,13 +491,6 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []respons
 		messages = append(messages, user("Include one replacement plan that is a little fancier, richer, longer, or more expensive than the others."))
 	}
 	return messages
-}
-
-func normalizeMenuPlanCount(count int) int {
-	if count < 1 {
-		return 1
-	}
-	return count
 }
 
 func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,

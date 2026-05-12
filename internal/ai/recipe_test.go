@@ -228,6 +228,14 @@ func TestBuildMenuPlanMessagesUsesRequestedCount(t *testing.T) {
 	}
 }
 
+func TestCreateMenuPlanRejectsNonPositiveCount(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	_, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, nil, nil, time.Now(), nil, 0)
+	if err == nil || !strings.Contains(err.Error(), "menu plan count must be greater than zero") {
+		t.Fatalf("expected count error, got %v", err)
+	}
+}
+
 func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
 	body := mustJSON(t, messages)
@@ -239,6 +247,14 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	}
 	if !strings.Contains(body, "make it vegetarian") || !strings.Contains(body, "Passed on roast chicken") {
 		t.Fatalf("expected feedback instructions in prompt: %s", body)
+	}
+}
+
+func TestRegenerateMenuPlanRejectsNonPositiveCount(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	_, err := client.RegenerateMenuPlan(t.Context(), nil, "resp-menu", 0)
+	if err == nil || !strings.Contains(err.Error(), "menu plan count must be greater than zero") {
+		t.Fatalf("expected count error, got %v", err)
 	}
 }
 
