@@ -46,14 +46,11 @@ func (c *tracingAIClient) GenerateRecipe(
 	instructions []string,
 	date time.Time,
 	lastRecipes []string,
-	plan ai.RecipePlan,
 ) (*ai.Recipe, error) {
-	ctx, span := tracer.Start(ctx, "recipes.ai.generate_recipe",
-		trace.WithAttributes(attribute.Bool("recipe_plan.fancy", plan.Fancy)),
-	)
+	ctx, span := tracer.Start(ctx, "recipes.ai.generate_recipe")
 	defer span.End()
 
-	return c.next.GenerateRecipe(ctx, location, ingredients, instructions, date, lastRecipes, plan)
+	return c.next.GenerateRecipe(ctx, location, ingredients, instructions, date, lastRecipes)
 }
 
 func (c *tracingAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {

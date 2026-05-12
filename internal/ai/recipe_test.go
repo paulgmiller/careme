@@ -191,11 +191,12 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
-	recipeMessages, err := client.buildRecipeMessages(location, ingredients, instructions, date, lastRecipes, RecipePlan{
+	recipeInstructions := append(slices.Clone(instructions), RecipePlan{
 		Cuisine:          "Korean",
 		AnchorIngredient: "chicken thighs",
 		Technique:        "stir-fry",
-	})
+	}.Instructions()...)
+	recipeMessages, err := client.buildRecipeMessages(location, ingredients, recipeInstructions, date, lastRecipes)
 	if err != nil {
 		t.Fatalf("buildRecipeMessages returned error: %v", err)
 	}
@@ -247,6 +248,29 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	}
 	if !strings.Contains(body, "make it vegetarian") || !strings.Contains(body, "Passed on roast chicken") {
 		t.Fatalf("expected feedback instructions in prompt: %s", body)
+	}
+}
+
+func TestRecipePlanInstructions(t *testing.T) {
+	plan := RecipePlan{
+		Cuisine:          "Korean",
+		AnchorIngredient: "tofu",
+		Technique:        "stir-fry",
+		Fancy:            true,
+	}
+	got := plan.Instructions()
+	if len(got) != 4 {
+		t.Fatalf("expected four plan instructions, got %v", got)
+	}
+	for _, phrase := range []string{
+		"Cuisine direction for this recipe: Korean.",
+		"Anchor ingredient direction for this recipe: tofu.",
+		"Suggested technique for this recipe: stir-fry.",
+		"fancier",
+	} {
+		if !strings.Contains(strings.Join(got, "\n"), phrase) {
+			t.Fatalf("expected plan instructions to contain %q, got %v", phrase, got)
+		}
 	}
 }
 

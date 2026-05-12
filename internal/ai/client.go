@@ -385,6 +385,18 @@ type RecipePlan struct {
 	Fancy            bool   `json:"fancy"`
 }
 
+func (p RecipePlan) Instructions() []string {
+	instructions := []string{
+		fmt.Sprintf("Cuisine direction for this recipe: %s.", p.Cuisine),
+		fmt.Sprintf("Anchor ingredient direction for this recipe: %s.", p.AnchorIngredient),
+		fmt.Sprintf("Suggested technique for this recipe: %s.", p.Technique),
+	}
+	if p.Fancy {
+		instructions = append(instructions, "This meal should be fancier, so it can be more expensive, longer, or richer.")
+	}
+	return instructions
+}
+
 var example = RecipePlan{
 	Cuisine:          "French Bistro",
 	AnchorIngredient: "chicken thighs",
@@ -494,9 +506,9 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []respons
 }
 
 func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string, plan RecipePlan,
+	instructions []string, date time.Time, lastRecipes []string,
 ) (*Recipe, error) {
-	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
+	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
 	}
@@ -557,18 +569,12 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan RecipePlan) ([]responses.ResponseInputItemUnionParam, error) {
+func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]responses.ResponseInputItemUnionParam, error) {
 	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
 	messages = append(messages, user("Default: each recipe should serve 2 people."))
-	messages = append(messages, user(fmt.Sprintf("Cuisine direction for this recipe: %s.", plan.Cuisine)))
-	messages = append(messages, user(fmt.Sprintf("Anchor Ingredient direction for this recipe: %s.", plan.AnchorIngredient)))
-	messages = append(messages, user(fmt.Sprintf("Suggested tecnique for this recipe: %s.", plan.Technique)))
-	if plan.Fancy {
-		messages = append(messages, user("this meal should be fancier so ignore limits on price, time or calories"))
-	}
 	return messages, nil
 }
 
