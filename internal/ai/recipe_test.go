@@ -246,6 +246,23 @@ func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
 	if !strings.Contains(menuPlanSystemMessage, "Create concise recipe directions, not full recipes") {
 		t.Fatalf("expected menu planner system prompt to describe plan creation")
 	}
+	if !strings.Contains(menuPlanSystemMessage, "Use notes only for brief planning rationale") {
+		t.Fatalf("expected menu planner system prompt to constrain notes")
+	}
+	if !strings.Contains(menuPlanSystemMessage, "Do not write recipe steps") {
+		t.Fatalf("expected menu planner system prompt to prevent full recipes in plan metadata")
+	}
+}
+
+func TestMenuPlanSchemaExcludesResponseID(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	body := mustJSON(t, client.menuSchema)
+	if !strings.Contains(body, "notes") {
+		t.Fatalf("menu plan schema should expose short notes to the model: %s", body)
+	}
+	if strings.Contains(body, "response_id") {
+		t.Fatalf("menu plan schema should not expose response_id to the model: %s", body)
+	}
 }
 
 func mustJSON(t *testing.T, v any) string {

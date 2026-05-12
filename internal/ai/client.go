@@ -374,7 +374,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 
 type MenuPlan struct {
 	Plans      []RecipePlan `json:"plans"`
-	Notes      string       `json:"notes,omitempty"`
+	Notes      string       `json:"notes"`
 	ResponseID string       `json:"response_id,omitempty" jsonschema:"-"`
 }
 
@@ -398,7 +398,7 @@ You are a menu planner for a recipe generator.
 
 Create concise recipe directions, not full recipes. Each plan should give enough direction for a chef model to write one complete recipe later.
 Prioritize seasonal ingredients, good sale value, practical weeknight cooking, and variety across cuisines, anchor ingredients, and techniques.
-Return only the requested structured menu plan JSON.`
+Use notes only for brief planning rationale, 1 to 2 short sentences. Do not write recipe steps, prep instructions, shopping lists, or long prose.`
 
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string, count int,
