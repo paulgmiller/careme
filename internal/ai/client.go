@@ -29,6 +29,7 @@ type GeneratedImage struct {
 const (
 	defaultRecipeModel = "gpt-5.5"
 	defaultWineModel   = openai.ChatModelGPT5Mini
+	recipePlanModel    = openai.ChatModelGPT5Mini // need to play witht this
 )
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
@@ -79,13 +80,12 @@ func (r *Recipe) ComputeHash() string {
 	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-// intentionally not including ResponseID to preserve old hashes
-// we used to use conversation id here but then you can end up sharing conversations with strangers which is kind of wierd.
 // now we can reuse first recipes and people can go off in different directions.
+// Mostly a collection of generaetd things could live in recipes instead of here.
 type ShoppingList struct {
-	ResponseID string   `json:"response_id,omitempty" jsonschema:"-"`
-	Recipes    []Recipe `json:"recipes" jsonschema:"required"`
-	Discarded  []Recipe `json:"-" jsonschema:"-"`
+	ResponseID string    `json:"response_id,omitempty" jsonschema:"-"`
+	Recipes    []Recipe  `json:"recipes"`
+	Plan       *MenuPlan `json:"plan"`
 }
 
 // question threads go off from the response that generated the recipe.
@@ -100,8 +100,9 @@ type WineSelection struct {
 }
 
 type client struct {
-	schema         map[string]any
+	recipeSchema   map[string]any
 	wineSchema     map[string]any
+	menuSchema     map[string]any
 	model          string
 	wineModel      string
 	oai            openai.Client
@@ -111,18 +112,26 @@ type client struct {
 // ignoring model for now.
 func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
 	// ignor model for now.
+	if promptRecorder == nil {
+		promptRecorder = noopPromptRecorder{}
+	}
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
 	}
-	recipesSchema := r.Reflect(&ShoppingList{})
-	recipesSchemaJSON, _ := json.Marshal(recipesSchema)
+	recipeSchema := r.Reflect(&Recipe{})
+	recipeSchemaJSON, _ := json.Marshal(recipeSchema)
 	wineSchema := r.Reflect(&WineSelection{})
 	wineSchemaJSON, _ := json.Marshal(wineSchema)
-	var m map[string]any
-	_ = json.Unmarshal(recipesSchemaJSON, &m)
+	menuSchema := r.Reflect(&MenuPlan{})
+	menuSchemaJson, _ := json.Marshal(menuSchema)
+	var recipe map[string]any
+	_ = json.Unmarshal(recipeSchemaJSON, &recipe)
 	var wine map[string]any
 	_ = json.Unmarshal(wineSchemaJSON, &wine)
+	var menu map[string]any
+	_ = json.Unmarshal(menuSchemaJson, &menu)
+
 	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
@@ -131,45 +140,47 @@ func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptR
 
 	return &client{
 		oai:            aiClient,
-		schema:         m,
+		recipeSchema:   recipe,
 		wineSchema:     wine,
+		menuSchema:     menu,
 		model:          defaultRecipeModel,
 		wineModel:      defaultWineModel,
 		promptRecorder: promptRecorder,
 	}
 }
 
+// edited out. Which recipe should be richer?!
 const systemMessage = `
 You are a professional chef and recipe developer helping working families cook varied weeknight dinners.
 
 # Outcome
-Create distinct, practical recipes using the provided sale ingredients, seasonal context, user preferences, and recent-recipe history.
+Create a practical, flavorful recipe using the provided sale ingredients, seasonal context, user preferences, recent-recipe history, cuisine and anchor ingredient.
 
 # Recipe Requirements
-- Default to 3 recipes for 2 people, under 1 hour, unless the user asks otherwise.
 - User instructions override defaults unless they make a recipe unsafe, uncookable, or impossible with the available ingredients.
-- Each recipe must include a protein plus at least one vegetable or starch component.
-- Use varied cuisines, cooking methods, textures, colors, and plating styles across the set.
+- Unless vegatarian Each recipe must include a protein plus at least one vegetable and/or starch component.
 - Include pastas, noodles, stir-fries, stews, braises, curries, casseroles, or other compositions when they fit the ingredients.
 - Prioritize sale ingredients by value and quality. Only use prices from the input; never invent prices.
 - Pantry items are allowed when common and inexpensive.
 - Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated quantities and servings.
-- Include one richer or more special recipe when it fits the budget and ingredients, and mention that in the description.
 - Include wine pairing guidance when useful; otherwise explain briefly why a pairing is not needed.
 
 # Field Guidance
 - title: use a short, appetizing name.
 - description: make the dish sound appealing and note what makes it practical, special, or seasonal.
-- cook_time: provide a realistic estimate such as "35 minutes".
+- cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: include quantities; include prices only when present in the input; common pantry items are allowed.
-- instructions: start with prep and end with plating; repeat amounts and prep details; do not include prices; do not prefix steps with numbers.
+- instructions: the first steps must be preparation steps before any cooking begins such as preheating and slicing; end with plating; repeat amounts and prep details; do not include prices; do not prefix steps with numbers.
 - health: include plausible calories and macro notes for the stated servings.
 - drink_pairing: give concise sommelier guidance tied to the dish.
 - wine_styles: at most two searchable consumer wine styles, such as "Pinot Noir" or "Sauvignon Blanc"; no regions, parenthetical notes, commas, "or", or "*-style blend" phrasing.
 
 # Quality Checks
-Before responding, ensure recipes are cookable, realistic, non-contradictory, varied, correctly priced, safe, and visually appealing after plating. Do not include these checks in the output.`
+Before responding, ensure recipe is cookable, realistic, non-contradictory, correctly priced, safe, and visually appealing after plating.
+Ensure the first instructions say what prep can be done ahead of time.
+Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.
+Do not include these checks in the output.`
 
 const recipeImagePromptInstructions = `
 Generate a realistic overhead food photograph of a single finished plate.
@@ -198,22 +209,18 @@ const (
 	recipeImageSize         = openai.ImageGenerateParamsSize1024x1024
 )
 
-func responseToShoppingList(ctx context.Context, resp *responses.Response) (*ShoppingList, error) {
+func responseToRecipe(ctx context.Context, resp *responses.Response) (*Recipe, error) {
 	slog.InfoContext(ctx, "API usage", responseUsageLogAttr(resp.Usage))
-	var shoppingList ShoppingList
-	if err := json.Unmarshal([]byte(resp.OutputText()), &shoppingList); err != nil {
+	var recipe Recipe
+	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
-	normalizeWineStyles(&shoppingList)
+	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")
 	}
-	shoppingList.ResponseID = resp.ID
-	for i := range shoppingList.Recipes {
-		shoppingList.Recipes[i].ResponseID = shoppingList.ResponseID
-	}
-
-	return &shoppingList, nil
+	recipe.ResponseID = resp.ID
+	return &recipe, nil
 }
 
 func scheme(schema map[string]any) responses.ResponseTextConfigParam {
@@ -227,7 +234,7 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
-func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*ShoppingList, error) {
+func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*Recipe, error) {
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
@@ -242,7 +249,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 			OfInputItemList: messages,
 		},
 		Store: openai.Bool(true),
-		Text:  scheme(c.schema),
+		Text:  scheme(c.recipeSchema),
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
@@ -250,7 +257,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	}
 
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToShoppingList(ctx, resp)
+	return responseToRecipe(ctx, resp)
 }
 
 func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
@@ -374,31 +381,99 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	return &selection, nil
 }
 
-func (c *client) GenerateRecipes(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ShoppingList, error) {
-	promptMessages, err := c.buildRecipePromptMessages(location, saleIngredients, instructions, date, lastRecipes)
+type MenuPlan struct {
+	Plans      []RecipePlan `json:"plans"`
+	Notes      string
+	ResponseId string
+}
+
+type RecipePlan struct {
+	Cuisine          string `json:"cuisine"`
+	AnchorIngredient string `json:"anchor_ingredient"`
+	Technique        string `json:"technique"`
+	Fancy            bool   `json:"fancy"`
+}
+
+var example = RecipePlan{
+	Cuisine:          "French Bistro",
+	AnchorIngredient: "chicken thighs",
+	Technique:        "braise",
+}
+
+var examplStr, _ = json.Marshal(example)
+
+func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
+	instructions []string, date time.Time, lastRecipes []string,
+) (*MenuPlan, error) {
+	promptMessages, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build menu plan messages: %w", err)
+	}
+	params := responses.ResponseNewParams{
+		Model: recipePlanModel,
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messagesToInput(promptMessages),
+		},
+		Store: openai.Bool(true),
+		Text:  scheme(c.menuSchema),
+	}
+	resp, err := c.oai.Responses.New(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
+
+	var plan MenuPlan
+	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
+		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
+	}
+	plan.ResponseId = resp.ID
+	slog.InfoContext(ctx, "generated menu plan", "plan", lo.Must(json.Marshal(plan)))
+	return &plan, nil
+}
+
+func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
+	instructions []string, date time.Time, lastRecipes []string,
+) ([]PromptMessage, error) {
+	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return nil, err
+	}
+	// should we generate more for higher variety
+	messages = append(messages,
+		userPromptMessage("Pick exactly 3 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best"+
+			"fit these ingredients based on seasonality and price. Example: "+string(examplStr)),
+		userPromptMessage("Goal is variety across cuisines, cooking methods and ingredients in addition to practicality"),
+		// user("Anchor ingredient should default to Proteins unless vegatarian")
+		userPromptMessage("Include one fancy plan that will be more expensive, longer, and/or richer."),
+	)
+	return messages, nil
+}
+
+func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
+	instructions []string, date time.Time, lastRecipes []string, plan RecipePlan,
+) (*Recipe, error) {
+	promptMessages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
 	}
-	messages := messagesToInput(promptMessages)
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
 		Instructions: openai.String(systemMessage),
-
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messages,
+			OfInputItemList: messagesToInput(promptMessages),
 		},
 		Store: openai.Bool(true),
-		Text:  scheme(c.schema),
+		Text:  scheme(c.recipeSchema),
 	}
-	// should we stream. Can we pass past generation.
-
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate recipes: %w", err)
+		return nil, err
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToShoppingList(ctx, resp)
+
+	return responseToRecipe(ctx, resp)
 }
 
 func user(msg string) responses.ResponseInputItemUnionParam {
@@ -440,16 +515,30 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 	return promptBuilder.String(), nil
 }
 
-// buildRecipePromptMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipePromptMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
+// buildRecipeMessages creates separate messages for the LLM to process more efficiently
+func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan RecipePlan) ([]PromptMessage, error) {
+	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return nil, err
+	}
+	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
+	messages = append(messages, userPromptMessage(fmt.Sprintf("Cuisine direction for this recipe: %s.", plan.Cuisine)))
+	messages = append(messages, userPromptMessage(fmt.Sprintf("Anchor Ingredient direction for this recipe: %s.", plan.AnchorIngredient)))
+	messages = append(messages, userPromptMessage(fmt.Sprintf("Suggested tecnique for this recipe: %s.", plan.Technique)))
+	if plan.Fancy {
+		messages = append(messages, userPromptMessage("this meal should be fancier so ignore limits on price, time or calories"))
+	}
+	return messages, nil
+}
+
+func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
 	var messages []PromptMessage
 	// constants we might make variable later
 	messages = append(messages, userPromptMessage("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
-	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
-	messages = append(messages, userPromptMessage("Default: generate 3 recipes"))
-	messages = append(messages, userPromptMessage("Default: prep and cook time under 1 hour"))
+	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
 	messages = append(messages, userPromptMessage("Default: cooking methods: oven, stove, grill, slow cooker"))
 
+	// todo reuse context via response id?
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
 	var buf strings.Builder
 	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
@@ -458,7 +547,6 @@ func (c *client) buildRecipePromptMessages(location *locationtypes.Location, sal
 	ingredientsMessage += buf.String()
 	messages = append(messages, userPromptMessage(ingredientsMessage))
 
-	// Previously cooked recipes to avoid (if any).
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
 		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
@@ -467,8 +555,6 @@ func (c *client) buildRecipePromptMessages(location *locationtypes.Location, sal
 		}
 		messages = append(messages, userPromptMessage(prevRecipesMsg.String()))
 	}
-
-	// Additional user instructions (if any)
 
 	messages = append(messages, cleanInstructionMessages(instructions)...)
 
@@ -515,13 +601,6 @@ func (c *client) recordRecipePrompt(ctx context.Context, responseID string, para
 	if responseID == "" {
 		return
 	}
-	var instructions []string
-	if params.Instructions.Valid() {
-		instruction := strings.TrimSpace(params.Instructions.Value)
-		if instruction != "" {
-			instructions = append(instructions, instruction)
-		}
-	}
 	record := &PromptRecord{
 		ResponseID:         responseID,
 		Model:              string(params.Model),
@@ -531,15 +610,6 @@ func (c *client) recordRecipePrompt(ctx context.Context, responseID string, para
 	}
 	if err := c.promptRecorder.RecordPrompt(ctx, record); err != nil {
 		slog.ErrorContext(ctx, "failed to record recipe prompt", "response_id", responseID, "error", err)
-	}
-}
-
-func normalizeWineStyles(shoppingList *ShoppingList) {
-	if shoppingList == nil {
-		return
-	}
-	for i := range shoppingList.Recipes {
-		shoppingList.Recipes[i].WineStyles = normalizeRecipeWineStyles(shoppingList.Recipes[i].WineStyles)
 	}
 }
 

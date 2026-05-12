@@ -83,7 +83,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 	ss := recipes.StatusStore(cache)
 	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, ai.NewCachePromptRecorder(cache))
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss)
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss, recipes.IO(cache))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}

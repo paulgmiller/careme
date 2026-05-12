@@ -1,78 +1,63 @@
 Business Source License 1.1
 
-License text copyright (c) 2026 North Briton LLC.
-All rights reserved.
+Parameters
 
-------------------------------------------------------------
-TERMS
+Licensor: North Briton LLC
+
+Licensed Work: Careme
+
+Additional Use Grant:
+You may use, copy, modify, and distribute the Licensed Work for
+personal, educational, research, evaluation, and hobby purposes only.
+Commercial use is prohibited without a separate commercial license
+from the Licensor.
+
+For purposes of this license, “Commercial Use” includes:
+- Offering the Licensed Work as a paid product or service
+- Using the Licensed Work to provide services to third parties
+- Internal use by a for-profit organization in support of
+  revenue-generating activity
+- Hosting or operating the Licensed Work for commercial benefit
+
+Change Date: 2029-05-26
+
+Change License: MIT License
+
+Terms
 
 The Licensor hereby grants you the right to copy, modify, create
-derivative works, and redistribute the Software, subject to the
-limitations below.
+derivative works, redistribute, and make non-commercial use of the
+Licensed Work, subject to the limitations described in this license.
 
-This license is governed by the Business Source License 1.1.
-
-------------------------------------------------------------
-DEFINITIONS
-
-"Licensor" means the copyright owner or entity granting this license.
-
-"Software" means the software and associated documentation covered
-by this license.
-
-"Commercial Use" means any use of the Software primarily intended
-for or directed toward commercial advantage or monetary compensation,
-including but not limited to:
-- Offering the Software as part of a paid product or service
-- Using the Software to provide services to third parties for a fee
-- Using the Software internally within a for-profit organization
-  where the Software materially supports revenue-generating activity
-
-"Personal Use" means use by an individual for personal, educational,
-or hobby purposes, with no commercial intent.
-
-------------------------------------------------------------
-GRANT OF RIGHTS
-
-You may use, modify, and redistribute the Software for Personal Use
-only.
-
-You may not use the Software for Commercial Use unless you obtain
-a separate commercial license from the Licensor.
-
-------------------------------------------------------------
-RESTRICTIONS
+The Licensed Work is provided under the Business Source License 1.1.
+All copies of the Licensed Work, and derivative works thereof, must
+include this License file.
 
 You may not:
-- Use the Software for Commercial Use
-- Sell, sublicense, or otherwise monetize the Software
-- Offer the Software as a hosted or managed service
-- Remove or alter this license notice
+- Use the Licensed Work for Commercial Use without a separate
+  commercial agreement with the Licensor
+- Sell or sublicense the Licensed Work
+- Offer the Licensed Work as a hosted or managed service
+- Remove or alter this License file
 
-------------------------------------------------------------
-CHANGE LICENSE
+On the Change Date, the Licensed Work will automatically become
+available under the MIT License.
 
-Effective on the Change Date, the Software will automatically be
-relicensed under the MIT License.
+-------------------------------------------------------------------------------
+MIT License
+-------------------------------------------------------------------------------
 
-Change Date: 3 years after the date of first public release of this
-Software, defined as 2026-05-26.
-
-------------------------------------------------------------
-MIT LICENSE (Effective on the Change Date)
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject
-to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the “Software”),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included
 in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS
 OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY

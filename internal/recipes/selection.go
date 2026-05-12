@@ -50,24 +50,6 @@ func recipeSelectionKey(userID, originHash string) string {
 	return fmt.Sprintf("%s%s/%s", recipeSelectionCachePrefix, strings.TrimSpace(userID), strings.TrimSpace(originHash))
 }
 
-// this should die off eventually.
-func recipeSelectionFromParams(p *generatorParams) recipeSelection {
-	if p == nil {
-		return recipeSelection{}
-	}
-	selection := recipeSelection{
-		SavedHashes:     make([]string, 0, len(p.Saved)),
-		DismissedHashes: make([]string, 0, len(p.Dismissed)),
-	}
-	for _, r := range p.Saved {
-		selection.SavedHashes = append(selection.SavedHashes, r.ComputeHash())
-	}
-	for _, r := range p.Dismissed {
-		selection.DismissedHashes = append(selection.DismissedHashes, r.ComputeHash())
-	}
-	return selection
-}
-
 func (rio recipeio) loadRecipeSelection(ctx context.Context, userID, originHash string) (recipeSelection, error) {
 	reader, err := rio.Cache.Get(ctx, recipeSelectionKey(userID, originHash))
 	if err != nil {
@@ -129,7 +111,12 @@ func (s *server) mergeParamsWithSelection(ctx context.Context, p *generatorParam
 		return
 	}
 
-	merged := recipeSelectionFromParams(p)
+	merged := recipeSelection{
+		SavedHashes: make([]string, 0, len(p.Saved)),
+	}
+	for _, r := range p.Saved {
+		merged.SavedHashes = append(merged.SavedHashes, r.ComputeHash())
+	}
 	for _, hash := range selection.SavedHashes {
 		merged.markSaved(hash)
 	}
