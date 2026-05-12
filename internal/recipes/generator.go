@@ -141,10 +141,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
-		recipeCount := min(len(p.Dismissed), len(menuPlan.Plans))
-		recipePlans, leftovers := menuPlan.Plans[:recipeCount], menuPlan.Plans[recipeCount:]
 
-		results, err := parallelism.MapWithErrors(recipePlans, func(replacement ai.RecipePlan) (*ai.Recipe, error) {
+		results, err := parallelism.MapWithErrors(menuPlan.Plans, func(replacement ai.RecipePlan) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
@@ -164,7 +162,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 		return &ai.ShoppingList{
 			Recipes: recipes,
-			Plan:    &ai.MenuPlan{Plans: leftovers, Notes: menuPlan.Notes, ResponseID: menuPlan.ResponseID},
+			Plan:    menuPlan,
 		}, nil
 	}
 
@@ -183,11 +181,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
-	// do we need to save menuplan outside of shoppinglist?
-	planCount := min(3, len(menuPlan.Plans))
-	recipePlans, leftovers := menuPlan.Plans[:planCount], menuPlan.Plans[planCount:]
 
-	results, err := parallelism.MapWithErrors(recipePlans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
+	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
 		recipe, err := g.aiClient.GenerateRecipe(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes, plan)
@@ -204,7 +199,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 	return &ai.ShoppingList{
 		Recipes: lo.FromSlicePtr(results),
-		Plan:    &ai.MenuPlan{Plans: leftovers, Notes: menuPlan.Notes, ResponseID: menuPlan.ResponseID},
+		Plan:    menuPlan,
 	}, nil
 }
 
