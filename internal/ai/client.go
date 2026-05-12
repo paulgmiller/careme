@@ -382,6 +382,7 @@ type RecipePlan struct {
 	Cuisine          string `json:"cuisine"`
 	AnchorIngredient string `json:"anchor_ingredient"`
 	Technique        string `json:"technique"`
+	Fancy            bool   `json:"fancy"`
 }
 
 var example = RecipePlan{
@@ -427,12 +428,14 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	if err != nil {
 		return nil, err
 	}
+	// should we generate more for higher variety
 	messages = append(messages,
 		user("Pick exactly 3 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best"+
 			"fit these ingredients based on seasonality and price. Example: "+string(examplStr)),
-		user("Plan the full set for variety across cuisines, cooking methods, textures, colors, and composition types like pastas, noodles, stir-fries, stews, braises, curries, or casseroles."),
-		user("Each plan should be practical, cookable, realistic, and able to become a recipe with a protein plus at least one vegetable or starch component."),
-		user("Include one richer or more special plan when it fits the budget and ingredients."),
+		user("Goal is variety across cuisines, cooking methods and ingredients in addition to practicality"),
+		// user("Anchor ingredient should default to Proteins unless vegatarian")
+		// We've regressed one fancy meal per week.
+		user("Include one fancy plan that will be more expensive, longer, and/or richer."),
 	)
 	return messages, nil
 }
@@ -506,9 +509,13 @@ func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngre
 	if err != nil {
 		return nil, err
 	}
+	messages = append(messages, user("Default: each recipe should serve 2 people."))
 	messages = append(messages, user(fmt.Sprintf("Cuisine direction for this recipe: %s.", plan.Cuisine)))
 	messages = append(messages, user(fmt.Sprintf("Anchor Ingredient direction for this recipe: %s.", plan.AnchorIngredient)))
 	messages = append(messages, user(fmt.Sprintf("Suggested tecnique for this recipe: %s.", plan.Technique)))
+	if plan.Fancy {
+		messages = append(messages, user("this meal should be fancier so ignore limits on price, time or calories"))
+	}
 	return messages, nil
 }
 
@@ -516,11 +523,10 @@ func (c *client) buildRecipeContextMessages(location *locationtypes.Location, sa
 	var messages []responses.ResponseInputItemUnionParam
 	// constants we might make variable later
 	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
-	messages = append(messages, user("Default: each recipe should serve 2 people."))
 	messages = append(messages, user("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
 	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
 
-	// todo resuse context via response id?
+	// todo reuse context via response id?
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
 	var buf strings.Builder
 	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
