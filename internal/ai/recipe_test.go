@@ -187,7 +187,7 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRecipeContextMessages returned error: %v", err)
 	}
-	menuMessages, err := client.buildMenuPlanMessages(location, ingredients, instructions, date, lastRecipes)
+	menuMessages, err := client.buildMenuPlanMessages(location, ingredients, instructions, date, lastRecipes, 3)
 	if err != nil {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
@@ -209,6 +209,42 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	}
 	if got, want := mustJSON(t, contextMessages), mustJSON(t, recipeMessages[:prefixLen]); got != want {
 		t.Fatalf("recipe generation prefix should match shared context:\ngot  %s\nwant %s", got, want)
+	}
+}
+
+func TestBuildMenuPlanMessagesUsesRequestedCount(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	location := &locationtypes.Location{State: "WA"}
+	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 2)
+	if err != nil {
+		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
+	}
+	body := mustJSON(t, messages)
+	if !strings.Contains(body, "Build a menu plan with exactly 2 distinct recipe plans") {
+		t.Fatalf("expected requested menu plan count in prompt: %s", body)
+	}
+	if strings.Contains(body, "Include one fancy plan") {
+		t.Fatalf("did not expect fancy-plan requirement for a two-plan request: %s", body)
+	}
+}
+
+func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
+	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
+	body := mustJSON(t, messages)
+	if !strings.Contains(body, "Pick exactly 1 replacement recipe plans") {
+		t.Fatalf("expected replacement count in prompt: %s", body)
+	}
+	if !strings.Contains(body, "Treat passed-on recipe titles as ideas to avoid") {
+		t.Fatalf("expected replacement-specific guidance in prompt: %s", body)
+	}
+	if !strings.Contains(body, "make it vegetarian") || !strings.Contains(body, "Passed on roast chicken") {
+		t.Fatalf("expected feedback instructions in prompt: %s", body)
+	}
+}
+
+func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
+	if !strings.Contains(menuPlanSystemMessage, "Create concise recipe directions, not full recipes") {
+		t.Fatalf("expected menu planner system prompt to describe plan creation")
 	}
 }
 

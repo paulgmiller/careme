@@ -374,8 +374,8 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 
 type MenuPlan struct {
 	Plans      []RecipePlan `json:"plans"`
-	Notes      string
-	ResponseId string
+	Notes      string       `json:"notes,omitempty"`
+	ResponseID string       `json:"response_id,omitempty" jsonschema:"-"`
 }
 
 type RecipePlan struct {
@@ -393,15 +393,23 @@ var example = RecipePlan{
 
 var examplStr, _ = json.Marshal(example)
 
+const menuPlanSystemMessage = `
+You are a menu planner for a recipe generator.
+
+Create concise recipe directions, not full recipes. Each plan should give enough direction for a chef model to write one complete recipe later.
+Prioritize seasonal ingredients, good sale value, practical weeknight cooking, and variety across cuisines, anchor ingredients, and techniques.
+Return only the requested structured menu plan JSON.`
+
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
+	instructions []string, date time.Time, lastRecipes []string, count int,
 ) (*MenuPlan, error) {
-	prompt, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes)
+	prompt, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes, count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build menu plan messages: %w", err)
 	}
 	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
-		Model: recipePlanModel,
+		Model:        recipePlanModel,
+		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: prompt,
 		},
@@ -412,31 +420,79 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		return nil, err
 	}
 
+	return responseToMenuPlan(ctx, resp)
+}
+
+func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*MenuPlan, error) {
+	if previousResponseID == "" {
+		return nil, fmt.Errorf("response ID is required for menu plan regeneration")
+	}
+	messages := buildRegenerateMenuPlanMessages(instructions, count)
+
+	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+		Model:              recipePlanModel,
+		PreviousResponseID: openai.String(previousResponseID),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Store: openai.Bool(true),
+		Text:  scheme(c.menuSchema),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
+	}
+	return responseToMenuPlan(ctx, resp)
+}
+
+func responseToMenuPlan(ctx context.Context, resp *responses.Response) (*MenuPlan, error) {
 	var plan MenuPlan
 	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
 	}
-	plan.ResponseId = resp.ID
+	if strings.TrimSpace(resp.ID) == "" {
+		return nil, fmt.Errorf("failed to get menu plan response ID")
+	}
+	plan.ResponseID = resp.ID
 	slog.InfoContext(ctx, "generated menu plan", "plan", lo.Must(json.Marshal(plan)))
 	return &plan, nil
 }
 
 func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
+	instructions []string, date time.Time, lastRecipes []string, count int,
 ) ([]responses.ResponseInputItemUnionParam, error) {
 	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
-	// should we generate more for higher variety
+	count = normalizeMenuPlanCount(count)
 	messages = append(messages,
-		user("Pick exactly 3 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best"+
-			"fit these ingredients based on seasonality and price. Example: "+string(examplStr)),
-		user("Goal is variety across cuisines, cooking methods and ingredients in addition to practicality"),
-		// user("Anchor ingredient should default to Proteins unless vegatarian")
-		user("Include one fancy plan that will be more expensive, longer, and/or richer."),
+		user(fmt.Sprintf("Build a menu plan with exactly %d distinct recipe plans. Each plan needs a cuisine, anchor ingredient, and technique that fit the available ingredients, seasonality, and price. Example: %s", count, string(examplStr))),
+		user("Balance practicality with variety across cuisines, cooking methods, and main ingredients."),
 	)
+	if count >= 3 {
+		messages = append(messages, user("Include one fancy plan that can be more expensive, longer, and/or richer than the others."))
+	}
 	return messages, nil
+}
+
+func buildRegenerateMenuPlanMessages(instructions []string, count int) []responses.ResponseInputItemUnionParam {
+	count = normalizeMenuPlanCount(count)
+	messages := cleanInstuctions(instructions)
+	messages = append(messages,
+		user(fmt.Sprintf("Pick exactly %d replacement recipe plans. Each replacement needs a cuisine, anchor ingredient, and technique, and should be a better fit given the user's feedback. Example: %s", count, string(examplStr))),
+		user("Treat passed-on recipe titles as ideas to avoid, not ingredients to reuse. Keep the replacements varied and practical."),
+	)
+	if count >= 3 {
+		messages = append(messages, user("Include one replacement plan that is a little fancier, richer, longer, or more expensive than the others."))
+	}
+	return messages
+}
+
+func normalizeMenuPlanCount(count int) int {
+	if count < 1 {
+		return 1
+	}
+	return count
 }
 
 func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,

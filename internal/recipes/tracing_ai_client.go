@@ -22,11 +22,21 @@ func (c *tracingAIClient) CreateMenuPlan(
 	instructions []string,
 	date time.Time,
 	lastRecipes []string,
+	count int,
 ) (*ai.MenuPlan, error) {
 	ctx, span := tracer.Start(ctx, "recipes.ai.create_menu_plan")
 	defer span.End()
 
-	return c.next.CreateMenuPlan(ctx, location, ingredients, instructions, date, lastRecipes)
+	return c.next.CreateMenuPlan(ctx, location, ingredients, instructions, date, lastRecipes, count)
+}
+
+func (c *tracingAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error) {
+	ctx, span := tracer.Start(ctx, "recipes.ai.regenerate_menu_plan",
+		trace.WithAttributes(attribute.Int("recipe_plan.count", count)),
+	)
+	defer span.End()
+
+	return c.next.RegenerateMenuPlan(ctx, instructions, previousResponseID, count)
 }
 
 func (c *tracingAIClient) GenerateRecipe(
