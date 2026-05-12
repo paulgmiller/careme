@@ -63,7 +63,7 @@ func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staples
 		return nil, fmt.Errorf("recipe saver is required")
 	}
 	return &generatorService{
-		aiClient:     aiClient,
+		aiClient:     &tracingAIClient{aiClient},
 		critiquer:    critiquer,
 		staples:      staples,
 		statusWriter: statuses,
