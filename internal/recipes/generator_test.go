@@ -576,6 +576,7 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
 	params.Instructions = "make it vegetarian"
+	params.Directive = "Use the store's sale ingredients."
 	params.Saved = []ai.Recipe{alreadySaved, newlySaved}
 	params.Dismissed = []ai.Recipe{dismissed}
 	params.PriorSavedHashes = []string{alreadySaved.ComputeHash()}
@@ -608,6 +609,37 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 	if got.Recipes[0].Title != "Brand New Dinner" || got.Recipes[1].Title != "Already Saved" || got.Recipes[2].Title != "Newly Saved" {
 		t.Fatalf("unexpected recipe order after regenerate: %+v", got.Recipes)
+	}
+}
+
+func TestGenerateRecipes_RegenerateBackCompatFallbackUsesFakePlan(t *testing.T) {
+	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
+	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
+	aiStub := &captureRegenerateAIClient{
+		recipe: &newResult,
+	}
+
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params.Directive = "Use the store's sale ingredients."
+	params.Instructions = "make it brighter"
+	params.Dismissed = []ai.Recipe{dismissed}
+
+	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
+	_, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+
+	wantInstructions := []string{
+		"make it brighter",
+		"Passed on Dismissed Recipe",
+	}
+	if aiStub.createMenuPlanCount != 0 || len(aiStub.createMenuPlanInstructions) != 0 {
+		t.Fatalf("back-compat fallback should not create a fresh menu plan, got count=%d instructions=%v", aiStub.createMenuPlanCount, aiStub.createMenuPlanInstructions)
+	}
+	if aiStub.menuPlanCount != 0 || len(aiStub.menuPlanInstructions) != 0 {
+		t.Fatalf("back-compat fallback should not regenerate a menu plan, got count=%d instructions=%v", aiStub.menuPlanCount, aiStub.menuPlanInstructions)
+	}
+	if !slices.Equal(aiStub.instructions, wantInstructions) {
+		t.Fatalf("unexpected fallback recipe instructions: got %v want %v", aiStub.instructions, wantInstructions)
 	}
 }
 
@@ -719,8 +751,8 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	if len(critiquer.recipes) != 1 || critiquer.recipes[0].Title != "Brand New Dinner" {
 		t.Fatalf("expected only the newly generated recipe to be critiqued, got %+v", critiquer.recipes)
 	}
-	if aiStub.createMenuPlanCount != 1 {
-		t.Fatalf("expected fresh fallback to request one replacement plan, got %d", aiStub.createMenuPlanCount)
+	if aiStub.createMenuPlanCount != 0 {
+		t.Fatalf("expected back-compat fallback not to create a fresh menu plan, got %d calls", aiStub.createMenuPlanCount)
 	}
 }
 
@@ -1009,6 +1041,7 @@ func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "make it fresher"
 	params.Dismissed = []ai.Recipe{dismissed}
+	params.PreviousMenuPlanResponseID = "resp-menu-original"
 
 	aiStub := &sequenceAIClient{
 		generateResponses: []*ai.ShoppingList{{

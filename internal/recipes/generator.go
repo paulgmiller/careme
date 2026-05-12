@@ -124,47 +124,35 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		g.writeStatus(ctx, hash, status.Regen(p.Instructions, p.Dismissed))
 
 		if len(p.Dismissed) == 0 {
-			slog.InfoContext(ctx, "regenerated chat with only saved recipes", "location", p.String(), "duration", time.Since(start), "hash", hash)
+			// should disallow this in ui?
+			slog.ErrorContext(ctx, "regenerated chat with only saved recipes", "location", p.String(), "duration", time.Since(start), "hash", hash)
 			return &ai.ShoppingList{
 				Recipes: p.Saved,
 			}, nil
 		}
 
-		baseInstructions := regenerateInstructions(p)
-		plannerInstructions := prependDirective(p.Directive, regenerateMenuPlanInstructions(baseInstructions, p.Dismissed))
+		regenInstructions := regenerateInstructions(p)
 		ingredients, err := g.recipeIngredients(ctx, p, hash)
 		if err != nil {
 			return nil, err
 		}
 
-		menuPlan, err := g.replacementMenuPlan(ctx, p, ingredients, plannerInstructions, len(p.Dismissed))
+		menuPlan, err := g.replacementMenuPlan(ctx, p, regenInstructions, len(p.Dismissed))
 		if err != nil {
 			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
 		recipeCount := min(len(p.Dismissed), len(menuPlan.Plans))
 		recipePlans, leftovers := menuPlan.Plans[:recipeCount], menuPlan.Plans[recipeCount:]
-		plannedReplacements := make([]plannedReplacement, 0, len(recipePlans))
-		for i, plan := range recipePlans {
-			plannedReplacements = append(plannedReplacements, plannedReplacement{
-				plan:      plan,
-				dismissed: p.Dismissed[i],
-			})
-		}
 
-		recipeInstructions := slices.Clone(plannerInstructions)
-		results, err := parallelism.MapWithErrors(plannedReplacements, func(replacement plannedReplacement) (*ai.Recipe, error) {
+		results, err := parallelism.MapWithErrors(recipePlans, func(replacement ai.RecipePlan) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
-			dismissedHash := replacement.dismissed.ComputeHash()
-			slog.InfoContext(ctx, "dismissed recipe", "hash", dismissedHash, "title", replacement.dismissed.Title)
-
-			recipe, err := g.aiClient.GenerateRecipe(ctx, p.Location, ingredients, recipeInstructions, p.Date, p.LastRecipes, replacement.plan)
+			recipe, err := g.aiClient.GenerateRecipe(ctx, p.Location, ingredients, regenInstructions, p.Date, p.LastRecipes, replacement)
 			if err != nil {
 				return nil, err
 			}
 			recipe.OriginHash = hash
-			recipe.ParentHash = dismissedHash
 			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe)
 		})
 		if err != nil {
@@ -220,11 +208,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	}, nil
 }
 
-type plannedReplacement struct {
-	plan      ai.RecipePlan
-	dismissed ai.Recipe
-}
-
 func (g *generatorService) recipeIngredients(ctx context.Context, p *generatorParams, hash string) ([]ai.InputIngredient, error) {
 	ingredients, err := g.staples.FetchStaples(ctx, p)
 	if err != nil {
@@ -241,11 +224,24 @@ func (g *generatorService) recipeIngredients(ctx context.Context, p *generatorPa
 	return ingredients, nil
 }
 
-func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generatorParams, ingredients []ai.InputIngredient, instructions []string, count int) (*ai.MenuPlan, error) {
+func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generatorParams, instructions []string, count int) (*ai.MenuPlan, error) {
 	if strings.TrimSpace(p.PreviousMenuPlanResponseID) != "" {
 		return g.aiClient.RegenerateMenuPlan(ctx, instructions, p.PreviousMenuPlanResponseID, count)
 	}
-	return g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes, count)
+	// Backward compatibility for cached shopping lists created before menu plan response IDs were persisted.
+	return backCompatMenuPlan(count), nil
+}
+
+func backCompatMenuPlan(count int) *ai.MenuPlan {
+	plans := make([]ai.RecipePlan, 0, count)
+	for range count {
+		plans = append(plans, ai.RecipePlan{
+			Cuisine:          "anything",
+			AnchorIngredient: "anything",
+			Technique:        "anything",
+		})
+	}
+	return &ai.MenuPlan{Plans: plans}
 }
 
 // generator not prociding a lot of value here. Should sever just hold an ai client?
@@ -273,24 +269,12 @@ func regenerateInstructions(p *generatorParams) []string {
 	for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
 		instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
 	}
-	return instructions
-}
-
-func regenerateMenuPlanInstructions(baseInstructions []string, dismissed []ai.Recipe) []string {
-	instructions := slices.Clone(baseInstructions)
-	for _, recipe := range dismissed {
+	for _, recipe := range p.Dismissed {
 		if title := strings.TrimSpace(recipe.Title); title != "" {
 			instructions = append(instructions, "Passed on "+title)
 		}
 	}
 	return instructions
-}
-
-func prependDirective(directive string, instructions []string) []string {
-	if strings.TrimSpace(directive) == "" {
-		return instructions
-	}
-	return append([]string{directive}, instructions...)
 }
 
 func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe) (*ai.Recipe, error) {
