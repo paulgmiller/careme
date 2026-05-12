@@ -8,6 +8,7 @@ Careme is your personal chef and sommilier. It will
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](https://github.com/paulgmiller/careme/blob/master/LICENSE)
 ![Last Commit](https://img.shields.io/github/last-commit/paulgmiller/careme)
 [![CI](https://github.com/paulgmiller/careme/actions/workflows/go.yml/badge.svg)](https://github.com/paulgmiller/careme/actions/workflows/go.yml)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/paulgmiller/careme)
 
 ## Configuration
 
