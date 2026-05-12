@@ -17,7 +17,6 @@ import (
 const MinimumRecipeScore = 8
 
 type Result struct {
-	Recipe   *ai.Recipe
 	Critique *ai.RecipeCritique
 	Err      error
 }
@@ -44,7 +43,6 @@ func (r rubberstamp) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) <-cha
 	result := make(chan Result, 1)
 	result <- Result{
 		Critique: &ai.RecipeCritique{OverallScore: 10},
-		Recipe:   &recipe,
 	}
 	close(result)
 	return result
@@ -84,7 +82,6 @@ func (mc *multiCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) 
 		defer span.End()
 		critique, err := mc.critiquer.CritiqueRecipe(ctx, recipe)
 		result <- Result{
-			Recipe:   &recipe,
 			Critique: critique,
 			Err:      err,
 		}

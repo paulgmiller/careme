@@ -320,7 +320,6 @@ func (c *captureCritiqueService) CritiqueRecipe(_ context.Context, recipe ai.Rec
 
 	crit, err := c.critiqueFor(recipe)
 	results <- critique.Result{
-		Recipe:   &recipe,
 		Critique: crit,
 		Err:      err,
 	}

@@ -240,14 +240,11 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	defer span.End()
 
 	// going to overwrite other statuss
-	g.writeStatus(ctx, hash, status.Titles("Getting feedback on this recipe:", []ai.Recipe{*recipe}))
+	g.writeStatus(ctx, hash, status.Titles("Getting feedback on: ", []ai.Recipe{*recipe}))
 
 	result := <-g.critiquer.CritiqueRecipe(ctx, *recipe)
-	if result.Recipe == nil {
-		result.Recipe = recipe
-	}
 	if result.Err != nil {
-		slog.ErrorContext(ctx, "failed to critique recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "error", result.Err)
+		slog.ErrorContext(ctx, "failed to critique recipe", "hash", hash, "title", recipe.Title, "error", result.Err)
 		return recipe, nil
 	}
 	if result.Critique == nil || result.Critique.OverallScore >= critique.MinimumRecipeScore {
@@ -255,7 +252,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	}
 
 	span.SetAttributes(attribute.Bool("regenaftercrique", true))
-	slog.InfoContext(ctx, "low scoring recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
+	slog.InfoContext(ctx, "low scoring recipe", "hash", hash, "title", recipe.Title, "score", result.Critique.OverallScore)
 	// going to overwrite other statuses
 	g.writeStatus(ctx, hash, status.Titles("Making adjustments to this recipe: ", []ai.Recipe{*recipe}))
 

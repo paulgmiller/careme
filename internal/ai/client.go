@@ -434,7 +434,6 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 			"fit these ingredients based on seasonality and price. Example: "+string(examplStr)),
 		user("Goal is variety across cuisines, cooking methods and ingredients in addition to practicality"),
 		// user("Anchor ingredient should default to Proteins unless vegatarian")
-		// We've regressed one fancy meal per week.
 		user("Include one fancy plan that will be more expensive, longer, and/or richer."),
 	)
 	return messages, nil
