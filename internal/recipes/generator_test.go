@@ -965,7 +965,7 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 
 	_, err := g.GenerateRecipes(t.Context(), params)
 	require.NoError(t, err)
-	assert.Equal(t, 2, len(statuses.status), "got statuses %v", statuses.status)
+	assert.Equal(t, 3, len(statuses.status), "got statuses %v", statuses.status)
 }
 
 func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {

@@ -156,6 +156,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			})
 		}
 
+		g.writeStatus(ctx, hash, menuPlan.String())
+
 		results, err := parallelism.MapWithErrors(replacements, func(replacement plannedRegeneration) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
@@ -200,11 +202,12 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 	instructions := []string{p.Directive, p.Instructions}
 
-	// pass in count?
+	// 3 is arbitrary let user decide?
 	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes, 3)
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
+	g.writeStatus(ctx, hash, menuPlan.String())
 
 	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")

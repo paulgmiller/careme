@@ -378,6 +378,16 @@ type MenuPlan struct {
 	ResponseID string       `json:"response_id,omitempty" jsonschema:"-"`
 }
 
+// meant for status
+func (p MenuPlan) String() string {
+	var sb strings.Builder
+	for _, rp := range p.Plans {
+		fmt.Fprintf(&sb, "%s using %s\n", rp.Cuisine, rp.AnchorIngredient)
+	}
+	sb.WriteString(p.Notes)
+	return sb.String()
+}
+
 type RecipePlan struct {
 	Cuisine          string `json:"cuisine"`
 	AnchorIngredient string `json:"anchor_ingredient"`
