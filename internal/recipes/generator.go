@@ -127,6 +127,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 		baseInstructions := regenerateInstructions(p)
 		results, err := parallelism.MapWithErrors(p.Dismissed, func(dismissed ai.Recipe) (*ai.Recipe, error) {
+			ctx, span := tracer.Start(ctx, "recipes.reenerate.single")
+			defer span.End()
+
 			if strings.TrimSpace(dismissed.ResponseID) == "" {
 				return nil, fmt.Errorf("recipe %q is missing response ID for regeneration", dismissed.Title)
 			}
@@ -183,6 +186,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	recipePlans, leftovers := menuPlan.Plans[:planCount], menuPlan.Plans[planCount:]
 
 	results, err := parallelism.MapWithErrors(recipePlans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
+		ctx, span := tracer.Start(ctx, "recipes.generate.single")
+		defer span.End()
 		recipe, err := g.aiClient.GenerateRecipe(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes, plan)
 		if err != nil {
 			return nil, err
