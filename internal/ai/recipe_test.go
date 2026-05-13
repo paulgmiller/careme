@@ -221,10 +221,10 @@ func TestBuildMenuPlanMessagesUsesRequestedCount(t *testing.T) {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "Build a menu plan with exactly 2 distinct recipe plans") {
+	if !strings.Contains(body, "Build exactly 2 distinct recipe plans") {
 		t.Fatalf("expected requested menu plan count in prompt: %s", body)
 	}
-	if strings.Contains(body, "Include one fancy plan") {
+	if strings.Contains(body, "Mark one plan fancy") {
 		t.Fatalf("did not expect fancy-plan requirement for a two-plan request: %s", body)
 	}
 }
@@ -240,11 +240,8 @@ func TestCreateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "Pick exactly 1 replacement recipe plans") {
+	if !strings.Contains(body, "Pick exactly 1 replacement plans") {
 		t.Fatalf("expected replacement count in prompt: %s", body)
-	}
-	if !strings.Contains(body, "Treat passed-on recipe titles as ideas to avoid") {
-		t.Fatalf("expected replacement-specific guidance in prompt: %s", body)
 	}
 	if !strings.Contains(body, "make it vegetarian") || !strings.Contains(body, "Passed on roast chicken") {
 		t.Fatalf("expected feedback instructions in prompt: %s", body)
@@ -283,23 +280,21 @@ func TestRegenerateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 }
 
 func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
-	if !strings.Contains(menuPlanSystemMessage, "Create concise recipe directions, not full recipes") {
-		t.Fatalf("expected menu planner system prompt to describe plan creation")
-	}
-	if !strings.Contains(menuPlanSystemMessage, "Use notes only for brief planning rationale") {
-		t.Fatalf("expected menu planner system prompt to constrain notes")
-	}
-	if !strings.Contains(menuPlanSystemMessage, "Do not write recipe steps") {
-		t.Fatalf("expected menu planner system prompt to prevent full recipes in plan metadata")
+	for _, phrase := range []string{
+		"Return compact planning labels, not recipes",
+		"short phrases, generally under 5 words",
+		"Do not write recipe steps",
+		"rationale, or prose notes",
+	} {
+		if !strings.Contains(menuPlanSystemMessage, phrase) {
+			t.Fatalf("expected menu planner system prompt to contain %q", phrase)
+		}
 	}
 }
 
 func TestMenuPlanSchemaExcludesResponseID(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil)
 	body := mustJSON(t, client.menuSchema)
-	if !strings.Contains(body, "notes") {
-		t.Fatalf("menu plan schema should expose short notes to the model: %s", body)
-	}
 	if strings.Contains(body, "response_id") {
 		t.Fatalf("menu plan schema should not expose response_id to the model: %s", body)
 	}
@@ -316,9 +311,9 @@ func mustJSON(t *testing.T, v any) string {
 
 func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
-		"the first steps must be preparation steps before any cooking begins",
+		"start with useful prep such as preheating, chopping, mixing, or make-ahead work before active cooking",
 		"provide the total elapsed recipe time",
-		"Ensure the first instructions say what prep can be done ahead of time.",
+		"5 to 8 clear steps",
 		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
 	} {
 		if !strings.Contains(systemMessage, want) {
