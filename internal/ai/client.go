@@ -164,7 +164,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: include quantities; include prices only when present in the input; common pantry items are allowed.
-- instructions: 5 to 8 clear steps; start with useful prep such as preheating, chopping, mixing, or make-ahead work before active cooking; end with plating; include amounts and prep details only when needed for cooking; do not include prices; do not prefix steps with numbers.
+- instructions: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers.
 - health: one short sentence with plausible calories and macro notes for the stated servings.
 - drink_pairing: one concise sentence tied to the dish.
 - wine_styles: at most two searchable consumer wine styles, such as "Pinot Noir" or "Sauvignon Blanc"; no regions, parenthetical notes, commas, "or", or "*-style blend" phrasing.
@@ -414,7 +414,7 @@ You are a menu planner for independent recipe generators.
 Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and technique. Set fancy to true only for the richer/splurgier/time intensive option.
 Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","fancy":false}
 
-Prioritize seasonal ingredients, sale value, practical weeknight cooking, and variety across cuisines, anchor ingredients, and techniques.
+Prioritize seasonal ingredients, sale value, practical weeknight cooking, and variety across cuisines, anchor ingredients, and techniques. Prefer specific cuisine directions over familiar defaults, and include less-common cuisines when they fit the ingredients.
 Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
 
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
@@ -496,6 +496,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	)
 	if count >= 3 {
 		messages = append(messages, user("Mark one plan fancy."))
+		messages = append(messages, user("Include one less-common cuisine direction."))
 	}
 	return messages, nil
 }
@@ -508,6 +509,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []respons
 	// ideally do this if they dismissed fancy.
 	if count >= 3 {
 		messages = append(messages, user("Mark one replacement plan fancy."))
+		messages = append(messages, user("Include one less-common cuisine direction."))
 	}
 	return messages
 }

@@ -227,6 +227,27 @@ func TestBuildMenuPlanMessagesUsesRequestedCount(t *testing.T) {
 	if strings.Contains(body, "Mark one plan fancy") {
 		t.Fatalf("did not expect fancy-plan requirement for a two-plan request: %s", body)
 	}
+	if strings.Contains(body, "Include one less-common cuisine direction") {
+		t.Fatalf("did not expect less-common cuisine requirement for a two-plan request: %s", body)
+	}
+}
+
+func TestBuildMenuPlanMessagesAddsVarietyRequirementsForThreePlans(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	location := &locationtypes.Location{State: "WA"}
+	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 3)
+	if err != nil {
+		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
+	}
+	body := mustJSON(t, messages)
+	for _, want := range []string{
+		"Mark one plan fancy",
+		"Include one less-common cuisine direction",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected menu plan prompt to contain %q: %s", want, body)
+		}
+	}
 }
 
 func TestCreateMenuPlanRejectsNonPositiveCount(t *testing.T) {
@@ -245,6 +266,19 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	}
 	if !strings.Contains(body, "make it vegetarian") || !strings.Contains(body, "Passed on roast chicken") {
 		t.Fatalf("expected feedback instructions in prompt: %s", body)
+	}
+}
+
+func TestBuildRegenerateMenuPlanMessagesAddsVarietyRequirementsForThreePlans(t *testing.T) {
+	messages := buildRegenerateMenuPlanMessages(nil, 3)
+	body := mustJSON(t, messages)
+	for _, want := range []string{
+		"Mark one replacement plan fancy",
+		"Include one less-common cuisine direction",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected regenerate menu plan prompt to contain %q: %s", want, body)
+		}
 	}
 }
 
@@ -283,6 +317,7 @@ func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
 	for _, phrase := range []string{
 		"Return compact planning labels, not recipes",
 		"short phrases, generally under 5 words",
+		"Prefer specific cuisine directions over familiar defaults",
 		"Do not write recipe steps",
 		"rationale, or prose notes",
 	} {
@@ -311,7 +346,8 @@ func mustJSON(t *testing.T, v any) string {
 
 func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
-		"start with useful prep such as preheating, chopping, mixing, or make-ahead work before active cooking",
+		"start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking",
+		"do not rely on prep details from the ingredient list alone",
 		"provide the total elapsed recipe time",
 		"5 to 8 clear steps",
 		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
