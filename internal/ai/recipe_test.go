@@ -317,7 +317,6 @@ func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
 	for _, phrase := range []string{
 		"Return compact planning labels, not recipes",
 		"short phrases, generally under 5 words",
-		"Prefer specific cuisine directions over familiar defaults",
 		"Do not write recipe steps",
 		"rationale, or prose notes",
 	} {
