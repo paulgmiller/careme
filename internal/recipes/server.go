@@ -919,8 +919,6 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	redirectToHash(w, r, p.Hash(), true /*useStart*/)
 }
 
-var lastlocationHashInvalidation = lo.Must(time.Parse(time.DateOnly, "2026-03-09"))
-
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// The shopping list page is mutated in-place via HTMX (save/dismiss/wine picks).
 	// We disable browser/intermediary caching so Back/Forward revalidation fetches the
@@ -1006,20 +1004,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		wineWG.Wait()
 
-		var ings []ai.InputIngredient
-		ings, err = s.IngredientsFromCache(ctx, p.LocationHash())
-		if err != nil {
-			// getting not fouind here and its driving up error count but why?
-			// shoppinglists from before
-			// commit 3ffe17773d6dd5dae886f0e5c04d0046e743a9b5
-			// Author: Paul Miller <paul.miller@gmail.com>
-			// Date:   Mon Mar 9 15:15:24 2026 -0700
-			if !errors.Is(err, cache.ErrNotFound) || p.Date.After(lastlocationHashInvalidation) {
-				slog.ErrorContext(ctx, "failed to grab cached ingredients", "error", err, "hash", hashParam)
-			}
-			// go anways we just lose aisle sorting
-		}
-		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, ings, w)
+		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, w)
 		return
 	}
 

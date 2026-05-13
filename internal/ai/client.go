@@ -34,10 +34,11 @@ const (
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
-	Name     string `json:"name"`
-	Quantity string `json:"quantity"` // should this and price be numbers? need units then
-	Price    string `json:"price"`    // TODO exclude empty
-	// product id so we can associate back with input ingredient
+	ProductID   string `json:"id,omitempty"`
+	AisleNumber string `json:"aisle_number,omitempty"`
+	Name        string `json:"name"`
+	Quantity    string `json:"quantity"` // should this and price be numbers? need units then
+	Price       string `json:"price"`    // TODO exclude empty
 }
 
 type Recipe struct {
@@ -164,6 +165,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: include quantities; include prices only when present in the input; common pantry items are allowed.
+- ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV.
 - instructions: the first steps must be preparation steps before any cooking begins such as preheating and slicing; end with plating; repeat amounts and prep details; do not include prices; do not prefix steps with numbers.
 - health: include plausible calories and macro notes for the stated servings.
 - drink_pairing: give concise sommelier guidance tied to the dish.

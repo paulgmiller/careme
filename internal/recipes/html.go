@@ -51,7 +51,7 @@ type shoppingRecipeView struct {
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, inputs []ai.InputIngredient, writer http.ResponseWriter,
+	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter,
 ) {
 	dismissedHashes := lo.SliceToMap(p.Dismissed, func(r ai.Recipe) (string, bool) {
 		return r.ComputeHash(), true
@@ -75,7 +75,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			combinedIngredients = append(combinedIngredients, displayIngredients...)
 		}
 	}
-	shoppingList := shoppingListForDisplay(combinedIngredients, inputs)
+	shoppingList := shoppingListForDisplay(combinedIngredients)
 	data := struct {
 		Location        locations.Location
 		Date            string
@@ -275,7 +275,7 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 	return templates.Mail.Execute(writer, data)
 }
 
-func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngredient) []*ai.Ingredient {
+func shoppingListForDisplay(ingredients []ai.Ingredient) []*ai.Ingredient {
 	items := make(map[string]*ai.Ingredient)
 	var combined []*ai.Ingredient // maintain original ordering after deduping
 
@@ -287,8 +287,11 @@ func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngred
 		existing, ok := items[name]
 		if !ok {
 			item := &ai.Ingredient{
-				Name:     ingredient.Name, // show non normalized
-				Quantity: strings.TrimSpace(ingredient.Quantity),
+				ProductID:   strings.TrimSpace(ingredient.ProductID),
+				AisleNumber: strings.TrimSpace(ingredient.AisleNumber),
+				Name:        ingredient.Name, // show non normalized
+				Quantity:    strings.TrimSpace(ingredient.Quantity),
+				Price:       strings.TrimSpace(ingredient.Price),
 			}
 			items[name] = item
 			combined = append(combined, item)
@@ -296,24 +299,26 @@ func shoppingListForDisplay(ingredients []ai.Ingredient, inputs []ai.InputIngred
 			continue
 		}
 		qty := strings.TrimSpace(ingredient.Quantity)
-		if qty == "" {
-			continue
-		}
-		if existing.Quantity == "" {
+		switch {
+		case qty == "":
+		case existing.Quantity == "":
 			existing.Quantity = qty
-			continue
+		default:
+			existing.Quantity = existing.Quantity + ", " + qty
 		}
-		existing.Quantity = existing.Quantity + ", " + qty
+		if strings.TrimSpace(existing.ProductID) == "" {
+			existing.ProductID = strings.TrimSpace(ingredient.ProductID)
+		}
+		if strings.TrimSpace(existing.AisleNumber) == "" {
+			existing.AisleNumber = strings.TrimSpace(ingredient.AisleNumber)
+		}
+		if strings.TrimSpace(existing.Price) == "" {
+			existing.Price = strings.TrimSpace(ingredient.Price)
+		}
 	}
 
-	// kind of big to do each time but we're fast right?
-	// better to do product here
-	aisles := lo.SliceToMap(inputs, func(ing ai.InputIngredient) (string, string) {
-		return normalizeShoppingListName(ing.Description), strings.TrimSpace(ing.AisleNumber)
-	})
-
 	slices.SortStableFunc(combined, func(a, b *ai.Ingredient) int {
-		return compareShoppingAisles(aisles[normalizeShoppingListName(a.Name)], aisles[normalizeShoppingListName(b.Name)])
+		return compareShoppingAisles(strings.TrimSpace(a.AisleNumber), strings.TrimSpace(b.AisleNumber))
 	})
 
 	return combined

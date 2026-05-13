@@ -598,6 +598,59 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 }
 
+func TestGenerateRecipes_EnrichesGeneratedIngredientsFromCatalogProductID(t *testing.T) {
+	generated := []ai.Recipe{
+		{
+			Title:       "Roast Chicken",
+			Description: "Crisp and simple",
+			Ingredients: []ai.Ingredient{
+				{ProductID: "chicken-1", Name: "Chicken thighs", Quantity: "1 lb", Price: "$99.99"},
+				{Name: "Salt", Quantity: "1 tsp"},
+			},
+			Instructions: []string{"Roast the chicken."},
+			ResponseID:   "resp-chicken",
+		},
+	}
+
+	cacheStore := cache.NewFileCache(t.TempDir())
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	regularPrice := float32(8.99)
+	salePrice := float32(6.49)
+	require.NoError(t, io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{
+		ProductID:    "chicken-1",
+		Description:  "Chicken thighs",
+		AisleNumber:  "7",
+		PriceRegular: &regularPrice,
+		PriceSale:    &salePrice,
+	}}))
+
+	aiStub := &captureGenerateAIClient{
+		shoppingList: &ai.ShoppingList{
+			Recipes: generated,
+		},
+	}
+	saver := &captureRecipeSaver{}
+	critiquer := &captureCritiqueService{}
+	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, saver)
+
+	got, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 1)
+	require.Len(t, got.Recipes[0].Ingredients, 2)
+	assert.Equal(t, "chicken-1", got.Recipes[0].Ingredients[0].ProductID)
+	assert.Equal(t, "7", got.Recipes[0].Ingredients[0].AisleNumber)
+	assert.Equal(t, "$6.49", got.Recipes[0].Ingredients[0].Price)
+	assert.Empty(t, got.Recipes[0].Ingredients[1].ProductID)
+	assert.Empty(t, got.Recipes[0].Ingredients[1].AisleNumber)
+	assert.Empty(t, got.Recipes[0].Ingredients[1].Price)
+
+	require.Len(t, saver.recipes, 1)
+	assert.Equal(t, "$6.49", saver.recipes[0].Ingredients[0].Price)
+	require.Len(t, critiquer.recipes, 1)
+	assert.Equal(t, "7", critiquer.recipes[0].Ingredients[0].AisleNumber)
+}
+
 type noopstatuswriter struct{}
 
 func (noopstatuswriter) SaveGenerationStatus(_ context.Context, _, _ string) error { return nil }

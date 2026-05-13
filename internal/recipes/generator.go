@@ -140,7 +140,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			}
 			recipe.OriginHash = hash
 			recipe.ParentHash = dismissed.ComputeHash()
-			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe)
+			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, nil)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
@@ -187,9 +187,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, err
 		}
+		enrichRecipeIngredientMetadata(recipe, ingredients)
 		// would prefer to do this deeper down in client like response id but have to pass in the hash
 		recipe.OriginHash = hash
-		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe)
+		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingredients)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
@@ -229,7 +230,7 @@ func regenerateInstructions(p *generatorParams) []string {
 	return instructions
 }
 
-func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe) (*ai.Recipe, error) {
+func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, inputs []ai.InputIngredient) (*ai.Recipe, error) {
 	if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 		return nil, err
 	}
@@ -264,6 +265,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipe %q from critique feedback: %w", recipe.Title, err)
 	}
+	enrichRecipeIngredientMetadata(retry, inputs)
 	retry.OriginHash = hash
 	retry.ParentHash = recipe.ComputeHash()
 	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
@@ -284,6 +286,45 @@ func (g *generatorService) critiqueInBackground(ctx context.Context, recipe ai.R
 			}
 		}
 	}()
+}
+
+func enrichRecipeIngredientMetadata(recipe *ai.Recipe, inputs []ai.InputIngredient) {
+	if recipe == nil || len(inputs) == 0 {
+		return
+	}
+
+	byProductID := make(map[string]ai.InputIngredient, len(inputs))
+	for _, input := range inputs {
+		productID := strings.TrimSpace(input.ProductID)
+		if productID == "" {
+			continue
+		}
+		byProductID[productID] = input
+	}
+
+	for i := range recipe.Ingredients {
+		ingredient := &recipe.Ingredients[i]
+		input, ok := byProductID[strings.TrimSpace(ingredient.ProductID)]
+		if !ok {
+			continue
+		}
+		ingredient.ProductID = strings.TrimSpace(input.ProductID)
+		ingredient.AisleNumber = strings.TrimSpace(input.AisleNumber)
+		if price := inputIngredientDisplayPrice(input); price != "" {
+			ingredient.Price = price
+		}
+	}
+}
+
+func inputIngredientDisplayPrice(input ai.InputIngredient) string {
+	price := input.PriceSale
+	if price == nil {
+		price = input.PriceRegular
+	}
+	if price == nil {
+		return ""
+	}
+	return fmt.Sprintf("$%.2f", *price)
 }
 
 // just making this best effort
