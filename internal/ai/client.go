@@ -411,7 +411,7 @@ func (p RecipePlan) Instructions() []string {
 const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
-Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and technique. Set fancy to true only for the richer/splurgier option.
+Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and technique. Set fancy to true only for the richer/splurgier/time intensive option.
 Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","fancy":false}
 
 Prioritize seasonal ingredients, sale value, practical weeknight cooking, and variety across cuisines, anchor ingredients, and techniques.
