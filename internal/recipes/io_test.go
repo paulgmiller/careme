@@ -92,6 +92,7 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 				DrinkPairing: "Chardonnay",
 			},
 		},
+		Plan: &ai.MenuPlan{ResponseID: "resp-menu-123"},
 	}
 
 	if err := rio.SaveShoppingList(t.Context(), list, hash); err != nil {
@@ -111,6 +112,9 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	}
 	if got.Recipes[0].ResponseID != list.Recipes[0].ResponseID {
 		t.Fatalf("expected recipe response id %q, got %q", list.Recipes[0].ResponseID, got.Recipes[0].ResponseID)
+	}
+	if got.Plan == nil || got.Plan.ResponseID != list.Plan.ResponseID {
+		t.Fatalf("expected menu plan response id %q, got %+v", list.Plan.ResponseID, got.Plan)
 	}
 }
 

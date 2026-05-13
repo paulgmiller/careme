@@ -152,7 +152,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 
 # Recipe Requirements
 - User instructions override defaults unless they make a recipe unsafe, uncookable, or impossible with the available ingredients.
-- Unless vegatarian Each recipe must include a protein plus at least one vegetable and/or starch component.
+- Unless the user asks for vegetarian or vegan food, include a protein plus at least one vegetable and/or starch.
 - Include pastas, noodles, stir-fries, stews, braises, curries, casseroles, or other compositions when they fit the ingredients.
 - Prioritize sale ingredients by value and quality. Only use prices from the input; never invent prices.
 - Pantry items are allowed when common and inexpensive.
@@ -161,18 +161,17 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 
 # Field Guidance
 - title: use a short, appetizing name.
-- description: make the dish sound appealing and note what makes it practical, special, or seasonal.
+- description: one appetizing sentence that notes what makes the dish practical, special, or seasonal.
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: include quantities; include prices only when present in the input; common pantry items are allowed.
-- instructions: the first steps must be preparation steps before any cooking begins such as preheating and slicing; end with plating; repeat amounts and prep details; do not include prices; do not prefix steps with numbers.
-- health: include plausible calories and macro notes for the stated servings.
-- drink_pairing: give concise sommelier guidance tied to the dish.
+- instructions: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers.
+- health: one short sentence with plausible calories and macro notes for the stated servings.
+- drink_pairing: one concise sentence tied to the dish.
 - wine_styles: at most two searchable consumer wine styles, such as "Pinot Noir" or "Sauvignon Blanc"; no regions, parenthetical notes, commas, "or", or "*-style blend" phrasing.
 
 # Quality Checks
 Before responding, ensure recipe is cookable, realistic, non-contradictory, correctly priced, safe, and visually appealing after plating.
-Ensure the first instructions say what prep can be done ahead of time.
 Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.
 Do not include these checks in the output.`
 
@@ -237,7 +236,9 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	params := responses.ResponseNewParams{
 		Model:              c.model,
 		PreviousResponseID: openai.String(previousResponseID),
-		// only new input
+		// Previous response IDs do not carry over top-level instructions.
+		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
+		Instructions: openai.String(systemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
@@ -375,8 +376,16 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 
 type MenuPlan struct {
 	Plans      []RecipePlan `json:"plans"`
-	Notes      string
-	ResponseId string
+	ResponseID string       `json:"response_id,omitempty" jsonschema:"-"`
+}
+
+// meant for status
+func (p MenuPlan) String() string {
+	var sb strings.Builder
+	for _, rp := range p.Plans {
+		fmt.Fprintf(&sb, "%s using %s\n", rp.Cuisine, rp.AnchorIngredient)
+	}
+	return sb.String()
 }
 
 type RecipePlan struct {
@@ -386,23 +395,44 @@ type RecipePlan struct {
 	Fancy            bool   `json:"fancy"`
 }
 
-var example = RecipePlan{
-	Cuisine:          "French Bistro",
-	AnchorIngredient: "chicken thighs",
-	Technique:        "braise",
+func (p RecipePlan) Instructions() []string {
+	instructions := []string{
+		fmt.Sprintf("Cuisine direction for this recipe: %s.", p.Cuisine),
+		fmt.Sprintf("Anchor ingredient direction for this recipe: %s.", p.AnchorIngredient),
+		fmt.Sprintf("Suggested technique for this recipe: %s.", p.Technique),
+	}
+	if p.Fancy {
+		instructions = append(instructions, "This meal should be fancier, so it can be more expensive, longer, or richer.")
+	}
+	return instructions
 }
 
-var examplStr, _ = json.Marshal(example)
+// Should we inject sample cuisines
+// https://github.com/paulgmiller/careme/issues/449#issuecomment-4185138982
+// const cusineList = "Italian, Japanese, Mexican, Cuban/Caribbean, Indian, Thai, French, Chinese, Spanish, Greek, Turkish, Ethiopian, Vietnamese, Korean, Moroccan, Peruvian"
+const menuPlanSystemMessage = `
+You are a menu planner for independent recipe generators.
+
+Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and technique. Set fancy to true only for the richer/splurgier/time intensive option.
+Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","fancy":false}
+Try and ensure variety across cuisines, anchor ingredients, and techniques.
+Prioritize seasonal ingredients, sale value, practical weeknight cooking. 
+Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
 
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
+	instructions []string, date time.Time, lastRecipes []string, count int,
 ) (*MenuPlan, error) {
-	prompt, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if count < 1 {
+		return nil, fmt.Errorf("menu plan count must be greater than zero")
+	}
+
+	prompt, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes, count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build menu plan messages: %w", err)
 	}
 	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
-		Model: recipePlanModel,
+		Model:        recipePlanModel,
+		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: prompt,
 		},
@@ -413,37 +443,83 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		return nil, err
 	}
 
+	return responseToMenuPlan(ctx, resp)
+}
+
+func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*MenuPlan, error) {
+	if previousResponseID == "" {
+		return nil, fmt.Errorf("response ID is required for menu plan regeneration")
+	}
+	if count < 1 {
+		return nil, fmt.Errorf("menu plan count must be greater than zero")
+	}
+	messages := buildRegenerateMenuPlanMessages(instructions, count)
+
+	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+		Model:              recipePlanModel,
+		PreviousResponseID: openai.String(previousResponseID),
+		// Previous response IDs do not carry over top-level instructions.
+		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
+		Instructions: openai.String(menuPlanSystemMessage),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Store: openai.Bool(true),
+		Text:  scheme(c.menuSchema),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
+	}
+	return responseToMenuPlan(ctx, resp)
+}
+
+func responseToMenuPlan(ctx context.Context, resp *responses.Response) (*MenuPlan, error) {
 	var plan MenuPlan
 	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
 	}
-	plan.ResponseId = resp.ID
+	if strings.TrimSpace(resp.ID) == "" {
+		return nil, fmt.Errorf("failed to get menu plan response ID")
+	}
+	plan.ResponseID = resp.ID
 	slog.InfoContext(ctx, "generated menu plan", "plan", lo.Must(json.Marshal(plan)))
 	return &plan, nil
 }
 
 func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
+	instructions []string, date time.Time, lastRecipes []string, count int,
 ) ([]responses.ResponseInputItemUnionParam, error) {
 	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
-	// should we generate more for higher variety
 	messages = append(messages,
-		user("Pick exactly 3 distinct recipe plans (cuisine, anchor ingredient and, or technique) that best"+
-			"fit these ingredients based on seasonality and price. Example: "+string(examplStr)),
-		user("Goal is variety across cuisines, cooking methods and ingredients in addition to practicality"),
-		// user("Anchor ingredient should default to Proteins unless vegatarian")
-		user("Include one fancy plan that will be more expensive, longer, and/or richer."),
+		user(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
 	)
+	if count >= 3 {
+		messages = append(messages, user("Mark one plan fancy."))
+		messages = append(messages, user("Include one less-common cuisine direction."))
+	}
 	return messages, nil
 }
 
+func buildRegenerateMenuPlanMessages(instructions []string, count int) []responses.ResponseInputItemUnionParam {
+	messages := cleanInstuctions(instructions)
+	messages = append(messages,
+		user(fmt.Sprintf("Pick exactly %d replacement plans. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
+	)
+	// ideally do this if they dismissed fancy.
+	if count >= 3 {
+		messages = append(messages, user("Mark one replacement plan fancy."))
+		messages = append(messages, user("Include one less-common cuisine direction."))
+	}
+	return messages
+}
+
 func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string, plan RecipePlan,
+	instructions []string, date time.Time, lastRecipes []string,
 ) (*Recipe, error) {
-	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes, plan)
+	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
 	}
@@ -504,18 +580,12 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string, plan RecipePlan) ([]responses.ResponseInputItemUnionParam, error) {
+func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]responses.ResponseInputItemUnionParam, error) {
 	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
 	messages = append(messages, user("Default: each recipe should serve 2 people."))
-	messages = append(messages, user(fmt.Sprintf("Cuisine direction for this recipe: %s.", plan.Cuisine)))
-	messages = append(messages, user(fmt.Sprintf("Anchor Ingredient direction for this recipe: %s.", plan.AnchorIngredient)))
-	messages = append(messages, user(fmt.Sprintf("Suggested tecnique for this recipe: %s.", plan.Technique)))
-	if plan.Fancy {
-		messages = append(messages, user("this meal should be fancier so ignore limits on price, time or calories"))
-	}
 	return messages, nil
 }
 

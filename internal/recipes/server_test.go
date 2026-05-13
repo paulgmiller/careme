@@ -621,6 +621,7 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	clone := *p
 	clone.LastRecipes = append([]string(nil), p.LastRecipes...)
 	clone.PriorSavedHashes = append([]string(nil), p.PriorSavedHashes...)
+	clone.PreviousMenuPlanResponseID = p.PreviousMenuPlanResponseID
 	clone.Saved = append([]ai.Recipe(nil), p.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), p.Dismissed...)
 	c.last = &clone
@@ -1594,6 +1595,7 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	saveRecipesForOrigin(t, s, originHash, alreadySaved, newlySaved, available)
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes: []ai.Recipe{alreadySaved, newlySaved, available},
+		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-old"},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -1627,6 +1629,9 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	require.NotNil(t, captured)
 	if got, want := captured.PriorSavedHashes, []string{alreadySaved.ComputeHash()}; !slices.Equal(got, want) {
 		t.Fatalf("expected prior saved hashes %v, got %v", want, got)
+	}
+	if got := captured.PreviousMenuPlanResponseID; got != "resp-menu-old" {
+		t.Fatalf("expected previous menu plan response id %q, got %q", "resp-menu-old", got)
 	}
 	if len(captured.Saved) != 2 {
 		t.Fatalf("expected both current saved recipes, got %#v", captured.Saved)
