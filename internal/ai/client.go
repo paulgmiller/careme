@@ -406,20 +406,13 @@ func (p RecipePlan) Instructions() []string {
 	return instructions
 }
 
-var example = RecipePlan{
-	Cuisine:          "French Bistro",
-	AnchorIngredient: "chicken thighs",
-	Technique:        "braise",
-}
-
-var examplStr, _ = json.Marshal(example)
-
 // Should we inject sample cuisines
 // https://github.com/paulgmiller/careme/issues/449#issuecomment-4185138982
 const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
 Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and technique. Set fancy to true only for the richer/splurgier option.
+Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","fancy":false}
 
 Prioritize seasonal ingredients, sale value, practical weeknight cooking, and variety across cuisines, anchor ingredients, and techniques.
 Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
@@ -499,7 +492,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 		return nil, err
 	}
 	messages = append(messages,
-		user(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price. Example: %s", count, string(examplStr))),
+		user(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
 	)
 	if count >= 3 {
 		messages = append(messages, user("Mark one plan fancy."))
@@ -510,8 +503,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 func buildRegenerateMenuPlanMessages(instructions []string, count int) []responses.ResponseInputItemUnionParam {
 	messages := cleanInstuctions(instructions)
 	messages = append(messages,
-		user(fmt.Sprintf("Pick exactly %d replacement plans. Avoid passed-on recipe titles and close variants. Fit the user's feedback. Example: %s", count, string(examplStr))),
-		user("Treat passed-on titles as ideas to avoid, not ingredients to reuse."),
+		user(fmt.Sprintf("Pick exactly %d replacement plans. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
 	)
 	// ideally do this if they dismissed fancy.
 	if count >= 3 {

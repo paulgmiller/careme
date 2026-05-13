@@ -243,9 +243,6 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	if !strings.Contains(body, "Pick exactly 1 replacement plans") {
 		t.Fatalf("expected replacement count in prompt: %s", body)
 	}
-	if !strings.Contains(body, "Treat passed-on titles as ideas to avoid") {
-		t.Fatalf("expected replacement-specific guidance in prompt: %s", body)
-	}
 	if !strings.Contains(body, "make it vegetarian") || !strings.Contains(body, "Passed on roast chicken") {
 		t.Fatalf("expected feedback instructions in prompt: %s", body)
 	}
