@@ -408,13 +408,15 @@ func (p RecipePlan) Instructions() []string {
 
 // Should we inject sample cuisines
 // https://github.com/paulgmiller/careme/issues/449#issuecomment-4185138982
+//const cusineList = "Italian, Japanese, Mexican, Cuban/Caribbean, Indian, Thai, French, Chinese, Spanish, Greek, Turkish, Ethiopian, Vietnamese, Korean, Moroccan, Peruvian"
+
 const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
 Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and technique. Set fancy to true only for the richer/splurgier/time intensive option.
 Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","fancy":false}
-
-Prioritize seasonal ingredients, sale value, practical weeknight cooking, and variety across cuisines, anchor ingredients, and techniques. Prefer specific cuisine directions over familiar defaults, and include less-common cuisines when they fit the ingredients.
+Try and ensure variety across cuisines, anchor ingredients, and techniques.
+Prioritize seasonal ingredients, sale value, practical weeknight cooking. 
 Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
 
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
@@ -509,7 +511,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []respons
 	// ideally do this if they dismissed fancy.
 	if count >= 3 {
 		messages = append(messages, user("Mark one replacement plan fancy."))
-		messages = append(messages, user("Include one less-common cuisine direction."))
+		messages = append(messages, user("Include one less-common cuisine direction"))
 	}
 	return messages
 }

@@ -297,7 +297,7 @@ func writeStoreMenuPlan(w io.Writer, number int, result storeMenuPlan) error {
 		if plan.Fancy {
 			fancy = " (fancier)"
 		}
-		if _, err := fmt.Fprintf(w, "   - %d: %s with %s, %s%s:%s\n", i+1, plan.Cuisine, plan.AnchorIngredient, plan.Technique, fancy, plan.Why); err != nil {
+		if _, err := fmt.Fprintf(w, "   - %d: %s with %s, %s%s\n", i+1, plan.Cuisine, plan.AnchorIngredient, plan.Technique, fancy); err != nil {
 			return err
 		}
 	}
