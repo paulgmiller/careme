@@ -510,7 +510,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []respons
 	// ideally do this if they dismissed fancy.
 	if count >= 3 {
 		messages = append(messages, user("Mark one replacement plan fancy."))
-		messages = append(messages, user("Include one less-common cuisine direction"))
+		messages = append(messages, user("Include one less-common cuisine direction."))
 	}
 	return messages
 }
