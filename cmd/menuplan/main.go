@@ -339,10 +339,3 @@ func compactStrings(values ...string) []string {
 	}
 	return parts
 }
-
-func textOrFallback(value, fallback string) string {
-	if value = strings.TrimSpace(value); value != "" {
-		return value
-	}
-	return fallback
-}

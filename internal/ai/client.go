@@ -408,8 +408,7 @@ func (p RecipePlan) Instructions() []string {
 
 // Should we inject sample cuisines
 // https://github.com/paulgmiller/careme/issues/449#issuecomment-4185138982
-//const cusineList = "Italian, Japanese, Mexican, Cuban/Caribbean, Indian, Thai, French, Chinese, Spanish, Greek, Turkish, Ethiopian, Vietnamese, Korean, Moroccan, Peruvian"
-
+// const cusineList = "Italian, Japanese, Mexican, Cuban/Caribbean, Indian, Thai, French, Chinese, Spanish, Greek, Turkish, Ethiopian, Vietnamese, Korean, Moroccan, Peruvian"
 const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
