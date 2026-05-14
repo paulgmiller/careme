@@ -14,8 +14,8 @@ func TestShoppingListForDisplay(t *testing.T) {
 		ingredients []ai.Ingredient
 		want        []shoppingListGroup
 	}{
-	{
-		name: "empty list returns empty result",
+		{
+			name: "empty list returns empty result",
 			want: nil,
 		},
 		{
@@ -27,21 +27,19 @@ func TestShoppingListForDisplay(t *testing.T) {
 				{Name: "garlic", Quantity: "3 cloves"},
 				{Name: "Basil", Quantity: " "},
 				{Name: "  ", Quantity: "1"},
-				},
-				want: []*ai.Ingredient{
-				},
-				want: []shoppingListGroup{
-					{
-						Aisle: "Other items",
-						Items: []*ai.Ingredient{
-							{Name: "Onion", Quantity: "1, 2"},
-							{Name: "Garlic", Quantity: "3 cloves"},
-							{Name: "Basil", Quantity: ""},
-						},
+			},
+			want: []shoppingListGroup{
+				{
+					Aisle: "Other items",
+					Items: []*ai.Ingredient{
+						{Name: "Onion", Quantity: "1, 2"},
+						{Name: "Garlic", Quantity: "3 cloves"},
+						{Name: "Basil", Quantity: ""},
 					},
 				},
 			},
-		}
+		},
+	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
