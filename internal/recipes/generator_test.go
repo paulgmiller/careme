@@ -472,11 +472,14 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 
 	cacheStore := cache.NewFileCache(t.TempDir())
 	rio := IO(cacheStore)
+	salePrice := float32(18.99)
 	cached := []ai.InputIngredient{
 		{
 			ProductID:   "cached-pinot-noir",
 			Description: "Cached Pinot Noir",
 			Size:        "750mL",
+			AisleNumber: "wine",
+			PriceSale:   &salePrice,
 		},
 	}
 	if err := rio.SaveIngredients(t.Context(), wineIngredientsCacheKey(style, location, cacheDate), cached); err != nil {
@@ -486,7 +489,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	aiStub := &captureWineQuestionAIClient{
 		answer: "Great with your dish.",
 		selection: &ai.WineSelection{
-			Wines:      []ai.Ingredient{{Name: "Cached Pinot Noir", Quantity: "750mL"}},
+			Wines:      []ai.Ingredient{{ProductID: "cached-pinot-noir", Name: "Cached Pinot Noir", Quantity: "750mL"}},
 			Commentary: "Great with your dish.",
 		},
 	}
@@ -509,6 +512,8 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	if got.Wines == nil || len(got.Wines) != 1 || got.Wines[0].Name != "Cached Pinot Noir" {
 		t.Fatalf("unexpected wine selection payload: %+v", got.Wines)
 	}
+	assert.Equal(t, "wine", got.Wines[0].AisleNumber)
+	assert.Equal(t, "$18.99", got.Wines[0].Price)
 	if aiStub.recipe.Title != "Roast Chicken" {
 		t.Fatalf("expected recipe title %q, got %q", "Roast Chicken", aiStub.recipe.Title)
 	}
@@ -519,18 +524,18 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 		answer: "Try one of these bottles.",
 		selection: &ai.WineSelection{
 			Wines: []ai.Ingredient{
-				{Name: "Whole Foods Red"},
-				{Name: "Whole Foods White"},
-				{Name: "Whole Foods Bubbly"},
+				{ProductID: "wholefoods-red", Name: "Whole Foods Red"},
+				{ProductID: "wholefoods-white", Name: "Whole Foods White"},
+				{ProductID: "wholefoods-bubbly", Name: "Whole Foods Bubbly"},
 			},
 			Commentary: "Try one of these bottles.",
 		},
 	}
 	staplesStub := &captureWineStaplesProvider{
 		responses: map[string][]ai.InputIngredient{
-			"red-wine":   {{ProductID: "wholefoods-red", Description: "Whole Foods Red"}},
-			"white-wine": {{ProductID: "wholefoods-white", Description: "Whole Foods White"}},
-			"sparkling":  {{ProductID: "wholefoods-bubbly", Description: "Whole Foods Bubbly"}},
+			"red-wine":   {{ProductID: "wholefoods-red", Description: "Whole Foods Red", AisleNumber: "red-wine"}},
+			"white-wine": {{ProductID: "wholefoods-white", Description: "Whole Foods White", AisleNumber: "white-wine"}},
+			"sparkling":  {{ProductID: "wholefoods-bubbly", Description: "Whole Foods Bubbly", AisleNumber: "sparkling"}},
 		},
 	}
 	rio := IO(cache.NewFileCache(t.TempDir()))
@@ -553,6 +558,9 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 	if got == nil || len(got.Wines) != 3 {
 		t.Fatalf("unexpected wine selection: %+v", got)
 	}
+	assert.Equal(t, "red-wine", got.Wines[0].AisleNumber)
+	assert.Equal(t, "white-wine", got.Wines[1].AisleNumber)
+	assert.Equal(t, "sparkling", got.Wines[2].AisleNumber)
 	if aiStub.recipe.Title != "Salmon" {
 		t.Fatalf("expected recipe title %q, got %q", "Salmon", aiStub.recipe.Title)
 	}
@@ -723,6 +731,59 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 			t.Fatalf("expected critiqued recipe to include origin hash %q, got %+v", params.Hash(), recipe)
 		}
 	}
+}
+
+func TestGenerateRecipes_EnrichesGeneratedIngredientsFromCatalogProductID(t *testing.T) {
+	generated := []ai.Recipe{
+		{
+			Title:       "Roast Chicken",
+			Description: "Crisp and simple",
+			Ingredients: []ai.Ingredient{
+				{ProductID: "chicken-1", Name: "Chicken thighs", Quantity: "1 lb", Price: "$99.99"},
+				{Name: "Salt", Quantity: "1 tsp"},
+			},
+			Instructions: []string{"Roast the chicken."},
+			ResponseID:   "resp-chicken",
+		},
+	}
+
+	cacheStore := cache.NewFileCache(t.TempDir())
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	regularPrice := float32(8.99)
+	salePrice := float32(6.49)
+	require.NoError(t, io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{
+		ProductID:    "chicken-1",
+		Description:  "Chicken thighs",
+		AisleNumber:  "7",
+		PriceRegular: &regularPrice,
+		PriceSale:    &salePrice,
+	}}))
+
+	aiStub := &captureGenerateAIClient{
+		shoppingList: &ai.ShoppingList{
+			Recipes: generated,
+		},
+	}
+	saver := &captureRecipeSaver{}
+	critiquer := &captureCritiqueService{}
+	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, saver)
+
+	got, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 1)
+	require.Len(t, got.Recipes[0].Ingredients, 2)
+	assert.Equal(t, "chicken-1", got.Recipes[0].Ingredients[0].ProductID)
+	assert.Equal(t, "7", got.Recipes[0].Ingredients[0].AisleNumber)
+	assert.Equal(t, "$6.49", got.Recipes[0].Ingredients[0].Price)
+	assert.Empty(t, got.Recipes[0].Ingredients[1].ProductID)
+	assert.Empty(t, got.Recipes[0].Ingredients[1].AisleNumber)
+	assert.Empty(t, got.Recipes[0].Ingredients[1].Price)
+
+	require.Len(t, saver.recipes, 1)
+	assert.Equal(t, "$6.49", saver.recipes[0].Ingredients[0].Price)
+	require.Len(t, critiquer.recipes, 1)
+	assert.Equal(t, "7", critiquer.recipes[0].Ingredients[0].AisleNumber)
 }
 
 type noopstatuswriter struct{}

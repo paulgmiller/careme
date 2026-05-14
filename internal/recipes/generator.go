@@ -109,6 +109,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	if err != nil {
 		return nil, err
 	}
+	enrichIngredientsMetadata(selection.Wines, inputIngredientMap(wines))
 	return selection, nil
 }
 
@@ -158,6 +159,17 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 		g.writeStatus(ctx, hash, menuPlan.String())
 
+		// this SHOULD hit the cache and we could do it in parallel with menu planning
+		ingredients, err := g.staples.FetchStaples(ctx, p)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get staples: %w", err)
+		}
+		ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
+			// TODO make configurable?
+			return ing.Grade == nil || ing.Grade.Score > 6
+		})
+		ingMap := inputIngredientMap(ingredients)
+
 		results, err := parallelism.MapWithErrors(replacements, func(replacement plannedRegeneration) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
@@ -168,7 +180,11 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 				return nil, err
 			}
 			recipe.OriginHash = hash
-			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe)
+			enrichIngredientsMetadata(recipe.Ingredients, ingMap)
+			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
+				return nil, err
+			}
+			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate replacement recipes with AI: %w", err)
@@ -196,6 +212,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		// TODO make configurable?
 		return ing.Grade == nil || ing.Grade.Score > 6
 	})
+	ingMap := inputIngredientMap(ingredients)
 
 	g.writeStatus(ctx, hash, status.Ingredients(ingredients, ogCount))
 	mutable.Shuffle(ingredients)
@@ -219,7 +236,12 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		}
 		// would prefer to do this deeper down in client like response id but have to pass in the hash
 		recipe.OriginHash = hash
-		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe)
+
+		enrichIngredientsMetadata(recipe.Ingredients, ingMap)
+		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
+			return nil, err
+		}
+		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
@@ -284,10 +306,7 @@ func regenerateInstructions(p *generatorParams) []string {
 	return instructions
 }
 
-func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe) (*ai.Recipe, error) {
-	if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
-		return nil, err
-	}
+func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, ingMap map[string]ai.InputIngredient) (*ai.Recipe, error) {
 	if g.critiquer == nil {
 		return recipe, nil
 	}
@@ -319,6 +338,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipe %q from critique feedback: %w", recipe.Title, err)
 	}
+	enrichIngredientsMetadata(retry.Ingredients, ingMap)
 	retry.OriginHash = hash
 	retry.ParentHash = recipe.ComputeHash()
 	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
@@ -339,6 +359,36 @@ func (g *generatorService) critiqueInBackground(ctx context.Context, recipe ai.R
 			}
 		}
 	}()
+}
+
+func enrichIngredientsMetadata(ingredients []ai.Ingredient, byProductID map[string]ai.InputIngredient) {
+	for i := range ingredients {
+		ingredient := &ingredients[i] // should we mutate or create new ingredient.
+		input, ok := byProductID[strings.TrimSpace(ingredient.ProductID)]
+		if !ok {
+			continue
+		}
+		ingredient.ProductID = strings.TrimSpace(input.ProductID)
+		ingredient.AisleNumber = strings.TrimSpace(input.AisleNumber)
+		ingredient.Price = inputIngredientDisplayPrice(input)
+	}
+}
+
+func inputIngredientMap(ingredients []ai.InputIngredient) map[string]ai.InputIngredient {
+	return lo.SliceToMap(ingredients, func(ing ai.InputIngredient) (string, ai.InputIngredient) {
+		return strings.TrimSpace(ing.ProductID), ing
+	})
+}
+
+func inputIngredientDisplayPrice(input ai.InputIngredient) string {
+	price := input.PriceSale
+	if price == nil {
+		price = input.PriceRegular
+	}
+	if price == nil {
+		return ""
+	}
+	return fmt.Sprintf("$%.2f", *price)
 }
 
 // just making this best effort

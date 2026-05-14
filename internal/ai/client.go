@@ -34,10 +34,11 @@ const (
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
-	Name     string `json:"name"`
-	Quantity string `json:"quantity"` // should this and price be numbers? need units then
-	Price    string `json:"price"`    // TODO exclude empty
-	// product id so we can associate back with input ingredient
+	ProductID   string `json:"id"`
+	AisleNumber string `json:"aisle_number,omitempty" jsonschema:"-"`
+	Name        string `json:"name"`
+	Quantity    string `json:"quantity"` // amount used in the recipe, not the catalog package size
+	Price       string `json:"price,omitempty" jsonschema:"-"`
 }
 
 type Recipe struct {
@@ -163,7 +164,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - description: one appetizing sentence that notes what makes the dish practical, special, or seasonal.
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
-- ingredients: include quantities; include prices only when present in the input; common pantry items are allowed.
+- ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Include the amount used in the recipe as quantity, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
 - instructions: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers.
 - health: one short sentence with plausible calories and macro notes for the stated servings.
 - drink_pairing: one concise sentence tied to the dish.
@@ -188,7 +189,7 @@ const winePrompt = `
 Act as a sommelier for the recipe provided below
 Select 1 to 2 wines from the provided TSV that best match the dish
 Return JSON with wines (ingredient array) and concise commentary explaining why those specific bottles work.
-Only choose wines present in the TSV. For each wine include name and optionally quantity/single price when available from TSV .
+Only choose wines present in the TSV. For each wine set id to the exact ProductId and include name and optionally quantity when useful.
 Be creative not always the same safe picks. Consider the specific ingredients, cooking method, and flavor profile of the dish when making your selection.
 Also for fancier/more expensive dishes consider more expensive wines.
 `
