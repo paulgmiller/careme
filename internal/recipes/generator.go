@@ -167,6 +167,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			// TODO make configurable?
 			return ing.Grade == nil || ing.Grade.Score > 6
 		})
+		ingMap := lo.SliceToMap(ingredients, func(ing ai.InputIngredient) (string, ai.InputIngredient) {
+			return ing.ProductID, ing
+		})
 
 		results, err := parallelism.MapWithErrors(replacements, func(replacement plannedRegeneration) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
@@ -178,11 +181,11 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 				return nil, err
 			}
 			recipe.OriginHash = hash
-			enrichRecipeIngredientMetadata(recipe, ingredients)
+			enrichRecipeIngredientMetadata(recipe, ingMap)
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 				return nil, err
 			}
-			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingredients)
+			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate replacement recipes with AI: %w", err)
@@ -210,6 +213,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		// TODO make configurable?
 		return ing.Grade == nil || ing.Grade.Score > 6
 	})
+	ingMap := lo.SliceToMap(ingredients, func(ing ai.InputIngredient) (string, ai.InputIngredient) {
+		return ing.ProductID, ing
+	})
 
 	g.writeStatus(ctx, hash, status.Ingredients(ingredients, ogCount))
 	mutable.Shuffle(ingredients)
@@ -233,11 +239,12 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		}
 		// would prefer to do this deeper down in client like response id but have to pass in the hash
 		recipe.OriginHash = hash
-		enrichRecipeIngredientMetadata(recipe, ingredients)
+
+		enrichRecipeIngredientMetadata(recipe, ingMap)
 		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 			return nil, err
 		}
-		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingredients)
+		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
@@ -302,7 +309,7 @@ func regenerateInstructions(p *generatorParams) []string {
 	return instructions
 }
 
-func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, inputs []ai.InputIngredient) (*ai.Recipe, error) {
+func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, ingMap map[string]ai.InputIngredient) (*ai.Recipe, error) {
 	if g.critiquer == nil {
 		return recipe, nil
 	}
@@ -334,7 +341,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipe %q from critique feedback: %w", recipe.Title, err)
 	}
-	enrichRecipeIngredientMetadata(retry, inputs)
+	enrichRecipeIngredientMetadata(retry, ingMap)
 	retry.OriginHash = hash
 	retry.ParentHash = recipe.ComputeHash()
 	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
@@ -357,31 +364,16 @@ func (g *generatorService) critiqueInBackground(ctx context.Context, recipe ai.R
 	}()
 }
 
-func enrichRecipeIngredientMetadata(recipe *ai.Recipe, inputs []ai.InputIngredient) {
-	if recipe == nil || len(inputs) == 0 {
-		return
-	}
-
-	byProductID := make(map[string]ai.InputIngredient, len(inputs))
-	for _, input := range inputs {
-		productID := strings.TrimSpace(input.ProductID)
-		if productID == "" {
-			continue
-		}
-		byProductID[productID] = input
-	}
-
+func enrichRecipeIngredientMetadata(recipe *ai.Recipe, byProductID map[string]ai.InputIngredient) {
 	for i := range recipe.Ingredients {
-		ingredient := &recipe.Ingredients[i]
+		ingredient := &recipe.Ingredients[i] // should we mutate or create new recipe.
 		input, ok := byProductID[strings.TrimSpace(ingredient.ProductID)]
 		if !ok {
 			continue
 		}
 		ingredient.ProductID = strings.TrimSpace(input.ProductID)
 		ingredient.AisleNumber = strings.TrimSpace(input.AisleNumber)
-		if price := inputIngredientDisplayPrice(input); price != "" {
-			ingredient.Price = price
-		}
+		ingredient.Price = inputIngredientDisplayPrice(input)
 	}
 }
 
