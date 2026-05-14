@@ -311,15 +311,6 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []*ai.Ingredient {
 		default:
 			existing.Quantity = existing.Quantity + ", " + qty
 		}
-		if strings.TrimSpace(existing.ProductID) == "" {
-			existing.ProductID = strings.TrimSpace(ingredient.ProductID)
-		}
-		if strings.TrimSpace(existing.AisleNumber) == "" {
-			existing.AisleNumber = strings.TrimSpace(ingredient.AisleNumber)
-		}
-		if strings.TrimSpace(existing.Price) == "" {
-			existing.Price = strings.TrimSpace(ingredient.Price)
-		}
 	}
 
 	slices.SortStableFunc(combined, func(a, b *ai.Ingredient) int {

@@ -80,6 +80,19 @@ func TestShoppingListForDisplay_PreservesFirstSeenOrderWithinSameAisleState(t *t
 	}, got)
 }
 
+func TestShoppingListForDisplay_KeepsFirstIngredientMetadataWhenCombining(t *testing.T) {
+	ingredients := []ai.Ingredient{
+		{ProductID: "lemon-1", Name: "Lemon", Quantity: "1", AisleNumber: "Produce", Price: "$2.00"},
+		{ProductID: "lemon-1", Name: "lemon", Quantity: "1 tbsp juice", AisleNumber: "Produce", Price: "$2.00"},
+	}
+
+	got := shoppingListForDisplay(ingredients)
+
+	assert.Equal(t, []*ai.Ingredient{
+		{ProductID: "lemon-1", Name: "Lemon", Quantity: "1, 1 tbsp juice", AisleNumber: "Produce", Price: "$2.00"},
+	}, got)
+}
+
 func TestShoppingListGroupsForDisplay_GroupsSortedItemsByAisle(t *testing.T) {
 	items := shoppingListForDisplay([]ai.Ingredient{
 		{Name: "Salt", Quantity: "1 tsp"},
