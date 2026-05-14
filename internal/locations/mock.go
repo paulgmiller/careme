@@ -17,15 +17,15 @@ import (
 type mock struct{}
 
 var fakes = map[string]Location{
-	"10": {
-		ID:      "10",
+	"70500010": {
+		ID:      "70500010",
 		Name:    "Big Willys",
 		Address: "1 willy ave",
 		State:   "North Dakota",
 		ZipCode: "58102",
 	},
-	"5000": {
-		ID:      "5000",
+	"70505000": {
+		ID:      "70505000",
 		Name:    "Piggly Wiggly",
 		Address: "20 somewhere st",
 		State:   "North Carolina",
