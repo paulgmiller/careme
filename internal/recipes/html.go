@@ -80,7 +80,6 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			combinedIngredients = append(combinedIngredients, displayIngredients...)
 		}
 	}
-	shoppingList := shoppingListForDisplay(combinedIngredients)
 	data := struct {
 		Location        locations.Location
 		Date            string
@@ -101,7 +100,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Instructions:    p.Instructions,
 		Hash:            hash,
 		Recipes:         recipeViews,
-		ShoppingList:    shoppingListGroupsForDisplay(shoppingList),
+		ShoppingList:    shoppingListForDisplay(combinedIngredients),
 		HasSavedRecipes: len(p.Saved) > 0,
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
@@ -280,7 +279,7 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 	return templates.Mail.Execute(writer, data)
 }
 
-func shoppingListForDisplay(ingredients []ai.Ingredient) []*ai.Ingredient {
+func shoppingListForDisplay(ingredients []ai.Ingredient) []shoppingListGroup {
 	items := make(map[string]*ai.Ingredient)
 	var combined []*ai.Ingredient // maintain original ordering after deduping
 
@@ -317,12 +316,8 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []*ai.Ingredient {
 		return compareShoppingAisles(strings.TrimSpace(a.AisleNumber), strings.TrimSpace(b.AisleNumber))
 	})
 
-	return combined
-}
-
-func shoppingListGroupsForDisplay(items []*ai.Ingredient) []shoppingListGroup {
 	var groups []shoppingListGroup
-	for _, item := range items {
+	for _, item := range combined {
 		aisle := strings.TrimSpace(item.AisleNumber)
 		if len(groups) == 0 || groups[len(groups)-1].Aisle != shoppingAisleHeading(aisle) {
 			groups = append(groups, shoppingListGroup{
@@ -345,6 +340,8 @@ func shoppingAisleHeading(aisle string) string {
 	if label, ok := knownShoppingAisleLabels[aisle]; ok {
 		return label
 	}
+	// Some providers give category slugs instead of display aisle names.
+	// Convert values like "fresh-vegetables" into a readable heading.
 	parts := strings.Fields(strings.NewReplacer("-", " ", "_", " ").Replace(aisle))
 	for i, part := range parts {
 		parts[i] = strings.ToUpper(part[:1]) + part[1:]
