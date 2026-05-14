@@ -48,6 +48,11 @@ type shoppingRecipeView struct {
 	WineRecommendation *ai.WineSelection
 }
 
+type shoppingListGroup struct {
+	Aisle string
+	Items []*ai.Ingredient
+}
+
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
@@ -84,7 +89,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Instructions    string
 		Hash            string
 		Recipes         []shoppingRecipeView
-		ShoppingList    []*ai.Ingredient
+		ShoppingList    []shoppingListGroup
 		HasSavedRecipes bool
 		Style           seasons.Style
 		ServerSignedIn  bool
@@ -96,7 +101,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Instructions:    p.Instructions,
 		Hash:            hash,
 		Recipes:         recipeViews,
-		ShoppingList:    shoppingList,
+		ShoppingList:    shoppingListGroupsForDisplay(shoppingList),
 		HasSavedRecipes: len(p.Saved) > 0,
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
@@ -322,6 +327,43 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []*ai.Ingredient {
 	})
 
 	return combined
+}
+
+func shoppingListGroupsForDisplay(items []*ai.Ingredient) []shoppingListGroup {
+	var groups []shoppingListGroup
+	for _, item := range items {
+		aisle := strings.TrimSpace(item.AisleNumber)
+		if len(groups) == 0 || groups[len(groups)-1].Aisle != shoppingAisleHeading(aisle) {
+			groups = append(groups, shoppingListGroup{
+				Aisle: shoppingAisleHeading(aisle),
+			})
+		}
+		groups[len(groups)-1].Items = append(groups[len(groups)-1].Items, item)
+	}
+	return groups
+}
+
+func shoppingAisleHeading(aisle string) string {
+	aisle = strings.TrimSpace(aisle)
+	if aisle == "" {
+		return "Other items"
+	}
+	if _, err := strconv.Atoi(aisle); err == nil {
+		return "Aisle " + aisle
+	}
+	if label, ok := knownShoppingAisleLabels[aisle]; ok {
+		return label
+	}
+	parts := strings.Fields(strings.NewReplacer("-", " ", "_", " ").Replace(aisle))
+	for i, part := range parts {
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
+}
+
+var knownShoppingAisleLabels = map[string]string{
+	"dairy-eggs":  "Dairy & eggs",
+	"fresh-herbs": "Fresh herbs",
 }
 
 // should only be used for internal matching otherwise violate some kroger must show names unaltered agreement

@@ -34,7 +34,7 @@ const (
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
-	ProductID   string `json:"id,omitempty"`
+	ProductID   string `json:"id"`
 	AisleNumber string `json:"aisle_number,omitempty" jsonschema:"-"`
 	Name        string `json:"name"`
 	Quantity    string `json:"quantity"` // amount used in the recipe, not the catalog package size
@@ -189,7 +189,7 @@ const winePrompt = `
 Act as a sommelier for the recipe provided below
 Select 1 to 2 wines from the provided TSV that best match the dish
 Return JSON with wines (ingredient array) and concise commentary explaining why those specific bottles work.
-Only choose wines present in the TSV. For each wine include name and optionally quantity/single price when available from TSV .
+Only choose wines present in the TSV. For each wine set id to the exact ProductId and include name and optionally quantity when useful.
 Be creative not always the same safe picks. Consider the specific ingredients, cooking method, and flavor profile of the dish when making your selection.
 Also for fancier/more expensive dishes consider more expensive wines.
 `

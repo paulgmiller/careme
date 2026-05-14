@@ -109,6 +109,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	if err != nil {
 		return nil, err
 	}
+	enrichWineSelectionMetadata(selection, inputIngredientMap(wines))
 	return selection, nil
 }
 
@@ -167,9 +168,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			// TODO make configurable?
 			return ing.Grade == nil || ing.Grade.Score > 6
 		})
-		ingMap := lo.SliceToMap(ingredients, func(ing ai.InputIngredient) (string, ai.InputIngredient) {
-			return ing.ProductID, ing
-		})
+		ingMap := inputIngredientMap(ingredients)
 
 		results, err := parallelism.MapWithErrors(replacements, func(replacement plannedRegeneration) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
@@ -213,9 +212,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		// TODO make configurable?
 		return ing.Grade == nil || ing.Grade.Score > 6
 	})
-	ingMap := lo.SliceToMap(ingredients, func(ing ai.InputIngredient) (string, ai.InputIngredient) {
-		return ing.ProductID, ing
-	})
+	ingMap := inputIngredientMap(ingredients)
 
 	g.writeStatus(ctx, hash, status.Ingredients(ingredients, ogCount))
 	mutable.Shuffle(ingredients)
@@ -365,8 +362,22 @@ func (g *generatorService) critiqueInBackground(ctx context.Context, recipe ai.R
 }
 
 func enrichRecipeIngredientMetadata(recipe *ai.Recipe, byProductID map[string]ai.InputIngredient) {
-	for i := range recipe.Ingredients {
-		ingredient := &recipe.Ingredients[i] // should we mutate or create new recipe.
+	if recipe == nil {
+		return
+	}
+	enrichIngredientsMetadata(recipe.Ingredients, byProductID)
+}
+
+func enrichWineSelectionMetadata(selection *ai.WineSelection, byProductID map[string]ai.InputIngredient) {
+	if selection == nil {
+		return
+	}
+	enrichIngredientsMetadata(selection.Wines, byProductID)
+}
+
+func enrichIngredientsMetadata(ingredients []ai.Ingredient, byProductID map[string]ai.InputIngredient) {
+	for i := range ingredients {
+		ingredient := &ingredients[i] // should we mutate or create new ingredient.
 		input, ok := byProductID[strings.TrimSpace(ingredient.ProductID)]
 		if !ok {
 			continue
@@ -375,6 +386,12 @@ func enrichRecipeIngredientMetadata(recipe *ai.Recipe, byProductID map[string]ai
 		ingredient.AisleNumber = strings.TrimSpace(input.AisleNumber)
 		ingredient.Price = inputIngredientDisplayPrice(input)
 	}
+}
+
+func inputIngredientMap(ingredients []ai.InputIngredient) map[string]ai.InputIngredient {
+	return lo.SliceToMap(ingredients, func(ing ai.InputIngredient) (string, ai.InputIngredient) {
+		return strings.TrimSpace(ing.ProductID), ing
+	})
 }
 
 func inputIngredientDisplayPrice(input ai.InputIngredient) string {

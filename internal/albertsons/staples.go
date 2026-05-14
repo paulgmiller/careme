@@ -164,7 +164,7 @@ func productToIngredient(product query.PathwaySearchProduct, _ int) ai.InputIngr
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		Categories:   categories,
-		AisleNumber:  product.AisleID, // also an aisle name if thats better?
+		AisleNumber:  product.AisleName, // aisle id was prty wierd string 1 19 3 1, 1 23 2 10
 	})
 }
 

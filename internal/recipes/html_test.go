@@ -136,6 +136,40 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{{
+		Title:       "Added Dinner",
+		Description: "Selected dinner",
+		Ingredients: []ai.Ingredient{
+			{Name: "Butter", Quantity: "2 tbsp", AisleNumber: "dairy-eggs"},
+			{Name: "Milk", Quantity: "1 cup", AisleNumber: "dairy-eggs"},
+			{Name: "Beans", Quantity: "1 can", AisleNumber: "2"},
+			{Name: "Salt", Quantity: "1 tsp"},
+		},
+		Instructions: []string{"Cook."},
+		Health:       "Balanced",
+		DrinkPairing: "Water",
+		Saved:        true,
+	}}}
+	p := DefaultParams(&loc, time.Now())
+
+	w := httptest.NewRecorder()
+	FormatShoppingListHTMLForHash(t.Context(), p, shoppingList, nil, true, p.Hash(), w)
+	html := assertHTTPSuccess(t, w)
+
+	isValidHTML(t, html)
+	if got := strings.Count(html, ">Dairy &amp; eggs<"); got != 1 {
+		t.Fatalf("shopping list should render dairy aisle heading once, got %d", got)
+	}
+	if got := strings.Count(html, ">Aisle 2<"); got != 1 {
+		t.Fatalf("shopping list should render numeric aisle heading once, got %d", got)
+	}
+	if got := strings.Count(html, ">Other items<"); got != 1 {
+		t.Fatalf("shopping list should render missing aisle heading once, got %d", got)
+	}
+}
+
 func TestFormatMail_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())

@@ -85,9 +85,13 @@ func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 	ingredients := schemaObject(t, properties["ingredients"])
 	items := schemaObject(t, ingredients["items"])
 	ingredientProperties := schemaProperties(t, items)
+	ingredientRequired := schemaRequired(t, items)
 
 	if _, ok := ingredientProperties["id"]; !ok {
 		t.Fatalf("expected ingredient schema to include product id")
+	}
+	if !slices.Contains(ingredientRequired, "id") {
+		t.Fatalf("expected ingredient schema to require product id, got %v", ingredientRequired)
 	}
 	if _, ok := ingredientProperties["name"]; !ok {
 		t.Fatalf("expected ingredient schema to include name")
@@ -101,6 +105,23 @@ func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 	if _, ok := ingredientProperties["aisle_number"]; ok {
 		t.Fatalf("did not expect model schema to include server-owned aisle number")
 	}
+}
+
+func schemaRequired(t *testing.T, schema map[string]any) []string {
+	t.Helper()
+	raw, ok := schema["required"].([]any)
+	if !ok {
+		t.Fatalf("expected required array, got %#v", schema["required"])
+	}
+	required := make([]string, 0, len(raw))
+	for _, value := range raw {
+		field, ok := value.(string)
+		if !ok {
+			t.Fatalf("expected required field string, got %#v", value)
+		}
+		required = append(required, field)
+	}
+	return required
 }
 
 func schemaProperties(t *testing.T, schema map[string]any) map[string]any {

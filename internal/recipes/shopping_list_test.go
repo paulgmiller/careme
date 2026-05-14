@@ -79,3 +79,50 @@ func TestShoppingListForDisplay_PreservesFirstSeenOrderWithinSameAisleState(t *t
 		{Name: "Oil", Quantity: "2 tbsp"},
 	}, got)
 }
+
+func TestShoppingListGroupsForDisplay_GroupsSortedItemsByAisle(t *testing.T) {
+	items := shoppingListForDisplay([]ai.Ingredient{
+		{Name: "Salt", Quantity: "1 tsp"},
+		{Name: "Rice", Quantity: "1 cup", AisleNumber: "10"},
+		{Name: "Beans", Quantity: "1 can", AisleNumber: "2"},
+		{Name: "Butter", Quantity: "2 tbsp", AisleNumber: "dairy-eggs"},
+		{Name: "Milk", Quantity: "1 cup", AisleNumber: "dairy-eggs"},
+		{Name: "Basil", Quantity: "1 bunch", AisleNumber: "fresh-herbs"},
+	})
+
+	got := shoppingListGroupsForDisplay(items)
+
+	assert.Equal(t, []shoppingListGroup{
+		{
+			Aisle: "Aisle 2",
+			Items: []*ai.Ingredient{
+				{Name: "Beans", Quantity: "1 can", AisleNumber: "2"},
+			},
+		},
+		{
+			Aisle: "Aisle 10",
+			Items: []*ai.Ingredient{
+				{Name: "Rice", Quantity: "1 cup", AisleNumber: "10"},
+			},
+		},
+		{
+			Aisle: "Dairy & eggs",
+			Items: []*ai.Ingredient{
+				{Name: "Butter", Quantity: "2 tbsp", AisleNumber: "dairy-eggs"},
+				{Name: "Milk", Quantity: "1 cup", AisleNumber: "dairy-eggs"},
+			},
+		},
+		{
+			Aisle: "Fresh herbs",
+			Items: []*ai.Ingredient{
+				{Name: "Basil", Quantity: "1 bunch", AisleNumber: "fresh-herbs"},
+			},
+		},
+		{
+			Aisle: "Other items",
+			Items: []*ai.Ingredient{
+				{Name: "Salt", Quantity: "1 tsp"},
+			},
+		},
+	}, got)
+}
