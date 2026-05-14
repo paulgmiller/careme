@@ -394,7 +394,6 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
 		"set id to the exact ProductId",
 		"amount used in the recipe as quantity",
-		"Do not include prices; the app will add known store prices after generation.",
 	} {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)

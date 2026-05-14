@@ -158,6 +158,16 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 		g.writeStatus(ctx, hash, menuPlan.String())
 
+		// this SHOULD hit the cache and we could do it in parallel with menu planning
+		ingredients, err := g.staples.FetchStaples(ctx, p)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get staples: %w", err)
+		}
+		ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
+			// TODO make configurable?
+			return ing.Grade == nil || ing.Grade.Score > 6
+		})
+
 		results, err := parallelism.MapWithErrors(replacements, func(replacement plannedRegeneration) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
@@ -168,7 +178,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 				return nil, err
 			}
 			recipe.OriginHash = hash
-			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, nil)
+			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingredients)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate replacement recipes with AI: %w", err)
@@ -217,7 +227,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, err
 		}
-		enrichRecipeIngredientMetadata(recipe, ingredients)
 		// would prefer to do this deeper down in client like response id but have to pass in the hash
 		recipe.OriginHash = hash
 		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingredients)
@@ -286,6 +295,8 @@ func regenerateInstructions(p *generatorParams) []string {
 }
 
 func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, inputs []ai.InputIngredient) (*ai.Recipe, error) {
+	// should this enrich an save be outside?
+	enrichRecipeIngredientMetadata(recipe, inputs)
 	if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 		return nil, err
 	}
