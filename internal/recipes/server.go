@@ -747,7 +747,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := s.paramsForAction(ctx, hash, currentUser.ID, strings.TrimSpace(r.FormValue("instructions")))
+	p, err := paramsForAction(ctx, hash, currentUser.ID, strings.TrimSpace(r.FormValue("instructions")), s.recipeio)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -801,7 +801,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := s.paramsForAction(ctx, hash, userid, "")
+	p, err := paramsForAction(ctx, hash, userid, "", s.recipeio)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -833,18 +833,18 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 }
 
 // paramsForAction merges old saved params with current saved/dismissed selection into new params.
-func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions string) (*generatorParams, error) {
-	baseParams, err := s.ParamsFromCache(ctx, hash)
+func paramsForAction(ctx context.Context, hash, userID, instructions string, io recipeio) (*generatorParams, error) {
+	baseParams, err := io.ParamsFromCache(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load recipe parameters")
 	}
 	// good place to fetch meal plan? except we want to kill paramsForAction?
-	currentList, err := s.FromCache(ctx, hash)
+	currentList, err := io.FromCache(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load recipe list")
 	}
 
-	selection, err := s.loadRecipeSelection(ctx, userID, hash)
+	selection, err := io.loadRecipeSelection(ctx, userID, hash)
 	if err != nil {
 		// should we just fall back to params? selection saving
 		return nil, fmt.Errorf("failed to load recipe selection")
@@ -856,7 +856,38 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 	if currentList.Plan != nil {
 		params.PreviousMenuPlanResponseID = strings.TrimSpace(currentList.Plan.ResponseID)
 	}
-	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
+	originalSelection := selectionFromParams(baseParams)
+	selection = originalSelection.override(selection)
+	localRecipes := lo.SliceToMap(append(params.Saved, params.Dismissed...),
+		func(r ai.Recipe) (string, *ai.Recipe) {
+			return r.ComputeHash(), &r
+		})
+
+	params.Saved = []ai.Recipe{}
+	for _, hash := range selection.SavedHashes {
+		if r, ok := localRecipes[hash]; ok {
+			params.Saved = append(params.Saved, *r)
+			continue
+		}
+		r, err := io.SingleFromCache(ctx, hash)
+		if err != nil {
+			return nil, err
+		}
+		params.Saved = append(params.Saved, *r)
+	}
+	params.Dismissed = []ai.Recipe{}
+	for _, hash := range selection.DismissedHashes {
+		if r, ok := localRecipes[hash]; ok {
+			params.Dismissed = append(params.Dismissed, *r)
+			continue
+		}
+		r, err := io.SingleFromCache(ctx, hash)
+		if err != nil {
+			return nil, err
+		}
+		params.Dismissed = append(params.Dismissed, *r)
+	}
+
 	return &params, nil
 }
 
@@ -983,8 +1014,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		s.mergeParamsWithSelection(ctx, p, selection, slist.Recipes)
-		applySavedToRecipes(slist.Recipes, p)
+		applySavedToRecipes(slist.Recipes, selection)
 		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
 		var wineWG sync.WaitGroup
 		var wineMu sync.Mutex

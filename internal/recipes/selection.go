@@ -97,52 +97,6 @@ func selectionFromParams(p *generatorParams) recipeSelection {
 	return selection
 }
 
-func (s *server) selectionRecipes(ctx context.Context, hashes []string, current []ai.Recipe) []ai.Recipe {
-	if len(hashes) == 0 {
-		return nil
-	}
-	currentByHash := make(map[string]ai.Recipe, len(current))
-	for _, recipe := range current {
-		currentByHash[recipe.ComputeHash()] = recipe
-	}
-
-	recipes := make([]ai.Recipe, 0, len(hashes))
-	for _, hash := range hashes {
-		if recipe, ok := currentByHash[hash]; ok {
-			recipes = append(recipes, recipe)
-			continue
-		}
-		recipe, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			continue
-		}
-		recipes = append(recipes, *recipe)
-	}
-	return recipes
-}
-
-func (s *server) mergeParamsWithSelection(ctx context.Context, p *generatorParams, selection recipeSelection, current []ai.Recipe) {
-	if p == nil {
-		return
-	}
-
-	merged := recipeSelection{
-		SavedHashes: make([]string, 0, len(p.Saved)),
-	}
-	for _, r := range p.Saved {
-		merged.SavedHashes = append(merged.SavedHashes, r.ComputeHash())
-	}
-	for _, hash := range selection.SavedHashes {
-		merged.markSaved(hash)
-	}
-	for _, hash := range selection.DismissedHashes {
-		merged.markDismissed(hash)
-	}
-
-	p.Saved = s.selectionRecipes(ctx, merged.SavedHashes, current)
-	p.Dismissed = s.selectionRecipes(ctx, merged.DismissedHashes, current)
-}
-
 func (selection recipeSelection) override(new recipeSelection) recipeSelection {
 	for _, hash := range new.SavedHashes {
 		selection.markSaved(hash)
@@ -162,13 +116,12 @@ func (selection recipeSelection) IsSaved(hash string) bool {
 	return false
 }
 
-func applySavedToRecipes(recipes []ai.Recipe, p *generatorParams) {
-	saved := make(map[string]struct{}, len(p.Saved))
-	for _, r := range p.Saved {
-		saved[r.ComputeHash()] = struct{}{}
-	}
+func applySavedToRecipes(recipes []ai.Recipe, selection recipeSelection) {
+	saved := lo.SliceToMap(selection.SavedHashes, func(hash string) (string, bool) {
+		return hash, true
+	})
 	for i := range recipes {
 		hash := recipes[i].ComputeHash()
-		_, recipes[i].Saved = saved[hash]
+		recipes[i].Saved = saved[hash]
 	}
 }
