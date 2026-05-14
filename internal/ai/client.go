@@ -382,6 +382,7 @@ type MenuPlan struct {
 // meant for status
 func (p MenuPlan) String() string {
 	var sb strings.Builder
+	sb.WriteString("Tenative Menu\n")
 	for _, rp := range p.Plans {
 		fmt.Fprintf(&sb, "%s using %s\n", rp.Cuisine, rp.AnchorIngredient)
 	}
