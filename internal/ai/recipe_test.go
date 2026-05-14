@@ -79,6 +79,48 @@ func TestNewClientUsesGPT55ForRecipeFlow(t *testing.T) {
 	}
 }
 
+func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	properties := schemaProperties(t, client.recipeSchema)
+	ingredients := schemaObject(t, properties["ingredients"])
+	items := schemaObject(t, ingredients["items"])
+	ingredientProperties := schemaProperties(t, items)
+
+	if _, ok := ingredientProperties["id"]; !ok {
+		t.Fatalf("expected ingredient schema to include product id")
+	}
+	if _, ok := ingredientProperties["name"]; !ok {
+		t.Fatalf("expected ingredient schema to include name")
+	}
+	if _, ok := ingredientProperties["quantity"]; !ok {
+		t.Fatalf("expected ingredient schema to include quantity")
+	}
+	if _, ok := ingredientProperties["price"]; ok {
+		t.Fatalf("did not expect model schema to include server-owned price")
+	}
+	if _, ok := ingredientProperties["aisle_number"]; ok {
+		t.Fatalf("did not expect model schema to include server-owned aisle number")
+	}
+}
+
+func schemaProperties(t *testing.T, schema map[string]any) map[string]any {
+	t.Helper()
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties object, got %#v", schema["properties"])
+	}
+	return properties
+}
+
+func schemaObject(t *testing.T, value any) map[string]any {
+	t.Helper()
+	object, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("expected schema object, got %#v", value)
+	}
+	return object
+}
+
 func TestNormalizeWineStyle(t *testing.T) {
 	tests := []struct {
 		name string
@@ -228,6 +270,8 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"Ensure the first instructions say what prep can be done ahead of time.",
 		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
 		"set id to the exact ProductId",
+		"amount used in the recipe as quantity",
+		"Do not include prices; the app will add known store prices after generation.",
 	} {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)
