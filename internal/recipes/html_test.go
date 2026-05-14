@@ -69,7 +69,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), w)
 	html := assertHTTPSuccess(t, w)
 	isValidHTML(t, html)
 	if !strings.Contains(html, "Total time:") {
@@ -121,7 +121,7 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	shoppingList.Recipes[0].Saved = true
 
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, shoppingList, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, shoppingList, nil, true, p.Hash(), w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -136,11 +136,45 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{{
+		Title:       "Added Dinner",
+		Description: "Selected dinner",
+		Ingredients: []ai.Ingredient{
+			{Name: "Butter", Quantity: "2 tbsp", AisleNumber: "dairy-eggs"},
+			{Name: "Milk", Quantity: "1 cup", AisleNumber: "dairy-eggs"},
+			{Name: "Beans", Quantity: "1 can", AisleNumber: "2"},
+			{Name: "Salt", Quantity: "1 tsp"},
+		},
+		Instructions: []string{"Cook."},
+		Health:       "Balanced",
+		DrinkPairing: "Water",
+		Saved:        true,
+	}}}
+	p := DefaultParams(&loc, time.Now())
+
+	w := httptest.NewRecorder()
+	FormatShoppingListHTMLForHash(t.Context(), p, shoppingList, nil, true, p.Hash(), w)
+	html := assertHTTPSuccess(t, w)
+
+	isValidHTML(t, html)
+	if got := strings.Count(html, ">Dairy &amp; eggs<"); got != 1 {
+		t.Fatalf("shopping list should render dairy aisle heading once, got %d", got)
+	}
+	if got := strings.Count(html, ">Aisle 2<"); got != 1 {
+		t.Fatalf("shopping list should render numeric aisle heading once, got %d", got)
+	}
+	if got := strings.Count(html, ">Other items<"); got != 1 {
+		t.Fatalf("shopping list should render missing aisle heading once, got %d", got)
+	}
+}
+
 func TestFormatMail_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -155,7 +189,7 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 
 	templates.Clarityproject = "test456"
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), w)
 	assertHTTPSuccess(t, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.clarity.ms/tag/")) {
 		t.Error("HTML should contain Clarity script URL")
@@ -179,7 +213,7 @@ func TestFormatShoppingListHTML_IncludesClaritySessionID(t *testing.T) {
 	ctx := logsetup.WithSessionID(t.Context(), "sess-123")
 
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(ctx, p, list, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(ctx, p, list, nil, true, p.Hash(), w)
 	assertHTTPSuccess(t, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte(`window.clarity("identify", "sess-123", "sess-123")`)) {
 		t.Error("HTML should include Clarity identify call with session id")
@@ -191,7 +225,7 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	templates.Clarityproject = ""
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), w)
 	assertHTTPSuccess(t, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")
@@ -208,7 +242,7 @@ func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
 	})
 	templates.GoogleTagID = "AW-1234567890"
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), w)
 	assertHTTPSuccess(t, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtag/js?id=AW-1234567890")) {
 		t.Error("HTML should contain Google tag script URL")
@@ -228,7 +262,7 @@ func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 	})
 	templates.GoogleTagID = ""
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), w)
 	assertHTTPSuccess(t, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("googletagmanager.com")) {
 		t.Error("HTML should not contain Google tag script when tag ID is empty")
@@ -239,7 +273,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, true, p.Hash(), w)
 	html := assertHTTPSuccess(t, w)
 
 	// Verify "Careme Recipes" is a link to home page
@@ -398,7 +432,7 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, multiRecipeList, nil, false, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, multiRecipeList, nil, false, p.Hash(), w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -519,7 +553,7 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		},
 	}
 
-	FormatShoppingListHTMLForHash(t.Context(), p, listWithoutPrice, nil, true, p.Hash(), nil, w)
+	FormatShoppingListHTMLForHash(t.Context(), p, listWithoutPrice, nil, true, p.Hash(), w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -592,7 +626,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 			},
 			Commentary: "Good with roasted flavors.",
 		},
-	}, true, p.Hash(), nil, w)
+	}, true, p.Hash(), w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)

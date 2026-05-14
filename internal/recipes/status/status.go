@@ -26,22 +26,12 @@ func Sales(ings []ai.InputIngredient) []string {
 
 func Ingredients(ings []ai.InputIngredient, originalCount int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Considering %d out of %d ingredients", len(ings), originalCount)
+	fmt.Fprintf(&b, "Considering %d out of %d ingredients\n", len(ings), originalCount)
 	for _, sale := range Sales(ings) {
-		b.WriteString("\n")
 		b.WriteString(sale)
-	}
-	return b.String()
-}
-
-func Titles(prefix string, recipes []ai.Recipe) string {
-	var b strings.Builder
-	b.WriteString(prefix)
-	b.WriteString("\n")
-	for _, r := range recipes {
-		b.WriteString(r.Title)
 		b.WriteString("\n")
 	}
+
 	return b.String()
 }
 
@@ -50,12 +40,11 @@ func Regen(instructions string, dismissed []ai.Recipe) string {
 	if len(instructions) > 0 {
 		fmt.Fprintf(&sb, "Noodling on %q\n", instructions)
 	}
-	if len(dismissed) > 0 {
-		sb.WriteString(Titles("Tossing out ", dismissed))
+	for _, d := range dismissed {
+		fmt.Fprintf(&sb, "Tossing %s\n", d.Title)
 	}
-
 	if sb.Len() == 0 {
-		return "Guess I'll keep going"
+		return "Guess I'll keep going\n"
 	}
 	return sb.String()
 }

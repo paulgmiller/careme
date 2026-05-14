@@ -91,20 +91,27 @@
                   Shopping list
                 </summary>
                 <div class="mt-4">
-                <ul class="space-y-2 text-ink-700">
-                  {{range .ShoppingList}}
-                  <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                    <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
-                      <span class="font-medium text-brand-700">{{.Name}}</span>
-                      {{if .Quantity}}
-                      <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
-                      {{else}}
-                      <span class="hidden sm:block" aria-hidden="true"></span>
-                      {{end}}
-                    </div>
-                  </li>
-                  {{end}}
-                </ul>
+                  <div class="space-y-5 text-ink-700">
+                    {{range .ShoppingList}}
+                    <section>
+                      <h3 class="text-xs font-semibold uppercase tracking-wide text-ink-500">{{.Aisle}}</h3>
+                      <ul class="mt-2 space-y-2">
+                        {{range .Items}}
+                        <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+                          <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
+                            <span class="font-medium text-brand-700">{{.Name}}</span>
+                            {{if .Quantity}}
+                            <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
+                            {{else}}
+                            <span class="hidden sm:block" aria-hidden="true"></span>
+                            {{end}}
+                          </div>
+                        </li>
+                        {{end}}
+                      </ul>
+                    </section>
+                    {{end}}
+                  </div>
                 </div>
               </details>
             </section>
