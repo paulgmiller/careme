@@ -37,15 +37,6 @@ func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
 	}, got)
 }
 
-func TestTitlesListsRecipeTitlesAfterPrefix(t *testing.T) {
-	got := Titles("Getting feedback on these recipes:", []ai.Recipe{
-		{Title: "Lemony Beans"},
-		{Title: "Pepper Pasta"},
-	})
-
-	assert.Equal(t, "Getting feedback on these recipes:\nLemony Beans\nPepper Pasta\n", got)
-}
-
 func TestIngredientsIncludesCountAndSales(t *testing.T) {
 	got := Ingredients([]ai.InputIngredient{
 		{

@@ -313,8 +313,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	ctx, span := tracer.Start(ctx, "recipes.critique.recipe")
 	defer span.End()
 
-	// going to overwrite other statuss
-	g.writeStatus(ctx, hash, status.Titles("Getting feedback on: ", []ai.Recipe{*recipe}))
+	g.writeStatus(ctx, hash, "Getting feedback on "+recipe.Title+"\n")
 
 	result := <-g.critiquer.CritiqueRecipe(ctx, *recipe)
 	if result.Err != nil {
@@ -328,7 +327,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	span.SetAttributes(attribute.Bool("regenaftercrique", true))
 	slog.InfoContext(ctx, "low scoring recipe", "hash", hash, "title", recipe.Title, "score", result.Critique.OverallScore)
 	// going to overwrite other statuses
-	g.writeStatus(ctx, hash, status.Titles("Making adjustments to this recipe: ", []ai.Recipe{*recipe}))
+	g.writeStatus(ctx, hash, "Adjusting "+recipe.Title+"\n")
 
 	// panic?
 	if strings.TrimSpace(recipe.ResponseID) == "" {
