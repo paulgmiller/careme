@@ -251,7 +251,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		}
 		selection = selection.override(latestSel)
 	}
-	recipe.Saved = selection.IsSaved(recipe.ComputeHash())
 
 	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
 	FormatRecipeHTML(ctx, p, *recipe, signedIn, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
@@ -525,8 +524,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recipe.Saved = true
-
+	saved := true
 	var response bytes.Buffer
 	if isSingleRecipeAction(r) {
 		if err := RenderRecipeSaveActionHTML(*recipe, shoppingListHash, &response); err != nil {
@@ -535,7 +533,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		if err := RenderShoppingRecipeCardHTML(*recipe, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+		if err := RenderShoppingRecipeCardHTML(*recipe, saved, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
 			slog.ErrorContext(ctx, "failed to render save card response", "hash", recipeHash, "error", err)
 			http.Error(w, "failed to write response", http.StatusInternalServerError)
 			return
@@ -628,9 +626,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
-
-	recipe.Saved = false
-
+	saved := false
 	var response bytes.Buffer
 	if isSingleRecipeAction(r) {
 		if err := RenderRecipeSaveActionHTML(*recipe, selectionHash, &response); err != nil {
@@ -639,7 +635,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		if err := RenderShoppingRecipeCardHTML(*recipe, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+		if err := RenderShoppingRecipeCardHTML(*recipe, saved, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
 			slog.ErrorContext(ctx, "failed to render dismiss card response", "hash", recipeHash, "error", err)
 			http.Error(w, "failed to write response", http.StatusInternalServerError)
 			return
@@ -1014,7 +1010,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		applySavedToRecipes(slist.Recipes, selection)
 		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
 		var wineWG sync.WaitGroup
 		var wineMu sync.Mutex
@@ -1037,7 +1032,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		wineWG.Wait()
 
-		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, w)
+		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, selection, w)
 		return
 	}
 

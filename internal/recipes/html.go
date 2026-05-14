@@ -16,8 +16,6 @@ import (
 	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
 	"careme/internal/templates"
-
-	"github.com/samber/lo"
 )
 
 type recipeImageView struct {
@@ -56,11 +54,8 @@ type shoppingListGroup struct {
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter,
+	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, selection recipeSelection, writer http.ResponseWriter,
 ) {
-	dismissedHashes := lo.SliceToMap(p.Dismissed, func(r ai.Recipe) (string, bool) {
-		return r.ComputeHash(), true
-	})
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
@@ -74,10 +69,10 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			ShoppingListHash:   hash,
 			ServerSignedIn:     signedIn,
 			DisplayIngredients: displayIngredients,
-			Dismissed:          dismissedHashes[recipeHash],
+			Dismissed:          selection.IsDismissed(recipeHash),
 			WineRecommendation: wineRecommendation,
 		})
-		if recipe.Saved {
+		if selection.IsSaved(recipeHash) {
 			hasSavedRecipes = true
 			combinedIngredients = append(combinedIngredients, displayIngredients...)
 		}
@@ -214,14 +209,14 @@ func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 }
 
 // called from shoppping list and will either mimimize dimissed or bring back in all on undo.
-func RenderShoppingRecipeCardHTML(recipe ai.Recipe, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
 	data := shoppingRecipeView{
 		Recipe:             recipe,
 		Hash:               recipe.ComputeHash(),
 		ShoppingListHash:   shoppingListHash,
 		ServerSignedIn:     true, // have to be signed in to toggle
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
-		Dismissed:          !recipe.Saved, // no inbetween state left.
+		Dismissed:          saved,
 		WineRecommendation: wineRecommendation,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)

@@ -1777,7 +1777,7 @@ func TestParamsForAction_PreservesBaseSavedSelectionAndDropsBaseDismissedWhenSel
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
 
-	updated, err := s.paramsForAction(t.Context(), originHash, "user-1", "make it vegetarian")
+	updated, err := paramsForAction(t.Context(), originHash, "user-1", "make it vegetarian", s.recipeio)
 	if err != nil {
 		t.Fatalf("paramsForAction failed: %v", err)
 	}

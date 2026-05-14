@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/ai"
 	"careme/internal/cache"
 
 	"github.com/samber/lo"
@@ -116,12 +115,11 @@ func (selection recipeSelection) IsSaved(hash string) bool {
 	return false
 }
 
-func applySavedToRecipes(recipes []ai.Recipe, selection recipeSelection) {
-	saved := lo.SliceToMap(selection.SavedHashes, func(hash string) (string, bool) {
-		return hash, true
-	})
-	for i := range recipes {
-		hash := recipes[i].ComputeHash()
-		recipes[i].Saved = saved[hash]
+func (selection recipeSelection) IsDismissed(hash string) bool {
+	for _, savedHash := range selection.DismissedHashes {
+		if hash == savedHash {
+			return true
+		}
 	}
+	return false
 }
