@@ -109,7 +109,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	if err != nil {
 		return nil, err
 	}
-	enrichWineSelectionMetadata(selection, inputIngredientMap(wines))
+	enrichIngredientsMetadata(selection.Wines, inputIngredientMap(wines))
 	return selection, nil
 }
 
@@ -180,7 +180,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 				return nil, err
 			}
 			recipe.OriginHash = hash
-			enrichRecipeIngredientMetadata(recipe, ingMap)
+			enrichIngredientsMetadata(recipe.Ingredients, ingMap)
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 				return nil, err
 			}
@@ -237,7 +237,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		// would prefer to do this deeper down in client like response id but have to pass in the hash
 		recipe.OriginHash = hash
 
-		enrichRecipeIngredientMetadata(recipe, ingMap)
+		enrichIngredientsMetadata(recipe.Ingredients, ingMap)
 		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 			return nil, err
 		}
@@ -338,7 +338,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipe %q from critique feedback: %w", recipe.Title, err)
 	}
-	enrichRecipeIngredientMetadata(retry, ingMap)
+	enrichIngredientsMetadata(retry.Ingredients, ingMap)
 	retry.OriginHash = hash
 	retry.ParentHash = recipe.ComputeHash()
 	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
@@ -359,20 +359,6 @@ func (g *generatorService) critiqueInBackground(ctx context.Context, recipe ai.R
 			}
 		}
 	}()
-}
-
-func enrichRecipeIngredientMetadata(recipe *ai.Recipe, byProductID map[string]ai.InputIngredient) {
-	if recipe == nil {
-		return
-	}
-	enrichIngredientsMetadata(recipe.Ingredients, byProductID)
-}
-
-func enrichWineSelectionMetadata(selection *ai.WineSelection, byProductID map[string]ai.InputIngredient) {
-	if selection == nil {
-		return
-	}
-	enrichIngredientsMetadata(selection.Wines, byProductID)
 }
 
 func enrichIngredientsMetadata(ingredients []ai.Ingredient, byProductID map[string]ai.InputIngredient) {
