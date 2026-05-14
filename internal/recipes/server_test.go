@@ -133,7 +133,6 @@ func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T
 	s := newTestServer(t, withTestCache(cacheStore))
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	p.ResponseID = "resp-123"
 	originHash := p.Hash()
 	require.NoError(t, s.SaveParams(t.Context(), p))
 
@@ -141,8 +140,7 @@ func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T
 	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed"}
 	saveRecipesForOrigin(t, s, originHash, savedRecipe, dismissedRecipe)
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes:    []ai.Recipe{savedRecipe, dismissedRecipe},
-		ResponseID: "resp-123",
+		Recipes: []ai.Recipe{savedRecipe, dismissedRecipe},
 	}, originHash))
 
 	require.NoError(t, s.saveRecipeSelection(t.Context(), "mock-clerk-user-id", originHash, recipeSelection{
@@ -522,7 +520,6 @@ func TestHandleSingle_UsesSelectionForSavedState(t *testing.T) {
 		&locations.Location{ID: "70003002", Name: "Single Store"},
 		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 	)
-	p.ResponseID = "resp-single-selection"
 	originHash := p.Hash()
 	require.NoError(t, s.SaveParams(t.Context(), p))
 

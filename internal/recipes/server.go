@@ -857,7 +857,6 @@ func (s *server) paramsForAction(ctx context.Context, hash, userID, instructions
 		params.PreviousMenuPlanResponseID = strings.TrimSpace(currentList.Plan.ResponseID)
 	}
 	s.mergeParamsWithSelection(ctx, &params, selection, currentList.Recipes)
-	params.ResponseID = currentList.ResponseID
 	return &params, nil
 }
 
