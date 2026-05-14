@@ -36,8 +36,8 @@ type generatorParams struct {
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
 	LastRecipes  []string `json:"-"`                   // this doesn't get populated until after save.
 	// UserID         string      `json:"user_id,omitempty"`
-	// ResponseID string `json:"response_id,omitempty"`
-	// TODO Both should just be title and hash instead of full ai.Recipe
+	// ideally this would be a section and we'd fetch titles and other things as needed
+	// as is this records a selectio at the time of a regeneration
 	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 
