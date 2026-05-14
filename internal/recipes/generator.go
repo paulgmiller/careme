@@ -178,6 +178,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 				return nil, err
 			}
 			recipe.OriginHash = hash
+			enrichRecipeIngredientMetadata(recipe, ingredients)
+			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
+				return nil, err
+			}
 			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingredients)
 		})
 		if err != nil {
@@ -229,6 +233,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		}
 		// would prefer to do this deeper down in client like response id but have to pass in the hash
 		recipe.OriginHash = hash
+		enrichRecipeIngredientMetadata(recipe, ingredients)
+		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
+			return nil, err
+		}
 		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingredients)
 	})
 	if err != nil {
@@ -295,11 +303,6 @@ func regenerateInstructions(p *generatorParams) []string {
 }
 
 func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, inputs []ai.InputIngredient) (*ai.Recipe, error) {
-	// should this enrich an save be outside?
-	enrichRecipeIngredientMetadata(recipe, inputs)
-	if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
-		return nil, err
-	}
 	if g.critiquer == nil {
 		return recipe, nil
 	}
