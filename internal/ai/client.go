@@ -84,7 +84,6 @@ func (r *Recipe) ComputeHash() string {
 // now we can reuse first recipes and people can go off in different directions.
 // Mostly a collection of generaetd things could live in recipes instead of here.
 type ShoppingList struct {
-	// ResponseID string    `json:"response_id,omitempty" jsonschema:"-"`
 	Recipes []Recipe  `json:"recipes"`
 	Plan    *MenuPlan `json:"plan"`
 }
