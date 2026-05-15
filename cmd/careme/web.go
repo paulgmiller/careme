@@ -118,6 +118,8 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
+	adminMux.Handle("/prompt/menu/{hash}", recipes.AdminMenuPromptJSON(cache))
+	adminMux.Handle("/prompt/recipe/{hash}", recipes.AdminRecipePromptJSON(cache))
 	adminMux.Handle("/critiques", critique.AdminCritiquesPage(critique.NewStore(cache), recipeIO))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
