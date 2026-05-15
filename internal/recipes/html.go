@@ -16,8 +16,6 @@ import (
 	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
 	"careme/internal/templates"
-
-	"github.com/samber/lo"
 )
 
 type recipeImageView struct {
@@ -44,7 +42,8 @@ type shoppingRecipeView struct {
 	ShoppingListHash   string
 	ServerSignedIn     bool
 	DisplayIngredients []ai.Ingredient // merged food and wine
-	Dismissed          bool            // saved already in recipe
+	Saved              bool
+	Dismissed          bool
 	WineRecommendation *ai.WineSelection
 }
 
@@ -56,27 +55,28 @@ type shoppingListGroup struct {
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter,
+	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, selection recipeSelection, writer http.ResponseWriter,
 ) {
-	dismissedHashes := lo.SliceToMap(p.Dismissed, func(r ai.Recipe) (string, bool) {
-		return r.ComputeHash(), true
-	})
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
+	hasSavedRecipes := false
 	for _, recipe := range l.Recipes {
 		recipeHash := recipe.ComputeHash()
 		wineRecommendation := wineRecommendations[recipeHash]
 		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
+		saved := selection.IsSaved(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
 			Hash:               recipeHash,
 			ShoppingListHash:   hash,
 			ServerSignedIn:     signedIn,
 			DisplayIngredients: displayIngredients,
-			Dismissed:          dismissedHashes[recipeHash],
+			Saved:              saved,
+			Dismissed:          selection.IsDismissed(recipeHash),
 			WineRecommendation: wineRecommendation,
 		})
-		if recipe.Saved {
+		if saved {
+			hasSavedRecipes = true
 			combinedIngredients = append(combinedIngredients, displayIngredients...)
 		}
 	}
@@ -101,7 +101,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Hash:            hash,
 		Recipes:         recipeViews,
 		ShoppingList:    shoppingListForDisplay(combinedIngredients),
-		HasSavedRecipes: len(p.Saved) > 0,
+		HasSavedRecipes: hasSavedRecipes,
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
 	}
@@ -113,7 +113,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool,
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, saved bool,
 	critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry,
 	fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter,
 ) {
@@ -131,6 +131,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ClarityScript       template.HTML
 		GoogleTagScript     template.HTML
 		Recipe              ai.Recipe
+		Saved               bool
 		DisplayIngredients  []ai.Ingredient
 		OriginHash          string
 		ResponseID          string
@@ -149,6 +150,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ClarityScript:       templates.ClarityScript(ctx),
 		GoogleTagScript:     templates.GoogleTagScript(),
 		Recipe:              recipe,
+		Saved:               saved,
 		DisplayIngredients:  ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		OriginHash:          recipe.OriginHash,
 		ResponseID:          activeResponseID,
@@ -212,28 +214,31 @@ func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 }
 
 // called from shoppping list and will either mimimize dimissed or bring back in all on undo.
-func RenderShoppingRecipeCardHTML(recipe ai.Recipe, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
 	data := shoppingRecipeView{
 		Recipe:             recipe,
 		Hash:               recipe.ComputeHash(),
 		ShoppingListHash:   shoppingListHash,
 		ServerSignedIn:     true, // have to be signed in to toggle
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
-		Dismissed:          !recipe.Saved, // no inbetween state left.
+		Saved:              saved,
+		Dismissed:          !saved,
 		WineRecommendation: wineRecommendation,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
 }
 
 // called from single recipe page just swaps save dimiss
-func RenderRecipeSaveActionHTML(recipe ai.Recipe, originHash string, writer io.Writer) error {
+func RenderRecipeSaveActionHTML(recipe ai.Recipe, originHash string, saved bool, writer io.Writer) error {
 	data := struct {
 		Recipe         ai.Recipe
+		Saved          bool
 		OriginHash     string
 		RecipeHash     string
 		ServerSignedIn bool
 	}{
 		Recipe:         recipe,
+		Saved:          saved,
 		OriginHash:     originHash,
 		RecipeHash:     recipe.ComputeHash(),
 		ServerSignedIn: true,

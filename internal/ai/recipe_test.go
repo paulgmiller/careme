@@ -38,10 +38,10 @@ func TestRecipeComputeHash(t *testing.T) {
 		t.Fatalf("Hash changed by json marshalling: %s", hash1)
 	}
 
-	recipe.Saved = true
 	recipe.OriginHash = "somehashvalue"
+	recipe.ParentHash = "parenthashvalue"
 
-	// Hash should be consistent regardless of silly fields
+	// Hash should be consistent regardless of provenance fields.
 	hash2 := recipe.ComputeHash()
 	if hash1 != hash2 {
 		t.Fatalf("hash should be consistent: %s != %s", hash1, hash2)
