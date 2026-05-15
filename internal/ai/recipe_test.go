@@ -83,7 +83,7 @@ func TestNewClientUsesGPT55ForRecipeFlow(t *testing.T) {
 }
 
 func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil)
+	client := NewClient("test-key", "ignored", nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 	ingredients := schemaObject(t, properties["ingredients"])
 	items := schemaObject(t, ingredients["items"])

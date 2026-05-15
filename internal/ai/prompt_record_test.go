@@ -41,7 +41,7 @@ func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
 	if len(keys) != 1 {
 		t.Fatalf("expected one prompt record, got %d: %v", len(keys), keys)
 	}
-	if keys[0] != "resp-123.json" {
+	if keys[0] != "resp-123" {
 		t.Fatalf("unexpected prompt cache key: %s", keys[0])
 	}
 

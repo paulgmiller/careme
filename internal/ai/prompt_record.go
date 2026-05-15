@@ -57,7 +57,7 @@ func (noopPromptRecorder) RecordPrompt(context.Context, *PromptRecord) error {
 
 func (r cachePromptRecorder) RecordPrompt(ctx context.Context, record *PromptRecord) error {
 	if record == nil {
-		return nil
+		return fmt.Errorf("nil prompt")
 	}
 	normalized := *record
 	if normalized.CreatedAt.IsZero() {
@@ -65,7 +65,7 @@ func (r cachePromptRecorder) RecordPrompt(ctx context.Context, record *PromptRec
 	}
 	normalized.ResponseID = strings.TrimSpace(normalized.ResponseID)
 	if normalized.ResponseID == "" {
-		return nil
+		return fmt.Errorf("no response id")
 	}
 
 	body, err := json.Marshal(normalized)
@@ -79,14 +79,5 @@ func (r cachePromptRecorder) RecordPrompt(ctx context.Context, record *PromptRec
 }
 
 func promptRecordCacheKey(record PromptRecord) string {
-	return RecipePromptCachePrefix + cacheSafePathPart(record.ResponseID) + ".json"
-}
-
-func cacheSafePathPart(part string) string {
-	part = strings.TrimSpace(part)
-	if part == "" {
-		return "unknown"
-	}
-	replacer := strings.NewReplacer("/", "_", "\\", "_", ":", "_")
-	return replacer.Replace(part)
+	return RecipePromptCachePrefix + record.ResponseID
 }
