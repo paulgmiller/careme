@@ -29,6 +29,18 @@ var faviconSpring []byte
 //go:embed favicon-summer.png
 var faviconSummer []byte
 
+//go:embed fall.png
+var backgroundFall []byte
+
+//go:embed winter.png
+var backgroundWinter []byte
+
+//go:embed spring.png
+var backgroundSpring []byte
+
+//go:embed summer.png
+var backgroundSummer []byte
+
 var TailwindAssetPath string
 
 func Init() {
@@ -64,6 +76,16 @@ func Register(mux routing.Registrar) {
 			slog.ErrorContext(r.Context(), "failed to write favicon", "error", err)
 		}
 	})
+
+	mux.HandleFunc("/background.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		// Keep cache short so clients can refresh seasonally without manual cache clear.
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		background := backgroundBySeason(seasons.GetCurrentSeason())
+		if _, err := w.Write(background); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write seasonal background", "error", err)
+		}
+	})
 }
 
 func faviconBySeason(season seasons.Season) []byte {
@@ -78,5 +100,20 @@ func faviconBySeason(season seasons.Season) []byte {
 		fallthrough
 	default:
 		return faviconFall
+	}
+}
+
+func backgroundBySeason(season seasons.Season) []byte {
+	switch season {
+	case seasons.Winter:
+		return backgroundWinter
+	case seasons.Spring:
+		return backgroundSpring
+	case seasons.Summer:
+		return backgroundSummer
+	case seasons.Fall:
+		fallthrough
+	default:
+		return backgroundFall
 	}
 }

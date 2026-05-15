@@ -31,3 +31,29 @@ func TestFaviconBySeason(t *testing.T) {
 		})
 	}
 }
+
+func TestBackgroundBySeason(t *testing.T) {
+	tests := []struct {
+		name   string
+		season seasons.Season
+		want   []byte
+	}{
+		{name: "fall", season: seasons.Fall, want: backgroundFall},
+		{name: "winter", season: seasons.Winter, want: backgroundWinter},
+		{name: "spring", season: seasons.Spring, want: backgroundSpring},
+		{name: "summer", season: seasons.Summer, want: backgroundSummer},
+		{name: "default falls back to fall", season: seasons.Season("unknown"), want: backgroundFall},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := backgroundBySeason(tt.season)
+			if len(got) == 0 {
+				t.Fatal("background should not be empty")
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("backgroundBySeason(%q) length = %d, want %d", tt.season, len(got), len(tt.want))
+			}
+		})
+	}
+}
