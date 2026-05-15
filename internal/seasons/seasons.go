@@ -1,6 +1,10 @@
 package seasons
 
-import "time"
+import (
+	"os"
+	"strings"
+	"time"
+)
 
 // Season represents a season of the year
 type Season string
@@ -29,6 +33,24 @@ type ColorScheme struct {
 // Style represents styling configuration including seasonal colors
 type Style struct {
 	Colors ColorScheme
+}
+
+const EnvSeason = "CAREME_SEASON"
+
+// ParseSeason returns a valid season from a query/env-style value.
+func ParseSeason(value string) (Season, bool) {
+	switch Season(strings.ToLower(strings.TrimSpace(value))) {
+	case Fall:
+		return Fall, true
+	case Winter:
+		return Winter, true
+	case Spring:
+		return Spring, true
+	case Summer:
+		return Summer, true
+	default:
+		return "", false
+	}
 }
 
 // GetSeason determines the season based on the month
@@ -121,6 +143,9 @@ func GetColorScheme(season Season) ColorScheme {
 
 // GetCurrentSeason returns the current season based on the current time
 func GetCurrentSeason() Season {
+	if season, ok := ParseSeason(os.Getenv(EnvSeason)); ok {
+		return season
+	}
 	return GetSeason(time.Now())
 }
 

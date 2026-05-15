@@ -93,3 +93,39 @@ func TestRegisterServesFontFiles(t *testing.T) {
 		t.Fatal("font response body should not be empty")
 	}
 }
+
+func TestRegisterServesSeasonalBackgroundFromEnv(t *testing.T) {
+	t.Setenv(seasons.EnvSeason, "spring")
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/background.png", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("background response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if rec.Body.Len() != len(backgroundSpring) {
+		t.Fatalf("background body length = %d, want spring length %d", rec.Body.Len(), len(backgroundSpring))
+	}
+}
+
+func TestRegisterServesSeasonalFaviconFromEnv(t *testing.T) {
+	t.Setenv(seasons.EnvSeason, "winter")
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/favicon.ico", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("favicon response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if rec.Body.Len() != len(faviconWinter) {
+		t.Fatalf("favicon body length = %d, want winter length %d", rec.Body.Len(), len(faviconWinter))
+	}
+}

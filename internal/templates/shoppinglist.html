@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Careme Recipes</title>
+  <title>Careme</title>
 
   {{if .Recipes}}
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
@@ -26,12 +26,13 @@
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white text-ink-700 antialiased">
-  <main class="px-4 py-10">
+  {{template "seasonal_background" .}}
+  <main class="relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-5xl space-y-8">
       <div class="friendly-card border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 p-8">
           <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">
-            <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme Recipes</a>
+            <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme</a>
           </h1>
           <p class="mt-2 text-ink-600">
             Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
