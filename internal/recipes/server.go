@@ -828,7 +828,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, newHash, false /*useStart*/)
 }
 
-// paramsForAction merges old saved params with current saved/dismissed selection into new params.
+// paramsForAction merges old params saved recipes with current saved/dismissed selection into new params.
 func paramsForAction(ctx context.Context, hash, userID, instructions string, io recipeio) (*generatorParams, error) {
 	baseParams, err := io.ParamsFromCache(ctx, hash)
 	if err != nil {
@@ -854,32 +854,29 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 	}
 	originalSelection := selectionFromSaved(baseParams.Saved)
 	selection = originalSelection.override(selection)
-	localRecipes := lo.SliceToMap(append(params.Saved, params.Dismissed...),
+	all := append(params.Saved, params.Dismissed...)
+	all = append(all, currentList.Recipes...)
+	localRecipes := lo.SliceToMap(all,
 		func(r ai.Recipe) (string, *ai.Recipe) {
 			return r.ComputeHash(), &r
 		})
 
-	params.Saved = []ai.Recipe{}
+	params.Saved = make([]ai.Recipe, 0, len(selection.SavedHashes))
 	for _, hash := range selection.SavedHashes {
-		if r, ok := localRecipes[hash]; ok {
-			params.Saved = append(params.Saved, *r)
-			continue
-		}
-		r, err := io.SingleFromCache(ctx, hash)
-		if err != nil {
-			return nil, err
+		r, found := localRecipes[hash]
+		if !found {
+			slog.ErrorContext(ctx, "missing hash while creating new params", "hash", hash)
+			return nil, fmt.Errorf("missing hash while creating new params %s", hash)
 		}
 		params.Saved = append(params.Saved, *r)
+
 	}
-	params.Dismissed = []ai.Recipe{}
+	params.Dismissed = make([]ai.Recipe, 0, len(selection.DismissedHashes))
 	for _, hash := range selection.DismissedHashes {
-		if r, ok := localRecipes[hash]; ok {
-			params.Dismissed = append(params.Dismissed, *r)
-			continue
-		}
-		r, err := io.SingleFromCache(ctx, hash)
-		if err != nil {
-			return nil, err
+		r, found := localRecipes[hash]
+		if !found {
+			slog.ErrorContext(ctx, "missing hash while creating new params", "hash", hash)
+			return nil, fmt.Errorf("missing hash while creating new params %s", hash)
 		}
 		params.Dismissed = append(params.Dismissed, *r)
 	}
