@@ -136,3 +136,57 @@ func TestGetCurrentStyle(t *testing.T) {
 		t.Errorf("GetCurrentStyle() returned empty colors")
 	}
 }
+
+func TestParseSeason(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  Season
+		ok    bool
+	}{
+		{name: "fall", value: "fall", want: Fall, ok: true},
+		{name: "winter case insensitive", value: "WINTER", want: Winter, ok: true},
+		{name: "spring trims spaces", value: " spring ", want: Spring, ok: true},
+		{name: "summer", value: "summer", want: Summer, ok: true},
+		{name: "invalid", value: "monsoon", ok: false},
+		{name: "empty", value: "", ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := ParseSeason(tt.value)
+			if ok != tt.ok {
+				t.Fatalf("ParseSeason(%q) ok = %v, want %v", tt.value, ok, tt.ok)
+			}
+			if got != tt.want {
+				t.Fatalf("ParseSeason(%q) = %q, want %q", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetCurrentSeasonUsesEnvOverride(t *testing.T) {
+	t.Setenv(EnvSeason, "winter")
+
+	season := GetCurrentSeason()
+	if season != Winter {
+		t.Fatalf("GetCurrentSeason() = %q, want %q", season, Winter)
+	}
+}
+
+func TestGetCurrentSeasonIgnoresInvalidEnvOverride(t *testing.T) {
+	t.Setenv(EnvSeason, "monsoon")
+
+	season := GetCurrentSeason()
+	validSeasons := []Season{Fall, Winter, Spring, Summer}
+	valid := false
+	for _, s := range validSeasons {
+		if season == s {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		t.Fatalf("GetCurrentSeason() returned invalid season: %v", season)
+	}
+}

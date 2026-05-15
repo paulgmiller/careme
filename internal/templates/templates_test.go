@@ -44,6 +44,31 @@ func TestClarityScriptOmitsIdentifyWhenSessionIDEmpty(t *testing.T) {
 	}
 }
 
+func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
+	for _, name := range []string{
+		"about.html",
+		"home.html",
+		"locations.html",
+		"recipe.html",
+		"shoppinglist.html",
+		"spinner.html",
+		"user.html",
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			if !strings.Contains(string(body), `{{template "seasonal_background" .}}`) {
+				t.Fatalf("%s should include seasonal background", name)
+			}
+			if !strings.Contains(string(body), `<main class="relative z-10`) {
+				t.Fatalf("%s should keep page content above seasonal background", name)
+			}
+		})
+	}
+}
+
 func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
