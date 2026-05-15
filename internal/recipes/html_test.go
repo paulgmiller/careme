@@ -16,6 +16,7 @@ import (
 	"careme/internal/logsetup"
 	"careme/internal/recipes/feedback"
 	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 
 	"golang.org/x/net/html"
 )
@@ -39,7 +40,17 @@ func assertHTTPSuccess(t *testing.T, w *httptest.ResponseRecorder) string {
 }
 
 func formatShoppingListHTMLForTest(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, selection recipeSelection, w *httptest.ResponseRecorder) {
-	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), selection, w)
+	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, renderTestUser(signedIn), p.Hash(), selection, w)
+}
+
+func renderTestUser(signedIn bool) *utypes.User {
+	if !signedIn {
+		return nil
+	}
+	return &utypes.User{
+		ID:    "test-user",
+		Email: []string{"chef@example.com"},
+	}
 }
 
 func TestMain(m *testing.M) {
@@ -100,6 +111,9 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	}
 	if !strings.Contains(html, `disabled`) {
 		t.Error("shopping list HTML should disable finalize button when nothing is saved")
+	}
+	if !strings.Contains(html, "chef@example.com") {
+		t.Error("shopping list HTML should render signed-in account widget")
 	}
 }
 
@@ -297,7 +311,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	recipe.ResponseID = "resp-123"
 	recipe.OriginHash = p.Hash()
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -365,6 +379,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if strings.Contains(html, "Recipe score:") {
 		t.Error("recipe HTML should hide recipe score when no critique exists")
 	}
+	if !strings.Contains(html, "chef@example.com") {
+		t.Error("recipe HTML should render signed-in account widget")
+	}
 }
 
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
@@ -373,7 +390,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, recipe, false, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, false, nil, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -393,6 +410,9 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `name="feedback"`) {
 		t.Error("recipe HTML should not contain feedback form when signed out")
 	}
+	if !strings.Contains(html, `href="/sign-in?return_to_b64=`) {
+		t.Error("recipe HTML should render a header sign-in link when signed out")
+	}
 }
 
 func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
@@ -403,7 +423,7 @@ func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	w := httptest.NewRecorder()
 	score := 8
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, renderTestUser(true), &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -468,6 +488,9 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `id="dismiss-`) {
 		t.Error("shopping list HTML should hide dismiss controls when signed out")
 	}
+	if !strings.Contains(html, `href="/sign-in?return_to_b64=`) {
+		t.Error("shopping list HTML should render a header sign-in link when signed out")
+	}
 }
 
 func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
@@ -476,7 +499,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Oregon Pinot Noir", Price: "$14.99"},
 			{Name: "Backup Chardonnay", Price: "$11.99"},
@@ -522,7 +545,7 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		ResponseID:   "resp-123",
 	}
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -581,7 +604,7 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	recipe.ResponseID = "resp-123"
 	recipeHash := recipe.ComputeHash()
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, renderTestUser(true), nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -631,7 +654,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 			},
 			Commentary: "Good with roasted flavors.",
 		},
-	}, true, p.Hash(), selection, w)
+	}, true, renderTestUser(true), p.Hash(), selection, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
