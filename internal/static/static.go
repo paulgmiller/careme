@@ -2,7 +2,7 @@ package static
 
 import (
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,6 +17,9 @@ var tailwindCSS []byte
 //go:embed htmx@2.0.8.js
 var htmx208JS []byte
 
+//go:embed fonts/*.woff2
+var fontFiles embed.FS
+
 //go:embed favicon-fall.png
 var faviconFall []byte
 
@@ -28,6 +31,18 @@ var faviconSpring []byte
 
 //go:embed favicon-summer.png
 var faviconSummer []byte
+
+//go:embed fall.png
+var backgroundFall []byte
+
+//go:embed winter.png
+var backgroundWinter []byte
+
+//go:embed spring.png
+var backgroundSpring []byte
+
+//go:embed summer.png
+var backgroundSummer []byte
 
 var TailwindAssetPath string
 
@@ -55,6 +70,13 @@ func Register(mux routing.Registrar) {
 		}
 	})
 
+	fontServer := http.FileServer(http.FS(fontFiles))
+	mux.Handle("/static/fonts/", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "font/woff2")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		fontServer.ServeHTTP(w, r)
+	})))
+
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		// Keep cache short so clients can refresh seasonally without manual cache clear.
@@ -62,6 +84,16 @@ func Register(mux routing.Registrar) {
 		favicon := faviconBySeason(seasons.GetCurrentSeason())
 		if _, err := w.Write(favicon); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write favicon", "error", err)
+		}
+	})
+
+	mux.HandleFunc("/background.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		// Keep cache short so clients can refresh seasonally without manual cache clear.
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		background := backgroundBySeason(seasons.GetCurrentSeason())
+		if _, err := w.Write(background); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write seasonal background", "error", err)
 		}
 	})
 }
@@ -78,5 +110,20 @@ func faviconBySeason(season seasons.Season) []byte {
 		fallthrough
 	default:
 		return faviconFall
+	}
+}
+
+func backgroundBySeason(season seasons.Season) []byte {
+	switch season {
+	case seasons.Winter:
+		return backgroundWinter
+	case seasons.Spring:
+		return backgroundSpring
+	case seasons.Summer:
+		return backgroundSummer
+	case seasons.Fall:
+		fallthrough
+	default:
+		return backgroundFall
 	}
 }
