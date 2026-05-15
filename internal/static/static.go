@@ -2,7 +2,7 @@ package static
 
 import (
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,6 +16,9 @@ var tailwindCSS []byte
 
 //go:embed htmx@2.0.8.js
 var htmx208JS []byte
+
+//go:embed fonts/*.woff2
+var fontFiles embed.FS
 
 //go:embed favicon-fall.png
 var faviconFall []byte
@@ -66,6 +69,13 @@ func Register(mux routing.Registrar) {
 			slog.ErrorContext(r.Context(), "failed to write htmx js", "error", err)
 		}
 	})
+
+	fontServer := http.FileServer(http.FS(fontFiles))
+	mux.Handle("/static/fonts/", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "font/woff2")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		fontServer.ServeHTTP(w, r)
+	})))
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")

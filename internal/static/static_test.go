@@ -1,6 +1,9 @@
 package static
 
 import (
+	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"careme/internal/seasons"
@@ -55,5 +58,38 @@ func TestBackgroundBySeason(t *testing.T) {
 				t.Fatalf("backgroundBySeason(%q) length = %d, want %d", tt.season, len(got), len(tt.want))
 			}
 		})
+	}
+}
+
+func TestFontFilesEmbedded(t *testing.T) {
+	matches, err := fs.Glob(fontFiles, "fonts/*.woff2")
+	if err != nil {
+		t.Fatalf("glob font files: %v", err)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("embedded font file count = %d, want 2", len(matches))
+	}
+}
+
+func TestRegisterServesFontFiles(t *testing.T) {
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/static/fonts/inter-v20-latin-400-800.woff2", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("font response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "font/woff2" {
+		t.Fatalf("font content type = %q, want %q", got, "font/woff2")
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Fatalf("font cache control = %q", got)
+	}
+	if rec.Body.Len() == 0 {
+		t.Fatal("font response body should not be empty")
 	}
 }
