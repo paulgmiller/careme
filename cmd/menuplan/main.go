@@ -141,7 +141,7 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 		return planService{}, fmt.Errorf("create staples service: %w", err)
 	}
 	return planService{
-		planner: ai.NewClient(cfg.AI.APIKey, "TODOMODEL", httpClient),
+		planner: ai.NewClient(cfg.AI.APIKey, "TODOMODEL", httpClient, ai.NewCachePromptRecorder(cacheStore)),
 		staples: staples,
 	}, nil
 }

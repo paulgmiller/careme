@@ -99,17 +99,21 @@ type WineSelection struct {
 }
 
 type client struct {
-	recipeSchema map[string]any
-	wineSchema   map[string]any
-	menuSchema   map[string]any
-	model        string
-	wineModel    string
-	oai          openai.Client
+	recipeSchema   map[string]any
+	wineSchema     map[string]any
+	menuSchema     map[string]any
+	model          string
+	wineModel      string
+	oai            openai.Client
+	promptRecorder PromptRecorder
 }
 
 // ignoring model for now.
-func NewClient(apiKey, _ string, httpClient *http.Client) *client {
+func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
 	// ignor model for now.
+	if promptRecorder == nil {
+		promptRecorder = noopPromptRecorder{}
+	}
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
 		ExpandedStruct: true, // put the root type inline (not a $ref)
@@ -132,13 +136,15 @@ func NewClient(apiKey, _ string, httpClient *http.Client) *client {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
 	aiClient := openai.NewClient(opts...)
+
 	return &client{
-		oai:          aiClient,
-		recipeSchema: recipe,
-		wineSchema:   wine,
-		menuSchema:   menu,
-		model:        defaultRecipeModel,
-		wineModel:    defaultWineModel,
+		oai:            aiClient,
+		recipeSchema:   recipe,
+		wineSchema:     wine,
+		menuSchema:     menu,
+		model:          defaultRecipeModel,
+		wineModel:      defaultWineModel,
+		promptRecorder: promptRecorder,
 	}
 }
 
@@ -230,7 +236,8 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	if previousResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
-	messages := cleanInstuctions(instructions)
+	promptMessages := cleanInstructionMessages(instructions)
+	messages := messagesToInput(promptMessages)
 
 	params := responses.ResponseNewParams{
 		Model:              c.model,
@@ -249,6 +256,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
 
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 	return responseToRecipe(ctx, resp)
 }
 
@@ -426,22 +434,24 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		return nil, fmt.Errorf("menu plan count must be greater than zero")
 	}
 
-	prompt, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes, count)
+	promptMessages, err := c.buildMenuPlanMessages(location, saleIngredients, instructions, date, lastRecipes, count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build menu plan messages: %w", err)
 	}
-	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+	params := responses.ResponseNewParams{
 		Model:        recipePlanModel,
 		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: prompt,
+			OfInputItemList: messagesToInput(promptMessages),
 		},
 		Store: openai.Bool(true),
 		Text:  scheme(c.menuSchema),
-	})
+	}
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, err
 	}
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
 	return responseToMenuPlan(ctx, resp)
 }
@@ -453,23 +463,25 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 	if count < 1 {
 		return nil, fmt.Errorf("menu plan count must be greater than zero")
 	}
-	messages := buildRegenerateMenuPlanMessages(instructions, count)
+	promptMessages := buildRegenerateMenuPlanMessages(instructions, count)
 
-	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+	params := responses.ResponseNewParams{
 		Model:              recipePlanModel,
 		PreviousResponseID: openai.String(previousResponseID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
 		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messages,
+			OfInputItemList: messagesToInput(promptMessages),
 		},
 		Store: openai.Bool(true),
 		Text:  scheme(c.menuSchema),
-	})
+	}
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
 	}
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 	return responseToMenuPlan(ctx, resp)
 }
 
@@ -488,30 +500,30 @@ func responseToMenuPlan(ctx context.Context, resp *responses.Response) (*MenuPla
 
 func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string, count int,
-) ([]responses.ResponseInputItemUnionParam, error) {
+) ([]PromptMessage, error) {
 	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
 	messages = append(messages,
-		user(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
+		userPromptMessage(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
 	)
 	if count >= 3 {
-		messages = append(messages, user("Mark one plan fancy."))
-		messages = append(messages, user("Include one less-common cuisine direction."))
+		messages = append(messages, userPromptMessage("Mark one plan fancy."))
+		messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 	}
 	return messages, nil
 }
 
-func buildRegenerateMenuPlanMessages(instructions []string, count int) []responses.ResponseInputItemUnionParam {
-	messages := cleanInstuctions(instructions)
+func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptMessage {
+	messages := cleanInstructionMessages(instructions)
 	messages = append(messages,
-		user(fmt.Sprintf("Pick exactly %d replacement plans. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
+		userPromptMessage(fmt.Sprintf("Pick exactly %d replacement plans. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
 	)
 	// ideally do this if they dismissed fancy.
 	if count >= 3 {
-		messages = append(messages, user("Mark one replacement plan fancy."))
-		messages = append(messages, user("Include one less-common cuisine direction."))
+		messages = append(messages, userPromptMessage("Mark one replacement plan fancy."))
+		messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 	}
 	return messages
 }
@@ -519,23 +531,25 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []respons
 func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string,
 ) (*Recipe, error) {
-	messages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
+	promptMessages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
 	}
 
-	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+	params := responses.ResponseNewParams{
 		Model:        c.model,
 		Instructions: openai.String(systemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messages,
+			OfInputItemList: messagesToInput(promptMessages),
 		},
 		Store: openai.Bool(true),
 		Text:  scheme(c.recipeSchema),
-	})
+	}
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, err
 	}
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
 	return responseToRecipe(ctx, resp)
 }
@@ -580,21 +594,21 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]responses.ResponseInputItemUnionParam, error) {
+func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
 	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
-	messages = append(messages, user("Default: each recipe should serve 2 people."))
+	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
 	return messages, nil
 }
 
-func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]responses.ResponseInputItemUnionParam, error) {
-	var messages []responses.ResponseInputItemUnionParam
+func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
+	var messages []PromptMessage
 	// constants we might make variable later
-	messages = append(messages, user("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
-	messages = append(messages, user("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
-	messages = append(messages, user("Default: cooking methods: oven, stove, grill, slow cooker"))
+	messages = append(messages, userPromptMessage("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
+	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
+	messages = append(messages, userPromptMessage("Default: cooking methods: oven, stove, grill, slow cooker"))
 
 	// todo reuse context via response id?
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
@@ -603,7 +617,7 @@ func (c *client) buildRecipeContextMessages(location *locationtypes.Location, sa
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
 	ingredientsMessage += buf.String()
-	messages = append(messages, user(ingredientsMessage))
+	messages = append(messages, userPromptMessage(ingredientsMessage))
 
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
@@ -611,10 +625,12 @@ func (c *client) buildRecipeContextMessages(location *locationtypes.Location, sa
 		for _, recipe := range lastRecipes {
 			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
 		}
-		messages = append(messages, user(prevRecipesMsg.String()))
+		messages = append(messages, userPromptMessage(prevRecipesMsg.String()))
 	}
 
-	return append(messages, cleanInstuctions(instructions)...), nil
+	messages = append(messages, cleanInstructionMessages(instructions)...)
+
+	return messages, nil
 }
 
 func (c *client) Ready(ctx context.Context) error {
@@ -625,16 +641,48 @@ func (c *client) Ready(ctx context.Context) error {
 	return err
 }
 
-func cleanInstuctions(instructions []string) []responses.ResponseInputItemUnionParam {
-	var responses []responses.ResponseInputItemUnionParam
+func cleanInstructionMessages(instructions []string) []PromptMessage {
+	var messages []PromptMessage
 	for _, i := range instructions {
 		i = strings.TrimSpace(i)
 		if i == "" {
 			continue
 		}
-		responses = append(responses, user(i))
+		messages = append(messages, userPromptMessage(i))
 	}
-	return responses
+	return messages
+}
+
+func userPromptMessage(msg string) PromptMessage {
+	return PromptMessage{Role: "user", Content: msg}
+}
+
+func messagesToInput(messages []PromptMessage) []responses.ResponseInputItemUnionParam {
+	input := make([]responses.ResponseInputItemUnionParam, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role != "user" {
+			continue
+		}
+		input = append(input, user(msg.Content))
+	}
+	return input
+}
+
+func (c *client) recordRecipePrompt(ctx context.Context, responseID string, params responses.ResponseNewParams, input []PromptMessage) {
+	responseID = strings.TrimSpace(responseID)
+	if responseID == "" {
+		return
+	}
+	record := &PromptRecord{
+		ResponseID:         responseID,
+		Model:              string(params.Model),
+		Instructions:       strings.TrimSpace(params.Instructions.Or("")),
+		PreviousResponseID: strings.TrimSpace(params.PreviousResponseID.Or("")),
+		Input:              append([]PromptMessage(nil), input...),
+	}
+	if err := c.promptRecorder.RecordPrompt(ctx, record); err != nil {
+		slog.ErrorContext(ctx, "failed to record recipe prompt", "response_id", responseID, "error", err)
+	}
 }
 
 func normalizeRecipeWineStyles(styles []string) []string {
