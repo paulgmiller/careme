@@ -20,6 +20,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/prompts"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
@@ -74,7 +75,7 @@ func runServer(cfg *config.Config, addr string) error {
 		mc := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(mc)
 
-		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, ai.NewCachePromptRecorder(cache))
+		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
 		imageGen = aiclient
 		ro.add(aiclient)
 		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
@@ -118,8 +119,8 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
-	adminMux.Handle("/prompt/menu/{hash}", recipes.AdminMenuPromptJSON(cache))
-	adminMux.Handle("/prompt/recipe/{hash}", recipes.AdminRecipePromptJSON(cache))
+	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))
+	adminMux.Handle("/prompt/recipe/{hash}", prompts.AdminRecipePromptJSON(cache))
 	adminMux.Handle("/critiques", critique.AdminCritiquesPage(critique.NewStore(cache), recipeIO))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)

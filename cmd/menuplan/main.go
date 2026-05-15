@@ -20,6 +20,7 @@ import (
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/recipes/prompts"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -141,7 +142,7 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 		return planService{}, fmt.Errorf("create staples service: %w", err)
 	}
 	return planService{
-		planner: ai.NewClient(cfg.AI.APIKey, "TODOMODEL", httpClient, ai.NewCachePromptRecorder(cacheStore)),
+		planner: ai.NewClient(cfg.AI.APIKey, "TODOMODEL", httpClient, prompts.NewCacheRecorder(cacheStore)),
 		staples: staples,
 	}, nil
 }

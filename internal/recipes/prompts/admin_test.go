@@ -1,4 +1,4 @@
-package recipes
+package prompts
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/recipes"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,10 +18,10 @@ func TestAdminMenuPromptJSON(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	require.NoError(t, IO(cacheStore).SaveShoppingList(t.Context(), &ai.ShoppingList{
+	require.NoError(t, recipes.IO(cacheStore).SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Plan: &ai.MenuPlan{ResponseID: "resp-menu-123"},
 	}, "menu-hash"))
-	require.NoError(t, ai.NewCachePromptRecorder(cacheStore).RecordPrompt(t.Context(), &ai.PromptRecord{
+	require.NoError(t, NewCacheRecorder(cacheStore).RecordPrompt(t.Context(), &ai.PromptRecord{
 		ResponseID:   "resp-menu-123",
 		Model:        "gpt-menu",
 		Instructions: "plan dinners",
@@ -54,8 +55,8 @@ func TestAdminRecipePromptJSON(t *testing.T) {
 		ResponseID: "resp-recipe-123",
 	}
 	recipeHash := recipe.ComputeHash()
-	require.NoError(t, IO(cacheStore).SaveRecipe(t.Context(), recipe))
-	require.NoError(t, ai.NewCachePromptRecorder(cacheStore).RecordPrompt(t.Context(), &ai.PromptRecord{
+	require.NoError(t, recipes.IO(cacheStore).SaveRecipe(t.Context(), recipe))
+	require.NoError(t, NewCacheRecorder(cacheStore).RecordPrompt(t.Context(), &ai.PromptRecord{
 		ResponseID:   "resp-recipe-123",
 		Model:        "gpt-recipe",
 		Instructions: "cook well",
@@ -89,9 +90,9 @@ func TestAdminRecipePromptJSONPrependsParentPromptInputs(t *testing.T) {
 		ResponseID: "resp-child",
 	}
 	recipeHash := recipe.ComputeHash()
-	require.NoError(t, IO(cacheStore).SaveRecipe(t.Context(), recipe))
+	require.NoError(t, recipes.IO(cacheStore).SaveRecipe(t.Context(), recipe))
 
-	recorder := ai.NewCachePromptRecorder(cacheStore)
+	recorder := NewCacheRecorder(cacheStore)
 	require.NoError(t, recorder.RecordPrompt(t.Context(), &ai.PromptRecord{
 		ResponseID: "resp-grandparent",
 		Model:      "gpt-recipe",
@@ -134,7 +135,7 @@ func TestAdminMenuPromptJSONMissingPrompt(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	require.NoError(t, IO(cacheStore).SaveShoppingList(t.Context(), &ai.ShoppingList{
+	require.NoError(t, recipes.IO(cacheStore).SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Plan: &ai.MenuPlan{ResponseID: "resp-missing"},
 	}, "menu-hash"))
 
