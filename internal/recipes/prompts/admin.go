@@ -1,4 +1,4 @@
-package recipes
+package prompts
 
 import (
 	"context"
@@ -11,13 +11,14 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/recipes"
 )
 
 func AdminMenuPromptJSON(c cache.Cache) http.Handler {
 	return adminPromptJSON(c, "menu", func(r *http.Request) (string, error) {
 		hash := r.PathValue("hash")
 
-		list, err := IO(c).FromCache(r.Context(), hash)
+		list, err := recipes.IO(c).FromCache(r.Context(), hash)
 		if err != nil {
 			return "", fmt.Errorf("load menu: %w", err)
 		}
@@ -32,7 +33,7 @@ func AdminRecipePromptJSON(c cache.Cache) http.Handler {
 	return adminPromptJSON(c, "recipe", func(r *http.Request) (string, error) {
 		hash := r.PathValue("hash")
 
-		recipe, err := IO(c).SingleFromCache(r.Context(), hash)
+		recipe, err := recipes.IO(c).SingleFromCache(r.Context(), hash)
 		if err != nil {
 			return "", fmt.Errorf("load recipe: %w", err)
 		}
@@ -47,7 +48,6 @@ func adminPromptJSON(c cache.Cache, kind string, responseIDFromRequest func(*htt
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		responseID, err := responseIDFromRequest(r)
 		if err != nil {
-
 			if errors.Is(err, cache.ErrNotFound) {
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
@@ -78,6 +78,11 @@ func adminPromptJSON(c cache.Cache, kind string, responseIDFromRequest func(*htt
 }
 
 func promptRecordWithParentInputsFromCache(ctx context.Context, c cache.Cache, responseID string) (*ai.PromptRecord, error) {
+	responseID = strings.TrimSpace(responseID)
+	if responseID == "" {
+		return nil, cache.ErrNotFound
+	}
+
 	record, err := promptRecordFromCache(ctx, c, responseID)
 	if err != nil {
 		return nil, err
@@ -89,7 +94,6 @@ func promptRecordWithParentInputsFromCache(ctx context.Context, c cache.Cache, r
 		return record, nil
 	}
 
-	// guard infinite recursion? eh it's an admin route let it burn.
 	parent, err := promptRecordWithParentInputsFromCache(ctx, c, parentResponseID)
 	if err != nil {
 		return nil, err
@@ -99,7 +103,7 @@ func promptRecordWithParentInputsFromCache(ctx context.Context, c cache.Cache, r
 }
 
 func promptRecordFromCache(ctx context.Context, c cache.Cache, responseID string) (*ai.PromptRecord, error) {
-	promptReader, err := c.Get(ctx, ai.RecipePromptCachePrefix+responseID)
+	promptReader, err := c.Get(ctx, CachePrefix+responseID)
 	if err != nil {
 		return nil, err
 	}

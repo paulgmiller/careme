@@ -239,7 +239,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 }
 
 func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, &cachePromptRecorder{})
+	client := NewClient("test-key", "ignored", nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	ingredients := []InputIngredient{
 		{ProductID: "chicken-1", Description: "Chicken thighs", Size: "2 lb", PriceRegular: float32Ptr(8.99)},
