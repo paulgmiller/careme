@@ -23,7 +23,6 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		Health:       "Balanced dinner",
 		DrinkPairing: "Pinot Noir",
 		OriginHash:   "internal-metadata",
-		Saved:        true,
 	}
 
 	prompt, err := buildRecipeCritiquePrompt(recipe)

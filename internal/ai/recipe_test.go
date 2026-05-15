@@ -41,10 +41,10 @@ func TestRecipeComputeHash(t *testing.T) {
 		t.Fatalf("Hash changed by json marshalling: %s", hash1)
 	}
 
-	recipe.Saved = true
 	recipe.OriginHash = "somehashvalue"
+	recipe.ParentHash = "parenthashvalue"
 
-	// Hash should be consistent regardless of silly fields
+	// Hash should be consistent regardless of provenance fields.
 	hash2 := recipe.ComputeHash()
 	if hash1 != hash2 {
 		t.Fatalf("hash should be consistent: %s != %s", hash1, hash2)
@@ -80,6 +80,69 @@ func TestNewClientUsesGPT55ForRecipeFlow(t *testing.T) {
 	if client.wineModel != openai.ChatModelGPT5Mini {
 		t.Fatalf("expected wine model to remain low-cost mini path, got %q", client.wineModel)
 	}
+}
+
+func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil)
+	properties := schemaProperties(t, client.recipeSchema)
+	ingredients := schemaObject(t, properties["ingredients"])
+	items := schemaObject(t, ingredients["items"])
+	ingredientProperties := schemaProperties(t, items)
+	ingredientRequired := schemaRequired(t, items)
+
+	if _, ok := ingredientProperties["id"]; !ok {
+		t.Fatalf("expected ingredient schema to include product id")
+	}
+	if !slices.Contains(ingredientRequired, "id") {
+		t.Fatalf("expected ingredient schema to require product id, got %v", ingredientRequired)
+	}
+	if _, ok := ingredientProperties["name"]; !ok {
+		t.Fatalf("expected ingredient schema to include name")
+	}
+	if _, ok := ingredientProperties["quantity"]; !ok {
+		t.Fatalf("expected ingredient schema to include quantity")
+	}
+	if _, ok := ingredientProperties["price"]; ok {
+		t.Fatalf("did not expect model schema to include server-owned price")
+	}
+	if _, ok := ingredientProperties["aisle_number"]; ok {
+		t.Fatalf("did not expect model schema to include server-owned aisle number")
+	}
+}
+
+func schemaRequired(t *testing.T, schema map[string]any) []string {
+	t.Helper()
+	raw, ok := schema["required"].([]any)
+	if !ok {
+		t.Fatalf("expected required array, got %#v", schema["required"])
+	}
+	required := make([]string, 0, len(raw))
+	for _, value := range raw {
+		field, ok := value.(string)
+		if !ok {
+			t.Fatalf("expected required field string, got %#v", value)
+		}
+		required = append(required, field)
+	}
+	return required
+}
+
+func schemaProperties(t *testing.T, schema map[string]any) map[string]any {
+	t.Helper()
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties object, got %#v", schema["properties"])
+	}
+	return properties
+}
+
+func schemaObject(t *testing.T, value any) map[string]any {
+	t.Helper()
+	object, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("expected schema object, got %#v", value)
+	}
+	return object
 }
 
 func TestNormalizeWineStyle(t *testing.T) {
@@ -449,6 +512,8 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"provide the total elapsed recipe time",
 		"5 to 8 clear steps",
 		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
+		"set id to the exact ProductId",
+		"amount used in the recipe as quantity",
 	} {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)

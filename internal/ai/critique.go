@@ -185,7 +185,6 @@ func parseRecipeCritique(body string) (*RecipeCritique, error) {
 func buildRecipeCritiquePrompt(recipe Recipe) (string, error) {
 	payload := recipe
 	payload.OriginHash = ""
-	payload.Saved = false
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal recipe critique payload: %w", err)

@@ -401,7 +401,6 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	// not presisting dimissed as
 	for _, s := range p.Saved {
 		slog.InfoContext(ctx, "keeping", "title", s.Title)
-		s.Saved = true
 		selectedRecipes = append(selectedRecipes, s)
 	}
 
