@@ -90,9 +90,6 @@ func selectionFromParams(p *generatorParams) recipeSelection {
 	for _, s := range p.Saved {
 		selection.markSaved(s.ComputeHash())
 	}
-	for _, d := range p.Dismissed {
-		selection.markDismissed(d.ComputeHash())
-	}
 	return selection
 }
 

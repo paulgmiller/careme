@@ -1819,7 +1819,7 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 		t.Fatalf("failed to save selection: %v", err)
 	}
 
-	updated, err := s.paramsForAction(t.Context(), originHash, "user-1", "")
+	updated, err := paramsForAction(t.Context(), originHash, "user-1", "", s.recipeio)
 	if err != nil {
 		t.Fatalf("paramsForAction failed: %v", err)
 	}
