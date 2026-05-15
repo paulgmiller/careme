@@ -241,7 +241,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "recipe's origin shpppinglist not found or expired", http.StatusInternalServerError)
 		return
 	}
-	selection := selectionFromParams(p)
+	selection := selectionFromSaved(p.Saved)
 	if signedIn && userID != "" {
 		latestSel, selErr := s.loadRecipeSelection(ctx, userID, recipe.OriginHash)
 		if selErr != nil {
@@ -852,7 +852,7 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 	if currentList.Plan != nil {
 		params.PreviousMenuPlanResponseID = strings.TrimSpace(currentList.Plan.ResponseID)
 	}
-	originalSelection := selectionFromParams(baseParams)
+	originalSelection := selectionFromSaved(baseParams.Saved)
 	selection = originalSelection.override(selection)
 	localRecipes := lo.SliceToMap(append(params.Saved, params.Dismissed...),
 		func(r ai.Recipe) (string, *ai.Recipe) {
@@ -985,7 +985,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		userID, err := s.clerk.GetUserIDFromRequest(r)
 		signedIn := !errors.Is(err, auth.ErrNoSession)
-		selection := selectionFromParams(p)
+		selection := selectionFromSaved(p.Saved)
 		if signedIn {
 			userSelection, err := s.loadRecipeSelection(ctx, userID, hashParam)
 			if err != nil {

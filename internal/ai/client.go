@@ -54,7 +54,6 @@ type Recipe struct {
 	ResponseID   string       `json:"response_id,omitempty" jsonschema:"-"` // not in schema
 	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"` // not in schema
 	ParentHash   string       `json:"parent_hash,omitempty" jsonschema:"-"` // regeneration metadata, not in schema
-	// Saved        bool         `json:"previously_saved,omitempty" jsonschema:"-"` // not in schema
 	// Shove wine selection in here
 }
 

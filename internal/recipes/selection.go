@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/cache"
 
 	"github.com/samber/lo"
@@ -81,13 +82,9 @@ func (rio recipeio) saveRecipeSelection(ctx context.Context, userID, originHash 
 	return nil
 }
 
-func selectionFromParams(p *generatorParams) recipeSelection {
-	if p == nil {
-		return recipeSelection{}
-	}
-
+func selectionFromSaved(saved []ai.Recipe) recipeSelection {
 	var selection recipeSelection
-	for _, s := range p.Saved {
+	for _, s := range saved {
 		selection.markSaved(s.ComputeHash())
 	}
 	return selection
