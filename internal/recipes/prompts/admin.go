@@ -98,10 +98,7 @@ func promptRecordWithParentInputsFromCache(ctx context.Context, c cache.Cache, r
 	if err != nil {
 		return nil, err
 	}
-	mergedInput := make([]ai.PromptMessage, 0, len(parent.Input)+len(record.Input))
-	mergedInput = append(mergedInput, parent.Input...)
-	mergedInput = append(mergedInput, record.Input...)
-	record.Input = mergedInput
+	record.Input = append(parent.Input, record.Input...)
 	return record, nil
 }
 
