@@ -295,12 +295,12 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	html := assertHTTPSuccess(t, w)
 
-	// Verify "Careme Recipes" is a link to home page
+	// Verify "Careme" is a link to home page
 	if !strings.Contains(html, `<a href="/"`) {
 		t.Error("HTML should contain a link to home page")
 	}
-	if !strings.Contains(html, "Careme Recipes</a>") {
-		t.Error("HTML should contain 'Careme Recipes' as a link")
+	if !strings.Contains(html, "Careme</a>") {
+		t.Error("HTML should contain 'Careme' as a link")
 	}
 }
 

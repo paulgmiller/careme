@@ -11,11 +11,12 @@
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
-  <main class="px-4 py-10">
+  {{template "seasonal_background" .}}
+  <main class="relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-3xl">
       <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 p-8">
-          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">Nearby Stores</h1>
+          <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">Nearby Stores</h1>
           <p class="mt-2 text-gray-600">Showing results near ZIP <span class="font-semibold text-brand-700">{{.Zip}}</span>.</p>
           {{if not .ServerSignedIn}}
           <p class="mt-2 text-sm text-gray-500">You can browse stores now, but building recipes requires signing in.</p>
