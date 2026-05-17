@@ -56,8 +56,9 @@ type shoppingListGroup struct {
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, signedIn bool, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
+	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
 ) {
+	serverSignedIn := currentUser != nil
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
@@ -70,7 +71,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			Recipe:             recipe,
 			Hash:               recipeHash,
 			ShoppingListHash:   hash,
-			ServerSignedIn:     signedIn,
+			ServerSignedIn:     serverSignedIn,
 			DisplayIngredients: displayIngredients,
 			Saved:              saved,
 			Dismissed:          selection.IsDismissed(recipeHash),
@@ -106,7 +107,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		ShoppingList:    shoppingListForDisplay(combinedIngredients),
 		HasSavedRecipes: hasSavedRecipes,
 		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  signedIn,
+		ServerSignedIn:  serverSignedIn,
 		User:            currentUser,
 		AuthReturnTo:    "/recipes?h=" + hash,
 	}
@@ -118,7 +119,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, saved bool,
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, saved bool,
 	currentUser *utypes.User, critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry,
 	fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter,
 ) {
@@ -130,6 +131,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
 		activeResponseID = threadResponseID
 	}
+	serverSignedIn := currentUser != nil
 	data := struct {
 		Location            locations.Location
 		Date                string
@@ -167,7 +169,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeHash:          recipeHash,
 		RecipeImage:         recipeImageData(recipeHash, hasRecipeImage, false),
 		Style:               seasons.GetCurrentStyle(),
-		ServerSignedIn:      signedIn,
+		ServerSignedIn:      serverSignedIn,
 		User:                currentUser,
 		AuthReturnTo:        "/recipe/" + recipeHash,
 		RecipeCritiqueURL:   "/critiques/" + recipeHash,
