@@ -151,8 +151,13 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "recipe not found", http.StatusNotFound)
 		return
 	}
-	userID, err := s.clerk.GetUserIDFromRequest(r)
-	signedIn := !errors.Is(err, auth.ErrNoSession)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil && !errors.Is(err, auth.ErrNoSession) {
+		slog.ErrorContext(ctx, "failed to get user from request", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+	signedIn := currentUser != nil
 	var critiqueScore *int
 	feedback := feedback.Feedback{}
 	var thread []RecipeThreadEntry
@@ -222,7 +227,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				ID:   "",
 				Name: "Unknown Location",
 			}, time.Now())
-			FormatRecipeHTML(ctx, p, *recipe, signedIn, false, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
+			FormatRecipeHTML(ctx, p, *recipe, false, currentUser, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
 			return
 		}
 		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
@@ -242,8 +247,8 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	selection := selectionFromSaved(p.Saved)
-	if signedIn && userID != "" {
-		latestSel, selErr := s.loadRecipeSelection(ctx, userID, recipe.OriginHash)
+	if signedIn {
+		latestSel, selErr := s.loadRecipeSelection(ctx, currentUser.ID, recipe.OriginHash)
 		if selErr != nil {
 			slog.ErrorContext(ctx, "failed to load recipe selection for single recipe render", "hash", recipe.OriginHash, "error", selErr)
 			http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
@@ -253,7 +258,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(ctx, p, *recipe, signedIn, selection.IsSaved(recipe.ComputeHash()), critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
+	FormatRecipeHTML(ctx, p, *recipe, selection.IsSaved(recipe.ComputeHash()), currentUser, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
@@ -980,11 +985,16 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
 			return
 		}
-		userID, err := s.clerk.GetUserIDFromRequest(r)
-		signedIn := !errors.Is(err, auth.ErrNoSession)
+		currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+		if err != nil && !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to get user from request", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		signedIn := currentUser != nil
 		selection := selectionFromSaved(p.Saved)
 		if signedIn {
-			userSelection, err := s.loadRecipeSelection(ctx, userID, hashParam)
+			userSelection, err := s.loadRecipeSelection(ctx, currentUser.ID, hashParam)
 			if err != nil {
 				slog.ErrorContext(ctx, "failed to load recipe selection for render", "hash", hashParam, "error", err)
 				http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
@@ -997,8 +1007,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			var unsubscribeURL string
 			if signedIn {
 				unsubscribeURL = s.cfg.ResolvedPublicOrigin() + "/user/unsubscribe?" + url.Values{
-					"user":  []string{userID},
-					"token": []string{tf.UnsubscribeToken(userID)},
+					"user":  []string{currentUser.ID},
+					"token": []string{tf.UnsubscribeToken(currentUser.ID)},
 				}.Encode()
 			}
 			if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), unsubscribeURL, w); err != nil {
@@ -1029,7 +1039,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		wineWG.Wait()
 
-		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, signedIn, hashParam, selection, w)
+		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, currentUser, hashParam, selection, w)
 		return
 	}
 
