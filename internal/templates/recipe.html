@@ -20,7 +20,7 @@
   <meta name="twitter:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
   {{end}}
 
-  {{template "tailwind_head" .Style}}
+  {{template "app_head" .Style}}
 
   {{.ClarityScript}}
   {{.GoogleTagScript}}
