@@ -4,11 +4,25 @@ Careme is your personal chef and sommilier. It will
 2. Check the stores inventory for fresh meat and seasonal produce
 3. Generate a weekly meal plan from a variety of cuisines and cooking styles.
 
+Learn way more at https://careme.cooking/about or go generate a recipe https://careme.cooking. 
+
+## Development
+
+
 ![Go](https://img.shields.io/badge/Go-1.26-blue)
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](https://github.com/paulgmiller/careme/blob/master/LICENSE)
 ![Last Commit](https://img.shields.io/github/last-commit/paulgmiller/careme)
 [![CI](https://github.com/paulgmiller/careme/actions/workflows/go.yml/badge.svg)](https://github.com/paulgmiller/careme/actions/workflows/go.yml)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/paulgmiller/careme)
+
+See agents.md for some more but 
+go test ./... on any go change 
+and 
+```
+bash tailwind/generate.sh
+```
+if you change input css or any *.html
+
 
 ## Configuration
 
@@ -36,14 +50,6 @@ For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry en
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
 
-## Development
-See agents.md for some more but 
-go test ./... on any go change 
-and 
-```
-bash tailwind/generate.sh
-```
-if you change input css or any *.html
 
 ## Cache Key Layout
 See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key/prefix layout and backend notes.
