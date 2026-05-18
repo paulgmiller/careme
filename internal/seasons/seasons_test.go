@@ -1,6 +1,7 @@
 package seasons
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -109,13 +110,7 @@ func TestGetCurrentSeason(t *testing.T) {
 	// Just verify it returns a valid season
 	season := GetCurrentSeason()
 	validSeasons := []Season{Fall, Winter, Spring, Summer}
-	valid := false
-	for _, s := range validSeasons {
-		if season == s {
-			valid = true
-			break
-		}
-	}
+	valid := slices.Contains(validSeasons, season)
 	if !valid {
 		t.Errorf("GetCurrentSeason() returned invalid season: %v", season)
 	}
@@ -179,13 +174,7 @@ func TestGetCurrentSeasonIgnoresInvalidEnvOverride(t *testing.T) {
 
 	season := GetCurrentSeason()
 	validSeasons := []Season{Fall, Winter, Spring, Summer}
-	valid := false
-	for _, s := range validSeasons {
-		if season == s {
-			valid = true
-			break
-		}
-	}
+	valid := slices.Contains(validSeasons, season)
 	if !valid {
 		t.Fatalf("GetCurrentSeason() returned invalid season: %v", season)
 	}

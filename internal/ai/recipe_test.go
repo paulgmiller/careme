@@ -216,7 +216,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 		WineStyles:   []string{"Pinot Noir", "Chardonnay"},
 	}
 	wines := []InputIngredient{
-		{ProductID: "pinot-noir-1", Description: "Pinot Noir", Size: "750mL", PriceRegular: float32Ptr(13.99)},
+		{ProductID: "pinot-noir-1", Description: "Pinot Noir", Size: "750mL", PriceRegular: new(float32(13.99))},
 	}
 
 	prompt, err := buildWineSelectionPrompt(recipe, wines)
@@ -242,8 +242,8 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	ingredients := []InputIngredient{
-		{ProductID: "chicken-1", Description: "Chicken thighs", Size: "2 lb", PriceRegular: float32Ptr(8.99)},
-		{ProductID: "beans-1", Description: "Green beans", Size: "12 oz", PriceRegular: float32Ptr(2.99)},
+		{ProductID: "chicken-1", Description: "Chicken thighs", Size: "2 lb", PriceRegular: new(float32(8.99))},
+		{ProductID: "beans-1", Description: "Green beans", Size: "12 oz", PriceRegular: new(float32(2.99))},
 	}
 	instructions := []string{"make it high protein"}
 	lastRecipes := []string{"Lemon chicken pasta"}

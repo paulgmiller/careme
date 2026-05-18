@@ -49,7 +49,7 @@ type RecipeCritique struct {
 	Issues         []RecipeCritiqueIssue `json:"issues"`
 	SuggestedFixes []string              `json:"suggested_fixes"`
 	Model          string                `json:"model,omitempty" jsonschema:"-"`
-	CritiquedAt    time.Time             `json:"critiqued_at,omitempty" jsonschema:"-"`
+	CritiquedAt    time.Time             `json:"critiqued_at" jsonschema:"-"`
 }
 
 type critiquer struct {

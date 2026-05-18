@@ -85,7 +85,7 @@ func newProxyTransport(cfg ProxyConfig) (*http.Transport, error) {
 // var _ retryablehttp.LeveledLogger = slog.Default()
 type SlogPrintf struct{}
 
-func (l SlogPrintf) Printf(format string, args ...interface{}) {
+func (l SlogPrintf) Printf(format string, args ...any) {
 	// missing context sadly so no operation id
 	slog.With().Info(fmt.Sprintf(format, args...), "source", "retryablehttp")
 }
