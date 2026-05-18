@@ -13,6 +13,7 @@ func TestNormalizeInputIngredientNormalizesFieldsAndSetsID(t *testing.T) {
 		AisleNumber:  " A5 ",
 		Brand:        " Farm Stand ",
 		Description:  "  Baby Spinach  ",
+		Slug:         " spinach ",
 		Size:         " 5 oz ",
 		PriceRegular: new(float32(4.99)),
 		PriceSale:    new(float32(3.49)),
@@ -23,6 +24,7 @@ func TestNormalizeInputIngredientNormalizesFieldsAndSetsID(t *testing.T) {
 	assert.Equal(t, "A5", ingredient.AisleNumber)
 	assert.Equal(t, "Farm Stand", ingredient.Brand)
 	assert.Equal(t, "Baby Spinach", ingredient.Description)
+	assert.Equal(t, "spinach", ingredient.Slug)
 	assert.Equal(t, "5 oz", ingredient.Size)
 	require.NotNil(t, ingredient.PriceRegular)
 	require.NotNil(t, ingredient.PriceSale)
@@ -67,6 +69,7 @@ func TestBuildIngredientGradePrompt(t *testing.T) {
 	assert.Contains(t, prompt, "preserving each id")
 	assert.Contains(t, prompt, `"id": "foobar"`)
 	assert.Contains(t, prompt, "Return JSON only matching the provided schema.")
+	assert.Contains(t, prompt, "Include a slug")
 	assert.Contains(t, prompt, `"description": "Asparagus"`)
 }
 
@@ -75,13 +78,25 @@ func TestParseIngredientGrades(t *testing.T) {
 		Description: "Asparagus",
 		ProductID:   "ingredient-1",
 	})}
-	graded, err := parseIngredientGrades(`{"grades":[{"id":"`+items[0].ProductID+`","score":8,"reason":"Fresh produce with broad weeknight use."}]}`, items)
+	graded, err := parseIngredientGrades(`{"grades":[{"id":"`+items[0].ProductID+`","score":8,"reason":"Fresh produce with broad weeknight use.","slug":" asparagus "}]}`, items)
 	require.NoError(t, err)
 	require.Len(t, graded, 1)
 	require.NotNil(t, graded[0].Grade)
 	assert.Equal(t, 8, graded[0].Grade.Score)
 	assert.Equal(t, "Fresh produce with broad weeknight use.", graded[0].Grade.Reason)
+	assert.Equal(t, "asparagus", graded[0].Slug)
 	assert.Equal(t, "Asparagus", graded[0].Description)
+}
+
+func TestParseIngredientGradesAllowsMissingSlug(t *testing.T) {
+	items := []InputIngredient{NormalizeInputIngredient(InputIngredient{
+		Description: "Asparagus",
+		ProductID:   "ingredient-1",
+	})}
+	graded, err := parseIngredientGrades(`{"grades":[{"id":"`+items[0].ProductID+`","score":8,"reason":"Fresh produce with broad weeknight use."}]}`, items)
+	require.NoError(t, err)
+	require.Len(t, graded, 1)
+	assert.Empty(t, graded[0].Slug)
 }
 
 func TestParseIngredientGradesRejectsInvalidResponses(t *testing.T) {
@@ -144,4 +159,19 @@ func TestIngredientGradeSchemaOmitsOperationalFields(t *testing.T) {
 	_, hasSchemaVersion := properties["schema_version"]
 
 	assert.False(t, hasSchemaVersion)
+}
+
+func TestIngredientGradeSchemaIncludesSlug(t *testing.T) {
+	schema := ingredientGradeJSONSchema()
+	properties, ok := schema["properties"].(map[string]any)
+	require.True(t, ok)
+	grades, ok := properties["grades"].(map[string]any)
+	require.True(t, ok)
+	items, ok := grades["items"].(map[string]any)
+	require.True(t, ok)
+	itemProperties, ok := items["properties"].(map[string]any)
+	require.True(t, ok)
+
+	_, hasSlug := itemProperties["slug"]
+	assert.True(t, hasSlug)
 }

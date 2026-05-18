@@ -19,6 +19,7 @@ func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 	ingredient := &ai.InputIngredient{
 		ProductID:   "ingredient-123",
 		Description: "Asparagus",
+		Slug:        "asparagus",
 		Grade: &ai.IngredientGrade{
 			Score:  8,
 			Reason: "Fresh produce with broad recipe use.",
@@ -35,4 +36,5 @@ func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 	assert.Equal(t, ingredient.Grade.Score, got.Grade.Score)
 	assert.Equal(t, ingredient.Grade.Reason, got.Grade.Reason)
 	assert.Equal(t, ingredient.Description, got.Description)
+	assert.Equal(t, ingredient.Slug, got.Slug)
 }

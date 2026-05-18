@@ -35,6 +35,7 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 			Score:  10,
 			Reason: "default",
 		}
+		ingredient.Slug = "stub-slug"
 		// this should be closer to whats in actual grader.
 		out = append(out, ingredient)
 	}
@@ -109,6 +110,7 @@ func TestCachingGraderOverlaysCachedGradeOnCurrentIngredientMetadata(t *testing.
 		Brand:       current.Brand,
 		Description: current.Description,
 		Size:        current.Size,
+		Slug:        "asparagus",
 		Grade: &ai.IngredientGrade{
 			Score:  9,
 			Reason: "cached grade",
@@ -130,6 +132,7 @@ func TestCachingGraderOverlaysCachedGradeOnCurrentIngredientMetadata(t *testing.
 	require.NotNil(t, results[0].Grade)
 	assert.Equal(t, 9, results[0].Grade.Score)
 	assert.Equal(t, "cached grade", results[0].Grade.Reason)
+	assert.Equal(t, "asparagus", results[0].Slug)
 }
 
 func TestCachingGraderOverlaysNewGradeOnCurrentIngredientMetadata(t *testing.T) {
@@ -151,11 +154,13 @@ func TestCachingGraderOverlaysNewGradeOnCurrentIngredientMetadata(t *testing.T) 
 	assert.Equal(t, []string{"Produce"}, results[0].Categories)
 	require.NotNil(t, results[0].Grade)
 	assert.Equal(t, 10, results[0].Grade.Score)
+	assert.Equal(t, "stub-slug", results[0].Slug)
 
 	cached, err := cacheStore.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(current)))
 	require.NoError(t, err)
 	assert.Equal(t, "fresh-herbs", cached.AisleNumber)
 	assert.Equal(t, []string{"Produce"}, cached.Categories)
+	assert.Equal(t, "stub-slug", cached.Slug)
 	require.NotNil(t, cached.Grade)
 }
 

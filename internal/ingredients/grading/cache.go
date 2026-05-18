@@ -59,6 +59,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 			}
 			// should probably only cache grade as rest of ingredient may change
 			ingredient.Grade = gradedIngredient.Grade
+			ingredient.Slug = gradedIngredient.Slug
 			return lookupResult{cached: &ingredient}, nil
 		}
 		if !errors.Is(err, cache.ErrNotFound) {
