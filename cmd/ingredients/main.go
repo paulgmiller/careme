@@ -92,6 +92,8 @@ func main() {
 	fmt.Println("Deduped grade distribution:")
 	printGradeDistribution(dedupedSummary)
 	fmt.Printf("Deduped count %d and score %d\n", dedupedSummary.TotalCount, dedupedSummary.ScoreSum)
+
+	printUsefulSlugGroups(groupUsefulIngredientsBySlug(graded))
 }
 
 type gradeSummary struct {
@@ -148,6 +150,51 @@ func dedupeIngredientsBySlug(ingredients []ai.InputIngredient) []ai.InputIngredi
 	return deduped
 }
 
+type slugIngredientGroup struct {
+	Slug        string
+	Ingredients []ai.InputIngredient
+	BestGrade   int
+}
+
+func groupUsefulIngredientsBySlug(ingredients []ai.InputIngredient) []slugIngredientGroup {
+	bySlug := make(map[string][]ai.InputIngredient)
+	for _, ingredient := range ingredients {
+		key := ingredientDedupeKey(ingredient)
+		if key == "" {
+			continue
+		}
+		bySlug[key] = append(bySlug[key], ingredient)
+	}
+
+	groups := make([]slugIngredientGroup, 0, len(bySlug))
+	for slug, groupIngredients := range bySlug {
+		slices.SortFunc(groupIngredients, compareIngredientsForSlugGroup)
+		bestGrade := gradeScore(groupIngredients[0])
+		if bestGrade <= 6 {
+			continue
+		}
+		groups = append(groups, slugIngredientGroup{
+			Slug:        slug,
+			Ingredients: groupIngredients,
+			BestGrade:   bestGrade,
+		})
+	}
+	slices.SortFunc(groups, func(a, b slugIngredientGroup) int {
+		if a.BestGrade != b.BestGrade {
+			return b.BestGrade - a.BestGrade
+		}
+		return strings.Compare(a.Slug, b.Slug)
+	})
+	return groups
+}
+
+func printUsefulSlugGroups(groups []slugIngredientGroup) {
+	fmt.Println("Useful slug groups:")
+	for _, group := range groups {
+		fmt.Printf("%s (%d ingredients, best %d/10)\n", group.Slug, len(group.Ingredients), group.BestGrade)
+	}
+}
+
 func ingredientDedupeKey(ingredient ai.InputIngredient) string {
 	if key := normalizedDedupeText(ingredient.Slug); key != "" {
 		return key
@@ -174,9 +221,26 @@ func betterDedupeRepresentative(candidate, current ai.InputIngredient) bool {
 	return strings.Compare(strings.ToLower(candidate.ProductID), strings.ToLower(current.ProductID)) < 0
 }
 
+func compareIngredientsForSlugGroup(a, b ai.InputIngredient) int {
+	if gradeScore(a) != gradeScore(b) {
+		return gradeScore(b) - gradeScore(a)
+	}
+	if cmp := strings.Compare(strings.ToLower(a.Description), strings.ToLower(b.Description)); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(strings.ToLower(a.ProductID), strings.ToLower(b.ProductID))
+}
+
 func gradeScore(ingredient ai.InputIngredient) int {
 	if ingredient.Grade == nil {
 		return -1
 	}
 	return ingredient.Grade.Score
+}
+
+func gradeReason(ingredient ai.InputIngredient) string {
+	if ingredient.Grade == nil {
+		return ""
+	}
+	return ingredient.Grade.Reason
 }

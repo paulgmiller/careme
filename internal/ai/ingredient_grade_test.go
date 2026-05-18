@@ -174,4 +174,8 @@ func TestIngredientGradeSchemaIncludesSlug(t *testing.T) {
 
 	_, hasSlug := itemProperties["slug"]
 	assert.True(t, hasSlug)
+
+	required, ok := items["required"].([]any)
+	require.True(t, ok)
+	assert.Contains(t, required, "slug")
 }

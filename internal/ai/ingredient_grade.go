@@ -28,12 +28,13 @@ You review grocery catalog items before they are shown to a home recipe generato
 
 Score each item from 0 to 10 for usefulness as an ingredient in home-cooked recipes.
 
-Also return a slug for each item. The slug is the canonical ingredient name in lowercase, usually plural only when that is the natural ingredient name. Strip brand names and most adjectives for marketing, color, quality, package, and production method when they do not affect cooking. Keep adjectives or prep words when they materially change how the ingredient cooks or is used.
+Also return a slug for each item. The slug is the canonical ingredient name in lowercase, singular. 
+Strip brand names and most adjectives for marketing, color, quality, package, and production method when they do not affect cooking. 
+Keep adjectives or prep words when they materially change how the ingredient cooks or is used.
 
 Slug examples:
 - baby carrots, rainbow carrots, organic carrots -> carrots
 - baby bok choy can remain distinct from bok choy
-- bronze-cut pasta can remain distinct from pasta
 
 Strongly reward:
 - raw, fresh, whole, or minimally processed produce, meat, seafood, dairy, grains, legumes, herbs, and spices
@@ -130,7 +131,7 @@ type ingredientGradeResponseItem struct {
 	ProductID string `json:"id"`
 	Score     int    `json:"score" jsonschema:"minimum=0,maximum=10"`
 	Reason    string `json:"reason"`
-	Slug      string `json:"slug,omitempty"`
+	Slug      string `json:"slug"`
 }
 
 type ingredientBatchGradeResponse struct {
