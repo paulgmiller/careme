@@ -30,11 +30,6 @@ func TestNormalizeInputIngredientNormalizesFieldsAndSetsID(t *testing.T) {
 	assert.Equal(t, float32(3.49), *ingredient.PriceSale)
 }
 
-//go:fix inline
-func float32Ptr(v float32) *float32 {
-	return new(v)
-}
-
 func TestInputIngredientHashStableAcrossCategoryOrder(t *testing.T) {
 	left := NormalizeInputIngredient(InputIngredient{
 		ProductID:   "123",

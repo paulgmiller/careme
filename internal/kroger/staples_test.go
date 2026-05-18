@@ -175,8 +175,3 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 		t.Fatalf("unexpected categories: got %v want %v", ingredient.Categories, categories)
 	}
 }
-
-//go:fix inline
-func stringPtr(value string) *string {
-	return new(value)
-}

@@ -48,8 +48,3 @@ func TestIngredientsIncludesCountAndSales(t *testing.T) {
 
 	assert.Equal(t, "Considering 1 out of 3 ingredients\nHalf Off Spinach 50% off at 5.00\n", got)
 }
-
-//go:fix inline
-func recipeFloat32(v float32) *float32 {
-	return new(v)
-}
