@@ -7,13 +7,11 @@ import (
 	"log"
 	"slices"
 	"strings"
-	"unicode"
 
 	"careme/internal/ai"
 	"careme/internal/config"
+	"careme/internal/produce"
 	"careme/internal/recipes"
-
-	"golang.org/x/text/unicode/norm"
 )
 
 func main() {
@@ -23,7 +21,7 @@ func main() {
 	// local to bellevue Fred Meyer 70100023, factoria 70500822
 	flag.StringVar(&locationID, "location", "70500874", "Kroger location ID to validate")
 	flag.StringVar(&locationID, "l", "70500874", "Kroger location ID to validate (short)")
-	flag.StringVar(&produceCSV, "produce", strings.Join(all, ","), "Comma-separated produce list to check")
+	flag.StringVar(&produceCSV, "produce", strings.Join(produce.DefaultTerms(), ","), "Comma-separated produce list to check")
 	flag.Parse()
 
 	if strings.TrimSpace(locationID) == "" {
@@ -60,7 +58,7 @@ func main() {
 
 func parseProduceList(csv string) []string {
 	parts := strings.Split(csv, ",")
-	produce := make([]string, 0, len(parts))
+	produceTerms := make([]string, 0, len(parts))
 	seen := make(map[string]struct{}, len(parts))
 	for _, part := range parts {
 		term := normalizeTerm(part)
@@ -71,9 +69,9 @@ func parseProduceList(csv string) []string {
 			continue
 		}
 		seen[term] = struct{}{}
-		produce = append(produce, term)
+		produceTerms = append(produceTerms, term)
 	}
-	return produce
+	return produceTerms
 }
 
 type produceFilterStats struct {
@@ -190,145 +188,9 @@ func printProduceFilterSummary(stat produceFilterStats, totalProduceTerms int) {
 }
 
 func hasProduce(ingredients []ai.InputIngredient, term string) []string {
-	needleTokens := tokens(normalizeTerm(term))
-	if len(needleTokens) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{})
-	matches := make([]string, 0)
-	for _, ingredient := range ingredients {
-		description := strings.TrimSpace(ingredient.Description)
-		if description == "" {
-			continue
-		}
-		haystackTokens := tokens(normalizeTerm(description))
-		if !containsAllTokens(haystackTokens, needleTokens) {
-			continue
-		}
-		if _, ok := seen[description]; ok {
-			continue
-		}
-		seen[description] = struct{}{}
-		matches = append(matches, description)
-	}
-
-	slices.Sort(matches)
-	return matches
+	return produce.MatchDescriptions(ingredients, term)
 }
 
 func normalizeTerm(s string) string {
-	s = strings.TrimSpace(strings.ToLower(s))
-	s = removeParenthetical(s)
-	s = stripDiacritics(s)
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		if unicode.IsLetter(r) || unicode.IsNumber(r) {
-			b.WriteRune(r)
-			continue
-		}
-		b.WriteRune(' ')
-	}
-	fields := strings.Fields(b.String())
-	if len(fields) == 0 {
-		return ""
-	}
-	normalized := make([]string, 0, len(fields))
-	for _, field := range fields {
-		token := normalizeToken(field)
-		if token == "" {
-			continue
-		}
-		normalized = append(normalized, token)
-	}
-	return strings.Join(normalized, " ")
-}
-
-func tokens(s string) []string {
-	if s == "" {
-		return nil
-	}
-	return strings.Fields(s)
-}
-
-func containsAllTokens(haystack []string, needle []string) bool {
-	if len(needle) == 0 {
-		return false
-	}
-	set := make(map[string]struct{}, len(haystack))
-	for _, token := range haystack {
-		set[token] = struct{}{}
-	}
-	for _, token := range needle {
-		if _, ok := set[token]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func removeParenthetical(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	depth := 0
-	for _, r := range s {
-		switch r {
-		case '(':
-			depth++
-		case ')':
-			if depth > 0 {
-				depth--
-			}
-		default:
-			if depth == 0 {
-				b.WriteRune(r)
-			}
-		}
-	}
-	return b.String()
-}
-
-func stripDiacritics(s string) string {
-	decomposed := norm.NFD.String(s)
-	var b strings.Builder
-	b.Grow(len(decomposed))
-	for _, r := range decomposed {
-		if unicode.Is(unicode.Mn, r) {
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return norm.NFC.String(b.String())
-}
-
-func normalizeToken(s string) string {
-	switch {
-	case strings.HasSuffix(s, "ies") && len(s) > 3:
-		s = s[:len(s)-3] + "y"
-	case strings.HasSuffix(s, "oes") && len(s) > 3:
-		s = s[:len(s)-2]
-	case strings.HasSuffix(s, "ches") || strings.HasSuffix(s, "shes") || strings.HasSuffix(s, "xes") || strings.HasSuffix(s, "zes") || strings.HasSuffix(s, "ses"):
-		if len(s) > 4 {
-			s = s[:len(s)-2]
-		}
-	case strings.HasSuffix(s, "s") && !strings.HasSuffix(s, "ss") && len(s) > 2:
-		s = s[:len(s)-1]
-	}
-
-	switch s {
-	case "kiwifruit":
-		s = "kiwi"
-	case "asparagus":
-		return s
-	case "portobello":
-		s = "portabella"
-	case "chile":
-		s = "chili"
-	}
-
-	switch s {
-	case "brussel":
-		return "brussels"
-	}
-	return s
+	return produce.NormalizeTerm(s)
 }

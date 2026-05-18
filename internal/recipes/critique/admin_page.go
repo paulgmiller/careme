@@ -31,7 +31,8 @@ var adminCritiquesPageTmpl = template.Must(template.New("admin-critiques").Parse
 <body>
   <nav>
     <a href="/admin/users">Users</a> |
-    <a href="/admin/critiques">Recipe Critiques</a>
+    <a href="/admin/critiques">Recipe Critiques</a> |
+    <a href="/admin/produce-scores">Produce Scores</a>
   </nav>
   <h1>Recipe Critiques</h1>
   <p>Total critiques: {{len .Critiques}}</p>

@@ -1,4 +1,4 @@
-package main
+package produce
 
 var fruit = []string{
 	"bananas",
@@ -135,4 +135,10 @@ var vegetables = []string{
 	"Bean sprouts",
 }
 
-var all = append(append(fruit, tubers...), vegetables...)
+func DefaultTerms() []string {
+	terms := make([]string, 0, len(fruit)+len(tubers)+len(vegetables))
+	terms = append(terms, fruit...)
+	terms = append(terms, tubers...)
+	terms = append(terms, vegetables...)
+	return terms
+}
