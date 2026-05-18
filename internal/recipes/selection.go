@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,7 +22,7 @@ const recipeSelectionCachePrefix = "recipe_selection/"
 type recipeSelection struct {
 	SavedHashes     []string  `json:"saved_hashes,omitempty"`
 	DismissedHashes []string  `json:"dismissed_hashes,omitempty"`
-	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 func (s *recipeSelection) markSaved(recipeHash string) {
@@ -101,19 +102,9 @@ func (selection recipeSelection) override(new recipeSelection) recipeSelection {
 }
 
 func (selection recipeSelection) IsSaved(hash string) bool {
-	for _, savedHash := range selection.SavedHashes {
-		if hash == savedHash {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(selection.SavedHashes, hash)
 }
 
 func (selection recipeSelection) IsDismissed(hash string) bool {
-	for _, savedHash := range selection.DismissedHashes {
-		if hash == savedHash {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(selection.DismissedHashes, hash)
 }

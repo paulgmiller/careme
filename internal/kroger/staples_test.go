@@ -149,11 +149,11 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	sale := float32(3.49)
 	categories := []string{"Produce", "Fresh Fruit"}
 	ingredient := inputIngredientFromKrogerIngredient(Ingredient{
-		ProductId:    stringPtr(" apple-1 "),
-		AisleNumber:  stringPtr(" 12 "),
-		Brand:        stringPtr(" Orchard Co "),
-		Description:  stringPtr(" Honeycrisp Apple "),
-		Size:         stringPtr(" 3 lb "),
+		ProductId:    new(" apple-1 "),
+		AisleNumber:  new(" 12 "),
+		Brand:        new(" Orchard Co "),
+		Description:  new(" Honeycrisp Apple "),
+		Size:         new(" 3 lb "),
 		PriceRegular: &regular,
 		PriceSale:    &sale,
 		Categories:   &categories,
@@ -176,6 +176,7 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	}
 }
 
+//go:fix inline
 func stringPtr(value string) *string {
-	return &value
+	return new(value)
 }

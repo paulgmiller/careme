@@ -29,7 +29,7 @@ var nowFn = time.Now
 
 type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
-	Date     time.Time           `json:"date,omitempty"`
+	Date     time.Time           `json:"date"`
 	// People       int
 	// per round instuctions
 	Instructions string   `json:"instructions,omitempty"`

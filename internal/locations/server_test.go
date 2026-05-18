@@ -68,7 +68,7 @@ func TestRequestStoreIsIdempotent(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		req := httptest.NewRequest(http.MethodPost, "/locations/request-store", strings.NewReader("store_id=publix_123"))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("HX-Request", "true")

@@ -123,7 +123,6 @@ func initializeLocationBackends(ctx context.Context, factories []locationBackend
 	g, ctx := errgroup.WithContext(ctx)
 	results := make(chan locationBackend, len(factories))
 	for i, factory := range factories {
-		i, factory := i, factory
 		g.Go(func() error {
 			start := time.Now()
 			backend, err := factory(ctx)

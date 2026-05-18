@@ -155,7 +155,7 @@ func selectedChains(raw string) ([]albertsons.Chain, error) {
 	}
 
 	selected := make([]albertsons.Chain, 0, len(all))
-	for _, part := range strings.Split(raw, ",") {
+	for part := range strings.SplitSeq(raw, ",") {
 		brand := strings.TrimSpace(strings.ToLower(part))
 		if brand == "" {
 			continue

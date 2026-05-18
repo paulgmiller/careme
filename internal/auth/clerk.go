@@ -52,7 +52,7 @@ func NewClient(cfg *config.Config) (*clerkClient, error) {
 
 	clientConfig := &clerk.ClientConfig{
 		BackendConfig: clerk.BackendConfig{
-			Key: clerk.String(cfg.Clerk.SecretKey),
+			Key: new(cfg.Clerk.SecretKey),
 		},
 	}
 

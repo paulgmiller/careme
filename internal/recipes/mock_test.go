@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -52,18 +53,18 @@ func TestMockGenerateRecipes_ReturnsRandomRecipes(t *testing.T) {
 	// Generate recipes multiple times and check that we get different combinations
 	// With 20 recipes choosing 3, it's very unlikely to get the same 3 in the same order multiple times
 	results := make([]string, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result, err := m.GenerateRecipes(t.Context(), params)
 		if err != nil {
 			t.Fatalf("expected no error on iteration %d, got %v", i, err)
 		}
 
 		// Create a string representation of the recipe titles
-		titles := ""
+		var titles strings.Builder
 		for _, recipe := range result.Recipes {
-			titles += recipe.Title + "|"
+			titles.WriteString(recipe.Title + "|")
 		}
-		results[i] = titles
+		results[i] = titles.String()
 	}
 
 	// Check that we got at least 2 different combinations

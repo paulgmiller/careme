@@ -169,7 +169,6 @@ func makeStoreMenuPlans(ctx context.Context, service planService, stores []locat
 	var wg sync.WaitGroup
 	wg.Add(len(stores))
 	for i, store := range stores {
-		i, store := i, store
 		go func() {
 			defer wg.Done()
 			date, err := recipes.StoreToDate(ctx, now, &store)
