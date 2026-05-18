@@ -1,12 +1,15 @@
 package recipes
 
 import (
+	"cmp"
 	"context"
 	"html/template"
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"careme/internal/ai"
 	"careme/internal/locations"
@@ -39,62 +42,44 @@ type shoppingRecipeView struct {
 	ShoppingListHash   string
 	ServerSignedIn     bool
 	DisplayIngredients []ai.Ingredient // merged food and wine
-	Dismissed          bool            // saved already in recipe
-	Wine               shoppingRecipeWineView
+	Saved              bool
+	Dismissed          bool
+	WineRecommendation *ai.WineSelection
 }
 
-// shoppingRecipeWineView holds the template-only state for the shopping list wine UI.
-// The shopping card has three independently swappable regions, so the IDs are grouped
-// here instead of being spread across the parent recipe view.
-type shoppingRecipeWineView struct {
-	ActionID       string
-	ActionButtonID string
-	PreviewID      string
-	DetailID       string
-	DetailButtonID string
-	Preview        []ai.Ingredient
-	Recommendation *ai.WineSelection
-}
-
-// FormatShoppingListHTML renders the multi-recipe shopping list view.
-func FormatShoppingListHTML(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, writer http.ResponseWriter) {
-	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), writer)
+type shoppingListGroup struct {
+	Aisle string
+	Items []*ai.Ingredient
 }
 
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
-func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList, wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, writer http.ResponseWriter) {
-	dismissedHashes := make(map[string]bool, len(p.Dismissed))
-	for _, recipe := range p.Dismissed {
-		dismissedHashes[recipe.ComputeHash()] = true
-	}
+// should shove wine recs into recipe instead of having them seperate.
+func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, selection recipeSelection, writer http.ResponseWriter,
+) {
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
+	hasSavedRecipes := false
 	for _, recipe := range l.Recipes {
 		recipeHash := recipe.ComputeHash()
 		wineRecommendation := wineRecommendations[recipeHash]
 		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
-		wineActionID, wineButtonID := shoppingWineDOMIDs(recipeHash)
-		wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
+		saved := selection.IsSaved(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
 			Hash:               recipeHash,
 			ShoppingListHash:   hash,
 			ServerSignedIn:     signedIn,
 			DisplayIngredients: displayIngredients,
-			Dismissed:          dismissedHashes[recipeHash],
-			Wine: shoppingRecipeWineView{
-				ActionID:       wineActionID,
-				ActionButtonID: wineButtonID,
-				PreviewID:      shoppingWinePreviewDOMID(recipeHash),
-				DetailID:       wineDetailID,
-				DetailButtonID: wineDetailButtonID,
-				Preview:        winePreviewPicks(wineRecommendation),
-				Recommendation: wineRecommendation,
-			},
+			Saved:              saved,
+			Dismissed:          selection.IsDismissed(recipeHash),
+			WineRecommendation: wineRecommendation,
 		})
-		combinedIngredients = append(combinedIngredients, displayIngredients...)
+		if saved {
+			hasSavedRecipes = true
+			combinedIngredients = append(combinedIngredients, displayIngredients...)
+		}
 	}
-	shoppingList := shoppingListForDisplay(combinedIngredients)
 	data := struct {
 		Location        locations.Location
 		Date            string
@@ -103,9 +88,8 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Instructions    string
 		Hash            string
 		Recipes         []shoppingRecipeView
-		ShoppingList    []ai.Ingredient
+		ShoppingList    []shoppingListGroup
 		HasSavedRecipes bool
-		ConversationID  string
 		Style           seasons.Style
 		ServerSignedIn  bool
 	}{
@@ -116,33 +100,41 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		Instructions:    p.Instructions,
 		Hash:            hash,
 		Recipes:         recipeViews,
-		ShoppingList:    shoppingList,
-		HasSavedRecipes: len(p.Saved) > 0,
-		ConversationID:  l.ConversationID,
+		ShoppingList:    shoppingListForDisplay(combinedIngredients),
+		HasSavedRecipes: hasSavedRecipes,
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  signedIn,
 	}
 
+	setTextContent(writer)
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry, fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter) {
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, saved bool,
+	critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry,
+	fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter,
+) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	recipeHash := recipe.ComputeHash()
+	activeResponseID := recipe.ResponseID
+	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
+		activeResponseID = threadResponseID
+	}
 	data := struct {
 		Location            locations.Location
 		Date                string
 		ClarityScript       template.HTML
 		GoogleTagScript     template.HTML
 		Recipe              ai.Recipe
+		Saved               bool
 		DisplayIngredients  []ai.Ingredient
 		OriginHash          string
-		ConversationID      string
+		ResponseID          string
 		WineRecommendation  *ai.WineSelection
 		Thread              []RecipeThreadEntry
 		Feedback            feedback.Feedback
@@ -158,9 +150,10 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ClarityScript:       templates.ClarityScript(ctx),
 		GoogleTagScript:     templates.GoogleTagScript(),
 		Recipe:              recipe,
+		Saved:               saved,
 		DisplayIngredients:  ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		OriginHash:          recipe.OriginHash,
-		ConversationID:      p.ConversationID,
+		ResponseID:          activeResponseID,
 		WineRecommendation:  wineRecommendation,
 		Thread:              thread,
 		Feedback:            fb,
@@ -172,6 +165,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore: critiqueScore,
 	}
 
+	setTextContent(writer)
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -185,118 +179,86 @@ func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeIma
 	}
 }
 
-func FormatRecipeImageActionHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
-	data := struct {
-		RecipeHash     string
-		RecipeImage    recipeImageView
-		ServerSignedIn bool
-	}{
-		RecipeHash:     recipeHash,
-		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, false),
-		ServerSignedIn: signedIn,
-	}
-
-	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action", data); err != nil {
-		http.Error(writer, "recipe image action template error: "+err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func FormatRecipeImageActionResponseHTML(recipeHash string, signedIn bool, hasRecipeImage bool, writer http.ResponseWriter) {
-	data := struct {
-		RecipeHash     string
-		RecipeImage    recipeImageView
-		ServerSignedIn bool
-	}{
-		RecipeHash:     recipeHash,
-		RecipeImage:    recipeImageData(recipeHash, hasRecipeImage, true),
-		ServerSignedIn: signedIn,
-	}
-
-	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_image_action_response", data); err != nil {
-		http.Error(writer, "recipe image response template error: "+err.Error(), http.StatusInternalServerError)
-	}
-}
-
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
-func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, conversationID string, writer http.ResponseWriter) {
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseID string, writer http.ResponseWriter) {
 	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	data := struct {
-		ConversationID string
+		ResponseID     string
 		Thread         []RecipeThreadEntry
 		ServerSignedIn bool
 	}{
-		ConversationID: conversationID,
+		ResponseID:     responseID,
 		Thread:         thread,
 		ServerSignedIn: signedIn,
 	}
 
+	setTextContent(writer)
 	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
 		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
-// FormatRecipeWineHTML renders the wine recommendation fragment for HTMX swaps.
-func FormatRecipeWineHTML(recipeHash string, selection *ai.WineSelection, writer http.ResponseWriter) {
-	data := struct {
-		RecipeHash         string
-		WineRecommendation *ai.WineSelection
-	}{
-		RecipeHash:         recipeHash,
-		WineRecommendation: selection,
-	}
-
-	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_wine", data); err != nil {
-		http.Error(writer, "recipe wine template error: "+err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// FormatShoppingRecipeWineHTML renders the signed-in shopping list wine fragment for HTMX swaps.
-func FormatShoppingRecipeWineHTML(recipeHash, slot string, selection *ai.WineSelection, writer http.ResponseWriter) {
-	wineActionID, wineButtonID := shoppingWineDOMIDs(recipeHash)
-	winePreviewID := shoppingWinePreviewDOMID(recipeHash)
-	wineDetailID, wineDetailButtonID := shoppingWineDetailDOMIDs(recipeHash)
-	data := struct {
-		// Hash is used for recipe-scoped DOM IDs and /recipe/{hash}/wine endpoints.
-		Hash           string
-		ServerSignedIn bool
-		Wine           shoppingRecipeWineView
-	}{
-		Hash:           recipeHash,
-		ServerSignedIn: true,
-		Wine: shoppingRecipeWineView{
-			ActionID:       wineActionID,
-			ActionButtonID: wineButtonID,
-			PreviewID:      winePreviewID,
-			DetailID:       wineDetailID,
-			DetailButtonID: wineDetailButtonID,
-			Preview:        winePreviewPicks(selection),
-			Recommendation: selection,
-		},
-	}
-
-	templateName := "shopping_recipe_wine_action_response"
-	if strings.EqualFold(strings.TrimSpace(slot), "details") {
-		templateName = "shopping_recipe_wine_details_response"
-	}
-
-	if err := templates.ShoppingList.ExecuteTemplate(writer, templateName, data); err != nil {
-		http.Error(writer, "shopping list wine template error: "+err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func RenderShoppingFinalizeControlsHTML(hash string, hasSavedRecipes bool, writer io.Writer) error {
+func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 	data := struct {
 		Hash            string
 		HasSavedRecipes bool
 	}{
 		Hash:            hash,
-		HasSavedRecipes: hasSavedRecipes,
+		HasSavedRecipes: true,
 	}
 
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_finalize_controls_response", data)
+}
+
+// called from shoppping list and will either mimimize dimissed or bring back in all on undo.
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
+	data := shoppingRecipeView{
+		Recipe:             recipe,
+		Hash:               recipe.ComputeHash(),
+		ShoppingListHash:   shoppingListHash,
+		ServerSignedIn:     true, // have to be signed in to toggle
+		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		Saved:              saved,
+		Dismissed:          !saved,
+		WineRecommendation: wineRecommendation,
+	}
+	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
+}
+
+// called from single recipe page just swaps save dimiss
+func RenderRecipeSaveActionHTML(recipe ai.Recipe, originHash string, saved bool, writer io.Writer) error {
+	data := struct {
+		Recipe         ai.Recipe
+		Saved          bool
+		OriginHash     string
+		RecipeHash     string
+		ServerSignedIn bool
+	}{
+		Recipe:         recipe,
+		Saved:          saved,
+		OriginHash:     originHash,
+		RecipeHash:     recipe.ComputeHash(),
+		ServerSignedIn: true,
+	}
+	return templates.Recipe.ExecuteTemplate(writer, "recipe_save_action", data)
+}
+
+func latestThreadResponseID(thread []RecipeThreadEntry) string {
+	if len(thread) == 0 {
+		return ""
+	}
+	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
+	for _, entry := range thread {
+		if responseID := strings.TrimSpace(entry.ResponseID); responseID != "" {
+			return responseID
+		}
+	}
+	return ""
 }
 
 // drops clarity, instructions and most of shoppinglist
@@ -322,43 +284,108 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 	return templates.Mail.Execute(writer, data)
 }
 
-func shoppingListForDisplay(ingredients []ai.Ingredient) []ai.Ingredient {
-	if len(ingredients) == 0 {
-		return nil
-	}
+func shoppingListForDisplay(ingredients []ai.Ingredient) []shoppingListGroup {
 	items := make(map[string]*ai.Ingredient)
-	order := make([]string, 0)
+	var combined []*ai.Ingredient // maintain original ordering after deduping
 
 	for _, ingredient := range ingredients {
-		name := strings.ToLower(strings.TrimSpace(ingredient.Name))
+		name := normalizeShoppingListName(ingredient.Name)
 		if name == "" {
 			continue
 		}
 		existing, ok := items[name]
 		if !ok {
-			items[name] = &ai.Ingredient{
-				Name:     ingredient.Name,
-				Quantity: strings.TrimSpace(ingredient.Quantity),
+			item := &ai.Ingredient{
+				ProductID:   strings.TrimSpace(ingredient.ProductID),
+				AisleNumber: strings.TrimSpace(ingredient.AisleNumber),
+				Name:        ingredient.Name, // show non normalized
+				Quantity:    strings.TrimSpace(ingredient.Quantity),
+				Price:       strings.TrimSpace(ingredient.Price),
 			}
-			order = append(order, name)
+			items[name] = item
+			combined = append(combined, item)
+
 			continue
 		}
 		qty := strings.TrimSpace(ingredient.Quantity)
-		if qty == "" {
-			continue
-		}
-		if existing.Quantity == "" {
+		switch {
+		case qty == "":
+		case existing.Quantity == "":
 			existing.Quantity = qty
-			continue
+		default:
+			existing.Quantity = existing.Quantity + ", " + qty
 		}
-		existing.Quantity = existing.Quantity + ", " + qty
 	}
 
-	combined := make([]ai.Ingredient, 0, len(order))
-	for _, name := range order {
-		combined = append(combined, *items[name])
+	slices.SortStableFunc(combined, func(a, b *ai.Ingredient) int {
+		return compareShoppingAisles(strings.TrimSpace(a.AisleNumber), strings.TrimSpace(b.AisleNumber))
+	})
+
+	var groups []shoppingListGroup
+	for _, item := range combined {
+		aisle := strings.TrimSpace(item.AisleNumber)
+		if len(groups) == 0 || groups[len(groups)-1].Aisle != shoppingAisleHeading(aisle) {
+			groups = append(groups, shoppingListGroup{
+				Aisle: shoppingAisleHeading(aisle),
+			})
+		}
+		groups[len(groups)-1].Items = append(groups[len(groups)-1].Items, item)
 	}
-	return combined
+	return groups
+}
+
+func shoppingAisleHeading(aisle string) string {
+	aisle = strings.TrimSpace(aisle)
+	if aisle == "" {
+		return "Other items"
+	}
+	if _, err := strconv.Atoi(aisle); err == nil {
+		return "Aisle " + aisle
+	}
+	if label, ok := knownShoppingAisleLabels[aisle]; ok {
+		return label
+	}
+	// Some providers give category slugs instead of display aisle names.
+	// Convert values like "fresh-vegetables" into a readable heading.
+	parts := strings.Fields(strings.NewReplacer("-", " ", "_", " ").Replace(aisle))
+	for i, part := range parts {
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
+}
+
+var knownShoppingAisleLabels = map[string]string{
+	"dairy-eggs":  "Dairy & eggs",
+	"fresh-herbs": "Fresh herbs",
+}
+
+// should only be used for internal matching otherwise violate some kroger must show names unaltered agreement
+func normalizeShoppingListName(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return ' '
+	}, name)
+	return strings.ToLower(strings.Join(strings.Fields(name), " "))
+}
+
+func compareShoppingAisles(a, b string) int {
+	if a == "" && b == "" {
+		return 0
+	}
+	if a == "" {
+		return 1
+	}
+	if b == "" {
+		return -1
+	}
+	aint, aerr := strconv.Atoi(a)
+	bint, berr := strconv.Atoi(b)
+	if aerr == nil && berr == nil {
+		return cmp.Compare(aint, bint)
+	}
+	return cmp.Compare(a, b)
 }
 
 func ingredientsForDisplay(base []ai.Ingredient, wineRecommendation *ai.WineSelection) []ai.Ingredient {
@@ -369,42 +396,4 @@ func ingredientsForDisplay(base []ai.Ingredient, wineRecommendation *ai.WineSele
 	}
 	display = append(display, wineRecommendation.Wines[0]) // Need a way to let the user pick among wines.
 	return display
-}
-
-// shoppingWineDOMIDs and friends live in Go rather than the template because the IDs
-// have to match across two render paths:
-// - the full shopping list page render
-// - the HTMX wine fragment responses that swap those regions later
-//
-// Keeping the ID construction here gives us one source of truth for:
-// - how recipe hashes are normalized into valid DOM ids
-// - which ids belong to the action, preview, and details regions
-// - tests that assert HTMX responses target the same elements as the full page
-func shoppingWineDOMIDs(hash string) (containerID string, buttonID string) {
-	safeHash := shoppingWineSafeHash(hash)
-	return "shopping-wine-" + safeHash, "shopping-wine-picker-" + safeHash
-}
-
-func shoppingWinePreviewDOMID(hash string) string {
-	safeHash := shoppingWineSafeHash(hash)
-	return "shopping-wine-preview-" + safeHash
-}
-
-func shoppingWineDetailDOMIDs(hash string) (containerID string, buttonID string) {
-	safeHash := shoppingWineSafeHash(hash)
-	return "shopping-wine-details-" + safeHash, "shopping-wine-details-picker-" + safeHash
-}
-
-func shoppingWineSafeHash(hash string) string {
-	return strings.TrimRight(strings.TrimSpace(hash), "=")
-}
-
-func winePreviewPicks(selection *ai.WineSelection) []ai.Ingredient {
-	if selection == nil || len(selection.Wines) == 0 {
-		return nil
-	}
-	if len(selection.Wines) <= 2 {
-		return selection.Wines
-	}
-	return selection.Wines[:2]
 }

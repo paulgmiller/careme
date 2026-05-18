@@ -39,7 +39,7 @@ func (s *Server) Register(mux routing.Registrar) {
 		mux.HandleFunc("GET /watchdogs/"+watcher.name, func(w http.ResponseWriter, r *http.Request) {
 			err := watcher.dog.Watchdog(r.Context())
 			if errors.Is(err, errTooSoon) {
-				http.Error(w, fmt.Sprintf("can only call watchdog every %v", watcher.period), http.StatusServiceUnavailable)
+				http.Error(w, fmt.Sprintf("can only call watchdog every %v", watcher.period), http.StatusTooManyRequests)
 				return
 			}
 			if err != nil {

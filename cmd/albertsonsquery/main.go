@@ -10,6 +10,8 @@ import (
 
 	"careme/internal/albertsons/query"
 	"careme/internal/brightdata"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
@@ -57,10 +59,12 @@ func run(ctx context.Context, args []string) error {
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 		defer cancel()
 	}
+
 	httpClient, err := brightdata.NewProxyAwareHTTPClient(brightdata.LoadConfig())
 	if err != nil {
 		return fmt.Errorf("create HTTP client: %w", err)
 	}
+	httpClient.Transport = otelhttp.NewTransport(httpClient.Transport)
 	client, err := query.NewSearchClient(query.SearchClientConfig{
 		BaseURL:         baseURL,
 		SubscriptionKey: subscriptionKey,

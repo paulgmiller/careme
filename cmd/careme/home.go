@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/locations"
+	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -22,6 +23,12 @@ type home struct {
 		GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 	}
 	authClient auth.AuthClient
+}
+
+func (h home) Register(routes routing.Registrar) {
+	routes.Handle("/{$}", h)
+	routes.Handle("/index.html", h)
+	routes.Handle("/index.htm", h)
 }
 
 func (h home) ServeHTTP(w http.ResponseWriter, r *http.Request) {

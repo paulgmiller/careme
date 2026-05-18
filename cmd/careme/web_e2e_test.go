@@ -84,12 +84,12 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 
 	// Step 6: ask a question on the finalized single recipe page.
 	question := "Can I use skirt steak instead?"
-	conversationID := extractHiddenValue(t, mustGetBody(t, client, srv.URL+"/recipe/"+url.PathEscape(savedHash)), "conversation_id")
+	responseID := extractHiddenValue(t, mustGetBody(t, client, srv.URL+"/recipe/"+url.PathEscape(savedHash)), "response_id")
 	questionURL := srv.URL + "/recipe/" + url.PathEscape(savedHash) + "/question"
 	questionBody := mustPostFormBodyHTMX(t, client, questionURL, url.Values{
-		"conversation_id": {conversationID},
-		"question":        {question},
-		"recipe_title":    {savedTitle},
+		"response_id":  {responseID},
+		"question":     {question},
+		"recipe_title": {savedTitle},
 	})
 	if !strings.Contains(questionBody, question) {
 		t.Fatalf("expected question thread to include question %q", question)
@@ -174,6 +174,34 @@ func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
 	}
 }
 
+func TestHomeRoutesAreExplicit(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.Close()
+
+	client := newTestClient(t)
+
+	for _, path := range []string{"/", "/index.html", "/index.htm"} {
+		resp := mustGet(t, client, srv.URL+path)
+		body := readAll(t, resp.Body)
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s expected 200, got %d: %s", path, resp.StatusCode, body)
+		}
+		requireValidHTML(t, path, resp.Header.Get("Content-Type"), body)
+	}
+
+	resp := mustGet(t, client, srv.URL+"/foobar")
+	body := readAll(t, resp.Body)
+	if err := resp.Body.Close(); err != nil {
+		t.Fatalf("failed to close response body: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET /foobar expected 404, got %d: %s", resp.StatusCode, body)
+	}
+}
+
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -186,7 +214,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
-	generator := recipes.NewMockGenerator()
+	generator := recipes.NewMockGenerator(recipes.IO(cacheStore))
 	centroids := locations.LoadCentroids()
 	locationStorage, err := locations.New(cfg, cacheStore, centroids)
 	if err != nil {
@@ -197,15 +225,15 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
-		return mockAuth.WithAuthHTTP(appMiddleware(h, &fakeRequestTracker{}))
+		return mockAuth.WithAuthHTTP(appMiddleware(h))
 	})
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory).Register(appRoutes)
-	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth).Register(appRoutes)
-	appRoutes.Handle("/", home{userStorage, locationStorage, mockAuth})
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator).Register(appRoutes)
+	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}
 	ro.add(locationServer)
@@ -391,10 +419,10 @@ func extractHiddenValue(t *testing.T, body, name string) string {
 
 func extractRecipeHashes(t *testing.T, body string) []string {
 	t.Helper()
-	re := regexp.MustCompile(`id="save-([^"]+)"`)
+	re := regexp.MustCompile(`<a href="/recipe/([^"]+)"`)
 	matches := re.FindAllStringSubmatch(body, -1)
 	if len(matches) == 0 {
-		t.Fatalf("expected recipe save inputs in page")
+		t.Fatalf("expected recipe links in page")
 	}
 	seen := make(map[string]struct{})
 	var hashes []string

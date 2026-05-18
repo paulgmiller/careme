@@ -16,6 +16,7 @@ type testServerConfig struct {
 	imageCache cache.Cache
 	storage    *users.Storage
 	generator  generator
+	imagegen   ImageGen
 	locServer  locServer
 	clerk      auth.AuthClient
 }
@@ -26,9 +27,8 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 	t.Helper()
 
 	cfg := testServerConfig{
-		cache:     cache.NewFileCache(filepath.Join(t.TempDir(), "cache")),
-		generator: mock{},
-		clerk:     auth.DefaultMock(),
+		cache: cache.NewFileCache(filepath.Join(t.TempDir(), "cache")),
+		clerk: auth.DefaultMock(),
 	}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -39,8 +39,15 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 	if cfg.storage == nil {
 		cfg.storage = users.NewStorage(cfg.cache)
 	}
+	if cfg.generator == nil {
+		cfg.generator = NewMockGenerator(IO(cfg.cache))
+	}
 
-	return NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk)
+	if cfg.imagegen == nil {
+		cfg.imagegen = mock{}
+	}
+
+	return NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen)
 }
 
 func withTestCache(c cache.ListCache) testServerOption {
@@ -58,6 +65,12 @@ func withTestStorage(storage *users.Storage) testServerOption {
 func withTestGenerator(g generator) testServerOption {
 	return func(cfg *testServerConfig) {
 		cfg.generator = g
+	}
+}
+
+func withImageGenerator(g ImageGen) testServerOption {
+	return func(cfg *testServerConfig) {
+		cfg.imagegen = g
 	}
 }
 

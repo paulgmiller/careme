@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,6 +28,18 @@ func isValidHTML(t *testing.T, htmlStr string) {
 	if err != nil {
 		t.Fatalf("rendered HTML is not valid: %v\nHTML:\n%s", err, htmlStr)
 	}
+}
+
+func assertHTTPSuccess(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	return w.Body.String()
+}
+
+func formatShoppingListHTMLForTest(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, selection recipeSelection, w *httptest.ResponseRecorder) {
+	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), selection, w)
 }
 
 func TestMain(m *testing.M) {
@@ -61,14 +74,11 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, list, true, w)
-	html := w.Body.String()
-	if w.Code != http.StatusOK {
-		t.Error("Want ok statuscode")
-	}
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+	html := assertHTTPSuccess(t, w)
 	isValidHTML(t, html)
-	if !strings.Contains(html, "Cook time:") {
-		t.Error("shopping list HTML should contain cook time")
+	if !strings.Contains(html, "Total time:") {
+		t.Error("shopping list HTML should contain total time")
 	}
 	if !strings.Contains(html, "Estimated cost:") {
 		t.Error("shopping list HTML should contain estimated cost")
@@ -76,8 +86,8 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("shopping list HTML should include htmx script")
 	}
-	if !strings.Contains(html, "Shopping list") {
-		t.Error("shopping list HTML should render the shopping list section for a single recipe")
+	if strings.Contains(html, "Shopping list") {
+		t.Error("shopping list HTML should not render the shopping list section before a recipe is added")
 	}
 	if !strings.Contains(html, `sm:grid-cols-[minmax(0,1fr)_10rem_5rem]`) {
 		t.Error("shopping list HTML should render ingredient rows with responsive aligned columns")
@@ -93,12 +103,84 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	addedRecipe := ai.Recipe{
+		Title:        "Added Bowl",
+		Description:  "Selected dinner",
+		Ingredients:  []ai.Ingredient{{Name: "Added carrots", Quantity: "2 cups"}},
+		Instructions: []string{"Cook."},
+		Health:       "Balanced",
+		DrinkPairing: "Water",
+	}
+	unaddedRecipe := ai.Recipe{
+		Title:        "Maybe Pasta",
+		Description:  "Not selected",
+		Ingredients:  []ai.Ingredient{{Name: "Unadded noodles", Quantity: "1 box"}},
+		Instructions: []string{"Boil."},
+		Health:       "Filling",
+		DrinkPairing: "Tea",
+	}
+	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{addedRecipe, unaddedRecipe}}
+	p := DefaultParams(&loc, time.Now())
+	selection := recipeSelection{SavedHashes: []string{addedRecipe.ComputeHash()}}
+
+	w := httptest.NewRecorder()
+	formatShoppingListHTMLForTest(t.Context(), p, shoppingList, true, selection, w)
+	html := assertHTTPSuccess(t, w)
+
+	isValidHTML(t, html)
+	if !strings.Contains(html, "Shopping list") {
+		t.Fatal("shopping list HTML should render the shopping list section when a recipe is added")
+	}
+	if got := strings.Count(html, "Added carrots"); got != 2 {
+		t.Fatalf("added recipe ingredient should render in recipe details and shopping list, got count %d", got)
+	}
+	if got := strings.Count(html, "Unadded noodles"); got != 1 {
+		t.Fatalf("unadded recipe ingredient should render only in recipe details, got count %d", got)
+	}
+}
+
+func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{{
+		Title:       "Added Dinner",
+		Description: "Selected dinner",
+		Ingredients: []ai.Ingredient{
+			{Name: "Butter", Quantity: "2 tbsp", AisleNumber: "dairy-eggs"},
+			{Name: "Milk", Quantity: "1 cup", AisleNumber: "dairy-eggs"},
+			{Name: "Beans", Quantity: "1 can", AisleNumber: "2"},
+			{Name: "Salt", Quantity: "1 tsp"},
+		},
+		Instructions: []string{"Cook."},
+		Health:       "Balanced",
+		DrinkPairing: "Water",
+	}}}
+	p := DefaultParams(&loc, time.Now())
+	selection := recipeSelection{SavedHashes: []string{shoppingList.Recipes[0].ComputeHash()}}
+
+	w := httptest.NewRecorder()
+	formatShoppingListHTMLForTest(t.Context(), p, shoppingList, true, selection, w)
+	html := assertHTTPSuccess(t, w)
+
+	isValidHTML(t, html)
+	if got := strings.Count(html, ">Dairy &amp; eggs<"); got != 1 {
+		t.Fatalf("shopping list should render dairy aisle heading once, got %d", got)
+	}
+	if got := strings.Count(html, ">Aisle 2<"); got != 1 {
+		t.Fatalf("shopping list should render numeric aisle heading once, got %d", got)
+	}
+	if got := strings.Count(html, ">Other items<"); got != 1 {
+		t.Fatalf("shopping list should render missing aisle heading once, got %d", got)
+	}
+}
+
 func TestFormatMail_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, list, true, w)
-	html := w.Body.String()
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 	if !strings.Contains(html, "quail") {
@@ -112,7 +194,8 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 
 	templates.Clarityproject = "test456"
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, list, true, w)
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+	assertHTTPSuccess(t, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.clarity.ms/tag/")) {
 		t.Error("HTML should contain Clarity script URL")
 	}
@@ -135,7 +218,8 @@ func TestFormatShoppingListHTML_IncludesClaritySessionID(t *testing.T) {
 	ctx := logsetup.WithSessionID(t.Context(), "sess-123")
 
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(ctx, p, list, nil, true, p.Hash(), w)
+	formatShoppingListHTMLForTest(ctx, p, list, true, recipeSelection{}, w)
+	assertHTTPSuccess(t, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte(`window.clarity("identify", "sess-123", "sess-123")`)) {
 		t.Error("HTML should include Clarity identify call with session id")
 	}
@@ -146,7 +230,8 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	templates.Clarityproject = ""
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, list, true, w)
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+	assertHTTPSuccess(t, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("clarity.ms")) {
 		t.Error("HTML should not contain Clarity script when project ID is empty")
 	}
@@ -162,7 +247,8 @@ func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
 	})
 	templates.GoogleTagID = "AW-1234567890"
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, list, true, w)
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+	assertHTTPSuccess(t, w)
 	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtag/js?id=AW-1234567890")) {
 		t.Error("HTML should contain Google tag script URL")
 	}
@@ -181,7 +267,8 @@ func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 	})
 	templates.GoogleTagID = ""
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, list, true, w)
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+	assertHTTPSuccess(t, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("googletagmanager.com")) {
 		t.Error("HTML should not contain Google tag script when tag ID is empty")
 	}
@@ -191,25 +278,27 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, list, true, w)
-	html := w.Body.String()
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+	html := assertHTTPSuccess(t, w)
 
-	// Verify "Careme Recipes" is a link to home page
+	// Verify "Careme" is a link to home page
 	if !strings.Contains(html, `<a href="/"`) {
 		t.Error("HTML should contain a link to home page")
 	}
-	if !strings.Contains(html, "Careme Recipes</a>") {
-		t.Error("HTML should contain 'Careme Recipes' as a link")
+	if !strings.Contains(html, "Careme</a>") {
+		t.Error("HTML should contain 'Careme' as a link")
 	}
 }
 
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
+	recipe.OriginHash = p.Hash()
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
-	html := w.Body.String()
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 
@@ -237,20 +326,17 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `id="wine-recommendation"`) {
 		t.Error("recipe HTML should contain wine recommendation container")
 	}
-	if !strings.Contains(html, `hx-post="/recipe/`) || !strings.Contains(html, `/wine"`) {
-		t.Error("recipe HTML should include wine picker htmx endpoint")
+	if strings.Contains(html, `/wine"`) || strings.Contains(html, "Choose a wine") {
+		t.Error("recipe HTML should not include manual wine picker")
 	}
-	if !strings.Contains(html, "Choose a wine") {
-		t.Error("recipe HTML should include choose wine button")
+	if !strings.Contains(html, `/save"`) || !strings.Contains(html, `Save`) {
+		t.Error("recipe HTML should include save button")
 	}
-	if !strings.Contains(html, "See plated dish") {
-		t.Error("recipe HTML should include see plated dish button")
+	if strings.Contains(html, "See plated dish") || strings.Contains(html, "Sign in to see plated dish") {
+		t.Error("recipe HTML should not include manual image generation actions")
 	}
-	if !strings.Contains(html, "htmx-indicator") {
-		t.Error("recipe HTML should include button spinners for async actions")
-	}
-	if !strings.Contains(html, "Cook time:") {
-		t.Error("recipe HTML should contain cook time")
+	if !strings.Contains(html, "Total time:") {
+		t.Error("recipe HTML should contain total time")
 	}
 	if !strings.Contains(html, "Estimated cost:") {
 		t.Error("recipe HTML should contain estimated cost")
@@ -284,15 +370,19 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
-	html := w.Body.String()
+	FormatRecipeHTML(t.Context(), p, recipe, false, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 
 	if strings.Contains(html, `name="question"`) {
 		t.Error("recipe HTML should not contain question input when signed out")
+	}
+	if strings.Contains(html, `/save"`) {
+		t.Error("recipe HTML should not expose save action when signed out")
 	}
 	if !strings.Contains(html, "Sign in to ask follow-up questions") {
 		t.Error("recipe HTML should prompt signed-out users to sign in for questions")
@@ -308,12 +398,13 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	score := 8
 
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
-	html := w.Body.String()
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 	if !strings.Contains(html, "Recipe score:") {
@@ -346,8 +437,8 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	FormatShoppingListHTML(t.Context(), p, multiRecipeList, false, w)
-	html := w.Body.String()
+	formatShoppingListHTMLForTest(t.Context(), p, multiRecipeList, false, recipeSelection{}, w)
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 	if strings.Contains(html, `/recipes/`) && strings.Contains(html, `/regenerate"`) {
@@ -368,7 +459,7 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, "Try again, chef") {
 		t.Error("shopping list HTML should hide regenerate action when signed out")
 	}
-	if strings.Contains(html, "Assemble Shopping List") {
+	if strings.Contains(html, "Build Shopping List") {
 		t.Error("shopping list HTML should hide finalize action when signed out")
 	}
 	if strings.Contains(html, `id="save-`) {
@@ -382,16 +473,17 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, list.Recipes[0], true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Oregon Pinot Noir", Price: "$14.99"},
 			{Name: "Backup Chardonnay", Price: "$11.99"},
 		},
 		Commentary: "Great with the savory notes.",
 	}, w)
-	html := w.Body.String()
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 
@@ -415,7 +507,6 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
 	recipe := ai.Recipe{
 		Title:        "Market Greens",
@@ -428,10 +519,11 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		Instructions: []string{"Wash and plate."},
 		Health:       "Light",
 		DrinkPairing: "Sparkling water",
+		ResponseID:   "resp-123",
 	}
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
-	html := w.Body.String()
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 	if !strings.Contains(html, "Little gem lettuce") {
@@ -466,8 +558,8 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		},
 	}
 
-	FormatShoppingListHTML(t.Context(), p, listWithoutPrice, true, w)
-	html := w.Body.String()
+	formatShoppingListHTMLForTest(t.Context(), p, listWithoutPrice, true, recipeSelection{}, w)
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 	if !strings.Contains(html, "English peas") {
@@ -484,13 +576,13 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.ConversationID = "convo123"
 	w := httptest.NewRecorder()
 	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
 	recipeHash := recipe.ComputeHash()
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
-	html := w.Body.String()
+	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 
@@ -505,7 +597,7 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	}
 }
 
-func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *testing.T) {
+func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	multi := ai.ShoppingList{
@@ -529,10 +621,7 @@ func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *te
 		},
 	}
 	wineHash := multi.Recipes[0].ComputeHash()
-	pickerHash := multi.Recipes[1].ComputeHash()
-	pickerActionID, pickerButtonID := shoppingWineDOMIDs(pickerHash)
-	pickerPreviewID := shoppingWinePreviewDOMID(pickerHash)
-	pickerDetailID, pickerDetailButtonID := shoppingWineDetailDOMIDs(pickerHash)
+	selection := recipeSelection{SavedHashes: []string{wineHash}}
 	w := httptest.NewRecorder()
 	FormatShoppingListHTMLForHash(t.Context(), p, multi, map[string]*ai.WineSelection{
 		wineHash: {
@@ -542,68 +631,25 @@ func TestFormatShoppingListHTMLForHash_RendersWinePickerAndWineIngredients(t *te
 			},
 			Commentary: "Good with roasted flavors.",
 		},
-	}, true, p.Hash(), w)
-	html := w.Body.String()
+	}, true, p.Hash(), selection, w)
+	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 
-	if !strings.Contains(html, `id="`+pickerActionID+`"`) {
-		t.Fatalf("shopping list should include action wine container for recipe without selection, body: %s", html)
+	if strings.Contains(html, `aria-label="Choose wine"`) || strings.Contains(html, `/wine"`) || strings.Contains(html, `/wine?view=shopping`) {
+		t.Fatalf("shopping list should not include wine picker controls, body: %s", html)
 	}
-	if !strings.Contains(html, `id="`+pickerButtonID+`"`) {
-		t.Fatalf("shopping list should include compact wine picker for recipe without selection, body: %s", html)
+	if got := strings.Count(html, "Cellar Red"); got != 3 {
+		t.Fatalf("shopping list should show selected wine in ingredients, recommendation, and combined list; got count %d, body: %s", got, html)
 	}
-	if !strings.Contains(html, `id="`+pickerPreviewID+`"`) {
-		t.Fatalf("shopping list should include preview wine container for recipe without selection, body: %s", html)
-	}
-	if !strings.Contains(html, `id="`+pickerDetailID+`"`) {
-		t.Fatalf("shopping list should include details wine container for recipe without selection, body: %s", html)
-	}
-	if !strings.Contains(html, `id="`+pickerDetailButtonID+`"`) {
-		t.Fatalf("shopping list should include details wine picker for recipe without selection, body: %s", html)
-	}
-	if _, wineButtonID := shoppingWineDOMIDs(wineHash); strings.Contains(html, `id="`+wineButtonID+`"`) {
-		t.Fatalf("shopping list should not include picker for recipe with cached wine, body: %s", html)
-	}
-	if !strings.Contains(html, `aria-label="Choose wine"`) {
-		t.Fatalf("shopping list should include accessible wine picker label, body: %s", html)
-	}
-	if strings.Index(html, `aria-live="polite"`) > strings.Index(html, `id="`+pickerPreviewID+`"`) {
-		t.Fatalf("shopping list should render wine preview beneath the action row, body: %s", html)
-	}
-	if got := strings.Count(html, "Cellar Red"); got != 4 {
-		t.Fatalf("shopping list should show selected wine in ingredients, preview, recommendation, and combined list; got count %d, body: %s", got, html)
-	}
-	if got := strings.Count(html, "Second Bottle"); got != 2 {
-		t.Fatalf("shopping list should only add the second wine to preview and recommendation; got count %d, body: %s", got, html)
+	if got := strings.Count(html, "Second Bottle"); got != 1 {
+		t.Fatalf("shopping list should only add the second wine to recommendation; got count %d, body: %s", got, html)
 	}
 	if got := strings.Count(html, "Good with roasted flavors."); got != 1 {
 		t.Fatalf("shopping list should render wine commentary once in details; got count %d, body: %s", got, html)
 	}
 	if strings.Index(html, "Drink pairing:") > strings.Index(html, "Good with roasted flavors.") {
 		t.Fatalf("shopping list should render wine commentary beneath drink pairing, body: %s", html)
-	}
-}
-
-func TestFormatShoppingRecipeWineHTML_RendersPicker(t *testing.T) {
-	w := httptest.NewRecorder()
-	FormatShoppingRecipeWineHTML("recipe-hash", "action", nil, w)
-	body := w.Body.String()
-	actionID, _ := shoppingWineDOMIDs("recipe-hash")
-	previewID := shoppingWinePreviewDOMID("recipe-hash")
-	detailContainerID, _ := shoppingWineDetailDOMIDs("recipe-hash")
-
-	if !strings.Contains(body, `id="`+actionID+`"`) {
-		t.Fatalf("expected shopping wine fragment container in response, got body: %s", body)
-	}
-	if !strings.Contains(body, `id="`+previewID+`"`) || !strings.Contains(body, `id="`+detailContainerID+`"`) || !strings.Contains(body, `hx-swap-oob="outerHTML"`) {
-		t.Fatalf("expected shopping wine preview and details fragments to update out-of-band, got body: %s", body)
-	}
-	if !strings.Contains(body, `aria-label="Choose wine"`) {
-		t.Fatalf("expected accessible wine picker in response, got body: %s", body)
-	}
-	if !strings.Contains(body, `hx-post="/recipe/recipe-hash/wine?view=shopping&slot=action"`) {
-		t.Fatalf("expected shopping wine endpoint in response, got body: %s", body)
 	}
 }
 
@@ -624,7 +670,7 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	}
 
 	FormatRecipeThreadHTML(thread, true, "conv123", w)
-	body := w.Body.String()
+	body := assertHTTPSuccess(t, w)
 
 	newerIndex := strings.Index(body, "newer question")
 	olderIndex := strings.Index(body, "older question")
@@ -633,31 +679,5 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	}
 	if newerIndex > olderIndex {
 		t.Fatalf("expected newer question before older question, body: %s", body)
-	}
-}
-
-func TestFormatRecipeWineHTML_RendersRecommendation(t *testing.T) {
-	w := httptest.NewRecorder()
-
-	FormatRecipeWineHTML("recipe-hash", &ai.WineSelection{
-		Wines: []ai.Ingredient{
-			{Name: "Light Pinot Noir", Price: "$12.99"},
-			{Name: "Dry Rose", Price: "$10.50"},
-		},
-		Commentary: "Try a light pinot noir.",
-	}, w)
-	body := w.Body.String()
-
-	if !strings.Contains(body, `id="wine-recommendation"`) {
-		t.Fatalf("expected wine fragment container in response, got body: %s", body)
-	}
-	if !strings.Contains(body, "Light Pinot Noir") || !strings.Contains(body, "$12.99") {
-		t.Fatalf("expected wine picks with prices in response, got body: %s", body)
-	}
-	if !strings.Contains(body, "Try a light pinot noir.") {
-		t.Fatalf("expected recommendation in response, got body: %s", body)
-	}
-	if strings.Index(body, "Light Pinot Noir") > strings.Index(body, "Try a light pinot noir.") {
-		t.Fatalf("expected wine picks to render before commentary, got body: %s", body)
 	}
 }

@@ -14,9 +14,10 @@ import (
 const recipeThreadPrefix = "recipe_thread/"
 
 type RecipeThreadEntry struct {
-	Question  string    `json:"question"`
-	Answer    string    `json:"answer"`
-	CreatedAt time.Time `json:"created_at"`
+	Question   string    `json:"question"`
+	Answer     string    `json:"answer"`
+	ResponseID string    `json:"response_id,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 func (rio recipeio) ThreadFromCache(ctx context.Context, hash string) ([]RecipeThreadEntry, error) {

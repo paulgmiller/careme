@@ -16,9 +16,11 @@ import (
 	"careme/internal/auth"
 	"careme/internal/config"
 	"careme/internal/ingredients"
+	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/prompts"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
@@ -28,6 +30,8 @@ import (
 	"careme/internal/watchdog"
 
 	cachepkg "careme/internal/cache"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func runServer(cfg *config.Config, addr string) error {
@@ -47,7 +51,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	rootMux := http.NewServeMux()
 	appRoutes := routing.Wrap(rootMux, func(h http.Handler) http.Handler {
-		return authClient.WithAuthHTTP(appMiddleware(h, newRequestTrackerFromEnv()))
+		return authClient.WithAuthHTTP(appMiddleware(h))
 	})
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
@@ -57,24 +61,30 @@ func runServer(cfg *config.Config, addr string) error {
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
 	watchdogServer := watchdog.Server{}
+	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	// TODO  make the mock more transparent?
+	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 
 	var generator recipes.ExtGenerator
+	var imageGen recipes.ImageGen
 	var waitFns []func()
-
 	if cfg.Mocks.Enable {
-		generator = recipes.NewMockGenerator()
+		generator = recipes.NewMockGenerator(recipes.IO(cache))
+		imageGen = recipes.NewMockImageGen()
 	} else {
-		mc := critique.NewManager(cfg, cache)
+		mc := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(mc)
-		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
+
+		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
+		imageGen = aiclient
 		ro.add(aiclient)
-		staples, err := recipes.NewCachedStaplesService(cfg, cache)
+		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
 		if err != nil {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}
 		watchdogServer.Add("staples", staples, 6.*time.Hour)
 		ss := recipes.StatusStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, mc, staples, ss)
+		generator, err = recipes.NewGenerator(aiclient, mc, staples, ss, recipes.IO(cache))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
@@ -99,7 +109,7 @@ func runServer(cfg *config.Config, addr string) error {
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
 	sitemapHandler.Register(infraRoutes)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
 	waitFns = append([]func(){recipeHandler.Wait}, waitFns...)
 
@@ -108,6 +118,9 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	recipeIO := recipes.IO(cache)
+	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
+	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))
+	adminMux.Handle("/prompt/recipe/{hash}", prompts.AdminRecipePromptJSON(cache))
 	adminMux.Handle("/critiques", critique.AdminCritiquesPage(critique.NewStore(cache), recipeIO))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
@@ -122,7 +135,7 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
-	appRoutes.Handle("/", home{userStorage, locationStorage, authClient})
+	home{userStorage, locationStorage, authClient}.Register(appRoutes)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})

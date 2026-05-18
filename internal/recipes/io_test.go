@@ -10,7 +10,6 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 )
 
@@ -81,9 +80,10 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 
 	hash := "test-hash"
 	list := &ai.ShoppingList{
-		ConversationID: "conversation-123",
 		Recipes: []ai.Recipe{
 			{
+				OriginHash:   hash,
+				ResponseID:   "resp-123",
 				Title:        "One Pan Chicken",
 				Description:  "Simple weeknight meal",
 				Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
@@ -92,6 +92,7 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 				DrinkPairing: "Chardonnay",
 			},
 		},
+		Plan: &ai.MenuPlan{ResponseID: "resp-menu-123"},
 	}
 
 	if err := rio.SaveShoppingList(t.Context(), list, hash); err != nil {
@@ -109,64 +110,11 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FromCache failed: %v", err)
 	}
-	if got.ConversationID != list.ConversationID {
-		t.Fatalf("expected conversation id %q, got %q", list.ConversationID, got.ConversationID)
+	if got.Recipes[0].ResponseID != list.Recipes[0].ResponseID {
+		t.Fatalf("expected recipe response id %q, got %q", list.Recipes[0].ResponseID, got.Recipes[0].ResponseID)
 	}
-}
-
-func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
-	tmpDir := t.TempDir()
-	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
-
-	kept := ai.Recipe{
-		Title:        "One Pan Chicken",
-		Description:  "Simple weeknight meal",
-		Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
-		Instructions: []string{"Prep ingredients", "Cook chicken"},
-		Health:       "Balanced",
-		DrinkPairing: "Chardonnay",
-	}
-	discarded := ai.Recipe{
-		Title:        "Mushy Pasta",
-		Description:  "Too vague to keep",
-		Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 lb", Price: "1.99"}},
-		Instructions: []string{"Cook until done somehow"},
-		Health:       "Heavy",
-		DrinkPairing: "None",
-	}
-	hash := "test-hash"
-	list := &ai.ShoppingList{
-		ConversationID: "conversation-123",
-		Recipes:        []ai.Recipe{kept},
-		Discarded:      []ai.Recipe{discarded},
-	}
-
-	if err := rio.SaveShoppingList(t.Context(), list, hash); err != nil {
-		t.Fatalf("SaveShoppingList failed: %v", err)
-	}
-
-	if len(list.Discarded) != 0 {
-		t.Fatalf("expected SaveShoppingList to clear discarded recipes after persisting, got %+v", list.Discarded)
-	}
-
-	stored, err := rio.SingleFromCache(t.Context(), discarded.ComputeHash())
-	if err != nil {
-		t.Fatalf("expected discarded recipe to be saved individually: %v", err)
-	}
-	if stored.Title != discarded.Title {
-		t.Fatalf("expected discarded recipe title %q, got %q", discarded.Title, stored.Title)
-	}
-	if stored.OriginHash != hash {
-		t.Fatalf("expected discarded recipe origin hash %q, got %q", hash, stored.OriginHash)
-	}
-
-	cachedList, err := rio.FromCache(t.Context(), hash)
-	if err != nil {
-		t.Fatalf("FromCache failed: %v", err)
-	}
-	if len(cachedList.Discarded) != 0 {
-		t.Fatalf("expected cached shopping list to omit discarded recipes, got %+v", cachedList.Discarded)
+	if got.Plan == nil || got.Plan.ResponseID != list.Plan.ResponseID {
+		t.Fatalf("expected menu plan response id %q, got %+v", list.Plan.ResponseID, got.Plan)
 	}
 }
 
@@ -176,10 +124,11 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	rio := IO(cacheStore)
 
 	hash := "ingredient-hash"
-	ingredients := []kroger.Ingredient{
+	ingredients := []ai.InputIngredient{
 		{
-			Description: loPtr("Chicken Breast"),
-			Size:        loPtr("1 lb"),
+			ProductID:   "chicken-1",
+			Description: "Chicken Breast",
+			Size:        "1 lb",
 		},
 	}
 
@@ -198,8 +147,40 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngredientsFromCache failed: %v", err)
 	}
-	if len(got) != 1 || got[0].Description == nil || *got[0].Description != "Chicken Breast" {
+	if len(got) != 1 || got[0].Description != "Chicken Breast" {
 		t.Fatalf("unexpected ingredients payload: %+v", got)
+	}
+}
+
+func TestSaveIngredients_PreservesGrade(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	hash := "ingredient-input-hash"
+	ingredients := []ai.InputIngredient{
+		{
+			ProductID:   "chicken-1",
+			Description: "Chicken Breast",
+			Size:        "1 lb",
+			Grade:       &ai.IngredientGrade{Score: 9, Reason: "Fresh and flexible."},
+		},
+	}
+
+	if err := rio.SaveIngredients(t.Context(), hash, ingredients); err != nil {
+		t.Fatalf("SaveIngredients failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpDir, ingredientsCachePrefix, hash)); err != nil {
+		t.Fatalf("expected ingredients at prefixed key: %v", err)
+	}
+
+	got, err := rio.IngredientsFromCache(t.Context(), hash)
+	if err != nil {
+		t.Fatalf("IngredientsFromCache failed: %v", err)
+	}
+	if len(got) != 1 || got[0].Description != "Chicken Breast" || got[0].Grade == nil || got[0].Grade.Score != 9 {
+		t.Fatalf("unexpected input ingredients payload: %+v", got)
 	}
 }
 
@@ -231,8 +212,4 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 	if got.Commentary != "Try a tempranillo." {
 		t.Fatalf("unexpected cached wine recommendation: got %q", got)
 	}
-}
-
-func loPtr(v string) *string {
-	return &v
 }

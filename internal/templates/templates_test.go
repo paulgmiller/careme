@@ -44,6 +44,31 @@ func TestClarityScriptOmitsIdentifyWhenSessionIDEmpty(t *testing.T) {
 	}
 }
 
+func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
+	for _, name := range []string{
+		"about.html",
+		"home.html",
+		"locations.html",
+		"recipe.html",
+		"shoppinglist.html",
+		"spinner.html",
+		"user.html",
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			if !strings.Contains(string(body), `{{template "seasonal_background" .}}`) {
+				t.Fatalf("%s should include seasonal background", name)
+			}
+			if !strings.Contains(string(body), `<main class="relative z-10`) {
+				t.Fatalf("%s should keep page content above seasonal background", name)
+			}
+		})
+	}
+}
+
 func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -63,11 +88,38 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
 		t.Fatalf("about page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
 	}
-	if !strings.Contains(rendered, `id="album"`) {
-		t.Fatalf("about page should include album section, body: %s", rendered)
+	for _, sectionID := range []string{`id="album"`, `id="ethos"`, `id="follow"`, `id="faq"`, `id="github"`} {
+		if !strings.Contains(rendered, sectionID) {
+			t.Fatalf("about page should include %s section, body: %s", sectionID, rendered)
+		}
 	}
-	if !strings.Contains(rendered, "Recipe Photo Album") {
-		t.Fatalf("about page should include album heading, body: %s", rendered)
+	for _, heading := range []string{">Album</h2>", "Ethos", ">Follow Careme</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
+		if !strings.Contains(rendered, heading) {
+			t.Fatalf("about page should include %q heading, body: %s", heading, rendered)
+		}
+	}
+	for _, link := range []string{
+		"https://github.com/paulgmiller/careme/issues/472",
+		"https://www.facebook.com/careme.cooking",
+		"https://bsky.app/profile/northbriton.net",
+		"https://github.com/paulgmiller/careme",
+	} {
+		if !strings.Contains(rendered, link) {
+			t.Fatalf("about page should include %q link, body: %s", link, rendered)
+		}
+	}
+	for _, label := range []string{`aria-label="Facebook"`, `aria-label="Instagram coming soon"`, `aria-label="Bluesky"`} {
+		if !strings.Contains(rendered, label) {
+			t.Fatalf("about page should include %s social label, body: %s", label, rendered)
+		}
+	}
+	if strings.Contains(rendered, `id="privacy"`) {
+		t.Fatalf("about page should not include old privacy section, body: %s", rendered)
+	}
+	for _, oldHeading := range []string{"1. Album", "2. Ethos", "3. Follow Careme", "4. FAQ", "5. GitHub"} {
+		if strings.Contains(rendered, oldHeading) {
+			t.Fatalf("about page should not include numbered heading %q, body: %s", oldHeading, rendered)
+		}
 	}
 	if got := strings.Count(rendered, `data-full="`); got != len(data.AlbumPhotos) {
 		t.Fatalf("about page should render %d album photos, got %d", len(data.AlbumPhotos), got)
@@ -126,6 +178,39 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 	if !strings.Contains(rendered, data.StatusMessage) {
 		t.Fatalf("spinner page should render status message, body: %s", rendered)
+	}
+}
+
+func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
+		RefreshInterval string
+		StatusMessage   string
+	}{
+		Style:           seasons.GetCurrentStyle(),
+		ServerSignedIn:  false,
+		RefreshInterval: "10",
+		StatusMessage:   "Considering ingredients\nHalf Off Spinach",
+	}
+
+	var buf bytes.Buffer
+	if err := Spin.Execute(&buf, data); err != nil {
+		t.Fatalf("Spin.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, "whitespace-pre-line") {
+		t.Fatalf("spinner status should render line breaks with CSS, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, data.StatusMessage) {
+		t.Fatalf("spinner status should keep newline text, body: %s", rendered)
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"careme/internal/kroger"
+	"careme/internal/ai"
 )
 
 const LocationIDPrefix = "safeway_"
@@ -47,9 +47,9 @@ func (p identityProvider) IsID(locationID string) bool {
 	return storeID != "" && storeID != locationID
 }
 
-func all() []kroger.Ingredient {
+func all() []ai.InputIngredient {
 	// do this once instead of every time?
-	ingredients := make([]kroger.Ingredient, 0, len(embeddedSafewayProducts))
+	ingredients := make([]ai.InputIngredient, 0, len(embeddedSafewayProducts))
 	for _, product := range embeddedSafewayProducts {
 		if !product.Availability {
 			continue
@@ -68,14 +68,14 @@ func all() []kroger.Ingredient {
 	return ingredients
 }
 
-func (p StaplesProvider) FetchStaples(_ context.Context, locationID string) ([]kroger.Ingredient, error) {
+func (p StaplesProvider) FetchStaples(_ context.Context, locationID string) ([]ai.InputIngredient, error) {
 	if !p.IsID(locationID) {
 		return nil, fmt.Errorf("invalid safeway location id %q", locationID)
 	}
 	return all(), nil
 }
 
-func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, searchTerm string, _ int) ([]kroger.Ingredient, error) {
+func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, searchTerm string, _ int) ([]ai.InputIngredient, error) {
 	if !p.IsID(locationID) {
 		return nil, fmt.Errorf("invalid safeway location id %q", locationID)
 	}
@@ -83,13 +83,13 @@ func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, se
 	return filterIngredients(all(), searchTerm), nil
 }
 
-func filterIngredients(ingredients []kroger.Ingredient, searchTerm string) []kroger.Ingredient {
+func filterIngredients(ingredients []ai.InputIngredient, searchTerm string) []ai.InputIngredient {
 	searchTerm = strings.TrimSpace(strings.ToLower(searchTerm))
 	if searchTerm == "" {
 		return slices.Clone(ingredients)
 	}
 
-	filtered := make([]kroger.Ingredient, 0, len(ingredients))
+	filtered := make([]ai.InputIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
 		if ingredientMatches(ingredient, searchTerm) {
 			filtered = append(filtered, ingredient)
@@ -98,10 +98,10 @@ func filterIngredients(ingredients []kroger.Ingredient, searchTerm string) []kro
 	return filtered
 }
 
-func ingredientMatches(ingredient kroger.Ingredient, searchTerm string) bool {
+func ingredientMatches(ingredient ai.InputIngredient, searchTerm string) bool {
 	for _, value := range []string{
-		stringValue(ingredient.Description),
-		stringValue(ingredient.Brand),
+		ingredient.Description,
+		ingredient.Brand,
 	} {
 		if strings.Contains(strings.ToLower(value), searchTerm) {
 			return true
@@ -111,7 +111,7 @@ func ingredientMatches(ingredient kroger.Ingredient, searchTerm string) bool {
 	return false
 }
 
-func productToIngredient(product SafewayProduct) kroger.Ingredient {
+func productToIngredient(product SafewayProduct) ai.InputIngredient {
 	description, size := splitProductName(product.ProductName) // dubious size is really always
 	regularPrice := float32Ptr(product.MRP)
 	salePrice := float32Ptr(product.DiscountedPrice)
@@ -121,19 +121,15 @@ func productToIngredient(product SafewayProduct) kroger.Ingredient {
 
 	productID := strconv.FormatInt(product.ID, 10)
 	categories := compactStrings([]string{product.Category, product.SubCategory})
-	var categoryPtr *[]string
-	if len(categories) > 0 {
-		categoryPtr = &categories
-	}
 
-	return kroger.Ingredient{
-		ProductId:    stringPtr(productID),
-		Description:  stringPtr(description),
-		Size:         stringPtr(size),
+	return ai.NormalizeInputIngredient(ai.InputIngredient{
+		ProductID:    productID,
+		Description:  description,
+		Size:         size,
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
-		Categories:   categoryPtr,
-	}
+		Categories:   categories,
+	})
 }
 
 func splitProductName(name string) (string, string) {
@@ -163,21 +159,6 @@ func mustLoadSafewayProducts() []SafewayProduct {
 		panic(fmt.Errorf("decode safeway products: %w", err))
 	}
 	return products
-}
-
-func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func stringPtr(value string) *string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	return &value
 }
 
 func float32Ptr(value *float64) *float32 {

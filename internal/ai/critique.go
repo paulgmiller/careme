@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -24,8 +25,10 @@ You are a strict recipe editor reviewing AI-generated recipes before they are gi
 Judge the recipe like an experienced chef helping create recipes to teach home cooks:
 - is it realistic to cook as written
 - are the instructions coherent and complete
+- do the instructions begin with preparation before active cooking starts
 - are the applications of salt, acid, fat, and heat appropriate
 - are the timing and cost estimates plausible
+- does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 
@@ -50,29 +53,40 @@ type RecipeCritique struct {
 }
 
 type critiquer struct {
-	apiKey string
 	model  string
 	schema map[string]any
+	gem    *genai.Client
 }
 
-func NewCritiquer(apiKey, model string) *critiquer {
+func NewCritiquer(apiKey, model string, httpClient *http.Client) *critiquer {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		model = defaultGeminiCritiqueModel
 	}
+
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+
+	// pass in context and return error? seems like context only used in edge case
+	client, err := genai.NewClient(context.TODO(), &genai.ClientConfig{
+		APIKey:     apiKey,
+		Backend:    genai.BackendGeminiAPI,
+		HTTPClient: httpClient,
+	})
+	if err != nil {
+		panic(err)
+	}
+
 	return &critiquer{
-		apiKey: strings.TrimSpace(apiKey),
+		gem:    client,
 		model:  model,
 		schema: recipeCritiqueJSONSchema(),
 	}
 }
 
 func (c *critiquer) Ready(ctx context.Context) error {
-	client, err := c.newClient(ctx)
-	if err != nil {
-		return err
-	}
-	for _, err := range client.Models.All(ctx) {
+	for _, err := range c.gem.Models.All(ctx) {
 		return err
 	}
 	return fmt.Errorf("model not found: %s", c.model)
@@ -95,12 +109,12 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe critique prompt: %w", err)
 	}
-	client, err := c.newClient(ctx)
+
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
-	resp, err := client.Models.GenerateContent(ctx, c.model, genai.Text(prompt), &genai.GenerateContentConfig{
+	resp, err := c.gem.Models.GenerateContent(ctx, c.model, genai.Text(prompt), &genai.GenerateContentConfig{
 		SystemInstruction: genai.NewContentFromText(recipeCritiqueSystemInstruction, genai.RoleUser),
 		// Temperature:        genai.Ptr[float32](0),
 		// MaxOutputTokens:    768,
@@ -127,7 +141,6 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	return critique, nil
 }
 
-// remove if we get https://github.com/openclosed-dev/slogan/pull/3 in
 func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
 	if usage == nil {
 		return slog.Group("usage", slog.Bool("available", false))
@@ -147,17 +160,6 @@ func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.
 	}
 
 	return slog.Group("usage", attrs...)
-}
-
-func (c *critiquer) newClient(ctx context.Context) (*genai.Client, error) {
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  c.apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create Gemini client: %w", err)
-	}
-	return client, nil
 }
 
 func parseRecipeCritique(body string) (*RecipeCritique, error) {
@@ -183,7 +185,6 @@ func parseRecipeCritique(body string) (*RecipeCritique, error) {
 func buildRecipeCritiquePrompt(recipe Recipe) (string, error) {
 	payload := recipe
 	payload.OriginHash = ""
-	payload.Saved = false
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal recipe critique payload: %w", err)

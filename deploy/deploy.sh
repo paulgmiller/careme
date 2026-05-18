@@ -2,13 +2,12 @@
 set -euo pipefail
 
 ref="${1:-origin/master}"
-deploy_dir="deploy"
-manifest_files=(
-  "${deploy_dir}/deploy.yaml"
-  "${deploy_dir}/cronjob-careme-mail.yaml"
-  "${deploy_dir}/cronjob-albertsons-scrape.yaml"
-  "${deploy_dir}/cronjob-albertsons-reese84.yaml"
-  "${deploy_dir}/cronjob-wholefoods-scrape.yaml"
+manifest_paths=(
+  "deploy/deploy.yaml"
+  "deploy/cronjob-careme-mail.yaml"
+  "deploy/cronjob-albertsons-scrape.yaml"
+  "deploy/cronjob-albertsons-reese84.yaml"
+  "deploy/cronjob-wholefoods-scrape.yaml"
 )
 namespace="${2:-careme}"
 short_len=7
@@ -32,16 +31,16 @@ fi
 
 export IMAGE_TAG="${commit_hash:0:${short_len}}"
 
-for manifest_file in "${manifest_files[@]}"; do
-  if [[ ! -f "${manifest_file}" ]]; then
-    echo "error: deploy file not found: ${manifest_file}" >&2
+for manifest_path in "${manifest_paths[@]}"; do
+  if ! git cat-file -e "${ref}:${manifest_path}" 2>/dev/null; then
+    echo "error: deploy file not found in ref '${ref}': ${manifest_path}" >&2
     exit 1
   fi
 done
 
 echo "Deploying image: ${IMAGE_TAG}"
-for manifest_file in "${manifest_files[@]}"; do
-  envsubst '${IMAGE_TAG}' <"${manifest_file}" | kubectl apply -f - -n "${namespace}"
+for manifest_path in "${manifest_paths[@]}"; do
+  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG}' | kubectl apply -f - -n "${namespace}"
 done
 
 echo "Waiting for rollout of deployment/careme"

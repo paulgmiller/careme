@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,29 +13,16 @@ import (
 	"time"
 
 	"careme/internal/config"
+	"careme/internal/kroger/products"
+
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config cfg.yaml swagger.yaml
+//go:generate go generate ./products ./locations
 
 // this wasn't in the swagger? try the jsons added next
-// OAuth2TokenResponse represents the response from Kroger OAuth2 token endpoint
-// LoggingDoer wraps an HttpRequestDoer and logs requests and responses
-type LoggingDoer struct {
-	Wrapped HttpRequestDoer
-}
-
-func (l *LoggingDoer) Do(req *http.Request) (*http.Response, error) {
-	fmt.Printf("Kroger Request: %s %s\nHeaders: %v\n", req.Method, req.URL.String(), req.Header)
-	resp, err := l.Wrapped.Do(req)
-	if err != nil {
-		fmt.Printf("Kroger Response Error: %v\n", err)
-		return resp, err
-	}
-	fmt.Printf("Kroger Response: %d %s\n", resp.StatusCode, resp.Status)
-	return resp, err
-}
-
-type OAuth2TokenResponse struct {
+// oAuth2TokenResponse represents the response from Kroger OAuth2 token endpoint
+type oAuth2TokenResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 	ExpiresIn   int    `json:"expires_in"`
@@ -47,13 +35,18 @@ type KrogerTokenManager struct {
 	expiresAt    time.Time
 	clientID     string
 	clientSecret string
+	httpClient   *http.Client
 	mu           sync.Mutex
 }
 
-func NewKrogerTokenManager(clientID, clientSecret string) *KrogerTokenManager {
+func NewKrogerTokenManager(clientID, clientSecret string, httpClient *http.Client) *KrogerTokenManager {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
 	return &KrogerTokenManager{
 		clientID:     clientID,
 		clientSecret: clientSecret,
+		httpClient:   httpClient,
 	}
 }
 
@@ -76,7 +69,7 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.SetBasicAuth(m.clientID, m.clientSecret)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := m.httpClient.Do(req)
 		if err != nil {
 			return "", err
 		}
@@ -95,7 +88,7 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("failed to get token: %s", string(body))
 		}
 
-		var tokenResp OAuth2TokenResponse
+		var tokenResp oAuth2TokenResponse
 		if err := json.Unmarshal(body, &tokenResp); err != nil {
 			return "", err
 		}
@@ -105,18 +98,27 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 	return m.token, nil
 }
 
-// GetOAuth2Token fetches an access token using client credentials grant
-// Deprecated: use KrogerTokenManager instead
-func GetOAuth2Token(ctx context.Context, clientID, clientSecret string) (string, error) {
-	tm := NewKrogerTokenManager(clientID, clientSecret)
-	return tm.GetToken(ctx)
+// this would be nice but it logs all retries as errors which sets off alerts.
+// var _ retryablehttp.LeveledLogger = slog.Default()
+type SlogPrintf struct{}
+
+func (l SlogPrintf) Printf(format string, args ...interface{}) {
+	// missing context sadly so no operation id
+	slog.Info(fmt.Sprintf(format, args...), "source", "retryablehttp")
 }
 
-func FromConfig(cfg *config.Config) (*ClientWithResponses, error) {
-	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret)
+// similiar but less customiszed that bright data.
+func withRetries(baseClient *http.Client) *http.Client {
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient = baseClient
+	retryClient.Logger = SlogPrintf{}
+	return retryClient.StandardClient()
+}
 
-	// Custom request editor that refreshes token if needed
-	requestEditor := func(editorCtx context.Context, req *http.Request) error {
+func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) func(context.Context, *http.Request) error {
+	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient)
+
+	return func(editorCtx context.Context, req *http.Request) error {
 		token, err := tokenManager.GetToken(editorCtx)
 		if err != nil {
 			return err
@@ -124,8 +126,20 @@ func FromConfig(cfg *config.Config) (*ClientWithResponses, error) {
 		req.Header.Set("Authorization", "Bearer "+token)
 		return nil
 	}
+}
 
-	return NewClientWithResponses("https://api.kroger.com/v1",
-		WithRequestEditorFn(requestEditor),
+func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*products.ClientWithResponses, error) {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	httpClient = withRetries(httpClient)
+	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
+	productsClient, err := products.NewClientWithResponses("https://api.kroger.com",
+		products.WithHTTPClient(httpClient),
+		products.WithRequestEditorFn(products.RequestEditorFn(requestEditor)),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("create kroger products client: %w", err)
+	}
+	return productsClient, nil
 }

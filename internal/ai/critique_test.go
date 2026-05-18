@@ -23,7 +23,6 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		Health:       "Balanced dinner",
 		DrinkPairing: "Pinot Noir",
 		OriginHash:   "internal-metadata",
-		Saved:        true,
 	}
 
 	prompt, err := buildRecipeCritiquePrompt(recipe)
@@ -46,6 +45,15 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		`"previously_saved"`,
 	} {
 		assert.NotContains(t, prompt, unwanted)
+	}
+}
+
+func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
+	for _, want := range []string{
+		"do the instructions begin with preparation before active cooking starts",
+		"does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}
 }
 

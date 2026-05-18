@@ -79,14 +79,17 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	}
 
 	ingredient := got[0]
-	if ingredient.Description == nil || *ingredient.Description != "Organic Asparagus" {
+	if ingredient.Description != "Organic Asparagus" {
 		t.Fatalf("unexpected description: %+v", ingredient.Description)
 	}
-	if ingredient.Brand == nil || *ingredient.Brand != "Whole Foods Market" {
+	if ingredient.Brand != "Whole Foods Market" {
 		t.Fatalf("unexpected brand: %+v", ingredient.Brand)
 	}
-	if ingredient.ProductId == nil || *ingredient.ProductId != "odQxPA" {
-		t.Fatalf("unexpected product id: %+v", *ingredient.ProductId)
+	if ingredient.ProductID != "odQxPA" {
+		t.Fatalf("unexpected product id: %+v", ingredient.ProductID)
+	}
+	if ingredient.AisleNumber != "fresh-vegetables" {
+		t.Fatalf("unexpected aisle number: %+v", ingredient.AisleNumber)
 	}
 	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != float32(5.99) {
 		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
@@ -122,15 +125,18 @@ func TestStaplesProvider_GetIngredients_UsesSearchTerm(t *testing.T) {
 	}
 	provider := NewStaplesProvider(client)
 
-	got, err := provider.GetIngredients(t.Context(), "wholefoods_10216", "pinot noir", 1)
+	got, err := provider.GetIngredients(t.Context(), "wholefoods_10216", "pinot noir", 0)
 	if err != nil {
 		t.Fatalf("GetIngredients returned error: %v", err)
 	}
-	if len(got) != 1 {
-		t.Fatalf("expected 1 ingredient after skip, got %d", len(got))
+	if len(got) != 2 {
+		t.Fatalf("expected 2 ingredients, got %d", len(got))
 	}
-	if got[0].Description == nil || *got[0].Description != "Rose" {
+	if got[0].Description != "Pinot Noir" {
 		t.Fatalf("unexpected ingredient description: %+v", got[0].Description)
+	}
+	if got[0].AisleNumber != "pinot noir" {
+		t.Fatalf("unexpected aisle number: %+v", got[0].AisleNumber)
 	}
 	if got := client.callCount(); got != 1 {
 		t.Fatalf("expected 1 category call, got %d", got)

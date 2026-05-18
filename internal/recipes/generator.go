@@ -2,38 +2,42 @@ package recipes
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
-	"hash/fnv"
-	"io"
 	"log/slog"
 	"slices"
 	"strings"
 	"time"
-	"unicode"
 
 	"careme/internal/ai"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/status"
 	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
+	"github.com/samber/lo/mutable"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type aiClient interface {
-	GenerateRecipes(ctx context.Context, location *locations.Location, ingredients []kroger.Ingredient, instructions []string, date time.Time, lastRecipes []string) (*ai.ShoppingList, error)
-	Regenerate(ctx context.Context, newinstructions []string, conversationID string) (*ai.ShoppingList, error)
-	AskQuestion(ctx context.Context, question string, conversationID string) (string, error)
-	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
-	PickWine(ctx context.Context, recipe ai.Recipe, wines []kroger.Ingredient) (*ai.WineSelection, error)
+	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
+	RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error)
+	GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error)
+	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
+	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
+	PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error)
 }
 
 type staplesService interface {
-	GetStaples(ctx context.Context, p *GeneratorParams) ([]kroger.Ingredient, error)
+	FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error)
 	// only used for wine. Probably need a refactoro
-	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]kroger.Ingredient, error)
+	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error)
+}
+
+type recipeSaver interface {
+	SaveRecipe(ctx context.Context, recipes ai.Recipe) error
 }
 
 type generatorService struct {
@@ -41,9 +45,12 @@ type generatorService struct {
 	critiquer    critique.Service
 	staples      staplesService
 	statusWriter statusWriter
+	saver        recipeSaver
 }
 
-func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService, statuses statusWriter) (*generatorService, error) {
+var tracer = otel.Tracer("careme/internal/recipes")
+
+func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService, statuses statusWriter, recipeSaver recipeSaver) (*generatorService, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
@@ -53,15 +60,21 @@ func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staples
 	if staples == nil {
 		return nil, fmt.Errorf("staples service is required")
 	}
+	if recipeSaver == nil {
+		return nil, fmt.Errorf("recipe saver is required")
+	}
 	return &generatorService{
-		aiClient:     aiClient,
+		aiClient:     &tracingAIClient{aiClient},
 		critiquer:    critiquer,
 		staples:      staples,
 		statusWriter: statuses,
+		saver:        recipeSaver,
 	}, nil
 }
 
 func (g *generatorService) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+	ctx, span := tracer.Start(ctx, "recipes.pickawine")
+	defer span.End()
 	var styles []string
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
@@ -78,7 +91,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
 	}
 
-	wines, err := parallelism.Flatten(styles, func(style string) ([]kroger.Ingredient, error) {
+	wines, err := parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
 		return g.staples.GetIngredients(ctx, location, style, 0, date)
 	})
 	if err != nil {
@@ -88,12 +101,15 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	if len(wines) == 0 {
 		return &ai.WineSelection{Commentary: "no wines found", Wines: []ai.Ingredient{}}, nil
 	}
-	wines = uniqueByDescription(wines)
+	wines = lo.UniqBy(wines, func(i ai.InputIngredient) string {
+		return i.ProductID
+	})
 
 	selection, err := g.aiClient.PickWine(ctx, recipe, wines)
 	if err != nil {
 		return nil, err
 	}
+	enrichIngredientsMetadata(selection.Wines, inputIngredientMap(wines))
 	return selection, nil
 }
 
@@ -101,75 +117,165 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	hash := p.Hash()
 	start := time.Now()
 
-	if p.ConversationID != "" && (p.Instructions != "" || len(p.Saved) > 0 || len(p.Dismissed) > 0) {
-		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "conversation_id", p.ConversationID)
-		instructions := regenerateInstructions(p)
+	if len(p.Dismissed) > 0 || len(p.Saved) > 0 {
+		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "dismissed_count", len(p.Dismissed))
+		ctx, span := tracer.Start(ctx, "recipes.regenerate")
+		defer span.End()
 
-		shoppingList, err := g.aiClient.Regenerate(ctx, instructions, p.ConversationID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to regenerate recipes with AI: %w", err)
+		g.writeStatus(ctx, hash, status.Regen(p.Instructions, p.Dismissed))
+
+		if len(p.Dismissed) == 0 {
+			// should disallow this in ui?
+			slog.ErrorContext(ctx, "regenerated chat with only saved recipes", "location", p.String(), "duration", time.Since(start), "hash", hash)
+			return &ai.ShoppingList{
+				Recipes: p.Saved,
+			}, nil
 		}
-		shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
+
+		regenInstructions := regenerateInstructions(p)
+
+		menuPlan, err := g.replacementMenuPlan(ctx, p, regenInstructions, len(p.Dismissed))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
-		shoppingList.Recipes = append(shoppingList.Recipes, p.Saved...)
+		if len(menuPlan.Plans) != len(p.Dismissed) {
+			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
+		}
+		// does it matter how we associate these?
+		type plannedRegeneration struct {
+			plan       ai.RecipePlan
+			responseID string
+		}
+		var replacements []plannedRegeneration
+		for i, plan := range menuPlan.Plans {
+			if strings.TrimSpace(p.Dismissed[i].ResponseID) == "" {
+				return nil, fmt.Errorf("recipe %q is missing response ID for regeneration", p.Dismissed[i].Title)
+			}
+			replacements = append(replacements, plannedRegeneration{
+				plan:       plan,
+				responseID: p.Dismissed[i].ResponseID,
+			})
+		}
+
+		g.writeStatus(ctx, hash, menuPlan.String())
+
+		// this SHOULD hit the cache and we could do it in parallel with menu planning
+		ingredients, err := g.staples.FetchStaples(ctx, p)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get staples: %w", err)
+		}
+		ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
+			// TODO make configurable?
+			return ing.Grade == nil || ing.Grade.Score > 6
+		})
+		ingMap := inputIngredientMap(ingredients)
+
+		results, err := parallelism.MapWithErrors(replacements, func(replacement plannedRegeneration) (*ai.Recipe, error) {
+			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
+			defer span.End()
+
+			instructions := append(slices.Clone(regenInstructions), replacement.plan.Instructions()...)
+			recipe, err := g.aiClient.Regenerate(ctx, instructions, replacement.responseID)
+			if err != nil {
+				return nil, err
+			}
+			recipe.OriginHash = hash
+			enrichIngredientsMetadata(recipe.Ingredients, ingMap)
+			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
+				return nil, err
+			}
+			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate replacement recipes with AI: %w", err)
+		}
+
+		recipes := append(lo.FromSlicePtr(results), p.Saved...)
 
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
-		return shoppingList, nil
+		return &ai.ShoppingList{
+			Recipes: recipes,
+			Plan:    menuPlan,
+		}, nil
 	}
 
+	ctx, span := tracer.Start(ctx, "recipes.generate")
+	defer span.End()
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
-	ingredients, err := g.staples.GetStaples(ctx, p)
+
+	ingredients, err := g.staples.FetchStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
-	g.writeStatus(ctx, hash, fmt.Sprintf("Looking through %d ingredients", len(ingredients)))
+	ogCount := len(ingredients)
+	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
+		// TODO make configurable?
+		return ing.Grade == nil || ing.Grade.Score > 6
+	})
+	ingMap := inputIngredientMap(ingredients)
+
+	g.writeStatus(ctx, hash, status.Ingredients(ingredients, ogCount))
+	mutable.Shuffle(ingredients)
 
 	instructions := []string{p.Directive, p.Instructions}
-	shoppingList, err := g.aiClient.GenerateRecipes(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes)
+
+	// 3 is arbitrary let user decide?
+	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes, 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
+	}
+	g.writeStatus(ctx, hash, menuPlan.String())
+
+	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
+		ctx, span := tracer.Start(ctx, "recipes.generate.single")
+		defer span.End()
+		recipeInstructions := append(slices.Clone(instructions), plan.Instructions()...)
+		recipe, err := g.aiClient.GenerateRecipe(ctx, p.Location, ingredients, recipeInstructions, p.Date, p.LastRecipes)
+		if err != nil {
+			return nil, err
+		}
+		// would prefer to do this deeper down in client like response id but have to pass in the hash
+		recipe.OriginHash = hash
+
+		enrichIngredientsMetadata(recipe.Ingredients, ingMap)
+		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
+			return nil, err
+		}
+		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
 	}
-
-	shoppingList, err = g.critiqueAndMaybeRetry(ctx, hash, shoppingList)
-	if err != nil {
-		return nil, err
-	}
-
-	p.ConversationID = shoppingList.ConversationID
 	slog.InfoContext(ctx, "generated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
-	return shoppingList, nil
+	return &ai.ShoppingList{
+		Recipes: lo.FromSlicePtr(results),
+		Plan:    menuPlan,
+	}, nil
 }
 
-func (g *generatorService) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
-	return g.aiClient.AskQuestion(ctx, question, conversationID)
-}
-
-func (g *generatorService) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
-	return g.aiClient.GenerateRecipeImage(ctx, recipe)
-}
-
-func uniqueByDescription(ingredients []kroger.Ingredient) []kroger.Ingredient {
-	return lo.UniqBy(ingredients, func(i kroger.Ingredient) string {
-		return toStr(i.Description)
-	})
-}
-
-func toStr(s *string) string {
-	if s == nil {
-		return "empty"
+func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generatorParams, instructions []string, count int) (*ai.MenuPlan, error) {
+	if strings.TrimSpace(p.PreviousMenuPlanResponseID) != "" {
+		return g.aiClient.RegenerateMenuPlan(ctx, instructions, p.PreviousMenuPlanResponseID, count)
 	}
-	return *s
+	// Backward compatibility for cached shopping lists created before menu plan response IDs were persisted.
+	return backCompatMenuPlan(count), nil
 }
 
-func wineIngredientsCacheKey(style, location string, date time.Time) string {
-	normalizedStyle := strings.ToLower(strings.TrimSpace(style))
-	fnv := fnv.New64a()
-	lo.Must(io.WriteString(fnv, location))
-	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, normalizedStyle))
-	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
+func backCompatMenuPlan(count int) *ai.MenuPlan {
+	plans := make([]ai.RecipePlan, 0, count)
+	for range count {
+		plans = append(plans, ai.RecipePlan{
+			Cuisine:          "anything",
+			AnchorIngredient: "anything",
+			Technique:        "anything",
+		})
+	}
+	return &ai.MenuPlan{Plans: plans}
+}
+
+// generator not prociding a lot of value here. Should sever just hold an ai client?
+func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
 }
 
 func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
@@ -184,67 +290,104 @@ func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
 	return lo.Uniq(titles)
 }
 
-func titles(prefix string, recipes []ai.Recipe) string {
-	var b strings.Builder
-	b.WriteString(prefix)
-	b.WriteString("\n")
-	for _, r := range recipes {
-		b.WriteString(r.Title)
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
 func regenerateInstructions(p *generatorParams) []string {
 	instructions := make([]string, 0, 1+len(p.Dismissed)+len(p.Saved))
 	if trimmed := strings.TrimSpace(p.Instructions); trimmed != "" {
 		instructions = append(instructions, trimmed)
 	}
-	for _, dismissed := range p.Dismissed {
-		instructions = append(instructions, "Passed on "+dismissed.Title)
-	}
 	for _, saved := range newlySaved(p.Saved, p.PriorSavedHashes) {
 		instructions = append(instructions, "Enjoyed and saved so don't repeat: "+saved)
+	}
+	for _, recipe := range p.Dismissed {
+		if title := strings.TrimSpace(recipe.Title); title != "" {
+			instructions = append(instructions, "Passed on "+title)
+		}
 	}
 	return instructions
 }
 
-func (g *generatorService) critiqueAndMaybeRetry(ctx context.Context, hash string, shoppingList *ai.ShoppingList) (*ai.ShoppingList, error) {
+func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, ingMap map[string]ai.InputIngredient) (*ai.Recipe, error) {
 	if g.critiquer == nil {
-		return shoppingList, nil
+		return recipe, nil
 	}
-	g.writeStatus(ctx, hash, titles("Getting feeeback on these recipes:", shoppingList.Recipes))
-	results := g.critiquer.CritiqueRecipes(ctx, shoppingList.Recipes)
-	good, garbage := critique.Split(ctx, results, critique.MinimumRecipeScore)
-	for _, result := range garbage {
-		slog.InfoContext(ctx, "low scoring recipe", "hash", result.Recipe.ComputeHash(), "title", result.Recipe.Title, "score", result.Critique.OverallScore)
-	}
-	if len(garbage) == 0 {
-		return shoppingList, nil
-	}
-	slog.InfoContext(ctx, "Regenerating recipes based on critique feedback:", "garbage_count", len(garbage), "good_count", len(good))
-	garbageRecipes := lo.Map(garbage, func(r critique.Result, _ int) ai.Recipe { return *r.Recipe })
-	g.writeStatus(ctx, hash, titles("Making adjustments to these recipes: ", garbageRecipes))
+	ctx, span := tracer.Start(ctx, "recipes.critique.recipe")
+	defer span.End()
 
-	if strings.TrimSpace(shoppingList.ConversationID) == "" {
-		return nil, fmt.Errorf("conversation ID is required for critique retry")
+	g.writeStatus(ctx, hash, "Getting feedback on "+recipe.Title+"\n")
+
+	result := <-g.critiquer.CritiqueRecipe(ctx, *recipe)
+	if result.Err != nil {
+		slog.ErrorContext(ctx, "failed to critique recipe", "hash", hash, "title", recipe.Title, "error", result.Err)
+		return recipe, nil
+	}
+	if result.Critique == nil || result.Critique.OverallScore >= critique.MinimumRecipeScore {
+		return recipe, nil
 	}
 
-	// we could also just give all feedback back if any are below score
-	shoppingList, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(garbage), shoppingList.ConversationID)
+	span.SetAttributes(attribute.Bool("regenaftercrique", true))
+	slog.InfoContext(ctx, "low scoring recipe", "hash", hash, "title", recipe.Title, "score", result.Critique.OverallScore)
+	// going to overwrite other statuses
+	g.writeStatus(ctx, hash, "Adjusting "+recipe.Title+"\n")
+
+	// panic?
+	if strings.TrimSpace(recipe.ResponseID) == "" {
+		return nil, fmt.Errorf("recipe %q is missing response ID for critique retry", recipe.Title)
+	}
+	retry, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(result), recipe.ResponseID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to regenerate recipes from critique feedback: %w", err)
+		return nil, fmt.Errorf("failed to regenerate recipe %q from critique feedback: %w", recipe.Title, err)
 	}
-	newRecipes := shoppingList.Recipes
-	linkToParents(garbage, recipePtrs(newRecipes))
-	shoppingList.Recipes = append(shoppingList.Recipes, good...)
-	shoppingList.Discarded = lo.Map(garbage, func(result critique.Result, _ int) ai.Recipe {
-		return *result.Recipe
-	})
+	enrichIngredientsMetadata(retry.Ingredients, ingMap)
+	retry.OriginHash = hash
+	retry.ParentHash = recipe.ComputeHash()
+	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
+		return nil, err
+	}
+	// don't block
+	g.critiqueInBackground(ctx, *retry)
 
-	_ = g.critiquer.CritiqueRecipes(ctx, newRecipes)
-	// no point in upating as we're async here g.updateGenerationStatus(ctx, hash, "")
-	return shoppingList, nil
+	return retry, nil
+}
+
+func (g *generatorService) critiqueInBackground(ctx context.Context, recipe ai.Recipe) {
+	results := g.critiquer.CritiqueRecipe(ctx, recipe)
+	go func() {
+		for result := range results {
+			if result.Err != nil {
+				slog.ErrorContext(ctx, "failed to critique retried recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", result.Err)
+			}
+		}
+	}()
+}
+
+func enrichIngredientsMetadata(ingredients []ai.Ingredient, byProductID map[string]ai.InputIngredient) {
+	for i := range ingredients {
+		ingredient := &ingredients[i] // should we mutate or create new ingredient.
+		input, ok := byProductID[strings.TrimSpace(ingredient.ProductID)]
+		if !ok {
+			continue
+		}
+		ingredient.ProductID = strings.TrimSpace(input.ProductID)
+		ingredient.AisleNumber = strings.TrimSpace(input.AisleNumber)
+		ingredient.Price = inputIngredientDisplayPrice(input)
+	}
+}
+
+func inputIngredientMap(ingredients []ai.InputIngredient) map[string]ai.InputIngredient {
+	return lo.SliceToMap(ingredients, func(ing ai.InputIngredient) (string, ai.InputIngredient) {
+		return strings.TrimSpace(ing.ProductID), ing
+	})
+}
+
+func inputIngredientDisplayPrice(input ai.InputIngredient) string {
+	price := input.PriceSale
+	if price == nil {
+		price = input.PriceRegular
+	}
+	if price == nil {
+		return ""
+	}
+	return fmt.Sprintf("$%.2f", *price)
 }
 
 // just making this best effort
@@ -255,90 +398,4 @@ func (g *generatorService) writeStatus(ctx context.Context, hash string, status 
 	if err := g.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
 		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "status", status, "error", err)
 	}
-}
-
-func linkToParents(garbage []critique.Result, newRecipes []*ai.Recipe) {
-	parents := lo.Map(garbage, func(result critique.Result, _ int) *ai.Recipe {
-		return result.Recipe
-	})
-	applyParentHashesByTitleMatch(parents, newRecipes)
-}
-
-func recipePtrs(recipes []ai.Recipe) []*ai.Recipe {
-	ptrs := make([]*ai.Recipe, 0, len(recipes))
-	for i := range recipes {
-		ptrs = append(ptrs, &recipes[i])
-	}
-	return ptrs
-}
-
-func applyParentHashesByTitleMatch(parents []*ai.Recipe, newRecipes []*ai.Recipe) {
-	type candidateMatch struct {
-		new    *ai.Recipe
-		parent *ai.Recipe
-		score  int
-	}
-
-	matches := make([]candidateMatch, 0, len(newRecipes)*len(parents))
-	for _, newRecipe := range newRecipes {
-		for _, parent := range parents {
-			score := sharedWords(newRecipe.Title, parent.Title)
-			if score == 0 {
-				continue
-			}
-			matches = append(matches, candidateMatch{
-				new:    newRecipe,
-				parent: parent,
-				score:  score,
-			})
-		}
-	}
-
-	slices.SortFunc(matches, func(a, b candidateMatch) int {
-		return b.score - a.score
-	})
-
-	used := make(map[*ai.Recipe]bool, len(newRecipes))
-	for _, match := range matches {
-		if match.new == nil || match.parent == nil {
-			continue
-		}
-		if used[match.new] {
-			continue
-		}
-		if used[match.parent] {
-			continue
-		}
-		parentHash := match.parent.ComputeHash()
-		childHash := match.new.ComputeHash()
-		if parentHash == "" || childHash == "" || parentHash == childHash {
-			continue
-		}
-		match.new.ParentHash = parentHash
-		used[match.new] = true
-		used[match.parent] = true
-	}
-}
-
-func sharedWords(a, b string) int {
-	wordsA := wordSet(a)
-	wordsB := wordSet(b)
-	return lo.CountBy(lo.Keys(wordsA), func(word string) bool {
-		return wordsB[word]
-	})
-}
-
-func wordSet(title string) map[string]bool {
-	wordDict := make(map[string]bool)
-	s := strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
-	})
-	for _, word := range s {
-		// tiny words not valuable?
-		if len(word) < 2 {
-			continue
-		}
-		wordDict[word] = true
-	}
-	return wordDict
 }

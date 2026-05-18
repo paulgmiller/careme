@@ -7,8 +7,11 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"strconv"
+	"strings"
 
+	"careme/internal/ai"
+	"careme/internal/config"
+	"careme/internal/kroger/products"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -47,49 +50,59 @@ func (p identityProvider) IsID(locationID string) bool {
 // internal?
 type StaplesProvider struct {
 	identityProvider
-	client ClientWithResponsesInterface
+	client *products.ClientWithResponses
 }
 
-func NewStaplesProvider(client ClientWithResponsesInterface) StaplesProvider {
-	return StaplesProvider{client: client}
+func NewStaplesProvider(cfg *config.Config, httpClient *http.Client) (*StaplesProvider, error) {
+	client, err := NewProductsClientFromConfig(cfg, httpClient)
+	if err != nil {
+		return nil, err
+	}
+	return &StaplesProvider{client: client}, nil
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]Ingredient, error) {
-	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]Ingredient, error) {
+func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to fetch category", "category", category.Term, "location", locationID, "error", err)
 			return nil, err
 		}
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category.Term, "location", locationID)
-		return ingredients, nil
+		return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
 	})
 }
 
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]Ingredient, error) {
-	return searchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
+func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
+	ingredients, err := searchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
+	if err != nil {
+		return nil, err
+	}
+	return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
 }
 
-func searchIngredients(ctx context.Context, client ClientWithResponsesInterface, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
+var availableInStore = products.Ais
+
+func searchIngredients(ctx context.Context, client *products.ClientWithResponses, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
 	limit := 50
-	limitStr := strconv.Itoa(limit)
-	startStr := strconv.Itoa(skip)
-	products, err := client.ProductSearchWithResponse(ctx, &ProductSearchParams{
-		FilterLocationId: &locationID,
-		FilterTerm:       &term,
-		FilterLimit:      &limitStr,
-		FilterStart:      &startStr,
+
+	productResults, err := client.ProductGetWithResponse(ctx, &products.ProductGetParams{
+		FilterLocationId:  &locationID,
+		FilterTerm:        &term,
+		FilterLimit:       &limit,
+		FilterStart:       &skip,
+		FilterFulfillment: &availableInStore,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kroger product search request failed: %w", err)
 	}
-	if err := requireSuccess(products.StatusCode(), products.JSON500); err != nil {
+	if err := requireSuccess(productResults.StatusCode(), productSearchErrorPayload(productResults)); err != nil {
 		return nil, err
 	}
 
 	var ingredients []Ingredient
 
-	for _, product := range *products.JSON200.Data {
+	for _, product := range *productResults.JSON200.Data {
 		wildcard := len(brands) > 0 && brands[0] == "*"
 
 		if product.Brand != nil && !slices.Contains(brands, toStr(product.Brand)) && !wildcard {
@@ -100,6 +113,12 @@ func searchIngredients(ctx context.Context, client ClientWithResponsesInterface,
 		}
 		for _, item := range *product.Items {
 			if item.Price == nil {
+				continue
+			}
+
+			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == products.TEMPORARILYOUTOFSTOCK {
+				// TODO pass along low stock levels to AI to use in recipe planning
+				// slog.WarnContext(ctx, "OOS", "description", *product.Description)
 				continue
 			}
 
@@ -130,13 +149,12 @@ func searchIngredients(ctx context.Context, client ClientWithResponsesInterface,
 			//Taxonomy:  product.,
 			// CountryOrigin: product.CountryOrigin,
 			// Favorite: item.Favorite,
-			// InventoryStockLevel: item.InventoryStockLevel),
 		}
 	}
 
 	// recursion is pretty dumb pagination
 	// kroger limites us to 250
-	if len(*products.JSON200.Data) == limit && skip < 250 {
+	if len(*productResults.JSON200.Data) == limit && skip < 250 {
 		page, err := searchIngredients(ctx, client, locationID, term, brands, frozen, skip+limit)
 		if err == nil {
 			ingredients = append(ingredients, page...)
@@ -144,6 +162,34 @@ func searchIngredients(ctx context.Context, client ClientWithResponsesInterface,
 	}
 
 	return ingredients, nil
+}
+
+func inputIngredientFromKrogerIngredient(ingredient Ingredient, _ int) ai.InputIngredient {
+	return ai.NormalizeInputIngredient(ai.InputIngredient{
+		ProductID:    strings.TrimSpace(toStr(ingredient.ProductId)),
+		AisleNumber:  strings.TrimSpace(toStr(ingredient.AisleNumber)),
+		Brand:        strings.TrimSpace(toStr(ingredient.Brand)),
+		Description:  strings.TrimSpace(toStr(ingredient.Description)),
+		Size:         strings.TrimSpace(toStr(ingredient.Size)),
+		PriceRegular: clonePrice(ingredient.PriceRegular),
+		PriceSale:    clonePrice(ingredient.PriceSale),
+		Categories:   categoriesFromPtr(ingredient.Categories),
+	})
+}
+
+func categoriesFromPtr(ptr *[]string) []string {
+	if ptr == nil {
+		return nil
+	}
+	return append([]string(nil), (*ptr)...)
+}
+
+func clonePrice(price *float32) *float32 {
+	if price == nil {
+		return nil
+	}
+	value := *price
+	return &value
 }
 
 func defaultStaples() []staplesFilter {
@@ -172,6 +218,15 @@ func defaultStaples() []staplesFilter {
 			Term:   "lamb",
 			Brands: []string{"Simple Truth"},
 		},
+		{
+			Term:   "grains",
+			Brands: []string{"*"},
+		},
+		{
+			Term:   "pasta",
+			Brands: []string{"*"}, // Should we just put our thumb on the scale
+		},
+		// TODO dairy, international
 	}...)
 }
 
@@ -198,6 +253,25 @@ func requireSuccess(statusCode int, payload any) error {
 		return nil
 	}
 	return krogerError(statusCode, payload)
+}
+
+func productSearchErrorPayload(resp *products.ProductGetResponse) any {
+	if resp == nil {
+		return nil
+	}
+	if len(resp.Body) != 0 {
+		return json.RawMessage(resp.Body)
+	}
+	if resp.JSON400 != nil {
+		return resp.JSON400
+	}
+	if resp.JSON401 != nil {
+		return resp.JSON401
+	}
+	if resp.JSON500 != nil {
+		return resp.JSON500
+	}
+	return nil
 }
 
 func mustJSONSignature(value any) string {

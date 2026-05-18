@@ -13,9 +13,15 @@ import (
 	"github.com/google/uuid"
 )
 
-type mock struct{}
+type mock struct {
+	saver recipeSaver
+}
 
-func NewMockGenerator() generator {
+func NewMockGenerator(saver recipeSaver) mock {
+	return mock{saver: saver}
+}
+
+func NewMockImageGen() mock {
 	return mock{}
 }
 
@@ -364,10 +370,7 @@ var mockRecipes = []ai.Recipe{
 }
 
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
-	id := p.ConversationID
-	if id == "" {
-		id = uuid.NewString()
-	}
+	originHash := p.Hash()
 	// fake like we're taking time to call an LLM so we get the spinner.
 	time.Sleep(100 * time.Millisecond)
 
@@ -387,6 +390,8 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 		}
 		mr := mockRecipes[idx]
 		if _, found := seen[mr.ComputeHash()]; !found {
+			mr.OriginHash = originHash
+			mr.ResponseID = uuid.NewString()
 
 			slog.InfoContext(ctx, "adding", "title", mr.Title)
 			selectedRecipes = append(selectedRecipes, mr)
@@ -396,19 +401,28 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	// not presisting dimissed as
 	for _, s := range p.Saved {
 		slog.InfoContext(ctx, "keeping", "title", s.Title)
-		s.Saved = true
 		selectedRecipes = append(selectedRecipes, s)
 	}
 
+	if m.saver != nil {
+		for _, recipe := range selectedRecipes {
+			if err := m.saver.SaveRecipe(ctx, recipe); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	return &ai.ShoppingList{
-		ConversationID: id,
-		Recipes:        selectedRecipes,
+		Recipes: selectedRecipes,
 	}, nil
 }
 
-func (m mock) AskQuestion(ctx context.Context, question string, conversationID string) (string, error) {
-	_ = conversationID
-	return fmt.Sprintf("Mock answer: %s", question), nil
+func (m mock) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+	_ = previousResponseID
+	return &ai.QuestionResponse{
+		Answer:     fmt.Sprintf("Mock answer: %s", question),
+		ResponseID: uuid.NewString(),
+	}, nil
 }
 
 func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {

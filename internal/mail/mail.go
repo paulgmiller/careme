@@ -18,19 +18,22 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
+	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
-	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/prompts"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
 
-	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const mailSentPrefix = "mail/sent/"
@@ -72,14 +75,16 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	userStorage := users.NewStorage(cache)
-	mc := critique.NewManager(cfg, cache)
-	staples, err := recipes.NewCachedStaplesService(cfg, cache)
+	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	mc := critique.NewManager(cfg, cache, aiHTTPClient)
+	ig := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
+	staples, err := recipes.NewCachedStaplesService(cfg, cache, ig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
 	ss := recipes.StatusStore(cache)
-	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL")
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss)
+	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss, recipes.IO(cache))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -110,12 +115,16 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 }
 
 func (m *mailer) RunOnce(ctx context.Context) {
+	ctx, span := otel.Tracer("careme/mail").Start(ctx, "mail_run")
+	defer span.End()
+
 	slog.InfoContext(ctx, "starting user email run")
 	users, err := m.userStorage.List(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to list users", "error", err.Error())
 		return
 	}
+	span.SetAttributes(attribute.Int("mail.user_count", len(users)))
 
 	for _, user := range users {
 		m.sendEmail(ctx, user)
@@ -125,7 +134,9 @@ func (m *mailer) RunOnce(ctx context.Context) {
 }
 
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
-	ctx = logsetup.WithOperationID(ctx, uuid.NewString())
+	ctx, span := otel.Tracer("careme/mail").Start(ctx, "send_email")
+	defer span.End()
+	span.SetAttributes(attribute.String("user.id", user.ID))
 
 	if !user.MailOptIn {
 		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)

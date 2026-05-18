@@ -17,25 +17,31 @@ const (
 )
 
 type Config struct {
-	AI              AIConfig               `json:"ai"`
-	Gemini          GeminiConfig           `json:"gemini"`
-	Kroger          KrogerConfig           `json:"kroger"`
-	Walmart         WalmartConfig          `json:"walmart"`
-	Aldi            AldiConfig             `json:"aldi"`
-	WholeFoods      WholeFoodsConfig       `json:"wholefoods"`
-	Albertsons      AlbertsonsConfig       `json:"albertsons"`
-	Publix          PublixConfig           `json:"publix"`
-	HEB             HEBConfig              `json:"heb"`
-	Wegmans         WegmansConfig          `json:"wegmans"`
-	BrightDataProxy brightdata.ProxyConfig `json:"brightdata_proxy"`
-	Mocks           MockConfig             `json:"mocks"`
-	Clerk           ClerkConfig            `json:"clerk"`
-	Admin           AdminConfig            `json:"admin"`
-	PublicOrigin    string                 `json:"public_origin"`
+	AI                AIConfig                `json:"ai"`
+	Gemini            GeminiConfig            `json:"gemini"`
+	IngredientGrading IngredientGradingConfig `json:"ingredient_grading"`
+	Kroger            KrogerConfig            `json:"kroger"`
+	Walmart           WalmartConfig           `json:"walmart"`
+	Aldi              AldiConfig              `json:"aldi"`
+	WholeFoods        WholeFoodsConfig        `json:"wholefoods"`
+	Albertsons        AlbertsonsConfig        `json:"albertsons"`
+	Publix            PublixConfig            `json:"publix"`
+	HEB               HEBConfig               `json:"heb"`
+	Wegmans           WegmansConfig           `json:"wegmans"`
+	BrightDataProxy   brightdata.ProxyConfig  `json:"brightdata_proxy"`
+	Mocks             MockConfig              `json:"mocks"`
+	Clerk             ClerkConfig             `json:"clerk"`
+	Admin             AdminConfig             `json:"admin"`
+	PublicOrigin      string                  `json:"public_origin"`
 }
 
 type AIConfig struct {
 	APIKey string `json:"api_key"`
+}
+
+type IngredientGradingConfig struct {
+	Enable bool   `json:"enable"`
+	Model  string `json:"model"`
 }
 
 type GeminiConfig struct {
@@ -163,6 +169,10 @@ func Load() (*Config, error) {
 	config := &Config{
 		AI: AIConfig{
 			APIKey: os.Getenv("AI_API_KEY"),
+		},
+		IngredientGrading: IngredientGradingConfig{
+			Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
+			Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
 		},
 		Gemini: GeminiConfig{
 			APIKey:        os.Getenv("GEMINI_API_KEY"),

@@ -14,7 +14,7 @@ Flow:
    - `location` (required)
    - `date` (optional, defaulted by store timezone/day boundary)
    - `instructions` (optional)
-   - `conversation_id` (optional)
+   - `response_id` (optional)
 3. `handleRecipes` persists that object with `SaveParams(...)` under `params/<params_hash>`.
 4. This saved `params` object is the start signal for generation. `kickgeneration(...)` is launched immediately after.
 
@@ -22,7 +22,7 @@ Flow:
 
 Async generation path:
 1. `kickgeneration(...)` calls `generator.GenerateRecipes(ctx, params)`.
-2. The generator returns an `ai.ShoppingList` containing `Recipes` (and `ConversationID`).
+2. The generator returns an `ai.ShoppingList` containing `Recipes` (and `ResponseID`).
 3. `SaveShoppingList(...)` persists:
    - `shoppinglist/<params_hash>` -> full `ai.ShoppingList`
    - `recipe/<recipe_hash>` -> each recipe object (with `OriginHash = params_hash`)
@@ -55,7 +55,7 @@ Regeneration entry:
 1. Loads old `params` from `params/<hash>`.
 2. Loads current `shoppingList` from `shoppinglist/<hash>`.
 3. Loads `recipeSelection` for `(user_id, hash)`.
-4. Merges selection state into params (`mergeParamsWithSelection`), applies new instructions, and carries conversation id when needed.
+4. Merges selection state into params (`mergeParamsWithSelection`), applies new instructions, and carries the latest response id when needed.
 5. Computes a new hash from the updated params.
 
 Then:
@@ -65,3 +65,4 @@ Then:
 Result:
 - `selection` holds transient decision state for a given origin hash.
 - A new generation cycle begins when a new `params` object is created and saved.
+- Recipe follow-up questions are chained by the latest `response_id` stored on the recipe thread; each answer updates that thread-level response id for the next turn.
