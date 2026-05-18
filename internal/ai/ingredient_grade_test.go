@@ -14,8 +14,8 @@ func TestNormalizeInputIngredientNormalizesFieldsAndSetsID(t *testing.T) {
 		Brand:        " Farm Stand ",
 		Description:  "  Baby Spinach  ",
 		Size:         " 5 oz ",
-		PriceRegular: float32Ptr(4.99),
-		PriceSale:    float32Ptr(3.49),
+		PriceRegular: new(float32(4.99)),
+		PriceSale:    new(float32(3.49)),
 		Categories:   []string{" greens ", "Produce", "produce", ""},
 	})
 

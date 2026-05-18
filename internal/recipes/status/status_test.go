@@ -12,22 +12,22 @@ func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
 	got := Sales([]ai.InputIngredient{
 		{
 			Description:  "Full Price Chicken",
-			PriceRegular: recipeFloat32(10),
+			PriceRegular: new(float32(10)),
 		},
 		{
 			Description:  "Half Off Spinach",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(5),
+			PriceRegular: new(float32(10)),
+			PriceSale:    new(float32(5)),
 		},
 		{
 			Description:  "Same Price Pasta",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(10),
+			PriceRegular: new(float32(10)),
+			PriceSale:    new(float32(10)),
 		},
 		{
 			Description:  "Twenty Off Salmon",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(8),
+			PriceRegular: new(float32(10)),
+			PriceSale:    new(float32(8)),
 		},
 	})
 
@@ -41,8 +41,8 @@ func TestIngredientsIncludesCountAndSales(t *testing.T) {
 	got := Ingredients([]ai.InputIngredient{
 		{
 			Description:  "Half Off Spinach",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(5),
+			PriceRegular: new(float32(10)),
+			PriceSale:    new(float32(5)),
 		},
 	}, 3)
 
