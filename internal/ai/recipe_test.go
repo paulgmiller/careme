@@ -314,6 +314,7 @@ func TestBuildMenuPlanMessagesAddsVarietyRequirementsForThreePlans(t *testing.T)
 	for _, want := range []string{
 		"Mark one plan fancy",
 		"Include one less-common cuisine direction",
+		"Use distinct side vegetables across the plans when possible",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("expected menu plan prompt to contain %q: %s", want, body)
@@ -372,6 +373,7 @@ func TestBuildRegenerateMenuPlanMessagesAddsVarietyRequirementsForThreePlans(t *
 	for _, want := range []string{
 		"Mark one replacement plan fancy",
 		"Include one less-common cuisine direction",
+		"Use distinct side vegetables across the plans when possible",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("expected regenerate menu plan prompt to contain %q: %s", want, body)
@@ -384,16 +386,18 @@ func TestRecipePlanInstructions(t *testing.T) {
 		Cuisine:          "Korean",
 		AnchorIngredient: "tofu",
 		Technique:        "stir-fry",
+		SideVegetable:    "broccoli",
 		Fancy:            true,
 	}
 	got := plan.Instructions()
-	if len(got) != 4 {
-		t.Fatalf("expected four plan instructions, got %v", got)
+	if len(got) != 5 {
+		t.Fatalf("expected five plan instructions, got %v", got)
 	}
 	for _, phrase := range []string{
 		"Cuisine direction for this recipe: Korean.",
 		"Anchor ingredient direction for this recipe: tofu.",
 		"Suggested technique for this recipe: stir-fry.",
+		"Side vegetable direction for this recipe: broccoli.",
 		"fancier",
 	} {
 		if !strings.Contains(strings.Join(got, "\n"), phrase) {
