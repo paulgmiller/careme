@@ -200,7 +200,7 @@ Also for fancier/more expensive dishes consider more expensive wines.
 `
 
 const (
-	recipeImageModel = "gpt-image-2" // dalle-3 is getting deprecated. 1.5 seems way better than 1.
+	recipeImageModel = openai.ImageModelGPTImage2 // dalle-3 is getting deprecated. 1.5 seems way better than 1.
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
 	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
 	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
