@@ -197,7 +197,7 @@ func TestHandleUser_RendersBillingPricingTableUnderAccountInformation(t *testing
 		}
 	}
 	accountIndex := strings.Index(body, "Account Information")
-	billingIndex := strings.Index(body, "Careme Subscription")
+	billingIndex := strings.Index(body, "Subscription")
 	if accountIndex == -1 || billingIndex == -1 || billingIndex < accountIndex {
 		t.Fatalf("expected billing section under account information, got body: %s", body)
 	}
