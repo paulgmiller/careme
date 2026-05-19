@@ -88,8 +88,8 @@ func TestWriteMenuPlansHumanReadable(t *testing.T) {
 			},
 			Date: time.Date(2026, time.May, 13, 0, 0, 0, 0, time.UTC),
 			Plan: &ai.MenuPlan{Plans: []ai.RecipePlan{
-				{Cuisine: "Korean", AnchorIngredient: "chicken thighs", Technique: "sheet pan"},
-				{Cuisine: "Thai", AnchorIngredient: "rice noodles", Technique: "stir fry", Fancy: true},
+				{Cuisine: "Korean", AnchorIngredient: "chicken thighs", Technique: "sheet pan", SideVegetable: "broccoli"},
+				{Cuisine: "Thai", AnchorIngredient: "rice noodles", Technique: "stir fry", SideVegetable: "snap peas", Fancy: true},
 			}},
 		},
 		{
@@ -108,8 +108,8 @@ func TestWriteMenuPlansHumanReadable(t *testing.T) {
 		"Address: 1 Market St, WA, 98101",
 		"Date: 2026-05-13",
 		"Plan:",
-		"Korean with chicken thighs, sheet pan",
-		"Thai with rice noodles, stir fry (fancier)",
+		"Korean with chicken thighs, sheet pan, side veg: broccoli",
+		"Thai with rice noodles, stir fry, side veg: snap peas (fancier)",
 		"2. Safeway",
 		"Could not make a menu plan: staples unavailable",
 	} {

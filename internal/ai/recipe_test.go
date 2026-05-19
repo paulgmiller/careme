@@ -384,16 +384,18 @@ func TestRecipePlanInstructions(t *testing.T) {
 		Cuisine:          "Korean",
 		AnchorIngredient: "tofu",
 		Technique:        "stir-fry",
+		SideVegetable:    "broccoli",
 		Fancy:            true,
 	}
 	got := plan.Instructions()
-	if len(got) != 4 {
-		t.Fatalf("expected four plan instructions, got %v", got)
+	if len(got) != 5 {
+		t.Fatalf("expected five plan instructions, got %v", got)
 	}
 	for _, phrase := range []string{
 		"Cuisine direction for this recipe: Korean.",
 		"Anchor ingredient direction for this recipe: tofu.",
 		"Suggested technique for this recipe: stir-fry.",
+		"Side vegetable direction for this recipe: broccoli.",
 		"fancier",
 	} {
 		if !strings.Contains(strings.Join(got, "\n"), phrase) {

@@ -400,6 +400,7 @@ type RecipePlan struct {
 	Cuisine          string `json:"cuisine"`
 	AnchorIngredient string `json:"anchor_ingredient"`
 	Technique        string `json:"technique"`
+	SideVegetable    string `json:"side_vegetable"`
 	Fancy            bool   `json:"fancy"`
 }
 
@@ -408,6 +409,7 @@ func (p RecipePlan) Instructions() []string {
 		fmt.Sprintf("Cuisine direction for this recipe: %s.", p.Cuisine),
 		fmt.Sprintf("Anchor ingredient direction for this recipe: %s.", p.AnchorIngredient),
 		fmt.Sprintf("Suggested technique for this recipe: %s.", p.Technique),
+		fmt.Sprintf("Side vegetable direction for this recipe: %s.", p.SideVegetable),
 	}
 	if p.Fancy {
 		instructions = append(instructions, "This meal should be fancier, so it can be more expensive, longer, or richer.")
@@ -422,8 +424,8 @@ const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
 Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and technique. Set fancy to true only for the richer/splurgier/time intensive option.
-Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","fancy":false}
-Try and ensure variety across cuisines, anchor ingredients, and techniques.
+Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","side_vegetable":"green beans","fancy":false}
+Try and ensure variety across cuisines, anchor ingredients, techniques, and side vegetables.
 Prioritize seasonal ingredients, sale value, practical weeknight cooking. 
 Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
 
