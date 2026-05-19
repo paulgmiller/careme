@@ -12,7 +12,7 @@
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
   {{template "seasonal_background" .}}
-  <main class="relative z-10 px-4 py-10">
+  <main class="relative px-4 py-10">
     <section class="mx-auto w-full max-w-4xl">
       <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 px-8 pb-6 pt-8">
@@ -129,17 +129,8 @@
           {{if .BillingEnabled}}
           <section class="space-y-4">
             <h2 class="text-lg font-semibold text-brand-700">Careme Subscription</h2>
-            <div class="flex flex-wrap items-center gap-3">
-              <button type="button"
-                      data-clerk-checkout-button
-                      data-plan-id="{{.BillingPlanID}}"
-                      data-plan-period="{{.BillingPlanPeriod}}"
-                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-gray-400">
-                Pay for Careme
-              </button>
-              <p class="text-sm text-gray-600">Opens secure checkout through Clerk.</p>
-            </div>
-            <p data-clerk-checkout-error hidden class="text-sm text-red-700">Checkout is not ready yet. Try again, chef.</p>
+            <div data-clerk-pricing-table class="min-h-40"></div>
+            <p data-clerk-pricing-error hidden class="text-sm text-red-700">Checkout is not ready yet. Try again, chef.</p>
           </section>
           {{end}}
           {{end}}
@@ -184,49 +175,76 @@
       <p class="mt-6 text-center text-sm text-gray-500">Need help? Reach out from the home page.</p>
     </section>
   </main>
+  {{if .BillingEnabled}}{{if (ClerkUIBundleURL)}}
+  <script
+    crossorigin="anonymous"
+    src="{{ClerkUIBundleURL}}">
+  </script>
+  {{end}}{{end}}
   <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
   {{if .BillingEnabled}}
   <script>
     (() => {
-      const button = document.querySelector("[data-clerk-checkout-button]");
-      const error = document.querySelector("[data-clerk-checkout-error]");
-      if (!button) return;
+      const pricingTable = document.querySelector("[data-clerk-pricing-table]");
+      const error = document.querySelector("[data-clerk-pricing-error]");
+      if (!pricingTable) return;
 
       const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const loadClerkUI = async () => {
+        if (window.__internal_ClerkUICtor) return window.__internal_ClerkUICtor;
+
+        const src = "{{ClerkUIBundleURL}}";
+        if (!src) return null;
+
+        await new Promise((resolve, reject) => {
+          const existing = document.querySelector(`script[src="${src}"]`);
+          if (existing) {
+            existing.addEventListener("load", resolve, { once: true });
+            existing.addEventListener("error", reject, { once: true });
+            return;
+          }
+
+          const script = document.createElement("script");
+          script.src = src;
+          script.async = true;
+          script.crossOrigin = "anonymous";
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("Failed to load Clerk UI"));
+          document.head.appendChild(script);
+        });
+        return window.__internal_ClerkUICtor || null;
+      };
       const waitForClerk = async () => {
         while (!window.Clerk?.load) await wait(10);
-        await Clerk.load();
+        const ClerkUI = await loadClerkUI();
+        if (ClerkUI) {
+          await Clerk.load({ ui: { ClerkUI } });
+        } else {
+          await Clerk.load();
+        }
         return Clerk;
       };
 
-      button.addEventListener("click", async () => {
-        const originalText = button.textContent;
-        button.disabled = true;
-        button.textContent = "Opening checkout...";
+      (async () => {
         if (error) error.hidden = true;
-
         try {
           const clerk = await waitForClerk();
           if (!clerk.isSignedIn) {
-            location.href = "{{SignInPath "/user"}}";
             return;
           }
-          if (!clerk.billing?.startCheckout) {
-            throw new Error("Clerk billing is unavailable");
+          if (!clerk.mountPricingTable) {
+            throw new Error("Clerk pricing table is unavailable");
           }
-          await clerk.billing.startCheckout({
-            planId: button.dataset.planId,
-            planPeriod: button.dataset.planPeriod || "month",
+          clerk.mountPricingTable(pricingTable, {
+            for: "user",
+            newSubscriptionRedirectUrl: "/user",
           });
-        } catch (checkoutError) {
-          console.error("Clerk checkout failed", checkoutError);
+        } catch (pricingError) {
+          console.error("Clerk pricing table failed", pricingError);
           if (error) error.hidden = false;
-        } finally {
-          button.disabled = false;
-          button.textContent = originalText;
         }
-      });
+      })();
     })();
   </script>
   {{end}}

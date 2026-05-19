@@ -33,9 +33,16 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
 		"ClerkJSVersion":      func() string { return clerkJSVersion },
-		"PublicOrigin":        func() string { return config.ResolvedPublicOrigin() },
-		"SignInPath":          signInPath,
-		"TailwindAssetPath":   func() string { return tailwindAssetPath },
+		"ClerkUIBundleURL": func() string {
+			domain := strings.TrimSpace(config.Clerk.Domain)
+			if domain == "" {
+				return ""
+			}
+			return "https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js"
+		},
+		"PublicOrigin":      func() string { return config.ResolvedPublicOrigin() },
+		"SignInPath":        signInPath,
+		"TailwindAssetPath": func() string { return tailwindAssetPath },
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {

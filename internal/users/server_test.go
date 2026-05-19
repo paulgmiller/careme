@@ -192,15 +192,19 @@ func TestHandleUser_RendersBillingCheckoutButtonWhenConfigured(t *testing.T) {
 	}
 	body := rr.Body.String()
 	for _, want := range []string{
-		"Pay for Careme",
-		`data-clerk-checkout-button`,
-		`data-plan-id="cplan_test"`,
-		`data-plan-period="annual"`,
-		`clerk.billing.startCheckout`,
+		"Account Information",
+		"Careme Subscription",
+		`data-clerk-pricing-table`,
+		`clerk.mountPricingTable`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("expected user page to include %q, got body: %s", want, body)
 		}
+	}
+	accountIndex := strings.Index(body, "Account Information")
+	billingIndex := strings.Index(body, "Careme Subscription")
+	if accountIndex == -1 || billingIndex == -1 || billingIndex < accountIndex {
+		t.Fatalf("expected billing section under account information, got body: %s", body)
 	}
 }
 
@@ -223,8 +227,8 @@ func TestHandleUser_OmitsBillingCheckoutButtonWhenUnconfigured(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	body := rr.Body.String()
-	if strings.Contains(body, "Pay for Careme") || strings.Contains(body, "data-clerk-checkout-button") {
-		t.Fatalf("expected billing checkout button to be omitted, got body: %s", body)
+	if strings.Contains(body, "Careme Subscription") || strings.Contains(body, "data-clerk-pricing-table") {
+		t.Fatalf("expected billing pricing table to be omitted, got body: %s", body)
 	}
 }
 

@@ -62,8 +62,12 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 			if !strings.Contains(string(body), `{{template "seasonal_background" .}}`) {
 				t.Fatalf("%s should include seasonal background", name)
 			}
-			if !strings.Contains(string(body), `<main class="relative z-10`) {
-				t.Fatalf("%s should keep page content above seasonal background", name)
+			wantMain := `<main class="relative z-10`
+			if name == "user.html" {
+				wantMain = `<main class="relative px-4`
+			}
+			if !strings.Contains(string(body), wantMain) {
+				t.Fatalf("%s should keep page content in a relative main container", name)
 			}
 		})
 	}
