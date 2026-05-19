@@ -55,6 +55,27 @@
 }
 
 @layer base {
+  :root {
+    --clerk-color-primary: light-dark(var(--brand-700), var(--brand-300));
+    --clerk-color-primary-foreground: light-dark(#ffffff, #0f172a);
+    --clerk-color-danger: var(--color-action-red-500);
+    --clerk-color-success: var(--color-action-green-500);
+    --clerk-color-warning: var(--brand-500);
+    --clerk-color-neutral: light-dark(#111827, #ffffff);
+    --clerk-color-foreground: light-dark(#111827, #ffffff);
+    --clerk-color-background: light-dark(#ffffff, #111827);
+    --clerk-color-input: light-dark(#ffffff, #1f2937);
+    --clerk-color-input-foreground: light-dark(#111827, #ffffff);
+    --clerk-color-ring: light-dark(
+      color-mix(in srgb, var(--brand-600) 35%, transparent),
+      color-mix(in srgb, var(--brand-300) 40%, transparent)
+    );
+    --clerk-color-shimmer: var(--brand-50);
+    --clerk-color-modal-backdrop: #0f172a;
+    --clerk-border-radius: 0.5rem;
+    --clerk-spacing: 1rem;
+  }
+
   p {
     text-wrap: pretty;
   }
