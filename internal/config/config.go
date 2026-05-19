@@ -244,6 +244,7 @@ func validate(cfg *Config) error {
 			return err
 		}
 	}
+
 	if cfg.Mocks.Enable {
 		return nil
 	}

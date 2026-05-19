@@ -126,11 +126,13 @@
             </div>
           </section>
 
+          {{if (ClerkEnabled)}}
           <section class="space-y-4">
             <h2 class="text-lg font-semibold text-brand-700">Careme Subscription</h2>
             <div data-clerk-pricing-table class="min-h-40"></div>
             <p data-clerk-pricing-error hidden class="text-sm text-red-700">Checkout is not ready yet. Try again, chef.</p>
           </section>
+          {{end}}
           {{end}}
 
           {{if eq .ActiveTab "past"}}
@@ -173,7 +175,7 @@
       <p class="mt-6 text-center text-sm text-gray-500">Need help? Reach out from the home page.</p>
     </section>
   </main>
-  {{if (ClerkUIBundleURL)}}
+  {{if (ClerkEnabled)}}
   <script
     crossorigin="anonymous"
     src="{{ClerkUIBundleURL}}">
@@ -181,6 +183,7 @@
   {{end}}
   <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
+  {{if (ClerkEnabled)}}
   <script>
     (() => {
       const pricingTable = document.querySelector("[data-clerk-pricing-table]");
@@ -244,5 +247,6 @@
       })();
     })();
   </script>
+  {{end}}
 </body>
 </html>
