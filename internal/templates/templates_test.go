@@ -62,8 +62,12 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 			if !strings.Contains(string(body), `{{template "seasonal_background" .}}`) {
 				t.Fatalf("%s should include seasonal background", name)
 			}
-			if !strings.Contains(string(body), `<main class="relative z-10`) {
-				t.Fatalf("%s should keep page content above seasonal background", name)
+			wantMain := `<main class="relative z-10`
+			if name == "user.html" {
+				wantMain = `<main class="relative px-4`
+			}
+			if !strings.Contains(string(body), wantMain) {
+				t.Fatalf("%s should keep page content in a relative main container", name)
 			}
 		})
 	}
@@ -178,6 +182,28 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 	if !strings.Contains(rendered, data.StatusMessage) {
 		t.Fatalf("spinner page should render status message, body: %s", rendered)
+	}
+}
+
+func TestClerkJSScriptsUsePinnedVersion(t *testing.T) {
+	for _, name := range []string{"auth_establish.html", "clerk_refresh.html"} {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if strings.Contains(rendered, "@latest") {
+				t.Fatalf("%s should not use @latest for ClerkJS", name)
+			}
+			if !strings.Contains(rendered, "@{{ClerkJSVersion}}") {
+				t.Fatalf("%s should use pinned ClerkJS template helper", name)
+			}
+		})
+	}
+
+	if clerkJSVersion == "" {
+		t.Fatal("clerkJSVersion should be pinned")
 	}
 }
 

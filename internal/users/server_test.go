@@ -167,6 +167,42 @@ func TestHandleUser_BlanksFavoriteStoreInHTMLWhenLocationLookupFails(t *testing.
 	}
 }
 
+func TestHandleUser_RendersBillingPricingTableUnderAccountInformation(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := &server{
+		storage:  storage,
+		userTmpl: templates.User,
+		clerk:    testAuthClient{},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/user", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleUser(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		"Account Information",
+		"Subscription",
+		`data-clerk-pricing-table`,
+		`clerk.mountPricingTable`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected user page to include %q, got body: %s", want, body)
+		}
+	}
+	accountIndex := strings.Index(body, "Account Information")
+	billingIndex := strings.Index(body, "Subscription")
+	if accountIndex == -1 || billingIndex == -1 || billingIndex < accountIndex {
+		t.Fatalf("expected billing section under account information, got body: %s", body)
+	}
+}
+
 func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
