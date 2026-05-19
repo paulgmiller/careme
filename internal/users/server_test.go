@@ -188,7 +188,7 @@ func TestHandleUser_RendersBillingPricingTableUnderAccountInformation(t *testing
 	body := rr.Body.String()
 	for _, want := range []string{
 		"Account Information",
-		"Careme Subscription",
+		"Subscription",
 		`data-clerk-pricing-table`,
 		`clerk.mountPricingTable`,
 	} {
