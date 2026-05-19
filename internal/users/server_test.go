@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"careme/internal/cache"
-	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
@@ -168,7 +167,7 @@ func TestHandleUser_BlanksFavoriteStoreInHTMLWhenLocationLookupFails(t *testing.
 	}
 }
 
-func TestHandleUser_RendersBillingCheckoutButtonWhenConfigured(t *testing.T) {
+func TestHandleUser_RendersBillingPricingTableUnderAccountInformation(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
@@ -176,10 +175,6 @@ func TestHandleUser_RendersBillingCheckoutButtonWhenConfigured(t *testing.T) {
 		storage:  storage,
 		userTmpl: templates.User,
 		clerk:    testAuthClient{},
-		billing: config.BillingConfig{
-			PlanID:     "cplan_test",
-			PlanPeriod: "annual",
-		},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/user", nil)
@@ -205,30 +200,6 @@ func TestHandleUser_RendersBillingCheckoutButtonWhenConfigured(t *testing.T) {
 	billingIndex := strings.Index(body, "Careme Subscription")
 	if accountIndex == -1 || billingIndex == -1 || billingIndex < accountIndex {
 		t.Fatalf("expected billing section under account information, got body: %s", body)
-	}
-}
-
-func TestHandleUser_OmitsBillingCheckoutButtonWhenUnconfigured(t *testing.T) {
-	t.Parallel()
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	storage := NewStorage(cacheStore)
-	s := &server{
-		storage:  storage,
-		userTmpl: templates.User,
-		clerk:    testAuthClient{},
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/user", nil)
-	rr := httptest.NewRecorder()
-
-	s.handleUser(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
-	}
-	body := rr.Body.String()
-	if strings.Contains(body, "Careme Subscription") || strings.Contains(body, "data-clerk-pricing-table") {
-		t.Fatalf("expected billing pricing table to be omitted, got body: %s", body)
 	}
 }
 
