@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
@@ -164,6 +165,66 @@ func TestHandleUser_BlanksFavoriteStoreInHTMLWhenLocationLookupFails(t *testing.
 	}
 	if user.FavoriteStore != "70500874" {
 		t.Fatalf("expected persisted favorite store to stay unchanged, got %q", user.FavoriteStore)
+	}
+}
+
+func TestHandleUser_RendersBillingCheckoutButtonWhenConfigured(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := &server{
+		storage:  storage,
+		userTmpl: templates.User,
+		clerk:    testAuthClient{},
+		billing: config.BillingConfig{
+			PlanID:     "cplan_test",
+			PlanPeriod: "annual",
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/user", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleUser(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		"Pay for Careme",
+		`data-clerk-checkout-button`,
+		`data-plan-id="cplan_test"`,
+		`data-plan-period="annual"`,
+		`clerk.billing.startCheckout`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected user page to include %q, got body: %s", want, body)
+		}
+	}
+}
+
+func TestHandleUser_OmitsBillingCheckoutButtonWhenUnconfigured(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := &server{
+		storage:  storage,
+		userTmpl: templates.User,
+		clerk:    testAuthClient{},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/user", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleUser(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, "Pay for Careme") || strings.Contains(body, "data-clerk-checkout-button") {
+		t.Fatalf("expected billing checkout button to be omitted, got body: %s", body)
 	}
 }
 

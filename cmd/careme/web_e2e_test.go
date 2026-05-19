@@ -231,7 +231,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
-	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory).Register(appRoutes)
+	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, cfg.Billing).Register(appRoutes)
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator).Register(appRoutes)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 

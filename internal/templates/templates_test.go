@@ -181,6 +181,28 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestClerkJSScriptsUsePinnedVersion(t *testing.T) {
+	for _, name := range []string{"auth_establish.html", "clerk_refresh.html"} {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if strings.Contains(rendered, "@latest") {
+				t.Fatalf("%s should not use @latest for ClerkJS", name)
+			}
+			if !strings.Contains(rendered, "@{{ClerkJSVersion}}") {
+				t.Fatalf("%s should use pinned ClerkJS template helper", name)
+			}
+		})
+	}
+
+	if clerkJSVersion == "" {
+		t.Fatal("clerkJSVersion should be pinned")
+	}
+}
+
 func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)

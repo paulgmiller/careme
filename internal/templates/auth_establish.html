@@ -10,7 +10,7 @@
     <script
       crossorigin="anonymous"
       data-clerk-publishable-key="{{.PublishableKey}}"
-      src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"></script>
+      src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@{{ClerkJSVersion}}/dist/clerk.browser.js"></script>
     <script>
       Clerk.load().then(() => {
         // Just loading Clerk on your domain is often enough to finalize cookies in dev.

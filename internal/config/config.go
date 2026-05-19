@@ -31,6 +31,7 @@ type Config struct {
 	BrightDataProxy   brightdata.ProxyConfig  `json:"brightdata_proxy"`
 	Mocks             MockConfig              `json:"mocks"`
 	Clerk             ClerkConfig             `json:"clerk"`
+	Billing           BillingConfig           `json:"billing"`
 	Admin             AdminConfig             `json:"admin"`
 	PublicOrigin      string                  `json:"public_origin"`
 }
@@ -71,6 +72,23 @@ type ClerkConfig struct {
 
 func (c *ClerkConfig) IsEnabled() bool {
 	return c.SecretKey != "" && c.Domain != "" && c.PublishableKey != ""
+}
+
+type BillingConfig struct {
+	PlanID     string `json:"plan_id"`
+	PlanPeriod string `json:"plan_period"`
+}
+
+func (c BillingConfig) IsEnabled() bool {
+	return strings.TrimSpace(c.PlanID) != ""
+}
+
+func (c BillingConfig) ResolvedPlanPeriod() string {
+	period := strings.TrimSpace(c.PlanPeriod)
+	if period == "" {
+		return "month"
+	}
+	return period
 }
 
 type AdminConfig struct {
@@ -191,6 +209,10 @@ func Load() (*Config, error) {
 			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
 			Domain:         os.Getenv("CLERK_DOMAIN"),
 		},
+		Billing: BillingConfig{
+			PlanID:     os.Getenv("CLERK_BILLING_PLAN_ID"),
+			PlanPeriod: os.Getenv("CLERK_BILLING_PLAN_PERIOD"),
+		},
 		Admin: AdminConfig{
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
 		},
@@ -244,6 +266,9 @@ func validate(cfg *Config) error {
 			return err
 		}
 	}
+	if err := validateBilling(cfg.Billing); err != nil {
+		return err
+	}
 
 	if cfg.Mocks.Enable {
 		return nil
@@ -257,6 +282,14 @@ func validate(cfg *Config) error {
 	}
 	if cfg.AI.APIKey == "" {
 		return fmt.Errorf("AI API  key must be set")
+	}
+	return nil
+}
+
+func validateBilling(cfg BillingConfig) error {
+	period := cfg.ResolvedPlanPeriod()
+	if period != "month" && period != "annual" {
+		return fmt.Errorf("clerk billing plan period must be month or annual")
 	}
 	return nil
 }

@@ -27,7 +27,7 @@ func TestUserPageUpdate_E2E(t *testing.T) {
 	storage := NewStorage(cacheStore)
 
 	tf := FakeUnsubscribeTokenFactory()
-	srv := NewHandler(storage, nil, auth.DefaultMock(), tf)
+	srv := NewHandler(storage, nil, auth.DefaultMock(), tf, config.BillingConfig{})
 	mux := http.NewServeMux()
 	srv.Register(mux)
 

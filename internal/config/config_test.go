@@ -139,6 +139,47 @@ func TestLoadReadsGeminiCritiqueConfig(t *testing.T) {
 	}
 }
 
+func TestLoadReadsClerkBillingConfig(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("CLERK_BILLING_PLAN_ID", "cplan_test")
+	t.Setenv("CLERK_BILLING_PLAN_PERIOD", "annual")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if !cfg.Billing.IsEnabled() {
+		t.Fatal("expected billing config to be enabled")
+	}
+	if got, want := cfg.Billing.PlanID, "cplan_test"; got != want {
+		t.Fatalf("expected billing plan ID %q, got %q", want, got)
+	}
+	if got, want := cfg.Billing.ResolvedPlanPeriod(), "annual"; got != want {
+		t.Fatalf("expected billing plan period %q, got %q", want, got)
+	}
+}
+
+func TestBillingConfigDefaultsPlanPeriodToMonth(t *testing.T) {
+	cfg := BillingConfig{PlanID: "cplan_test"}
+	if got, want := cfg.ResolvedPlanPeriod(), "month"; got != want {
+		t.Fatalf("expected default billing period %q, got %q", want, got)
+	}
+}
+
+func TestValidate_RejectsInvalidBillingPlanPeriod(t *testing.T) {
+	cfg := &Config{
+		Mocks:   MockConfig{Enable: true},
+		Billing: BillingConfig{PlanID: "cplan_test", PlanPeriod: "weekly"},
+	}
+
+	err := validate(cfg)
+	if err == nil || !contains(err.Error(), "clerk billing plan period") {
+		t.Fatalf("expected billing period validation error, got %v", err)
+	}
+}
+
 func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
 	cfg := &Config{}
 	if got, want := cfg.ResolvedPublicOrigin(), "http://localhost:8080"; got != want {
@@ -192,6 +233,8 @@ func resetStoreEnvs(t *testing.T) {
 		"BRIGHTDATA_PROXY_PASSWORD",
 		"GEMINI_API_KEY",
 		"GEMINI_CRITIQUE_MODEL",
+		"CLERK_BILLING_PLAN_ID",
+		"CLERK_BILLING_PLAN_PERIOD",
 		"PUBLIX_ENABLE",
 		"HEB_ENABLE",
 	} {

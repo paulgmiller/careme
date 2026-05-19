@@ -13,6 +13,8 @@ import (
 	"careme/internal/logsetup"
 )
 
+const clerkJSVersion = "5.99.0"
+
 //go:embed *.html
 var htmlFiles embed.FS
 
@@ -30,6 +32,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	funcs := template.FuncMap{
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
+		"ClerkJSVersion":      func() string { return clerkJSVersion },
 		"PublicOrigin":        func() string { return config.ResolvedPublicOrigin() },
 		"SignInPath":          signInPath,
 		"TailwindAssetPath":   func() string { return tailwindAssetPath },

@@ -10,6 +10,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/config"
 	utypes "careme/internal/users/types"
 )
 
@@ -17,7 +18,7 @@ func TestHandleUnsubscribeDisablesMailOptInOnGet(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	tf := FakeUnsubscribeTokenFactory()
-	s := NewHandler(NewStorage(cacheStore), nil, auth.DefaultMock(), tf)
+	s := NewHandler(NewStorage(cacheStore), nil, auth.DefaultMock(), tf, config.BillingConfig{})
 	u := &utypes.User{
 		ID:            "u-1",
 		Email:         []string{"u1@example.com"},
@@ -54,7 +55,7 @@ func TestHandleUnsubscribeDoesNotDisableMailOptInOnHead(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	tf := FakeUnsubscribeTokenFactory()
-	s := NewHandler(NewStorage(cacheStore), nil, auth.DefaultMock(), tf)
+	s := NewHandler(NewStorage(cacheStore), nil, auth.DefaultMock(), tf, config.BillingConfig{})
 	u := &utypes.User{
 		ID:            "u-1",
 		Email:         []string{"u1@example.com"},

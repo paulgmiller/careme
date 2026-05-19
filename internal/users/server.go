@@ -14,6 +14,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
@@ -35,6 +36,7 @@ type server struct {
 	locGetter          locationGetter
 	clerk              auth.AuthClient // make an interface
 	unsubscribeFactory UnsubscribeTokenFactory
+	billing            config.BillingConfig
 }
 
 type pastRecipeView struct {
@@ -50,13 +52,14 @@ const (
 )
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient, unsubscribe UnsubscribeTokenFactory) *server {
+func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient, unsubscribe UnsubscribeTokenFactory, billing config.BillingConfig) *server {
 	return &server{
 		storage:            storage,
 		userTmpl:           templates.User,
 		locGetter:          locGetter,
 		clerk:              clerkClient,
 		unsubscribeFactory: unsubscribe,
+		billing:            billing,
 	}
 }
 
@@ -226,6 +229,9 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		PastRecipes       []pastRecipeView
 		Style             seasons.Style
 		ServerSignedIn    bool
+		BillingEnabled    bool
+		BillingPlanID     string
+		BillingPlanPeriod string
 	}{
 		ClarityScript:     templates.ClarityScript(ctx),
 		GoogleTagScript:   templates.GoogleTagScript(),
@@ -236,6 +242,9 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		PastRecipes:       pastRecipeViews(ctx, s.storage.cache, userForTemplate.LastRecipes),
 		Style:             seasons.GetCurrentStyle(),
 		ServerSignedIn:    true,
+		BillingEnabled:    s.billing.IsEnabled(),
+		BillingPlanID:     s.billing.PlanID,
+		BillingPlanPeriod: s.billing.ResolvedPlanPeriod(),
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)
