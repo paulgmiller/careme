@@ -513,7 +513,6 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	if count >= 3 {
 		messages = append(messages, userPromptMessage("Mark one plan fancy."))
 		messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
-		messages = append(messages, userPromptMessage("Use distinct side vegetables across the plans when possible."))
 	}
 	return messages, nil
 }
@@ -527,7 +526,6 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptM
 	if count >= 3 {
 		messages = append(messages, userPromptMessage("Mark one replacement plan fancy."))
 		messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
-		messages = append(messages, userPromptMessage("Use distinct side vegetables across the plans when possible."))
 	}
 	return messages
 }
