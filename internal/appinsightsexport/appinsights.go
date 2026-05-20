@@ -9,18 +9,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	msappinsights "github.com/microsoft/ApplicationInsights-Go/appinsights"
-	"github.com/microsoft/ApplicationInsights-Go/appinsights/contracts"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	otellog "go.opentelemetry.io/otel/log"
-	logsdk "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
-	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -49,20 +42,6 @@ type Config struct {
 	InstrumentationKey string
 	IngestionEndpoint  *url.URL
 	Client             *http.Client
-}
-
-type appInsightsTraceExporter struct {
-	client  msappinsights.TelemetryClient
-	stopped bool
-	mu      sync.RWMutex
-	once    sync.Once
-}
-
-type appInsightsLogExporter struct {
-	client  msappinsights.TelemetryClient
-	stopped bool
-	mu      sync.RWMutex
-	once    sync.Once
 }
 
 func Enabled() bool {
@@ -111,40 +90,6 @@ func LoadConfig() (*Config, error) {
 	return ParseConnectionString(os.Getenv(ConnectionStringEnv))
 }
 
-func NewTraceExporterFromEnv(res *resource.Resource, serviceVersion string) (tracesdk.SpanExporter, error) {
-	cfg, err := LoadConfig()
-	if err != nil {
-		return nil, err
-	}
-	return NewTraceExporter(cfg, res, serviceVersion)
-}
-
-func NewLogExporterFromEnv(res *resource.Resource, serviceVersion string) (logsdk.Exporter, error) {
-	cfg, err := LoadConfig()
-	if err != nil {
-		return nil, err
-	}
-	return NewLogExporter(cfg, res, serviceVersion)
-}
-
-func NewTraceExporter(cfg *Config, res *resource.Resource, serviceVersion string) (tracesdk.SpanExporter, error) {
-	client, err := newAppInsightsTelemetryClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-	applyAppInsightsClientContext(client, res, serviceVersion)
-	return &appInsightsTraceExporter{client: client}, nil
-}
-
-func NewLogExporter(cfg *Config, res *resource.Resource, serviceVersion string) (logsdk.Exporter, error) {
-	client, err := newAppInsightsTelemetryClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-	applyAppInsightsClientContext(client, res, serviceVersion)
-	return &appInsightsLogExporter{client: client}, nil
-}
-
 func newAppInsightsTelemetryClient(cfg *Config) (msappinsights.TelemetryClient, error) {
 	if cfg == nil {
 		return nil, errors.New("app insights config is required")
@@ -185,71 +130,6 @@ func applyAppInsightsClientContext(client msappinsights.TelemetryClient, res *re
 	}
 }
 
-func (e *appInsightsTraceExporter) ExportSpans(_ context.Context, spans []tracesdk.ReadOnlySpan) error {
-	e.mu.RLock()
-	stopped := e.stopped
-	e.mu.RUnlock()
-	if stopped {
-		return nil
-	}
-
-	for _, span := range spans {
-		item := spanToAppInsights(span)
-		if item == nil {
-			continue
-		}
-		e.client.Track(item)
-	}
-	return nil
-}
-
-func (e *appInsightsTraceExporter) Shutdown(ctx context.Context) error {
-	var err error
-	e.once.Do(func() {
-		e.mu.Lock()
-		e.stopped = true
-		e.mu.Unlock()
-		err = closeTelemetryClient(ctx, e.client)
-	})
-	return err
-}
-
-func (e *appInsightsLogExporter) Export(_ context.Context, records []logsdk.Record) error {
-	e.mu.RLock()
-	stopped := e.stopped
-	e.mu.RUnlock()
-	if stopped {
-		return nil
-	}
-
-	for _, record := range records {
-		item := logRecordToAppInsights(record)
-		e.client.Track(item)
-	}
-	return nil
-}
-
-func (e *appInsightsLogExporter) Shutdown(ctx context.Context) error {
-	var err error
-	e.once.Do(func() {
-		e.mu.Lock()
-		e.stopped = true
-		e.mu.Unlock()
-		err = closeTelemetryClient(ctx, e.client)
-	})
-	return err
-}
-
-func (e *appInsightsLogExporter) ForceFlush(context.Context) error {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if e.stopped || e.client == nil {
-		return nil
-	}
-	e.client.Channel().Flush()
-	return nil
-}
-
 func closeTelemetryClient(ctx context.Context, client msappinsights.TelemetryClient) error {
 	if client == nil {
 		return nil
@@ -271,153 +151,6 @@ func closeTelemetryClient(ctx context.Context, client msappinsights.TelemetryCli
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-}
-
-func spanToAppInsights(span tracesdk.ReadOnlySpan) msappinsights.Telemetry {
-	if span == nil {
-		return nil
-	}
-
-	switch span.SpanKind() {
-	case trace.SpanKindServer, trace.SpanKindConsumer:
-		return serverSpanToRequest(span)
-	default:
-		return spanToDependency(span)
-	}
-}
-
-func serverSpanToRequest(span tracesdk.ReadOnlySpan) msappinsights.Telemetry {
-	method := spanAttrString(span, attrHTTPRequestMethod)
-	requestURL := spanAttrString(span, attrURLFull, attrHTTPURLLegacy)
-	responseCode := spanAttrCode(span)
-	duration := span.EndTime().Sub(span.StartTime())
-
-	request := msappinsights.NewRequestTelemetry(defaultString(method, "SPAN"), requestURL, duration, responseCode)
-	request.Name = span.Name()
-	request.Url = requestURL
-	request.Id = span.SpanContext().SpanID().String()
-	request.MarkTime(span.StartTime(), span.EndTime())
-	request.Success = spanSuccess(span, responseCode)
-	request.Source = spanAttrString(span, attrServerAddress, attrNetPeerName)
-	copySpanAttributes(span, request.Properties, request.Measurements)
-	populateSpanMetadata(span, request.Properties, request.Tags)
-	return request
-}
-
-func spanToDependency(span tracesdk.ReadOnlySpan) msappinsights.Telemetry {
-	target := spanAttrString(span, attrServerAddress, attrNetPeerName)
-	fullURL := spanAttrString(span, attrURLFull, attrHTTPURLLegacy)
-	if target == "" && fullURL != "" {
-		if parsed, err := url.Parse(fullURL); err == nil {
-			target = parsed.Host
-		}
-	}
-
-	responseCode := spanAttrCode(span)
-	dependency := msappinsights.NewRemoteDependencyTelemetry(
-		span.Name(),
-		dependencyType(span),
-		target,
-		spanSuccess(span, responseCode),
-	)
-	dependency.Id = span.SpanContext().SpanID().String()
-	dependency.MarkTime(span.StartTime(), span.EndTime())
-	dependency.ResultCode = responseCode
-	dependency.Data = fullURL
-	copySpanAttributes(span, dependency.Properties, dependency.Measurements)
-	populateSpanMetadata(span, dependency.Properties, dependency.Tags)
-	return dependency
-}
-
-func logRecordToAppInsights(record logsdk.Record) *msappinsights.TraceTelemetry {
-	message := record.Body().String()
-	if message == "" || message == "<nil>" {
-		message = record.EventName()
-	}
-	traceItem := msappinsights.NewTraceTelemetry(message, appInsightsSeverityForLog(record))
-	if ts := firstNonZero(record.Timestamp(), record.ObservedTimestamp()); !ts.IsZero() {
-		traceItem.Timestamp = ts
-	}
-	record.WalkAttributes(func(kv otellog.KeyValue) bool {
-		appendLogValue(traceItem.Properties, kv.Key, kv.Value)
-		return true
-	})
-	populateLogMetadata(record, traceItem.Properties, traceItem.Tags)
-	return traceItem
-}
-
-func populateSpanMetadata(span tracesdk.ReadOnlySpan, properties map[string]string, tags contracts.ContextTags) {
-	if span == nil {
-		return
-	}
-	if tags == nil {
-		tags = make(contracts.ContextTags)
-	}
-	tags.Operation().SetId(span.SpanContext().TraceID().String())
-	tags.Operation().SetName(span.Name())
-	if parent := span.Parent(); parent.IsValid() {
-		tags.Operation().SetParentId(parent.SpanID().String())
-	}
-
-	properties["otel.span_id"] = span.SpanContext().SpanID().String()
-	properties["otel.trace_id"] = span.SpanContext().TraceID().String()
-	properties["otel.span_kind"] = span.SpanKind().String()
-	properties["otel.status.code"] = span.Status().Code.String()
-	if desc := strings.TrimSpace(span.Status().Description); desc != "" {
-		properties["otel.status.description"] = desc
-	}
-	properties["otel.events.count"] = strconv.Itoa(len(span.Events()))
-	properties["otel.links.count"] = strconv.Itoa(len(span.Links()))
-	if scope := span.InstrumentationScope(); scope.Name != "" {
-		properties["scope.name"] = scope.Name
-	}
-	if scope := span.InstrumentationScope(); scope.Version != "" {
-		properties["scope.version"] = scope.Version
-	}
-	copyResourceAttributes(span.Resource(), properties, nil)
-	if dropped := span.DroppedAttributes(); dropped > 0 {
-		properties[propertyDroppedAttrCount] = strconv.Itoa(dropped)
-	}
-}
-
-func populateLogMetadata(record logsdk.Record, properties map[string]string, tags contracts.ContextTags) {
-	if tags == nil {
-		tags = make(contracts.ContextTags)
-	}
-	if traceID := record.TraceID(); traceID.IsValid() {
-		tags.Operation().SetId(traceID.String())
-		properties["otel.trace_id"] = traceID.String()
-	}
-	if spanID := record.SpanID(); spanID.IsValid() {
-		tags.Operation().SetParentId(spanID.String())
-		properties["otel.span_id"] = spanID.String()
-	}
-	if eventName := record.EventName(); eventName != "" {
-		properties["otel.event_name"] = eventName
-	}
-	if text := record.SeverityText(); text != "" {
-		properties["otel.severity_text"] = text
-	}
-	properties["otel.trace_flags"] = fmt.Sprintf("%02x", byte(record.TraceFlags()))
-	if err := record.Body().String(); err == "<nil>" {
-		properties["otel.body.empty"] = "true"
-	}
-	if scope := record.InstrumentationScope(); scope.Name != "" {
-		properties["logger.name"] = scope.Name
-	}
-	if scope := record.InstrumentationScope(); scope.Version != "" {
-		properties["logger.version"] = scope.Version
-	}
-	copyResourceAttributes(record.Resource(), properties, nil)
-	if dropped := record.DroppedAttributes(); dropped > 0 {
-		properties[propertyDroppedAttrCount] = strconv.Itoa(dropped)
-	}
-}
-
-func copySpanAttributes(span tracesdk.ReadOnlySpan, properties map[string]string, measurements map[string]float64) {
-	for _, kv := range span.Attributes() {
-		appendAttributeValue(properties, measurements, string(kv.Key), kv.Value)
 	}
 }
 
@@ -452,91 +185,6 @@ func appendAttributeValue(properties map[string]string, measurements map[string]
 	default:
 		properties[key] = fmt.Sprint(value.AsInterface())
 	}
-}
-
-func appendLogValue(properties map[string]string, key string, value otellog.Value) {
-	switch value.Kind() {
-	case otellog.KindBool:
-		properties[key] = strconv.FormatBool(value.AsBool())
-	case otellog.KindInt64:
-		properties[key] = strconv.FormatInt(value.AsInt64(), 10)
-	case otellog.KindFloat64:
-		properties[key] = strconv.FormatFloat(value.AsFloat64(), 'g', -1, 64)
-	case otellog.KindString:
-		properties[key] = value.AsString()
-	default:
-		properties[key] = value.String()
-	}
-}
-
-func appInsightsSeverityForLog(record logsdk.Record) contracts.SeverityLevel {
-	switch severity := record.Severity(); {
-	case severity >= otellog.SeverityFatal:
-		return msappinsights.Critical
-	case severity >= otellog.SeverityError:
-		return msappinsights.Error
-	case severity >= otellog.SeverityWarn:
-		return msappinsights.Warning
-	case severity >= otellog.SeverityInfo:
-		return msappinsights.Information
-	default:
-		return msappinsights.Verbose
-	}
-}
-
-func spanSuccess(span tracesdk.ReadOnlySpan, responseCode string) bool {
-	if responseCode != "" {
-		code, err := strconv.Atoi(responseCode)
-		if err == nil {
-			return code < http.StatusBadRequest || code == http.StatusUnauthorized
-		}
-	}
-	return span.Status().Code != codes.Error
-}
-
-func dependencyType(span tracesdk.ReadOnlySpan) string {
-	switch {
-	case spanAttrString(span, attrDBSystemName, attrDBSystemLegacy) != "":
-		return "DB"
-	case spanAttrString(span, attrMessagingSystem) != "":
-		return "Messaging"
-	case spanAttrString(span, attrURLFull, attrHTTPURLLegacy) != "":
-		return "HTTP"
-	case span.SpanKind() == trace.SpanKindInternal:
-		return "InProc"
-	default:
-		return strings.ToUpper(span.SpanKind().String())
-	}
-}
-
-func spanAttrCode(span tracesdk.ReadOnlySpan) string {
-	for _, kv := range span.Attributes() {
-		if string(kv.Key) != attrHTTPResponseStatus {
-			continue
-		}
-		switch kv.Value.Type() {
-		case attribute.INT64:
-			return strconv.FormatInt(kv.Value.AsInt64(), 10)
-		case attribute.STRING:
-			return kv.Value.AsString()
-		}
-	}
-	return ""
-}
-
-func spanAttrString(span tracesdk.ReadOnlySpan, keys ...string) string {
-	for _, key := range keys {
-		for _, kv := range span.Attributes() {
-			if string(kv.Key) != key {
-				continue
-			}
-			if kv.Value.Type() == attribute.STRING {
-				return kv.Value.AsString()
-			}
-			return fmt.Sprint(kv.Value.AsInterface())
-		}
-	}
-	return ""
 }
 
 func resourceString(res *resource.Resource, key, fallback string) string {
