@@ -9,18 +9,6 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 )
 
-type capturePromptRecorder struct {
-	record *PromptRecord
-	err    error
-}
-
-func (r *capturePromptRecorder) RecordPrompt(_ context.Context, record *PromptRecord) error {
-	clone := *record
-	clone.Input = append([]PromptMessage(nil), record.Input...)
-	r.record = &clone
-	return r.err
-}
-
 func TestRecordRecipePromptStoresResponseParams(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	c := &client{
