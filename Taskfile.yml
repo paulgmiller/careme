@@ -31,6 +31,7 @@ tasks:
       - vet
       - test
       - lint
+      - js-lint
       - k8s-lint
       - tailwind-check
 
@@ -71,6 +72,11 @@ tasks:
       - kubeconform
     cmds:
       - ./bin/kubeconform -strict -summary deploy/*.yaml
+
+  js-lint:
+    desc: Syntax-check JavaScript embedded in templates
+    cmds:
+      - node tools/lint-js-templates.mjs
 
   test:
     desc: Run tests with mocks enabled by default
