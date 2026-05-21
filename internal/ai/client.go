@@ -8,7 +8,9 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -419,7 +421,57 @@ func (p RecipePlan) Instructions() []string {
 
 // Should we inject sample cuisines
 // https://github.com/paulgmiller/careme/issues/449#issuecomment-4185138982
-// const cusineList = "Italian, Japanese, Mexican, Cuban/Caribbean, Indian, Thai, French, Chinese, Spanish, Greek, Turkish, Ethiopian, Vietnamese, Korean, Moroccan, Peruvian"
+var cuisineList = []string{
+	"American",
+	"Armenian",
+	"Basque",
+	"Burmese",
+	"Cajun",
+	"Caribbean",
+	"Chilean",
+	"Chinese",
+	"Cuban",
+	"Ethiopian",
+	"Filipino",
+	"French",
+	"Georgian",
+	"German",
+	"Greek",
+	"Indian",
+	"Italian",
+	"Japanese",
+	"Korean",
+	"Lebanese",
+	"Malaysian",
+	"Mediterranean",
+	"Mexican",
+	"Moroccan",
+	"Persian",
+	"Peruvian",
+	"Polish",
+	"Senegalese",
+	"Spanish",
+	"Sri Lankan",
+	"Thai",
+	"Tunisian",
+	"Turkish",
+	"Vietnamese",
+}
+
+func pickN(xs []string, n int) []string {
+	if n > len(xs) || n < 0 {
+		panic("can't pick negative or more than we got")
+	}
+	xs = slices.Clone(xs)
+
+	for i := range n {
+		j := i + rand.N(len(xs)-i)
+		xs[i], xs[j] = xs[j], xs[i]
+	}
+
+	return xs[:n]
+}
+
 const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
@@ -510,9 +562,11 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	messages = append(messages,
 		userPromptMessage(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
 	)
+	cuisines := pickN(cuisineList, 5)
+	messages = append(messages, userPromptMessage("For extra variety here are some radnom cuisine families for inspiration "+strings.Join(cuisines, ", ")))
 	if count >= 3 {
 		messages = append(messages, userPromptMessage("Mark one plan fancy."))
-		messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
+		// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 	}
 	return messages, nil
 }
@@ -525,7 +579,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptM
 	// ideally do this if they dismissed fancy.
 	if count >= 3 {
 		messages = append(messages, userPromptMessage("Mark one replacement plan fancy."))
-		messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
+		// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 	}
 	return messages
 }
