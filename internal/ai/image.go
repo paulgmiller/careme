@@ -51,7 +51,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
 	}
 
-	slog.InfoContext(ctx, "API usage", imageUsageLogAttr(resp.Usage))
+	slog.InfoContext(ctx, "API usage", "model", string(recipeImageModel), imageUsageLogAttr(string(recipeImageModel), resp.Usage))
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("image generation returned no images")
 	}
@@ -65,7 +65,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 	}, nil
 }
 
-func imageUsageLogAttr(usage openai.ImagesResponseUsage) slog.Attr {
+func imageUsageLogAttr(model string, usage openai.ImagesResponseUsage) slog.Attr {
 	return slog.Group("usage",
 		slog.Int64("inputTokens", usage.InputTokens),
 		slog.Group("inputTokensDetails",
@@ -78,6 +78,12 @@ func imageUsageLogAttr(usage openai.ImagesResponseUsage) slog.Attr {
 			slog.Int64("textTokens", usage.OutputTokensDetails.TextTokens),
 		),
 		slog.Int64("totalTokens", usage.TotalTokens),
+		estimatedSpendLogAttr(estimateOpenAIImageSpend(
+			model,
+			usage.InputTokensDetails.TextTokens,
+			usage.InputTokensDetails.ImageTokens,
+			usage.OutputTokens,
+		)),
 	)
 }
 

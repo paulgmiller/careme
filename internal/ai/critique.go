@@ -129,7 +129,7 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		"model_version", resp.ModelVersion,
 		"response_id", resp.ResponseID,
 		"latencyMS", time.Since(start).Milliseconds(),
-		geminiUsageLogAttr(resp.UsageMetadata),
+		geminiUsageLogAttr(c.model, resp.UsageMetadata),
 	)
 
 	critique, err := parseRecipeCritique(resp.Text())
@@ -141,10 +141,11 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	return critique, nil
 }
 
-func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
+func geminiUsageLogAttr(model string, usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
 	if usage == nil {
 		return slog.Group("usage", slog.Bool("available", false))
 	}
+	outputTokens := int64(usage.CandidatesTokenCount + usage.ThoughtsTokenCount)
 
 	attrs := []any{
 		slog.Bool("available", true),
@@ -158,6 +159,12 @@ func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.
 	if usage.TrafficType != "" {
 		attrs = append(attrs, slog.String("trafficType", string(usage.TrafficType)))
 	}
+	attrs = append(attrs, estimatedSpendLogAttr(estimateGeminiSpend(
+		model,
+		int64(usage.PromptTokenCount+usage.ToolUsePromptTokenCount),
+		int64(usage.CachedContentTokenCount),
+		outputTokens,
+	)))
 
 	return slog.Group("usage", attrs...)
 }

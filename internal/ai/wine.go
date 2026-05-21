@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	openai "github.com/openai/openai-go/v3"
@@ -43,6 +44,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	if err != nil {
 		return nil, fmt.Errorf("failed to pick wine: %w", err)
 	}
+	slog.InfoContext(ctx, "API usage", "model", c.wineModel, responseUsageLogAttr(c.wineModel, resp.Usage))
 
 	var selection WineSelection
 	if err := json.Unmarshal([]byte(resp.OutputText()), &selection); err != nil {

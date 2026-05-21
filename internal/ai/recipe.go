@@ -113,8 +113,8 @@ Before responding, ensure recipe is cookable, realistic, non-contradictory, corr
 Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.
 Do not include these checks in the output.`
 
-func responseToRecipe(ctx context.Context, resp *responses.Response) (*Recipe, error) {
-	slog.InfoContext(ctx, "API usage", responseUsageLogAttr(resp.Usage))
+func responseToRecipe(ctx context.Context, model string, resp *responses.Response) (*Recipe, error) {
+	slog.InfoContext(ctx, "API usage", "model", model, responseUsageLogAttr(model, resp.Usage))
 	var recipe Recipe
 	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
@@ -152,7 +152,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	}
 
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToRecipe(ctx, resp)
+	return responseToRecipe(ctx, c.model, resp)
 }
 
 func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
@@ -176,6 +176,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
 	}
+	slog.InfoContext(ctx, "API usage", "model", c.model, responseUsageLogAttr(c.model, resp.Usage))
 	answer := strings.TrimSpace(resp.OutputText())
 	if answer == "" {
 		return nil, fmt.Errorf("empty response from model")
@@ -189,7 +190,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	}, nil
 }
 
-func responseUsageLogAttr(usage responses.ResponseUsage) slog.Attr {
+func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr {
 	return slog.Group("usage",
 		slog.Int64("inputTokens", usage.InputTokens),
 		slog.Group("inputTokensDetails",
@@ -200,6 +201,7 @@ func responseUsageLogAttr(usage responses.ResponseUsage) slog.Attr {
 			slog.Int64("reasoningTokens", usage.OutputTokensDetails.ReasoningTokens),
 		),
 		slog.Int64("totalTokens", usage.TotalTokens),
+		estimatedSpendLogAttr(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.OutputTokens)),
 	)
 }
 
@@ -226,7 +228,7 @@ func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Loc
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	return responseToRecipe(ctx, resp)
+	return responseToRecipe(ctx, c.model, resp)
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently

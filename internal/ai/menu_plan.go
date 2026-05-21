@@ -159,7 +159,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	return responseToMenuPlan(ctx, resp)
+	return responseToMenuPlan(ctx, recipePlanModel, resp)
 }
 
 func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*MenuPlan, error) {
@@ -188,10 +188,10 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToMenuPlan(ctx, resp)
+	return responseToMenuPlan(ctx, recipePlanModel, resp)
 }
 
-func responseToMenuPlan(ctx context.Context, resp *responses.Response) (*MenuPlan, error) {
+func responseToMenuPlan(ctx context.Context, model string, resp *responses.Response) (*MenuPlan, error) {
 	var plan MenuPlan
 	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
@@ -200,7 +200,7 @@ func responseToMenuPlan(ctx context.Context, resp *responses.Response) (*MenuPla
 		return nil, fmt.Errorf("failed to get menu plan response ID")
 	}
 	plan.ResponseID = resp.ID
-	slog.InfoContext(ctx, "generated menu plan", "plan", lo.Must(json.Marshal(plan)))
+	slog.InfoContext(ctx, "generated menu plan", "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage))
 	return &plan, nil
 }
 
