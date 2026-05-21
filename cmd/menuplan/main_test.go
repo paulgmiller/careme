@@ -10,7 +10,6 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
-	"careme/internal/recipes"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,42 +131,4 @@ func TestFilterMenuIngredientsDropsLowGrades(t *testing.T) {
 	require.Len(t, got, 2)
 	assert.Equal(t, "ungraded", got[0].ProductID)
 	assert.Equal(t, "good", got[1].ProductID)
-}
-
-type blockingStaplesService struct {
-	started chan string
-	release chan struct{}
-}
-
-func (s *blockingStaplesService) FetchStaples(_ context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error) {
-	s.started <- p.Location.ID
-	<-s.release
-	return []ai.InputIngredient{{ProductID: p.Location.ID + "-ingredient", Description: "seasonal greens"}}, nil
-}
-
-type blockingMenuPlanner struct {
-	started chan string
-	release chan struct{}
-}
-
-func (p *blockingMenuPlanner) CreateMenuPlan(_ context.Context, location *locations.Location, _ []ai.InputIngredient, _ []string, _ time.Time, _ []string, _ int) (*ai.MenuPlan, error) {
-	p.started <- location.ID
-	<-p.release
-	return &ai.MenuPlan{Plans: []ai.RecipePlan{{Cuisine: "Japanese", AnchorIngredient: location.ID, Technique: "grill"}}}, nil
-}
-
-func waitForStarted(t *testing.T, ch <-chan string, want ...string) {
-	t.Helper()
-	seen := make(map[string]bool, len(want))
-	for range want {
-		select {
-		case id := <-ch:
-			seen[id] = true
-		case <-time.After(2 * time.Second):
-			t.Fatalf("timed out waiting for starts; saw %v want %v", seen, want)
-		}
-	}
-	for _, id := range want {
-		assert.True(t, seen[id], "expected %s to start", id)
-	}
 }

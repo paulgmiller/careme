@@ -160,7 +160,7 @@ func makeMenuPlan(ctx context.Context, service planService, store locations.Loca
 	}
 	ingredients = filterMenuIngredients(ingredients)
 
-	cuisines, err := parallelism.Flatten(lo.Range(10), func(int) ([]string, error) {
+	return parallelism.Flatten(lo.Range(10), func(int) ([]string, error) {
 		plan, err := service.planner.CreateMenuPlan(ctx, &store, ingredients, compactStrings(params.Instructions), date, nil, count)
 		if err != nil {
 			return nil, fmt.Errorf("create menu plan: %w", err)
@@ -169,7 +169,6 @@ func makeMenuPlan(ctx context.Context, service planService, store locations.Loca
 			return p.Cuisine
 		}), nil
 	})
-	return cuisines, nil
 }
 
 func makeStoreMenuPlans(ctx context.Context, service planService, stores []locations.Location, instructions string, now time.Time) []string {
