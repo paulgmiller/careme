@@ -50,6 +50,8 @@ type generatorService struct {
 
 var tracer = otel.Tracer("careme/internal/recipes")
 
+var menuPlanResponseIDBackCompatLastDate = time.Date(2026, time.May, 22, 0, 0, 0, 0, time.UTC)
+
 func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService, statuses statusWriter, recipeSaver recipeSaver) (*generatorService, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
@@ -257,8 +259,24 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 	if strings.TrimSpace(p.PreviousMenuPlanResponseID) != "" {
 		return g.aiClient.RegenerateMenuPlan(ctx, instructions, p.PreviousMenuPlanResponseID, count)
 	}
+	if afterMenuPlanResponseIDBackCompatLastDate(p.Date) {
+		return nil, fmt.Errorf("missing previous menu plan response ID for menu date %s", p.Date.Format("2006-01-02"))
+	}
 	// Backward compatibility for cached shopping lists created before menu plan response IDs were persisted.
+	slog.WarnContext(ctx, "no menuplan on regen")
 	return backCompatMenuPlan(count), nil
+}
+
+func afterMenuPlanResponseIDBackCompatLastDate(date time.Time) bool {
+	year, month, day := date.Date()
+	lastYear, lastMonth, lastDay := menuPlanResponseIDBackCompatLastDate.Date()
+	if year != lastYear {
+		return year > lastYear
+	}
+	if month != lastMonth {
+		return month > lastMonth
+	}
+	return day > lastDay
 }
 
 func backCompatMenuPlan(count int) *ai.MenuPlan {

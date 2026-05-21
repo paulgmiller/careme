@@ -640,7 +640,7 @@ func TestGenerateRecipes_RegenerateBackCompatFallbackUsesFakePlan(t *testing.T) 
 		recipe: &newResult,
 	}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Date(2026, time.May, 22, 0, 0, 0, 0, time.UTC))
 	params.Directive = "Use the store's sale ingredients."
 	params.Instructions = "make it brighter"
 	params.Dismissed = []ai.Recipe{dismissed}
@@ -666,6 +666,27 @@ func TestGenerateRecipes_RegenerateBackCompatFallbackUsesFakePlan(t *testing.T) 
 	}.Instructions()...)
 	if !slices.Equal(aiStub.instructions, wantRecipeInstructions) {
 		t.Fatalf("unexpected fallback recipe instructions: got %v want %v", aiStub.instructions, wantRecipeInstructions)
+	}
+}
+
+func TestGenerateRecipes_RegenerateBackCompatFallbackErrorsAfterCutoff(t *testing.T) {
+	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
+	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
+	aiStub := &captureRegenerateAIClient{
+		recipe: &newResult,
+	}
+
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Date(2026, time.May, 23, 0, 0, 0, 0, time.UTC))
+	params.Directive = "Use the store's sale ingredients."
+	params.Instructions = "make it brighter"
+	params.Dismissed = []ai.Recipe{dismissed}
+
+	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
+	_, err := g.GenerateRecipes(t.Context(), params)
+	require.ErrorContains(t, err, "missing previous menu plan response ID for menu date 2026-05-23")
+
+	if aiStub.createMenuPlanCount != 0 || aiStub.menuPlanCount != 0 {
+		t.Fatalf("missing response ID should fail before menu planning calls, got create=%d regenerate=%d", aiStub.createMenuPlanCount, aiStub.menuPlanCount)
 	}
 }
 

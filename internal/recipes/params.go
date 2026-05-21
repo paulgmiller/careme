@@ -41,9 +41,9 @@ type generatorParams struct {
 	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 
-	// regeneration-only context from the origin params; not persisted or hashed
+	// regeneration-only context from the origin params; not hashed
 	PriorSavedHashes           []string `json:"-"`
-	PreviousMenuPlanResponseID string   `json:"-"`
+	PreviousMenuPlanResponseID string   `json:"previous_menu_plan_response_id,omitempty"`
 }
 
 // exist for mail's interface be careful please.
