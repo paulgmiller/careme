@@ -17,6 +17,9 @@ var tailwindCSS []byte
 //go:embed htmx@2.0.8.js
 var htmx208JS []byte
 
+//go:embed user-clerk-billing.js
+var userClerkBillingJS []byte
+
 //go:embed fonts/*.woff2
 var fontFiles embed.FS
 
@@ -67,6 +70,14 @@ func Register(mux routing.Registrar) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		if _, err := w.Write(htmx208JS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write htmx js", "error", err)
+		}
+	})
+
+	mux.HandleFunc("/static/user-clerk-billing.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		if _, err := w.Write(userClerkBillingJS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write user Clerk billing js", "error", err)
 		}
 	})
 

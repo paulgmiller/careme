@@ -190,7 +190,7 @@ func TestHandleUser_RendersBillingPricingTableUnderAccountInformation(t *testing
 		"Account Information",
 		"Subscription",
 		`data-clerk-pricing-table`,
-		`clerk.mountPricingTable`,
+		`/static/user-clerk-billing.js`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("expected user page to include %q, got body: %s", want, body)

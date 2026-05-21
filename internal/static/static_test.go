@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"careme/internal/seasons"
@@ -91,6 +92,29 @@ func TestRegisterServesFontFiles(t *testing.T) {
 	}
 	if rec.Body.Len() == 0 {
 		t.Fatal("font response body should not be empty")
+	}
+}
+
+func TestRegisterServesUserClerkBillingJS(t *testing.T) {
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/static/user-clerk-billing.js", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("billing js response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
+		t.Fatalf("billing js content type = %q, want application/javascript; charset=utf-8", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=3600" {
+		t.Fatalf("billing js cache control = %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), "mountPricingTable") {
+		t.Fatal("billing js response should include Clerk pricing table mount logic")
 	}
 }
 

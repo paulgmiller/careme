@@ -177,6 +177,8 @@
   </main>
   <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
-  {{template "user_clerk_billing" .}}
+  {{if (ClerkEnabled)}}
+  <script src="/static/user-clerk-billing.js"></script>
+  {{end}}
 </body>
 </html>

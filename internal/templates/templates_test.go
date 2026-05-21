@@ -207,7 +207,7 @@ func TestClerkJSScriptsUsePinnedVersion(t *testing.T) {
 	}
 }
 
-func TestUserTemplateRendersClerkBillingPartialWhenEnabled(t *testing.T) {
+func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
 	cfg.Clerk.Domain = "clerk.example.com"
@@ -246,11 +246,11 @@ func TestUserTemplateRendersClerkBillingPartialWhenEnabled(t *testing.T) {
 	if !strings.Contains(rendered, `data-clerk-pricing-table data-clerk-ui-bundle-url="https://clerk.example.com/npm/@clerk/ui@1/dist/ui.browser.js"`) {
 		t.Fatalf("user page should pass Clerk UI bundle URL to billing script, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `data-js-lint="user-clerk-billing"`) {
-		t.Fatalf("user page should render Clerk billing script partial, body: %s", rendered)
+	if !strings.Contains(rendered, `<script src="/static/user-clerk-billing.js"></script>`) {
+		t.Fatalf("user page should load Clerk billing script asset, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `mountPricingTable`) {
-		t.Fatalf("user page should render Clerk pricing table mount logic, body: %s", rendered)
+	if strings.Contains(rendered, `mountPricingTable`) {
+		t.Fatalf("user page should not inline Clerk pricing table mount logic, body: %s", rendered)
 	}
 }
 
