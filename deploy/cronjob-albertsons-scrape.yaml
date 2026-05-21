@@ -32,6 +32,21 @@ spec:
                     name: grafana
                 - secretRef:
                     name: storage
+              env:
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: WORKLOAD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['app']
+                - name: OTEL_RESOURCE_ATTRIBUTES
+                  value: "deployment.environment.name=production,k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.app=$(WORKLOAD_NAME)"
               resources:
                 requests:
                   cpu: 50m

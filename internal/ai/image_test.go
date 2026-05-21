@@ -30,7 +30,7 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 }
 
 func TestImageUsageLogAttr(t *testing.T) {
-	attr := imageUsageLogAttr(openai.ImagesResponseUsage{
+	attr := imageUsageLogAttr(string(recipeImageModel), openai.ImagesResponseUsage{
 		InputTokens:  100,
 		OutputTokens: 200,
 		TotalTokens:  300,
@@ -62,6 +62,13 @@ func TestImageUsageLogAttr(t *testing.T) {
 			slog.Int64("textTokens", 20),
 		),
 		slog.Int64("totalTokens", 300),
+		slog.Group("spend",
+			slog.String("currency", "USD"),
+			slog.Float64("totalUSD", 0.00668),
+			slog.Float64("inputUSD", 0.00068),
+			slog.Float64("cachedInputUSD", 0),
+			slog.Float64("outputUSD", 0.006),
+		),
 	}) {
 		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())
 	}
