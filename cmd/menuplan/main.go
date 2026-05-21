@@ -102,8 +102,14 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 
 	results := makeStoreMenuPlans(ctx, service, stores, instructions, time.Now())
+	printHistogram(results, func(r ai.RecipePlan, _ int) string {
+		return r.SideVegetable
+	})
+	return nil
+}
 
-	histogram := lo.CountValues(results)
+func printHistogram(respices []ai.RecipePlan, transform func(ai.RecipePlan, int) string) {
+	histogram := lo.CountValues(lo.Map(respices, transform))
 	keys := lo.Keys(histogram)
 	slices.Sort(keys)
 	for _, key := range keys {
@@ -115,8 +121,6 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		// %-10s left-aligns the key text with a 10-character padded margin
 		fmt.Printf("%-10s (%d) %s\n", key, count, bar)
 	}
-
-	return nil
 }
 
 func newCache(cfg *config.Config) (cache.ListCache, error) {
@@ -150,7 +154,7 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 	}, nil
 }
 
-func makeMenuPlan(ctx context.Context, service planService, store locations.Location, date time.Time, instructions string, count int) ([]string, error) {
+func makeMenuPlans(ctx context.Context, service planService, store locations.Location, date time.Time, instructions string, count int) ([]ai.RecipePlan, error) {
 	params := recipes.DefaultParams(&store, date)
 	params.Instructions = instructions
 
@@ -160,19 +164,17 @@ func makeMenuPlan(ctx context.Context, service planService, store locations.Loca
 	}
 	ingredients = filterMenuIngredients(ingredients)
 
-	return parallelism.Flatten(lo.Range(10), func(int) ([]string, error) {
+	return parallelism.Flatten(lo.Range(10), func(int) ([]ai.RecipePlan, error) {
 		plan, err := service.planner.CreateMenuPlan(ctx, &store, ingredients, compactStrings(params.Instructions), date, nil, count)
 		if err != nil {
 			return nil, fmt.Errorf("create menu plan: %w", err)
 		}
-		return lo.Map(plan.Plans, func(p ai.RecipePlan, _ int) string {
-			return p.Cuisine
-		}), nil
+		return plan.Plans, nil
 	})
 }
 
-func makeStoreMenuPlans(ctx context.Context, service planService, stores []locations.Location, instructions string, now time.Time) []string {
-	results := make([][]string, len(stores))
+func makeStoreMenuPlans(ctx context.Context, service planService, stores []locations.Location, instructions string, now time.Time) []ai.RecipePlan {
+	results := make([][]ai.RecipePlan, len(stores))
 	var wg sync.WaitGroup
 	wg.Add(len(stores))
 	for i, store := range stores {
@@ -184,7 +186,7 @@ func makeStoreMenuPlans(ctx context.Context, service planService, stores []locat
 				return
 			}
 
-			cuisines, err := makeMenuPlan(ctx, service, store, date, instructions, 3)
+			cuisines, err := makeMenuPlans(ctx, service, store, date, instructions, 3)
 			if err != nil {
 				slog.Warn("go error %s", "error", err)
 			}
