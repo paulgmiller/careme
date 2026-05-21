@@ -15,8 +15,6 @@ type textTokenPrice struct {
 }
 
 type estimatedSpend struct {
-	available      bool
-	pricingMode    string
 	reason         string
 	inputUSD       float64
 	cachedInputUSD float64
@@ -28,17 +26,14 @@ func (s estimatedSpend) totalUSD() float64 {
 }
 
 func estimatedSpendLogAttr(spend estimatedSpend) slog.Attr {
-	if !spend.available {
+	if spend.reason != "" {
 		return slog.Group("spend",
-			slog.Bool("available", false),
 			slog.String("reason", spend.reason),
 		)
 	}
 	return slog.Group("spend",
-		slog.Bool("available", true),
 		slog.String("currency", "USD"),
-		slog.String("pricingMode", spend.pricingMode),
-		slog.Float64("estimatedUSD", roundUSD(spend.totalUSD())),
+		slog.Float64("totalUSD", roundUSD(spend.totalUSD())),
 		slog.Float64("inputUSD", roundUSD(spend.inputUSD)),
 		slog.Float64("cachedInputUSD", roundUSD(spend.cachedInputUSD)),
 		slog.Float64("outputUSD", roundUSD(spend.outputUSD)),
@@ -58,8 +53,6 @@ func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, o
 	}
 	uncachedInputTokens := inputTokens - cachedInputTokens
 	return estimatedSpend{
-		available:      true,
-		pricingMode:    "standard",
 		inputUSD:       tokensToUSD(uncachedInputTokens, price.inputUSDPerMillion),
 		cachedInputUSD: tokensToUSD(cachedInputTokens, price.cachedInputUSDPerMillion),
 		outputUSD:      tokensToUSD(outputTokens, price.outputUSDPerMillion),
@@ -93,8 +86,6 @@ func estimateOpenAIImageSpend(model string, textInputTokens, imageInputTokens, o
 	switch normalizeModelName(model) {
 	case "gpt-image-2":
 		return estimatedSpend{
-			available:   true,
-			pricingMode: "standard",
 			inputUSD: tokensToUSD(textInputTokens, 5) +
 				tokensToUSD(imageInputTokens, 8),
 			outputUSD: tokensToUSD(outputTokens, 30),
@@ -117,8 +108,6 @@ func estimateGeminiSpend(model string, promptTokens, cachedTokens, outputTokens 
 	}
 	uncachedPromptTokens := promptTokens - cachedTokens
 	return estimatedSpend{
-		available:      true,
-		pricingMode:    "standard",
 		inputUSD:       tokensToUSD(uncachedPromptTokens, price.inputUSDPerMillion),
 		cachedInputUSD: tokensToUSD(cachedTokens, price.cachedInputUSDPerMillion),
 		outputUSD:      tokensToUSD(outputTokens, price.outputUSDPerMillion),

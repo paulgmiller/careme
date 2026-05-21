@@ -30,7 +30,7 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 }
 
 func TestImageUsageLogAttr(t *testing.T) {
-	attr := imageUsageLogAttr("gpt-image-2", openai.ImagesResponseUsage{
+	attr := imageUsageLogAttr(string(recipeImageModel), openai.ImagesResponseUsage{
 		InputTokens:  100,
 		OutputTokens: 200,
 		TotalTokens:  300,
@@ -63,10 +63,8 @@ func TestImageUsageLogAttr(t *testing.T) {
 		),
 		slog.Int64("totalTokens", 300),
 		slog.Group("spend",
-			slog.Bool("available", true),
 			slog.String("currency", "USD"),
-			slog.String("pricingMode", "standard"),
-			slog.Float64("estimatedUSD", 0.00668),
+			slog.Float64("totalUSD", 0.00668),
 			slog.Float64("inputUSD", 0.00068),
 			slog.Float64("cachedInputUSD", 0),
 			slog.Float64("outputUSD", 0.006),

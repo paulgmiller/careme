@@ -108,7 +108,7 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 }
 
 func TestResponseUsageLogAttr(t *testing.T) {
-	attr := responseUsageLogAttr("gpt-5.5", responses.ResponseUsage{
+	attr := responseUsageLogAttr(defaultRecipeModel, responses.ResponseUsage{
 		InputTokens:  1200,
 		OutputTokens: 350,
 		TotalTokens:  1550,
@@ -133,10 +133,8 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		slog.Group("outputTokensDetails", slog.Int64("reasoningTokens", 125)),
 		slog.Int64("totalTokens", 1550),
 		slog.Group("spend",
-			slog.Bool("available", true),
 			slog.String("currency", "USD"),
-			slog.String("pricingMode", "standard"),
-			slog.Float64("estimatedUSD", 0.01245),
+			slog.Float64("totalUSD", 0.01245),
 			slog.Float64("inputUSD", 0.0015),
 			slog.Float64("cachedInputUSD", 0.00045),
 			slog.Float64("outputUSD", 0.0105),
