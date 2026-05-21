@@ -303,7 +303,38 @@ func TestBuildMenuPlanMessagesUsesRequestedCount(t *testing.T) {
 	}
 }
 
-func TestBuildMenuPlanMessagesAddsVarietyRequirementsForThreePlans(t *testing.T) {
+func TestBuildMenuPlanMessagesIncludesCuisineListInspiration(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil, nil)
+	location := &locationtypes.Location{State: "WA"}
+	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 3)
+	if err != nil {
+		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
+	}
+
+	const prefix = "For extra variety, loosely draw from one of these cuisine styles if it fits the ingredients: "
+	var inspiration string
+	for _, message := range messages {
+		if strings.HasPrefix(message.Content, prefix) {
+			inspiration = strings.TrimPrefix(message.Content, prefix)
+			break
+		}
+	}
+	if inspiration == "" {
+		t.Fatalf("expected menu plan prompt to include cuisine inspiration: %s", mustJSON(t, messages))
+	}
+
+	included := strings.Split(inspiration, ", ")
+	if len(included) == 0 {
+		t.Fatalf("expected at least one cuisine from cuisineList in prompt: %q", inspiration)
+	}
+	for _, cuisine := range included {
+		if !slices.Contains(cuisineList, cuisine) {
+			t.Fatalf("expected injected cuisine %q to come from cuisineList; prompt cuisines: %v", cuisine, included)
+		}
+	}
+}
+
+func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 3)
@@ -311,13 +342,8 @@ func TestBuildMenuPlanMessagesAddsVarietyRequirementsForThreePlans(t *testing.T)
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
 	body := mustJSON(t, messages)
-	for _, want := range []string{
-		"Mark one plan fancy",
-		"Include one less-common cuisine direction",
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("expected menu plan prompt to contain %q: %s", want, body)
-		}
+	if !strings.Contains(body, "Mark one plan fancy") {
+		t.Fatalf("expected menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
 
@@ -366,16 +392,11 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	}
 }
 
-func TestBuildRegenerateMenuPlanMessagesAddsVarietyRequirementsForThreePlans(t *testing.T) {
+func TestBuildRegenerateMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages(nil, 3)
 	body := mustJSON(t, messages)
-	for _, want := range []string{
-		"Mark one replacement plan fancy",
-		"Include one less-common cuisine direction",
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("expected regenerate menu plan prompt to contain %q: %s", want, body)
-		}
+	if !strings.Contains(body, "Mark one replacement plan fancy") {
+		t.Fatalf("expected regenerate menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
 

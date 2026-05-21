@@ -8,7 +8,9 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -417,9 +419,75 @@ func (p RecipePlan) Instructions() []string {
 	return instructions
 }
 
-// Should we inject sample cuisines
-// https://github.com/paulgmiller/careme/issues/449#issuecomment-4185138982
-// const cusineList = "Italian, Japanese, Mexican, Cuban/Caribbean, Indian, Thai, French, Chinese, Spanish, Greek, Turkish, Ethiopian, Vietnamese, Korean, Moroccan, Peruvian"
+// Notes about this list which is intended to force variety not be an all encompasing list.
+// American, Chinese, Italian, French and mexican all have subcuisines
+// Considering addign some way to look up "local cuisine" (Just add "local") to the list?
+var cuisineList = []string{
+	"Armenian",
+	"Basque",
+	"Burmese",
+	"Cajun",
+	"California Modern",
+	"Caribbean",
+	"Cantonese",
+	"Chilean",
+	"Chinese",
+	"Creole",
+	"Cuban",
+	"Ethiopian",
+	"Filipino",
+	"French",
+	"Georgian",
+	"German",
+	"Greek",
+	"Indian",
+	"Isan Thai",
+	"Italian",
+	"Jamaican",
+	"Japanese",
+	"Korean",
+	"Lebanese",
+	"Malaysian",
+	"Mexican",
+	"Moroccan",
+	"New England",
+	"North Indian",
+	"Oaxacan",
+	"Pacific Northwest",
+	"Persian",
+	"Peruvian",
+	"Polish",
+	"Provençal",
+	"Senegalese",
+	"Sichuan",
+	"Sicilian",
+	"South Indian",
+	"Southern American",
+	"Spanish",
+	"Sri Lankan",
+	"Tex-Mex",
+	"Thai",
+	"Tunisian",
+	"Turkish",
+	"Tuscan",
+	"Vietnamese",
+	"Yucatecan",
+}
+
+func pickN(xs []string, n int) []string {
+	if n > len(xs) || n < 0 {
+		panic("can't pick negative or more than we got")
+	}
+	xs = slices.Clone(xs)
+
+	for i := range n {
+		j := i + rand.N(len(xs)-i)
+		xs[i], xs[j] = xs[j], xs[i]
+	}
+
+	return xs[:n]
+}
+
 const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
@@ -510,9 +578,12 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	messages = append(messages,
 		userPromptMessage(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
 	)
+	cuisines := pickN(cuisineList, 5)
+	messages = append(messages, userPromptMessage("For extra variety, loosely draw from one of these cuisine styles if it fits the ingredients: "+strings.Join(cuisines, ", ")))
+	// messages = append(messages, userPromptMessage("but don't overlook local cuisine"))
 	if count >= 3 {
 		messages = append(messages, userPromptMessage("Mark one plan fancy."))
-		messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
+		// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 	}
 	return messages, nil
 }
@@ -525,7 +596,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptM
 	// ideally do this if they dismissed fancy.
 	if count >= 3 {
 		messages = append(messages, userPromptMessage("Mark one replacement plan fancy."))
-		messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
+		// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 	}
 	return messages
 }
