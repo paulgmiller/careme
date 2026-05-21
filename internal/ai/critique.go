@@ -125,6 +125,7 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		return nil, fmt.Errorf("failed to critique recipe: %w", err)
 	}
 	slog.InfoContext(ctx, "Gemini critique usage",
+		"ai_category", aiCategoryCritique,
 		"model", c.model,
 		"model_version", resp.ModelVersion,
 		"response_id", resp.ResponseID,

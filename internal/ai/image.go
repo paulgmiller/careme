@@ -51,7 +51,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
 	}
 
-	slog.InfoContext(ctx, "API usage", "model", string(recipeImageModel), imageUsageLogAttr(string(recipeImageModel), resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryImage, "model", string(recipeImageModel), imageUsageLogAttr(string(recipeImageModel), resp.Usage))
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("image generation returned no images")
 	}
