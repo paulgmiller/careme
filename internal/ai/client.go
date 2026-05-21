@@ -419,47 +419,9 @@ func (p RecipePlan) Instructions() []string {
 	return instructions
 }
 
-// Should we inject sample cuisines
-// https://github.com/paulgmiller/careme/issues/449#issuecomment-4185138982
-var cuisineList = []string{
-	"American",
-	"Armenian",
-	"Basque",
-	"Burmese",
-	"Cajun",
-	"Caribbean",
-	"Chilean",
-	"Chinese",
-	"Cuban",
-	"Ethiopian",
-	"Filipino",
-	"French",
-	"Georgian",
-	"German",
-	"Greek",
-	"Indian",
-	"Italian",
-	"Japanese",
-	"Korean",
-	"Lebanese",
-	"Malaysian",
-	"Mediterranean",
-	"Mexican",
-	"Moroccan",
-	"Persian",
-	"Peruvian",
-	"Polish",
-	"Senegalese",
-	"Spanish",
-	"Sri Lankan",
-	"Thai",
-	"Tunisian",
-	"Turkish",
-	"Vietnamese",
-	"local", // how do we not lose pnw and california.
-}
-
-/*
+// Notes about this list which is intended to force variety not be an all encompasing list.
+// American, Chinese, Italian, French and mexican all have subcuisines
+// Considering addign some way to look up "local cuisine" (Just add "local") to the list?
 var cuisineList = []string{
 	"Armenian",
 	"Basque",
@@ -511,7 +473,6 @@ var cuisineList = []string{
 	"Vietnamese",
 	"Yucatecan",
 }
-*/
 
 func pickN(xs []string, n int) []string {
 	if n > len(xs) || n < 0 {
