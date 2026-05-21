@@ -207,6 +207,53 @@ func TestClerkJSScriptsUsePinnedVersion(t *testing.T) {
 	}
 }
 
+func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	cfg.Clerk.Domain = "clerk.example.com"
+	if err := Init(cfg, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+			t.Fatalf("cleanup Init() error = %v", err)
+		}
+	})
+
+	data := struct {
+		ClarityScript     template.HTML
+		GoogleTagScript   template.HTML
+		Style             seasons.Style
+		User              *utypes.User
+		Success           bool
+		FavoriteStoreName string
+		ActiveTab         string
+		PastRecipes       []utypes.Recipe
+		ServerSignedIn    bool
+	}{
+		Style:          seasons.GetCurrentStyle(),
+		User:           &utypes.User{Email: []string{"chef@example.com"}},
+		ActiveTab:      "customize",
+		ServerSignedIn: true,
+	}
+
+	var buf bytes.Buffer
+	if err := User.Execute(&buf, data); err != nil {
+		t.Fatalf("User.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, `data-clerk-pricing-table data-clerk-ui-bundle-url="https://clerk.example.com/npm/@clerk/ui@1/dist/ui.browser.js"`) {
+		t.Fatalf("user page should pass Clerk UI bundle URL to billing script, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<script src="/static/user-clerk-billing.js"></script>`) {
+		t.Fatalf("user page should load Clerk billing script asset, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `mountPricingTable`) {
+		t.Fatalf("user page should not inline Clerk pricing table mount logic, body: %s", rendered)
+	}
+}
+
 func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
