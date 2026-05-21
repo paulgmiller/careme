@@ -456,7 +456,62 @@ var cuisineList = []string{
 	"Tunisian",
 	"Turkish",
 	"Vietnamese",
+	"local", // how do we not lose pnw and california.
 }
+
+/*
+var cuisineList = []string{
+	"Armenian",
+	"Basque",
+	"Burmese",
+	"Cajun",
+	"California Modern",
+	"Caribbean",
+	"Cantonese",
+	"Chilean",
+	"Chinese",
+	"Creole",
+	"Cuban",
+	"Ethiopian",
+	"Filipino",
+	"French",
+	"Georgian",
+	"German",
+	"Greek",
+	"Indian",
+	"Isan Thai",
+	"Italian",
+	"Jamaican",
+	"Japanese",
+	"Korean",
+	"Lebanese",
+	"Malaysian",
+	"Mexican",
+	"Moroccan",
+	"New England",
+	"North Indian",
+	"Oaxacan",
+	"Pacific Northwest",
+	"Persian",
+	"Peruvian",
+	"Polish",
+	"Provençal",
+	"Senegalese",
+	"Sichuan",
+	"Sicilian",
+	"South Indian",
+	"Southern American",
+	"Spanish",
+	"Sri Lankan",
+	"Tex-Mex",
+	"Thai",
+	"Tunisian",
+	"Turkish",
+	"Tuscan",
+	"Vietnamese",
+	"Yucatecan",
+}
+*/
 
 func pickN(xs []string, n int) []string {
 	if n > len(xs) || n < 0 {
@@ -563,7 +618,8 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 		userPromptMessage(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
 	)
 	cuisines := pickN(cuisineList, 5)
-	messages = append(messages, userPromptMessage("For extra variety here are some radnom cuisine families for inspiration "+strings.Join(cuisines, ", ")))
+	messages = append(messages, userPromptMessage("For extra variety here are some random cuisine families for inspiration "+strings.Join(cuisines, ", ")))
+	// messages = append(messages, userPromptMessage("but don't overlook local cuisine"))
 	if count >= 3 {
 		messages = append(messages, userPromptMessage("Mark one plan fancy."))
 		// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
