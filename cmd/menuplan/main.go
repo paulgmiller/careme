@@ -181,13 +181,13 @@ func makeStoreMenuPlans(ctx context.Context, service planService, stores []locat
 			defer wg.Done()
 			date, err := recipes.StoreToDate(ctx, now, &store)
 			if err != nil {
-				slog.Warn("go error on store to date %s", err)
+				slog.Warn("go error on store to date %s", "error", err)
 				return
 			}
 
 			cuisines, err := makeMenuPlan(ctx, service, store, date, instructions, 3)
 			if err != nil {
-				slog.Warn("go error %s", err)
+				slog.Warn("go error %s", "error", err)
 			}
 			results[i] = cuisines
 		}()

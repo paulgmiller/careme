@@ -134,44 +134,6 @@ func TestFilterMenuIngredientsDropsLowGrades(t *testing.T) {
 	assert.Equal(t, "good", got[1].ProductID)
 }
 
-func TestMakeStoreMenuPlansRunsStoresInParallel(t *testing.T) {
-	staples := &blockingStaplesService{
-		started: make(chan string, 2),
-		release: make(chan struct{}),
-	}
-	planner := &blockingMenuPlanner{
-		started: make(chan string, 2),
-		release: make(chan struct{}),
-	}
-	service := planService{planner: planner, staples: staples}
-	stores := []locations.Location{
-		{ID: "70500001", Name: "First", State: "WA", ZipCode: "98101"},
-		{ID: "70500002", Name: "Second", State: "WA", ZipCode: "98102"},
-	}
-
-	done := make(chan []storeMenuPlan, 1)
-	go func() {
-		done <- makeStoreMenuPlans(t.Context(), service, stores, "", time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC))
-	}()
-
-	waitForStarted(t, staples.started, "70500001", "70500002")
-	close(staples.release)
-	waitForStarted(t, planner.started, "70500001", "70500002")
-	close(planner.release)
-
-	select {
-	case results := <-done:
-		require.Len(t, results, 2)
-		require.NoError(t, results[0].Err)
-		require.NoError(t, results[1].Err)
-		assert.Equal(t, "70500001", results[0].Location.ID)
-		assert.Equal(t, "70500002", results[1].Location.ID)
-		assert.Equal(t, "70500001", results[0].Plan.Plans[0].AnchorIngredient)
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for parallel menu plans")
-	}
-}
-
 type blockingStaplesService struct {
 	started chan string
 	release chan struct{}

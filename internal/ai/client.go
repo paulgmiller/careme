@@ -579,7 +579,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 		userPromptMessage(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
 	)
 	cuisines := pickN(cuisineList, 5)
-	messages = append(messages, userPromptMessage("For extra variety here are some random cuisine families for inspiration "+strings.Join(cuisines, ", ")))
+	messages = append(messages, userPromptMessage("For extra variety, loosely draw from one of these cuisine styles if it fits the ingredients: "+strings.Join(cuisines, ", ")))
 	// messages = append(messages, userPromptMessage("but don't overlook local cuisine"))
 	if count >= 3 {
 		messages = append(messages, userPromptMessage("Mark one plan fancy."))
