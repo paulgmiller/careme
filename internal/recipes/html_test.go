@@ -703,4 +703,13 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	if newerIndex > olderIndex {
 		t.Fatalf("expected newer question before older question, body: %s", body)
 	}
+	if !strings.Contains(body, "<details") {
+		t.Fatalf("expected thread entries to render as expandable details, body: %s", body)
+	}
+	if !strings.Contains(body, "<details class=\"group rounded-xl border border-brand-100 bg-brand-50/70 p-4\" open>") {
+		t.Fatalf("expected newest thread entry to be expanded by default, body: %s", body)
+	}
+	if !strings.Contains(body, "group-open:hidden") || !strings.Contains(body, "group-open:block") {
+		t.Fatalf("expected thread entries to include chevron expand/collapse indicator, body: %s", body)
+	}
 }
