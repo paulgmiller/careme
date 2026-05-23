@@ -26,28 +26,34 @@
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
-  <main class="px-4 py-10">
+  {{template "seasonal_background" .}}
+  <main class="relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-4xl space-y-8">
       <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 p-8">
-          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">
-            <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme</a>
-          </h1>
-          {{if .Location.Name}}
-          <p class="mt-2 text-gray-600">
-            Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
-            {{if .Location.Address}}<span class="text-sm text-gray-500">({{.Location.Address}})</span>{{end}}
-          </p>
-          {{end}}
-          {{if .OriginHash}}
-          <a href="/recipes?h={{.OriginHash}}" class="mt-2 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back to shopping list</a>
-          {{end}}
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">
+                <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme</a>
+              </h1>
+              {{if .Location.Name}}
+              <p class="mt-2 text-gray-600">
+                Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
+                {{if .Location.Address}}<span class="text-sm text-gray-500">({{.Location.Address}})</span>{{end}}
+              </p>
+              {{end}}
+              {{if .OriginHash}}
+              <a href="/recipes?h={{.OriginHash}}" class="mt-2 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back to shopping list</a>
+              {{end}}
+            </div>
+            {{template "account_widget" .}}
+          </div>
         </div>
 
         <div class="p-8 space-y-8">
           <article class="space-y-6 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
             <header class="space-y-2">
-              <h2 class="text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
+              <h2 class="font-display text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
               <p class="text-sm text-gray-500">{{.Recipe.Description}}</p>
               {{template "recipe_save_action" .}}
             </header>
@@ -91,7 +97,7 @@
 
             <div class="space-y-2 text-sm text-gray-600">
               {{if .Recipe.CookTime}}
-              <p><span class="font-semibold text-brand-700">Cook time:</span> {{.Recipe.CookTime}}</p>
+              <p><span class="font-semibold text-brand-700">Total time:</span> {{.Recipe.CookTime}}</p>
               {{end}}
               {{if .Recipe.CostEstimate}}
               <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.Recipe.CostEstimate}}</p>
@@ -316,7 +322,7 @@
 {{define "recipe_save_action"}}
 {{if and .ServerSignedIn .OriginHash}}
 <div class="recipe-save-action pt-2">
-  {{if .Recipe.Saved}}
+  {{if .Saved}}
   <button type="button"
           hx-post="/recipe/{{.RecipeHash}}/dismiss"
           hx-vals='{"h":"{{.OriginHash}}","source":"recipe"}'

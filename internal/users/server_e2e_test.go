@@ -16,7 +16,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	cfg.Clerk.Domain = "bold-salmon-53.clerk.accounts.dev"
+	if err := templates.Init(cfg, "dummyhash"); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())

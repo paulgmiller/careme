@@ -20,6 +20,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/prompts"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
@@ -68,13 +69,13 @@ func runServer(cfg *config.Config, addr string) error {
 	var imageGen recipes.ImageGen
 	var waitFns []func()
 	if cfg.Mocks.Enable {
-		generator = recipes.NewMockGenerator()
-		imageGen = recipes.NewMockGenerator()
+		generator = recipes.NewMockGenerator(recipes.IO(cache))
+		imageGen = recipes.NewMockImageGen()
 	} else {
 		mc := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(mc)
 
-		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient)
+		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
 		imageGen = aiclient
 		ro.add(aiclient)
 		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
@@ -83,7 +84,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		watchdogServer.Add("staples", staples, 6.*time.Hour)
 		ss := recipes.StatusStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, mc, staples, ss)
+		generator, err = recipes.NewGenerator(aiclient, mc, staples, ss, recipes.IO(cache))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
@@ -118,6 +119,8 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
+	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))
+	adminMux.Handle("/prompt/recipe/{hash}", prompts.AdminRecipePromptJSON(cache))
 	adminMux.Handle("/critiques", critique.AdminCritiquesPage(critique.NewStore(cache), recipeIO))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)

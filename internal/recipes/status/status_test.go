@@ -12,22 +12,22 @@ func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
 	got := Sales([]ai.InputIngredient{
 		{
 			Description:  "Full Price Chicken",
-			PriceRegular: recipeFloat32(10),
+			PriceRegular: new(float32(10)),
 		},
 		{
 			Description:  "Half Off Spinach",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(5),
+			PriceRegular: new(float32(10)),
+			PriceSale:    new(float32(5)),
 		},
 		{
 			Description:  "Same Price Pasta",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(10),
+			PriceRegular: new(float32(10)),
+			PriceSale:    new(float32(10)),
 		},
 		{
 			Description:  "Twenty Off Salmon",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(8),
+			PriceRegular: new(float32(10)),
+			PriceSale:    new(float32(8)),
 		},
 	})
 
@@ -37,27 +37,14 @@ func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
 	}, got)
 }
 
-func TestTitlesListsRecipeTitlesAfterPrefix(t *testing.T) {
-	got := Titles("Getting feedback on these recipes:", []ai.Recipe{
-		{Title: "Lemony Beans"},
-		{Title: "Pepper Pasta"},
-	})
-
-	assert.Equal(t, "Getting feedback on these recipes:\nLemony Beans\nPepper Pasta\n", got)
-}
-
 func TestIngredientsIncludesCountAndSales(t *testing.T) {
 	got := Ingredients([]ai.InputIngredient{
 		{
 			Description:  "Half Off Spinach",
-			PriceRegular: recipeFloat32(10),
-			PriceSale:    recipeFloat32(5),
+			PriceRegular: new(float32(10)),
+			PriceSale:    new(float32(5)),
 		},
 	}, 3)
 
-	assert.Equal(t, "Considering 1 out of 3 ingredients\nHalf Off Spinach 50% off at 5.00", got)
-}
-
-func recipeFloat32(v float32) *float32 {
-	return &v
+	assert.Equal(t, "Considering 1 out of 3 ingredients\nHalf Off Spinach 50% off at 5.00\n", got)
 }

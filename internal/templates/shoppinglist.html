@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Careme Recipes</title>
+  <title>Careme</title>
 
   {{if .Recipes}}
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
@@ -26,17 +26,23 @@
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white text-ink-700 antialiased">
-  <main class="px-4 py-10">
+  {{template "seasonal_background" .}}
+  <main class="relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-5xl space-y-8">
       <div class="friendly-card border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 p-8">
-          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">
-            <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme Recipes</a>
-          </h1>
-          <p class="mt-2 text-ink-600">
-            Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
-            <span class="text-sm text-ink-500">({{.Location.Address}})</span>
-          </p>
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">
+                <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme</a>
+              </h1>
+              <p class="mt-2 text-ink-600">
+                Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
+                <span class="text-sm text-ink-500">({{.Location.Address}})</span>
+              </p>
+            </div>
+            {{template "account_widget" .}}
+          </div>
         </div>
 
         <div class="p-8">
@@ -91,20 +97,27 @@
                   Shopping list
                 </summary>
                 <div class="mt-4">
-                <ul class="space-y-2 text-ink-700">
-                  {{range .ShoppingList}}
-                  <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                    <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
-                      <span class="font-medium text-brand-700">{{.Name}}</span>
-                      {{if .Quantity}}
-                      <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
-                      {{else}}
-                      <span class="hidden sm:block" aria-hidden="true"></span>
-                      {{end}}
-                    </div>
-                  </li>
-                  {{end}}
-                </ul>
+                  <div class="space-y-5 text-ink-700">
+                    {{range .ShoppingList}}
+                    <section>
+                      <h3 class="text-xs font-semibold uppercase tracking-wide text-ink-500">{{.Aisle}}</h3>
+                      <ul class="mt-2 space-y-2">
+                        {{range .Items}}
+                        <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+                          <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
+                            <span class="font-medium text-brand-700">{{.Name}}</span>
+                            {{if .Quantity}}
+                            <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
+                            {{else}}
+                            <span class="hidden sm:block" aria-hidden="true"></span>
+                            {{end}}
+                          </div>
+                        </li>
+                        {{end}}
+                      </ul>
+                    </section>
+                    {{end}}
+                  </div>
                 </div>
               </details>
             </section>
@@ -187,7 +200,7 @@
 
   <div class="space-y-2 text-sm text-ink-600">
     {{if .CookTime}}
-    <p><span class="font-semibold text-brand-700">Cook time:</span> {{.CookTime}}</p>
+    <p><span class="font-semibold text-brand-700">Total time:</span> {{.CookTime}}</p>
     {{end}}
     {{if .CostEstimate}}
     <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.CostEstimate}}</p>

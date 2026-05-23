@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
 )
 
@@ -34,10 +33,10 @@ func TestRecipeComputeHash(t *testing.T) {
 		t.Fatalf("Hash changed by json marshalling: %s", hash1)
 	}
 
-	recipe.Saved = true
 	recipe.OriginHash = "somehashvalue"
+	recipe.ParentHash = "parenthashvalue"
 
-	// Hash should be consistent regardless of silly fields
+	// Hash should be consistent regardless of provenance fields.
 	hash2 := recipe.ComputeHash()
 	if hash1 != hash2 {
 		t.Fatalf("hash should be consistent: %s != %s", hash1, hash2)
@@ -64,112 +63,52 @@ func TestRecipeHashLength(t *testing.T) {
 	}
 }
 
-func TestNewClientUsesGPT55ForRecipeFlow(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil)
+func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil, nil)
+	properties := schemaProperties(t, client.recipeSchema)
+	ingredients := schemaObject(t, properties["ingredients"])
+	items := schemaObject(t, ingredients["items"])
+	ingredientProperties := schemaProperties(t, items)
+	ingredientRequired := schemaRequired(t, items)
 
-	if client.model != "gpt-5.5" {
-		t.Fatalf("expected primary recipe model to be gpt-5.5, got %q", client.model)
+	if _, ok := ingredientProperties["id"]; !ok {
+		t.Fatalf("expected ingredient schema to include product id")
 	}
-	if client.wineModel != openai.ChatModelGPT5Mini {
-		t.Fatalf("expected wine model to remain low-cost mini path, got %q", client.wineModel)
+	if !slices.Contains(ingredientRequired, "id") {
+		t.Fatalf("expected ingredient schema to require product id, got %v", ingredientRequired)
+	}
+	if _, ok := ingredientProperties["name"]; !ok {
+		t.Fatalf("expected ingredient schema to include name")
+	}
+	if _, ok := ingredientProperties["quantity"]; !ok {
+		t.Fatalf("expected ingredient schema to include quantity")
+	}
+	if _, ok := ingredientProperties["price"]; ok {
+		t.Fatalf("did not expect model schema to include server-owned price")
+	}
+	if _, ok := ingredientProperties["aisle_number"]; ok {
+		t.Fatalf("did not expect model schema to include server-owned aisle number")
 	}
 }
 
-func TestNormalizeWineStyle(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "plain style", in: "Pinot Noir", want: "Pinot Noir"},
-		{name: "parenthetical region hint", in: "Sauvignon Blanc (New Zealand or Loire)", want: "Sauvignon Blanc"},
-		{name: "trailing punctuation", in: "  Riesling.  ", want: "Riesling"},
-		{name: "bracket hint", in: "Chardonnay [California]", want: "Chardonnay"},
-		{name: "empty", in: "   ", want: ""},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := normalizeWineStyle(tc.in); got != tc.want {
-				t.Fatalf("normalizeWineStyle(%q): got %q want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestNormalizeRecipeWineStyles(t *testing.T) {
-	got := normalizeRecipeWineStyles([]string{
-		" Pinot Noir (WA or Oregon) ",
-		"pinot noir",
-		"Sauvignon Blanc (New Zealand or Loire)",
-		"Riesling",
-	})
-	want := []string{"Pinot Noir", "Sauvignon Blanc"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("unexpected normalized wine styles: got %#v want %#v", got, want)
-	}
-}
-
-func TestBuildRecipeImagePrompt(t *testing.T) {
-	recipe := Recipe{
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		Ingredients:  []Ingredient{{Name: "Chicken", Quantity: "1 whole"}},
-		Instructions: []string{"Roast until golden."},
-	}
-
-	prompt, err := buildRecipeImagePrompt(recipe)
-	if err != nil {
-		t.Fatalf("buildRecipeImagePrompt returned error: %v", err)
-	}
-	if !strings.Contains(prompt, "realistic overhead food photograph") {
-		t.Fatalf("expected image prompt instructions in prompt: %s", prompt)
-	}
-	if !strings.Contains(prompt, "Recipe:\nRoast Chicken\nCrisp skin and herbs.\nInstructions:\n- Roast until golden.\n") {
-		t.Fatalf("expected recipe summary in prompt: %s", prompt)
-	}
-}
-
-func TestBuildWineSelectionPrompt(t *testing.T) {
-	recipe := Recipe{
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		CookTime:     "45 minutes",
-		CostEstimate: "$18-24",
-		Ingredients: []Ingredient{
-			{Name: "Chicken", Quantity: "1 whole", Price: "$12"},
-			{Name: "Lemon", Quantity: "1", Price: "$1"},
-		},
-		Instructions: []string{"Roast until golden.", "Finish with lemon juice."},
-		Health:       "Balanced dinner",
-		DrinkPairing: "Pinot Noir",
-		WineStyles:   []string{"Pinot Noir", "Chardonnay"},
-	}
-	wines := []InputIngredient{
-		{ProductID: "pinot-noir-1", Description: "Pinot Noir", Size: "750mL", PriceRegular: float32Ptr(13.99)},
-	}
-
-	prompt, err := buildWineSelectionPrompt(recipe, wines)
-	if err != nil {
-		t.Fatalf("buildWineSelectionPrompt returned error: %v", err)
-	}
-	expect := "Chicken\nCrisp skin and herbs."
-	if !strings.Contains(prompt, expect) {
-		t.Fatalf("expected recipe summary in prompt: %s\n\n got \n %s", expect, prompt)
-	}
-	if !strings.Contains(prompt, "Existing drink pairing note: Pinot Noir") {
-		t.Fatalf("expected pairing hints in prompt: %s", prompt)
-	}
-	if !strings.Contains(prompt, "- Roast until golden.\n- Finish with lemon juice.\n") {
-		t.Fatalf("expected instructions replay in prompt: %s", prompt)
-	}
-	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\npinot-noir-1\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
-		t.Fatalf("expected candidate wines TSV in prompt: %s", prompt)
+func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
+	for _, want := range []string{
+		"start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking",
+		"do not rely on prep details from the ingredient list alone",
+		"provide the total elapsed recipe time",
+		"5 to 8 clear steps",
+		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
+		"set id to the exact ProductId",
+		"amount used in the recipe as quantity",
+	} {
+		if !strings.Contains(systemMessage, want) {
+			t.Fatalf("expected system message to contain %q", want)
+		}
 	}
 }
 
 func TestResponseUsageLogAttr(t *testing.T) {
-	attr := responseUsageLogAttr(responses.ResponseUsage{
+	attr := responseUsageLogAttr(defaultRecipeModel, responses.ResponseUsage{
 		InputTokens:  1200,
 		OutputTokens: 350,
 		TotalTokens:  1550,
@@ -193,44 +132,13 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		slog.Int64("outputTokens", 350),
 		slog.Group("outputTokensDetails", slog.Int64("reasoningTokens", 125)),
 		slog.Int64("totalTokens", 1550),
-	}) {
-		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())
-	}
-}
-
-func TestImageUsageLogAttr(t *testing.T) {
-	attr := imageUsageLogAttr(openai.ImagesResponseUsage{
-		InputTokens:  100,
-		OutputTokens: 200,
-		TotalTokens:  300,
-		InputTokensDetails: openai.ImagesResponseUsageInputTokensDetails{
-			ImageTokens: 60,
-			TextTokens:  40,
-		},
-		OutputTokensDetails: openai.ImagesResponseUsageOutputTokensDetails{
-			ImageTokens: 180,
-			TextTokens:  20,
-		},
-	})
-
-	if attr.Key != "usage" {
-		t.Fatalf("unexpected attr key: %s", attr.Key)
-	}
-	if attr.Value.Kind() != slog.KindGroup {
-		t.Fatalf("unexpected attr kind: %v", attr.Value.Kind())
-	}
-	if !reflect.DeepEqual(attr.Value.Group(), []slog.Attr{
-		slog.Int64("inputTokens", 100),
-		slog.Group("inputTokensDetails",
-			slog.Int64("imageTokens", 60),
-			slog.Int64("textTokens", 40),
+		slog.Group("spend",
+			slog.String("currency", "USD"),
+			slog.Float64("totalUSD", 0.01245),
+			slog.Float64("inputUSD", 0.0015),
+			slog.Float64("cachedInputUSD", 0.00045),
+			slog.Float64("outputUSD", 0.0105),
 		),
-		slog.Int64("outputTokens", 200),
-		slog.Group("outputTokensDetails",
-			slog.Int64("imageTokens", 180),
-			slog.Int64("textTokens", 20),
-		),
-		slog.Int64("totalTokens", 300),
 	}) {
 		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())
 	}

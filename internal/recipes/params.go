@@ -29,20 +29,21 @@ var nowFn = time.Now
 
 type generatorParams struct {
 	Location *locations.Location `json:"location,omitempty"`
-	Date     time.Time           `json:"date,omitempty"`
+	Date     time.Time           `json:"date"`
 	// People       int
 	// per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
 	LastRecipes  []string `json:"-"`                   // this doesn't get populated until after save.
 	// UserID         string      `json:"user_id,omitempty"`
-	ResponseID string `json:"response_id,omitempty"`
-	// TODO Both should just be title and hash instead of full ai.Recipe
+	// ideally this would be a section and we'd fetch titles and other things as needed
+	// as is this records a selectio at the time of a regeneration
 	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 
-	// regeneration-only context from the origin params; not persisted or hashed
-	PriorSavedHashes []string `json:"-"`
+	// regeneration-only context from the origin params; not hashed
+	PriorSavedHashes           []string `json:"-"`
+	PreviousMenuPlanResponseID string   `json:"previous_menu_plan_response_id,omitempty"`
 }
 
 // exist for mail's interface be careful please.
@@ -130,7 +131,6 @@ func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*genera
 
 	p := DefaultParams(l, date)
 	p.Instructions = r.URL.Query().Get("instructions")
-	p.ResponseID = strings.TrimSpace(r.URL.Query().Get("response_id"))
 
 	return p, nil
 }

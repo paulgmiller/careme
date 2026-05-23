@@ -25,8 +25,10 @@ You are a strict recipe editor reviewing AI-generated recipes before they are gi
 Judge the recipe like an experienced chef helping create recipes to teach home cooks:
 - is it realistic to cook as written
 - are the instructions coherent and complete
+- do the instructions begin with preparation before active cooking starts
 - are the applications of salt, acid, fat, and heat appropriate
 - are the timing and cost estimates plausible
+- does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 
@@ -47,7 +49,7 @@ type RecipeCritique struct {
 	Issues         []RecipeCritiqueIssue `json:"issues"`
 	SuggestedFixes []string              `json:"suggested_fixes"`
 	Model          string                `json:"model,omitempty" jsonschema:"-"`
-	CritiquedAt    time.Time             `json:"critiqued_at,omitempty" jsonschema:"-"`
+	CritiquedAt    time.Time             `json:"critiqued_at" jsonschema:"-"`
 }
 
 type critiquer struct {
@@ -123,11 +125,12 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		return nil, fmt.Errorf("failed to critique recipe: %w", err)
 	}
 	slog.InfoContext(ctx, "Gemini critique usage",
+		"ai_category", aiCategoryCritique,
 		"model", c.model,
 		"model_version", resp.ModelVersion,
 		"response_id", resp.ResponseID,
 		"latencyMS", time.Since(start).Milliseconds(),
-		geminiUsageLogAttr(resp.UsageMetadata),
+		geminiUsageLogAttr(c.model, resp.UsageMetadata),
 	)
 
 	critique, err := parseRecipeCritique(resp.Text())
@@ -139,10 +142,11 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	return critique, nil
 }
 
-func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
+func geminiUsageLogAttr(model string, usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
 	if usage == nil {
 		return slog.Group("usage", slog.Bool("available", false))
 	}
+	outputTokens := int64(usage.CandidatesTokenCount + usage.ThoughtsTokenCount)
 
 	attrs := []any{
 		slog.Bool("available", true),
@@ -156,6 +160,12 @@ func geminiUsageLogAttr(usage *genai.GenerateContentResponseUsageMetadata) slog.
 	if usage.TrafficType != "" {
 		attrs = append(attrs, slog.String("trafficType", string(usage.TrafficType)))
 	}
+	attrs = append(attrs, estimatedSpendLogAttr(estimateGeminiSpend(
+		model,
+		int64(usage.PromptTokenCount+usage.ToolUsePromptTokenCount),
+		int64(usage.CachedContentTokenCount),
+		outputTokens,
+	)))
 
 	return slog.Group("usage", attrs...)
 }
@@ -183,7 +193,6 @@ func parseRecipeCritique(body string) (*RecipeCritique, error) {
 func buildRecipeCritiquePrompt(recipe Recipe) (string, error) {
 	payload := recipe
 	payload.OriginHash = ""
-	payload.Saved = false
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal recipe critique payload: %w", err)

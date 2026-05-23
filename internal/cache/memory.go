@@ -70,8 +70,8 @@ func (c *InMemoryCache) List(_ context.Context, prefix string, _ string) ([]stri
 	c.mu.RLock()
 	keys := make([]string, 0)
 	for key := range c.data {
-		if strings.HasPrefix(key, prefix) {
-			keys = append(keys, strings.TrimPrefix(key, prefix))
+		if after, ok := strings.CutPrefix(key, prefix); ok {
+			keys = append(keys, after)
 		}
 	}
 	c.mu.RUnlock()

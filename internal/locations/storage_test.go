@@ -59,7 +59,7 @@ func TestInitializeLocationBackendsRunsFactoriesInParallelAndCollectsBackends(t 
 		done <- result{backends: backends, err: err}
 	}()
 
-	for i := 0; i < len(factories); i++ {
+	for range factories {
 		select {
 		case <-started:
 		case <-time.After(200 * time.Millisecond):

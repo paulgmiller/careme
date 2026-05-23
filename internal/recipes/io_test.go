@@ -73,6 +73,27 @@ func TestSaveParams_UsesPrefixedKey(t *testing.T) {
 	}
 }
 
+func TestSaveParams_PersistsPreviousMenuPlanResponseID(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheStore := cache.NewFileCache(tmpDir)
+	rio := IO(cacheStore)
+
+	p := DefaultParams(&locations.Location{ID: "123", Name: "Test Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
+	p.PreviousMenuPlanResponseID = "resp-menu-123"
+
+	if err := rio.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("SaveParams failed: %v", err)
+	}
+
+	got, err := rio.ParamsFromCache(t.Context(), p.Hash())
+	if err != nil {
+		t.Fatalf("ParamsFromCache failed: %v", err)
+	}
+	if got.PreviousMenuPlanResponseID != p.PreviousMenuPlanResponseID {
+		t.Fatalf("expected previous menu plan response id %q, got %q", p.PreviousMenuPlanResponseID, got.PreviousMenuPlanResponseID)
+	}
+}
+
 func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
@@ -80,10 +101,10 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 
 	hash := "test-hash"
 	list := &ai.ShoppingList{
-		ResponseID: "resp-123",
 		Recipes: []ai.Recipe{
 			{
 				OriginHash:   hash,
+				ResponseID:   "resp-123",
 				Title:        "One Pan Chicken",
 				Description:  "Simple weeknight meal",
 				Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
@@ -92,6 +113,7 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 				DrinkPairing: "Chardonnay",
 			},
 		},
+		Plan: &ai.MenuPlan{ResponseID: "resp-menu-123"},
 	}
 
 	if err := rio.SaveShoppingList(t.Context(), list, hash); err != nil {
@@ -109,66 +131,11 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FromCache failed: %v", err)
 	}
-	if got.ResponseID != list.ResponseID {
-		t.Fatalf("expected response id %q, got %q", list.ResponseID, got.ResponseID)
+	if got.Recipes[0].ResponseID != list.Recipes[0].ResponseID {
+		t.Fatalf("expected recipe response id %q, got %q", list.Recipes[0].ResponseID, got.Recipes[0].ResponseID)
 	}
-}
-
-func TestSaveShoppingList_SavesDiscardedRecipesSeparately(t *testing.T) {
-	tmpDir := t.TempDir()
-	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
-
-	kept := ai.Recipe{
-		OriginHash:   "test-hash",
-		Title:        "One Pan Chicken",
-		Description:  "Simple weeknight meal",
-		Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
-		Instructions: []string{"Prep ingredients", "Cook chicken"},
-		Health:       "Balanced",
-		DrinkPairing: "Chardonnay",
-	}
-	discarded := ai.Recipe{
-		OriginHash:   "test-hash",
-		Title:        "Mushy Pasta",
-		Description:  "Too vague to keep",
-		Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 lb", Price: "1.99"}},
-		Instructions: []string{"Cook until done somehow"},
-		Health:       "Heavy",
-		DrinkPairing: "None",
-	}
-	hash := "test-hash"
-	list := &ai.ShoppingList{
-		ResponseID: "resp-123",
-		Recipes:    []ai.Recipe{kept},
-		Discarded:  []ai.Recipe{discarded},
-	}
-
-	if err := rio.SaveShoppingList(t.Context(), list, hash); err != nil {
-		t.Fatalf("SaveShoppingList failed: %v", err)
-	}
-
-	if len(list.Discarded) != 0 {
-		t.Fatalf("expected SaveShoppingList to clear discarded recipes after persisting, got %+v", list.Discarded)
-	}
-
-	stored, err := rio.SingleFromCache(t.Context(), discarded.ComputeHash())
-	if err != nil {
-		t.Fatalf("expected discarded recipe to be saved individually: %v", err)
-	}
-	if stored.Title != discarded.Title {
-		t.Fatalf("expected discarded recipe title %q, got %q", discarded.Title, stored.Title)
-	}
-	if stored.OriginHash != hash {
-		t.Fatalf("expected discarded recipe origin hash %q, got %q", hash, stored.OriginHash)
-	}
-
-	cachedList, err := rio.FromCache(t.Context(), hash)
-	if err != nil {
-		t.Fatalf("FromCache failed: %v", err)
-	}
-	if len(cachedList.Discarded) != 0 {
-		t.Fatalf("expected cached shopping list to omit discarded recipes, got %+v", cachedList.Discarded)
+	if got.Plan == nil || got.Plan.ResponseID != list.Plan.ResponseID {
+		t.Fatalf("expected menu plan response id %q, got %+v", list.Plan.ResponseID, got.Plan)
 	}
 }
 

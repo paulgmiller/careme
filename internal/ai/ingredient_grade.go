@@ -194,7 +194,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	if err != nil {
 		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
 	}
-	slog.InfoContext(ctx, "Ingredient grading usage", "model", g.model, responseUsageLogAttr(resp.Usage))
+	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage))
 
 	return parseIngredientGrades(resp.OutputText(), items)
 }

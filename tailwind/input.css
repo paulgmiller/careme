@@ -1,8 +1,28 @@
 @import "tailwindcss";
 @source "../internal/templates/**/*.html";
 
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+  src: url("/static/fonts/fraunces-v38-latin-700-900.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/static/fonts/inter-v20-latin-400-800.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 @theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
   --color-brand-50: var(--brand-50);
   --color-brand-100: var(--brand-100);
   --color-brand-200: var(--brand-200);
@@ -35,6 +55,27 @@
 }
 
 @layer base {
+  :root {
+    --clerk-color-primary: light-dark(var(--brand-700), var(--brand-300));
+    --clerk-color-primary-foreground: light-dark(#ffffff, #0f172a);
+    --clerk-color-danger: var(--color-action-red-500);
+    --clerk-color-success: var(--color-action-green-500);
+    --clerk-color-warning: var(--brand-500);
+    --clerk-color-neutral: light-dark(#111827, #ffffff);
+    --clerk-color-foreground: light-dark(#111827, #ffffff);
+    --clerk-color-background: light-dark(#ffffff, #111827);
+    --clerk-color-input: light-dark(#ffffff, #1f2937);
+    --clerk-color-input-foreground: light-dark(#111827, #ffffff);
+    --clerk-color-ring: light-dark(
+      color-mix(in srgb, var(--brand-600) 35%, transparent),
+      color-mix(in srgb, var(--brand-300) 40%, transparent)
+    );
+    --clerk-color-shimmer: var(--brand-50);
+    --clerk-color-modal-backdrop: #0f172a;
+    --clerk-border-radius: 0.5rem;
+    --clerk-spacing: 1rem;
+  }
+
   p {
     text-wrap: pretty;
   }
