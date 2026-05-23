@@ -126,9 +126,18 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
 spec:
   rules:
-${INGRESS_RULES}
+    - host: ${INGRESS_HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: careme
+                port:
+                  number: 80
   # Uncomment TLS section after DNS points to ingress controller and certificate issuer is set up
   # tls:
   #   - hosts:
-  #       - careme.northbrion.net
+  #       - ${INGRESS_HOST}
   #     secretName: careme-tls
