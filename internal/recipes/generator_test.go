@@ -676,14 +676,14 @@ func TestGenerateRecipes_RegenerateBackCompatFallbackErrorsAfterCutoff(t *testin
 		recipe: &newResult,
 	}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Date(2026, time.May, 23, 0, 0, 0, 0, time.UTC))
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Date(2026, time.May, 25, 0, 0, 0, 0, time.UTC))
 	params.Directive = "Use the store's sale ingredients."
 	params.Instructions = "make it brighter"
 	params.Dismissed = []ai.Recipe{dismissed}
 
 	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
 	_, err := g.GenerateRecipes(t.Context(), params)
-	require.ErrorContains(t, err, "missing previous menu plan response ID for menu date 2026-05-23")
+	require.ErrorContains(t, err, "missing previous menu plan response ID for menu date 2026-05-25")
 
 	if aiStub.createMenuPlanCount != 0 || aiStub.menuPlanCount != 0 {
 		t.Fatalf("missing response ID should fail before menu planning calls, got create=%d regenerate=%d", aiStub.createMenuPlanCount, aiStub.menuPlanCount)
