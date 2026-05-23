@@ -275,8 +275,11 @@
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">You asked</p>
             <p class="mt-1 text-sm text-gray-700">{{$entry.Question}}</p>
           </div>
-          <span class="mt-0.5 text-xs font-semibold uppercase tracking-wide text-brand-700 group-open:hidden">Show answer</span>
-          <span class="mt-0.5 hidden text-xs font-semibold uppercase tracking-wide text-brand-700 group-open:inline">Hide answer</span>
+          <span class="mt-0.5 flex size-4 items-center justify-center text-brand-700" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="size-3 transition-transform group-open:rotate-180">
+              <path fill-rule="evenodd" d="M5.22 7.22a.75.75 0 0 1 1.06 0L10 10.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 8.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+            </svg>
+          </span>
         </div>
       </summary>
       <div class="mt-3 border-t border-brand-100 pt-3">
