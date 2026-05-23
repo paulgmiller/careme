@@ -3,9 +3,12 @@ package recipes
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"html/template"
 	"io"
+	"math"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -318,14 +321,7 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []shoppingListGroup {
 
 			continue
 		}
-		qty := strings.TrimSpace(ingredient.Quantity)
-		switch {
-		case qty == "":
-		case existing.Quantity == "":
-			existing.Quantity = qty
-		default:
-			existing.Quantity = existing.Quantity + ", " + qty
-		}
+		existing.Quantity = mergeShoppingQuantities(existing.Quantity, ingredient.Quantity)
 	}
 
 	slices.SortStableFunc(combined, func(a, b *ai.Ingredient) int {
@@ -343,6 +339,60 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []shoppingListGroup {
 		groups[len(groups)-1].Items = append(groups[len(groups)-1].Items, item)
 	}
 	return groups
+}
+
+var shoppingQtyWithSuffixPattern = regexp.MustCompile(`^\s*(\d+(?:\.\d+)?)\s+(.+?)\s*$`)
+
+func mergeShoppingQuantities(existing string, incoming string) string {
+	existing = strings.TrimSpace(existing)
+	incoming = strings.TrimSpace(incoming)
+	switch {
+	case incoming == "":
+		return existing
+	case existing == "":
+		return incoming
+	}
+
+	existingNumber, existingSuffix, okExisting := parseShoppingQuantity(existing)
+	incomingNumber, incomingSuffix, okIncoming := parseShoppingQuantity(incoming)
+	if okExisting && okIncoming && normalizeShoppingQuantitySuffix(existingSuffix) == normalizeShoppingQuantitySuffix(incomingSuffix) {
+		return formatShoppingQuantity(existingNumber+incomingNumber, existingSuffix)
+	}
+	return existing + ", " + incoming
+}
+
+func parseShoppingQuantity(raw string) (float64, string, bool) {
+	match := shoppingQtyWithSuffixPattern.FindStringSubmatch(beforeFirstComma(raw))
+	if len(match) != 3 {
+		return 0, "", false
+	}
+	value, err := strconv.ParseFloat(match[1], 64)
+	if err != nil {
+		return 0, "", false
+	}
+	suffix := strings.TrimSpace(match[2])
+	if suffix == "" {
+		return 0, "", false
+	}
+	return value, suffix, true
+}
+
+func beforeFirstComma(value string) string {
+	if index := strings.Index(value, ","); index >= 0 {
+		return strings.TrimSpace(value[:index])
+	}
+	return strings.TrimSpace(value)
+}
+
+func normalizeShoppingQuantitySuffix(suffix string) string {
+	return strings.ToLower(strings.Join(strings.Fields(suffix), " "))
+}
+
+func formatShoppingQuantity(value float64, suffix string) string {
+	if math.Abs(value-math.Round(value)) < 1e-9 {
+		return fmt.Sprintf("%d %s", int64(math.Round(value)), suffix)
+	}
+	return fmt.Sprintf("%s %s", strconv.FormatFloat(value, 'f', -1, 64), suffix)
 }
 
 func shoppingAisleHeading(aisle string) string {

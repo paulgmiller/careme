@@ -676,6 +676,33 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	}
 }
 
+func TestShoppingListForDisplay_SumsMatchingQuantitiesWithSuffix(t *testing.T) {
+	groups := shoppingListForDisplay([]ai.Ingredient{
+		{Name: "Garlic", Quantity: "2 cloves, finely grated or minced"},
+		{Name: "Garlic", Quantity: "2 cloves, minced"},
+		{Name: "Garlic", Quantity: "2 cloves"},
+	})
+	if len(groups) != 1 || len(groups[0].Items) != 1 {
+		t.Fatalf("expected one grouped garlic item, got %+v", groups)
+	}
+	if got, want := groups[0].Items[0].Quantity, "6 cloves"; got != want {
+		t.Fatalf("expected summed quantity %q, got %q", want, got)
+	}
+}
+
+func TestShoppingListForDisplay_KeepsDistinctSuffixesSeparate(t *testing.T) {
+	groups := shoppingListForDisplay([]ai.Ingredient{
+		{Name: "Garlic", Quantity: "2 cloves"},
+		{Name: "Garlic", Quantity: "1 bulb"},
+	})
+	if len(groups) != 1 || len(groups[0].Items) != 1 {
+		t.Fatalf("expected one grouped garlic item, got %+v", groups)
+	}
+	if got, want := groups[0].Items[0].Quantity, "2 cloves, 1 bulb"; got != want {
+		t.Fatalf("expected quantity %q, got %q", want, got)
+	}
+}
+
 func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	w := httptest.NewRecorder()
 	now := time.Now()
