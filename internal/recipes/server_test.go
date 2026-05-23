@@ -1511,6 +1511,7 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 	saveRecipesForOrigin(t, s, originHash, savedRecipe, dismissedRecipe)
 	shoppingList := &ai.ShoppingList{
 		Recipes: []ai.Recipe{savedRecipe, dismissedRecipe},
+		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},
 	}
 	if err := s.SaveShoppingList(t.Context(), shoppingList, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
@@ -1713,6 +1714,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 	saveRecipesForOrigin(t, s, originHash, savedRecipe, dismissedRecipe)
 	shoppingList := &ai.ShoppingList{
 		Recipes: []ai.Recipe{savedRecipe, dismissedRecipe},
+		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},
 	}
 	if err := s.SaveShoppingList(t.Context(), shoppingList, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
@@ -1755,6 +1757,9 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 	}
 	if len(finalList.Recipes) != 1 || finalList.Recipes[0].ComputeHash() != savedRecipe.ComputeHash() {
 		t.Fatalf("expected only saved recipe in finalized list, got %#v", finalList.Recipes)
+	}
+	if finalList.Plan == nil || finalList.Plan.ResponseID != "resp-menu-original" {
+		t.Fatalf("expected finalized list to preserve menu plan response id, got %+v", finalList.Plan)
 	}
 }
 

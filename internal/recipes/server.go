@@ -807,6 +807,12 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	currentList, err := s.FromCache(ctx, hash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load shopping list for finalize", "hash", hash, "error", err)
+		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
+		return
+	}
 	if len(p.Saved) == 0 {
 		// ui does not allow this
 		slog.ErrorContext(ctx, "Got zero saved recipes finalize", "hash", hash)
@@ -823,6 +829,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 
 	shoppingList := &ai.ShoppingList{
 		Recipes: p.Saved,
+		Plan:    currentList.Plan,
 	}
 	if err := s.SaveShoppingList(ctx, shoppingList, newHash); err != nil {
 		slog.ErrorContext(ctx, "failed to save finalized shopping list", "hash", newHash, "error", err)
