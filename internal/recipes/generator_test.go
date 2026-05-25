@@ -829,6 +829,7 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Saved = []ai.Recipe{alreadySaved}
 	params.Dismissed = []ai.Recipe{dismissed}
+	params.PreviousMenuPlanResponseID = "resp-menu-old"
 
 	critiquer := &captureCritiqueService{}
 	aiStub := &captureRegenerateAIClient{
@@ -852,7 +853,10 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 		t.Fatalf("expected only the newly generated recipe to be critiqued, got %+v", critiquer.recipes)
 	}
 	if aiStub.createMenuPlanCount != 0 {
-		t.Fatalf("expected back-compat fallback not to create a fresh menu plan, got %d calls", aiStub.createMenuPlanCount)
+		t.Fatalf("expected regeneration not to create a fresh menu plan, got %d calls", aiStub.createMenuPlanCount)
+	}
+	if aiStub.menuPlanResponseID != "resp-menu-old" {
+		t.Fatalf("expected menu plan response ID %q, got %q", "resp-menu-old", aiStub.menuPlanResponseID)
 	}
 }
 
