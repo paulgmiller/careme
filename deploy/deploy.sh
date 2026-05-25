@@ -9,6 +9,12 @@ manifest_paths=(
   "deploy/cronjob-albertsons-reese84.yaml"
   "deploy/cronjob-wholefoods-scrape.yaml"
 )
+disabled_store_env=(
+  "ALDI_ENABLE=false"
+  "PUBLIX_ENABLE=false"
+  "HEB_ENABLE=false"
+  "WEGMANS_ENABLE=false"
+)
 namespace="${2:-careme}"
 short_len=7
 
@@ -75,6 +81,9 @@ echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
   git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST}' | kubectl apply -f - -n "${namespace}"
 done
+
+echo "Disabling Publix, ALDI, and H-E-B integrations for deployment/careme"
+kubectl set env deployment/careme "${disabled_store_env[@]}" -n "${namespace}"
 
 echo "Waiting for rollout of deployment/careme"
 kubectl rollout status deployment/careme -n "${namespace}" -w
