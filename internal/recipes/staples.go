@@ -20,6 +20,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/kroger"
 	"careme/internal/parallelism"
+	"careme/internal/publix"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 
@@ -278,6 +279,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 	return []backendStaplesProvider{
 		albertsonsProvider,
 		krogerBackend,
+		publix.NewStaplesProvider(cfg.Publix, brightdataClient),
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
@@ -289,6 +291,7 @@ func defaultIdentityProviders() []identityProvider {
 		kroger.NewIdentityProvider(),
 		// actowiz.NewIdentityProvider(),
 		albertsons.NewIdentityProvider(),
+		publix.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),
 	}
