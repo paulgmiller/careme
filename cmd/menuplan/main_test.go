@@ -104,7 +104,7 @@ func TestWriteMenuPlansHumanReadable(t *testing.T) {
 	for _, want := range []string{
 		"Menu plans for 98101",
 		"1. Kroger - Downtown",
-		"Address: 1 Market St, WA, 98101",
+		"Address: 1 Market St, WA 98101",
 		"Date: 2026-05-13",
 		"Plan:",
 		"Korean with chicken thighs, sheet pan, side veg: broccoli",

@@ -334,11 +334,18 @@ func storeDetailLines(loc locations.Location) []string {
 	if loc.ID != "" {
 		lines = append(lines, "Store ID: "+loc.ID)
 	}
-	addressParts := compactStrings(loc.Address, loc.State, loc.ZipCode)
-	if len(addressParts) > 0 {
-		lines = append(lines, "Address: "+strings.Join(addressParts, ", "))
+	addressLine := formatAddressLine(loc)
+	if addressLine != "" {
+		lines = append(lines, "Address: "+addressLine)
 	}
 	return lines
+}
+
+
+func formatAddressLine(loc locations.Location) string {
+	stateZip := strings.TrimSpace(strings.Join(compactStrings(loc.State, loc.ZipCode), " "))
+	parts := compactStrings(loc.Address, stateZip)
+	return strings.Join(parts, ", ")
 }
 
 func compactStrings(values ...string) []string {
