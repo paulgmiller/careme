@@ -3,6 +3,7 @@ package publix
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"sync"
 	"testing"
@@ -18,6 +19,33 @@ func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
 	}
 	if got != string(want) {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
+	}
+}
+
+func TestStapleCategories_IncludesKnownPublixStaples(t *testing.T) {
+	t.Parallel()
+
+	got := map[string]string{}
+	for _, category := range StapleCategories() {
+		got[category.Name] = category.ID
+	}
+
+	want := map[string]string{
+		"vegetables":      CategoryVegetables,
+		"fruit":           CategoryFruit,
+		"beef":            CategoryBeef,
+		"veal":            CategoryVeal,
+		"chicken":         CategoryChicken,
+		"lamb":            CategoryLamb,
+		"sausage":         CategorySausage,
+		"fish":            CategoryFish,
+		"scallops":        CategoryScallops,
+		"pasta":           CategoryPasta,
+		"rice and grains": CategoryRiceGrains,
+	}
+
+	if !maps.Equal(got, want) {
+		t.Fatalf("unexpected staple categories: got %+v want %+v", got, want)
 	}
 }
 

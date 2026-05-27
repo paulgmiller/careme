@@ -19,7 +19,16 @@ import (
 
 const (
 	CategoryVegetables = "837d6afb-a1d4-46a3-9015-b6db092ddb54"
+	CategoryFruit      = "21125cb8-4ba7-4038-a5c2-75899e205ce4"
 	CategoryBeef       = "163c7c04-5495-404e-81fc-34f71b241093"
+	CategoryVeal       = "206be70c-672c-4457-9e73-dc11d5412879"
+	CategoryChicken    = "6772da29-55bf-4051-83d5-104d73ae9a96"
+	CategoryLamb       = "e73c3cc5-be20-47f2-ae20-76dfa398ec06"
+	CategorySausage    = "20a53a52-81f3-4039-8758-0f703235a75b"
+	CategoryFish       = "eb84be44-d588-42b4-8e22-11016b4f5604"
+	CategoryScallops   = "c88b0e54-ef75-4408-9d3e-851f35c2b6d6"
+	CategoryPasta      = "e9f01489-6ce4-4c64-b5f5-2fe1e55da3c9"
+	CategoryRiceGrains = "b064da7d-7b01-426d-a122-450fba08f8a4"
 
 	defaultStapleTake = 48
 )
@@ -138,7 +147,16 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
 		{Name: "vegetables", ID: CategoryVegetables},
+		{Name: "fruit", ID: CategoryFruit},
 		{Name: "beef", ID: CategoryBeef},
+		{Name: "veal", ID: CategoryVeal},
+		{Name: "chicken", ID: CategoryChicken},
+		{Name: "lamb", ID: CategoryLamb},
+		{Name: "sausage", ID: CategorySausage},
+		{Name: "fish", ID: CategoryFish},
+		{Name: "scallops", ID: CategoryScallops},
+		{Name: "pasta", ID: CategoryPasta},
+		{Name: "rice and grains", ID: CategoryRiceGrains},
 	}
 }
 
