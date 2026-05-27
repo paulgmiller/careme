@@ -103,11 +103,6 @@ for manifest_path in "${manifest_paths[@]}"; do
   git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
 done
 
-if [[ "${namespace}" == "caremetest" ]]; then
-  echo "Removing careme-mail cronjob from ${namespace}"
-  kubectl delete cronjob/careme-mail -n "${namespace}" --ignore-not-found
-fi
-
 echo "Disabling Publix, ALDI, and H-E-B integrations for deployment/careme"
 kubectl set env deployment/careme "${disabled_store_env[@]}" -n "${namespace}"
 
