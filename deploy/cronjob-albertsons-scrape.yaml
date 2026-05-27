@@ -5,7 +5,7 @@ metadata:
   labels:
     app: albertsons-scrape
 spec:
-  schedule: "0 6 * * 0"
+  schedule: "${ALBERTSONS_SCRAPE_SCHEDULE}"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 3
