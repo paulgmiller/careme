@@ -144,17 +144,7 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 			},
 		},
 	}
-	cacheStore := cache.NewInMemoryCache()
-	err := SaveAbckRecord(t.Context(), cacheStore, AbckRecord{
-		Cookie:    "akamai-token",
-		FetchedAt: time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC),
-		SourceURL: "https://www.publix.com/c/beef/163c7c04-5495-404e-81fc-34f71b241093",
-		Provider:  brightDataBrowserSource,
-	})
-	if err != nil {
-		t.Fatalf("SaveAbckRecord returned error: %v", err)
-	}
-	provider := newStaplesProviderWithCache(client, cacheStore)
+	provider := newStaplesProviderWithCache(client, defaultLoadAbck)
 
 	got, err := provider.FetchStaples(t.Context(), "publix_1847")
 	if err != nil {
@@ -233,17 +223,8 @@ func TestStaplesProvider_GetIngredients_UsesCategoryAndSkip(t *testing.T) {
 			},
 		},
 	}
-	cacheStore := cache.NewInMemoryCache()
-	err := SaveAbckRecord(t.Context(), cacheStore, AbckRecord{
-		Cookie:    "akamai-token",
-		FetchedAt: time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC),
-		SourceURL: "https://www.publix.com/c/beef/163c7c04-5495-404e-81fc-34f71b241093",
-		Provider:  brightDataBrowserSource,
-	})
-	if err != nil {
-		t.Fatalf("SaveAbckRecord returned error: %v", err)
-	}
-	provider := newStaplesProviderWithCache(client, cacheStore)
+
+	provider := newStaplesProviderWithCache(client, defaultLoadAbck)
 
 	got, err := provider.GetIngredients(t.Context(), "publix_1847", "beef", 48)
 	if err != nil {
@@ -279,7 +260,9 @@ func TestStaplesProvider_UsesCachedAbck(t *testing.T) {
 			},
 		},
 	}
-	provider := newStaplesProviderWithCache(client, cacheStore)
+	provider := newStaplesProviderWithCache(client, func(ctx context.Context) (string, error) {
+		return cookieFromCache(ctx, cacheStore)
+	})
 
 	_, err = provider.GetIngredients(t.Context(), "publix_1847", "beef", 0)
 	if err != nil {
@@ -293,7 +276,7 @@ func TestStaplesProvider_UsesCachedAbck(t *testing.T) {
 func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	t.Parallel()
 
-	provider := newStaplesProviderWithCache(&stubSavingsClient{}, cache.NewInMemoryCache())
+	provider := newStaplesProviderWithCache(&stubSavingsClient{}, defaultLoadAbck)
 	_, err := provider.FetchStaples(t.Context(), "1847")
 	if err == nil {
 		t.Fatal("expected invalid location error")
@@ -302,3 +285,5 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 		t.Fatalf("unexpected error: got %q want %q", got, want)
 	}
 }
+
+func defaultLoadAbck(context.Context) (string, error) { return "akamai-token", nil }

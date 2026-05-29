@@ -52,10 +52,12 @@ type savingsClient interface {
 
 type identityProvider struct{}
 
+type loadAbck func(context.Context) (string, error)
+
 type StaplesProvider struct {
 	identityProvider
 	client    savingsClient
-	abckCache cache.Cache
+	abckCache loadAbck
 }
 
 func NewIdentityProvider() identityProvider {
@@ -68,13 +70,23 @@ func NewStaplesProvider(cfg config.PublixConfig, httpClient *http.Client) (Stapl
 		return StaplesProvider{}, fmt.Errorf("failed to create publix cache for abck token: %w", err)
 	}
 
-	return newStaplesProviderWithCache(NewSearchClient(httpClient), abckCache), nil
+	return newStaplesProviderWithCache(NewSearchClient(httpClient), func(ctx context.Context) (string, error) {
+		return cookieFromCache(ctx, abckCache)
+	}), nil
 }
 
-func newStaplesProviderWithCache(client savingsClient, abckCache cache.Cache) StaplesProvider {
+func cookieFromCache(ctx context.Context, c cache.Cache) (string, error) {
+	abck, err := LoadLatestAbck(ctx, c)
+	if err != nil {
+		return "", fmt.Errorf("load cached publix abck token: %w", err)
+	}
+	return abck.Cookie, nil
+}
+
+func newStaplesProviderWithCache(client savingsClient, loadAbck loadAbck) StaplesProvider {
 	return StaplesProvider{
 		client:    client,
-		abckCache: abckCache,
+		abckCache: loadAbck,
 	}
 }
 
@@ -95,7 +107,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	if p.client == nil {
 		return nil, fmt.Errorf("publix client is required")
 	}
-	abck, err := p.resolveAbck(ctx)
+	abck, err := p.abckCache(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +155,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	if p.client == nil {
 		return nil, fmt.Errorf("publix client is required")
 	}
-	abck, err := p.resolveAbck(ctx)
+	abck, err := p.abckCache(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -180,14 +192,6 @@ func countProductPriceLines(products []StoreProduct) (int, int) {
 		}
 	}
 	return priceLineCount, originalPriceLineCount
-}
-
-func (p StaplesProvider) resolveAbck(ctx context.Context) (string, error) {
-	record, err := LoadLatestAbck(ctx, p.abckCache)
-	if err != nil {
-		return "", fmt.Errorf("load cached publix abck token: %w", err)
-	}
-	return record.Cookie, nil
 }
 
 func StapleCategories() []StapleCategory {
