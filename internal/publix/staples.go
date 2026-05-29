@@ -107,7 +107,21 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		ingredients := lo.Map(payload.StoreProducts, func(product StoreProduct, _ int) ai.InputIngredient {
 			return productToIngredient(product, category)
 		})
-		slog.InfoContext(ctx, "found publix staples for category", "count", len(ingredients), "category", category.Name, "location", locationID)
+		priceLineCount, originalPriceLineCount := countProductPriceLines(payload.StoreProducts)
+		slog.InfoContext(
+			ctx,
+			"found publix staples for category",
+			"count",
+			len(ingredients),
+			"priceLineCount",
+			priceLineCount,
+			"originalPriceLineCount",
+			originalPriceLineCount,
+			"category",
+			category.Name,
+			"location",
+			locationID,
+		)
 		return ingredients, nil
 	})
 }
@@ -144,6 +158,20 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	}), nil
 }
 
+func countProductPriceLines(products []StoreProduct) (int, int) {
+	var priceLineCount int
+	var originalPriceLineCount int
+	for _, product := range products {
+		if strings.TrimSpace(stringValue(product.PriceLine)) != "" {
+			priceLineCount++
+		}
+		if strings.TrimSpace(stringValue(product.OriginalPriceLine)) != "" {
+			originalPriceLineCount++
+		}
+	}
+	return priceLineCount, originalPriceLineCount
+}
+
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
 		{Name: "vegetables", ID: CategoryVegetables},
@@ -170,10 +198,7 @@ func stapleCategoryFromInput(input string) (StapleCategory, bool) {
 			return category, true
 		}
 	}
-	if strings.EqualFold(input, "vegatables") {
-		return StapleCategory{Name: "vegetables", ID: CategoryVegetables}, true
-	}
-	return StapleCategory{Name: input, ID: input}, true
+	return StapleCategory{}, false
 }
 
 func storeIDFromLocation(locationID string) (string, error) {
@@ -199,13 +224,15 @@ func parseLocationID(locationID string) (string, bool) {
 
 func productToIngredient(product StoreProduct, category StapleCategory) ai.InputIngredient {
 	salePrice := priceFromLine(stringValue(product.PriceLine))
+	regularPrice := priceFromLine(stringValue(product.OriginalPriceLine))
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
-		ProductID:   strconv.Itoa(product.ItemCode),
-		Description: product.Title,
-		Size:        stringValue(product.SizeDescription),
-		PriceSale:   salePrice,
-		AisleNumber: category.Name,
-		Categories:  []string{category.Name},
+		ProductID:    strconv.Itoa(product.ItemCode),
+		Description:  product.Title,
+		Size:         stringValue(product.SizeDescription),
+		PriceRegular: regularPrice,
+		PriceSale:    salePrice,
+		AisleNumber:  category.Name,
+		Categories:   []string{category.Name},
 	})
 }
 
@@ -219,6 +246,7 @@ func stringValue(value *string) string {
 var priceLinePattern = regexp.MustCompile(`(?i)(?:(\d+)\s*(?:for|/)\s*)?\$([0-9]+(?:\.[0-9]{1,2})?)`)
 
 func priceFromLine(priceLine string) *float32 {
+
 	matches := priceLinePattern.FindStringSubmatch(priceLine)
 	if len(matches) == 0 {
 		return nil

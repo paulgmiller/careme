@@ -86,15 +86,17 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	t.Parallel()
 
 	priceLine := "2 for $5.00"
+	originalPriceLine := "$3.49"
 	sizeDescription := "1 lb"
 	client := &stubSavingsClient{
 		results: map[string]StoreProductsSavingsResult{
 			CategoryVegetables: {
 				StoreProducts: []StoreProduct{{
-					ItemCode:        101,
-					Title:           "Publix Asparagus",
-					PriceLine:       &priceLine,
-					SizeDescription: &sizeDescription,
+					ItemCode:          101,
+					Title:             "Publix Asparagus",
+					PriceLine:         &priceLine,
+					OriginalPriceLine: &originalPriceLine,
+					SizeDescription:   &sizeDescription,
 				}},
 				TotalCount: 1,
 			},
@@ -129,6 +131,9 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	if ingredient.PriceSale == nil || *ingredient.PriceSale != float32(2.5) {
 		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
 	}
+	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != float32(3.49) {
+		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
+	}
 	if ingredient.AisleNumber != "vegetables" {
 		t.Fatalf("unexpected aisle: %q", ingredient.AisleNumber)
 	}
@@ -141,10 +146,11 @@ func TestStaplesProvider_MapsNullPriceAndSize(t *testing.T) {
 	t.Parallel()
 
 	ingredient := productToIngredient(StoreProduct{
-		ItemCode:        96320,
-		Title:           "Publix Veal Cubed Steaks, USDA Choice, Group Raised",
-		PriceLine:       nil,
-		SizeDescription: nil,
+		ItemCode:          96320,
+		Title:             "Publix Veal Cubed Steaks, USDA Choice, Group Raised",
+		PriceLine:         nil,
+		OriginalPriceLine: nil,
+		SizeDescription:   nil,
 	}, StapleCategory{Name: "beef", ID: CategoryBeef})
 
 	if ingredient.ProductID != "96320" {
@@ -158,6 +164,9 @@ func TestStaplesProvider_MapsNullPriceAndSize(t *testing.T) {
 	}
 	if ingredient.PriceSale != nil {
 		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
+	}
+	if ingredient.PriceRegular != nil {
+		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
 	}
 }
 
