@@ -22,7 +22,6 @@ func main() {
 	var searchTerm string
 	var location string
 	var verbose bool
-	flag.StringVar(&searchTerm, "ingredient", "", "Search term for ingredient lookup")
 	flag.StringVar(&searchTerm, "i", "", "Search term for ingredient lookup")
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
@@ -44,12 +43,7 @@ func main() {
 		log.Fatalf("failed to create recipe generator: %s", err)
 	}
 
-	var ings []ai.InputIngredient
-	if searchTerm == "" {
-		ings, err = sp.FetchStaples(ctx, location)
-	} else {
-		ings, err = sp.GetIngredients(ctx, location, searchTerm, 0)
-	}
+	ings, err := sp.FetchStaples(ctx, location)
 	if err != nil {
 		log.Fatalf("failed to get ingredients: %s", err)
 	}

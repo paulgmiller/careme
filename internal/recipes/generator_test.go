@@ -425,13 +425,6 @@ func (s *captureWineStaplesProvider) FetchWines(_ context.Context, _ string, sty
 	return slices.Clone(ingredients), nil
 }
 
-func (s *captureWineStaplesProvider) GetIngredients(_ context.Context, _ string, searchTerm string, _ int) ([]ai.InputIngredient, error) {
-	s.mu.Lock()
-	s.searches = append(s.searches, searchTerm)
-	s.mu.Unlock()
-	return slices.Clone(s.responses[searchTerm]), nil
-}
-
 func (s *captureWineStaplesProvider) searchTerms() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

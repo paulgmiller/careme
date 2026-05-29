@@ -70,17 +70,6 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	return provider.FetchStaples(ctx, locationID)
 }
 
-func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
-	provider, err := p.providerForLocation(locationID)
-	if err != nil {
-		return nil, err
-	}
-	ctx, span := tracer.Start(ctx, "staples.getingredients")
-	span.SetAttributes(attribute.String("backend", fmt.Sprintf("%T", provider)))
-	defer span.End()
-	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
-}
-
 func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	provider, err := p.providerForLocation(locationID)
 	if err != nil {
@@ -94,14 +83,6 @@ func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID strin
 
 func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	ingredients, err := p.provider.FetchStaples(ctx, locationID)
-	if err != nil {
-		return nil, err
-	}
-	return dedupeInputIngredients(ingredients)
-}
-
-func (p dedupingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
-	ingredients, err := p.provider.GetIngredients(ctx, locationID, searchTerm, skip)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +115,10 @@ type cachedStaplesService struct {
 type staplesProvider interface {
 	FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
 	FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error)
+}
+
+type ingredientSearchProvider interface {
+	staplesProvider
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error)
 }
 
@@ -266,31 +251,6 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 
 	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {
 		logger.ErrorContext(ctx, "failed to cache wines", "error", err)
-	}
-	return wines, nil
-}
-
-func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error) {
-	cacheKey := wineIngredientsCacheKey(searchTerm, locationID, date)
-	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "style", searchTerm)
-
-	wines, err := s.cache.IngredientsFromCache(ctx, cacheKey)
-	if err == nil {
-		logger.InfoContext(ctx, "serving cached ingredients", "count", len(wines))
-		return wines, nil
-	}
-	if !errors.Is(err, cache.ErrNotFound) {
-		logger.ErrorContext(ctx, "failed to read cached ingredients", "error", err)
-	}
-
-	wines, err = s.provider.GetIngredients(ctx, locationID, searchTerm, skip)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ingredients for %q: %w", searchTerm, err)
-	}
-	logger.InfoContext(ctx, "found ingredients", "count", len(wines))
-
-	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {
-		logger.ErrorContext(ctx, "failed to cache ingredients", "error", err)
 	}
 	return wines, nil
 }
