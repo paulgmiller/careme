@@ -13,7 +13,6 @@ cron_manifest_paths=(
 )
 disabled_store_env=(
   "ALDI_ENABLE=false"
-  "PUBLIX_ENABLE=false"
   "HEB_ENABLE=false"
   "WEGMANS_ENABLE=false"
 )
@@ -111,8 +110,10 @@ for manifest_path in "${manifest_paths[@]}"; do
   git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
 done
 
-echo "Disabling Publix, ALDI, and H-E-B integrations for deployment/careme"
-kubectl set env deployment/careme "${disabled_store_env[@]}" -n "${namespace}"
+if [[ "${namespace}" == "caremetest" ]]; then
+  echo "Disabling ALDI, and H-E-B integrations for caremetest deployment/careme"
+  kubectl set env deployment/careme "${disabled_store_env[@]}" -n "${namespace}"
+fi
 
 echo "Waiting for rollout of deployment/careme"
 kubectl rollout status deployment/careme -n "${namespace}" -w
