@@ -212,17 +212,31 @@ func TestStaplesProvider_MapsNullPriceAndSize(t *testing.T) {
 	}
 }
 
-func TestStaplesProvider_FetchWines_ReturnsUnsupported(t *testing.T) {
+func TestStaplesProvider_FetchWines_UsesWineCategory(t *testing.T) {
 	t.Parallel()
 
-	provider := newStaplesProviderWithCache(&stubSavingsClient{}, defaultLoadAbck)
-
-	_, err := provider.FetchWines(t.Context(), "publix_1847", []string{"Pinot Noir"})
-	if err == nil {
-		t.Fatal("expected unsupported wine lookup error")
+	client := &stubSavingsClient{
+		results: map[string]StoreProductsSavingsResult{
+			CategoryWine: {
+				StoreProducts: []StoreProduct{{ItemCode: 12345, Title: "Publix Pinot Noir"}},
+				TotalCount:    1,
+			},
+		},
 	}
-	if got, want := err.Error(), "publix wine lookup is not supported"; got != want {
-		t.Fatalf("unexpected error: got %q want %q", got, want)
+	provider := newStaplesProviderWithCache(client, defaultLoadAbck)
+
+	got, err := provider.FetchWines(t.Context(), "publix_1847", []string{"Pinot Noir"})
+	if err != nil {
+		t.Fatalf("FetchWines returned error: %v", err)
+	}
+	if !client.hasCall("1847", CategoryWine, "akamai-token", wineTake, 0) {
+		t.Fatalf("missing wine category call")
+	}
+	if len(got) != 1 || got[0].Description != "Publix Pinot Noir" {
+		t.Fatalf("unexpected wines: %+v", got)
+	}
+	if got[0].AisleNumber != "wine" {
+		t.Fatalf("unexpected aisle: %q", got[0].AisleNumber)
 	}
 }
 

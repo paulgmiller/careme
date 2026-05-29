@@ -19,9 +19,6 @@ import (
 )
 
 const (
-	// TODO go get wine
-	// https://www.publix.com/c/wine/50eeb714-7cea-4a73-990a-43fa1a451bbd?searchtermredirect=produce&page=2
-
 	CategoryVegetables = "837d6afb-a1d4-46a3-9015-b6db092ddb54"
 	CategoryFruit      = "21125cb8-4ba7-4038-a5c2-75899e205ce4"
 	CategoryBeef       = "163c7c04-5495-404e-81fc-34f71b241093"
@@ -33,9 +30,11 @@ const (
 	CategoryScallops   = "c88b0e54-ef75-4408-9d3e-851f35c2b6d6"
 	CategoryPasta      = "e9f01489-6ce4-4c64-b5f5-2fe1e55da3c9"
 	CategoryRiceGrains = "b064da7d-7b01-426d-a122-450fba08f8a4"
+	CategoryWine       = "50eeb714-7cea-4a73-990a-43fa1a451bbd"
 
 	defaultStapleTake = 48
 	bigStapleTake     = 100
+	wineTake          = 200
 )
 
 var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
@@ -147,11 +146,32 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
-	if _, err := storeIDFromLocation(locationID); err != nil {
+func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+	storeID, err := storeIDFromLocation(locationID)
+	if err != nil {
 		return nil, err
 	}
-	return nil, fmt.Errorf("publix wine lookup is not supported")
+	if p.client == nil {
+		return nil, fmt.Errorf("publix client is required")
+	}
+	abck, err := p.abckCache(ctx)
+	if err != nil {
+		return nil, err
+	}
+	category := StapleCategory{Name: "wine", ID: CategoryWine}
+	payload, err := p.client.StoreProductsSavings(ctx, StoreProductsSavingsOptions{
+		StoreNumber: storeID,
+		CategoryID:  category.ID,
+		Abck:        abck,
+		Take:        wineTake,
+		Skip:        0,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return lo.Map(payload.StoreProducts, func(product StoreProduct, _ int) ai.InputIngredient {
+		return productToIngredient(product, category)
+	}), nil
 }
 
 func countProductPriceLines(products []StoreProduct) (int, int) {
