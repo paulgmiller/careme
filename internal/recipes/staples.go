@@ -279,7 +279,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 	return []backendStaplesProvider{
 		albertsonsProvider,
 		krogerBackend,
-		publix.NewStaplesProvider(cfg.Publix, brightdataClient),
+		publix.NewStaplesProvider(cfg.Publix, httpClient),
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),

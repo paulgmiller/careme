@@ -142,6 +142,12 @@ func TestStoreProductsSavingsBuildsRequestAndDecodesProducts(t *testing.T) {
 		if got, want := r.Header.Get("Content-Type"), "application/json"; got != want {
 			t.Fatalf("unexpected content type: got %q want %q", got, want)
 		}
+		if got, want := r.Header.Get("Accept"), "*/*"; got != want {
+			t.Fatalf("unexpected accept: got %q want %q", got, want)
+		}
+		if got, want := r.Header.Get("Accept-Language"), "en-US,en;q=0.9"; got != want {
+			t.Fatalf("unexpected accept language: got %q want %q", got, want)
+		}
 		if got, want := r.Header.Get("Origin"), DefaultBaseURL; got != want {
 			t.Fatalf("unexpected origin: got %q want %q", got, want)
 		}
@@ -151,7 +157,13 @@ func TestStoreProductsSavingsBuildsRequestAndDecodesProducts(t *testing.T) {
 		if got, want := r.Header.Get("PublixStore"), "1847"; got != want {
 			t.Fatalf("unexpected publix store: got %q want %q", got, want)
 		}
-		if got, want := r.Header.Get("Cookie"), "_abck=token-value"; got != want {
+		if got, want := r.Header.Get("User-Agent"), storeProductsSavingsUserAgent; got != want {
+			t.Fatalf("unexpected user agent: got %q want %q", got, want)
+		}
+		if got, want := r.Header.Get("X-Src"), storeProductsSavingsXSrc; got != want {
+			t.Fatalf("unexpected x-src: got %q want %q", got, want)
+		}
+		if got, want := r.Header.Get("Cookie"), "_abck=token-value; bm_sv=bm-token"; got != want {
 			t.Fatalf("unexpected cookie: got %q want %q", got, want)
 		}
 		raw, err := io.ReadAll(r.Body)
@@ -181,7 +193,7 @@ func TestStoreProductsSavingsBuildsRequestAndDecodesProducts(t *testing.T) {
 	got, err := client.StoreProductsSavings(context.Background(), StoreProductsSavingsOptions{
 		StoreNumber: "1847",
 		CategoryID:  CategoryBeef,
-		Abck:        "token-value",
+		Abck:        "token-value; bm_sv=bm-token",
 		Take:        48,
 		Skip:        7,
 	})
@@ -192,11 +204,33 @@ func TestStoreProductsSavingsBuildsRequestAndDecodesProducts(t *testing.T) {
 	if got, want := requestedPath, "/search/api/search/storeproductssavings/"; got != want {
 		t.Fatalf("unexpected request path: got %q want %q", got, want)
 	}
-	if !strings.Contains(requestedQuery, "storeNumber=1847") || !strings.Contains(requestedQuery, "cat="+CategoryBeef) {
+	if !strings.Contains(requestedQuery, "keyword=") ||
+		!strings.Contains(requestedQuery, "storeNumber=1847") ||
+		!strings.Contains(requestedQuery, "cat="+CategoryBeef) ||
+		!strings.Contains(requestedQuery, "source="+storeProductsSavingsSource) {
 		t.Fatalf("unexpected request query: %q", requestedQuery)
 	}
-	if requestBody.Variables.Take != 48 || requestBody.Variables.Skip != 7 || requestBody.Variables.CategoryID != CategoryBeef {
+	if requestBody.OperationName != storeProductsSavingsOperationName {
+		t.Fatalf("unexpected operation name: %q", requestBody.OperationName)
+	}
+	if requestBody.Variables.Take != 48 ||
+		requestBody.Variables.Skip != 7 ||
+		requestBody.Variables.CategoryID != CategoryBeef ||
+		requestBody.Variables.Source != storeProductsSavingsSource ||
+		requestBody.Variables.MinMatch != -41 ||
+		requestBody.Variables.BoostVarIndex != 1 ||
+		requestBody.Variables.SegmentVarIndex != 1 ||
+		requestBody.Variables.IntentVarIndex != 1 {
 		t.Fatalf("unexpected graphql variables: %+v", requestBody.Variables)
+	}
+	if got, want := requestBody.Variables.SortOrder, "srchViewsMonth desc, srchViewsYear desc"; got != want {
+		t.Fatalf("unexpected sort order: got %q want %q", got, want)
+	}
+	if len(requestBody.Variables.SearchVariation) != 2 {
+		t.Fatalf("unexpected search variation: %+v", requestBody.Variables.SearchVariation)
+	}
+	if !strings.Contains(requestBody.Query, "GetStoreProductsSavingsSearchResultAsync") {
+		t.Fatalf("unexpected graphql query: %q", requestBody.Query)
 	}
 	if got.TotalCount != 2 || len(got.StoreProducts) != 2 {
 		t.Fatalf("unexpected response: %+v", got)
