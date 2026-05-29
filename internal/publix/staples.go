@@ -180,6 +180,13 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	}), nil
 }
 
+func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+	if _, err := storeIDFromLocation(locationID); err != nil {
+		return nil, err
+	}
+	return nil, fmt.Errorf("publix wine lookup is not supported")
+}
+
 func countProductPriceLines(products []StoreProduct) (int, int) {
 	var priceLineCount int
 	var originalPriceLineCount int

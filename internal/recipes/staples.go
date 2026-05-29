@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -80,6 +81,17 @@ func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID s
 	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
 }
 
+func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+	provider, err := p.providerForLocation(locationID)
+	if err != nil {
+		return nil, err
+	}
+	ctx, span := tracer.Start(ctx, "staples.fetchwines")
+	span.SetAttributes(attribute.String("backend", fmt.Sprintf("%T", provider)))
+	defer span.End()
+	return provider.FetchWines(ctx, locationID, styles)
+}
+
 func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	ingredients, err := p.provider.FetchStaples(ctx, locationID)
 	if err != nil {
@@ -90,6 +102,14 @@ func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID st
 
 func (p dedupingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
 	ingredients, err := p.provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	if err != nil {
+		return nil, err
+	}
+	return dedupeInputIngredients(ingredients)
+}
+
+func (p dedupingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+	ingredients, err := p.provider.FetchWines(ctx, locationID, styles)
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +133,7 @@ type cachedStaplesService struct {
 
 type staplesProvider interface {
 	FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
+	FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error)
 	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error)
 }
 
@@ -189,6 +210,64 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
 	lo.Must(io.WriteString(fnv, normalizedStyle))
 	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
+}
+
+func wineStylesCacheKey(styles []string, location string, date time.Time) string {
+	normalized := normalizedWineStyles(styles)
+	if len(normalized) == 1 {
+		return wineIngredientsCacheKey(normalized[0], location, date)
+	}
+	return wineIngredientsCacheKey(strings.Join(normalized, "\t"), location, date)
+}
+
+func normalizedWineStyles(styles []string) []string {
+	seen := map[string]bool{}
+	var normalized []string
+	for _, style := range styles {
+		style = strings.TrimSpace(style)
+		if style == "" {
+			continue
+		}
+		key := strings.ToLower(style)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		normalized = append(normalized, style)
+	}
+	slices.SortFunc(normalized, func(a, b string) int {
+		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+	})
+	return normalized
+}
+
+func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string, styles []string, date time.Time) ([]ai.InputIngredient, error) {
+	styles = normalizedWineStyles(styles)
+	if len(styles) == 0 {
+		return nil, nil
+	}
+	cacheKey := wineStylesCacheKey(styles, locationID, date)
+	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "styles", styles)
+
+	wines, err := s.cache.IngredientsFromCache(ctx, cacheKey)
+	if err == nil {
+		logger.InfoContext(ctx, "serving cached wines", "count", len(wines))
+		return wines, nil
+	}
+	if !errors.Is(err, cache.ErrNotFound) {
+		logger.ErrorContext(ctx, "failed to read cached wines", "error", err)
+	}
+
+	wines, err = s.provider.FetchWines(ctx, locationID, styles)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch wines for %q: %w", strings.Join(styles, ", "), err)
+	}
+	logger.InfoContext(ctx, "found wines", "count", len(wines))
+
+	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {
+		logger.ErrorContext(ctx, "failed to cache wines", "error", err)
+	}
+	return wines, nil
 }
 
 func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error) {

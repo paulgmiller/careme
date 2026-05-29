@@ -83,6 +83,19 @@ func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, se
 	return filterIngredients(all(), searchTerm), nil
 }
 
+func (p StaplesProvider) FetchWines(_ context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+	if !p.IsID(locationID) {
+		return nil, fmt.Errorf("invalid safeway location id %q", locationID)
+	}
+
+	var wines []ai.InputIngredient
+	ingredients := all()
+	for _, style := range styles {
+		wines = append(wines, filterIngredients(ingredients, style)...)
+	}
+	return wines, nil
+}
+
 func filterIngredients(ingredients []ai.InputIngredient, searchTerm string) []ai.InputIngredient {
 	searchTerm = strings.TrimSpace(strings.ToLower(searchTerm))
 	if searchTerm == "" {

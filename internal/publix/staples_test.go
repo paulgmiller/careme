@@ -238,6 +238,20 @@ func TestStaplesProvider_GetIngredients_UsesCategoryAndSkip(t *testing.T) {
 	}
 }
 
+func TestStaplesProvider_FetchWines_ReturnsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	provider := newStaplesProviderWithCache(&stubSavingsClient{}, defaultLoadAbck)
+
+	_, err := provider.FetchWines(t.Context(), "publix_1847", []string{"Pinot Noir"})
+	if err == nil {
+		t.Fatal("expected unsupported wine lookup error")
+	}
+	if got, want := err.Error(), "publix wine lookup is not supported"; got != want {
+		t.Fatalf("unexpected error: got %q want %q", got, want)
+	}
+}
+
 func TestStaplesProvider_UsesCachedAbck(t *testing.T) {
 	t.Parallel()
 

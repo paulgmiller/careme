@@ -186,6 +186,45 @@ func TestStaplesProvider_GetIngredients_UsesSearchTermAndSkip(t *testing.T) {
 	}
 }
 
+func TestStaplesProvider_FetchWines_UsesWineCategoryAndStyles(t *testing.T) {
+	t.Parallel()
+
+	client := &stubSearchClient{
+		results: map[string]query.PathwaySearchPayload{
+			query.Category_Wine: {
+				Response: query.PathwaySearchResponse{
+					Docs: []query.PathwaySearchProduct{
+						{ID: "wine-1", Name: "Pinot Noir", Price: 12.99},
+					},
+				},
+			},
+		},
+	}
+	provider := newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
+		if baseURL != "https://www.acmemarkets.com" {
+			t.Fatalf("unexpected base URL: %q", baseURL)
+		}
+		return client, nil
+	})
+
+	got, err := provider.FetchWines(t.Context(), "acmemarkets_806", []string{"Pinot Noir", "Sauvignon Blanc"})
+	if err != nil {
+		t.Fatalf("FetchWines returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected one result per style, got %d", len(got))
+	}
+	for _, style := range []string{"Pinot Noir", "Sauvignon Blanc"} {
+		searchCall := "806:" + query.Category_Wine + ":" + style
+		if !client.hasCall(searchCall) {
+			t.Fatalf("missing expected wine search call %q", searchCall)
+		}
+		if got, ok := client.startForCall(searchCall); !ok || got != 0 {
+			t.Fatalf("unexpected search start for %q: got %d found %t", searchCall, got, ok)
+		}
+	}
+}
+
 func TestNewStaplesProvider_UsesInjectedHTTPClient(t *testing.T) {
 	t.Parallel()
 

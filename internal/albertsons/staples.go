@@ -120,6 +120,23 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	return lo.Map(payload.Response.Docs, productToIngredient), nil
 }
 
+func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+	client, storeID, err := p.clientForLocation(locationID)
+	if err != nil {
+		return nil, err
+	}
+
+	return parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
+		payload, err := client.Search(ctx, storeID, query.Category_Wine, query.SearchOptions{
+			Query: style, Rows: 100,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return lo.Map(payload.Response.Docs, productToIngredient), nil
+	})
+}
+
 // clientForLocation takes a prefixed store id and looks up chaing base url and returnes unprefixed id.
 func (p StaplesProvider) clientForLocation(locationID string) (searchClient, string, error) {
 	baseURL, storeID, ok := searchBaseURLAndStoreID(locationID)

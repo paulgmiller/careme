@@ -93,6 +93,27 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	}), nil
 }
 
+func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+	if p.client == nil {
+		return nil, fmt.Errorf("whole foods client is required")
+	}
+
+	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
+	if storeID == locationID || storeID == "" {
+		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
+	}
+
+	return parallelism.Flatten(defaultWineCategories(), func(category string) ([]ai.InputIngredient, error) {
+		resp, err := p.client.Category(ctx, category, storeID)
+		if err != nil {
+			return nil, err
+		}
+		return lo.Map(resp, func(p product, _ int) ai.InputIngredient {
+			return productToIngredient(p, category)
+		}), nil
+	})
+}
+
 func defaultStaples() []string {
 	return []string{
 		"fresh-vegetables",
@@ -108,7 +129,10 @@ func defaultStaples() []string {
 		"rice-grains",
 		"pasta-noodles",
 	}
-	// red-wine, white-wine, sparkling
+}
+
+func defaultWineCategories() []string {
+	return []string{"red-wine", "white-wine", "sparkling"}
 }
 
 func productToIngredient(product product, category string) ai.InputIngredient {
