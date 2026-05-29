@@ -3,8 +3,10 @@ package publix
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -76,13 +78,50 @@ func (s *stubSavingsClient) callCount() int {
 func (s *stubSavingsClient) hasCall(store, category, abck string, take, skip int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return slices.ContainsFunc(s.calls, func(call StoreProductsSavingsOptions) bool {
+
+	hasCall := slices.ContainsFunc(s.calls, func(call StoreProductsSavingsOptions) bool {
 		return call.StoreNumber == store &&
 			call.CategoryID == category &&
 			call.Abck == abck &&
 			call.Take == take &&
 			call.Skip == skip
 	})
+	if hasCall {
+		return true
+	}
+
+	fmt.Printf("missing savings call: want store=%q category=%q abck=%q take=%d skip=%d\n", store, category, abck, take, skip)
+	if len(s.calls) == 0 {
+		fmt.Println("got no savings calls")
+		return false
+	}
+	for i, call := range s.calls {
+		fmt.Printf("got savings call %d: %s\n", i, savingsCallDiff(call, store, category, abck, take, skip))
+	}
+	return false
+}
+
+func savingsCallDiff(call StoreProductsSavingsOptions, store, category, abck string, take, skip int) string {
+	diffs := []string{}
+	if call.StoreNumber != store {
+		diffs = append(diffs, fmt.Sprintf("store got %q want %q", call.StoreNumber, store))
+	}
+	if call.CategoryID != category {
+		diffs = append(diffs, fmt.Sprintf("category got %q want %q", call.CategoryID, category))
+	}
+	if call.Abck != abck {
+		diffs = append(diffs, fmt.Sprintf("abck got %q want %q", call.Abck, abck))
+	}
+	if call.Take != take {
+		diffs = append(diffs, fmt.Sprintf("take got %d want %d", call.Take, take))
+	}
+	if call.Skip != skip {
+		diffs = append(diffs, fmt.Sprintf("skip got %d want %d", call.Skip, skip))
+	}
+	if len(diffs) == 0 {
+		return "matches"
+	}
+	return strings.Join(diffs, ", ")
 }
 
 func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
@@ -105,7 +144,17 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 			},
 		},
 	}
-	provider := newStaplesProvider(client, "akamai-token")
+	cacheStore := cache.NewInMemoryCache()
+	err := SaveAbckRecord(t.Context(), cacheStore, AbckRecord{
+		Cookie:    "akamai-token",
+		FetchedAt: time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC),
+		SourceURL: "https://www.publix.com/c/beef/163c7c04-5495-404e-81fc-34f71b241093",
+		Provider:  brightDataBrowserSource,
+	})
+	if err != nil {
+		t.Fatalf("SaveAbckRecord returned error: %v", err)
+	}
+	provider := newStaplesProviderWithCache(client, cacheStore)
 
 	got, err := provider.FetchStaples(t.Context(), "publix_1847")
 	if err != nil {
@@ -184,7 +233,17 @@ func TestStaplesProvider_GetIngredients_UsesCategoryAndSkip(t *testing.T) {
 			},
 		},
 	}
-	provider := newStaplesProvider(client, "akamai-token")
+	cacheStore := cache.NewInMemoryCache()
+	err := SaveAbckRecord(t.Context(), cacheStore, AbckRecord{
+		Cookie:    "akamai-token",
+		FetchedAt: time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC),
+		SourceURL: "https://www.publix.com/c/beef/163c7c04-5495-404e-81fc-34f71b241093",
+		Provider:  brightDataBrowserSource,
+	})
+	if err != nil {
+		t.Fatalf("SaveAbckRecord returned error: %v", err)
+	}
+	provider := newStaplesProviderWithCache(client, cacheStore)
 
 	got, err := provider.GetIngredients(t.Context(), "publix_1847", "beef", 48)
 	if err != nil {
@@ -198,7 +257,7 @@ func TestStaplesProvider_GetIngredients_UsesCategoryAndSkip(t *testing.T) {
 	}
 }
 
-func TestStaplesProvider_UsesCachedAbckWhenConfigIsEmpty(t *testing.T) {
+func TestStaplesProvider_UsesCachedAbck(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
@@ -220,7 +279,7 @@ func TestStaplesProvider_UsesCachedAbckWhenConfigIsEmpty(t *testing.T) {
 			},
 		},
 	}
-	provider := newStaplesProviderWithCache(client, "", cacheStore)
+	provider := newStaplesProviderWithCache(client, cacheStore)
 
 	_, err = provider.GetIngredients(t.Context(), "publix_1847", "beef", 0)
 	if err != nil {
@@ -234,7 +293,7 @@ func TestStaplesProvider_UsesCachedAbckWhenConfigIsEmpty(t *testing.T) {
 func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	t.Parallel()
 
-	provider := newStaplesProvider(&stubSavingsClient{}, "akamai-token")
+	provider := newStaplesProviderWithCache(&stubSavingsClient{}, cache.NewInMemoryCache())
 	_, err := provider.FetchStaples(t.Context(), "1847")
 	if err == nil {
 		t.Fatal("expected invalid location error")

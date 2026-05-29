@@ -55,7 +55,6 @@ type identityProvider struct{}
 type StaplesProvider struct {
 	identityProvider
 	client    savingsClient
-	abck      string
 	abckCache cache.Cache
 }
 
@@ -69,23 +68,12 @@ func NewStaplesProvider(cfg config.PublixConfig, httpClient *http.Client) (Stapl
 		return StaplesProvider{}, fmt.Errorf("failed to create publix cache for abck token: %w", err)
 	}
 
-	return StaplesProvider{
-		client:    NewSearchClient(httpClient),
-		abckCache: abckCache,
-	}, nil
+	return newStaplesProviderWithCache(NewSearchClient(httpClient), abckCache), nil
 }
 
-func newStaplesProvider(client savingsClient, abck string) StaplesProvider {
-	return StaplesProvider{
-		client: client,
-		abck:   abck,
-	}
-}
-
-func newStaplesProviderWithCache(client savingsClient, abck string, abckCache cache.Cache) StaplesProvider {
+func newStaplesProviderWithCache(client savingsClient, abckCache cache.Cache) StaplesProvider {
 	return StaplesProvider{
 		client:    client,
-		abck:      abck,
 		abckCache: abckCache,
 	}
 }
@@ -195,13 +183,6 @@ func countProductPriceLines(products []StoreProduct) (int, int) {
 }
 
 func (p StaplesProvider) resolveAbck(ctx context.Context) (string, error) {
-	if abck := strings.TrimSpace(p.abck); abck != "" {
-		return abck, nil
-	}
-	if p.abckCache == nil {
-		return "", fmt.Errorf("publix abck token is required")
-	}
-
 	record, err := LoadLatestAbck(ctx, p.abckCache)
 	if err != nil {
 		return "", fmt.Errorf("load cached publix abck token: %w", err)
