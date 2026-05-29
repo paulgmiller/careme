@@ -176,7 +176,7 @@ func countProductPriceLines(products []StoreProduct) (int, int) {
 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
-		//get capped at 100 need to paginate vegtables and fruit
+		// get capped at 100 need to paginate vegtables and fruit
 		{Name: "vegetables", ID: CategoryVegetables, Take: bigStapleTake},
 		{Name: "fruit", ID: CategoryFruit, Take: bigStapleTake},
 		{Name: "beef", ID: CategoryBeef, Take: bigStapleTake},
@@ -249,7 +249,6 @@ func stringValue(value *string) string {
 var priceLinePattern = regexp.MustCompile(`(?i)(?:(\d+)\s*(?:for|/)\s*)?\$([0-9]+(?:\.[0-9]{1,2})?)`)
 
 func priceFromLine(priceLine string) *float32 {
-
 	matches := priceLinePattern.FindStringSubmatch(priceLine)
 	if len(matches) == 0 {
 		return nil
