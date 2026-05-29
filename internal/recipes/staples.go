@@ -226,6 +226,9 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 	if len(styles) == 0 {
 		return nil, nil
 	}
+	// TODO: Let providers normalize wine cache styles. Whole Foods ignores recipe
+	// styles and always fetches red-wine/white-wine/sparkling, so style-based keys
+	// currently create duplicate cache entries for the same candidate set.
 	cacheKey := wineStylesCacheKey(styles, locationID, date)
 	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "styles", styles)
 
