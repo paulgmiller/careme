@@ -111,7 +111,7 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	if got, want := client.callCount(), len(StapleCategories()); got != want {
 		t.Fatalf("expected %d category calls, got %d", want, got)
 	}
-	if !client.hasCall("1847", CategoryVegetables, "akamai-token", defaultStapleTake, 0) {
+	if !client.hasCall("1847", CategoryVegetables, "akamai-token", bigStapleTake, 0) {
 		t.Fatalf("missing vegetables category call")
 	}
 	if len(got) != 1 {
