@@ -77,7 +77,15 @@ func main() {
 			catMap[cat] += 1
 		}
 		if verbose {
-			fmt.Printf("%2d/10: %s - %s: size: %s: %s\n", result.Grade.Score, result.Brand, result.Description, result.Size, result.Grade.Reason)
+			fmt.Printf(
+				"%2d/10: %s - %s: regular: %s sale: %s: %s\n",
+				result.Grade.Score,
+				result.Brand,
+				result.Description,
+				priceString(result.PriceRegular),
+				priceString(result.PriceSale),
+				result.Grade.Reason,
+			)
 		}
 	}
 	for cat, count := range catMap {
@@ -94,4 +102,11 @@ func main() {
 	}
 	sumGrades := lo.SumBy(graded, func(ing ai.InputIngredient) int { return ing.Grade.Score })
 	fmt.Printf("Total count %d and score %d\n", len(graded), sumGrades)
+}
+
+func priceString(price *float32) string {
+	if price == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%.2f", *price)
 }
