@@ -210,26 +210,12 @@ func TestStoreProductsSavingsBuildsRequestAndDecodesProducts(t *testing.T) {
 		!strings.Contains(requestedQuery, "source="+storeProductsSavingsSource) {
 		t.Fatalf("unexpected request query: %q", requestedQuery)
 	}
-	if requestBody.OperationName != storeProductsSavingsOperationName {
-		t.Fatalf("unexpected operation name: %q", requestBody.OperationName)
-	}
 	if requestBody.Variables.Take != 48 ||
 		requestBody.Variables.Skip != 7 ||
-		requestBody.Variables.CategoryID != CategoryBeef ||
-		requestBody.Variables.Source != storeProductsSavingsSource ||
-		requestBody.Variables.MinMatch != -41 ||
-		requestBody.Variables.BoostVarIndex != 1 ||
-		requestBody.Variables.SegmentVarIndex != 1 ||
-		requestBody.Variables.IntentVarIndex != 1 {
+		requestBody.Variables.CategoryID != CategoryBeef {
 		t.Fatalf("unexpected graphql variables: %+v", requestBody.Variables)
 	}
-	if got, want := requestBody.Variables.SortOrder, "srchViewsMonth desc, srchViewsYear desc"; got != want {
-		t.Fatalf("unexpected sort order: got %q want %q", got, want)
-	}
-	if len(requestBody.Variables.SearchVariation) != 2 {
-		t.Fatalf("unexpected search variation: %+v", requestBody.Variables.SearchVariation)
-	}
-	if !strings.Contains(requestBody.Query, "GetStoreProductsSavingsSearchResultAsync") {
+	if !strings.Contains(requestBody.Query, "storeProductsSavingsSearchResult(skip: $skip, take: $take, categoryID: $categoryID)") {
 		t.Fatalf("unexpected graphql query: %q", requestBody.Query)
 	}
 	if got.TotalCount != 2 || len(got.StoreProducts) != 2 {

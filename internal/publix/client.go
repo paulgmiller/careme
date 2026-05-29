@@ -318,31 +318,10 @@ func (c *Client) StoreProductsSavings(ctx context.Context, opts StoreProductsSav
 	endpoint.RawQuery = query.Encode()
 
 	payload := storeProductsSavingsGraphQLRequest{
-		OperationName: storeProductsSavingsOperationName,
 		Variables: storeProductsSavingsVariables{
-			Take:             opts.Take,
-			Skip:             opts.Skip,
-			SortOrder:        "srchViewsMonth desc, srchViewsYear desc",
-			IsPU:             false,
-			CategoryID:       opts.CategoryID,
-			Keyword:          "",
-			Facets:           "",
-			MinMatch:         -41,
-			BoostVarIndex:    1,
-			WildcardSearch:   false,
-			IsPreviewSite:    false,
-			GetOrderHistory:  false,
-			FilterQuery:      "",
-			ReorderItemCodes: nil,
-			BoostBuryQuery:   "",
-			ElevatedProducts: []storeProductsSavingsKeyValue{},
-			ForceElevation:   false,
-			SearchRetryIndex: 0,
-			Source:           storeProductsSavingsSource,
-			SearchVariation:  []storeProductsSavingsKeyValue{{Key: "configurable_add_to_cart", Value: "true"}, {Key: "boost_field", Value: "A"}},
-			SegmentVarIndex:  1,
-			Intents:          []string{},
-			IntentVarIndex:   1,
+			Take:       opts.Take,
+			Skip:       opts.Skip,
+			CategoryID: opts.CategoryID,
 		},
 		Query: storeProductsSavingsQuery,
 	}
@@ -394,43 +373,14 @@ func (c *Client) StoreProductsSavings(ctx context.Context, opts StoreProductsSav
 }
 
 type storeProductsSavingsGraphQLRequest struct {
-	OperationName string                        `json:"operationName"`
-	Variables     storeProductsSavingsVariables `json:"variables"`
-	Query         string                        `json:"query"`
+	Variables storeProductsSavingsVariables `json:"variables"`
+	Query     string                        `json:"query"`
 }
 
 type storeProductsSavingsVariables struct {
-	Take             int                            `json:"take"`
-	Skip             int                            `json:"skip"`
-	SortOrder        string                         `json:"sortOrder"`
-	IsPU             bool                           `json:"ispu"`
-	CategoryID       string                         `json:"categoryID"`
-	Keyword          string                         `json:"keyword"`
-	FacetOverrideStr *string                        `json:"facetOverrideStr"`
-	Facets           string                         `json:"facets"`
-	MinMatch         int                            `json:"minMatch"`
-	BoostVarIndex    int                            `json:"boostVarIndex"`
-	WildcardSearch   bool                           `json:"wildcardSearch"`
-	IsPreviewSite    bool                           `json:"isPreviewSite"`
-	GetOrderHistory  bool                           `json:"getOrderHistory"`
-	FilterQuery      string                         `json:"filterQuery"`
-	ReorderItemCodes []int                          `json:"reorderItemCodes"`
-	BoostBuryQuery   string                         `json:"boostBuryQuery"`
-	ElevatedProducts []storeProductsSavingsKeyValue `json:"elevatedProducts"`
-	ForceElevation   bool                           `json:"forceElevation"`
-	SearchRetryIndex int                            `json:"searchRetryIndex"`
-	Source           string                         `json:"source"`
-	SearchVariation  []storeProductsSavingsKeyValue `json:"searchVariation"`
-	SegmentVarIndex  int                            `json:"segmentVarIndex"`
-	Intents          []string                       `json:"intents"`
-	UserCoupon       *string                        `json:"userCoupon"`
-	IntentVarIndex   int                            `json:"intentVarIndex"`
-	CouponID         *string                        `json:"couponId"`
-}
-
-type storeProductsSavingsKeyValue struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	Take       int    `json:"take"`
+	Skip       int    `json:"skip"`
+	CategoryID string `json:"categoryID"`
 }
 
 type storeProductsSavingsGraphQLResponse struct {
@@ -444,45 +394,7 @@ type graphQLError struct {
 	Message string `json:"message"`
 }
 
-const storeProductsSavingsQuery = `query GetStoreProductsSavingsSearchResultAsync($keyword: String, $skip: Int!, $take: Int!, $facetOverrideStr: String, $facets: String, $sortOrder: String, $ispu: Boolean, $categoryID: String, $minMatch: Int!, $boostVarIndex: Int!, $wildcardSearch: Boolean!, $isPreviewSite: Boolean!, $segmentVarIndex: Int!, $getOrderHistory: Boolean!, $filterQuery: String, $reorderItemCodes: [Int!], $intents: [String!], $searchRetryIndex: Int!, $intentVarIndex: Int!, $boostBuryQuery: String, $source: String, $elevatedProducts: [KeyValuePairOfStringAndStringInput!], $couponId: String, $forceElevation: Boolean, $searchVariation: [KeyValuePairOfStringAndStringInput!], $userCoupon: String) {
-  storeProductsSavingsSearchResult(
-    keyword: $keyword
-    skip: $skip
-    take: $take
-    facetOverrideStr: $facetOverrideStr
-    facets: $facets
-    sortOrder: $sortOrder
-    ispu: $ispu
-    categoryID: $categoryID
-    minMatch: $minMatch
-    boostVarIndex: $boostVarIndex
-    wildcardSearch: $wildcardSearch
-    isPreviewSite: $isPreviewSite
-    segmentVarIndex: $segmentVarIndex
-    getOrderHistory: $getOrderHistory
-    filterQuery: $filterQuery
-    reorderItemCodes: $reorderItemCodes
-    intents: $intents
-    boostBuryQuery: $boostBuryQuery
-    searchRetryIndex: $searchRetryIndex
-    intentVarIndex: $intentVarIndex
-    source: $source
-    elevatedProducts: $elevatedProducts
-    couponId: $couponId
-    forceElevation: $forceElevation
-    searchVariation: $searchVariation
-    userCoupon: $userCoupon
-  ) {
-    storeProducts {
-      itemCode
-      title
-      sizeDescription
-      priceLine
-    }
-    totalCount
-  }
-}
-`
+const storeProductsSavingsQuery = "query ($skip: Int, $take: Int, $categoryID: String) { storeProductsSavingsSearchResult(skip: $skip, take: $take, categoryID: $categoryID) { storeProducts { itemCode title priceLine sizeDescription } totalCount } }"
 
 func abckCookie(abck string) string {
 	abck = strings.TrimSpace(abck)
