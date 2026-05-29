@@ -413,11 +413,16 @@ func (s *captureWineStaplesProvider) FetchStaples(ctx context.Context, locationI
 	panic("unexpected call to FetchStaples")
 }
 
-func (s *captureWineStaplesProvider) GetIngredients(_ context.Context, _ string, searchTerm string, _ int) ([]ai.InputIngredient, error) {
+func (s *captureWineStaplesProvider) FetchWines(_ context.Context, _ string, styles []string) ([]ai.InputIngredient, error) {
 	s.mu.Lock()
-	s.searches = append(s.searches, searchTerm)
+	s.searches = append(s.searches, styles...)
 	s.mu.Unlock()
-	return slices.Clone(s.responses[searchTerm]), nil
+
+	var ingredients []ai.InputIngredient
+	for _, style := range styles {
+		ingredients = append(ingredients, s.responses[style]...)
+	}
+	return slices.Clone(ingredients), nil
 }
 
 func (s *captureWineStaplesProvider) searchTerms() []string {
@@ -430,8 +435,8 @@ func (panicStaplesService) FetchStaples(context.Context, *GeneratorParams) ([]ai
 	panic("unexpected call to FetchStaples")
 }
 
-func (panicStaplesService) GetIngredients(context.Context, string, string, int, time.Time) ([]ai.InputIngredient, error) {
-	panic("unexpected call to GetIngredients")
+func (panicStaplesService) FetchWines(context.Context, string, []string, time.Time) ([]ai.InputIngredient, error) {
+	panic("unexpected call to FetchWines")
 }
 
 func (noopRecipeSaver) SaveRecipe(context.Context, ai.Recipe) error {
@@ -519,23 +524,19 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 }
 
-func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
+func TestPickAWine_PassesRecipeWineStylesToStaplesService(t *testing.T) {
 	aiStub := &captureWineQuestionAIClient{
 		answer: "Try one of these bottles.",
 		selection: &ai.WineSelection{
 			Wines: []ai.Ingredient{
-				{ProductID: "wholefoods-red", Name: "Whole Foods Red"},
-				{ProductID: "wholefoods-white", Name: "Whole Foods White"},
-				{ProductID: "wholefoods-bubbly", Name: "Whole Foods Bubbly"},
+				{ProductID: "pinot", Name: "Pinot Noir"},
 			},
 			Commentary: "Try one of these bottles.",
 		},
 	}
 	staplesStub := &captureWineStaplesProvider{
 		responses: map[string][]ai.InputIngredient{
-			"red-wine":   {{ProductID: "wholefoods-red", Description: "Whole Foods Red", AisleNumber: "red-wine"}},
-			"white-wine": {{ProductID: "wholefoods-white", Description: "Whole Foods White", AisleNumber: "white-wine"}},
-			"sparkling":  {{ProductID: "wholefoods-bubbly", Description: "Whole Foods Bubbly", AisleNumber: "sparkling"}},
+			"Pinot Noir": {{ProductID: "pinot", Description: "Pinot Noir", AisleNumber: "wine"}},
 		},
 	}
 	rio := IO(cache.NewFileCache(t.TempDir()))
@@ -550,17 +551,14 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 	}
 
 	searches := staplesStub.searchTerms()
-	slices.Sort(searches)
-	wantSearches := []string{"red-wine", "sparkling", "white-wine"}
+	wantSearches := []string{"Pinot Noir"}
 	if !slices.Equal(searches, wantSearches) {
-		t.Fatalf("unexpected whole foods wine searches: got %v want %v", searches, wantSearches)
+		t.Fatalf("unexpected wine searches: got %v want %v", searches, wantSearches)
 	}
-	if got == nil || len(got.Wines) != 3 {
+	if got == nil || len(got.Wines) != 1 {
 		t.Fatalf("unexpected wine selection: %+v", got)
 	}
-	assert.Equal(t, "red-wine", got.Wines[0].AisleNumber)
-	assert.Equal(t, "white-wine", got.Wines[1].AisleNumber)
-	assert.Equal(t, "sparkling", got.Wines[2].AisleNumber)
+	assert.Equal(t, "wine", got.Wines[0].AisleNumber)
 	if aiStub.recipe.Title != "Salmon" {
 		t.Fatalf("expected recipe title %q, got %q", "Salmon", aiStub.recipe.Title)
 	}

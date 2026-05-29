@@ -7,6 +7,7 @@ import (
 )
 
 // Flatten runs fn for each item concurrently, merging all returned slices and errors.
+// fn must return errors instead of calling t.Fatal or anything else that exits the worker goroutine.
 func Flatten[T any, T2 any](items []T, fn func(T) ([]T2, error)) ([]T2, error) {
 	if len(items) == 0 {
 		return []T2{}, nil
@@ -36,6 +37,7 @@ func Flatten[T any, T2 any](items []T, fn func(T) ([]T2, error)) ([]T2, error) {
 }
 
 // MapWithErrors collects errors but doesn't cancel anything.
+// fn must return errors instead of calling t.Fatal or anything else that exits the worker goroutine.
 func MapWithErrors[T any, T2 any](items []T, fn func(T) (T2, error)) ([]T2, error) {
 	if len(items) == 0 {
 		return []T2{}, nil

@@ -212,29 +212,31 @@ func TestStaplesProvider_MapsNullPriceAndSize(t *testing.T) {
 	}
 }
 
-func TestStaplesProvider_GetIngredients_UsesCategoryAndSkip(t *testing.T) {
+func TestStaplesProvider_FetchWines_UsesWineCategory(t *testing.T) {
 	t.Parallel()
 
 	client := &stubSavingsClient{
 		results: map[string]StoreProductsSavingsResult{
-			CategoryBeef: {
-				StoreProducts: []StoreProduct{{ItemCode: 96320, Title: "Publix Veal Cubed Steaks"}},
+			CategoryWine: {
+				StoreProducts: []StoreProduct{{ItemCode: 12345, Title: "Publix Pinot Noir"}},
 				TotalCount:    1,
 			},
 		},
 	}
-
 	provider := newStaplesProviderWithCache(client, defaultLoadAbck)
 
-	got, err := provider.GetIngredients(t.Context(), "publix_1847", "beef", 48)
+	got, err := provider.FetchWines(t.Context(), "publix_1847", []string{"Pinot Noir"})
 	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
+		t.Fatalf("FetchWines returned error: %v", err)
 	}
-	if !client.hasCall("1847", CategoryBeef, "akamai-token", defaultStapleTake, 48) {
-		t.Fatalf("missing beef category call")
+	if !client.hasCall("1847", CategoryWine, "akamai-token", wineTake, 0) {
+		t.Fatalf("missing wine category call")
 	}
-	if len(got) != 1 || got[0].Description != "Publix Veal Cubed Steaks" {
-		t.Fatalf("unexpected ingredients: %+v", got)
+	if len(got) != 1 || got[0].Description != "Publix Pinot Noir" {
+		t.Fatalf("unexpected wines: %+v", got)
+	}
+	if got[0].AisleNumber != "wine" {
+		t.Fatalf("unexpected aisle: %q", got[0].AisleNumber)
 	}
 }
 
@@ -264,11 +266,11 @@ func TestStaplesProvider_UsesCachedAbck(t *testing.T) {
 		return cookieFromCache(ctx, cacheStore)
 	})
 
-	_, err = provider.GetIngredients(t.Context(), "publix_1847", "beef", 0)
+	_, err = provider.FetchStaples(t.Context(), "publix_1847")
 	if err != nil {
 		t.Fatalf("GetIngredients returned error: %v", err)
 	}
-	if !client.hasCall("1847", CategoryBeef, "cached-token", defaultStapleTake, 0) {
+	if !client.hasCall("1847", CategoryBeef, "cached-token", bigStapleTake, 0) {
 		t.Fatalf("missing beef category call with cached abck token")
 	}
 }
