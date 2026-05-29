@@ -47,8 +47,7 @@ func runWithDeps(ctx context.Context, args []string) error {
 		timeoutSec int
 	)
 
-	_, err := config.Load()
-	if err != nil {
+	if err := config.LoadEncryptedEnv("secrets/envtest"); err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
