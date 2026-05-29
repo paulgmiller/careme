@@ -42,8 +42,10 @@ type StoreProductsSavingsResult struct {
 }
 
 type StoreProduct struct {
-	ItemCode          int     `json:"itemCode"`
-	Title             string  `json:"title"`
+	ItemCode int    `json:"itemCode"`
+	Title    string `json:"title"`
+	//shortDescription?
+	//titleBrand?
 	PriceLine         *string `json:"priceLine"`
 	OriginalPriceLine *string `json:"originalPriceLine"`
 	SizeDescription   *string `json:"sizeDescription"`
@@ -135,7 +137,6 @@ func (c *SearchClient) StoreProductsSavings(ctx context.Context, opts StoreProdu
 		return nil, fmt.Errorf("request %q: %w", endpoint.String(), err)
 	}
 	defer func() {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 8<<10))
 		_ = resp.Body.Close()
 	}()
 
@@ -201,30 +202,13 @@ const storeProductsSavingsQuery = `query ($keyword: String, $skip: Int, $take: I
       title
       shortDescription
       srchAttr_cardDescription
-      srchAttri_leadTime
-      formattedLeadTime
-      srchAttri_partySize
-      formattedPartySize
-      formattedPartySizeCount
-      advancedNotice
       sizeDescription
       savingLine
       onSale
       priceLine
       specialPromotionDescription
-      uiDisplayType
-      activationStatus
-      rss
       isCatering
       isCateringAddon
-      imageUrls {
-        large {
-          a
-        }
-        small {
-          a
-        }
-      }
       originalPriceLine
       promoConditionsMsg
       promoMsg
@@ -235,36 +219,10 @@ const storeProductsSavingsQuery = `query ($keyword: String, $skip: Int, $take: I
       inStoreLocation
       storeNbr
       hasCoupon
-      defaultModifierList
-      defaultModifierCalories {
-        Default
-        Wrap
-        Whole
-      }
       titleBrand
       fauxTaxonomy
-      isOnlinePay
-      isSingleClickAddToCart
-      nutritionalDescriptionObject {
-        MenuLabelingStatement
-        PerServing
-        ServingStatement
-        IncludeStatement
-      }
-      productAlerts {
-        productCardMessage
-        productCardLabel
-        productCardLabelIcon
-        productCardLabelVariant
-        isOrderable
-      }
     }
     totalCount
-    retryCount
-    correctedSearchTerm
-    searchTermCorrectedModel
-    searchStoreNum
-    keywordCategoryIntentRecognition
   }
 }`
 
