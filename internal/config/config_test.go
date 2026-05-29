@@ -90,24 +90,6 @@ func TestLoadReadsAlbertsonsSearchCredentials(t *testing.T) {
 	}
 }
 
-func TestLoadReadsPublixAbck(t *testing.T) {
-	resetStoreEnvs(t)
-	t.Setenv("ENABLE_MOCKS", "1")
-	t.Setenv("PUBLIX_ABCK", "akamai-token")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-
-	if got, want := cfg.Publix.Abck, "akamai-token"; got != want {
-		t.Fatalf("expected Publix abck %q, got %q", want, got)
-	}
-	if !cfg.Publix.HasInventory() {
-		t.Fatalf("expected Publix inventory to be enabled")
-	}
-}
-
 func TestLoadReadsBrightDataProxyConfig(t *testing.T) {
 	resetStoreEnvs(t)
 	t.Setenv("ENABLE_MOCKS", "1")

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"careme/internal/ai"
+	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/parallelism"
 
@@ -51,27 +52,41 @@ type savingsClient interface {
 
 type identityProvider struct{}
 
+type loadAbck func(context.Context) (string, error)
+
 type StaplesProvider struct {
 	identityProvider
-	client savingsClient
-	abck   string
+	client    savingsClient
+	abckCache loadAbck
 }
 
 func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
-func NewStaplesProvider(cfg config.PublixConfig, httpClient *http.Client) StaplesProvider {
-	return StaplesProvider{
-		client: NewSearchClient(httpClient),
-		abck:   cfg.Abck,
+func NewStaplesProvider(cfg config.PublixConfig, httpClient *http.Client) (StaplesProvider, error) {
+	abckCache, err := cache.EnsureCache(Container)
+	if err != nil {
+		return StaplesProvider{}, fmt.Errorf("failed to create publix cache for abck token: %w", err)
 	}
+
+	return newStaplesProviderWithCache(NewSearchClient(httpClient), func(ctx context.Context) (string, error) {
+		return cookieFromCache(ctx, abckCache)
+	}), nil
 }
 
-func newStaplesProvider(client savingsClient, abck string) StaplesProvider {
+func cookieFromCache(ctx context.Context, c cache.Cache) (string, error) {
+	abck, err := LoadLatestAbck(ctx, c)
+	if err != nil {
+		return "", fmt.Errorf("load cached publix abck token: %w", err)
+	}
+	return abck.Cookie, nil
+}
+
+func newStaplesProviderWithCache(client savingsClient, loadAbck loadAbck) StaplesProvider {
 	return StaplesProvider{
-		client: client,
-		abck:   abck,
+		client:    client,
+		abckCache: loadAbck,
 	}
 }
 
@@ -92,15 +107,16 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	if p.client == nil {
 		return nil, fmt.Errorf("publix client is required")
 	}
-	if strings.TrimSpace(p.abck) == "" {
-		return nil, fmt.Errorf("publix abck token is required")
+	abck, err := p.abckCache(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
 		payload, err := p.client.StoreProductsSavings(ctx, StoreProductsSavingsOptions{
 			StoreNumber: storeID,
 			CategoryID:  category.ID,
-			Abck:        p.abck,
+			Abck:        abck,
 			Take:        category.Take,
 			Skip:        0,
 		})
@@ -139,8 +155,9 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	if p.client == nil {
 		return nil, fmt.Errorf("publix client is required")
 	}
-	if strings.TrimSpace(p.abck) == "" {
-		return nil, fmt.Errorf("publix abck token is required")
+	abck, err := p.abckCache(ctx)
+	if err != nil {
+		return nil, err
 	}
 	category, ok := stapleCategoryFromInput(categoryID)
 	if !ok {
@@ -150,7 +167,7 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 	payload, err := p.client.StoreProductsSavings(ctx, StoreProductsSavingsOptions{
 		StoreNumber: storeID,
 		CategoryID:  category.ID,
-		Abck:        p.abck,
+		Abck:        abck,
 		Take:        defaultStapleTake,
 		Skip:        skip,
 	})

@@ -7,6 +7,8 @@ mail_manifest_path="deploy/cronjob-careme-mail.yaml"
 cron_manifest_paths=(
   "deploy/cronjob-albertsons-scrape.yaml"
   "deploy/cronjob-albertsons-reese84.yaml"
+  "deploy/cronjob-publix-scrape.yaml"
+  "deploy/cronjob-publix-abck.yaml"
   "deploy/cronjob-wholefoods-scrape.yaml"
 )
 disabled_store_env=(
@@ -40,12 +42,16 @@ public_origin="${public_origin:-https://${ingress_host}}"
 manifest_paths=("${app_manifest_path}" "${mail_manifest_path}" "${cron_manifest_paths[@]}")
 albertsons_scrape_schedule="0 6 * * 0"
 albertsons_reese84_schedule="0 */6 * * *"
+publix_scrape_schedule="30 6 * * 0"
+publix_abck_schedule="15 */6 * * *"
 wholefoods_scrape_schedule="0 6 * * 0"
 
 if [[ "${namespace}" == "caremetest" ]]; then
   manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
   albertsons_scrape_schedule="0 6 1,15 * *"
   albertsons_reese84_schedule="0 */12 * * *"
+  publix_scrape_schedule="30 6 1,15 * *"
+  publix_abck_schedule="15 6 * * *"
   wholefoods_scrape_schedule="0 6 1,15 * *"
 fi
 
@@ -71,6 +77,8 @@ export PUBLIC_ORIGIN="${public_origin}"
 export INGRESS_HOST="${ingress_host}"
 export ALBERTSONS_SCRAPE_SCHEDULE="${albertsons_scrape_schedule}"
 export ALBERTSONS_REESE84_SCHEDULE="${albertsons_reese84_schedule}"
+export PUBLIX_SCRAPE_SCHEDULE="${publix_scrape_schedule}"
+export PUBLIX_ABCK_SCHEDULE="${publix_abck_schedule}"
 export WHOLEFOODS_SCRAPE_SCHEDULE="${wholefoods_scrape_schedule}"
 
 for manifest_path in "${manifest_paths[@]}"; do
@@ -100,7 +108,7 @@ echo "Deploying namespace: ${namespace}"
 echo "Using public origin: ${PUBLIC_ORIGIN}"
 echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
-  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
+  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
 done
 
 echo "Disabling Publix, ALDI, and H-E-B integrations for deployment/careme"

@@ -268,6 +268,11 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
 	}
 
+	publixProvider, err := publix.NewStaplesProvider(cfg.Publix, brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create publix staples provider: %w", err)
+	}
+
 	// Kroger is a public API integration, not a scraper. Keep it off Bright Data;
 	// retries are added in the Kroger client.
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
@@ -279,8 +284,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 	return []backendStaplesProvider{
 		albertsonsProvider,
 		krogerBackend,
-		// move to bright client after https://brightdata.com/cp/kyc works
-		publix.NewStaplesProvider(cfg.Publix, httpClient),
+		publixProvider,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),

@@ -19,10 +19,9 @@ type centroidByZip interface {
 }
 
 type LocationBackend struct {
-	zipLookup    centroidByZip
-	spatial      []locationtypes.Location
-	hydrator     *hydrator.LazyHydrator
-	hasInventory bool
+	zipLookup centroidByZip
+	spatial   []locationtypes.Location
+	hydrator  *hydrator.LazyHydrator
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -43,7 +42,6 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 	if err != nil {
 		return nil, err
 	}
-	backend.hasInventory = cfg.Publix.HasInventory()
 	return backend, nil
 }
 
@@ -71,7 +69,7 @@ func (b *LocationBackend) IsID(locationID string) bool {
 }
 
 func (b *LocationBackend) HasInventory(locationID string) bool {
-	return b.hasInventory
+	return true
 }
 
 func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
