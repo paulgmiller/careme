@@ -1,0 +1,10 @@
+{
+  "name": "careme-playwright",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "1.51.1"
+  },
+  "scripts": {
+    "test": "playwright test"
+  }
+}
