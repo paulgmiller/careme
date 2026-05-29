@@ -342,10 +342,7 @@ func (c *Client) StoreProductsSavings(ctx context.Context, opts StoreProductsSav
 			SearchVariation:  []storeProductsSavingsKeyValue{{Key: "configurable_add_to_cart", Value: "true"}, {Key: "boost_field", Value: "A"}},
 			SegmentVarIndex:  1,
 			Intents:          []string{},
-			UserCoupon:       nil,
 			IntentVarIndex:   1,
-			FacetOverrideStr: nil,
-			CouponID:         nil,
 		},
 		Query: storeProductsSavingsQuery,
 	}
@@ -477,77 +474,12 @@ const storeProductsSavingsQuery = `query GetStoreProductsSavingsSearchResultAsyn
     userCoupon: $userCoupon
   ) {
     storeProducts {
-      baseProductId
       itemCode
       title
-      shortDescription
-      srchAttr_cardDescription
-      srchAttri_leadTime
-      formattedLeadTime
-      srchAttri_partySize
-      formattedPartySize
-      formattedPartySizeCount
-      advancedNotice
       sizeDescription
-      savingLine
-      onSale
       priceLine
-      specialPromotionDescription
-      uiDisplayType
-      activationStatus
-      rss
-      isCatering
-      isCateringAddon
-      imageUrls {
-        large {
-          a
-        }
-        small {
-          a
-        }
-      }
-      originalPriceLine
-      promoConditionsMsg
-      promoMsg
-      promoType
-      promoValidThruMsg
-      promoTotalSavings
-      onTpr
-      inStoreLocation
-      storeNbr
-      hasCoupon
-      promoValidThruMsg
-      promoMsg
-      defaultModifierList
-      defaultModifierCalories {
-        Default
-        Wrap
-        Whole
-      }
-      titleBrand
-      fauxTaxonomy
-      isOnlinePay
-      isSingleClickAddToCart
-      nutritionalDescriptionObject {
-        MenuLabelingStatement
-        PerServing
-        ServingStatement
-        IncludeStatement
-      }
-      productAlerts {
-        productCardMessage
-        productCardLabel
-        productCardLabelIcon
-        productCardLabelVariant
-        isOrderable
-      }
     }
     totalCount
-    retryCount
-    correctedSearchTerm
-    searchTermCorrectedModel
-    searchStoreNum
-    keywordCategoryIntentRecognition
   }
 }
 `
