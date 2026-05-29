@@ -73,12 +73,14 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
-	ingredients, err := searchIngredients(ctx, p.client, locationID, searchTerm, []string{"*"}, false, skip)
-	if err != nil {
-		return nil, err
-	}
-	return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
+func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
+		ingredients, err := searchIngredients(ctx, p.client, locationID, style, []string{"*"}, false, 0)
+		if err != nil {
+			return nil, err
+		}
+		return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
+	})
 }
 
 var availableInStore = products.Ais

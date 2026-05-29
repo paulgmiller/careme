@@ -3,6 +3,7 @@ package albertsons
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -145,7 +146,7 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	}
 }
 
-func TestStaplesProvider_GetIngredients_UsesSearchTermAndSkip(t *testing.T) {
+func TestStaplesProvider_FetchWines_UsesWineCategoryAndStyles(t *testing.T) {
 	t.Parallel()
 
 	client := &stubSearchClient{
@@ -153,8 +154,7 @@ func TestStaplesProvider_GetIngredients_UsesSearchTermAndSkip(t *testing.T) {
 			query.Category_Wine: {
 				Response: query.PathwaySearchResponse{
 					Docs: []query.PathwaySearchProduct{
-						{ID: "veg-1", Name: "Pinot Tomatoes", Price: 1.99},
-						{ID: "veg-2", Name: "Rose Radishes", Price: 2.49},
+						{ID: "wine-1", Name: "Pinot Noir", Price: 12.99},
 					},
 				},
 			},
@@ -167,22 +167,21 @@ func TestStaplesProvider_GetIngredients_UsesSearchTermAndSkip(t *testing.T) {
 		return client, nil
 	})
 
-	got, err := provider.GetIngredients(t.Context(), "acmemarkets_806", "pinot", 1)
+	got, err := provider.FetchWines(t.Context(), "acmemarkets_806", []string{"Pinot Noir", "Sauvignon Blanc"})
 	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
-	}
-	searchCall := "806:" + query.Category_Wine + ":pinot"
-	if !client.hasCall(searchCall) {
-		t.Fatalf("missing expected search call")
-	}
-	if got, ok := client.startForCall(searchCall); !ok || got != 1 {
-		t.Fatalf("unexpected search start: got %d found %t", got, ok)
+		t.Fatalf("FetchWines returned error: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("expected 2 ingredients, got %d", len(got))
+		t.Fatalf("expected one result per style, got %d", len(got))
 	}
-	if got[0].Description != "Pinot Tomatoes" {
-		t.Fatalf("unexpected description: %+v", got[0].Description)
+	for _, style := range []string{"Pinot Noir", "Sauvignon Blanc"} {
+		searchCall := "806:" + query.Category_Wine + ":" + style
+		if !client.hasCall(searchCall) {
+			t.Fatalf("missing expected wine search call %q", searchCall)
+		}
+		if got, ok := client.startForCall(searchCall); !ok || got != 0 {
+			t.Fatalf("unexpected search start for %q: got %d found %t", searchCall, got, ok)
+		}
 	}
 }
 
@@ -190,18 +189,17 @@ func TestNewStaplesProvider_UsesInjectedHTTPClient(t *testing.T) {
 	t.Parallel()
 
 	var sawRequest bool
-	const skip = 17
 	httpClient := &http.Client{
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 			sawRequest = true
 			if got, want := r.URL.Host, "www.acmemarkets.com"; got != want {
-				t.Fatalf("unexpected host: got %q want %q", got, want)
+				return nil, fmt.Errorf("unexpected host: got %q want %q", got, want)
 			}
-			if got, want := r.URL.Query().Get("start"), "17"; got != want {
-				t.Fatalf("unexpected start query param: got %q want %q", got, want)
+			if got, want := r.URL.Query().Get("start"), "0"; got != want {
+				return nil, fmt.Errorf("unexpected start query param: got %q want %q", got, want)
 			}
 			if got, want := r.Header.Get("Ocp-Apim-Subscription-Key"), "test-sub-key"; got != want {
-				t.Fatalf("unexpected subscription key: got %q want %q", got, want)
+				return nil, fmt.Errorf("unexpected subscription key: got %q want %q", got, want)
 			}
 			return &http.Response{
 				StatusCode: http.StatusOK,
@@ -228,9 +226,9 @@ func TestNewStaplesProvider_UsesInjectedHTTPClient(t *testing.T) {
 		return query.NewSearchClient(querycfg)
 	})
 
-	got, err := provider.GetIngredients(t.Context(), "acmemarkets_806", "pinot", skip)
+	got, err := provider.FetchWines(t.Context(), "acmemarkets_806", []string{"pinot"})
 	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
+		t.Fatalf("FetchWines returned error: %v", err)
 	}
 	if !sawRequest {
 		t.Fatal("expected injected HTTP client to be used")

@@ -36,7 +36,7 @@ func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ string) ([]ai.In
 	return slices.Clone(s.ingredients), nil
 }
 
-func (s *stubStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]ai.InputIngredient, error) {
+func (s *stubStaplesProvider) FetchWines(_ context.Context, _ string, _ []string) ([]ai.InputIngredient, error) {
 	return s.FetchStaples(context.Background(), "")
 }
 
@@ -60,7 +60,7 @@ func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ string) (
 	return slices.Clone(s.ingredients), nil
 }
 
-func (s *stubRoutingStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]ai.InputIngredient, error) {
+func (s *stubRoutingStaplesProvider) FetchWines(_ context.Context, _ string, _ []string) ([]ai.InputIngredient, error) {
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
@@ -123,25 +123,25 @@ func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) 
 	}
 }
 
-func TestRoutingStaplesProvider_GetIngredients_SelectsProviderByLocationID(t *testing.T) {
+func TestRoutingStaplesProvider_FetchWines_SelectsProviderByLocationID(t *testing.T) {
 	krogerBackend := &stubStaplesProvider{
 		ids:         map[string]bool{"70100023": true},
 		ingredients: []ai.InputIngredient{{ProductID: "1", Description: "Pinot Noir"}},
 	}
 	wholeFoodsProvider := &stubStaplesProvider{
 		ids:         map[string]bool{"wholefoods_10216": true},
-		ingredients: []ai.InputIngredient{{ProductID: "2", Description: "Whole Foods Pinot Noir"}},
+		ingredients: []ai.InputIngredient{{ProductID: "2", Description: "Whole Foods Red"}},
 	}
 	provider := routingStaplesProvider{
 		backends: []backendStaplesProvider{krogerBackend, wholeFoodsProvider},
 	}
 
-	got, err := provider.GetIngredients(t.Context(), "wholefoods_10216", "pinot noir", 0)
+	got, err := provider.FetchWines(t.Context(), "wholefoods_10216", []string{"Pinot Noir"})
 	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
+		t.Fatalf("FetchWines returned error: %v", err)
 	}
-	if len(got) != 1 || got[0].Description != "Whole Foods Pinot Noir" {
-		t.Fatalf("unexpected ingredients: %+v", got)
+	if len(got) != 1 || got[0].Description != "Whole Foods Red" {
+		t.Fatalf("unexpected wines: %+v", got)
 	}
 	if krogerBackend.calls != 0 || wholeFoodsProvider.calls != 1 {
 		t.Fatalf("expected whole foods provider to be selected, got kroger=%d wholefoods=%d", krogerBackend.calls, wholeFoodsProvider.calls)
@@ -192,7 +192,7 @@ func TestDedupingStaplesProvider_FetchStaplesDedupesProductIDs(t *testing.T) {
 	}
 }
 
-func TestDedupingStaplesProvider_GetIngredientsDedupesProductIDs(t *testing.T) {
+func TestDedupingStaplesProvider_FetchWinesDedupesProductIDs(t *testing.T) {
 	provider := dedupingStaplesProvider{
 		provider: &stubRoutingStaplesProvider{
 			ingredients: []ai.InputIngredient{
@@ -203,12 +203,12 @@ func TestDedupingStaplesProvider_GetIngredientsDedupesProductIDs(t *testing.T) {
 		},
 	}
 
-	got, err := provider.GetIngredients(t.Context(), "70100023", "pinot noir", 0)
+	got, err := provider.FetchWines(t.Context(), "70100023", []string{"pinot noir"})
 	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
+		t.Fatalf("FetchWines returned error: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("expected deduped ingredients, got %+v", got)
+		t.Fatalf("expected deduped wines, got %+v", got)
 	}
 	if got[0].ProductID != "wine-1" || got[1].ProductID != "wine-2" {
 		t.Fatalf("expected first occurrence of each product id in order, got %+v", got)

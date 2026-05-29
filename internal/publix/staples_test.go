@@ -294,29 +294,48 @@ func TestStaplesProvider_MapsNullPriceAndSize(t *testing.T) {
 	}
 }
 
-func TestStaplesProvider_GetIngredients_UsesCategoryAndSkip(t *testing.T) {
+func TestStaplesProvider_FetchWines_PaginatesWineCategory(t *testing.T) {
 	t.Parallel()
 
 	client := &stubSavingsClient{
-		results: map[string]StoreProductsSavingsResult{
-			CategoryBeef: {
-				StoreProducts: []StoreProduct{{ItemCode: 96320, Title: "Publix Veal Cubed Steaks"}},
-				TotalCount:    1,
-			},
+		resultFor: func(opts StoreProductsSavingsOptions) StoreProductsSavingsResult {
+			if opts.CategoryID != CategoryWine {
+				return StoreProductsSavingsResult{}
+			}
+
+			products := make([]StoreProduct, opts.Take)
+			for i := range products {
+				products[i] = StoreProduct{
+					ItemCode: opts.Skip + i + 1,
+					Title:    fmt.Sprintf("Publix wine %d", opts.Skip+i+1),
+				}
+			}
+			return StoreProductsSavingsResult{
+				StoreProducts: products,
+				TotalCount:    300,
+			}
 		},
 	}
-
 	provider := newStaplesProviderWithCache(client, defaultLoadAbck)
 
-	got, err := provider.GetIngredients(t.Context(), "publix_1847", "beef", 48)
+	got, err := provider.FetchWines(t.Context(), "publix_1847", []string{"Pinot Noir"})
 	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
+		t.Fatalf("FetchWines returned error: %v", err)
 	}
-	if !client.hasCall("1847", CategoryBeef, "akamai-token", defaultStapleTake, 48) {
-		t.Fatalf("missing beef category call")
+	if !client.hasCall("1847", CategoryWine, "akamai-token", bigStapleTake, 0) {
+		t.Fatalf("missing first wine category page call")
 	}
-	if len(got) != 1 || got[0].Description != "Publix Veal Cubed Steaks" {
-		t.Fatalf("unexpected ingredients: %+v", got)
+	if !client.hasCall("1847", CategoryWine, "akamai-token", bigStapleTake, 100) {
+		t.Fatalf("missing second wine category page call")
+	}
+	if got, want := client.categoryCallCount(CategoryWine), 2; got != want {
+		t.Fatalf("unexpected wine page count: got %d want %d", got, want)
+	}
+	if len(got) != wineTake || got[0].Description != "Publix wine 1" || got[len(got)-1].Description != "Publix wine 200" {
+		t.Fatalf("unexpected wines: %+v", got)
+	}
+	if got[0].AisleNumber != "wine" {
+		t.Fatalf("unexpected aisle: %q", got[0].AisleNumber)
 	}
 }
 
@@ -346,11 +365,11 @@ func TestStaplesProvider_UsesCachedAbck(t *testing.T) {
 		return cookieFromCache(ctx, cacheStore)
 	})
 
-	_, err = provider.GetIngredients(t.Context(), "publix_1847", "beef", 0)
+	_, err = provider.FetchStaples(t.Context(), "publix_1847")
 	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
+		t.Fatalf("FetchStaples returned error: %v", err)
 	}
-	if !client.hasCall("1847", CategoryBeef, "cached-token", defaultStapleTake, 0) {
+	if !client.hasCall("1847", CategoryBeef, "cached-token", bigStapleTake, 0) {
 		t.Fatalf("missing beef category call with cached abck token")
 	}
 }

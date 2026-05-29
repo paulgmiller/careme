@@ -13,7 +13,6 @@ import (
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/status"
-	"careme/internal/wholefoods"
 
 	"github.com/samber/lo"
 	"github.com/samber/lo/mutable"
@@ -32,8 +31,7 @@ type aiClient interface {
 
 type staplesService interface {
 	FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error)
-	// only used for wine. Probably need a refactoro
-	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error)
+	FetchWines(ctx context.Context, locationID string, styles []string, date time.Time) ([]ai.InputIngredient, error)
 }
 
 type recipeSaver interface {
@@ -85,17 +83,11 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 		}
 	}
 
-	if wholefoods.NewIdentityProvider().IsID(location) {
-		styles = []string{"red-wine", "white-wine", "sparkling"}
-	}
-
 	if len(styles) == 0 {
 		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
 	}
 
-	wines, err := parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
-		return g.staples.GetIngredients(ctx, location, style, 0, date)
-	})
+	wines, err := g.staples.FetchWines(ctx, location, styles, date)
 	if err != nil {
 		return nil, err
 	}

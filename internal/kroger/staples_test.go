@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -111,6 +112,46 @@ func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
 	}
 	if gotCalls := calls.Load(); gotCalls != 3 {
 		t.Fatalf("expected 2 retries before success, got %d calls", gotCalls)
+	}
+}
+
+func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
+	var mu sync.Mutex
+	var terms []string
+	baseClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		mu.Lock()
+		terms = append(terms, req.URL.Query().Get("filter.term"))
+		mu.Unlock()
+		return jsonResponse(req, http.StatusOK, `{"data":[{
+			"productId":"wine-1",
+			"brand":"Kroger",
+			"description":"Pinot Noir",
+			"categories":["Wine"],
+			"items":[{"size":"750mL","price":{"regular":12.99}}]
+		}]}`), nil
+	})}
+
+	client, err := products.NewClientWithResponses(
+		"https://kroger.test",
+		products.WithHTTPClient(baseClient),
+	)
+	if err != nil {
+		t.Fatalf("NewClientWithResponses returned error: %v", err)
+	}
+
+	provider := StaplesProvider{client: client}
+	got, err := provider.FetchWines(t.Context(), "70500874", []string{"Pinot Noir", "Sauvignon Blanc"})
+	if err != nil {
+		t.Fatalf("FetchWines returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected one result per style, got %d", len(got))
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	slices.Sort(terms)
+	if !slices.Equal(terms, []string{"Pinot Noir", "Sauvignon Blanc"}) {
+		t.Fatalf("unexpected search terms: got %v", terms)
 	}
 }
 
