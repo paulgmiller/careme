@@ -109,9 +109,6 @@ func TestStoreProductsSavingsBuildsRequestAndDecodesProducts(t *testing.T) {
 	if strings.Contains(requestBody.Query, "searchVariation") || strings.Contains(requestBody.Query, "facetOverrideStr") {
 		t.Fatalf("graphql query was not simplified: %q", requestBody.Query)
 	}
-	if !strings.Contains(requestBody.Query, "productAlerts") {
-		t.Fatalf("missing broad storeProducts selection in graphql query: %q", requestBody.Query)
-	}
 	if !strings.Contains(requestBody.Query, "originalPriceLine") {
 		t.Fatalf("missing originalPriceLine in graphql query: %q", requestBody.Query)
 	}

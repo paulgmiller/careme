@@ -130,7 +130,7 @@ func (c *SearchClient) StoreProductsSavings(ctx context.Context, opts StoreProdu
 	req.Header.Set("PublixStore", opts.StoreNumber)
 	req.Header.Set("User-Agent", storeProductsSavingsUserAgent)
 	req.Header.Set("X-Src", storeProductsSavingsXSrc)
-	req.Header.Set("Cookie", abckCookie(opts.Abck))
+	req.Header.Set("Cookie", "_abck="+strings.TrimSpace(opts.Abck))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -225,11 +225,3 @@ const storeProductsSavingsQuery = `query ($keyword: String, $skip: Int, $take: I
     totalCount
   }
 }`
-
-func abckCookie(abck string) string {
-	abck = strings.TrimSpace(abck)
-	if strings.Contains(abck, "_abck=") {
-		return abck
-	}
-	return "_abck=" + abck
-}
