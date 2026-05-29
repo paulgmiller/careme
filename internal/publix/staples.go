@@ -31,6 +31,7 @@ const (
 	CategoryRiceGrains = "b064da7d-7b01-426d-a122-450fba08f8a4"
 
 	defaultStapleTake = 48
+	bigStapleTake     = 100
 )
 
 var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
@@ -38,6 +39,7 @@ var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
 type StapleCategory struct {
 	Name string `json:"name"`
 	ID   string `json:"id"`
+	Take int    `json:"take,omitempty"`
 }
 
 type savingsClient interface {
@@ -96,7 +98,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			StoreNumber: storeID,
 			CategoryID:  category.ID,
 			Abck:        p.abck,
-			Take:        defaultStapleTake,
+			Take:        category.Take,
 			Skip:        0,
 		})
 		if err != nil {
@@ -174,17 +176,18 @@ func countProductPriceLines(products []StoreProduct) (int, int) {
 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
-		{Name: "vegetables", ID: CategoryVegetables},
-		{Name: "fruit", ID: CategoryFruit},
-		{Name: "beef", ID: CategoryBeef},
-		{Name: "veal", ID: CategoryVeal},
-		{Name: "chicken", ID: CategoryChicken},
-		{Name: "lamb", ID: CategoryLamb},
-		{Name: "sausage", ID: CategorySausage},
-		{Name: "fish", ID: CategoryFish},
-		{Name: "scallops", ID: CategoryScallops},
-		{Name: "pasta", ID: CategoryPasta},
-		{Name: "rice and grains", ID: CategoryRiceGrains},
+		//get capped at 100 need to paginate vegtables and fruit
+		{Name: "vegetables", ID: CategoryVegetables, Take: bigStapleTake},
+		{Name: "fruit", ID: CategoryFruit, Take: bigStapleTake},
+		{Name: "beef", ID: CategoryBeef, Take: bigStapleTake},
+		{Name: "veal", ID: CategoryVeal, Take: defaultStapleTake},
+		{Name: "chicken", ID: CategoryChicken, Take: bigStapleTake},
+		{Name: "lamb", ID: CategoryLamb, Take: defaultStapleTake},
+		{Name: "sausage", ID: CategorySausage, Take: defaultStapleTake},
+		{Name: "fish", ID: CategoryFish, Take: bigStapleTake},
+		{Name: "scallops", ID: CategoryScallops, Take: defaultStapleTake},
+		{Name: "pasta", ID: CategoryPasta, Take: bigStapleTake},
+		{Name: "rice and grains", ID: CategoryRiceGrains, Take: bigStapleTake},
 	}
 }
 
