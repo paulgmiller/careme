@@ -44,8 +44,8 @@ type StoreProductsSavingsResult struct {
 type StoreProduct struct {
 	ItemCode int    `json:"itemCode"`
 	Title    string `json:"title"`
-	//shortDescription?
-	//titleBrand?
+	// shortDescription?
+	// titleBrand?
 	PriceLine         *string `json:"priceLine"`
 	OriginalPriceLine *string `json:"originalPriceLine"`
 	SizeDescription   *string `json:"sizeDescription"`
