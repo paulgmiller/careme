@@ -19,7 +19,7 @@ import (
 
 const (
 	// TODO go get wine
-	//https://www.publix.com/c/wine/50eeb714-7cea-4a73-990a-43fa1a451bbd?searchtermredirect=produce&page=2
+	// https://www.publix.com/c/wine/50eeb714-7cea-4a73-990a-43fa1a451bbd?searchtermredirect=produce&page=2
 
 	CategoryVegetables = "837d6afb-a1d4-46a3-9015-b6db092ddb54"
 	CategoryFruit      = "21125cb8-4ba7-4038-a5c2-75899e205ce4"
