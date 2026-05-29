@@ -5,7 +5,7 @@ metadata:
   labels:
     app: albertsons-reese84
 spec:
-  schedule: "0 */6 * * *"
+  schedule: "${ALBERTSONS_REESE84_SCHEDULE}"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 3
