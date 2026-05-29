@@ -58,7 +58,7 @@ func NewIdentityProvider() identityProvider {
 
 func NewStaplesProvider(cfg config.PublixConfig, httpClient *http.Client) StaplesProvider {
 	return StaplesProvider{
-		client: NewClient(httpClient),
+		client: NewSearchClient(httpClient),
 		abck:   cfg.Abck,
 	}
 }
