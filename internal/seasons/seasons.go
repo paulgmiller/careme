@@ -122,18 +122,18 @@ func GetColorScheme(season Season) ColorScheme {
 			C900: "#14532d",
 		}
 	case Summer:
-		// Yellow/golden colors - sunshine and ripe fruits
+		// Muted berry colors - watermelon rind, raspberries, and summer fruit
 		return ColorScheme{
-			C50:  "#fefce8",
-			C100: "#fef9c3",
-			C200: "#fef08a",
-			C300: "#fde047",
-			C400: "#facc15",
-			C500: "#eab308",
-			C600: "#ca8a04",
-			C700: "#a16207",
-			C800: "#854d0e",
-			C900: "#713f12",
+			C50:  "#fff5f7",
+			C100: "#fde8ee",
+			C200: "#f8cfdc",
+			C300: "#eea9bd",
+			C400: "#dc7895",
+			C500: "#c65373",
+			C600: "#a93e5f",
+			C700: "#87324f",
+			C800: "#6f2d45",
+			C900: "#5b2639",
 		}
 	default:
 		// Default to fall colors
