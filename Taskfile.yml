@@ -112,6 +112,7 @@ tasks:
       - docker-build-wholefoods
       - docker-build-albertsons
       - docker-build-publix
+      - docker-build-publixabck
       - docker-build-aldi
 
   docker-build-careme:
@@ -149,6 +150,15 @@ tasks:
         vars:
           CMD_PATH: ./cmd/publix
           IMAGE: careme-publix-local
+
+  docker-build-publixabck:
+    desc: Build the publixabck image locally
+    internal: true
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/publixabck
+          IMAGE: careme-publixabck-local
 
   docker-build-aldi:
     desc: Build the aldi image locally

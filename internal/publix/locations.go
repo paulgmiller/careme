@@ -2,7 +2,9 @@ package publix
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"careme/internal/cache"
@@ -43,8 +45,24 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 	if err != nil {
 		return nil, err
 	}
-	backend.hasInventory = cfg.Publix.HasInventory()
+	backend.hasInventory = hasInventory(ctx, cfg.Publix, listCache)
 	return backend, nil
+}
+
+func hasInventory(ctx context.Context, cfg config.PublixConfig, c cache.Cache) bool {
+	if cfg.HasInventory() {
+		return true
+	}
+	if c == nil {
+		return false
+	}
+
+	if _, err := LoadLatestAbck(ctx, c); err == nil {
+		return true
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		slog.WarnContext(ctx, "failed to read cached publix abck token for inventory status", "error", err)
+	}
+	return false
 }
 
 func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {

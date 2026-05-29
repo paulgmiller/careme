@@ -7,6 +7,9 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
+
+	"careme/internal/cache"
 )
 
 func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
@@ -192,6 +195,39 @@ func TestStaplesProvider_GetIngredients_UsesCategoryAndSkip(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Description != "Publix Veal Cubed Steaks" {
 		t.Fatalf("unexpected ingredients: %+v", got)
+	}
+}
+
+func TestStaplesProvider_UsesCachedAbckWhenConfigIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	err := SaveAbckRecord(t.Context(), cacheStore, AbckRecord{
+		Cookie:    "cached-token",
+		FetchedAt: time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC),
+		SourceURL: "https://www.publix.com/c/beef/163c7c04-5495-404e-81fc-34f71b241093",
+		Provider:  brightDataBrowserSource,
+	})
+	if err != nil {
+		t.Fatalf("SaveAbckRecord returned error: %v", err)
+	}
+
+	client := &stubSavingsClient{
+		results: map[string]StoreProductsSavingsResult{
+			CategoryBeef: {
+				StoreProducts: []StoreProduct{{ItemCode: 96320, Title: "Publix Veal Cubed Steaks"}},
+				TotalCount:    1,
+			},
+		},
+	}
+	provider := newStaplesProviderWithCache(client, "", cacheStore)
+
+	_, err = provider.GetIngredients(t.Context(), "publix_1847", "beef", 0)
+	if err != nil {
+		t.Fatalf("GetIngredients returned error: %v", err)
+	}
+	if !client.hasCall("1847", CategoryBeef, "cached-token", defaultStapleTake, 0) {
+		t.Fatalf("missing beef category call with cached abck token")
 	}
 }
 

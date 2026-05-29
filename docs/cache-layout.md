@@ -56,6 +56,8 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `publix/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Publix stores (`id`, `lat`, `lon`) | `cmd/publix` rebuilds after sync | `internal/publix` location backend |
 | `publix/store_url_map.json` | JSON object mapping numeric Publix store ID to canonical location URL | `cmd/publix` and `internal/publix` cache helpers | `cmd/publix` incremental sync |
 | `publix/missing_store_ids.json` | JSON array of numeric Publix store IDs known to redirect back to `/locations` | `cmd/publix` and `internal/publix` cache helpers | `cmd/publix` incremental sync |
+| `publix/abck/latest.json` | JSON `publix.AbckRecord` containing the freshest Publix `_abck` cookie plus metadata | `cmd/publixabck` | `internal/publix` staples cookie resolver |
+| `publix/abck/history/` | JSON `publix.AbckRecord` append-only history keyed by fetch timestamp | `cmd/publixabck` | Operational debugging and manual rollback/reference |
 | `wegmans/stores/` | JSON `wegmans.StoreSummary` keyed by numeric Wegmans store ID | `cmd/wegmans` and `internal/wegmans` cache helpers | `internal/wegmans` location backend |
 | `wegmans/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Wegmans stores (`id`, `lat`, `lon`) | `cmd/wegmans` rebuilds after sync | `internal/wegmans` location backend |
 | `wholefoods/stores/` | JSON `wholefoods.StoreSummaryResponse` keyed by Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `internal/wholefoods` location backend |
@@ -72,6 +74,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 - Wegmans locations use a separate cache created via `cache.EnsureCache("wegmans")`.
 - HEB locations use a separate cache created via `cache.EnsureCache("heb")`.
 - Publix uses a separate cache created via `cache.EnsureCache("publix")`; it does not share the `recipes` container/directory.
+- Publix `_abck` cookie refresh also uses `cache.EnsureCache("publix")`; the latest record is overwritten while timestamped history remains append-only.
 - Recipe images use a separate cache created via `cache.EnsureCache("recipe-images")`; they do not share the main `recipes` container/directory.
 - Whole Foods uses a separate cache created via `cache.EnsureCache("wholefoods")`; it does not share the `recipes` container/directory.
 - Local cache paths when filesystem backend is used. are

@@ -139,6 +139,9 @@ jobs:
           - name: albertsonsreese84
             cmd_path: ./cmd/albertsonsreese84
             image_suffix: albertsonsreese84
+          - name: publixabck
+            cmd_path: ./cmd/publixabck
+            image_suffix: publixabck
 
     steps:
       - uses: actions/checkout@v5

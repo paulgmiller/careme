@@ -7,6 +7,7 @@ mail_manifest_path="deploy/cronjob-careme-mail.yaml"
 cron_manifest_paths=(
   "deploy/cronjob-albertsons-scrape.yaml"
   "deploy/cronjob-albertsons-reese84.yaml"
+  "deploy/cronjob-publix-abck.yaml"
   "deploy/cronjob-wholefoods-scrape.yaml"
 )
 disabled_store_env=(
