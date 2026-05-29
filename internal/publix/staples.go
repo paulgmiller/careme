@@ -147,39 +147,6 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, categoryID string, skip int) ([]ai.InputIngredient, error) {
-	storeID, err := storeIDFromLocation(locationID)
-	if err != nil {
-		return nil, err
-	}
-	if p.client == nil {
-		return nil, fmt.Errorf("publix client is required")
-	}
-	abck, err := p.abckCache(ctx)
-	if err != nil {
-		return nil, err
-	}
-	category, ok := stapleCategoryFromInput(categoryID)
-	if !ok {
-		return nil, fmt.Errorf("publix category id is required")
-	}
-
-	payload, err := p.client.StoreProductsSavings(ctx, StoreProductsSavingsOptions{
-		StoreNumber: storeID,
-		CategoryID:  category.ID,
-		Abck:        abck,
-		Take:        defaultStapleTake,
-		Skip:        skip,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return lo.Map(payload.StoreProducts, func(product StoreProduct, _ int) ai.InputIngredient {
-		return productToIngredient(product, category)
-	}), nil
-}
-
 func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	if _, err := storeIDFromLocation(locationID); err != nil {
 		return nil, err
@@ -216,19 +183,6 @@ func StapleCategories() []StapleCategory {
 		{Name: "pasta", ID: CategoryPasta, Take: bigStapleTake},
 		{Name: "rice and grains", ID: CategoryRiceGrains, Take: bigStapleTake},
 	}
-}
-
-func stapleCategoryFromInput(input string) (StapleCategory, bool) {
-	input = strings.TrimSpace(input)
-	if input == "" {
-		return StapleCategory{}, false
-	}
-	for _, category := range StapleCategories() {
-		if input == category.ID || strings.EqualFold(input, category.Name) {
-			return category, true
-		}
-	}
-	return StapleCategory{}, false
 }
 
 func storeIDFromLocation(locationID string) (string, error) {

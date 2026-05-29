@@ -117,11 +117,6 @@ type staplesProvider interface {
 	FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error)
 }
 
-type ingredientSearchProvider interface {
-	staplesProvider
-	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error)
-}
-
 func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	seen := map[string]bool{}
 	var deduped []ai.InputIngredient

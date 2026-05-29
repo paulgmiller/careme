@@ -114,38 +114,6 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	}
 }
 
-func TestStaplesProvider_GetIngredients_UsesSearchTerm(t *testing.T) {
-	client := &stubCategoryClient{
-		results: map[string][]product{
-			"pinot noir": {
-				{Name: "Pinot Noir", Slug: "pinot-noir", Brand: "WFM", Store: 10216},
-				{Name: "Rose", Slug: "rose", Brand: "WFM", Store: 10216},
-			},
-		},
-	}
-	provider := NewStaplesProvider(client)
-
-	got, err := provider.GetIngredients(t.Context(), "wholefoods_10216", "pinot noir", 0)
-	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("expected 2 ingredients, got %d", len(got))
-	}
-	if got[0].Description != "Pinot Noir" {
-		t.Fatalf("unexpected ingredient description: %+v", got[0].Description)
-	}
-	if got[0].AisleNumber != "pinot noir" {
-		t.Fatalf("unexpected aisle number: %+v", got[0].AisleNumber)
-	}
-	if got := client.callCount(); got != 1 {
-		t.Fatalf("expected 1 category call, got %d", got)
-	}
-	if !client.hasCall("10216:pinot noir") {
-		t.Fatalf("missing expected category call")
-	}
-}
-
 func TestStaplesProvider_FetchWines_UsesHardcodedWineCategories(t *testing.T) {
 	client := &stubCategoryClient{
 		results: map[string][]product{

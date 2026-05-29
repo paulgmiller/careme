@@ -103,23 +103,6 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-// since this is mostly used by wine it isn't actuallyt they helpful.
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
-	client, storeID, err := p.clientForLocation(locationID)
-	if err != nil {
-		return nil, err
-	}
-
-	// should we just resturn all instead of search term? how many is this?
-	payload, err := client.Search(ctx, storeID, query.Category_Wine, query.SearchOptions{
-		Query: searchTerm, Rows: 100, Start: uint(skip),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return lo.Map(payload.Response.Docs, productToIngredient), nil
-}
-
 func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	client, storeID, err := p.clientForLocation(locationID)
 	if err != nil {

@@ -72,27 +72,6 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, _ int) ([]ai.InputIngredient, error) {
-	if p.client == nil {
-		return nil, fmt.Errorf("whole foods client is required")
-	}
-
-	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
-	if storeID == locationID || storeID == "" {
-		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
-	}
-
-	// no pagination so no skip
-	resp, err := p.client.Category(ctx, searchTerm, storeID)
-	if err != nil {
-		return nil, err
-	}
-
-	return lo.Map(resp, func(p product, _ int) ai.InputIngredient {
-		return productToIngredient(p, searchTerm)
-	}), nil
-}
-
 func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	if p.client == nil {
 		return nil, fmt.Errorf("whole foods client is required")

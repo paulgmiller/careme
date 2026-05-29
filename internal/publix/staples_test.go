@@ -212,32 +212,6 @@ func TestStaplesProvider_MapsNullPriceAndSize(t *testing.T) {
 	}
 }
 
-func TestStaplesProvider_GetIngredients_UsesCategoryAndSkip(t *testing.T) {
-	t.Parallel()
-
-	client := &stubSavingsClient{
-		results: map[string]StoreProductsSavingsResult{
-			CategoryBeef: {
-				StoreProducts: []StoreProduct{{ItemCode: 96320, Title: "Publix Veal Cubed Steaks"}},
-				TotalCount:    1,
-			},
-		},
-	}
-
-	provider := newStaplesProviderWithCache(client, defaultLoadAbck)
-
-	got, err := provider.GetIngredients(t.Context(), "publix_1847", "beef", 48)
-	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
-	}
-	if !client.hasCall("1847", CategoryBeef, "akamai-token", defaultStapleTake, 48) {
-		t.Fatalf("missing beef category call")
-	}
-	if len(got) != 1 || got[0].Description != "Publix Veal Cubed Steaks" {
-		t.Fatalf("unexpected ingredients: %+v", got)
-	}
-}
-
 func TestStaplesProvider_FetchWines_ReturnsUnsupported(t *testing.T) {
 	t.Parallel()
 
@@ -278,11 +252,11 @@ func TestStaplesProvider_UsesCachedAbck(t *testing.T) {
 		return cookieFromCache(ctx, cacheStore)
 	})
 
-	_, err = provider.GetIngredients(t.Context(), "publix_1847", "beef", 0)
+	_, err = provider.FetchStaples(t.Context(), "publix_1847")
 	if err != nil {
 		t.Fatalf("GetIngredients returned error: %v", err)
 	}
-	if !client.hasCall("1847", CategoryBeef, "cached-token", defaultStapleTake, 0) {
+	if !client.hasCall("1847", CategoryBeef, "cached-token", bigStapleTake, 0) {
 		t.Fatalf("missing beef category call with cached abck token")
 	}
 }
