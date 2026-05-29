@@ -55,9 +55,10 @@ func TestStapleCategories_IncludesKnownPublixStaples(t *testing.T) {
 }
 
 type stubSavingsClient struct {
-	results map[string]StoreProductsSavingsResult
-	mu      sync.Mutex
-	calls   []StoreProductsSavingsOptions
+	results   map[string]StoreProductsSavingsResult
+	resultFor func(StoreProductsSavingsOptions) StoreProductsSavingsResult
+	mu        sync.Mutex
+	calls     []StoreProductsSavingsOptions
 }
 
 func (s *stubSavingsClient) StoreProductsSavings(_ context.Context, opts StoreProductsSavingsOptions) (*StoreProductsSavingsResult, error) {
@@ -65,6 +66,10 @@ func (s *stubSavingsClient) StoreProductsSavings(_ context.Context, opts StorePr
 	s.calls = append(s.calls, opts)
 	s.mu.Unlock()
 
+	if s.resultFor != nil {
+		result := s.resultFor(opts)
+		return &result, nil
+	}
 	result := s.results[opts.CategoryID]
 	return &result, nil
 }
@@ -101,6 +106,19 @@ func (s *stubSavingsClient) hasCall(store, category, abck string, take, skip int
 	return false
 }
 
+func (s *stubSavingsClient) categoryCallCount(category string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var count int
+	for _, call := range s.calls {
+		if call.CategoryID == category {
+			count++
+		}
+	}
+	return count
+}
+
 func savingsCallDiff(call StoreProductsSavingsOptions, store, category, abck string, take, skip int) string {
 	diffs := []string{}
 	if call.StoreNumber != store {
@@ -122,6 +140,54 @@ func savingsCallDiff(call StoreProductsSavingsOptions, store, category, abck str
 		return "matches"
 	}
 	return strings.Join(diffs, ", ")
+}
+
+func TestStaplesProvider_PaginatesProduceStaples(t *testing.T) {
+	t.Parallel()
+
+	client := &stubSavingsClient{
+		resultFor: func(opts StoreProductsSavingsOptions) StoreProductsSavingsResult {
+			if opts.CategoryID != CategoryVegetables && opts.CategoryID != CategoryFruit {
+				return StoreProductsSavingsResult{}
+			}
+
+			products := make([]StoreProduct, opts.Take)
+			for i := range products {
+				products[i] = StoreProduct{
+					ItemCode: opts.Skip + i + 1,
+					Title:    fmt.Sprintf("produce item %d", opts.Skip+i+1),
+				}
+			}
+			return StoreProductsSavingsResult{
+				StoreProducts: products,
+				TotalCount:    300,
+			}
+		},
+	}
+	provider := newStaplesProviderWithCache(client, defaultLoadAbck)
+
+	got, err := provider.FetchStaples(t.Context(), "publix_1847")
+	if err != nil {
+		t.Fatalf("FetchStaples returned error: %v", err)
+	}
+
+	if got, want := len(got), produceStapleLimit*2; got != want {
+		t.Fatalf("unexpected ingredient count: got %d want %d", got, want)
+	}
+	for _, category := range []string{CategoryVegetables, CategoryFruit} {
+		if !client.hasCall("1847", category, "akamai-token", bigStapleTake, 0) {
+			t.Fatalf("missing first produce page call for %s", category)
+		}
+		if !client.hasCall("1847", category, "akamai-token", bigStapleTake, 100) {
+			t.Fatalf("missing second produce page call for %s", category)
+		}
+		if !client.hasCall("1847", category, "akamai-token", 50, 200) {
+			t.Fatalf("missing final capped produce page call for %s", category)
+		}
+		if got, want := client.categoryCallCount(category), 3; got != want {
+			t.Fatalf("unexpected produce page count for %s: got %d want %d", category, got, want)
+		}
+	}
 }
 
 func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {

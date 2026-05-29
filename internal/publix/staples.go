@@ -34,16 +34,18 @@ const (
 	CategoryPasta      = "e9f01489-6ce4-4c64-b5f5-2fe1e55da3c9"
 	CategoryRiceGrains = "b064da7d-7b01-426d-a122-450fba08f8a4"
 
-	defaultStapleTake = 48
-	bigStapleTake     = 100
+	defaultStapleTake  = 48
+	bigStapleTake      = 100
+	produceStapleLimit = 250
 )
 
 var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
 
 type StapleCategory struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
-	Take int    `json:"take,omitempty"`
+	Name  string `json:"name"`
+	ID    string `json:"id"`
+	Take  int    `json:"take,omitempty"`
+	Limit int    `json:"limit,omitempty"`
 }
 
 type savingsClient interface {
@@ -113,22 +115,16 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	}
 
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
-		payload, err := p.client.StoreProductsSavings(ctx, StoreProductsSavingsOptions{
-			StoreNumber: storeID,
-			CategoryID:  category.ID,
-			Abck:        abck,
-			Take:        category.Take,
-			Skip:        0,
-		})
+		products, err := p.fetchCategoryProducts(ctx, storeID, abck, category)
 		if err != nil {
 			slog.WarnContext(ctx, "failed to fetch publix category", "category", category.Name, "location", locationID, "error", err)
 			return nil, err
 		}
 
-		ingredients := lo.Map(payload.StoreProducts, func(product StoreProduct, _ int) ai.InputIngredient {
+		ingredients := lo.Map(products, func(product StoreProduct, _ int) ai.InputIngredient {
 			return productToIngredient(product, category)
 		})
-		priceLineCount, originalPriceLineCount := countProductPriceLines(payload.StoreProducts)
+		priceLineCount, originalPriceLineCount := countProductPriceLines(products)
 		slog.InfoContext(
 			ctx,
 			"found publix staples for category",
@@ -145,6 +141,62 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		)
 		return ingredients, nil
 	})
+}
+
+func (p StaplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abck string, category StapleCategory) ([]StoreProduct, error) {
+	limit := category.fetchLimit()
+	products := make([]StoreProduct, 0, limit)
+	for skip := 0; len(products) < limit; {
+		take := category.takeForRemaining(limit - len(products))
+		payload, err := p.client.StoreProductsSavings(ctx, StoreProductsSavingsOptions{
+			StoreNumber: storeID,
+			CategoryID:  category.ID,
+			Abck:        abck,
+			Take:        take,
+			Skip:        skip,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		products = append(products, payload.StoreProducts...)
+		if len(products) > limit {
+			products = products[:limit]
+		}
+		if len(payload.StoreProducts) == 0 || len(payload.StoreProducts) < take {
+			break
+		}
+		if payload.TotalCount > 0 && skip+len(payload.StoreProducts) >= payload.TotalCount {
+			break
+		}
+		skip += take
+	}
+
+	return products, nil
+}
+
+func (category StapleCategory) fetchLimit() int {
+	if category.Limit > 0 {
+		return category.Limit
+	}
+	if category.Take > 0 {
+		return category.Take
+	}
+	return defaultStapleTake
+}
+
+func (category StapleCategory) takeForRemaining(remaining int) int {
+	take := category.Take
+	if take <= 0 {
+		take = defaultStapleTake
+	}
+	if take > bigStapleTake {
+		take = bigStapleTake
+	}
+	if remaining > 0 && take > remaining {
+		take = remaining
+	}
+	return take
 }
 
 func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, categoryID string, skip int) ([]ai.InputIngredient, error) {
@@ -196,9 +248,8 @@ func countProductPriceLines(products []StoreProduct) (int, int) {
 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
-		// get capped at 100 need to paginate vegtables and fruit
-		{Name: "vegetables", ID: CategoryVegetables, Take: bigStapleTake},
-		{Name: "fruit", ID: CategoryFruit, Take: bigStapleTake},
+		{Name: "vegetables", ID: CategoryVegetables, Take: bigStapleTake, Limit: produceStapleLimit},
+		{Name: "fruit", ID: CategoryFruit, Take: bigStapleTake, Limit: produceStapleLimit},
 		{Name: "beef", ID: CategoryBeef, Take: bigStapleTake},
 		{Name: "veal", ID: CategoryVeal, Take: defaultStapleTake},
 		{Name: "chicken", ID: CategoryChicken, Take: bigStapleTake},
