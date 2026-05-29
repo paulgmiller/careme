@@ -34,18 +34,17 @@ const (
 	CategoryPasta      = "e9f01489-6ce4-4c64-b5f5-2fe1e55da3c9"
 	CategoryRiceGrains = "b064da7d-7b01-426d-a122-450fba08f8a4"
 
-	defaultStapleTake  = 48
-	bigStapleTake      = 100
-	produceStapleLimit = 250
+	defaultStapleTake = 48
+	bigStapleTake     = 100
+	produceStapleTake = 250
 )
 
 var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
 
 type StapleCategory struct {
-	Name  string `json:"name"`
-	ID    string `json:"id"`
-	Take  int    `json:"take,omitempty"`
-	Limit int    `json:"limit,omitempty"`
+	Name string `json:"name"`
+	ID   string `json:"id"`
+	Take int    `json:"take,omitempty"`
 }
 
 type savingsClient interface {
@@ -176,9 +175,6 @@ func (p StaplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abc
 }
 
 func (category StapleCategory) fetchLimit() int {
-	if category.Limit > 0 {
-		return category.Limit
-	}
 	if category.Take > 0 {
 		return category.Take
 	}
@@ -248,8 +244,8 @@ func countProductPriceLines(products []StoreProduct) (int, int) {
 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
-		{Name: "vegetables", ID: CategoryVegetables, Take: bigStapleTake, Limit: produceStapleLimit},
-		{Name: "fruit", ID: CategoryFruit, Take: bigStapleTake, Limit: produceStapleLimit},
+		{Name: "vegetables", ID: CategoryVegetables, Take: produceStapleTake},
+		{Name: "fruit", ID: CategoryFruit, Take: produceStapleTake},
 		{Name: "beef", ID: CategoryBeef, Take: bigStapleTake},
 		{Name: "veal", ID: CategoryVeal, Take: defaultStapleTake},
 		{Name: "chicken", ID: CategoryChicken, Take: bigStapleTake},

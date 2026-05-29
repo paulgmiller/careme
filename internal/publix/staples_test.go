@@ -54,6 +54,22 @@ func TestStapleCategories_IncludesKnownPublixStaples(t *testing.T) {
 	}
 }
 
+func TestStapleCategories_ProduceTakesTwoHundredFifty(t *testing.T) {
+	t.Parallel()
+
+	got := map[string]int{}
+	for _, category := range StapleCategories() {
+		got[category.Name] = category.Take
+	}
+
+	if got["vegetables"] != produceStapleTake {
+		t.Fatalf("unexpected vegetables take: got %d want %d", got["vegetables"], produceStapleTake)
+	}
+	if got["fruit"] != produceStapleTake {
+		t.Fatalf("unexpected fruit take: got %d want %d", got["fruit"], produceStapleTake)
+	}
+}
+
 type stubSavingsClient struct {
 	results   map[string]StoreProductsSavingsResult
 	resultFor func(StoreProductsSavingsOptions) StoreProductsSavingsResult
@@ -171,7 +187,7 @@ func TestStaplesProvider_PaginatesProduceStaples(t *testing.T) {
 		t.Fatalf("FetchStaples returned error: %v", err)
 	}
 
-	if got, want := len(got), produceStapleLimit*2; got != want {
+	if got, want := len(got), produceStapleTake*2; got != want {
 		t.Fatalf("unexpected ingredient count: got %d want %d", got, want)
 	}
 	for _, category := range []string{CategoryVegetables, CategoryFruit} {
