@@ -63,22 +63,16 @@ func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
-func NewStaplesProvider(cfg config.PublixConfig, httpClient *http.Client) StaplesProvider {
-	var abckCache cache.Cache
-	if strings.TrimSpace(cfg.Abck) == "" {
-		c, err := cache.EnsureCache(Container)
-		if err != nil {
-			slog.Warn("failed to create publix cache for abck token", "error", err)
-		} else {
-			abckCache = c
-		}
+func NewStaplesProvider(cfg config.PublixConfig, httpClient *http.Client) (StaplesProvider, error) {
+	abckCache, err := cache.EnsureCache(Container)
+	if err != nil {
+		return StaplesProvider{}, fmt.Errorf("failed to create publix cache for abck token: %w", err)
 	}
 
 	return StaplesProvider{
 		client:    NewSearchClient(httpClient),
-		abck:      cfg.Abck,
 		abckCache: abckCache,
-	}
+	}, nil
 }
 
 func newStaplesProvider(client savingsClient, abck string) StaplesProvider {

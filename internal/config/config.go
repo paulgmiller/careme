@@ -110,16 +110,12 @@ func (c *AlbertsonsConfig) HasInventory() bool {
 }
 
 type PublixConfig struct {
-	Enable bool   `json:"enable"`
-	Abck   string `json:"abck"`
+	Enable bool `json:"enable"`
+	//Abck   string `json:"abck"`
 }
 
 func (c *PublixConfig) IsEnabled() bool {
 	return c.Enable
-}
-
-func (c *PublixConfig) HasInventory() bool {
-	return strings.TrimSpace(c.Abck) != ""
 }
 
 type HEBConfig struct {
@@ -213,7 +209,7 @@ func Load() (*Config, error) {
 		},
 		Publix: PublixConfig{
 			Enable: envEnabled("PUBLIX_ENABLE"),
-			Abck:   os.Getenv("PUBLIX_ABCK"),
+			//	Abck:   os.Getenv("PUBLIX_ABCK"),
 		},
 		HEB: HEBConfig{
 			Enable: envEnabled("HEB_ENABLE"),

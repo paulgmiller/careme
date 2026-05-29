@@ -4,10 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"careme/internal/cache"
-	"careme/internal/config"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -93,29 +91,6 @@ func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "load publix locations index") {
 		t.Fatalf("expected missing index error, got %v", err)
-	}
-}
-
-func TestHasInventoryUsesCachedAbck(t *testing.T) {
-	t.Parallel()
-
-	cacheStore := cache.NewInMemoryCache()
-	if hasInventory(t.Context(), config.PublixConfig{}, cacheStore) {
-		t.Fatal("expected no inventory without env token or cached abck")
-	}
-
-	err := SaveAbckRecord(t.Context(), cacheStore, AbckRecord{
-		Cookie:    "cached-token",
-		FetchedAt: time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC),
-		SourceURL: "https://www.publix.com/c/beef/163c7c04-5495-404e-81fc-34f71b241093",
-		Provider:  brightDataBrowserSource,
-	})
-	if err != nil {
-		t.Fatalf("SaveAbckRecord returned error: %v", err)
-	}
-
-	if !hasInventory(t.Context(), config.PublixConfig{}, cacheStore) {
-		t.Fatal("expected cached abck to enable inventory")
 	}
 }
 

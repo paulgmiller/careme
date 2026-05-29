@@ -12,6 +12,7 @@ import (
 
 	"careme/internal/brightdata"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/logsetup"
 	"careme/internal/publix"
 )
@@ -45,6 +46,11 @@ func runWithDeps(ctx context.Context, args []string) error {
 		waitMS     int
 		timeoutSec int
 	)
+
+	_, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
 
 	fs.StringVar(&targetURL, "url", defaultTargetURL, "page to navigate before reading cookies")
 	fs.StringVar(&wsEndpoint, "ws-endpoint", strings.TrimSpace(os.Getenv(brightDataBrowserWSEnv)), "Bright Data Browser API websocket endpoint including credentials")
