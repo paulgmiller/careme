@@ -14,6 +14,7 @@ import (
 	"careme/internal/albertsons"
 	"careme/internal/brightdata"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/logsetup"
 )
 
@@ -49,6 +50,10 @@ func runWithDeps(ctx context.Context, args []string) error {
 		waitMS     int
 		timeoutSec int
 	)
+
+	if err := config.LoadEncryptedEnv("secrets/envtest"); err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
 
 	fs.StringVar(&targetURL, "url", defaultTargetURL, "page to navigate before reading cookies")
 	fs.StringVar(&cookieName, "cookie-name", defaultCookieName, "cookie name to store")

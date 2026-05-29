@@ -27,14 +27,14 @@ func loadRuntimeEnv() error {
 		}
 
 		// TODO make this settable with env var :)
-		if err := loadEncryptedEnv("secrets/envtest"); err != nil {
+		if err := LoadEncryptedEnv("secrets/envtest"); err != nil {
 			loadErr = err
 		}
 	})
 	return loadErr
 }
 
-func loadEncryptedEnv(path string) error {
+func LoadEncryptedEnv(path string) error {
 	identities, err := loadSSHIdentities()
 	if err != nil {
 		return fmt.Errorf("load ssh identity for %q: %w", path, err)
