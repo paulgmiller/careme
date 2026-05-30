@@ -35,15 +35,17 @@ const (
 	defaultStapleTake = 48
 	bigStapleTake     = 100
 	produceStapleTake = 250
-	wineTake          = 200
+
+	wineTake = 200
+	maxPage  = 100
 )
 
 var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
 
 type StapleCategory struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
-	Take int    `json:"take,omitempty"`
+	Name  string
+	ID    string
+	Limit int
 }
 
 type savingsClient interface {
@@ -142,10 +144,10 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 }
 
 func (p StaplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abck string, category StapleCategory) ([]StoreProduct, error) {
-	limit := category.fetchLimit()
+	limit := category.Limit
 	products := make([]StoreProduct, 0, limit)
 	for skip := 0; len(products) < limit; {
-		take := category.requestTake()
+		take := min(limit-len(products), maxPage)
 		payload, err := p.client.StoreProductsSavings(ctx, StoreProductsSavingsOptions{
 			StoreNumber: storeID,
 			CategoryID:  category.ID,
@@ -158,34 +160,15 @@ func (p StaplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abc
 		}
 
 		products = append(products, payload.StoreProducts...)
-		if len(payload.StoreProducts) == 0 || len(payload.StoreProducts) < take {
+		if len(products) >= limit {
 			break
 		}
-		if payload.TotalCount > 0 && skip+len(payload.StoreProducts) >= payload.TotalCount {
+		if len(payload.StoreProducts) == 0 || len(payload.StoreProducts) < take {
 			break
 		}
 		skip += take
 	}
-
 	return products, nil
-}
-
-func (category StapleCategory) fetchLimit() int {
-	if category.Take > 0 {
-		return category.Take
-	}
-	return defaultStapleTake
-}
-
-func (category StapleCategory) requestTake() int {
-	take := category.Take
-	if take <= 0 {
-		take = defaultStapleTake
-	}
-	if take > bigStapleTake {
-		take = bigStapleTake
-	}
-	return take
 }
 
 func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
@@ -201,7 +184,7 @@ func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []
 		return nil, err
 	}
 
-	category := StapleCategory{Name: "wine", ID: CategoryWine, Take: wineTake}
+	category := StapleCategory{Name: "wine", ID: CategoryWine, Limit: wineTake}
 	products, err := p.fetchCategoryProducts(ctx, storeID, abck, category)
 	if err != nil {
 		return nil, err
@@ -227,17 +210,17 @@ func countProductPriceLines(products []StoreProduct) (int, int) {
 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
-		{Name: "vegetables", ID: CategoryVegetables, Take: produceStapleTake},
-		{Name: "fruit", ID: CategoryFruit, Take: produceStapleTake},
-		{Name: "beef", ID: CategoryBeef, Take: bigStapleTake},
-		{Name: "veal", ID: CategoryVeal, Take: defaultStapleTake},
-		{Name: "chicken", ID: CategoryChicken, Take: bigStapleTake},
-		{Name: "lamb", ID: CategoryLamb, Take: defaultStapleTake},
-		{Name: "sausage", ID: CategorySausage, Take: defaultStapleTake},
-		{Name: "fish", ID: CategoryFish, Take: bigStapleTake},
-		{Name: "scallops", ID: CategoryScallops, Take: defaultStapleTake},
-		{Name: "pasta", ID: CategoryPasta, Take: bigStapleTake},
-		{Name: "rice and grains", ID: CategoryRiceGrains, Take: bigStapleTake},
+		{Name: "vegetables", ID: CategoryVegetables, Limit: produceStapleTake},
+		{Name: "fruit", ID: CategoryFruit, Limit: produceStapleTake},
+		{Name: "beef", ID: CategoryBeef, Limit: bigStapleTake},
+		{Name: "veal", ID: CategoryVeal, Limit: defaultStapleTake},
+		{Name: "chicken", ID: CategoryChicken, Limit: bigStapleTake},
+		{Name: "lamb", ID: CategoryLamb, Limit: defaultStapleTake},
+		{Name: "sausage", ID: CategorySausage, Limit: defaultStapleTake},
+		{Name: "fish", ID: CategoryFish, Limit: bigStapleTake},
+		{Name: "scallops", ID: CategoryScallops, Limit: defaultStapleTake},
+		{Name: "pasta", ID: CategoryPasta, Limit: bigStapleTake},
+		{Name: "rice and grains", ID: CategoryRiceGrains, Limit: bigStapleTake},
 	}
 }
 

@@ -59,7 +59,7 @@ func TestStapleCategories_ProduceTakesTwoHundredFifty(t *testing.T) {
 
 	got := map[string]int{}
 	for _, category := range StapleCategories() {
-		got[category.Name] = category.Take
+		got[category.Name] = category.Limit
 	}
 
 	if got["vegetables"] != produceStapleTake {
@@ -187,17 +187,17 @@ func TestStaplesProvider_PaginatesProduceStaples(t *testing.T) {
 		t.Fatalf("FetchStaples returned error: %v", err)
 	}
 
-	if got, want := len(got), 300*2; got != want {
+	if got, want := len(got), 500; got != want {
 		t.Fatalf("unexpected ingredient count: got %d want %d", got, want)
 	}
 	for _, category := range []string{CategoryVegetables, CategoryFruit} {
-		if !client.hasCall("1847", category, "akamai-token", bigStapleTake, 0) {
+		if !client.hasCall("1847", category, "akamai-token", maxPage, 0) {
 			t.Fatalf("missing first produce page call for %s", category)
 		}
-		if !client.hasCall("1847", category, "akamai-token", bigStapleTake, 100) {
+		if !client.hasCall("1847", category, "akamai-token", maxPage, 100) {
 			t.Fatalf("missing second produce page call for %s", category)
 		}
-		if !client.hasCall("1847", category, "akamai-token", bigStapleTake, 200) {
+		if !client.hasCall("1847", category, "akamai-token", produceStapleTake-(maxPage*2), 200) {
 			t.Fatalf("missing final capped produce page call for %s", category)
 		}
 		if got, want := client.categoryCallCount(category), 3; got != want {
