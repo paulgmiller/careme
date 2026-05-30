@@ -163,7 +163,7 @@ func (p StaplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abc
 		if len(products) >= limit {
 			break
 		}
-		if len(payload.StoreProducts) == 0 || len(payload.StoreProducts) < take {
+		if len(payload.StoreProducts) < take {
 			break
 		}
 		skip += take
