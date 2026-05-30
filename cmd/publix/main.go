@@ -64,9 +64,8 @@ func main() {
 		log.Fatalf("end-id must be greater than or equal to start-id")
 	}
 
-	_, err = config.Load()
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+	if err := config.LoadEncryptedEnv("secrets/envtest"); err != nil {
+		log.Fatalf("load config: %s", err)
 	}
 
 	cacheStore, err := cache.EnsureCache(publix.Container)
