@@ -187,7 +187,7 @@ func TestStaplesProvider_PaginatesProduceStaples(t *testing.T) {
 		t.Fatalf("FetchStaples returned error: %v", err)
 	}
 
-	if got, want := len(got), produceStapleTake*2; got != want {
+	if got, want := len(got), 300*2; got != want {
 		t.Fatalf("unexpected ingredient count: got %d want %d", got, want)
 	}
 	for _, category := range []string{CategoryVegetables, CategoryFruit} {
@@ -197,7 +197,7 @@ func TestStaplesProvider_PaginatesProduceStaples(t *testing.T) {
 		if !client.hasCall("1847", category, "akamai-token", bigStapleTake, 100) {
 			t.Fatalf("missing second produce page call for %s", category)
 		}
-		if !client.hasCall("1847", category, "akamai-token", 50, 200) {
+		if !client.hasCall("1847", category, "akamai-token", bigStapleTake, 200) {
 			t.Fatalf("missing final capped produce page call for %s", category)
 		}
 		if got, want := client.categoryCallCount(category), 3; got != want {

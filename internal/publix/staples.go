@@ -145,7 +145,7 @@ func (p StaplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abc
 	limit := category.fetchLimit()
 	products := make([]StoreProduct, 0, limit)
 	for skip := 0; len(products) < limit; {
-		take := category.takeForRemaining(limit - len(products))
+		take := category.requestTake()
 		payload, err := p.client.StoreProductsSavings(ctx, StoreProductsSavingsOptions{
 			StoreNumber: storeID,
 			CategoryID:  category.ID,
@@ -158,9 +158,6 @@ func (p StaplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abc
 		}
 
 		products = append(products, payload.StoreProducts...)
-		if len(products) > limit {
-			products = products[:limit]
-		}
 		if len(payload.StoreProducts) == 0 || len(payload.StoreProducts) < take {
 			break
 		}
@@ -180,16 +177,13 @@ func (category StapleCategory) fetchLimit() int {
 	return defaultStapleTake
 }
 
-func (category StapleCategory) takeForRemaining(remaining int) int {
+func (category StapleCategory) requestTake() int {
 	take := category.Take
 	if take <= 0 {
 		take = defaultStapleTake
 	}
 	if take > bigStapleTake {
 		take = bigStapleTake
-	}
-	if remaining > 0 && take > remaining {
-		take = remaining
 	}
 	return take
 }
