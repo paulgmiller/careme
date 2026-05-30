@@ -181,8 +181,6 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 	return graded, nil
 }
 
-// this is not actually wine specificexcept that GetIngredients only does wine requests from ui
-// command line could still call it kroger style.
 func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	normalizedStyle := strings.ToLower(strings.TrimSpace(style))
 	fnv := fnv.New64a()

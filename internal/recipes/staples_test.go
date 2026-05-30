@@ -36,10 +36,6 @@ func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ string) ([]ai.In
 	return slices.Clone(s.ingredients), nil
 }
 
-func (s *stubStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]ai.InputIngredient, error) {
-	return s.FetchStaples(context.Background(), "")
-}
-
 func (s *stubStaplesProvider) FetchWines(_ context.Context, _ string, _ []string) ([]ai.InputIngredient, error) {
 	return s.FetchStaples(context.Background(), "")
 }
@@ -57,14 +53,6 @@ type stubIngredientGrader struct {
 }
 
 func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ string) ([]ai.InputIngredient, error) {
-	s.calls++
-	if s.err != nil {
-		return nil, s.err
-	}
-	return slices.Clone(s.ingredients), nil
-}
-
-func (s *stubRoutingStaplesProvider) GetIngredients(_ context.Context, _ string, _ string, _ int) ([]ai.InputIngredient, error) {
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
