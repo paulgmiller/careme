@@ -1,13 +1,17 @@
 package query
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,30 +26,38 @@ const (
 
 	defaultFirst            = 4
 	defaultOrderBy          = "bestMatch"
-	defaultItemsDisplayType = "collections_nav_child_carousel"
+	defaultItemsDisplayType = "collections_all_items_grid"
 	defaultPageSource       = "browse"
 )
 
 type Client struct {
-	baseURL        string
-	httpClient     *http.Client
-	forterToken    string
-	pageViewIDFunc func() string
+	baseURL            string
+	httpClient         *http.Client
+	instacartSID       string
+	instacartSessionID string
+	cookieHeader       string
+	debugWriter        io.Writer
+	pageViewIDFunc     func() string
 }
 
 type ClientConfig struct {
-	BaseURL        string
-	HTTPClient     *http.Client
-	ForterToken    string
-	PageViewIDFunc func() string
+	BaseURL            string
+	HTTPClient         *http.Client
+	InstacartSID       string
+	InstacartSessionID string
+	CookieHeader       string
+	DebugWriter        io.Writer
+	PageViewIDFunc     func() string
 }
 
 type SearchOptions struct {
-	PostalCode string
-	ZoneID     string
-	First      int
-	OrderBy    string
-	PageViewID string
+	PostalCode       string
+	ZoneID           string
+	First            int
+	OrderBy          string
+	ItemsDisplayType string
+	PageSource       string
+	PageViewID       string
 }
 
 type collectionProductsVariables struct {
@@ -87,10 +99,13 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 
 	return &Client{
-		baseURL:        strings.TrimRight(baseURL, "/"),
-		httpClient:     httpClient,
-		forterToken:    strings.TrimSpace(cfg.ForterToken),
-		pageViewIDFunc: pageViewIDFunc,
+		baseURL:            strings.TrimRight(baseURL, "/"),
+		httpClient:         httpClient,
+		instacartSID:       strings.TrimSpace(cfg.InstacartSID),
+		instacartSessionID: strings.TrimSpace(cfg.InstacartSessionID),
+		cookieHeader:       strings.TrimSpace(cfg.CookieHeader),
+		debugWriter:        cfg.DebugWriter,
+		pageViewIDFunc:     pageViewIDFunc,
 	}
 }
 
@@ -120,6 +135,24 @@ func (c *Client) CollectionProducts(ctx context.Context, storeID, categorySlug s
 	if err != nil {
 		return nil, err
 	}
+	c.debugf(
+		"graphql operation=%s shop_id=%s postal_code=%s zone_id=%s slug=%s first=%d order_by=%s items_display_type=%s page_source=%s page_view_id=%s",
+		operationName,
+		storeID,
+		strings.TrimSpace(opts.PostalCode),
+		strings.TrimSpace(opts.ZoneID),
+		categorySlug,
+		resolvedFirst(opts.First),
+		resolvedString(opts.OrderBy, defaultOrderBy),
+		resolvedString(opts.ItemsDisplayType, defaultItemsDisplayType),
+		resolvedString(opts.PageSource, defaultPageSource),
+		pageViewID,
+	)
+
+	initCookies, err := c.initCookies(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -130,9 +163,71 @@ func (c *Client) CollectionProducts(ctx context.Context, storeID, categorySlug s
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Client-Identifier", "web")
 	req.Header.Set("X-Page-View-Id", pageViewID)
-	if c.forterToken != "" {
-		req.AddCookie(&http.Cookie{Name: "forterToken", Value: c.forterToken})
+	req.Header.Set("Referer", c.baseURL+"/store/aldi/collections/"+url.PathEscape(categorySlug))
+	if c.cookieHeader != "" {
+		req.Header.Set("Cookie", c.cookieHeader)
+	} else if c.instacartSID != "" {
+		req.AddCookie(&http.Cookie{Name: "__Host-instacart_sid", Value: c.instacartSID})
 	}
+	if c.cookieHeader == "" && c.instacartSessionID != "" {
+		req.AddCookie(&http.Cookie{Name: "_instacart_session_id", Value: c.instacartSessionID})
+	}
+	for _, cookie := range initCookies {
+		req.AddCookie(cookie)
+	}
+	c.debugf("graphql request cookies=%s", cookieNames(req.Cookies()))
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request %q: %w", endpoint, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("read collection products response: %w", readErr)
+	}
+	c.debugf("graphql status=%d body_preview=%s", resp.StatusCode, bodyPreview(body))
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("collection products request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload CollectionProductsPayload
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode collection products response: %w", err)
+	}
+	c.debugf(
+		"graphql decoded items=%d item_ids=%d featured_products=%d header=%q search_id=%q errors=%d",
+		len(payload.Data.CollectionProducts.Items),
+		len(payload.Data.ItemIDs()),
+		len(payload.Data.CollectionProductsBasedSearchResults.ItemResultList.FeaturedProducts),
+		payload.Data.CollectionProductsBasedSearchResults.ViewSection.HeaderString,
+		payload.Data.CollectionProductsBasedSearchResults.SearchID,
+		len(payload.Errors),
+	)
+	if len(payload.Errors) > 0 {
+		return nil, fmt.Errorf("collection products GraphQL error: %s", graphQLErrorsString(payload.Errors))
+	}
+	return &payload, nil
+}
+
+func (c *Client) initCookies(ctx context.Context) ([]*http.Cookie, error) {
+	if c.cookieHeader != "" || c.instacartSID != "" || c.instacartSessionID != "" {
+		c.debugf("init skipped manual_cookie_override=true cookie_header=%t instacart_sid=%t instacart_session_id=%t", c.cookieHeader != "", c.instacartSID != "", c.instacartSessionID != "")
+		return nil, nil
+	}
+
+	endpoint := c.baseURL + "/idp/v1/init"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader([]byte("{}")))
+	if err != nil {
+		return nil, fmt.Errorf("build init request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Referer", c.baseURL+"/store/aldi/storefront")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -144,17 +239,12 @@ func (c *Client) CollectionProducts(ctx context.Context, storeID, categorySlug s
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("collection products request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("init request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-
-	var payload CollectionProductsPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("decode collection products response: %w", err)
-	}
-	if len(payload.Errors) > 0 {
-		return nil, fmt.Errorf("collection products GraphQL error: %s", graphQLErrorsString(payload.Errors))
-	}
-	return &payload, nil
+	_, _ = io.Copy(io.Discard, resp.Body)
+	cookies := resp.Cookies()
+	c.debugf("init status=%d cookies=%s", resp.StatusCode, cookieNames(cookies))
+	return cookies, nil
 }
 
 func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string, opts SearchOptions) (string, error) {
@@ -163,26 +253,17 @@ func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string,
 		return "", fmt.Errorf("parse collection products URL: %w", err)
 	}
 
-	first := opts.First
-	if first == 0 {
-		first = defaultFirst
-	}
-	orderBy := strings.TrimSpace(opts.OrderBy)
-	if orderBy == "" {
-		orderBy = defaultOrderBy
-	}
-
 	variables := collectionProductsVariables{
 		ShopID:           storeID,
 		PostalCode:       strings.TrimSpace(opts.PostalCode),
-		ZoneID:           strings.TrimSpace(opts.ZoneID),
+		ZoneID:           resolvedZoneID(opts.ZoneID),
 		Slug:             categorySlug,
-		OrderBy:          orderBy,
+		OrderBy:          resolvedString(opts.OrderBy, defaultOrderBy),
 		Filters:          []string{},
 		PageViewID:       pageViewID,
-		ItemsDisplayType: defaultItemsDisplayType,
-		First:            first,
-		PageSource:       defaultPageSource,
+		ItemsDisplayType: resolvedString(opts.ItemsDisplayType, defaultItemsDisplayType),
+		First:            resolvedFirst(opts.First),
+		PageSource:       resolvedString(opts.PageSource, defaultPageSource),
 	}
 	rawVariables, err := json.Marshal(variables)
 	if err != nil {
@@ -206,6 +287,76 @@ func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string,
 	query.Set("extensions", string(rawExtensions))
 	endpoint.RawQuery = query.Encode()
 	return endpoint.String(), nil
+}
+
+func resolvedFirst(value int) int {
+	if value == 0 {
+		return defaultFirst
+	}
+	return value
+}
+
+func resolvedString(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+// ALDI's collection query requires a zone id, but the shop lookup APIs we have
+// only give us the store/shop identifiers. Until we can derive the real zone
+// from session location state, fall back to a random zone in the observed range.
+func resolvedZoneID(value string) string {
+	value = strings.TrimSpace(value)
+	if value != "" {
+		return value
+	}
+
+	const minZoneID = 100
+	const maxZoneID = 300
+
+	n := big.NewInt(maxZoneID - minZoneID + 1)
+	v, err := rand.Int(rand.Reader, n)
+	if err != nil {
+		return "100"
+	}
+	return fmt.Sprintf("%d", minZoneID+int(v.Int64()))
+}
+
+func (c *Client) debugf(format string, args ...any) {
+	if c.debugWriter == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(c.debugWriter, "aldiquery debug: "+format+"\n", args...)
+}
+
+func cookieNames(cookies []*http.Cookie) string {
+	if len(cookies) == 0 {
+		return "(none)"
+	}
+
+	names := make([]string, 0, len(cookies))
+	for _, cookie := range cookies {
+		if strings.TrimSpace(cookie.Name) == "" {
+			continue
+		}
+		names = append(names, cookie.Name)
+	}
+	if len(names) == 0 {
+		return "(none)"
+	}
+	sort.Strings(names)
+	return strings.Join(names, ",")
+}
+
+func bodyPreview(body []byte) string {
+	const maxPreviewBytes = 2000
+	preview := strings.TrimSpace(string(body))
+	if len(preview) <= maxPreviewBytes {
+		return preview
+	}
+	return preview[:maxPreviewBytes] + "...(truncated)"
 }
 
 func graphQLErrorsString(errs []GraphQLError) string {

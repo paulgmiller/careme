@@ -8,11 +8,38 @@ type CollectionProductsPayload struct {
 }
 
 type CollectionProductsData struct {
-	CollectionProducts CollectionProducts `json:"collectionProducts"`
+	CollectionProducts                   CollectionProducts                   `json:"collectionProducts"`
+	CollectionProductsBasedSearchResults CollectionProductsBasedSearchResults `json:"collectionProductsBasedSearchResults"`
 }
 
 type CollectionProducts struct {
 	Items []Item `json:"items"`
+}
+
+type CollectionProductsBasedSearchResults struct {
+	ItemResultList SearchItemResultList `json:"itemResultList"`
+	SearchID       string               `json:"searchId"`
+	ViewSection    CollectionView       `json:"viewSection"`
+}
+
+type SearchItemResultList struct {
+	FeaturedProducts []Item   `json:"featuredProducts"`
+	ItemIDs          []string `json:"itemIds"`
+}
+
+type CollectionView struct {
+	HeaderString string `json:"headerString"`
+}
+
+func (data CollectionProductsData) Items() []Item {
+	if len(data.CollectionProducts.Items) > 0 {
+		return data.CollectionProducts.Items
+	}
+	return data.CollectionProductsBasedSearchResults.ItemResultList.FeaturedProducts
+}
+
+func (data CollectionProductsData) ItemIDs() []string {
+	return data.CollectionProductsBasedSearchResults.ItemResultList.ItemIDs
 }
 
 type GraphQLError struct {

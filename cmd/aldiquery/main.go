@@ -28,27 +28,33 @@ var newHTTPClient = func(timeout time.Duration) *http.Client {
 
 func run(ctx context.Context, args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("aldiquery", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
 
 	var (
-		baseURL     string
-		storeID     string
-		category    string
-		postalCode  string
-		zoneID      string
-		forterToken string
-		first       int
-		timeoutSec  int
+		baseURL            string
+		storeID            string
+		slug               string
+		postalCode         string
+		zoneID             string
+		instacartSID       string
+		instacartSessionID string
+		cookieHeader       string
+		first              int
+		timeoutSec         int
+		debug              bool
 	)
 
 	fs.StringVar(&baseURL, "base-url", query.DefaultBaseURL, "ALDI base URL")
 	fs.StringVar(&storeID, "store-id", "", "ALDI GraphQL shopId to query against")
-	fs.StringVar(&category, "category", "", "ALDI collection slug, for example rc-other-fish-18102")
+	fs.StringVar(&slug, "slug", "", "ALDI collection slug, for example n-beef-67693")
+	fs.StringVar(&slug, "category", "", "ALDI collection slug, for example n-beef-67693")
 	fs.StringVar(&postalCode, "postal-code", "", "optional postal code")
 	fs.StringVar(&zoneID, "zone-id", "", "optional zone id")
-	fs.StringVar(&forterToken, "forter-token", envOrDefault("ALDI_FORTER_TOKEN", ""), "optional forterToken cookie value")
+	fs.StringVar(&instacartSID, "instacart-sid", envOrDefault("ALDI_INSTACART_SID", ""), "optional __Host-instacart_sid cookie override")
+	fs.StringVar(&instacartSessionID, "instacart-session-id", envOrDefault("ALDI_INSTACART_SESSION_ID", ""), "optional _instacart_session_id cookie override")
+	fs.StringVar(&cookieHeader, "cookie", envOrDefault("ALDI_COOKIE", ""), "optional raw Cookie header override copied from a browser request")
 	fs.IntVar(&first, "first", 4, "number of products to request")
 	fs.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
+	fs.BoolVar(&debug, "debug", false, "print ALDI request diagnostics to stderr")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -56,8 +62,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if strings.TrimSpace(storeID) == "" {
 		return errors.New("store-id is required")
 	}
-	if strings.TrimSpace(category) == "" {
-		return errors.New("category is required")
+	if strings.TrimSpace(slug) == "" {
+		return errors.New("slug is required")
 	}
 	if first < 0 {
 		return errors.New("first must be greater than or equal to 0")
@@ -69,13 +75,19 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		defer cancel()
 	}
 
-	client := query.NewClient(query.ClientConfig{
-		BaseURL:     baseURL,
-		ForterToken: forterToken,
-		HTTPClient:  newHTTPClient(time.Duration(timeoutSec) * time.Second),
-	})
+	clientConfig := query.ClientConfig{
+		BaseURL:            baseURL,
+		InstacartSID:       instacartSID,
+		InstacartSessionID: instacartSessionID,
+		CookieHeader:       cookieHeader,
+		HTTPClient:         newHTTPClient(time.Duration(timeoutSec) * time.Second),
+	}
+	if debug {
+		clientConfig.DebugWriter = os.Stderr
+	}
+	client := query.NewClient(clientConfig)
 
-	payload, err := client.CollectionProducts(ctx, storeID, category, query.SearchOptions{
+	payload, err := client.CollectionProducts(ctx, storeID, slug, query.SearchOptions{
 		PostalCode: postalCode,
 		ZoneID:     zoneID,
 		First:      first,
@@ -84,13 +96,26 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return fmt.Errorf("query collection products: %w", err)
 	}
 
-	items := payload.Data.CollectionProducts.Items
+	items := payload.Data.Items()
 	for i, item := range items {
 		if _, err := fmt.Fprintln(out, itemLine(i+1, item)); err != nil {
 			return fmt.Errorf("write product: %w", err)
 		}
 	}
-	if _, err := fmt.Fprintf(out, "total products: %d\n", len(items)); err != nil {
+	itemIDs := payload.Data.ItemIDs()
+	if len(items) == 0 {
+		for i, itemID := range itemIDs {
+			if _, err := fmt.Fprintf(out, "%d: item_id=%s\n", i+1, itemID); err != nil {
+				return fmt.Errorf("write item id: %w", err)
+			}
+		}
+	}
+
+	total := len(items)
+	if total == 0 {
+		total = len(itemIDs)
+	}
+	if _, err := fmt.Fprintf(out, "total products: %d\n", total); err != nil {
 		return fmt.Errorf("write total products: %w", err)
 	}
 	return nil

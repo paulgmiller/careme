@@ -39,6 +39,9 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if loc.Name != "ALDI 201 W Division St" || loc.ZipCode != "60610" || loc.Chain != "aldi" {
 		t.Fatalf("unexpected location: %+v", loc)
 	}
+	if loc.InventoryStoreID != "29998" {
+		t.Fatalf("unexpected inventory store id: %q", loc.InventoryStoreID)
+	}
 	reader, err := cacheStore.Get(context.Background(), LocationIndexCacheKey)
 	if err != nil {
 		t.Fatalf("expected compact location index to be cached: %v", err)
@@ -116,16 +119,17 @@ func nearbySummary() *StoreSummary {
 	lat := 41.894989
 	lon := -87.629197
 	return &StoreSummary{
-		ID:         "aldi_F100",
-		StoreID:    5757831,
-		Identifier: "F100",
-		Name:       "ALDI 201 W Division St",
-		Address:    "201 W Division St",
-		City:       "Chicago",
-		State:      "IL",
-		ZipCode:    "60610",
-		Lat:        &lat,
-		Lon:        &lon,
+		ID:            "aldi_F100",
+		StoreID:       5757831,
+		Identifier:    "F100",
+		Name:          "ALDI 201 W Division St",
+		Address:       "201 W Division St",
+		City:          "Chicago",
+		State:         "IL",
+		ZipCode:       "60610",
+		Lat:           &lat,
+		Lon:           &lon,
+		InstoreShopID: "29998",
 	}
 }
 

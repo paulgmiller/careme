@@ -61,13 +61,14 @@ func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Loc
 		return locationtypes.Location{}, fmt.Errorf("decode ALDI store summary: %w", err)
 	}
 	return locationtypes.Location{
-		ID:      summary.ID,
-		Name:    summary.Name,
-		Address: summary.Address,
-		State:   summary.State,
-		ZipCode: summary.ZipCode,
-		Lat:     summary.Lat,
-		Lon:     summary.Lon,
-		Chain:   Container,
+		ID:               summary.ID,
+		Name:             summary.Name,
+		Address:          summary.Address,
+		State:            summary.State,
+		ZipCode:          summary.ZipCode,
+		Lat:              summary.Lat,
+		Lon:              summary.Lon,
+		Chain:            Container,
+		InventoryStoreID: summary.InstoreShopID,
 	}, nil
 }

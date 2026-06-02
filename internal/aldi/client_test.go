@@ -118,3 +118,133 @@ func TestStoreSummariesRequiresIdentifier(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestInStoreShopIDInitializesSessionAndMatchesStoreAddress(t *testing.T) {
+	t.Parallel()
+
+	var initCalled bool
+	var shopsCookie string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/idp/v1/init":
+			if r.Method != http.MethodPost {
+				t.Fatalf("unexpected init method: %s", r.Method)
+			}
+			initCalled = true
+			http.SetCookie(w, &http.Cookie{Name: "_instacart_session_id", Value: "session"})
+			w.WriteHeader(http.StatusOK)
+		case "/idp/v1/shops":
+			shopsCookie = r.Header.Get("Cookie")
+			if got := r.URL.Query().Get("postal_code"); got != "40222" {
+				t.Fatalf("unexpected postal_code: %q", got)
+			}
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"shops": []Shop{
+					{
+						ID:                "38764",
+						RetailerKey:       "aldi",
+						FulfillmentOption: "delivery",
+						Address: ShopAddress{
+							StreetAddress: "825 S. Hurstbourne Pkwy",
+							City:          "Louisville",
+							State:         "KY",
+							PostalCode:    "40222",
+						},
+						LocationCode: "444-042",
+					},
+					{
+						ID:                "516286",
+						RetailerKey:       "aldi",
+						FulfillmentOption: "instore",
+						Address: ShopAddress{
+							StreetAddress: "825 S Hurstbourne Pkwy",
+							City:          "Louisville",
+							State:         "KY",
+							PostalCode:    "40222",
+						},
+						LocationCode: "444-042",
+					},
+				},
+			}); err != nil {
+				t.Fatalf("encode shops: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClientWithBaseURL(server.URL, "test-key", server.Client())
+	client.ShopURL = server.URL
+
+	shopID, err := client.InStoreShopID(context.Background(), &StoreSummary{
+		ID:      "aldi_F219",
+		Address: "825 S. Hurstbourne Pkwy",
+		City:    "Louisville",
+		State:   "KY",
+		ZipCode: "40222",
+	})
+	if err != nil {
+		t.Fatalf("InStoreShopID returned error: %v", err)
+	}
+	if shopID != "516286" {
+		t.Fatalf("unexpected shop id: %q", shopID)
+	}
+	if !initCalled {
+		t.Fatal("expected init endpoint to be called")
+	}
+	if !strings.Contains(shopsCookie, "_instacart_session_id=session") {
+		t.Fatalf("expected shops request to include session cookie, got %q", shopsCookie)
+	}
+}
+
+func TestInStoreShopIDReturnsErrorWhenNoInstoreMatch(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/idp/v1/init":
+			w.WriteHeader(http.StatusOK)
+		case "/idp/v1/shops":
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"shops": []Shop{
+					{
+						ID:                "38764",
+						RetailerKey:       "aldi",
+						FulfillmentOption: "delivery",
+						Address: ShopAddress{
+							StreetAddress: "825 S. Hurstbourne Pkwy",
+							City:          "Louisville",
+							State:         "KY",
+							PostalCode:    "40222",
+						},
+					},
+				},
+			}); err != nil {
+				t.Fatalf("encode shops: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClientWithBaseURL(server.URL, "test-key", server.Client())
+	client.ShopURL = server.URL
+
+	_, err := client.InStoreShopID(context.Background(), &StoreSummary{
+		ID:      "aldi_F219",
+		Address: "825 S. Hurstbourne Pkwy",
+		City:    "Louisville",
+		State:   "KY",
+		ZipCode: "40222",
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "instore shop not found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
