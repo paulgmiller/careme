@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -206,7 +209,6 @@ func (c *Client) ShopsByPostalCode(ctx context.Context, postalCode string) ([]Sh
 	params := endpoint.Query()
 	params.Set("postal_code", postalCode)
 	endpoint.RawQuery = params.Encode()
-
 	var response shopsResponse
 	if err := c.shopJSON(ctx, http.MethodGet, endpoint.String(), nil, &response); err != nil {
 		return nil, err
@@ -283,25 +285,86 @@ func mergeCookies(existing, next []*http.Cookie) []*http.Cookie {
 }
 
 func findInStoreShop(summary *StoreSummary, shops []Shop) (Shop, bool) {
+	var candidates []Shop
+	var cities = map[string]bool{}
+	var aldis, instores int
 	for _, shop := range shops {
 		if !strings.EqualFold(strings.TrimSpace(shop.RetailerKey), Container) {
 			continue
 		}
-		if !strings.EqualFold(strings.TrimSpace(shop.FulfillmentOption), "instore") {
-			continue
-		}
-		if normalizeComparable(summary.Address) != normalizeComparable(shop.Address.StreetAddress) {
-			continue
+		aldis++
+		if isInStoreFulfillment(shop) {
+			instores++
 		}
 		if !strings.EqualFold(strings.TrimSpace(summary.City), strings.TrimSpace(shop.Address.City)) {
+			cities[shop.Address.City+", "+shop.Address.State] = true
 			continue
 		}
 		if !strings.EqualFold(strings.TrimSpace(summary.State), strings.TrimSpace(shop.Address.State)) {
+			cities[shop.Address.City+", "+shop.Address.State] = true
 			continue
 		}
-		return shop, true
+		candidates = append(candidates, shop)
 	}
-	return Shop{}, false
+
+	if len(candidates) == 0 {
+		slog.Warn("no aldi in store shops", "len", len(shops), "aldis", aldis, "instores", instores, "city", summary.City, "state", summary.State, "other_cities", lo.Keys(cities))
+		return Shop{}, false
+	}
+
+	if len(candidates) == 1 {
+		return candidates[0], true
+	}
+
+	best := candidates[0]
+	bestScore := addressWordMatchScore(summary.Address, best.Address.StreetAddress)
+	bestFulfillmentRank := fulfillmentRank(best)
+	tiedByFulfillment := map[string]int{normalizedFulfillment(best): 1}
+	for _, candidate := range candidates[1:] {
+		score := addressWordMatchScore(summary.Address, candidate.Address.StreetAddress)
+		if score > bestScore {
+			best = candidate
+			bestScore = score
+			bestFulfillmentRank = fulfillmentRank(candidate)
+			tiedByFulfillment = map[string]int{normalizedFulfillment(candidate): 1}
+			continue
+		}
+		if score != bestScore {
+			continue
+		}
+
+		rank := fulfillmentRank(candidate)
+		if rank > bestFulfillmentRank {
+			best = candidate
+			bestFulfillmentRank = rank
+			tiedByFulfillment = map[string]int{normalizedFulfillment(candidate): 0}
+		}
+		if rank == bestFulfillmentRank {
+			tiedByFulfillment[normalizedFulfillment(candidate)]++
+		}
+	}
+	for fulfillment, ties := range tiedByFulfillment {
+		if ties > 1 {
+			slog.Warn("multiple ALDI shop candidates tied after address matching", "address", summary.Address, "fulfillment", fulfillment, "score", bestScore, "ties", ties)
+			return Shop{}, false
+		}
+	}
+	return best, true
+}
+
+func isInStoreFulfillment(shop Shop) bool {
+	return strings.EqualFold(strings.TrimSpace(shop.FulfillmentOption), "instore")
+}
+
+func fulfillmentRank(shop Shop) int {
+	if isInStoreFulfillment(shop) {
+		return 1
+	}
+	return 0
+}
+
+func normalizedFulfillment(shop Shop) string {
+	return normalizeComparable(shop.FulfillmentOption)
 }
 
 var nonAlphaNumeric = regexp.MustCompile(`[^a-z0-9]+`)
@@ -310,6 +373,31 @@ func normalizeComparable(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	value = nonAlphaNumeric.ReplaceAllString(value, " ")
 	return strings.Join(strings.Fields(value), " ")
+}
+
+func addressWordMatchScore(summaryAddress, shopAddress string) int {
+	summaryWords := comparableWordSet(summaryAddress)
+	if len(summaryWords) == 0 {
+		return 0
+	}
+
+	score := 0
+	for _, word := range strings.Fields(normalizeComparable(shopAddress)) {
+		if summaryWords[word] {
+			score++
+			delete(summaryWords, word)
+		}
+	}
+	return score
+}
+
+func comparableWordSet(value string) map[string]bool {
+	words := strings.Fields(normalizeComparable(value))
+	set := make(map[string]bool, len(words))
+	for _, word := range words {
+		set[word] = true
+	}
+	return set
 }
 
 func normalizeLocation(location SourceLocation) (*StoreSummary, error) {

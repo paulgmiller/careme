@@ -199,7 +199,7 @@ func TestInStoreShopIDInitializesSessionAndMatchesStoreAddress(t *testing.T) {
 	}
 }
 
-func TestInStoreShopIDReturnsErrorWhenNoInstoreMatch(t *testing.T) {
+func TestInStoreShopIDFallsBackWhenNoInstoreMatch(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -234,17 +234,170 @@ func TestInStoreShopIDReturnsErrorWhenNoInstoreMatch(t *testing.T) {
 	client := NewClientWithBaseURL(server.URL, "test-key", server.Client())
 	client.ShopURL = server.URL
 
-	_, err := client.InStoreShopID(context.Background(), &StoreSummary{
+	shopID, err := client.InStoreShopID(context.Background(), &StoreSummary{
 		ID:      "aldi_F219",
 		Address: "825 S. Hurstbourne Pkwy",
 		City:    "Louisville",
 		State:   "KY",
 		ZipCode: "40222",
 	})
-	if err == nil {
-		t.Fatal("expected error")
+	if err != nil {
+		t.Fatalf("InStoreShopID returned error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "instore shop not found") {
-		t.Fatalf("unexpected error: %v", err)
+	if shopID != "38764" {
+		t.Fatalf("unexpected shop id: %q", shopID)
+	}
+}
+
+func TestFindInStoreShopPrefersAddressWordMatchBeforeFulfillment(t *testing.T) {
+	t.Parallel()
+
+	shop, ok := findInStoreShop(&StoreSummary{
+		ID:      "aldi_F219",
+		Address: "825 S. Hurstbourne Pkwy",
+		City:    "Louisville",
+		State:   "KY",
+		ZipCode: "40222",
+	}, []Shop{
+		{
+			ID:                "wrong",
+			RetailerKey:       "aldi",
+			FulfillmentOption: "instore",
+			Address: ShopAddress{
+				StreetAddress: "4301 Bardstown Rd",
+				City:          "Louisville",
+				State:         "KY",
+				PostalCode:    "40218",
+			},
+		},
+		{
+			ID:                "right",
+			RetailerKey:       "aldi",
+			FulfillmentOption: "instore",
+			Address: ShopAddress{
+				StreetAddress: "825 South Hurstbourne Parkway",
+				City:          "Louisville",
+				State:         "KY",
+				PostalCode:    "40222",
+			},
+		},
+		{
+			ID:                "delivery",
+			RetailerKey:       "aldi",
+			FulfillmentOption: "delivery",
+			Address: ShopAddress{
+				StreetAddress: "825 S. Hurstbourne Pkwy",
+				City:          "Louisville",
+				State:         "KY",
+				PostalCode:    "40222",
+			},
+		},
+	})
+	if !ok {
+		t.Fatal("expected shop match")
+	}
+	if shop.ID != "delivery" {
+		t.Fatalf("unexpected shop id: %q", shop.ID)
+	}
+}
+
+func TestFindInStoreShopReturnsFalseWhenBestMatchTiesSameFulfillment(t *testing.T) {
+	t.Parallel()
+
+	_, ok := findInStoreShop(&StoreSummary{
+		ID:      "aldi_F219",
+		Address: "825 S. Hurstbourne Pkwy",
+		City:    "Louisville",
+		State:   "KY",
+		ZipCode: "40222",
+	}, []Shop{
+		{
+			ID:                "first",
+			RetailerKey:       "aldi",
+			FulfillmentOption: "instore",
+			Address: ShopAddress{
+				StreetAddress: "825 S Hurstbourne Pkwy",
+				City:          "Louisville",
+				State:         "KY",
+				PostalCode:    "40222",
+			},
+		},
+		{
+			ID:                "second",
+			RetailerKey:       "aldi",
+			FulfillmentOption: "instore",
+			Address: ShopAddress{
+				StreetAddress: "825 S Hurstbourne Pkwy",
+				City:          "Louisville",
+				State:         "KY",
+				PostalCode:    "40222",
+			},
+		},
+		{
+			ID:                "delivery",
+			RetailerKey:       "aldi",
+			FulfillmentOption: "delivery",
+			Address: ShopAddress{
+				StreetAddress: "825 S. Hurstbourne Pkwy",
+				City:          "Louisville",
+				State:         "KY",
+				PostalCode:    "40222",
+			},
+		},
+	})
+	if ok {
+		t.Fatal("expected tied same-fulfillment match to fail")
+	}
+}
+
+func TestFindInStoreShopFulfillmentBreaksAddressScoreTie(t *testing.T) {
+	t.Parallel()
+
+	shop, ok := findInStoreShop(&StoreSummary{
+		ID:      "aldi_F219",
+		Address: "825 S. Hurstbourne Pkwy",
+		City:    "Louisville",
+		State:   "KY",
+		ZipCode: "40222",
+	}, []Shop{
+		{
+			ID:                "delivery-one",
+			RetailerKey:       "aldi",
+			FulfillmentOption: "delivery",
+			Address: ShopAddress{
+				StreetAddress: "825 S Hurstbourne Pkwy",
+				City:          "Louisville",
+				State:         "KY",
+				PostalCode:    "40222",
+			},
+		},
+		{
+			ID:                "delivery-two",
+			RetailerKey:       "aldi",
+			FulfillmentOption: "delivery",
+			Address: ShopAddress{
+				StreetAddress: "825 S. Hurstbourne Pkwy",
+				City:          "Louisville",
+				State:         "KY",
+				PostalCode:    "40222",
+			},
+		},
+		{
+			ID:                "instore",
+			RetailerKey:       "aldi",
+			FulfillmentOption: "instore",
+			Address: ShopAddress{
+				StreetAddress: "825 S Hurstbourne Pkwy",
+				City:          "Louisville",
+				State:         "KY",
+				PostalCode:    "40222",
+			},
+		},
+	})
+	if !ok {
+		t.Fatal("expected shop match")
+	}
+	if shop.ID != "instore" {
+		t.Fatalf("unexpected shop id: %q", shop.ID)
 	}
 }
