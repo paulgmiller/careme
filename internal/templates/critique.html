@@ -30,11 +30,11 @@
         </header>
 
         <div class="space-y-6 p-6 sm:p-8">
-          {{if .Strengths}}
+          {{if .SuggestedFixes}}
           <section>
-            <h2 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Strengths</h2>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Suggested fixes</h2>
             <ul class="mt-3 space-y-2">
-              {{range .Strengths}}
+              {{range .SuggestedFixes}}
               <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-800">{{.}}</li>
               {{end}}
             </ul>
@@ -52,11 +52,11 @@
           </section>
           {{end}}
 
-          {{if .SuggestedFixes}}
+          {{if .Strengths}}
           <section>
-            <h2 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Suggested fixes</h2>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Strengths</h2>
             <ul class="mt-3 space-y-2">
-              {{range .SuggestedFixes}}
+              {{range .Strengths}}
               <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-800">{{.}}</li>
               {{end}}
             </ul>

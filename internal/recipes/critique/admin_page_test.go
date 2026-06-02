@@ -195,4 +195,14 @@ func TestCritiquePageRendersSingleCritique(t *testing.T) {
 			t.Fatalf("response body missing %q: %s", want, body)
 		}
 	}
+
+	fixesIndex := strings.Index(body, "Suggested fixes")
+	issuesIndex := strings.Index(body, "Issues")
+	strengthsIndex := strings.Index(body, "Strengths")
+	if fixesIndex == -1 || issuesIndex == -1 || strengthsIndex == -1 {
+		t.Fatalf("response body missing critique section heading: %s", body)
+	}
+	if !(fixesIndex < issuesIndex && issuesIndex < strengthsIndex) {
+		t.Fatalf("critique sections should render fixes, issues, strengths; got indexes fixes=%d issues=%d strengths=%d", fixesIndex, issuesIndex, strengthsIndex)
+	}
 }
