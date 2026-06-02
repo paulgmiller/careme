@@ -47,6 +47,7 @@ func TestClarityScriptOmitsIdentifyWhenSessionIDEmpty(t *testing.T) {
 func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	for _, name := range []string{
 		"about.html",
+		"critique.html",
 		"home.html",
 		"locations.html",
 		"recipe.html",

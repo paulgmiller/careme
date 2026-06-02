@@ -3,15 +3,25 @@ package critique_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/templates"
 )
+
+func TestMain(m *testing.M) {
+	if err := templates.Init(&config.Config{}, "dummyhash.css"); err != nil {
+		panic(err)
+	}
+	os.Exit(m.Run())
+}
 
 func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	t.Parallel()
