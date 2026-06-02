@@ -111,10 +111,11 @@ func TestRunPrintsProducts(t *testing.T) {
 	assert.Contains(t, capturedReq.URL.Query().Get("variables"), `"first":12`)
 }
 
-func TestRunPrintsSearchResultItemIDs(t *testing.T) {
+func TestRunHydratesSearchResultItemIDs(t *testing.T) {
 	clearCookieEnv(t)
 
-	var capturedReq *http.Request
+	var capturedCollectionReq *http.Request
+	var capturedItemsReq *http.Request
 	originalHTTPClient := newHTTPClient
 	t.Cleanup(func() { newHTTPClient = originalHTTPClient })
 	newHTTPClient = func(time.Duration) *http.Client {
@@ -131,24 +132,57 @@ func TestRunPrintsSearchResultItemIDs(t *testing.T) {
 						Request: r,
 					}, nil
 				}
-				capturedReq = r
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Header: http.Header{
-						"Content-Type": []string{"application/json"},
-					},
-					Body: io.NopCloser(strings.NewReader(`{
-						"data": {
-							"collectionProductsBasedSearchResults": {
-								"itemResultList": {
-									"featuredProducts": [],
-									"itemIds": ["items_516286-17771058", "items_516286-123"]
+				switch r.URL.Query().Get("operationName") {
+				case "CollectionProductsWithFeaturedProducts":
+					capturedCollectionReq = r
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header: http.Header{
+							"Content-Type": []string{"application/json"},
+						},
+						Body: io.NopCloser(strings.NewReader(`{
+							"data": {
+								"collectionProductsBasedSearchResults": {
+									"itemResultList": {
+										"featuredProducts": [],
+										"itemIds": ["items_516286-17771058", "items_516286-123"]
+									}
 								}
 							}
-						}
-					}`)),
-					Request: r,
-				}, nil
+						}`)),
+						Request: r,
+					}, nil
+				case "Items":
+					capturedItemsReq = r
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header: http.Header{
+							"Content-Type": []string{"application/json"},
+						},
+						Body: io.NopCloser(strings.NewReader(`{
+							"data": {
+								"items": [
+									{
+										"name": "Sea Queen Fresh Atlantic Salmon Portions",
+										"size": "per lb",
+										"productId": "17771058",
+										"availability": {"available": true, "stockLevel": "highlyInStock"},
+										"price": {"viewSection": {"itemCard": {"priceString": "$9.49"}}}
+									},
+									{
+										"name": "Ground Beef",
+										"size": "1 lb",
+										"productId": "123",
+										"price": {"viewSection": {"itemCard": {"priceString": "$5.99"}}}
+									}
+								]
+							}
+						}`)),
+						Request: r,
+					}, nil
+				default:
+					return nil, nil
+				}
 			}),
 		}
 	}
@@ -160,14 +194,17 @@ func TestRunPrintsSearchResultItemIDs(t *testing.T) {
 		"-category", "n-beef-67693",
 	}, &out)
 	require.NoError(t, err)
-	require.NotNil(t, capturedReq)
+	require.NotNil(t, capturedCollectionReq)
+	require.NotNil(t, capturedItemsReq)
 
-	assert.Contains(t, out.String(), "1: item_id=items_516286-17771058")
-	assert.Contains(t, out.String(), "2: item_id=items_516286-123")
+	assert.Contains(t, out.String(), "1: Sea Queen Fresh Atlantic Salmon Portions (per lb) - $9.49 highlyInStock product=17771058")
+	assert.Contains(t, out.String(), "2: Ground Beef (1 lb) - $5.99 product=123")
 	assert.Contains(t, out.String(), "total products: 2")
-	cookie, err := capturedReq.Cookie("__Host-instacart_sid")
+	cookie, err := capturedItemsReq.Cookie("__Host-instacart_sid")
 	require.NoError(t, err)
 	assert.Equal(t, "init-sid", cookie.Value)
+	assert.Equal(t, "Items", capturedItemsReq.URL.Query().Get("operationName"))
+	assert.Contains(t, capturedItemsReq.URL.Query().Get("variables"), `"ids":["items_516286-17771058","items_516286-123"]`)
 }
 
 type ioDiscard struct{}

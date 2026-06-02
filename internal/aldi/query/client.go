@@ -21,8 +21,10 @@ import (
 const (
 	DefaultBaseURL = "https://www.aldi.us"
 
-	operationName      = "CollectionProductsWithFeaturedProducts"
-	persistedQueryHash = "f3193dacfeec83828016dc1b3c8af8e61c4470d3f466da2d5797b3f2c530369c"
+	collectionProductsOperationName      = "CollectionProductsWithFeaturedProducts"
+	collectionProductsPersistedQueryHash = "f3193dacfeec83828016dc1b3c8af8e61c4470d3f466da2d5797b3f2c530369c"
+	itemsOperationName                   = "Items"
+	itemsPersistedQueryHash              = "b2411f6acba21b2a6a277ca5616fdc5d1265ba647808895c05fe7ce1fd2fdcec"
 
 	defaultFirst            = 4
 	defaultOrderBy          = "bestMatch"
@@ -71,6 +73,13 @@ type collectionProductsVariables struct {
 	ItemsDisplayType string   `json:"itemsDisplayType"`
 	First            int      `json:"first"`
 	PageSource       string   `json:"pageSource"`
+}
+
+type itemsVariables struct {
+	IDs        []string `json:"ids"`
+	ShopID     string   `json:"shopId"`
+	ZoneID     string   `json:"zoneId"`
+	PostalCode string   `json:"postalCode,omitempty"`
 }
 
 type persistedQueryExtensions struct {
@@ -137,7 +146,7 @@ func (c *Client) CollectionProducts(ctx context.Context, storeID, categorySlug s
 	}
 	c.debugf(
 		"graphql operation=%s shop_id=%s postal_code=%s zone_id=%s slug=%s first=%d order_by=%s items_display_type=%s page_source=%s page_view_id=%s",
-		operationName,
+		collectionProductsOperationName,
 		storeID,
 		strings.TrimSpace(opts.PostalCode),
 		strings.TrimSpace(opts.ZoneID),
@@ -214,6 +223,97 @@ func (c *Client) CollectionProducts(ctx context.Context, storeID, categorySlug s
 	return &payload, nil
 }
 
+func (c *Client) Items(ctx context.Context, storeID string, ids []string, opts SearchOptions) (*ItemsPayload, error) {
+	storeID = strings.TrimSpace(storeID)
+	if storeID == "" {
+		return nil, errors.New("store id is required")
+	}
+
+	ids = compactStrings(ids)
+	if len(ids) == 0 {
+		return nil, errors.New("item ids are required")
+	}
+
+	pageViewID := strings.TrimSpace(opts.PageViewID)
+	if pageViewID == "" {
+		pageViewID = strings.TrimSpace(c.pageViewIDFunc())
+	}
+	if pageViewID == "" {
+		return nil, errors.New("page view id is required")
+	}
+
+	endpoint, err := c.itemsURL(storeID, ids, opts)
+	if err != nil {
+		return nil, err
+	}
+	c.debugf(
+		"graphql operation=%s shop_id=%s postal_code=%s zone_id=%s item_ids=%d page_view_id=%s",
+		itemsOperationName,
+		storeID,
+		strings.TrimSpace(opts.PostalCode),
+		strings.TrimSpace(opts.ZoneID),
+		len(ids),
+		pageViewID,
+	)
+
+	initCookies, err := c.initCookies(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build items request: %w", err)
+	}
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Client-Identifier", "web")
+	req.Header.Set("X-IC-View-Layer", "true")
+	req.Header.Set("X-Page-View-Id", pageViewID)
+	req.Header.Set("Referer", c.baseURL+"/store/aldi/storefront")
+	if c.cookieHeader != "" {
+		req.Header.Set("Cookie", c.cookieHeader)
+	} else if c.instacartSID != "" {
+		req.AddCookie(&http.Cookie{Name: "__Host-instacart_sid", Value: c.instacartSID})
+	}
+	if c.cookieHeader == "" && c.instacartSessionID != "" {
+		req.AddCookie(&http.Cookie{Name: "_instacart_session_id", Value: c.instacartSessionID})
+	}
+	for _, cookie := range initCookies {
+		req.AddCookie(cookie)
+	}
+	c.debugf("items request cookies=%s", cookieNames(req.Cookies()))
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request %q: %w", endpoint, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("read items response: %w", readErr)
+	}
+	c.debugf("items status=%d body_preview=%s", resp.StatusCode, bodyPreview(body))
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("items request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload ItemsPayload
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode items response: %w", err)
+	}
+	c.debugf("items decoded items=%d errors=%d", len(payload.Data.Items), len(payload.Errors))
+	if len(payload.Errors) > 0 {
+		return nil, fmt.Errorf("items GraphQL error: %s", graphQLErrorsString(payload.Errors))
+	}
+	return &payload, nil
+}
+
 func (c *Client) initCookies(ctx context.Context) ([]*http.Cookie, error) {
 	if c.cookieHeader != "" || c.instacartSID != "" || c.instacartSessionID != "" {
 		c.debugf("init skipped manual_cookie_override=true cookie_header=%t instacart_sid=%t instacart_session_id=%t", c.cookieHeader != "", c.instacartSID != "", c.instacartSessionID != "")
@@ -273,7 +373,7 @@ func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string,
 	extensions := persistedQueryExtensions{
 		PersistedQuery: persistedQuery{
 			Version:    1,
-			SHA256Hash: persistedQueryHash,
+			SHA256Hash: collectionProductsPersistedQueryHash,
 		},
 	}
 	rawExtensions, err := json.Marshal(extensions)
@@ -282,11 +382,59 @@ func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string,
 	}
 
 	query := endpoint.Query()
-	query.Set("operationName", operationName)
+	query.Set("operationName", collectionProductsOperationName)
 	query.Set("variables", string(rawVariables))
 	query.Set("extensions", string(rawExtensions))
 	endpoint.RawQuery = query.Encode()
 	return endpoint.String(), nil
+}
+
+func (c *Client) itemsURL(storeID string, ids []string, opts SearchOptions) (string, error) {
+	endpoint, err := url.Parse(c.baseURL + "/graphql")
+	if err != nil {
+		return "", fmt.Errorf("parse items URL: %w", err)
+	}
+
+	variables := itemsVariables{
+		IDs:        ids,
+		ShopID:     storeID,
+		ZoneID:     resolvedZoneID(opts.ZoneID),
+		PostalCode: strings.TrimSpace(opts.PostalCode),
+	}
+	rawVariables, err := json.Marshal(variables)
+	if err != nil {
+		return "", fmt.Errorf("marshal items variables: %w", err)
+	}
+
+	extensions := persistedQueryExtensions{
+		PersistedQuery: persistedQuery{
+			Version:    1,
+			SHA256Hash: itemsPersistedQueryHash,
+		},
+	}
+	rawExtensions, err := json.Marshal(extensions)
+	if err != nil {
+		return "", fmt.Errorf("marshal items extensions: %w", err)
+	}
+
+	query := endpoint.Query()
+	query.Set("operationName", itemsOperationName)
+	query.Set("variables", string(rawVariables))
+	query.Set("extensions", string(rawExtensions))
+	endpoint.RawQuery = query.Encode()
+	return endpoint.String(), nil
+}
+
+func compactStrings(values []string) []string {
+	compact := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		compact = append(compact, value)
+	}
+	return compact
 }
 
 func resolvedFirst(value int) int {

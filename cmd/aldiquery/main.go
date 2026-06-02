@@ -15,6 +15,8 @@ import (
 	"careme/internal/aldi/query"
 )
 
+const itemBatchSize = 10
+
 func main() {
 	if err := run(context.Background(), os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -97,12 +99,21 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 
 	items := payload.Data.Items()
+	itemIDs := payload.Data.ItemIDs()
+	if len(itemIDs) > len(items) {
+		items, err = hydrateItems(ctx, client, storeID, itemIDs, query.SearchOptions{
+			PostalCode: postalCode,
+			ZoneID:     zoneID,
+		}, first)
+		if err != nil {
+			return fmt.Errorf("hydrate collection products: %w", err)
+		}
+	}
 	for i, item := range items {
 		if _, err := fmt.Fprintln(out, itemLine(i+1, item)); err != nil {
 			return fmt.Errorf("write product: %w", err)
 		}
 	}
-	itemIDs := payload.Data.ItemIDs()
 	if len(items) == 0 {
 		for i, itemID := range itemIDs {
 			if _, err := fmt.Fprintf(out, "%d: item_id=%s\n", i+1, itemID); err != nil {
@@ -119,6 +130,27 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return fmt.Errorf("write total products: %w", err)
 	}
 	return nil
+}
+
+func hydrateItems(ctx context.Context, client *query.Client, storeID string, itemIDs []string, opts query.SearchOptions, limit int) ([]query.Item, error) {
+	if limit > 0 && len(itemIDs) > limit {
+		itemIDs = itemIDs[:limit]
+	}
+
+	items := make([]query.Item, 0, len(itemIDs))
+	for start := 0; start < len(itemIDs); start += itemBatchSize {
+		end := start + itemBatchSize
+		if end > len(itemIDs) {
+			end = len(itemIDs)
+		}
+
+		payload, err := client.Items(ctx, storeID, itemIDs[start:end], opts)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, payload.Data.Items...)
+	}
+	return items, nil
 }
 
 func itemLine(index int, item query.Item) string {

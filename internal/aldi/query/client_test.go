@@ -42,7 +42,7 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 	require.NotNil(t, capturedReq)
 
 	assert.Equal(t, "/graphql", capturedReq.URL.Path)
-	assert.Equal(t, operationName, capturedReq.URL.Query().Get("operationName"))
+	assert.Equal(t, collectionProductsOperationName, capturedReq.URL.Query().Get("operationName"))
 	assert.Equal(t, "*/*", capturedReq.Header.Get("Accept"))
 	assert.Equal(t, "en-US,en;q=0.9", capturedReq.Header.Get("Accept-Language"))
 	assert.Equal(t, "application/json", capturedReq.Header.Get("Content-Type"))
@@ -73,7 +73,76 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 	var extensions map[string]map[string]any
 	require.NoError(t, json.Unmarshal([]byte(capturedReq.URL.Query().Get("extensions")), &extensions))
 	assert.Equal(t, float64(1), extensions["persistedQuery"]["version"])
-	assert.Equal(t, persistedQueryHash, extensions["persistedQuery"]["sha256Hash"])
+	assert.Equal(t, collectionProductsPersistedQueryHash, extensions["persistedQuery"]["sha256Hash"])
+}
+
+func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
+	t.Parallel()
+
+	var capturedReq *http.Request
+	client := NewClient(ClientConfig{
+		BaseURL:            "https://example.test",
+		InstacartSID:       "instacart-sid",
+		InstacartSessionID: "instacart-session-id",
+		PageViewIDFunc:     func() string { return "page-view-id" },
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				capturedReq = r
+				return jsonResponse(r, http.StatusOK, `{
+					"data": {
+						"items": [
+							{
+								"id": "items_516286-19115479",
+								"name": "Black Angus Beef",
+								"size": "1 lb",
+								"productId": "19115479",
+								"availability": {"available": true, "stockLevel": "highlyInStock"}
+							}
+						]
+					}
+				}`), nil
+			}),
+		},
+	})
+
+	payload, err := client.Items(context.Background(), "516286", []string{"items_516286-19115479"}, SearchOptions{
+		PostalCode: "40222",
+		ZoneID:     "289",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, payload)
+	require.NotNil(t, capturedReq)
+
+	assert.Equal(t, "/graphql", capturedReq.URL.Path)
+	assert.Equal(t, itemsOperationName, capturedReq.URL.Query().Get("operationName"))
+	assert.Equal(t, "*/*", capturedReq.Header.Get("Accept"))
+	assert.Equal(t, "en-US,en;q=0.9", capturedReq.Header.Get("Accept-Language"))
+	assert.Equal(t, "application/json", capturedReq.Header.Get("Content-Type"))
+	assert.Equal(t, "web", capturedReq.Header.Get("X-Client-Identifier"))
+	assert.Equal(t, "true", capturedReq.Header.Get("X-IC-View-Layer"))
+	assert.Equal(t, "page-view-id", capturedReq.Header.Get("X-Page-View-Id"))
+
+	cookie, err := capturedReq.Cookie("__Host-instacart_sid")
+	require.NoError(t, err)
+	assert.Equal(t, "instacart-sid", cookie.Value)
+	cookie, err = capturedReq.Cookie("_instacart_session_id")
+	require.NoError(t, err)
+	assert.Equal(t, "instacart-session-id", cookie.Value)
+
+	var variables map[string]any
+	require.NoError(t, json.Unmarshal([]byte(capturedReq.URL.Query().Get("variables")), &variables))
+	assert.Equal(t, []any{"items_516286-19115479"}, variables["ids"])
+	assert.Equal(t, "516286", variables["shopId"])
+	assert.Equal(t, "40222", variables["postalCode"])
+	assert.Equal(t, "289", variables["zoneId"])
+
+	var extensions map[string]map[string]any
+	require.NoError(t, json.Unmarshal([]byte(capturedReq.URL.Query().Get("extensions")), &extensions))
+	assert.Equal(t, float64(1), extensions["persistedQuery"]["version"])
+	assert.Equal(t, itemsPersistedQueryHash, extensions["persistedQuery"]["sha256Hash"])
+
+	require.Len(t, payload.Data.Items, 1)
+	assert.Equal(t, "Black Angus Beef", payload.Data.Items[0].Name)
 }
 
 func TestCollectionProductsCanUseRawCookieHeader(t *testing.T) {
@@ -305,6 +374,33 @@ func TestCollectionProductsParsesSearchResultItemIDs(t *testing.T) {
 	assert.Empty(t, payload.Data.Items())
 	assert.Equal(t, []string{"items_29998-17771058", "items_29998-123"}, payload.Data.ItemIDs())
 	assert.Equal(t, "Beef", payload.Data.CollectionProductsBasedSearchResults.ViewSection.HeaderString)
+}
+
+func TestCollectionProductsParsesCollectionProductItemIDs(t *testing.T) {
+	t.Parallel()
+
+	client := NewClient(ClientConfig{
+		BaseURL:        "https://example.test",
+		InstacartSID:   "instacart-sid",
+		PageViewIDFunc: func() string { return "page-view-id" },
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				return jsonResponse(r, http.StatusOK, `{
+					"data": {
+						"collectionProducts": {
+							"itemIds": ["items_516286-19115479", "items_516286-20112308"],
+							"items": []
+						}
+					}
+				}`), nil
+			}),
+		},
+	})
+
+	payload, err := client.CollectionProducts(context.Background(), "516286", "n-beef-67693", SearchOptions{})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"items_516286-19115479", "items_516286-20112308"}, payload.Data.ItemIDs())
 }
 
 func TestCollectionProductsReturnsGraphQLErrors(t *testing.T) {

@@ -13,7 +13,8 @@ type CollectionProductsData struct {
 }
 
 type CollectionProducts struct {
-	Items []Item `json:"items"`
+	ItemIDs []string `json:"itemIds"`
+	Items   []Item   `json:"items"`
 }
 
 type CollectionProductsBasedSearchResults struct {
@@ -39,7 +40,19 @@ func (data CollectionProductsData) Items() []Item {
 }
 
 func (data CollectionProductsData) ItemIDs() []string {
+	if len(data.CollectionProducts.ItemIDs) > 0 {
+		return data.CollectionProducts.ItemIDs
+	}
 	return data.CollectionProductsBasedSearchResults.ItemResultList.ItemIDs
+}
+
+type ItemsPayload struct {
+	Data   ItemsData      `json:"data"`
+	Errors []GraphQLError `json:"errors"`
+}
+
+type ItemsData struct {
+	Items []Item `json:"items"`
 }
 
 type GraphQLError struct {
