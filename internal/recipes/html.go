@@ -16,6 +16,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -136,47 +137,51 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 	}
 	serverSignedIn := currentUser != nil
 	data := struct {
-		Location            locations.Location
-		Date                string
-		ClarityScript       template.HTML
-		GoogleTagScript     template.HTML
-		Recipe              ai.Recipe
-		Saved               bool
-		DisplayIngredients  []ai.Ingredient
-		OriginHash          string
-		ResponseID          string
-		WineRecommendation  *ai.WineSelection
-		Thread              []RecipeThreadEntry
-		Feedback            feedback.Feedback
-		RecipeHash          string
-		RecipeImage         recipeImageView
-		Style               seasons.Style
-		ServerSignedIn      bool
-		User                *utypes.User
-		AuthReturnTo        string
-		RecipeCritiqueURL   string
-		RecipeCritiqueScore *int
+		Location                locations.Location
+		Date                    string
+		ClarityScript           template.HTML
+		GoogleTagScript         template.HTML
+		Recipe                  ai.Recipe
+		Saved                   bool
+		DisplayIngredients      []ai.Ingredient
+		OriginHash              string
+		ResponseID              string
+		WineRecommendation      *ai.WineSelection
+		Thread                  []RecipeThreadEntry
+		Feedback                feedback.Feedback
+		RecipeHash              string
+		RecipeImage             recipeImageView
+		Style                   seasons.Style
+		ServerSignedIn          bool
+		User                    *utypes.User
+		AuthReturnTo            string
+		RecipeCritiqueURL       string
+		RecipeCritiqueScore     *int
+		RecipeCritiqueNeedsCare bool
+		MinimumRecipeScore      int
 	}{
-		Location:            *p.Location,
-		Date:                p.Date.Format("2006-01-02"),
-		ClarityScript:       templates.ClarityScript(ctx),
-		GoogleTagScript:     templates.GoogleTagScript(),
-		Recipe:              recipe,
-		Saved:               saved,
-		DisplayIngredients:  ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
-		OriginHash:          recipe.OriginHash,
-		ResponseID:          activeResponseID,
-		WineRecommendation:  wineRecommendation,
-		Thread:              thread,
-		Feedback:            fb,
-		RecipeHash:          recipeHash,
-		RecipeImage:         recipeImageData(recipeHash, hasRecipeImage, false),
-		Style:               seasons.GetCurrentStyle(),
-		ServerSignedIn:      serverSignedIn,
-		User:                currentUser,
-		AuthReturnTo:        "/recipe/" + recipeHash,
-		RecipeCritiqueURL:   "/critiques/" + recipeHash,
-		RecipeCritiqueScore: critiqueScore,
+		Location:                *p.Location,
+		Date:                    p.Date.Format("2006-01-02"),
+		ClarityScript:           templates.ClarityScript(ctx),
+		GoogleTagScript:         templates.GoogleTagScript(),
+		Recipe:                  recipe,
+		Saved:                   saved,
+		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		OriginHash:              recipe.OriginHash,
+		ResponseID:              activeResponseID,
+		WineRecommendation:      wineRecommendation,
+		Thread:                  thread,
+		Feedback:                fb,
+		RecipeHash:              recipeHash,
+		RecipeImage:             recipeImageData(recipeHash, hasRecipeImage, false),
+		Style:                   seasons.GetCurrentStyle(),
+		ServerSignedIn:          serverSignedIn,
+		User:                    currentUser,
+		AuthReturnTo:            "/recipe/" + recipeHash,
+		RecipeCritiqueURL:       "/critiques/" + recipeHash,
+		RecipeCritiqueScore:     critiqueScore,
+		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
+		MinimumRecipeScore:      critique.MinimumRecipeScore,
 	}
 
 	setTextContent(writer)
