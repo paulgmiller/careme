@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 )
 
 const (
@@ -146,9 +147,8 @@ func validateCollectionProductsArgs(storeID, postalCode, categorySlug string, op
 
 func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode, pageView string, itemIDs []string, opts SearchOptions, limit int, initCookies []*http.Cookie) ([]Item, error) {
 	items := make([]Item, 0, len(itemIDs))
-	for start := 0; start < len(itemIDs); start += itemBatchSize {
-		end := min(start+itemBatchSize, len(itemIDs))
-		payload, err := c.items(ctx, storeID, postalCode, pageView, itemIDs[start:end], opts, initCookies)
+	for _, batch := range lo.Chunk(itemIDs, itemBatchSize) {
+		payload, err := c.items(ctx, storeID, postalCode, pageView, batch, opts, initCookies)
 		if err != nil {
 			return nil, err
 		}
