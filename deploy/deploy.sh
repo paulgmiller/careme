@@ -12,15 +12,12 @@ cron_manifest_paths=(
   "deploy/cronjob-publix-abck.yaml"
   "deploy/cronjob-wholefoods-scrape.yaml"
 )
-disabled_store_env=(
-  "HEB_ENABLE=false"
-  "WEGMANS_ENABLE=false"
-)
 namespace="${2:-careme}"
 short_len=7
 
 public_origin="${PUBLIC_ORIGIN:-}"
 ingress_host="${INGRESS_HOST:-}"
+store_disable_env_yaml=""
 
 if [[ -z "${ingress_host}" ]]; then
   case "${namespace}" in
@@ -48,6 +45,11 @@ wholefoods_scrape_schedule="0 6 * * 0"
 
 if [[ "${namespace}" == "caremetest" ]]; then
   manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
+  store_disable_env_yaml='
+            - name: HEB_ENABLE
+              value: "false"
+            - name: WEGMANS_ENABLE
+              value: "false"'
   aldi_scrape_schedule="45 6 1,15 * *"
   albertsons_scrape_schedule="0 6 1,15 * *"
   albertsons_reese84_schedule="0 */12 * * *"
@@ -76,6 +78,7 @@ fi
 export IMAGE_TAG="${commit_hash:0:${short_len}}"
 export PUBLIC_ORIGIN="${public_origin}"
 export INGRESS_HOST="${ingress_host}"
+export STORE_DISABLE_ENV_YAML="${store_disable_env_yaml}"
 export ALDI_SCRAPE_SCHEDULE="${aldi_scrape_schedule}"
 export ALBERTSONS_SCRAPE_SCHEDULE="${albertsons_scrape_schedule}"
 export ALBERTSONS_REESE84_SCHEDULE="${albertsons_reese84_schedule}"
@@ -96,6 +99,11 @@ if [[ "${namespace}" == "caremetest" ]]; then
     echo "hint: deploy a ref that includes the deploy/deploy.yaml ingress host placeholder change" >&2
     exit 1
   fi
+  if ! git show "${ref}:deploy/deploy.yaml" | grep -q '\${STORE_DISABLE_ENV_YAML}'; then
+    echo "error: ref '${ref}' does not contain caremetest store-disable env rendering" >&2
+    echo "hint: deploy a ref that includes the deploy/deploy.yaml store disable placeholder change" >&2
+    exit 1
+  fi
   for cron_manifest_path in "${cron_manifest_paths[@]}"; do
     if ! git show "${ref}:${cron_manifest_path}" | grep -q '_SCHEDULE}'; then
       echo "error: ref '${ref}' does not contain schedule placeholders in ${cron_manifest_path}" >&2
@@ -110,13 +118,8 @@ echo "Deploying namespace: ${namespace}"
 echo "Using public origin: ${PUBLIC_ORIGIN}"
 echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
-  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
+  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
 done
-
-if [[ "${namespace}" == "caremetest" ]]; then
-  echo "Disabling ALDI, and H-E-B integrations for caremetest deployment/careme"
-  kubectl set env deployment/careme "${disabled_store_env[@]}" -n "${namespace}"
-fi
 
 echo "Waiting for rollout of deployment/careme"
 kubectl rollout status deployment/careme -n "${namespace}" -w

@@ -260,6 +260,7 @@ func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
 		"starmarket_3566",
 		"acmemarkets_806",
 		"publix_1847",
+		"aldi_F219",
 	}
 	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]ai.InputIngredient, error) {
 		return s.provider.FetchStaples(ctx, storeID)
