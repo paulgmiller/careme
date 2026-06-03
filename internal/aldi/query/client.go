@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +31,7 @@ const (
 	defaultOrderBy          = "bestMatch"
 	defaultItemsDisplayType = "collections_all_items_grid"
 	defaultPageSource       = "browse"
+	itemBatchSize           = 20
 )
 
 type Client struct {
@@ -40,6 +42,8 @@ type Client struct {
 	cookieHeader       string
 	debugWriter        io.Writer
 	pageViewIDFunc     func() string
+	zoneMu             sync.Mutex
+	zoneIDsByStore     map[string]string
 }
 
 type ClientConfig struct {
@@ -115,10 +119,40 @@ func NewClient(cfg ClientConfig) *Client {
 		cookieHeader:       strings.TrimSpace(cfg.CookieHeader),
 		debugWriter:        cfg.DebugWriter,
 		pageViewIDFunc:     pageViewIDFunc,
+		zoneIDsByStore:     make(map[string]string),
 	}
 }
 
-func (c *Client) CollectionProducts(ctx context.Context, storeID, categorySlug string, opts SearchOptions) (*CollectionProductsPayload, error) {
+func (c *Client) Products(ctx context.Context, storeID, categorySlug string, opts SearchOptions) ([]Item, error) {
+	payload, err := c.collectionProducts(ctx, storeID, categorySlug, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	limit := resolvedFirst(opts.First)
+	items := payload.Data.Items()
+	itemIDs := payload.Data.ItemIDs()
+	if len(itemIDs) <= len(items) {
+		return limitItems(items, limit), nil
+	}
+	return c.hydrateItems(ctx, storeID, itemIDs, opts, limit)
+}
+
+func (c *Client) hydrateItems(ctx context.Context, storeID string, itemIDs []string, opts SearchOptions, limit int) ([]Item, error) {
+	itemIDs = limitStrings(itemIDs, limit)
+	items := make([]Item, 0, len(itemIDs))
+	for start := 0; start < len(itemIDs); start += itemBatchSize {
+		end := min(start+itemBatchSize, len(itemIDs))
+		payload, err := c.items(ctx, storeID, itemIDs[start:end], opts)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, payload.Data.Items...)
+	}
+	return limitItems(items, limit), nil
+}
+
+func (c *Client) collectionProducts(ctx context.Context, storeID, categorySlug string, opts SearchOptions) (*CollectionProductsPayload, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
@@ -223,7 +257,7 @@ func (c *Client) CollectionProducts(ctx context.Context, storeID, categorySlug s
 	return &payload, nil
 }
 
-func (c *Client) Items(ctx context.Context, storeID string, ids []string, opts SearchOptions) (*ItemsPayload, error) {
+func (c *Client) items(ctx context.Context, storeID string, ids []string, opts SearchOptions) (*ItemsPayload, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
@@ -356,7 +390,7 @@ func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string,
 	variables := collectionProductsVariables{
 		ShopID:           storeID,
 		PostalCode:       strings.TrimSpace(opts.PostalCode),
-		ZoneID:           resolvedZoneID(opts.ZoneID),
+		ZoneID:           c.zoneIDForStore(storeID, opts.ZoneID),
 		Slug:             categorySlug,
 		OrderBy:          resolvedString(opts.OrderBy, defaultOrderBy),
 		Filters:          []string{},
@@ -398,7 +432,7 @@ func (c *Client) itemsURL(storeID string, ids []string, opts SearchOptions) (str
 	variables := itemsVariables{
 		IDs:        ids,
 		ShopID:     storeID,
-		ZoneID:     resolvedZoneID(opts.ZoneID),
+		ZoneID:     c.zoneIDForStore(storeID, opts.ZoneID),
 		PostalCode: strings.TrimSpace(opts.PostalCode),
 	}
 	rawVariables, err := json.Marshal(variables)
@@ -437,6 +471,21 @@ func compactStrings(values []string) []string {
 	return compact
 }
 
+func limitItems(items []Item, limit int) []Item {
+	if limit <= 0 || len(items) <= limit {
+		return items
+	}
+	return items[:limit]
+}
+
+func limitStrings(values []string, limit int) []string {
+	values = compactStrings(values)
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
 func resolvedFirst(value int) int {
 	if value == 0 {
 		return defaultFirst
@@ -452,15 +501,41 @@ func resolvedString(value, fallback string) string {
 	return value
 }
 
+func (c *Client) zoneIDForStore(storeID, value string) string {
+	storeID = strings.TrimSpace(storeID)
+	value = strings.TrimSpace(value)
+	if value != "" {
+		c.cacheZoneID(storeID, value)
+		return value
+	}
+	if storeID == "" {
+		return generatedZoneID()
+	}
+
+	c.zoneMu.Lock()
+	defer c.zoneMu.Unlock()
+
+	if zoneID := c.zoneIDsByStore[storeID]; zoneID != "" {
+		return zoneID
+	}
+	zoneID := generatedZoneID()
+	c.zoneIDsByStore[storeID] = zoneID
+	return zoneID
+}
+
+func (c *Client) cacheZoneID(storeID, zoneID string) {
+	if storeID == "" || zoneID == "" {
+		return
+	}
+	c.zoneMu.Lock()
+	defer c.zoneMu.Unlock()
+	c.zoneIDsByStore[storeID] = zoneID
+}
+
 // ALDI's collection query requires a zone id, but the shop lookup APIs we have
 // only give us the store/shop identifiers. Until we can derive the real zone
 // from session location state, fall back to a random zone in the observed range.
-func resolvedZoneID(value string) string {
-	value = strings.TrimSpace(value)
-	if value != "" {
-		return value
-	}
-
+func generatedZoneID() string {
 	const minZoneID = 100
 	const maxZoneID = 300
 

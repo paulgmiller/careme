@@ -3,9 +3,7 @@ package aldi
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"slices"
-	"strings"
 	"sync"
 	"testing"
 
@@ -61,7 +59,7 @@ func TestStaplesProviderMapsProductsToIngredients(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	require.NoError(t, CacheStoreSummary(t.Context(), cacheStore, nearbySummary()))
 	client := &stubProductClient{
-		collectionItems: map[string][]query.Item{
+		products: map[string][]query.Item{
 			"n-beef-67693": {
 				{
 					ID:        "items_29998-17771058",
@@ -113,23 +111,22 @@ func TestStaplesProviderMapsProductsToIngredients(t *testing.T) {
 	}, slugs)
 }
 
-func TestStaplesProviderHydratesItemIDs(t *testing.T) {
+func TestStaplesProviderMapsHydratedProductsToIngredients(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
 	require.NoError(t, CacheStoreSummary(t.Context(), cacheStore, nearbySummary()))
 	client := &stubProductClient{
-		collectionItemIDs: map[string][]string{
-			"n-beef-67693": {"items_29998-17771058"},
-		},
-		items: map[string]query.Item{
-			"items_29998-17771058": {
-				ID:        "items_29998-17771058",
-				Name:      "Hydrated Beef",
-				ProductID: "17771058",
-				Price: query.ItemPrice{
-					ViewSection: query.ItemPriceView{
-						ItemCard: query.PriceDisplay{PriceString: "2 for $10.00"},
+		products: map[string][]query.Item{
+			"n-beef-67693": {
+				{
+					ID:        "items_29998-17771058",
+					Name:      "Hydrated Beef",
+					ProductID: "17771058",
+					Price: query.ItemPrice{
+						ViewSection: query.ItemPriceView{
+							ItemCard: query.PriceDisplay{PriceString: "2 for $10.00"},
+						},
 					},
 				},
 			},
@@ -144,7 +141,31 @@ func TestStaplesProviderHydratesItemIDs(t *testing.T) {
 	assert.Equal(t, "Hydrated Beef", got[0].Description)
 	require.NotNil(t, got[0].PriceRegular)
 	assert.InDelta(t, 5.00, *got[0].PriceRegular, 0.001)
-	assert.Equal(t, [][]string{{"items_29998-17771058"}}, client.itemBatches())
+}
+
+func TestStaplesProviderPassesCategoryLimit(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	require.NoError(t, CacheStoreSummary(t.Context(), cacheStore, nearbySummary()))
+	client := &stubProductClient{
+		products: map[string][]query.Item{
+			"n-beef-67693": {
+				{
+					ID:        "items_29998-17771058",
+					Name:      "Hydrated Beef",
+					ProductID: "17771058",
+				},
+			},
+		},
+	}
+	provider := newStaplesProviderWithCache(client, cacheStore)
+
+	got, err := provider.FetchStaples(t.Context(), "aldi_F100")
+	require.NoError(t, err)
+
+	require.Len(t, got, 1)
+	assert.Equal(t, bigStapleTake, client.firstForSlug("n-beef-67693"))
 }
 
 func TestStaplesProviderMissingInstoreShopID(t *testing.T) {
@@ -180,64 +201,29 @@ func TestStaplesProviderFetchWinesUnsupported(t *testing.T) {
 }
 
 type stubProductClient struct {
-	mu                sync.Mutex
-	collectionItems   map[string][]query.Item
-	collectionItemIDs map[string][]string
-	items             map[string]query.Item
-	calls             []collectionCall
-	itemCalls         [][]string
+	mu       sync.Mutex
+	products map[string][]query.Item
+	calls    []productsCall
 }
 
-type collectionCall struct {
+type productsCall struct {
 	storeID    string
 	slug       string
 	postalCode string
+	first      int
 }
 
-func (s *stubProductClient) CollectionProducts(_ context.Context, storeID, categorySlug string, opts query.SearchOptions) (*query.CollectionProductsPayload, error) {
+func (s *stubProductClient) Products(_ context.Context, storeID, categorySlug string, opts query.SearchOptions) ([]query.Item, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.calls = append(s.calls, collectionCall{
+	s.calls = append(s.calls, productsCall{
 		storeID:    storeID,
 		slug:       categorySlug,
 		postalCode: opts.PostalCode,
+		first:      opts.First,
 	})
-	return &query.CollectionProductsPayload{
-		Data: query.CollectionProductsData{
-			CollectionProducts: query.CollectionProducts{
-				Items: slices.Clone(s.collectionItems[categorySlug]),
-			},
-			CollectionProductsBasedSearchResults: query.CollectionProductsBasedSearchResults{
-				ItemResultList: query.SearchItemResultList{
-					ItemIDs: slices.Clone(s.collectionItemIDs[categorySlug]),
-				},
-			},
-		},
-	}, nil
-}
-
-func (s *stubProductClient) Items(_ context.Context, storeID string, ids []string, opts query.SearchOptions) (*query.ItemsPayload, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if storeID != "29998" {
-		return nil, fmt.Errorf("unexpected store id: %s", storeID)
-	}
-	if strings.TrimSpace(opts.PostalCode) != "60610" {
-		return nil, fmt.Errorf("unexpected postal code: %s", opts.PostalCode)
-	}
-
-	s.itemCalls = append(s.itemCalls, slices.Clone(ids))
-	items := make([]query.Item, 0, len(ids))
-	for _, id := range ids {
-		if item, ok := s.items[id]; ok {
-			items = append(items, item)
-		}
-	}
-	return &query.ItemsPayload{
-		Data: query.ItemsData{Items: items},
-	}, nil
+	return slices.Clone(s.products[categorySlug]), nil
 }
 
 func (s *stubProductClient) storeID() string {
@@ -271,13 +257,14 @@ func (s *stubProductClient) slugs() []string {
 	return slugs
 }
 
-func (s *stubProductClient) itemBatches() [][]string {
+func (s *stubProductClient) firstForSlug(slug string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	batches := make([][]string, 0, len(s.itemCalls))
-	for _, batch := range s.itemCalls {
-		batches = append(batches, slices.Clone(batch))
+	for _, call := range s.calls {
+		if call.slug == slug {
+			return call.first
+		}
 	}
-	return batches
+	return 0
 }

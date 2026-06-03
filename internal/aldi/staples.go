@@ -23,7 +23,6 @@ const (
 	defaultStapleTake = 48
 	bigStapleTake     = 100
 	produceStapleTake = 250
-	itemBatchSize     = 20
 )
 
 var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
@@ -35,8 +34,7 @@ type StapleCategory struct {
 }
 
 type productClient interface {
-	CollectionProducts(ctx context.Context, storeID, categorySlug string, opts query.SearchOptions) (*query.CollectionProductsPayload, error)
-	Items(ctx context.Context, storeID string, ids []string, opts query.SearchOptions) (*query.ItemsPayload, error)
+	Products(ctx context.Context, storeID, categorySlug string, opts query.SearchOptions) ([]query.Item, error)
 }
 
 type identityProvider struct{}
@@ -90,7 +88,10 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 
 	storeID := strings.TrimSpace(summary.InstoreShopID)
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
-		items, err := p.fetchCategoryItems(ctx, storeID, summary.ZipCode, category)
+		items, err := p.client.Products(ctx, storeID, category.Slug, query.SearchOptions{
+			PostalCode: strings.TrimSpace(summary.ZipCode),
+			First:      category.Limit,
+		})
 		if err != nil {
 			slog.WarnContext(ctx, "failed to fetch ALDI category", "category", category.Name, "location", locationID, "error", err)
 			return nil, err
@@ -102,38 +103,6 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		slog.InfoContext(ctx, "found ALDI staples for category", "count", len(ingredients), "category", category.Name, "location", locationID)
 		return ingredients, nil
 	})
-}
-
-func (p StaplesProvider) fetchCategoryItems(ctx context.Context, storeID, postalCode string, category StapleCategory) ([]query.Item, error) {
-	opts := query.SearchOptions{
-		PostalCode: strings.TrimSpace(postalCode),
-		First:      category.Limit,
-	}
-	payload, err := p.client.CollectionProducts(ctx, storeID, category.Slug, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	items := payload.Data.Items()
-	itemIDs := payload.Data.ItemIDs()
-	if len(itemIDs) <= len(items) {
-		return limitItems(items, category.Limit), nil
-	}
-	return p.hydrateItems(ctx, storeID, itemIDs, opts, category.Limit)
-}
-
-func (p StaplesProvider) hydrateItems(ctx context.Context, storeID string, itemIDs []string, opts query.SearchOptions, limit int) ([]query.Item, error) {
-	itemIDs = limitStrings(itemIDs, limit)
-	items := make([]query.Item, 0, len(itemIDs))
-	for start := 0; start < len(itemIDs); start += itemBatchSize {
-		end := min(start+itemBatchSize, len(itemIDs))
-		payload, err := p.client.Items(ctx, storeID, itemIDs[start:end], opts)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, payload.Data.Items...)
-	}
-	return limitItems(items, limit), nil
 }
 
 func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
@@ -247,31 +216,4 @@ func priceFromString(value string) *float32 {
 
 	out := float32(price)
 	return &out
-}
-
-func limitItems(items []query.Item, limit int) []query.Item {
-	if limit <= 0 || len(items) <= limit {
-		return items
-	}
-	return items[:limit]
-}
-
-func limitStrings(values []string, limit int) []string {
-	values = compactStrings(values)
-	if limit <= 0 || len(values) <= limit {
-		return values
-	}
-	return values[:limit]
-}
-
-func compactStrings(values []string) []string {
-	compact := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		compact = append(compact, value)
-	}
-	return compact
 }
