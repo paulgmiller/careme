@@ -2,6 +2,7 @@ package aldi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -22,6 +23,7 @@ type LocationBackend struct {
 	zipLookup centroidByZip
 	spatial   []locationtypes.Location
 	hydrator  *hydrator.LazyHydrator
+	cache     cache.Cache
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -54,6 +56,7 @@ func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidBy
 		zipLookup: zipLookup,
 		spatial:   spatial,
 		hydrator:  hydrator.NewLazyHydrator(&loader{c}),
+		cache:     c,
 	}, nil
 }
 
@@ -65,11 +68,19 @@ func (b *LocationBackend) HasInventory(locationID string) bool {
 	if !IsID(locationID) {
 		return false
 	}
-	loc, err := b.hydrator.Hydrate(context.Background(), strings.TrimSpace(locationID))
+	reader, err := b.cache.Get(context.Background(), StoreCachePrefix+strings.TrimSpace(locationID))
 	if err != nil {
 		return false
 	}
-	return strings.TrimSpace(loc.InventoryStoreID) != ""
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	var summary StoreSummary
+	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+		return false
+	}
+	return strings.TrimSpace(summary.InstoreShopID) != ""
 }
 
 func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {

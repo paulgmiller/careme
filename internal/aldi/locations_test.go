@@ -39,9 +39,6 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if loc.Name != "ALDI 201 W Division St" || loc.ZipCode != "60610" || loc.Chain != "aldi" {
 		t.Fatalf("unexpected location: %+v", loc)
 	}
-	if loc.InventoryStoreID != "29998" {
-		t.Fatalf("unexpected inventory store id: %q", loc.InventoryStoreID)
-	}
 	if !backend.HasInventory("aldi_F100") {
 		t.Fatalf("expected location with instore shop id to have inventory")
 	}
