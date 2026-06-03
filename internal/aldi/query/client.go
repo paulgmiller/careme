@@ -44,16 +44,14 @@ type Client struct {
 }
 
 type ClientConfig struct {
-	BaseURL        string
-	HTTPClient     *http.Client
-	PageViewIDFunc func() string
+	BaseURL    string
+	HTTPClient *http.Client
 }
 
 type SearchOptions struct {
-	ZoneID     string
-	First      int
-	OrderBy    string
-	PageViewID string
+	ZoneID  string
+	First   int
+	OrderBy string
 }
 
 type collectionProductsVariables struct {
@@ -94,15 +92,10 @@ func NewClient(cfg ClientConfig) *Client {
 		httpClient = &http.Client{Timeout: 20 * time.Second}
 	}
 
-	pageViewIDFunc := cfg.PageViewIDFunc
-	if pageViewIDFunc == nil {
-		pageViewIDFunc = uuid.NewString
-	}
-
 	return &Client{
 		baseURL:        strings.TrimRight(baseURL, "/"),
 		httpClient:     httpClient,
-		pageViewIDFunc: pageViewIDFunc,
+		pageViewIDFunc: uuid.NewString,
 		zoneIDsByStore: make(map[string]string),
 	}
 }
@@ -120,7 +113,9 @@ func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug
 		return nil, err
 	}
 
-	payload, err := c.collectionProducts(ctx, storeID, postalCode, categorySlug, opts, initCookies)
+	pageViewID := strings.TrimSpace(c.pageViewIDFunc())
+
+	payload, err := c.collectionProducts(ctx, storeID, postalCode, pageViewID, categorySlug, opts, initCookies)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +126,7 @@ func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug
 	if len(itemIDs) <= len(items) {
 		return limitItems(items, limit), nil
 	}
-	return c.hydrateItems(ctx, storeID, postalCode, itemIDs, opts, limit, initCookies)
+	return c.hydrateItems(ctx, storeID, postalCode, pageViewID, itemIDs, opts, limit, initCookies)
 }
 
 func validateCollectionProductsArgs(storeID, postalCode, categorySlug string, opts SearchOptions) error {
@@ -150,12 +145,12 @@ func validateCollectionProductsArgs(storeID, postalCode, categorySlug string, op
 	return nil
 }
 
-func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode string, itemIDs []string, opts SearchOptions, limit int, initCookies []*http.Cookie) ([]Item, error) {
+func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode, pageView string, itemIDs []string, opts SearchOptions, limit int, initCookies []*http.Cookie) ([]Item, error) {
 	itemIDs = limitStrings(itemIDs, limit)
 	items := make([]Item, 0, len(itemIDs))
 	for start := 0; start < len(itemIDs); start += itemBatchSize {
 		end := min(start+itemBatchSize, len(itemIDs))
-		payload, err := c.items(ctx, storeID, postalCode, itemIDs[start:end], opts, initCookies)
+		payload, err := c.items(ctx, storeID, postalCode, pageView, itemIDs[start:end], opts, initCookies)
 		if err != nil {
 			return nil, err
 		}
@@ -164,7 +159,7 @@ func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode string, i
 	return limitItems(items, limit), nil
 }
 
-func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, categorySlug string, opts SearchOptions, initCookies []*http.Cookie) (*CollectionProductsPayload, error) {
+func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, categorySlug, pageViewID string, opts SearchOptions, initCookies []*http.Cookie) (*CollectionProductsPayload, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
@@ -180,13 +175,6 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 		return nil, errors.New("category slug is required")
 	}
 
-	pageViewID := strings.TrimSpace(opts.PageViewID)
-	if pageViewID == "" {
-		pageViewID = strings.TrimSpace(c.pageViewIDFunc())
-	}
-	if pageViewID == "" {
-		return nil, errors.New("page view id is required")
-	}
 	if opts.First < 0 {
 		return nil, errors.New("first must be greater than or equal to 0")
 	}
@@ -256,7 +244,7 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 	return &payload, nil
 }
 
-func (c *Client) items(ctx context.Context, storeID, postalCode string, ids []string, opts SearchOptions, initCookies []*http.Cookie) (*ItemsPayload, error) {
+func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID string, ids []string, opts SearchOptions, initCookies []*http.Cookie) (*ItemsPayload, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
@@ -270,14 +258,6 @@ func (c *Client) items(ctx context.Context, storeID, postalCode string, ids []st
 	ids = compactStrings(ids)
 	if len(ids) == 0 {
 		return nil, errors.New("item ids are required")
-	}
-
-	pageViewID := strings.TrimSpace(opts.PageViewID)
-	if pageViewID == "" {
-		pageViewID = strings.TrimSpace(c.pageViewIDFunc())
-	}
-	if pageViewID == "" {
-		return nil, errors.New("page view id is required")
 	}
 
 	endpoint, err := c.itemsURL(storeID, postalCode, ids, opts)

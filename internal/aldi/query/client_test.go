@@ -19,9 +19,8 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 	t.Parallel()
 
 	var capturedReq *http.Request
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		PageViewIDFunc: func() string { return "page-view-id" },
+	client := newTestClient(ClientConfig{
+		BaseURL: "https://example.test",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
@@ -33,7 +32,7 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 		},
 	})
 
-	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", SearchOptions{
+	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", "page-view-id", SearchOptions{
 		ZoneID: "384",
 		First:  12,
 	}, testInitCookies())
@@ -78,9 +77,8 @@ func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
 	t.Parallel()
 
 	var capturedReq *http.Request
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		PageViewIDFunc: func() string { return "page-view-id" },
+	client := newTestClient(ClientConfig{
+		BaseURL: "https://example.test",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
@@ -104,7 +102,7 @@ func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
 		},
 	})
 
-	payload, err := client.items(context.Background(), "516286", "40222", []string{"items_516286-19115479"}, SearchOptions{
+	payload, err := client.items(context.Background(), "516286", "40222", "page-view-id", []string{"items_516286-19115479"}, SearchOptions{
 		ZoneID: "289",
 	}, testInitCookies())
 	require.NoError(t, err)
@@ -148,9 +146,8 @@ func TestCollectionProductsUsesDefaultFirst(t *testing.T) {
 
 	var capturedQuery url.Values
 	var capturedInitReq *http.Request
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		PageViewIDFunc: func() string { return "page-view-id" },
+	client := newTestClient(ClientConfig{
+		BaseURL: "https://example.test",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
@@ -189,9 +186,8 @@ func TestCollectionProductsUsesDefaultFirst(t *testing.T) {
 func TestCollectionProductsParsesItems(t *testing.T) {
 	t.Parallel()
 
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		PageViewIDFunc: func() string { return "page-view-id" },
+	client := newTestClient(ClientConfig{
+		BaseURL: "https://example.test",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
@@ -253,7 +249,7 @@ func TestCollectionProductsParsesItems(t *testing.T) {
 		},
 	})
 
-	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", SearchOptions{}, testInitCookies())
+	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", "page-view-id", SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
 	require.Len(t, payload.Data.Items(), 1)
 
@@ -274,9 +270,8 @@ func TestCollectionProductsParsesItems(t *testing.T) {
 func TestCollectionProductsParsesSearchResultItemIDs(t *testing.T) {
 	t.Parallel()
 
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		PageViewIDFunc: func() string { return "page-view-id" },
+	client := newTestClient(ClientConfig{
+		BaseURL: "https://example.test",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
@@ -298,7 +293,7 @@ func TestCollectionProductsParsesSearchResultItemIDs(t *testing.T) {
 		},
 	})
 
-	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "n-beef-67693", SearchOptions{}, testInitCookies())
+	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "page-view-id", "n-beef-67693", SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
 
 	assert.Empty(t, payload.Data.Items())
@@ -309,9 +304,8 @@ func TestCollectionProductsParsesSearchResultItemIDs(t *testing.T) {
 func TestCollectionProductsParsesCollectionProductItemIDs(t *testing.T) {
 	t.Parallel()
 
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		PageViewIDFunc: func() string { return "page-view-id" },
+	client := newTestClient(ClientConfig{
+		BaseURL: "https://example.test",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
@@ -329,7 +323,7 @@ func TestCollectionProductsParsesCollectionProductItemIDs(t *testing.T) {
 		},
 	})
 
-	payload, err := client.collectionProducts(context.Background(), "516286", "40222", "n-beef-67693", SearchOptions{}, testInitCookies())
+	payload, err := client.collectionProducts(context.Background(), "516286", "40222", "page-view-id", "n-beef-67693", SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"items_516286-19115479", "items_516286-20112308"}, payload.Data.ItemIDs())
@@ -340,9 +334,8 @@ func TestProductsHydratesItemIDsUpToLimit(t *testing.T) {
 
 	var capturedItemsReq *http.Request
 	var initCalls atomic.Int32
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		PageViewIDFunc: func() string { return "page-view-id" },
+	client := newTestClient(ClientConfig{
+		BaseURL: "https://example.test",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
@@ -399,9 +392,8 @@ func TestProductsReusesGeneratedZoneIDForStore(t *testing.T) {
 
 	var collectionZoneID string
 	var itemsZoneID string
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		PageViewIDFunc: func() string { return "page-view-id" },
+	client := newTestClient(ClientConfig{
+		BaseURL: "https://example.test",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
@@ -450,9 +442,8 @@ func TestProductsReusesGeneratedZoneIDForStore(t *testing.T) {
 func TestCollectionProductsReturnsGraphQLErrors(t *testing.T) {
 	t.Parallel()
 
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		PageViewIDFunc: func() string { return "page-view-id" },
+	client := newTestClient(ClientConfig{
+		BaseURL: "https://example.test",
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
@@ -463,7 +454,7 @@ func TestCollectionProductsReturnsGraphQLErrors(t *testing.T) {
 		},
 	})
 
-	_, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", SearchOptions{}, testInitCookies())
+	_, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", "page-view-id", SearchOptions{}, testInitCookies())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Not Authenticated")
 }
@@ -494,6 +485,12 @@ func TestCollectionProductsValidatesRequiredFields(t *testing.T) {
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func newTestClient(cfg ClientConfig) *Client {
+	client := NewClient(cfg)
+	client.pageViewIDFunc = func() string { return "page-view-id" }
+	return client
+}
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
