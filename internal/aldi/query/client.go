@@ -114,7 +114,7 @@ func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug
 
 	pageViewID := strings.TrimSpace(c.pageViewIDFunc())
 
-	payload, err := c.collectionProducts(ctx, storeID, postalCode, pageViewID, categorySlug, opts, initCookies)
+	payload, err := c.collectionProducts(ctx, storeID, postalCode, categorySlug, pageViewID, opts, initCookies)
 	if err != nil {
 		return nil, err
 	}

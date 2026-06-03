@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -35,6 +36,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		postalCode string
 		first      int
 		timeoutSec int
+		debug      bool
 	)
 
 	fs.StringVar(&baseURL, "base-url", query.DefaultBaseURL, "ALDI base URL")
@@ -44,10 +46,18 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	fs.StringVar(&postalCode, "postal-code", "", "postal code")
 	fs.IntVar(&first, "first", 4, "number of products to request")
 	fs.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
+	fs.BoolVar(&debug, "debug", false, "turn on debug logs")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+
+	if debug {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})))
+	}
+
 	if strings.TrimSpace(storeID) == "" {
 		return errors.New("store-id is required")
 	}

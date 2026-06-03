@@ -39,6 +39,7 @@ func main() {
 		log.Fatalf("failed to configure logging: %v", err)
 	}
 	defer closeLogger()
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	cacheStore, err := cache.EnsureCache(aldi.Container)
 	if err != nil {
