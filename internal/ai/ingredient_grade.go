@@ -28,6 +28,14 @@ You review grocery catalog items before they are shown to a home recipe generato
 
 Score each item from 0 to 10 for usefulness as an ingredient in home-cooked recipes.
 
+Also return a slug for each item. The slug is the canonical ingredient name in lowercase, singular. 
+Strip brand names and most adjectives for marketing, color, quality, package, and production method when they do not affect cooking. 
+Keep adjectives or prep words when they materially change how the ingredient cooks or is used.
+
+Slug examples:
+- baby carrots, rainbow carrots, organic carrots -> carrots
+- baby bok choy can remain distinct from bok choy
+
 Strongly reward:
 - raw, fresh, whole, or minimally processed produce, meat, seafood, dairy, grains, legumes, herbs, and spices
 - ingredients that can support many recipe styles or cuisines. Reward diverse ingredients that are hard to make at home.
@@ -79,6 +87,7 @@ type InputIngredient struct {
 	AisleNumber  string           `json:"number,omitempty"` // this is a dumb json name fix it later
 	Brand        string           `json:"brand,omitempty"`
 	Description  string           `json:"description,omitempty"`
+	Slug         string           `json:"slug,omitempty"`
 	Size         string           `json:"size,omitempty"`
 	PriceRegular *float32         `json:"regularPrice,omitempty"`
 	PriceSale    *float32         `json:"salePrice,omitempty"`
@@ -104,6 +113,7 @@ func NormalizeInputIngredient(ingredient InputIngredient) InputIngredient {
 	ingredient.AisleNumber = strings.TrimSpace(ingredient.AisleNumber)
 	ingredient.Brand = strings.TrimSpace(ingredient.Brand)
 	ingredient.Description = strings.TrimSpace(ingredient.Description)
+	ingredient.Slug = strings.TrimSpace(ingredient.Slug)
 	ingredient.Size = strings.TrimSpace(ingredient.Size)
 	return ingredient
 }
@@ -121,6 +131,7 @@ type ingredientGradeResponseItem struct {
 	ProductID string `json:"id"`
 	Score     int    `json:"score" jsonschema:"minimum=0,maximum=10"`
 	Reason    string `json:"reason"`
+	Slug      string `json:"slug"`
 }
 
 type ingredientBatchGradeResponse struct {
@@ -221,7 +232,7 @@ func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal ingredient batch: %w", err)
 	}
-	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each id exactly.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
+	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each id exactly. Include a slug for deduplicating ingredient variants.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
 }
 
 func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredient, error) {
@@ -276,6 +287,7 @@ func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredi
 			Score:  result.Score,
 			Reason: strings.TrimSpace(result.Reason),
 		}
+		item.Slug = strings.TrimSpace(result.Slug)
 		graded = append(graded, item)
 	}
 
