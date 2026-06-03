@@ -68,6 +68,7 @@ spec:
               value: "paul.miller@gmail.com"
             - name: PUBLIC_ORIGIN
               value: "${PUBLIC_ORIGIN}"
+            #${STORE_DISABLE_ENV_YAML}
 
           volumeMounts:
             - name: recipes
