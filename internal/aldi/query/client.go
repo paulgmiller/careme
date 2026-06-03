@@ -191,18 +191,19 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 		_ = resp.Body.Close()
 	}()
 
-	body, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		return nil, fmt.Errorf("read collection products response: %w", readErr)
-	}
-	slog.DebugContext(ctx, "aldi graphql response", "operation", collectionProductsOperationName, "status", resp.StatusCode, "body_preview", bodyPreview(body))
+	slog.DebugContext(ctx, "aldi graphql response", "operation", collectionProductsOperationName, "status", resp.StatusCode)
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("read collection products response: %w", readErr)
+		}
+
 		return nil, fmt.Errorf("collection products request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var payload CollectionProductsPayload
-	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&payload); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode collection products response: %w", err)
 	}
 	slog.DebugContext(
@@ -266,18 +267,18 @@ func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID stri
 		_ = resp.Body.Close()
 	}()
 
-	body, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		return nil, fmt.Errorf("read items response: %w", readErr)
-	}
-	slog.DebugContext(ctx, "aldi graphql response", "operation", itemsOperationName, "status", resp.StatusCode, "body_preview", bodyPreview(body))
+	slog.DebugContext(ctx, "aldi graphql response", "operation", itemsOperationName, "status", resp.StatusCode)
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("read items response: %w", readErr)
+		}
 		return nil, fmt.Errorf("items request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var payload ItemsPayload
-	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&payload); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode items response: %w", err)
 	}
 	slog.DebugContext(ctx, "aldi graphql decoded", "operation", itemsOperationName, "items", len(payload.Data.Items), "errors", len(payload.Errors))
