@@ -286,7 +286,7 @@ func mergeCookies(existing, next []*http.Cookie) []*http.Cookie {
 
 func findInStoreShop(summary *StoreSummary, shops []Shop) (Shop, bool) {
 	var candidates []Shop
-	var cities = map[string]bool{}
+	cities := map[string]bool{}
 	var aldis, instores int
 	for _, shop := range shops {
 		if !strings.EqualFold(strings.TrimSpace(shop.RetailerKey), Container) {
