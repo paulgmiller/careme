@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/albertsons"
+	"careme/internal/aldi"
 	"careme/internal/cache"
 	"careme/internal/locations"
 )
@@ -236,6 +237,16 @@ func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T
 
 	got := staplesSignatureForLocation("safeway_1142")
 	want := albertsons.NewIdentityProvider().Signature()
+	if got != want {
+		t.Fatalf("unexpected signature: got %q want %q", got, want)
+	}
+}
+
+func TestStaplesSignatureForLocation_UsesAldiIdentityProvider(t *testing.T) {
+	t.Parallel()
+
+	got := staplesSignatureForLocation("aldi_F100")
+	want := aldi.NewIdentityProvider().Signature()
 	if got != want {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
 	}

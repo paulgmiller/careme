@@ -16,6 +16,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/albertsons"
+	"careme/internal/aldi"
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -309,6 +310,11 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		return nil, fmt.Errorf("create publix staples provider: %w", err)
 	}
 
+	aldiProvider, err := aldi.NewStaplesProvider(brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create ALDI staples provider: %w", err)
+	}
+
 	// Kroger is a public API integration, not a scraper. Keep it off Bright Data;
 	// retries are added in the Kroger client.
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
@@ -319,6 +325,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 
 	return []backendStaplesProvider{
 		albertsonsProvider,
+		aldiProvider,
 		krogerBackend,
 		publixProvider,
 		// actowiz.NewStaplesProvider(),
@@ -332,6 +339,7 @@ func defaultIdentityProviders() []identityProvider {
 		kroger.NewIdentityProvider(),
 		// actowiz.NewIdentityProvider(),
 		albertsons.NewIdentityProvider(),
+		aldi.NewIdentityProvider(),
 		publix.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),
