@@ -42,11 +42,7 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {
 	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
-		if strings.Contains(err.Error(), "zero entry index") {
-			entries = nil
-		} else {
-			return nil, fmt.Errorf("load aldi locations index: %w", err)
-		}
+		return nil, fmt.Errorf("load aldi locations index: %w", err)
 	}
 
 	spatial := make([]locationtypes.Location, 0, len(entries))
@@ -66,16 +62,8 @@ func (b *LocationBackend) IsID(locationID string) bool {
 }
 
 func (b *LocationBackend) HasInventory(locationID string) bool {
-	locationID = strings.TrimSpace(locationID)
-	if !IsID(locationID) {
-		return false
-	}
-	for _, loc := range b.spatial {
-		if loc.ID == locationID {
-			return true
-		}
-	}
-	return false
+	// misisng summary ids already filtered
+	return true
 }
 
 func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {

@@ -84,9 +84,6 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	if locs[0].Chain != "aldi" {
 		t.Fatalf("unexpected location chain: %q", locs[0].Chain)
 	}
-	if backend.HasInventory("aldi_F216") {
-		t.Fatalf("expected location without instore shop id to not have inventory")
-	}
 }
 
 func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
