@@ -42,6 +42,9 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if loc.InventoryStoreID != "29998" {
 		t.Fatalf("unexpected inventory store id: %q", loc.InventoryStoreID)
 	}
+	if !backend.HasInventory("aldi_F100") {
+		t.Fatalf("expected location with instore shop id to have inventory")
+	}
 	reader, err := cacheStore.Get(context.Background(), LocationIndexCacheKey)
 	if err != nil {
 		t.Fatalf("expected compact location index to be cached: %v", err)
@@ -83,6 +86,9 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	}
 	if locs[0].Chain != "aldi" {
 		t.Fatalf("unexpected location chain: %q", locs[0].Chain)
+	}
+	if backend.HasInventory("aldi_F216") {
+		t.Fatalf("expected location without instore shop id to not have inventory")
 	}
 }
 

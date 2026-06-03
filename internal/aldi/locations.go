@@ -62,7 +62,14 @@ func (b *LocationBackend) IsID(locationID string) bool {
 }
 
 func (b *LocationBackend) HasInventory(locationID string) bool {
-	return false
+	if !IsID(locationID) {
+		return false
+	}
+	loc, err := b.hydrator.Hydrate(context.Background(), strings.TrimSpace(locationID))
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(loc.InventoryStoreID) != ""
 }
 
 func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
