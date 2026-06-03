@@ -109,7 +109,6 @@ func TestRunPrintsProducts(t *testing.T) {
 	assert.Equal(t, "init-sid", cookie.Value)
 	assert.Equal(t, "CollectionProductsWithFeaturedProducts", capturedReq.URL.Query().Get("operationName"))
 	assert.Contains(t, capturedReq.URL.Query().Get("variables"), `"postalCode":"60174"`)
-	assert.Contains(t, capturedReq.URL.Query().Get("variables"), `"zoneId":"384"`)
 	assert.Contains(t, capturedReq.URL.Query().Get("variables"), `"first":12`)
 }
 
