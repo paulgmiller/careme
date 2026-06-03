@@ -18,9 +18,6 @@ import (
 
 type summaryClient interface {
 	StoreSummaries(ctx context.Context) ([]*aldi.StoreSummary, error)
-}
-
-type inStoreShopIDResolver interface {
 	InStoreShopID(ctx context.Context, summary *aldi.StoreSummary) (string, error)
 }
 
@@ -86,12 +83,7 @@ func enrichInStoreShopID(ctx context.Context, client summaryClient, summary *ald
 		return
 	}
 
-	resolver, ok := client.(inStoreShopIDResolver)
-	if !ok {
-		return
-	}
-
-	shopID, err := resolver.InStoreShopID(ctx, summary)
+	shopID, err := client.InStoreShopID(ctx, summary)
 	if err != nil {
 		slog.WarnContext(ctx, "failed to resolve ALDI instore shop id", "location_id", summary.ID, "zip_code", summary.ZipCode, "error", err)
 		return

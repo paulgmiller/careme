@@ -106,6 +106,10 @@ func (f fakeSummaryClient) StoreSummaries(_ context.Context) ([]*aldi.StoreSumma
 	return f.summaries, f.err
 }
 
+func (f fakeSummaryClient) InStoreShopID(_ context.Context, _ *aldi.StoreSummary) (string, error) {
+	return "", nil
+}
+
 type fakeInventorySummaryClient struct {
 	summaries []*aldi.StoreSummary
 	shopIDs   map[string]string
