@@ -191,12 +191,25 @@ func TestStaplesProviderInvalidLocationID(t *testing.T) {
 
 func TestStaplesProviderFetchWinesUnsupported(t *testing.T) {
 	t.Parallel()
+	cacheStore := cache.NewInMemoryCache()
+	require.NoError(t, CacheStoreSummary(t.Context(), cacheStore, nearbySummary()))
+	client := &stubProductClient{
+		products: map[string][]query.Item{
+			"rc-red-wine-category": {
+				{
+					ID:        "items_29998-17771058",
+					Name:      "Swanky Merlot",
+					ProductID: "17771058",
+				},
+			},
+		},
+	}
+	provider := newStaplesProviderWithCache(client, cacheStore)
 
-	provider := newStaplesProviderWithCache(&stubProductClient{}, cache.NewInMemoryCache())
-
-	_, err := provider.FetchWines(t.Context(), "aldi_F100", []string{"Pinot Noir"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `wine lookup is not supported for location "aldi_F100"`)
+	wines, err := provider.FetchWines(t.Context(), "aldi_F100", []string{"Pinot Noir"})
+	require.NoError(t, err)
+	require.Len(t, wines, 1)
+	assert.Equal(t, wines[0].Description, "Swanky Merlot")
 }
 
 type stubProductClient struct {
