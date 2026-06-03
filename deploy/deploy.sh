@@ -5,6 +5,7 @@ ref="${1:-origin/master}"
 app_manifest_path="deploy/deploy.yaml"
 mail_manifest_path="deploy/cronjob-careme-mail.yaml"
 cron_manifest_paths=(
+  "deploy/cronjob-aldi-scrape.yaml"
   "deploy/cronjob-albertsons-scrape.yaml"
   "deploy/cronjob-albertsons-reese84.yaml"
   "deploy/cronjob-publix-scrape.yaml"
@@ -12,7 +13,6 @@ cron_manifest_paths=(
   "deploy/cronjob-wholefoods-scrape.yaml"
 )
 disabled_store_env=(
-  "ALDI_ENABLE=false"
   "HEB_ENABLE=false"
   "WEGMANS_ENABLE=false"
 )
@@ -39,6 +39,7 @@ fi
 
 public_origin="${public_origin:-https://${ingress_host}}"
 manifest_paths=("${app_manifest_path}" "${mail_manifest_path}" "${cron_manifest_paths[@]}")
+aldi_scrape_schedule="45 6 * * 0"
 albertsons_scrape_schedule="0 6 * * 0"
 albertsons_reese84_schedule="0 */6 * * *"
 publix_scrape_schedule="30 6 * * 0"
@@ -47,6 +48,7 @@ wholefoods_scrape_schedule="0 6 * * 0"
 
 if [[ "${namespace}" == "caremetest" ]]; then
   manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
+  aldi_scrape_schedule="45 6 1,15 * *"
   albertsons_scrape_schedule="0 6 1,15 * *"
   albertsons_reese84_schedule="0 */12 * * *"
   publix_scrape_schedule="30 6 1,15 * *"
@@ -74,6 +76,7 @@ fi
 export IMAGE_TAG="${commit_hash:0:${short_len}}"
 export PUBLIC_ORIGIN="${public_origin}"
 export INGRESS_HOST="${ingress_host}"
+export ALDI_SCRAPE_SCHEDULE="${aldi_scrape_schedule}"
 export ALBERTSONS_SCRAPE_SCHEDULE="${albertsons_scrape_schedule}"
 export ALBERTSONS_REESE84_SCHEDULE="${albertsons_reese84_schedule}"
 export PUBLIX_SCRAPE_SCHEDULE="${publix_scrape_schedule}"
@@ -107,7 +110,7 @@ echo "Deploying namespace: ${namespace}"
 echo "Using public origin: ${PUBLIC_ORIGIN}"
 echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
-  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
+  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
 done
 
 if [[ "${namespace}" == "caremetest" ]]; then
