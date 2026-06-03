@@ -39,7 +39,7 @@ type productClient interface {
 
 type identityProvider struct{}
 
-type StaplesProvider struct {
+type staplesProvider struct {
 	identityProvider
 	client productClient
 	cache  cache.Cache
@@ -49,10 +49,10 @@ func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
-func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
+func NewStaplesProvider(httpClient *http.Client) (staplesProvider, error) {
 	cacheStore, err := cache.EnsureCache(Container)
 	if err != nil {
-		return StaplesProvider{}, fmt.Errorf("create ALDI staples cache: %w", err)
+		return staplesProvider{}, fmt.Errorf("create ALDI staples cache: %w", err)
 	}
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 20 * time.Second}
@@ -62,8 +62,8 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 	}), cacheStore), nil
 }
 
-func newStaplesProviderWithCache(client productClient, cacheStore cache.Cache) StaplesProvider {
-	return StaplesProvider{
+func newStaplesProviderWithCache(client productClient, cacheStore cache.Cache) staplesProvider {
+	return staplesProvider{
 		client: client,
 		cache:  cacheStore,
 	}
@@ -77,15 +77,15 @@ func (p identityProvider) IsID(locationID string) bool {
 	return IsID(locationID)
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	if !IsID(locationID) {
+		return nil, fmt.Errorf("ALDI location id %q is invalid", locationID)
+	}
+
 	summary, err := p.storeSummary(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
-	if p.client == nil {
-		return nil, fmt.Errorf("ALDI client is required")
-	}
-
 	storeID := strings.TrimSpace(summary.InstoreShopID)
 	postalCode := strings.TrimSpace(summary.ZipCode)
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
@@ -105,19 +105,12 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	return nil, fmt.Errorf("wine lookup is not supported for location %q", locationID)
 }
 
-func (p StaplesProvider) storeSummary(ctx context.Context, locationID string) (StoreSummary, error) {
+func (p staplesProvider) storeSummary(ctx context.Context, locationID string) (StoreSummary, error) {
 	locationID = strings.TrimSpace(locationID)
-	if !IsID(locationID) {
-		return StoreSummary{}, fmt.Errorf("ALDI location id %q is invalid", locationID)
-	}
-	if p.cache == nil {
-		return StoreSummary{}, fmt.Errorf("ALDI cache is required")
-	}
-
 	reader, err := p.cache.Get(ctx, StoreCachePrefix+locationID)
 	if err != nil {
 		return StoreSummary{}, fmt.Errorf("load ALDI store summary for %q: %w", locationID, err)
@@ -163,8 +156,9 @@ func itemToIngredient(item query.Item, category StapleCategory) ai.InputIngredie
 		Description:  item.Name,
 		Size:         itemSize(item),
 		PriceRegular: itemPrice(item),
-		PriceSale:    itemPrice(item),
-		Categories:   []string{category.Name},
+		// No sale data
+		// PriceSale:    itemPrice(item),
+		Categories: []string{category.Name},
 	})
 }
 

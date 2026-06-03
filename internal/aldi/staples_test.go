@@ -91,8 +91,7 @@ func TestStaplesProviderMapsProductsToIngredients(t *testing.T) {
 	assert.Equal(t, []string{"beef"}, got[0].Categories)
 	require.NotNil(t, got[0].PriceRegular)
 	assert.InDelta(t, 7.49, *got[0].PriceRegular, 0.001)
-	require.NotNil(t, got[0].PriceSale)
-	assert.InDelta(t, 7.49, *got[0].PriceSale, 0.001)
+	assert.Nil(t, got[0].PriceSale)
 
 	assert.Equal(t, "29998", client.storeID())
 	assert.Equal(t, "60610", client.postalCode())

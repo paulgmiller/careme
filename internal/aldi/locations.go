@@ -2,7 +2,6 @@ package aldi
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -23,7 +22,6 @@ type LocationBackend struct {
 	zipLookup centroidByZip
 	spatial   []locationtypes.Location
 	hydrator  *hydrator.LazyHydrator
-	cache     cache.Cache
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -44,7 +42,11 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {
 	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
-		return nil, fmt.Errorf("load aldi locations index: %w", err)
+		if strings.Contains(err.Error(), "zero entry index") {
+			entries = nil
+		} else {
+			return nil, fmt.Errorf("load aldi locations index: %w", err)
+		}
 	}
 
 	spatial := make([]locationtypes.Location, 0, len(entries))
@@ -56,7 +58,6 @@ func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidBy
 		zipLookup: zipLookup,
 		spatial:   spatial,
 		hydrator:  hydrator.NewLazyHydrator(&loader{c}),
-		cache:     c,
 	}, nil
 }
 
@@ -65,22 +66,16 @@ func (b *LocationBackend) IsID(locationID string) bool {
 }
 
 func (b *LocationBackend) HasInventory(locationID string) bool {
+	locationID = strings.TrimSpace(locationID)
 	if !IsID(locationID) {
 		return false
 	}
-	reader, err := b.cache.Get(context.Background(), StoreCachePrefix+strings.TrimSpace(locationID))
-	if err != nil {
-		return false
+	for _, loc := range b.spatial {
+		if loc.ID == locationID {
+			return true
+		}
 	}
-	defer func() {
-		_ = reader.Close()
-	}()
-
-	var summary StoreSummary
-	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
-		return false
-	}
-	return strings.TrimSpace(summary.InstoreShopID) != ""
+	return false
 }
 
 func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
