@@ -96,7 +96,6 @@ func TestRunPrintsProducts(t *testing.T) {
 		"-store-id", "29998",
 		"-slug", "rc-other-fish-18102",
 		"-postal-code", "60174",
-		"-zone-id", "384",
 		"-first", "12",
 	}, &out)
 	require.NoError(t, err)

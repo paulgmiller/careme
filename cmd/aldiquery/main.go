@@ -33,7 +33,6 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		storeID    string
 		slug       string
 		postalCode string
-		zoneID     string
 		first      int
 		timeoutSec int
 	)
@@ -43,7 +42,6 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	fs.StringVar(&slug, "slug", "", "ALDI collection slug, for example n-beef-67693")
 	fs.StringVar(&slug, "category", "", "ALDI collection slug, for example n-beef-67693")
 	fs.StringVar(&postalCode, "postal-code", "", "postal code")
-	fs.StringVar(&zoneID, "zone-id", "", "optional zone id")
 	fs.IntVar(&first, "first", 4, "number of products to request")
 	fs.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
 
@@ -76,8 +74,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	client := query.NewClient(clientConfig)
 
 	items, err := client.Products(ctx, storeID, postalCode, slug, query.SearchOptions{
-		ZoneID: zoneID,
-		First:  first,
+		First: first,
 	})
 	if err != nil {
 		return fmt.Errorf("query collection products: %w", err)

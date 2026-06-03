@@ -49,9 +49,7 @@ type ClientConfig struct {
 }
 
 type SearchOptions struct {
-	ZoneID  string
-	First   int
-	OrderBy string
+	First int
 }
 
 type collectionProductsVariables struct {
@@ -147,7 +145,6 @@ func validateCollectionProductsArgs(storeID, postalCode, categorySlug string, op
 }
 
 func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode, pageView string, itemIDs []string, opts SearchOptions, limit int, initCookies []*http.Cookie) ([]Item, error) {
-	itemIDs = limitStrings(itemIDs, limit)
 	items := make([]Item, 0, len(itemIDs))
 	for start := 0; start < len(itemIDs); start += itemBatchSize {
 		end := min(start+itemBatchSize, len(itemIDs))
@@ -184,10 +181,9 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 	if err != nil {
 		return nil, err
 	}
-	zoneID := c.zoneIDForStore(storeID, opts.ZoneID)
 	slog.DebugContext(ctx, "aldi graphql request",
 		"operation", collectionProductsOperationName, "shop_id", storeID,
-		"postal_code", postalCode, "zone_id", zoneID, "slug", categorySlug,
+		"postal_code", postalCode, "slug", categorySlug,
 		"first", resolvedFirst(opts.First), "page_view_id", pageViewID,
 	)
 
@@ -265,14 +261,12 @@ func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID stri
 	if err != nil {
 		return nil, err
 	}
-	zoneID := c.zoneIDForStore(storeID, opts.ZoneID)
 	slog.DebugContext(
 		ctx,
 		"aldi graphql request",
 		"operation", itemsOperationName,
 		"shop_id", storeID,
 		"postal_code", postalCode,
-		"zone_id", zoneID,
 		"item_ids", len(ids),
 		"page_view_id", pageViewID,
 	)
@@ -359,9 +353,9 @@ func (c *Client) collectionProductsURL(storeID, postalCode, categorySlug, pageVi
 	variables := collectionProductsVariables{
 		ShopID:     storeID,
 		PostalCode: strings.TrimSpace(postalCode),
-		ZoneID:     c.zoneIDForStore(storeID, opts.ZoneID),
+		ZoneID:     c.zoneIDForStore(storeID),
 		Slug:       categorySlug,
-		OrderBy:    resolvedString(opts.OrderBy, defaultOrderBy),
+		OrderBy:    defaultOrderBy,
 		Filters:    []string{},
 		PageViewID: pageViewID,
 		First:      resolvedFirst(opts.First),
@@ -399,7 +393,7 @@ func (c *Client) itemsURL(storeID, postalCode string, ids []string, opts SearchO
 	variables := itemsVariables{
 		IDs:        ids,
 		ShopID:     storeID,
-		ZoneID:     c.zoneIDForStore(storeID, opts.ZoneID),
+		ZoneID:     c.zoneIDForStore(storeID),
 		PostalCode: strings.TrimSpace(postalCode),
 	}
 	rawVariables, err := json.Marshal(variables)
@@ -438,14 +432,6 @@ func compactStrings(values []string) []string {
 	return compact
 }
 
-func limitStrings(values []string, limit int) []string {
-	values = compactStrings(values)
-	if limit <= 0 || len(values) <= limit {
-		return values
-	}
-	return values[:limit]
-}
-
 func resolvedFirst(value int) int {
 	if value == 0 {
 		return defaultFirst
@@ -453,25 +439,8 @@ func resolvedFirst(value int) int {
 	return value
 }
 
-func resolvedString(value, fallback string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
-func (c *Client) zoneIDForStore(storeID, value string) string {
+func (c *Client) zoneIDForStore(storeID string) string {
 	storeID = strings.TrimSpace(storeID)
-	value = strings.TrimSpace(value)
-	if value != "" {
-		c.cacheZoneID(storeID, value)
-		return value
-	}
-	if storeID == "" {
-		return generatedZoneID()
-	}
-
 	c.zoneMu.Lock()
 	defer c.zoneMu.Unlock()
 

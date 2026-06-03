@@ -33,8 +33,7 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 	})
 
 	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", "page-view-id", SearchOptions{
-		ZoneID: "384",
-		First:  12,
+		First: 12,
 	}, testInitCookies())
 	require.NoError(t, err)
 	require.NotNil(t, payload)
@@ -60,7 +59,6 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(capturedReq.URL.Query().Get("variables")), &variables))
 	assert.Equal(t, "29998", variables["shopId"])
 	assert.Equal(t, "60174", variables["postalCode"])
-	assert.Equal(t, "384", variables["zoneId"])
 	assert.Equal(t, "rc-other-fish-18102", variables["slug"])
 	assert.Equal(t, defaultOrderBy, variables["orderBy"])
 	assert.Equal(t, "page-view-id", variables["pageViewId"])
@@ -102,9 +100,7 @@ func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
 		},
 	})
 
-	payload, err := client.items(context.Background(), "516286", "40222", "page-view-id", []string{"items_516286-19115479"}, SearchOptions{
-		ZoneID: "289",
-	}, testInitCookies())
+	payload, err := client.items(context.Background(), "516286", "40222", "page-view-id", []string{"items_516286-19115479"}, SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
 	require.NotNil(t, payload)
 	require.NotNil(t, capturedReq)
@@ -130,7 +126,6 @@ func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
 	assert.Equal(t, []any{"items_516286-19115479"}, variables["ids"])
 	assert.Equal(t, "516286", variables["shopId"])
 	assert.Equal(t, "40222", variables["postalCode"])
-	assert.Equal(t, "289", variables["zoneId"])
 
 	var extensions map[string]map[string]any
 	require.NoError(t, json.Unmarshal([]byte(capturedReq.URL.Query().Get("extensions")), &extensions))
@@ -348,7 +343,7 @@ func TestProductsHydratesItemIDsUpToLimit(t *testing.T) {
 						"data": {
 							"collectionProductsBasedSearchResults": {
 								"itemResultList": {
-									"itemIds": ["items_516286-19115479", "items_516286-20112308", "items_516286-333"]
+									"itemIds": ["items_516286-19115479", "items_516286-20112308"]
 								}
 							}
 						}
@@ -372,8 +367,7 @@ func TestProductsHydratesItemIDsUpToLimit(t *testing.T) {
 	})
 
 	items, err := client.Products(context.Background(), "516286", "40222", "n-beef-67693", SearchOptions{
-		ZoneID: "289",
-		First:  2,
+		First: 2,
 	})
 	require.NoError(t, err)
 
