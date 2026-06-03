@@ -213,14 +213,14 @@ type productsCall struct {
 	first      int
 }
 
-func (s *stubProductClient) Products(_ context.Context, storeID, categorySlug string, opts query.SearchOptions) ([]query.Item, error) {
+func (s *stubProductClient) Products(_ context.Context, storeID, postalCode, categorySlug string, opts query.SearchOptions) ([]query.Item, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.calls = append(s.calls, productsCall{
 		storeID:    storeID,
 		slug:       categorySlug,
-		postalCode: opts.PostalCode,
+		postalCode: postalCode,
 		first:      opts.First,
 	})
 	return slices.Clone(s.products[categorySlug]), nil

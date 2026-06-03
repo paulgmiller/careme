@@ -34,7 +34,7 @@ type StapleCategory struct {
 }
 
 type productClient interface {
-	Products(ctx context.Context, storeID, categorySlug string, opts query.SearchOptions) ([]query.Item, error)
+	Products(ctx context.Context, storeID, postalCode, categorySlug string, opts query.SearchOptions) ([]query.Item, error)
 }
 
 type identityProvider struct{}
@@ -87,10 +87,10 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	}
 
 	storeID := strings.TrimSpace(summary.InstoreShopID)
+	postalCode := strings.TrimSpace(summary.ZipCode)
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
-		items, err := p.client.Products(ctx, storeID, category.Slug, query.SearchOptions{
-			PostalCode: strings.TrimSpace(summary.ZipCode),
-			First:      category.Limit,
+		items, err := p.client.Products(ctx, storeID, postalCode, category.Slug, query.SearchOptions{
+			First: category.Limit,
 		})
 		if err != nil {
 			slog.WarnContext(ctx, "failed to fetch ALDI category", "category", category.Name, "location", locationID, "error", err)

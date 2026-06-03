@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,11 +33,10 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 		},
 	})
 
-	payload, err := client.collectionProducts(context.Background(), "29998", "rc-other-fish-18102", SearchOptions{
-		PostalCode: "60174",
-		ZoneID:     "384",
-		First:      12,
-	})
+	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", SearchOptions{
+		ZoneID: "384",
+		First:  12,
+	}, testInitCookies())
 	require.NoError(t, err)
 	require.NotNil(t, payload)
 	require.NotNil(t, capturedReq)
@@ -104,10 +104,9 @@ func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
 		},
 	})
 
-	payload, err := client.items(context.Background(), "516286", []string{"items_516286-19115479"}, SearchOptions{
-		PostalCode: "40222",
-		ZoneID:     "289",
-	})
+	payload, err := client.items(context.Background(), "516286", "40222", []string{"items_516286-19115479"}, SearchOptions{
+		ZoneID: "289",
+	}, testInitCookies())
 	require.NoError(t, err)
 	require.NotNil(t, payload)
 	require.NotNil(t, capturedReq)
@@ -169,7 +168,7 @@ func TestCollectionProductsUsesDefaultFirst(t *testing.T) {
 		},
 	})
 
-	_, err := client.collectionProducts(context.Background(), "29998", "rc-other-fish-18102", SearchOptions{})
+	_, err := client.Products(context.Background(), "29998", "60174", "rc-other-fish-18102", SearchOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, capturedInitReq)
 	assert.Equal(t, http.MethodPost, capturedInitReq.Method)
@@ -177,7 +176,7 @@ func TestCollectionProductsUsesDefaultFirst(t *testing.T) {
 
 	var variables map[string]any
 	require.NoError(t, json.Unmarshal([]byte(capturedQuery.Get("variables")), &variables))
-	assert.NotContains(t, variables, "postalCode")
+	assert.Equal(t, "60174", variables["postalCode"])
 	zoneID, ok := variables["zoneId"].(string)
 	require.True(t, ok)
 	zoneNum, err := strconv.Atoi(zoneID)
@@ -254,7 +253,7 @@ func TestCollectionProductsParsesItems(t *testing.T) {
 		},
 	})
 
-	payload, err := client.collectionProducts(context.Background(), "29998", "rc-other-fish-18102", SearchOptions{})
+	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
 	require.Len(t, payload.Data.Items(), 1)
 
@@ -299,7 +298,7 @@ func TestCollectionProductsParsesSearchResultItemIDs(t *testing.T) {
 		},
 	})
 
-	payload, err := client.collectionProducts(context.Background(), "29998", "n-beef-67693", SearchOptions{})
+	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "n-beef-67693", SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
 
 	assert.Empty(t, payload.Data.Items())
@@ -330,7 +329,7 @@ func TestCollectionProductsParsesCollectionProductItemIDs(t *testing.T) {
 		},
 	})
 
-	payload, err := client.collectionProducts(context.Background(), "516286", "n-beef-67693", SearchOptions{})
+	payload, err := client.collectionProducts(context.Background(), "516286", "40222", "n-beef-67693", SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"items_516286-19115479", "items_516286-20112308"}, payload.Data.ItemIDs())
@@ -340,12 +339,14 @@ func TestProductsHydratesItemIDsUpToLimit(t *testing.T) {
 	t.Parallel()
 
 	var capturedItemsReq *http.Request
+	var initCalls atomic.Int32
 	client := NewClient(ClientConfig{
 		BaseURL:        "https://example.test",
 		PageViewIDFunc: func() string { return "page-view-id" },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path == "/idp/v1/init" {
+					initCalls.Add(1)
 					return initCookieResponse(r), nil
 				}
 				switch r.URL.Query().Get("operationName") {
@@ -377,10 +378,9 @@ func TestProductsHydratesItemIDsUpToLimit(t *testing.T) {
 		},
 	})
 
-	items, err := client.Products(context.Background(), "516286", "n-beef-67693", SearchOptions{
-		PostalCode: "40222",
-		ZoneID:     "289",
-		First:      2,
+	items, err := client.Products(context.Background(), "516286", "40222", "n-beef-67693", SearchOptions{
+		ZoneID: "289",
+		First:  2,
 	})
 	require.NoError(t, err)
 
@@ -391,6 +391,7 @@ func TestProductsHydratesItemIDsUpToLimit(t *testing.T) {
 	assert.Equal(t, itemsOperationName, capturedItemsReq.URL.Query().Get("operationName"))
 	assert.Contains(t, capturedItemsReq.URL.Query().Get("variables"), `"ids":["items_516286-19115479","items_516286-20112308"]`)
 	assert.NotContains(t, capturedItemsReq.URL.Query().Get("variables"), "items_516286-333")
+	assert.Equal(t, int32(1), initCalls.Load())
 }
 
 func TestProductsReusesGeneratedZoneIDForStore(t *testing.T) {
@@ -439,7 +440,7 @@ func TestProductsReusesGeneratedZoneIDForStore(t *testing.T) {
 		},
 	})
 
-	_, err := client.Products(context.Background(), "516286", "n-beef-67693", SearchOptions{})
+	_, err := client.Products(context.Background(), "516286", "40222", "n-beef-67693", SearchOptions{})
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, collectionZoneID)
@@ -462,7 +463,7 @@ func TestCollectionProductsReturnsGraphQLErrors(t *testing.T) {
 		},
 	})
 
-	_, err := client.collectionProducts(context.Background(), "29998", "rc-other-fish-18102", SearchOptions{})
+	_, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", SearchOptions{}, testInitCookies())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Not Authenticated")
 }
@@ -479,13 +480,16 @@ func TestCollectionProductsValidatesRequiredFields(t *testing.T) {
 		},
 	})
 
-	_, err := client.Products(context.Background(), "", "rc-other-fish-18102", SearchOptions{})
+	_, err := client.Products(context.Background(), "", "60174", "rc-other-fish-18102", SearchOptions{})
 	require.ErrorContains(t, err, "store id is required")
 
-	_, err = client.Products(context.Background(), "29998", "", SearchOptions{})
+	_, err = client.Products(context.Background(), "29998", "", "rc-other-fish-18102", SearchOptions{})
+	require.ErrorContains(t, err, "postal code is required")
+
+	_, err = client.Products(context.Background(), "29998", "60174", "", SearchOptions{})
 	require.ErrorContains(t, err, "category slug is required")
 
-	_, err = client.Products(context.Background(), "29998", "rc-other-fish-18102", SearchOptions{First: -1})
+	_, err = client.Products(context.Background(), "29998", "60174", "rc-other-fish-18102", SearchOptions{First: -1})
 	require.ErrorContains(t, err, "first must be greater than or equal to 0")
 }
 
@@ -511,4 +515,11 @@ func initCookieResponse(req *http.Request) *http.Response {
 	resp.Header.Set("Set-Cookie", "__Host-instacart_sid=init-sid; Path=/; Secure; HttpOnly")
 	resp.Header.Add("Set-Cookie", "_instacart_session_id=init-session; Path=/; Secure; HttpOnly")
 	return resp
+}
+
+func testInitCookies() []*http.Cookie {
+	return []*http.Cookie{
+		{Name: "__Host-instacart_sid", Value: "init-sid"},
+		{Name: "_instacart_session_id", Value: "init-session"},
+	}
 }

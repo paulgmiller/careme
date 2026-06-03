@@ -50,7 +50,6 @@ type ClientConfig struct {
 }
 
 type SearchOptions struct {
-	PostalCode string
 	ZoneID     string
 	First      int
 	OrderBy    string
@@ -108,8 +107,20 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 }
 
-func (c *Client) Products(ctx context.Context, storeID, categorySlug string, opts SearchOptions) ([]Item, error) {
-	payload, err := c.collectionProducts(ctx, storeID, categorySlug, opts)
+func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug string, opts SearchOptions) ([]Item, error) {
+	if err := validateCollectionProductsArgs(storeID, postalCode, categorySlug, opts); err != nil {
+		return nil, err
+	}
+	storeID = strings.TrimSpace(storeID)
+	postalCode = strings.TrimSpace(postalCode)
+	categorySlug = strings.TrimSpace(categorySlug)
+
+	initCookies, err := c.initCookies(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	payload, err := c.collectionProducts(ctx, storeID, postalCode, categorySlug, opts, initCookies)
 	if err != nil {
 		return nil, err
 	}
@@ -120,15 +131,31 @@ func (c *Client) Products(ctx context.Context, storeID, categorySlug string, opt
 	if len(itemIDs) <= len(items) {
 		return limitItems(items, limit), nil
 	}
-	return c.hydrateItems(ctx, storeID, itemIDs, opts, limit)
+	return c.hydrateItems(ctx, storeID, postalCode, itemIDs, opts, limit, initCookies)
 }
 
-func (c *Client) hydrateItems(ctx context.Context, storeID string, itemIDs []string, opts SearchOptions, limit int) ([]Item, error) {
+func validateCollectionProductsArgs(storeID, postalCode, categorySlug string, opts SearchOptions) error {
+	if strings.TrimSpace(storeID) == "" {
+		return errors.New("store id is required")
+	}
+	if strings.TrimSpace(postalCode) == "" {
+		return errors.New("postal code is required")
+	}
+	if strings.TrimSpace(categorySlug) == "" {
+		return errors.New("category slug is required")
+	}
+	if opts.First < 0 {
+		return errors.New("first must be greater than or equal to 0")
+	}
+	return nil
+}
+
+func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode string, itemIDs []string, opts SearchOptions, limit int, initCookies []*http.Cookie) ([]Item, error) {
 	itemIDs = limitStrings(itemIDs, limit)
 	items := make([]Item, 0, len(itemIDs))
 	for start := 0; start < len(itemIDs); start += itemBatchSize {
 		end := min(start+itemBatchSize, len(itemIDs))
-		payload, err := c.items(ctx, storeID, itemIDs[start:end], opts)
+		payload, err := c.items(ctx, storeID, postalCode, itemIDs[start:end], opts, initCookies)
 		if err != nil {
 			return nil, err
 		}
@@ -137,10 +164,15 @@ func (c *Client) hydrateItems(ctx context.Context, storeID string, itemIDs []str
 	return limitItems(items, limit), nil
 }
 
-func (c *Client) collectionProducts(ctx context.Context, storeID, categorySlug string, opts SearchOptions) (*CollectionProductsPayload, error) {
+func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, categorySlug string, opts SearchOptions, initCookies []*http.Cookie) (*CollectionProductsPayload, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
+	}
+
+	postalCode = strings.TrimSpace(postalCode)
+	if postalCode == "" {
+		return nil, errors.New("postal code is required")
 	}
 
 	categorySlug = strings.TrimSpace(categorySlug)
@@ -159,21 +191,16 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, categorySlug s
 		return nil, errors.New("first must be greater than or equal to 0")
 	}
 
-	endpoint, err := c.collectionProductsURL(storeID, categorySlug, pageViewID, opts)
+	endpoint, err := c.collectionProductsURL(storeID, postalCode, categorySlug, pageViewID, opts)
 	if err != nil {
 		return nil, err
 	}
 	zoneID := c.zoneIDForStore(storeID, opts.ZoneID)
 	slog.DebugContext(ctx, "aldi graphql request",
 		"operation", collectionProductsOperationName, "shop_id", storeID,
-		"postal_code", opts.PostalCode, "zone_id", zoneID, "slug", categorySlug,
+		"postal_code", postalCode, "zone_id", zoneID, "slug", categorySlug,
 		"first", resolvedFirst(opts.First), "page_view_id", pageViewID,
 	)
-
-	initCookies, err := c.initCookies(ctx)
-	if err != nil {
-		return nil, err
-	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -229,10 +256,15 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, categorySlug s
 	return &payload, nil
 }
 
-func (c *Client) items(ctx context.Context, storeID string, ids []string, opts SearchOptions) (*ItemsPayload, error) {
+func (c *Client) items(ctx context.Context, storeID, postalCode string, ids []string, opts SearchOptions, initCookies []*http.Cookie) (*ItemsPayload, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
+	}
+
+	postalCode = strings.TrimSpace(postalCode)
+	if postalCode == "" {
+		return nil, errors.New("postal code is required")
 	}
 
 	ids = compactStrings(ids)
@@ -248,7 +280,7 @@ func (c *Client) items(ctx context.Context, storeID string, ids []string, opts S
 		return nil, errors.New("page view id is required")
 	}
 
-	endpoint, err := c.itemsURL(storeID, ids, opts)
+	endpoint, err := c.itemsURL(storeID, postalCode, ids, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -258,16 +290,11 @@ func (c *Client) items(ctx context.Context, storeID string, ids []string, opts S
 		"aldi graphql request",
 		"operation", itemsOperationName,
 		"shop_id", storeID,
-		"postal_code", strings.TrimSpace(opts.PostalCode),
+		"postal_code", postalCode,
 		"zone_id", zoneID,
 		"item_ids", len(ids),
 		"page_view_id", pageViewID,
 	)
-
-	initCookies, err := c.initCookies(ctx)
-	if err != nil {
-		return nil, err
-	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -342,7 +369,7 @@ func (c *Client) initCookies(ctx context.Context) ([]*http.Cookie, error) {
 	return cookies, nil
 }
 
-func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string, opts SearchOptions) (string, error) {
+func (c *Client) collectionProductsURL(storeID, postalCode, categorySlug, pageViewID string, opts SearchOptions) (string, error) {
 	endpoint, err := url.Parse(c.baseURL + "/graphql")
 	if err != nil {
 		return "", fmt.Errorf("parse collection products URL: %w", err)
@@ -350,7 +377,7 @@ func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string,
 
 	variables := collectionProductsVariables{
 		ShopID:     storeID,
-		PostalCode: strings.TrimSpace(opts.PostalCode),
+		PostalCode: strings.TrimSpace(postalCode),
 		ZoneID:     c.zoneIDForStore(storeID, opts.ZoneID),
 		Slug:       categorySlug,
 		OrderBy:    resolvedString(opts.OrderBy, defaultOrderBy),
@@ -382,7 +409,7 @@ func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string,
 	return endpoint.String(), nil
 }
 
-func (c *Client) itemsURL(storeID string, ids []string, opts SearchOptions) (string, error) {
+func (c *Client) itemsURL(storeID, postalCode string, ids []string, opts SearchOptions) (string, error) {
 	endpoint, err := url.Parse(c.baseURL + "/graphql")
 	if err != nil {
 		return "", fmt.Errorf("parse items URL: %w", err)
@@ -392,7 +419,7 @@ func (c *Client) itemsURL(storeID string, ids []string, opts SearchOptions) (str
 		IDs:        ids,
 		ShopID:     storeID,
 		ZoneID:     c.zoneIDForStore(storeID, opts.ZoneID),
-		PostalCode: strings.TrimSpace(opts.PostalCode),
+		PostalCode: strings.TrimSpace(postalCode),
 	}
 	rawVariables, err := json.Marshal(variables)
 	if err != nil {

@@ -29,6 +29,13 @@ func TestRunRequiresCategory(t *testing.T) {
 	require.ErrorContains(t, err, "slug is required")
 }
 
+func TestRunRequiresPostalCode(t *testing.T) {
+	t.Parallel()
+
+	err := run(context.Background(), []string{"-store-id", "29998", "-category", "n-beef-67693"}, ioDiscard{})
+	require.ErrorContains(t, err, "postal-code is required")
+}
+
 func TestRunPrintsProducts(t *testing.T) {
 	var capturedReq *http.Request
 	originalHTTPClient := newHTTPClient
@@ -185,6 +192,7 @@ func TestRunHydratesSearchResultItemIDs(t *testing.T) {
 	err := run(context.Background(), []string{
 		"-base-url", "https://example.test",
 		"-store-id", "516286",
+		"-postal-code", "40222",
 		"-category", "n-beef-67693",
 	}, &out)
 	require.NoError(t, err)
