@@ -224,7 +224,6 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 }
 
 func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID string, ids []string, initCookies []*http.Cookie) (*ItemsPayload, error) {
-	ids = compactStrings(ids)
 	if len(ids) == 0 {
 		return nil, errors.New("item ids are required")
 	}
@@ -391,18 +390,6 @@ func (c *Client) itemsURL(storeID, postalCode string, ids []string) (string, err
 	return endpoint.String(), nil
 }
 
-func compactStrings(values []string) []string {
-	compact := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		compact = append(compact, value)
-	}
-	return compact
-}
-
 func resolvedFirst(value int) int {
 	if value == 0 {
 		return defaultFirst
@@ -421,15 +408,6 @@ func (c *Client) zoneIDForStore(storeID string) string {
 	zoneID := generatedZoneID()
 	c.zoneIDsByStore[storeID] = zoneID
 	return zoneID
-}
-
-func (c *Client) cacheZoneID(storeID, zoneID string) {
-	if storeID == "" || zoneID == "" {
-		return
-	}
-	c.zoneMu.Lock()
-	defer c.zoneMu.Unlock()
-	c.zoneIDsByStore[storeID] = zoneID
 }
 
 // ALDI's collection query requires a zone id, but the shop lookup APIs we have
@@ -464,15 +442,6 @@ func cookieNames(cookies []*http.Cookie) string {
 	}
 	sort.Strings(names)
 	return strings.Join(names, ",")
-}
-
-func bodyPreview(body []byte) string {
-	const maxPreviewBytes = 2000
-	preview := strings.TrimSpace(string(body))
-	if len(preview) <= maxPreviewBytes {
-		return preview
-	}
-	return preview[:maxPreviewBytes] + "...(truncated)"
 }
 
 func graphQLErrorsString(errs []GraphQLError) string {
