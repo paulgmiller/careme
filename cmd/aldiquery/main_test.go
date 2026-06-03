@@ -30,8 +30,6 @@ func TestRunRequiresCategory(t *testing.T) {
 }
 
 func TestRunPrintsProducts(t *testing.T) {
-	clearCookieEnv(t)
-
 	var capturedReq *http.Request
 	originalHTTPClient := newHTTPClient
 	t.Cleanup(func() { newHTTPClient = originalHTTPClient })
@@ -92,28 +90,24 @@ func TestRunPrintsProducts(t *testing.T) {
 		"-slug", "rc-other-fish-18102",
 		"-postal-code", "60174",
 		"-zone-id", "384",
-		"-instacart-sid", "instacart-sid",
 		"-first", "12",
 	}, &out)
 	require.NoError(t, err)
 	require.NotNil(t, capturedReq)
 
-	assert.Contains(t, out.String(), "1: Sea Queen Fresh Atlantic Salmon Portions (per lb) - $9.49 /pkg (est.) [$9.49 / lb] highlyInStock product=17771058")
+	assert.Contains(t, out.String(), "Sea Queen Fresh Atlantic Salmon Portions (per lb) - $9.49 /pkg (est.) [$9.49 / lb] highlyInStock product=17771058")
 	assert.Contains(t, out.String(), "total products: 1")
 
 	cookie, err := capturedReq.Cookie("__Host-instacart_sid")
 	require.NoError(t, err)
-	assert.Equal(t, "instacart-sid", cookie.Value)
+	assert.Equal(t, "init-sid", cookie.Value)
 	assert.Equal(t, "CollectionProductsWithFeaturedProducts", capturedReq.URL.Query().Get("operationName"))
 	assert.Contains(t, capturedReq.URL.Query().Get("variables"), `"postalCode":"60174"`)
 	assert.Contains(t, capturedReq.URL.Query().Get("variables"), `"zoneId":"384"`)
-	assert.Contains(t, capturedReq.URL.Query().Get("variables"), `"itemsDisplayType":"collections_all_items_grid"`)
 	assert.Contains(t, capturedReq.URL.Query().Get("variables"), `"first":12`)
 }
 
 func TestRunHydratesSearchResultItemIDs(t *testing.T) {
-	clearCookieEnv(t)
-
 	var capturedCollectionReq *http.Request
 	var capturedItemsReq *http.Request
 	originalHTTPClient := newHTTPClient
@@ -197,8 +191,8 @@ func TestRunHydratesSearchResultItemIDs(t *testing.T) {
 	require.NotNil(t, capturedCollectionReq)
 	require.NotNil(t, capturedItemsReq)
 
-	assert.Contains(t, out.String(), "1: Sea Queen Fresh Atlantic Salmon Portions (per lb) - $9.49 highlyInStock product=17771058")
-	assert.Contains(t, out.String(), "2: Ground Beef (1 lb) - $5.99 product=123")
+	assert.Contains(t, out.String(), "Sea Queen Fresh Atlantic Salmon Portions (per lb) - $9.49 highlyInStock product=17771058")
+	assert.Contains(t, out.String(), "Ground Beef (1 lb) - $5.99 product=123")
 	assert.Contains(t, out.String(), "total products: 2")
 	cookie, err := capturedItemsReq.Cookie("__Host-instacart_sid")
 	require.NoError(t, err)
@@ -211,12 +205,6 @@ type ioDiscard struct{}
 
 func (ioDiscard) Write(p []byte) (int, error) {
 	return len(p), nil
-}
-
-func clearCookieEnv(t *testing.T) {
-	t.Setenv("ALDI_COOKIE", "")
-	t.Setenv("ALDI_INSTACART_SID", "")
-	t.Setenv("ALDI_INSTACART_SESSION_ID", "")
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

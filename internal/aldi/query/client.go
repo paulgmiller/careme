@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -22,61 +23,49 @@ import (
 const (
 	DefaultBaseURL = "https://www.aldi.us"
 
-	collectionProductsOperationName      = "CollectionProductsWithFeaturedProducts"
+	collectionProductsOperationName = "CollectionProductsWithFeaturedProducts"
+	itemsOperationName              = "Items"
+	// without these query hashes you get error: query collection products: items GraphQL error: Error separating operations: expected exactly one operation, got 0
+	// danger of changing obviously.
 	collectionProductsPersistedQueryHash = "f3193dacfeec83828016dc1b3c8af8e61c4470d3f466da2d5797b3f2c530369c"
-	itemsOperationName                   = "Items"
 	itemsPersistedQueryHash              = "b2411f6acba21b2a6a277ca5616fdc5d1265ba647808895c05fe7ce1fd2fdcec"
 
-	defaultFirst            = 4
-	defaultOrderBy          = "bestMatch"
-	defaultItemsDisplayType = "collections_all_items_grid"
-	defaultPageSource       = "browse"
-	itemBatchSize           = 20
+	defaultFirst   = 10
+	defaultOrderBy = "bestMatch"
+	itemBatchSize  = 30
 )
 
 type Client struct {
-	baseURL            string
-	httpClient         *http.Client
-	instacartSID       string
-	instacartSessionID string
-	cookieHeader       string
-	debugWriter        io.Writer
-	pageViewIDFunc     func() string
-	zoneMu             sync.Mutex
-	zoneIDsByStore     map[string]string
+	baseURL        string
+	httpClient     *http.Client
+	pageViewIDFunc func() string
+	zoneMu         sync.Mutex
+	zoneIDsByStore map[string]string
 }
 
 type ClientConfig struct {
-	BaseURL            string
-	HTTPClient         *http.Client
-	InstacartSID       string
-	InstacartSessionID string
-	CookieHeader       string
-	DebugWriter        io.Writer
-	PageViewIDFunc     func() string
+	BaseURL        string
+	HTTPClient     *http.Client
+	PageViewIDFunc func() string
 }
 
 type SearchOptions struct {
-	PostalCode       string
-	ZoneID           string
-	First            int
-	OrderBy          string
-	ItemsDisplayType string
-	PageSource       string
-	PageViewID       string
+	PostalCode string
+	ZoneID     string
+	First      int
+	OrderBy    string
+	PageViewID string
 }
 
 type collectionProductsVariables struct {
-	ShopID           string   `json:"shopId"`
-	PostalCode       string   `json:"postalCode,omitempty"`
-	ZoneID           string   `json:"zoneId,omitempty"`
-	Slug             string   `json:"slug"`
-	OrderBy          string   `json:"orderBy"`
-	Filters          []string `json:"filters"`
-	PageViewID       string   `json:"pageViewId"`
-	ItemsDisplayType string   `json:"itemsDisplayType"`
-	First            int      `json:"first"`
-	PageSource       string   `json:"pageSource"`
+	ShopID     string   `json:"shopId"`
+	PostalCode string   `json:"postalCode,omitempty"`
+	ZoneID     string   `json:"zoneId,omitempty"`
+	Slug       string   `json:"slug"`
+	OrderBy    string   `json:"orderBy"`
+	Filters    []string `json:"filters"`
+	PageViewID string   `json:"pageViewId"`
+	First      int      `json:"first"`
 }
 
 type itemsVariables struct {
@@ -112,14 +101,10 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 
 	return &Client{
-		baseURL:            strings.TrimRight(baseURL, "/"),
-		httpClient:         httpClient,
-		instacartSID:       strings.TrimSpace(cfg.InstacartSID),
-		instacartSessionID: strings.TrimSpace(cfg.InstacartSessionID),
-		cookieHeader:       strings.TrimSpace(cfg.CookieHeader),
-		debugWriter:        cfg.DebugWriter,
-		pageViewIDFunc:     pageViewIDFunc,
-		zoneIDsByStore:     make(map[string]string),
+		baseURL:        strings.TrimRight(baseURL, "/"),
+		httpClient:     httpClient,
+		pageViewIDFunc: pageViewIDFunc,
+		zoneIDsByStore: make(map[string]string),
 	}
 }
 
@@ -178,18 +163,11 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, categorySlug s
 	if err != nil {
 		return nil, err
 	}
-	c.debugf(
-		"graphql operation=%s shop_id=%s postal_code=%s zone_id=%s slug=%s first=%d order_by=%s items_display_type=%s page_source=%s page_view_id=%s",
-		collectionProductsOperationName,
-		storeID,
-		strings.TrimSpace(opts.PostalCode),
-		strings.TrimSpace(opts.ZoneID),
-		categorySlug,
-		resolvedFirst(opts.First),
-		resolvedString(opts.OrderBy, defaultOrderBy),
-		resolvedString(opts.ItemsDisplayType, defaultItemsDisplayType),
-		resolvedString(opts.PageSource, defaultPageSource),
-		pageViewID,
+	zoneID := c.zoneIDForStore(storeID, opts.ZoneID)
+	slog.DebugContext(ctx, "aldi graphql request",
+		"operation", collectionProductsOperationName, "shop_id", storeID,
+		"postal_code", opts.PostalCode, "zone_id", zoneID, "slug", categorySlug,
+		"first", resolvedFirst(opts.First), "page_view_id", pageViewID,
 	)
 
 	initCookies, err := c.initCookies(ctx)
@@ -207,18 +185,10 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, categorySlug s
 	req.Header.Set("X-Client-Identifier", "web")
 	req.Header.Set("X-Page-View-Id", pageViewID)
 	req.Header.Set("Referer", c.baseURL+"/store/aldi/collections/"+url.PathEscape(categorySlug))
-	if c.cookieHeader != "" {
-		req.Header.Set("Cookie", c.cookieHeader)
-	} else if c.instacartSID != "" {
-		req.AddCookie(&http.Cookie{Name: "__Host-instacart_sid", Value: c.instacartSID})
-	}
-	if c.cookieHeader == "" && c.instacartSessionID != "" {
-		req.AddCookie(&http.Cookie{Name: "_instacart_session_id", Value: c.instacartSessionID})
-	}
 	for _, cookie := range initCookies {
 		req.AddCookie(cookie)
 	}
-	c.debugf("graphql request cookies=%s", cookieNames(req.Cookies()))
+	slog.DebugContext(ctx, "aldi graphql request cookies", "operation", collectionProductsOperationName, "cookies", cookieNames(req.Cookies()))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -232,7 +202,7 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, categorySlug s
 	if readErr != nil {
 		return nil, fmt.Errorf("read collection products response: %w", readErr)
 	}
-	c.debugf("graphql status=%d body_preview=%s", resp.StatusCode, bodyPreview(body))
+	slog.DebugContext(ctx, "aldi graphql response", "operation", collectionProductsOperationName, "status", resp.StatusCode, "body_preview", bodyPreview(body))
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("collection products request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
@@ -242,14 +212,16 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, categorySlug s
 	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode collection products response: %w", err)
 	}
-	c.debugf(
-		"graphql decoded items=%d item_ids=%d featured_products=%d header=%q search_id=%q errors=%d",
-		len(payload.Data.CollectionProducts.Items),
-		len(payload.Data.ItemIDs()),
-		len(payload.Data.CollectionProductsBasedSearchResults.ItemResultList.FeaturedProducts),
-		payload.Data.CollectionProductsBasedSearchResults.ViewSection.HeaderString,
-		payload.Data.CollectionProductsBasedSearchResults.SearchID,
-		len(payload.Errors),
+	slog.DebugContext(
+		ctx,
+		"aldi graphql decoded",
+		"operation", collectionProductsOperationName,
+		"items", len(payload.Data.CollectionProducts.Items),
+		"item_ids", len(payload.Data.ItemIDs()),
+		"featured_products", len(payload.Data.CollectionProductsBasedSearchResults.ItemResultList.FeaturedProducts),
+		"header", payload.Data.CollectionProductsBasedSearchResults.ViewSection.HeaderString,
+		"search_id", payload.Data.CollectionProductsBasedSearchResults.SearchID,
+		"errors", len(payload.Errors),
 	)
 	if len(payload.Errors) > 0 {
 		return nil, fmt.Errorf("collection products GraphQL error: %s", graphQLErrorsString(payload.Errors))
@@ -280,14 +252,16 @@ func (c *Client) items(ctx context.Context, storeID string, ids []string, opts S
 	if err != nil {
 		return nil, err
 	}
-	c.debugf(
-		"graphql operation=%s shop_id=%s postal_code=%s zone_id=%s item_ids=%d page_view_id=%s",
-		itemsOperationName,
-		storeID,
-		strings.TrimSpace(opts.PostalCode),
-		strings.TrimSpace(opts.ZoneID),
-		len(ids),
-		pageViewID,
+	zoneID := c.zoneIDForStore(storeID, opts.ZoneID)
+	slog.DebugContext(
+		ctx,
+		"aldi graphql request",
+		"operation", itemsOperationName,
+		"shop_id", storeID,
+		"postal_code", strings.TrimSpace(opts.PostalCode),
+		"zone_id", zoneID,
+		"item_ids", len(ids),
+		"page_view_id", pageViewID,
 	)
 
 	initCookies, err := c.initCookies(ctx)
@@ -306,18 +280,10 @@ func (c *Client) items(ctx context.Context, storeID string, ids []string, opts S
 	req.Header.Set("X-IC-View-Layer", "true")
 	req.Header.Set("X-Page-View-Id", pageViewID)
 	req.Header.Set("Referer", c.baseURL+"/store/aldi/storefront")
-	if c.cookieHeader != "" {
-		req.Header.Set("Cookie", c.cookieHeader)
-	} else if c.instacartSID != "" {
-		req.AddCookie(&http.Cookie{Name: "__Host-instacart_sid", Value: c.instacartSID})
-	}
-	if c.cookieHeader == "" && c.instacartSessionID != "" {
-		req.AddCookie(&http.Cookie{Name: "_instacart_session_id", Value: c.instacartSessionID})
-	}
 	for _, cookie := range initCookies {
 		req.AddCookie(cookie)
 	}
-	c.debugf("items request cookies=%s", cookieNames(req.Cookies()))
+	slog.DebugContext(ctx, "aldi graphql request cookies", "operation", itemsOperationName, "cookies", cookieNames(req.Cookies()))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -331,7 +297,7 @@ func (c *Client) items(ctx context.Context, storeID string, ids []string, opts S
 	if readErr != nil {
 		return nil, fmt.Errorf("read items response: %w", readErr)
 	}
-	c.debugf("items status=%d body_preview=%s", resp.StatusCode, bodyPreview(body))
+	slog.DebugContext(ctx, "aldi graphql response", "operation", itemsOperationName, "status", resp.StatusCode, "body_preview", bodyPreview(body))
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("items request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
@@ -341,7 +307,7 @@ func (c *Client) items(ctx context.Context, storeID string, ids []string, opts S
 	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode items response: %w", err)
 	}
-	c.debugf("items decoded items=%d errors=%d", len(payload.Data.Items), len(payload.Errors))
+	slog.DebugContext(ctx, "aldi graphql decoded", "operation", itemsOperationName, "items", len(payload.Data.Items), "errors", len(payload.Errors))
 	if len(payload.Errors) > 0 {
 		return nil, fmt.Errorf("items GraphQL error: %s", graphQLErrorsString(payload.Errors))
 	}
@@ -349,11 +315,6 @@ func (c *Client) items(ctx context.Context, storeID string, ids []string, opts S
 }
 
 func (c *Client) initCookies(ctx context.Context) ([]*http.Cookie, error) {
-	if c.cookieHeader != "" || c.instacartSID != "" || c.instacartSessionID != "" {
-		c.debugf("init skipped manual_cookie_override=true cookie_header=%t instacart_sid=%t instacart_session_id=%t", c.cookieHeader != "", c.instacartSID != "", c.instacartSessionID != "")
-		return nil, nil
-	}
-
 	endpoint := c.baseURL + "/idp/v1/init"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader([]byte("{}")))
 	if err != nil {
@@ -377,7 +338,7 @@ func (c *Client) initCookies(ctx context.Context) ([]*http.Cookie, error) {
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	cookies := resp.Cookies()
-	c.debugf("init status=%d cookies=%s", resp.StatusCode, cookieNames(cookies))
+	slog.DebugContext(ctx, "aldi init response", "status", resp.StatusCode, "cookies", cookieNames(cookies))
 	return cookies, nil
 }
 
@@ -388,16 +349,14 @@ func (c *Client) collectionProductsURL(storeID, categorySlug, pageViewID string,
 	}
 
 	variables := collectionProductsVariables{
-		ShopID:           storeID,
-		PostalCode:       strings.TrimSpace(opts.PostalCode),
-		ZoneID:           c.zoneIDForStore(storeID, opts.ZoneID),
-		Slug:             categorySlug,
-		OrderBy:          resolvedString(opts.OrderBy, defaultOrderBy),
-		Filters:          []string{},
-		PageViewID:       pageViewID,
-		ItemsDisplayType: resolvedString(opts.ItemsDisplayType, defaultItemsDisplayType),
-		First:            resolvedFirst(opts.First),
-		PageSource:       resolvedString(opts.PageSource, defaultPageSource),
+		ShopID:     storeID,
+		PostalCode: strings.TrimSpace(opts.PostalCode),
+		ZoneID:     c.zoneIDForStore(storeID, opts.ZoneID),
+		Slug:       categorySlug,
+		OrderBy:    resolvedString(opts.OrderBy, defaultOrderBy),
+		Filters:    []string{},
+		PageViewID: pageViewID,
+		First:      resolvedFirst(opts.First),
 	}
 	rawVariables, err := json.Marshal(variables)
 	if err != nil {
@@ -545,13 +504,6 @@ func generatedZoneID() string {
 		return "100"
 	}
 	return fmt.Sprintf("%d", minZoneID+int(v.Int64()))
-}
-
-func (c *Client) debugf(format string, args ...any) {
-	if c.debugWriter == nil {
-		return
-	}
-	_, _ = fmt.Fprintf(c.debugWriter, "aldiquery debug: "+format+"\n", args...)
 }
 
 func cookieNames(cookies []*http.Cookie) string {

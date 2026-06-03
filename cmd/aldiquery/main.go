@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,16 +29,13 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("aldiquery", flag.ContinueOnError)
 
 	var (
-		baseURL            string
-		storeID            string
-		slug               string
-		postalCode         string
-		zoneID             string
-		instacartSID       string
-		instacartSessionID string
-		first              int
-		timeoutSec         int
-		debug              bool
+		baseURL    string
+		storeID    string
+		slug       string
+		postalCode string
+		zoneID     string
+		first      int
+		timeoutSec int
 	)
 
 	fs.StringVar(&baseURL, "base-url", query.DefaultBaseURL, "ALDI base URL")
@@ -48,11 +44,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	fs.StringVar(&slug, "category", "", "ALDI collection slug, for example n-beef-67693")
 	fs.StringVar(&postalCode, "postal-code", "", "optional postal code")
 	fs.StringVar(&zoneID, "zone-id", "", "optional zone id")
-	fs.StringVar(&instacartSID, "instacart-sid", envOrDefault("ALDI_INSTACART_SID", ""), "optional __Host-instacart_sid cookie override")
-	fs.StringVar(&instacartSessionID, "instacart-session-id", envOrDefault("ALDI_INSTACART_SESSION_ID", ""), "optional _instacart_session_id cookie override")
 	fs.IntVar(&first, "first", 4, "number of products to request")
 	fs.IntVar(&timeoutSec, "timeout", 20, "HTTP timeout in seconds")
-	fs.BoolVar(&debug, "debug", false, "print ALDI request diagnostics to stderr")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -74,13 +67,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 
 	clientConfig := query.ClientConfig{
-		BaseURL:            baseURL,
-		InstacartSID:       instacartSID,
-		InstacartSessionID: instacartSessionID,
-		HTTPClient:         newHTTPClient(time.Duration(timeoutSec) * time.Second),
-	}
-	if debug {
-		clientConfig.DebugWriter = os.Stderr
+		BaseURL:    baseURL,
+		HTTPClient: newHTTPClient(time.Duration(timeoutSec) * time.Second),
 	}
 	client := query.NewClient(clientConfig)
 
@@ -93,8 +81,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return fmt.Errorf("query collection products: %w", err)
 	}
 
-	for i, item := range items {
-		if _, err := fmt.Fprintln(out, itemLine(i+1, item)); err != nil {
+	for _, item := range items {
+		if _, err := fmt.Fprintln(out, itemLine(item)); err != nil {
 			return fmt.Errorf("write product: %w", err)
 		}
 	}
@@ -104,10 +92,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	return nil
 }
 
-func itemLine(index int, item query.Item) string {
+func itemLine(item query.Item) string {
 	var line strings.Builder
-	line.WriteString(strconv.Itoa(index))
-	line.WriteString(": ")
 	line.WriteString(item.Name)
 	if item.Size != "" {
 		line.WriteString(" (")
@@ -139,11 +125,4 @@ func displayPrice(item query.Item) string {
 		return item.Price.ViewSection.ItemCard.PriceString
 	}
 	return item.Price.ViewSection.PriceString
-}
-
-func envOrDefault(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
 }

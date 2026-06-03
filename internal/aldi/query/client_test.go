@@ -1,7 +1,6 @@
 package query
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -20,12 +19,13 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 
 	var capturedReq *http.Request
 	client := NewClient(ClientConfig{
-		BaseURL:            "https://example.test",
-		InstacartSID:       "instacart-sid",
-		InstacartSessionID: "instacart-session-id",
-		PageViewIDFunc:     func() string { return "page-view-id" },
+		BaseURL:        "https://example.test",
+		PageViewIDFunc: func() string { return "page-view-id" },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/idp/v1/init" {
+					return initCookieResponse(r), nil
+				}
 				capturedReq = r
 				return jsonResponse(r, http.StatusOK, `{"data":{"collectionProducts":{"items":[]}}}`), nil
 			}),
@@ -52,10 +52,10 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 
 	cookie, err := capturedReq.Cookie("__Host-instacart_sid")
 	require.NoError(t, err)
-	assert.Equal(t, "instacart-sid", cookie.Value)
+	assert.Equal(t, "init-sid", cookie.Value)
 	cookie, err = capturedReq.Cookie("_instacart_session_id")
 	require.NoError(t, err)
-	assert.Equal(t, "instacart-session-id", cookie.Value)
+	assert.Equal(t, "init-session", cookie.Value)
 
 	var variables map[string]any
 	require.NoError(t, json.Unmarshal([]byte(capturedReq.URL.Query().Get("variables")), &variables))
@@ -65,9 +65,7 @@ func TestCollectionProductsBuildsExpectedRequest(t *testing.T) {
 	assert.Equal(t, "rc-other-fish-18102", variables["slug"])
 	assert.Equal(t, defaultOrderBy, variables["orderBy"])
 	assert.Equal(t, "page-view-id", variables["pageViewId"])
-	assert.Equal(t, defaultItemsDisplayType, variables["itemsDisplayType"])
 	assert.Equal(t, float64(12), variables["first"])
-	assert.Equal(t, defaultPageSource, variables["pageSource"])
 	assert.Empty(t, variables["filters"])
 
 	var extensions map[string]map[string]any
@@ -81,12 +79,13 @@ func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
 
 	var capturedReq *http.Request
 	client := NewClient(ClientConfig{
-		BaseURL:            "https://example.test",
-		InstacartSID:       "instacart-sid",
-		InstacartSessionID: "instacart-session-id",
-		PageViewIDFunc:     func() string { return "page-view-id" },
+		BaseURL:        "https://example.test",
+		PageViewIDFunc: func() string { return "page-view-id" },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/idp/v1/init" {
+					return initCookieResponse(r), nil
+				}
 				capturedReq = r
 				return jsonResponse(r, http.StatusOK, `{
 					"data": {
@@ -124,10 +123,10 @@ func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
 
 	cookie, err := capturedReq.Cookie("__Host-instacart_sid")
 	require.NoError(t, err)
-	assert.Equal(t, "instacart-sid", cookie.Value)
+	assert.Equal(t, "init-sid", cookie.Value)
 	cookie, err = capturedReq.Cookie("_instacart_session_id")
 	require.NoError(t, err)
-	assert.Equal(t, "instacart-session-id", cookie.Value)
+	assert.Equal(t, "init-session", cookie.Value)
 
 	var variables map[string]any
 	require.NoError(t, json.Unmarshal([]byte(capturedReq.URL.Query().Get("variables")), &variables))
@@ -143,29 +142,6 @@ func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
 
 	require.Len(t, payload.Data.Items, 1)
 	assert.Equal(t, "Black Angus Beef", payload.Data.Items[0].Name)
-}
-
-func TestCollectionProductsCanUseRawCookieHeader(t *testing.T) {
-	t.Parallel()
-
-	var capturedReq *http.Request
-	client := NewClient(ClientConfig{
-		BaseURL:      "https://example.test",
-		CookieHeader: "__Host-instacart_sid=sid; _instacart_session_id=session",
-		HTTPClient: &http.Client{
-			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				capturedReq = r
-				return jsonResponse(r, http.StatusOK, `{"data":{"collectionProductsBasedSearchResults":{"itemResultList":{"itemIds":[]}}}}`), nil
-			}),
-		},
-		PageViewIDFunc: func() string { return "page-view-id" },
-	})
-
-	_, err := client.collectionProducts(context.Background(), "29998", "rc-other-fish-18102", SearchOptions{})
-	require.NoError(t, err)
-	require.NotNil(t, capturedReq)
-
-	assert.Equal(t, "__Host-instacart_sid=sid; _instacart_session_id=session", capturedReq.Header.Get("Cookie"))
 }
 
 func TestCollectionProductsUsesDefaultFirst(t *testing.T) {
@@ -211,64 +187,17 @@ func TestCollectionProductsUsesDefaultFirst(t *testing.T) {
 	assert.Equal(t, float64(defaultFirst), variables["first"])
 }
 
-func TestCollectionProductsDebugOutput(t *testing.T) {
-	t.Parallel()
-
-	var debug bytes.Buffer
-	client := NewClient(ClientConfig{
-		BaseURL:        "https://example.test",
-		DebugWriter:    &debug,
-		PageViewIDFunc: func() string { return "page-view-id" },
-		HTTPClient: &http.Client{
-			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				if r.URL.Path == "/idp/v1/init" {
-					resp := jsonResponse(r, http.StatusOK, `{}`)
-					resp.Header.Add("Set-Cookie", "__Host-instacart_sid=init-sid; Path=/; Secure; HttpOnly")
-					resp.Header.Add("Set-Cookie", "_instacart_session_id=session-id; Path=/; Secure; HttpOnly")
-					return resp, nil
-				}
-				return jsonResponse(r, http.StatusOK, `{
-					"data": {
-						"collectionProductsBasedSearchResults": {
-							"itemResultList": {
-								"featuredProducts": [],
-								"itemIds": ["items_29998-17771058"]
-							},
-							"searchId": "search-id",
-							"viewSection": {"headerString": "Beef"}
-						}
-					}
-				}`), nil
-			}),
-		},
-	})
-
-	_, err := client.collectionProducts(context.Background(), "29998", "n-beef-67693", SearchOptions{
-		PostalCode: "60174",
-		ZoneID:     "384",
-		First:      12,
-	})
-	require.NoError(t, err)
-
-	output := debug.String()
-	assert.Contains(t, output, "graphql operation=CollectionProductsWithFeaturedProducts shop_id=29998 postal_code=60174 zone_id=384 slug=n-beef-67693 first=12 order_by=bestMatch items_display_type=collections_all_items_grid page_source=browse page_view_id=page-view-id")
-	assert.Contains(t, output, "init status=200 cookies=__Host-instacart_sid,_instacart_session_id")
-	assert.Contains(t, output, "graphql request cookies=__Host-instacart_sid,_instacart_session_id")
-	assert.Contains(t, output, "graphql status=200 body_preview=")
-	assert.Contains(t, output, `graphql decoded items=0 item_ids=1 featured_products=0 header="Beef" search_id="search-id" errors=0`)
-	assert.NotContains(t, output, "init-sid")
-	assert.NotContains(t, output, "session-id")
-}
-
 func TestCollectionProductsParsesItems(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(ClientConfig{
 		BaseURL:        "https://example.test",
-		InstacartSID:   "instacart-sid",
 		PageViewIDFunc: func() string { return "page-view-id" },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/idp/v1/init" {
+					return initCookieResponse(r), nil
+				}
 				return jsonResponse(r, http.StatusOK, `{
 					"data": {
 						"collectionProducts": {
@@ -348,10 +277,12 @@ func TestCollectionProductsParsesSearchResultItemIDs(t *testing.T) {
 
 	client := NewClient(ClientConfig{
 		BaseURL:        "https://example.test",
-		InstacartSID:   "instacart-sid",
 		PageViewIDFunc: func() string { return "page-view-id" },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/idp/v1/init" {
+					return initCookieResponse(r), nil
+				}
 				return jsonResponse(r, http.StatusOK, `{
 					"data": {
 						"collectionProductsBasedSearchResults": {
@@ -381,10 +312,12 @@ func TestCollectionProductsParsesCollectionProductItemIDs(t *testing.T) {
 
 	client := NewClient(ClientConfig{
 		BaseURL:        "https://example.test",
-		InstacartSID:   "instacart-sid",
 		PageViewIDFunc: func() string { return "page-view-id" },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/idp/v1/init" {
+					return initCookieResponse(r), nil
+				}
 				return jsonResponse(r, http.StatusOK, `{
 					"data": {
 						"collectionProducts": {
@@ -409,10 +342,12 @@ func TestProductsHydratesItemIDsUpToLimit(t *testing.T) {
 	var capturedItemsReq *http.Request
 	client := NewClient(ClientConfig{
 		BaseURL:        "https://example.test",
-		InstacartSID:   "instacart-sid",
 		PageViewIDFunc: func() string { return "page-view-id" },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/idp/v1/init" {
+					return initCookieResponse(r), nil
+				}
 				switch r.URL.Query().Get("operationName") {
 				case collectionProductsOperationName:
 					return jsonResponse(r, http.StatusOK, `{
@@ -465,10 +400,12 @@ func TestProductsReusesGeneratedZoneIDForStore(t *testing.T) {
 	var itemsZoneID string
 	client := NewClient(ClientConfig{
 		BaseURL:        "https://example.test",
-		InstacartSID:   "instacart-sid",
 		PageViewIDFunc: func() string { return "page-view-id" },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/idp/v1/init" {
+					return initCookieResponse(r), nil
+				}
 				var variables map[string]any
 				require.NoError(t, json.Unmarshal([]byte(r.URL.Query().Get("variables")), &variables))
 				zoneID, _ := variables["zoneId"].(string)
@@ -514,10 +451,12 @@ func TestCollectionProductsReturnsGraphQLErrors(t *testing.T) {
 
 	client := NewClient(ClientConfig{
 		BaseURL:        "https://example.test",
-		InstacartSID:   "instacart-sid",
 		PageViewIDFunc: func() string { return "page-view-id" },
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/idp/v1/init" {
+					return initCookieResponse(r), nil
+				}
 				return jsonResponse(r, http.StatusOK, `{"errors":[{"message":"Not Authenticated","path":["collectionProducts"]}],"data":null}`), nil
 			}),
 		},
@@ -565,4 +504,11 @@ func jsonResponse(req *http.Request, status int, body string) *http.Response {
 		Body:    io.NopCloser(strings.NewReader(body)),
 		Request: req,
 	}
+}
+
+func initCookieResponse(req *http.Request) *http.Response {
+	resp := jsonResponse(req, http.StatusOK, `{}`)
+	resp.Header.Set("Set-Cookie", "__Host-instacart_sid=init-sid; Path=/; Secure; HttpOnly")
+	resp.Header.Add("Set-Cookie", "_instacart_session_id=init-session; Path=/; Secure; HttpOnly")
+	return resp
 }
