@@ -105,8 +105,29 @@ func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p staplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
-	return nil, fmt.Errorf("wine lookup is not supported for location %q", locationID)
+func (p staplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+	summary, err := p.storeSummary(ctx, locationID)
+	if err != nil {
+		return nil, err
+	}
+	storeID := strings.TrimSpace(summary.InstoreShopID)
+	postalCode := strings.TrimSpace(summary.ZipCode)
+
+	return parallelism.Flatten(Wines(), func(category StapleCategory) ([]ai.InputIngredient, error) {
+		items, err := p.client.Products(ctx, storeID, postalCode, category.Slug, query.SearchOptions{
+			First: category.Limit,
+		})
+		if err != nil {
+			slog.WarnContext(ctx, "failed to fetch ALDI wines", "category", category.Name, "location", locationID, "error", err)
+			return nil, err
+		}
+
+		ingredients := lo.Map(items, func(item query.Item, _ int) ai.InputIngredient {
+			return itemToIngredient(item, category)
+		})
+		slog.InfoContext(ctx, "found ALDI wines for category", "count", len(ingredients), "category", category.Name, "location", locationID)
+		return ingredients, nil
+	})
 }
 
 func (p staplesProvider) storeSummary(ctx context.Context, locationID string) (StoreSummary, error) {
@@ -140,6 +161,13 @@ func StapleCategories() []StapleCategory {
 		{Name: "shellfish", Slug: "n-shellfish-45452", Limit: defaultStapleTake},
 		{Name: "lamb", Slug: "n-lamb-91217", Limit: defaultStapleTake},
 		{Name: "pasta and dry goods", Slug: "n-dry-goods-pasta-19255", Limit: bigStapleTake},
+	}
+}
+
+func Wines() []StapleCategory {
+	return []StapleCategory{
+		{Name: "red wine", Slug: "rc-red-wine-category", Limit: bigStapleTake},
+		{Name: "white wine", Slug: "rc-white-wine", Limit: bigStapleTake},
 	}
 }
 
