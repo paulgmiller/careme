@@ -108,6 +108,7 @@ func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug
 	postalCode = strings.TrimSpace(postalCode)
 	categorySlug = strings.TrimSpace(categorySlug)
 
+	// cache this for small period?
 	initCookies, err := c.initCookies(ctx)
 	if err != nil {
 		return nil, err
@@ -124,7 +125,7 @@ func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug
 	items := payload.Data.Items()
 	itemIDs := payload.Data.ItemIDs()
 	if len(itemIDs) <= len(items) {
-		return limitItems(items, limit), nil
+		return items, nil
 	}
 	return c.hydrateItems(ctx, storeID, postalCode, pageViewID, itemIDs, opts, limit, initCookies)
 }
@@ -156,7 +157,7 @@ func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode, pageView
 		}
 		items = append(items, payload.Data.Items...)
 	}
-	return limitItems(items, limit), nil
+	return items, nil
 }
 
 func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, categorySlug, pageViewID string, opts SearchOptions, initCookies []*http.Cookie) (*CollectionProductsPayload, error) {
@@ -435,13 +436,6 @@ func compactStrings(values []string) []string {
 		compact = append(compact, value)
 	}
 	return compact
-}
-
-func limitItems(items []Item, limit int) []Item {
-	if limit <= 0 || len(items) <= limit {
-		return items
-	}
-	return items[:limit]
 }
 
 func limitStrings(values []string, limit int) []string {
