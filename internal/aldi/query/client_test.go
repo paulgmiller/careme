@@ -100,7 +100,7 @@ func TestItemsBuildsExpectedRequestAndParsesItems(t *testing.T) {
 		},
 	})
 
-	payload, err := client.items(context.Background(), "516286", "40222", "page-view-id", []string{"items_516286-19115479"}, SearchOptions{}, testInitCookies())
+	payload, err := client.items(context.Background(), "516286", "40222", "page-view-id", []string{"items_516286-19115479"}, testInitCookies())
 	require.NoError(t, err)
 	require.NotNil(t, payload)
 	require.NotNil(t, capturedReq)

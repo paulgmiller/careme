@@ -108,6 +108,7 @@ func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug
 	categorySlug = strings.TrimSpace(categorySlug)
 
 	// cache this for small period?
+	// or filter to just instcart SID and Session ID?
 	initCookies, err := c.initCookies(ctx)
 	if err != nil {
 		return nil, err
@@ -126,7 +127,7 @@ func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug
 	if len(itemIDs) <= len(items) {
 		return items, nil
 	}
-	return c.hydrateItems(ctx, storeID, postalCode, pageViewID, itemIDs, opts, limit, initCookies)
+	return c.hydrateItems(ctx, storeID, postalCode, pageViewID, itemIDs, limit, initCookies)
 }
 
 func validateCollectionProductsArgs(storeID, postalCode, categorySlug string, opts SearchOptions) error {
@@ -145,10 +146,10 @@ func validateCollectionProductsArgs(storeID, postalCode, categorySlug string, op
 	return nil
 }
 
-func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode, pageView string, itemIDs []string, opts SearchOptions, limit int, initCookies []*http.Cookie) ([]Item, error) {
+func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode, pageView string, itemIDs []string, limit int, initCookies []*http.Cookie) ([]Item, error) {
 	items := make([]Item, 0, len(itemIDs))
 	for _, batch := range lo.Chunk(itemIDs, itemBatchSize) {
-		payload, err := c.items(ctx, storeID, postalCode, pageView, batch, opts, initCookies)
+		payload, err := c.items(ctx, storeID, postalCode, pageView, batch, initCookies)
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +182,6 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 	for _, cookie := range initCookies {
 		req.AddCookie(cookie)
 	}
-	slog.DebugContext(ctx, "aldi graphql request cookies", "operation", collectionProductsOperationName, "cookies", cookieNames(req.Cookies()))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -223,13 +223,13 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 	return &payload, nil
 }
 
-func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID string, ids []string, opts SearchOptions, initCookies []*http.Cookie) (*ItemsPayload, error) {
+func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID string, ids []string, initCookies []*http.Cookie) (*ItemsPayload, error) {
 	ids = compactStrings(ids)
 	if len(ids) == 0 {
 		return nil, errors.New("item ids are required")
 	}
 
-	endpoint, err := c.itemsURL(storeID, postalCode, ids, opts)
+	endpoint, err := c.itemsURL(storeID, postalCode, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,6 @@ func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID stri
 	for _, cookie := range initCookies {
 		req.AddCookie(cookie)
 	}
-	slog.DebugContext(ctx, "aldi graphql request cookies", "operation", itemsOperationName, "cookies", cookieNames(req.Cookies()))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -356,7 +355,7 @@ func (c *Client) collectionProductsURL(storeID, postalCode, categorySlug, pageVi
 	return endpoint.String(), nil
 }
 
-func (c *Client) itemsURL(storeID, postalCode string, ids []string, opts SearchOptions) (string, error) {
+func (c *Client) itemsURL(storeID, postalCode string, ids []string) (string, error) {
 	endpoint, err := url.Parse(c.baseURL + "/graphql")
 	if err != nil {
 		return "", fmt.Errorf("parse items URL: %w", err)
