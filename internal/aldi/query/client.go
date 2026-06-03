@@ -158,25 +158,6 @@ func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode, pageView
 }
 
 func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, categorySlug, pageViewID string, opts SearchOptions, initCookies []*http.Cookie) (*CollectionProductsPayload, error) {
-	storeID = strings.TrimSpace(storeID)
-	if storeID == "" {
-		return nil, errors.New("store id is required")
-	}
-
-	postalCode = strings.TrimSpace(postalCode)
-	if postalCode == "" {
-		return nil, errors.New("postal code is required")
-	}
-
-	categorySlug = strings.TrimSpace(categorySlug)
-	if categorySlug == "" {
-		return nil, errors.New("category slug is required")
-	}
-
-	if opts.First < 0 {
-		return nil, errors.New("first must be greater than or equal to 0")
-	}
-
 	endpoint, err := c.collectionProductsURL(storeID, postalCode, categorySlug, pageViewID, opts)
 	if err != nil {
 		return nil, err
@@ -242,16 +223,6 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 }
 
 func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID string, ids []string, opts SearchOptions, initCookies []*http.Cookie) (*ItemsPayload, error) {
-	storeID = strings.TrimSpace(storeID)
-	if storeID == "" {
-		return nil, errors.New("store id is required")
-	}
-
-	postalCode = strings.TrimSpace(postalCode)
-	if postalCode == "" {
-		return nil, errors.New("postal code is required")
-	}
-
 	ids = compactStrings(ids)
 	if len(ids) == 0 {
 		return nil, errors.New("item ids are required")
