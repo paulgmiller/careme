@@ -76,13 +76,54 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 	assertCookieValue(t, capturedReq, "USER_CHOSEN_STORE", "true")
 }
 
+func TestCategoryPageIncludesIntParameter(t *testing.T) {
+	t.Parallel()
+
+	var capturedReq *http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedReq = r
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+	}))
+	defer server.Close()
+
+	client := NewQueryClient(QueryClientConfig{
+		BaseURL:    server.URL,
+		BuildID:    "test-build",
+		HTTPClient: server.Client(),
+	})
+
+	_, err := client.CategoryPage(context.Background(), CategoryOptions{
+		Reese84:      "test-reese",
+		StoreID:      "465",
+		ParentID:     "490110",
+		ChildID:      "490529",
+		CategoryPath: "/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef",
+		Int:          "curbside-category-shortcuts.meat.beef",
+		Page:         2,
+	})
+	if err != nil {
+		t.Fatalf("CategoryPage returned error: %v", err)
+	}
+
+	query := capturedReq.URL.Query()
+	assertQueryValue(t, query, "int", "curbside-category-shortcuts.meat.beef")
+	assertQueryValue(t, query, "parentId", "490110")
+	assertQueryValue(t, query, "childId", "490529")
+	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef"; got != want {
+		t.Fatalf("unexpected referer: got %q want %q", got, want)
+	}
+}
+
 func TestCategoryPageDiscoversBuildID(t *testing.T) {
 	t.Parallel()
 
+	var categoryPagePath string
 	var dataRequestPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/category/shop/490020/490083":
+		case "/category/shop/fruit-vegetables/vegetables/490020/490083":
+			categoryPagePath = r.URL.Path
 			w.Header().Set("Content-Type", "text/html")
 			_, _ = io.WriteString(w, `<!doctype html><html><body><script id="__NEXT_DATA__" type="application/json">{"buildId":"discovered-build"}</script></body></html>`)
 		case "/_next/data/discovered-build/en/category/shop/490020/490083.json":
@@ -101,16 +142,32 @@ func TestCategoryPageDiscoversBuildID(t *testing.T) {
 	})
 
 	_, err := client.CategoryPage(context.Background(), CategoryOptions{
-		Reese84:  "test-reese",
-		StoreID:  "92",
-		ParentID: "490020",
-		ChildID:  "490083",
+		Reese84:      "test-reese",
+		StoreID:      "92",
+		ParentID:     "490020",
+		ChildID:      "490083",
+		CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083",
 	})
 	if err != nil {
 		t.Fatalf("CategoryPage returned error: %v", err)
 	}
+	if got, want := categoryPagePath, "/category/shop/fruit-vegetables/vegetables/490020/490083"; got != want {
+		t.Fatalf("unexpected category page path: got %q want %q", got, want)
+	}
 	if got, want := dataRequestPath, "/_next/data/discovered-build/en/category/shop/490020/490083.json"; got != want {
 		t.Fatalf("unexpected data path: got %q want %q", got, want)
+	}
+}
+
+func TestExtractBuildIDFromNextStaticAsset(t *testing.T) {
+	t.Parallel()
+
+	buildID, err := extractBuildID([]byte(`<!doctype html><html><head><script src="/_next/static/static-build-id/_buildManifest.js"></script></head></html>`))
+	if err != nil {
+		t.Fatalf("extractBuildID returned error: %v", err)
+	}
+	if buildID != "static-build-id" {
+		t.Fatalf("unexpected build id: %q", buildID)
 	}
 }
 
@@ -194,6 +251,55 @@ func TestDecodeCategoryPayloadExtractsProducts(t *testing.T) {
 	}
 }
 
+func TestDecodeCategoryPayloadExtractsNormalizedProductObjects(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"props": {
+			"pageProps": {
+				"apolloState": {
+					"Product:beef-1": {
+						"__typename": "Product",
+						"id": "beef-1",
+						"storeId": 465,
+						"displayName": "H-E-B Ground Beef",
+						"fullCategoryHierarchy": "Meat & seafood/Meat/Beef",
+						"brand": {"name": "H-E-B"},
+						"productLocation": {"location": "Meat Market"}
+					},
+					"Product:beef-1-duplicate": {
+						"__typename": "Product",
+						"id": "beef-1",
+						"storeId": 465,
+						"displayName": "H-E-B Ground Beef"
+					},
+					"Product:beef-2": {
+						"__typename": "Product",
+						"id": "beef-2",
+						"storeId": 465,
+						"displayName": "Beef Chuck Roast"
+					}
+				}
+			}
+		}
+	}`)
+
+	products, _, err := decodeCategoryPayload(body)
+	if err != nil {
+		t.Fatalf("decodeCategoryPayload returned error: %v", err)
+	}
+	if len(products) != 2 {
+		t.Fatalf("expected 2 products, got %d: %+v", len(products), products)
+	}
+	productIDs := map[string]bool{}
+	for _, product := range products {
+		productIDs[product.ID] = true
+	}
+	if !productIDs["beef-1"] || !productIDs["beef-2"] {
+		t.Fatalf("missing normalized products: %+v", products)
+	}
+}
+
 func TestCategoryAutoPaginatesWithSCT(t *testing.T) {
 	t.Parallel()
 
@@ -238,6 +344,40 @@ func TestCategoryAutoPaginatesWithSCT(t *testing.T) {
 	}
 	if got, want := pageTwoSCT, "page-two-token"; got != want {
 		t.Fatalf("unexpected page two sct: got %q want %q", got, want)
+	}
+}
+
+func TestCategoryDoesNotPaginateOnGenericSCT(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p1","displayName":"Apples"}],"sct":"current-page-token"}}}`)
+	}))
+	defer server.Close()
+
+	client := NewQueryClient(QueryClientConfig{
+		BaseURL:    server.URL,
+		BuildID:    "test-build",
+		HTTPClient: server.Client(),
+	})
+
+	products, err := client.Category(context.Background(), CategoryOptions{
+		Reese84:  "test-reese",
+		StoreID:  "92",
+		ParentID: "490020",
+		ChildID:  "490083",
+	})
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected 1 product, got %d", len(products))
+	}
+	if calls != 1 {
+		t.Fatalf("expected 1 request, got %d", calls)
 	}
 }
 

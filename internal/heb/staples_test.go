@@ -58,7 +58,9 @@ func (s *stubHEBQueryClient) hasCall(want CategoryOptions) bool {
 		return got.Reese84 == want.Reese84 &&
 			got.StoreID == want.StoreID &&
 			got.ParentID == want.ParentID &&
-			got.ChildID == want.ChildID
+			got.ChildID == want.ChildID &&
+			got.CategoryPath == want.CategoryPath &&
+			got.Int == want.Int
 	})
 }
 
@@ -67,13 +69,13 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 
 	client := &stubHEBQueryClient{
 		results: map[string][]Product{
-			CategoryVegetablesParent + ":" + CategoryVegetablesChild: {
+			CategoryBeefParent + ":" + CategoryBeefChild: {
 				{
-					ID:                    "veg-1",
-					DisplayName:           "Fresh Broccoli Crowns",
-					FullCategoryHierarchy: "Fruit & vegetables/Vegetables",
+					ID:                    "beef-1",
+					DisplayName:           "H-E-B Ground Beef",
+					FullCategoryHierarchy: "Meat & seafood/Meat/Beef",
 					Brand:                 &Brand{Name: "H-E-B"},
-					ProductLocation:       &ProductLocation{Location: "In Produce on the Front Wall"},
+					ProductLocation:       &ProductLocation{Location: "Meat Market"},
 				},
 			},
 		},
@@ -90,23 +92,25 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 		t.Fatalf("unexpected call count: got %d want %d", got, want)
 	}
 	if !client.hasCall(CategoryOptions{
-		Reese84:  "cached-reese84",
-		StoreID:  "92",
-		ParentID: CategoryVegetablesParent,
-		ChildID:  CategoryVegetablesChild,
+		Reese84:      "cached-reese84",
+		StoreID:      "92",
+		ParentID:     CategoryBeefParent,
+		ChildID:      CategoryBeefChild,
+		CategoryPath: "/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef",
+		Int:          "curbside-category-shortcuts.meat.beef",
 	}) {
-		t.Fatalf("missing vegetables category call")
+		t.Fatalf("missing beef category call")
 	}
 	if len(got) != 1 {
 		t.Fatalf("expected 1 ingredient, got %d", len(got))
 	}
 
 	assertInputIngredient(t, got[0], ai.InputIngredient{
-		ProductID:   "veg-1",
-		Description: "Fresh Broccoli Crowns",
+		ProductID:   "beef-1",
+		Description: "H-E-B Ground Beef",
 		Brand:       "H-E-B",
-		AisleNumber: "In Produce on the Front Wall",
-		Categories:  []string{"Fruit & vegetables", "Vegetables"},
+		AisleNumber: "Meat Market",
+		Categories:  []string{"Meat & seafood", "Meat", "Beef"},
 	})
 }
 
@@ -142,6 +146,13 @@ func TestNewStaplesProvider_LoadsAlbertsonsCachedReese84(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStaplesProvider returned error: %v", err)
 	}
+	queryClient, ok := provider.client.(*QueryClient)
+	if !ok {
+		t.Fatalf("expected *QueryClient, got %T", provider.client)
+	}
+	if queryClient.buildID != StaplesBuildID {
+		t.Fatalf("unexpected build id: got %q want %q", queryClient.buildID, StaplesBuildID)
+	}
 	got, err := provider.loadReese84(t.Context())
 	if err != nil {
 		t.Fatalf("loadReese84 returned error: %v", err)
@@ -162,6 +173,18 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	_, err := provider.FetchStaples(t.Context(), "92")
 	if err == nil || err.Error() != `invalid heb location id "92"` {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestStoreIDFromLocation_UsesShoppingStoreOverride(t *testing.T) {
+	t.Parallel()
+
+	got, err := storeIDFromLocation("heb_773")
+	if err != nil {
+		t.Fatalf("storeIDFromLocation returned error: %v", err)
+	}
+	if got != "465" {
+		t.Fatalf("unexpected store id: got %q want %q", got, "465")
 	}
 }
 

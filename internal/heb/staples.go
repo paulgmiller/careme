@@ -17,24 +17,32 @@ import (
 )
 
 const (
-	CategoryFruitParent       = "490020"
-	CategoryFruitChild        = "490082"
-	CategoryVegetablesParent  = "490020"
-	CategoryVegetablesChild   = "490083"
-	CategoryMeatSeafoodParent = "2863"
-	CategoryMeatSeafoodChild  = "490023"
-	CategoryDairyEggsParent   = "2863"
-	CategoryDairyEggsChild    = "490016"
-	CategoryPastaRiceParent   = "490024"
-	CategoryPastaRiceChild    = "490121"
+	StaplesBuildID = "7818000e5b98897ce6caf33b86a3190db6c09e01"
+
+	CategoryFruitParent      = "490020"
+	CategoryFruitChild       = "490082"
+	CategoryVegetablesParent = "490020"
+	CategoryVegetablesChild  = "490083"
+	CategoryBeefParent       = "490110"
+	CategoryBeefChild        = "490529"
+	CategoryDairyEggsParent  = "2863"
+	CategoryDairyEggsChild   = "490016"
+	CategoryPastaRiceParent  = "490024"
+	CategoryPastaRiceChild   = "490121"
 )
 
 var defaultHEBStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
 
 type StapleCategory struct {
-	Name     string
-	ParentID string
-	ChildID  string
+	Name         string
+	ParentID     string
+	ChildID      string
+	CategoryPath string
+	Int          string
+}
+
+var shoppingStoreIDOverrides = map[string]string{
+	//"heb_773": "465",
 }
 
 type hebQueryClient interface {
@@ -63,6 +71,7 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 
 	return newStaplesProviderWithClient(NewQueryClient(QueryClientConfig{
 		HTTPClient: httpClient,
+		BuildID:    StaplesBuildID,
 	}), func(ctx context.Context) (string, error) {
 		record, err := albertsons.LoadLatestReese84(ctx, albertsonsCache)
 		if err != nil {
@@ -107,10 +116,12 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
 		products, err := p.client.Category(ctx, CategoryOptions{
-			Reese84:  reese84,
-			StoreID:  storeID,
-			ParentID: category.ParentID,
-			ChildID:  category.ChildID,
+			Reese84:      reese84,
+			StoreID:      storeID,
+			ParentID:     category.ParentID,
+			ChildID:      category.ChildID,
+			CategoryPath: category.CategoryPath,
+			Int:          category.Int,
 		})
 		if err != nil {
 			slog.WarnContext(ctx, "failed to fetch heb category", "category", category.Name, "location", locationID, "error", err)
@@ -131,11 +142,11 @@ func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []st
 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
-		{Name: "fruit", ParentID: CategoryFruitParent, ChildID: CategoryFruitChild},
-		{Name: "vegetables", ParentID: CategoryVegetablesParent, ChildID: CategoryVegetablesChild},
-		{Name: "meat & seafood", ParentID: CategoryMeatSeafoodParent, ChildID: CategoryMeatSeafoodChild},
-		{Name: "dairy & eggs", ParentID: CategoryDairyEggsParent, ChildID: CategoryDairyEggsChild},
-		{Name: "pasta & rice", ParentID: CategoryPastaRiceParent, ChildID: CategoryPastaRiceChild},
+		//{Name: "fruit", ParentID: CategoryFruitParent, ChildID: CategoryFruitChild, CategoryPath: "/category/shop/fruit-vegetables/fruit/490020/490082"},
+		//{Name: "vegetables", ParentID: CategoryVegetablesParent, ChildID: CategoryVegetablesChild, CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083"},
+		{Name: "beef", ParentID: "490110", ChildID: "490529", CategoryPath: "/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef", Int: "curbside-category-shortcuts.meat.beef"},
+		//{Name: "dairy & eggs", ParentID: CategoryDairyEggsParent, ChildID: CategoryDairyEggsChild, CategoryPath: "/category/shop/dairy-eggs/2863/490016"},
+		//{Name: "pasta & rice", ParentID: CategoryPastaRiceParent, ChildID: CategoryPastaRiceChild, CategoryPath: "/category/shop/pantry/pasta-rice/490024/490121"},
 	}
 }
 
@@ -143,6 +154,9 @@ func storeIDFromLocation(locationID string) (string, error) {
 	locationID = strings.TrimSpace(locationID)
 	if !IsID(locationID) {
 		return "", fmt.Errorf("invalid heb location id %q", locationID)
+	}
+	if storeID := shoppingStoreIDOverrides[locationID]; storeID != "" {
+		return storeID, nil
 	}
 	return strings.TrimPrefix(locationID, LocationIDPrefix), nil
 }

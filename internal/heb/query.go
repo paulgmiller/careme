@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,12 +47,14 @@ type QueryClientConfig struct {
 }
 
 type CategoryOptions struct {
-	Reese84  string
-	StoreID  string
-	ParentID string
-	ChildID  string
-	Page     int
-	SCT      string
+	Reese84      string
+	StoreID      string
+	ParentID     string
+	ChildID      string
+	CategoryPath string
+	Int          string
+	Page         int
+	SCT          string
 }
 
 type CategoryPage struct {
@@ -119,6 +122,8 @@ type ProductImageURL struct {
 type nextData struct {
 	BuildID string `json:"buildId"`
 }
+
+var nextStaticBuildIDRe = regexp.MustCompile(`/_next/static/([^/]+)/`)
 
 func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
@@ -245,7 +250,12 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 	}, nil
 }
 
+// 989c6544932987f836f21ec977bac83f5d376a14
 func (c *QueryClient) resolveBuildID(ctx context.Context, opts CategoryOptions) (string, error) {
+	return "989c6544932987f836f21ec977bac83f5d376a14", nil
+}
+
+func (c *QueryClient) busted(ctx context.Context, opts CategoryOptions) (string, error) {
 	c.buildIDMu.Lock()
 	defer c.buildIDMu.Unlock()
 
@@ -302,6 +312,9 @@ func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (str
 	query.Set("page", strconv.Itoa(opts.Page))
 	query.Set("parentId", opts.ParentID)
 	query.Set("childId", opts.ChildID)
+	if intValue := strings.TrimSpace(opts.Int); intValue != "" {
+		query.Set("int", intValue)
+	}
 	if sct := strings.TrimSpace(opts.SCT); sct != "" {
 		query.Set("sct", sct)
 	}
@@ -310,7 +323,7 @@ func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (str
 }
 
 func (c *QueryClient) categoryPageURL(opts CategoryOptions) (string, error) {
-	endpoint, err := url.Parse(c.baseURL + "/category/shop/" + url.PathEscape(opts.ParentID) + "/" + url.PathEscape(opts.ChildID))
+	endpoint, err := url.Parse(c.baseURL + c.categoryPagePath(opts))
 	if err != nil {
 		return "", fmt.Errorf("parse category page URL: %w", err)
 	}
@@ -321,9 +334,16 @@ func (c *QueryClient) setCategoryHeaders(req *http.Request, opts CategoryOptions
 	c.setStoreCookies(req, opts)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Referer", c.baseURL+"/category/shop/"+url.PathEscape(opts.ParentID)+"/"+url.PathEscape(opts.ChildID))
+	req.Header.Set("Referer", c.baseURL+c.categoryPagePath(opts))
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("X-Nextjs-Data", "1")
+}
+
+func (c *QueryClient) categoryPagePath(opts CategoryOptions) string {
+	if path := normalizeCategoryPath(opts.CategoryPath); path != "" {
+		return path
+	}
+	return "/category/shop/" + url.PathEscape(opts.ParentID) + "/" + url.PathEscape(opts.ChildID)
 }
 
 func (c *QueryClient) setStoreCookies(req *http.Request, opts CategoryOptions) {
@@ -373,18 +393,37 @@ func extractBuildID(body []byte) (string, error) {
 	}
 	walk(doc)
 
-	if strings.TrimSpace(script) == "" {
-		return "", errors.New("next data build id not found")
+	if strings.TrimSpace(script) != "" {
+		var data nextData
+		if err := json.Unmarshal([]byte(htmlstd.UnescapeString(script)), &data); err != nil {
+			return "", fmt.Errorf("decode next data json: %w", err)
+		}
+		if strings.TrimSpace(data.BuildID) != "" {
+			return strings.TrimSpace(data.BuildID), nil
+		}
 	}
 
-	var data nextData
-	if err := json.Unmarshal([]byte(htmlstd.UnescapeString(script)), &data); err != nil {
-		return "", fmt.Errorf("decode next data json: %w", err)
+	matches := nextStaticBuildIDRe.FindSubmatch(body)
+	if len(matches) == 2 && strings.TrimSpace(string(matches[1])) != "" {
+		return strings.TrimSpace(string(matches[1])), nil
 	}
-	if strings.TrimSpace(data.BuildID) == "" {
-		return "", errors.New("next data build id not found")
+
+	return "", errors.New("next data build id not found")
+}
+
+func normalizeCategoryPath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
 	}
-	return strings.TrimSpace(data.BuildID), nil
+	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+		value = parsed.Path
+	}
+	value = "/" + strings.Trim(value, "/")
+	if !strings.HasPrefix(value, "/category/shop/") {
+		return ""
+	}
+	return value
 }
 
 func queryAttrValue(n *html.Node, name string) string {
@@ -411,19 +450,26 @@ func decodeCategoryPayload(body []byte) ([]Product, string, error) {
 }
 
 func extractProducts(root any) ([]Product, error) {
-	var best []Product
+	var products []Product
+	seen := make(map[string]struct{})
 	walkQueryJSON(root, func(value any) {
 		if arr, ok := value.([]any); ok {
-			products := productsFromArray(arr)
-			if len(products) > len(best) {
-				best = products
+			for _, product := range productsFromArray(arr) {
+				products = appendProduct(products, product, seen)
+			}
+			return
+		}
+		if obj, ok := value.(map[string]any); ok && looksLikeProduct(obj) {
+			product, ok := productFromObject(obj)
+			if ok {
+				products = appendProduct(products, product, seen)
 			}
 		}
 	})
-	if best == nil {
+	if products == nil {
 		return nil, nil
 	}
-	return best, nil
+	return products, nil
 }
 
 func productsFromArray(values []any) []Product {
@@ -433,21 +479,39 @@ func productsFromArray(values []any) []Product {
 		if !ok || !looksLikeProduct(obj) {
 			continue
 		}
-		raw, err := json.Marshal(obj)
-		if err != nil {
-			continue
+		if product, ok := productFromObject(obj); ok {
+			products = append(products, product)
 		}
-		var product Product
-		if err := json.Unmarshal(raw, &product); err != nil {
-			continue
-		}
-		if strings.TrimSpace(product.ID) == "" {
-			continue
-		}
-		product.Raw = raw
-		products = append(products, product)
 	}
 	return products
+}
+
+func productFromObject(obj map[string]any) (Product, bool) {
+	raw, err := json.Marshal(obj)
+	if err != nil {
+		return Product{}, false
+	}
+	var product Product
+	if err := json.Unmarshal(raw, &product); err != nil {
+		return Product{}, false
+	}
+	if strings.TrimSpace(product.ID) == "" {
+		return Product{}, false
+	}
+	product.Raw = raw
+	return product, true
+}
+
+func appendProduct(products []Product, product Product, seen map[string]struct{}) []Product {
+	id := strings.TrimSpace(product.ID)
+	if id == "" {
+		return products
+	}
+	if _, ok := seen[id]; ok {
+		return products
+	}
+	seen[id] = struct{}{}
+	return append(products, product)
 }
 
 func looksLikeProduct(obj map[string]any) bool {
@@ -473,8 +537,6 @@ func extractNextSCT(root any) string {
 		"nextsearchcontexttoken",
 		"nextpagecontexttoken",
 		"nextpagesearchcontexttoken",
-		"searchcontexttoken",
-		"sct",
 	}
 
 	var found string
