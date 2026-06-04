@@ -7,28 +7,15 @@ import (
 	"fmt"
 
 	"careme/internal/cache"
-	"careme/internal/locations/storeindex"
-	"careme/internal/sitemapfetch"
 
 	locationtypes "careme/internal/locations/types"
 )
 
 const (
-	Container              = "heb"
-	StoreCachePrefix       = "heb/stores/"
-	StoreURLMapCacheKey    = "heb/store_url_map.json"
-	LocationIDPrefix       = "heb_"
-	DefaultStoreSitemapURL = "https://www.heb.com/sitemap/storeSitemap.xml"
-	LocationIndexCacheKey  = "heb/store_locations.json"
+	Container        = "heb"
+	StoreCachePrefix = "heb/stores/"
+	LocationIDPrefix = "heb_"
 )
-
-func SaveStoreURLMap(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
-	return sitemapfetch.SaveURLMap(ctx, c, StoreURLMapCacheKey, urlMap)
-}
-
-func LoadStoreURLMap(ctx context.Context, c cache.Cache) (map[string]string, error) {
-	return sitemapfetch.LoadURLMap(ctx, c, StoreURLMapCacheKey)
-}
 
 func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary) error {
 	if summary == nil {
@@ -44,18 +31,6 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 		return fmt.Errorf("write store summary cache: %w", err)
 	}
 	return nil
-}
-
-func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
-	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey, func(summary StoreSummary) storeindex.Entry {
-		lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
-		return storeindex.Entry{
-			ID:  summary.ID,
-			Lat: lat,
-			Lon: lon,
-		}
-	})
-	return err
 }
 
 type loader struct {

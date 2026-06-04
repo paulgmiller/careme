@@ -32,23 +32,8 @@ func TestNewAddsHEBBackendWhenEnabled(t *testing.T) {
 		t.Fatalf("EnsureCache returned error: %v", err)
 	}
 
-	lat := 27.7912
-	lon := -97.6670
-	if err := heb.CacheStoreSummary(context.Background(), listCache, &heb.StoreSummary{
-		ID:      "heb_22",
-		StoreID: "22",
-		Name:    "Robstown H-E-B",
-		Address: "308 E Main",
-		City:    "Robstown",
-		State:   "TX",
-		ZipCode: "78380",
-		Lat:     &lat,
-		Lon:     &lon,
-	}); err != nil {
-		t.Fatalf("CacheStoreSummary returned error: %v", err)
-	}
-	if err := heb.RebuildLocationIndex(context.Background(), listCache, LoadCentroids()); err != nil {
-		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	if err := heb.SaveNextDataBuildID(context.Background(), listCache, "test-build"); err != nil {
+		t.Fatalf("SaveNextDataBuildID returned error: %v", err)
 	}
 
 	storage, err := New(&config.Config{

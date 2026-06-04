@@ -2,99 +2,134 @@ package heb
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
+func TestNewLocationBackendLookupCachedStoreByID(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
-	if err := CacheStoreSummary(context.Background(), cacheStore, robstownSummary()); err != nil {
-		t.Fatalf("CacheStoreSummary returned error: %v", err)
-	}
-	zipLookup := staticZIPLookup{
-		"78380": {Lat: 27.8000, Lon: -97.6700},
-	}
-	if err := RebuildLocationIndex(context.Background(), cacheStore, zipLookup); err != nil {
-		t.Fatalf("RebuildLocationIndex returned error: %v", err)
-	}
+	require.NoError(t, CacheStoreSummary(context.Background(), cacheStore, robstownSummary()))
 
-	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
-	if err != nil {
-		t.Fatalf("newLocationBackend returned error: %v", err)
-	}
+	backend, err := newLocationBackendWithDeps(context.Background(), cacheStore, staticZIPLookup{}, &fakeStoreLocationsFetcher{}, func(context.Context) (string, error) {
+		return "test-build", nil
+	})
+	require.NoError(t, err)
 
-	if !backend.IsID("heb_22") {
-		t.Fatalf("expected heb id to be recognized")
-	}
-	if !backend.HasInventory("heb_22") {
-		t.Fatalf("expected heb location to support inventory")
-	}
+	assert.True(t, backend.IsID("heb_22"))
+	assert.True(t, backend.HasInventory("heb_22"))
 
 	loc, err := backend.GetLocationByID(context.Background(), "heb_22")
-	if err != nil {
-		t.Fatalf("GetLocationByID returned error: %v", err)
-	}
-	if loc.Name != "Robstown H-E-B" || loc.ZipCode != "78380" || loc.Chain != "heb" {
-		t.Fatalf("unexpected location: %+v", loc)
-	}
-	reader, err := cacheStore.Get(context.Background(), LocationIndexCacheKey)
-	if err != nil {
-		t.Fatalf("expected compact location index to be cached: %v", err)
-	}
-	_ = reader.Close()
+	require.NoError(t, err)
+	assert.Equal(t, "Robstown H-E-B", loc.Name)
+	assert.Equal(t, "78380", loc.ZipCode)
+	assert.Equal(t, "heb", loc.Chain)
 }
 
-func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
+func TestLocationBackendGetLocationsByZipFetchesAndCachesStoreLocations(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
-	if err := CacheStoreSummary(context.Background(), cacheStore, robstownSummary()); err != nil {
-		t.Fatalf("cache robstown summary: %v", err)
-	}
-	if err := CacheStoreSummary(context.Background(), cacheStore, farStoreSummary()); err != nil {
-		t.Fatalf("cache far store summary: %v", err)
-	}
-	zipLookup := staticZIPLookup{
-		"78380": {Lat: 27.8000, Lon: -97.6700},
-	}
-	if err := RebuildLocationIndex(context.Background(), cacheStore, zipLookup); err != nil {
-		t.Fatalf("RebuildLocationIndex returned error: %v", err)
+	fetcher := &fakeStoreLocationsFetcher{
+		pages: map[int]string{
+			1: locationSearchFixture(2, 1, locationSearchStore{
+				StoreNumber: 699,
+				Name:        "Nogalitos H-E-B",
+				Address:     "1601 NOGALITOS",
+				City:        "SAN ANTONIO",
+				State:       "TX",
+				Zip:         "78204-2427",
+				Lat:         29.3978,
+				Lon:         -98.51499,
+			}),
+			2: locationSearchFixture(2, 2, locationSearchStore{
+				StoreNumber: 718,
+				Name:        "South Flores Market H-E-B",
+				Address:     "516 S FLORES STREET",
+				City:        "SAN ANTONIO",
+				State:       "TX",
+				Zip:         "78204-1217",
+				Lat:         29.41909,
+				Lon:         -98.49648,
+			}),
+		},
 	}
 
-	backend, err := newLocationBackend(context.Background(), cacheStore, zipLookup)
-	if err != nil {
-		t.Fatalf("newLocationBackend returned error: %v", err)
-	}
+	backend, err := newLocationBackendWithDeps(context.Background(), cacheStore, staticZIPLookup{}, fetcher, func(context.Context) (string, error) {
+		return "test-build", nil
+	})
+	require.NoError(t, err)
 
-	locs, err := backend.GetLocationsByZip(context.Background(), "78380")
-	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
-	}
-	if len(locs) != 1 {
-		t.Fatalf("expected 1 nearby location, got %d", len(locs))
-	}
-	if locs[0].ID != "heb_22" {
-		t.Fatalf("unexpected location id: %q", locs[0].ID)
-	}
+	locs, err := backend.GetLocationsByZip(context.Background(), "78204")
+	require.NoError(t, err)
+	require.Len(t, locs, 2)
+	assert.Equal(t, "heb_699", locs[0].ID)
+	assert.Equal(t, "Nogalitos H-E-B", locs[0].Name)
+	assert.Equal(t, "78204", locs[0].ZipCode)
+	assert.Equal(t, []int{1, 2}, fetcher.calls)
+
+	_, err = LoadCachedStoreLocationsPage(context.Background(), cacheStore, "78204", 1)
+	require.NoError(t, err)
+
+	loc, err := backend.GetLocationByID(context.Background(), "heb_718")
+	require.NoError(t, err)
+	assert.Equal(t, "South Flores Market H-E-B", loc.Name)
 }
 
-func TestNewLocationBackendErrorsWhenNoCachedSummaries(t *testing.T) {
+func TestLocationBackendGetLocationsByZipUsesCachedStoreLocations(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
+	require.NoError(t, CacheStoreLocationsPage(context.Background(), cacheStore, "78204", 1, []byte(locationSearchFixture(1, 1, locationSearchStore{
+		StoreNumber: 699,
+		Name:        "Nogalitos H-E-B",
+		Address:     "1601 NOGALITOS",
+		City:        "SAN ANTONIO",
+		State:       "TX",
+		Zip:         "78204-2427",
+		Lat:         29.3978,
+		Lon:         -98.51499,
+	}))))
 
-	_, err := newLocationBackend(context.Background(), cacheStore, staticZIPLookup{})
-	if err == nil {
-		t.Fatal("expected newLocationBackend to return an error")
+	fetcher := &fakeStoreLocationsFetcher{}
+	backend, err := newLocationBackendWithDeps(context.Background(), cacheStore, staticZIPLookup{}, fetcher, func(context.Context) (string, error) {
+		return "", fmt.Errorf("build id should not be needed")
+	})
+	require.NoError(t, err)
+
+	locs, err := backend.GetLocationsByZip(context.Background(), "78204")
+	require.NoError(t, err)
+	require.Len(t, locs, 1)
+	assert.Equal(t, "heb_699", locs[0].ID)
+	assert.Empty(t, fetcher.calls)
+}
+
+type fakeStoreLocationsFetcher struct {
+	pages map[int]string
+	calls []int
+}
+
+func (f *fakeStoreLocationsFetcher) StoreLocationsPage(_ context.Context, buildID, address string, page int) ([]byte, error) {
+	if buildID == "" {
+		return nil, fmt.Errorf("build id is required")
 	}
-	if !strings.Contains(err.Error(), "load heb locations index") {
-		t.Fatalf("expected missing index error, got %v", err)
+	if address == "" {
+		return nil, fmt.Errorf("address is required")
 	}
+	f.calls = append(f.calls, page)
+	body := f.pages[page]
+	if body == "" {
+		body = locationSearchFixture(0, page)
+	}
+	return []byte(body), nil
 }
 
 type staticZIPLookup map[string]coords
@@ -128,18 +163,41 @@ func robstownSummary() *StoreSummary {
 	}
 }
 
-func farStoreSummary() *StoreSummary {
-	lat := 30.2672
-	lon := -97.7431
-	return &StoreSummary{
-		ID:      "heb_216",
-		StoreID: "216",
-		Name:    "Hancock Center H-E-B",
-		Address: "1000 E 41st St",
-		City:    "Austin",
-		State:   "TX",
-		ZipCode: "78751",
-		Lat:     &lat,
-		Lon:     &lon,
+type locationSearchStore struct {
+	StoreNumber int
+	Name        string
+	Address     string
+	City        string
+	State       string
+	Zip         string
+	Lat         float64
+	Lon         float64
+}
+
+func locationSearchFixture(total, currentPage int, stores ...locationSearchStore) string {
+	parts := make([]string, 0, len(stores))
+	for _, store := range stores {
+		parts = append(parts, fmt.Sprintf(`{
+			"store": {
+				"longitude": %f,
+				"latitude": %f,
+				"storeNumber": %d,
+				"name": %q,
+				"address": {
+					"streetAddress": %q,
+					"locality": %q,
+					"region": %q,
+					"postalCode": %q
+				}
+			}
+		}`, store.Lon, store.Lat, store.StoreNumber, store.Name, store.Address, store.City, store.State, store.Zip))
 	}
+	return fmt.Sprintf(`{
+		"pageProps": {
+			"currentPageStores": [%s],
+			"totalStoresCount": %d,
+			"currentPage": %d,
+			"searchError": false
+		}
+	}`, strings.Join(parts, ","), total, currentPage)
 }

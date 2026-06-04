@@ -49,9 +49,9 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `albertsons/reese84/latest.json` | JSON `albertsons.Reese84Record` containing the freshest ACME/Albertsons-family `reese84` cookie plus metadata | `cmd/albertsonsreese84` | `internal/albertsons` staples/search cookie resolver |
 | `albertsons/reese84/history/` | JSON `albertsons.Reese84Record` append-only history keyed by fetch timestamp | `cmd/albertsonsreese84` | Operational debugging and manual rollback/reference |
 | `aldi/store_locations.json` | JSON `[]storeindex.Entry` spatial index for ALDI stores (`id`, `lat`, `lon`) | `cmd/aldi` rebuilds after sync | `internal/aldi` location backend |
-| `heb/stores/` | JSON `heb.StoreSummary` keyed by prefixed HEB location ID | `cmd/heb` and `internal/heb` cache helpers | `internal/heb` location backend |
-| `heb/store_locations.json` | JSON `[]storeindex.Entry` spatial index for HEB stores (`id`, `lat`, `lon`) | `cmd/heb` rebuilds after sync | `internal/heb` location backend |
-| `heb/store_url_map.json` | JSON object mapping store URL to prefixed HEB location ID | `cmd/heb` and `internal/heb` cache helpers | `cmd/heb` incremental sync |
+| `heb/stores/` | JSON `heb.StoreSummary` keyed by prefixed HEB location ID | `internal/heb` location backend after store-location searches | `internal/heb` location backend |
+| `heb/store_location_search/` | Raw HEB Next.js store-location JSON responses keyed by address search and page | `internal/heb` location backend | `internal/heb` location backend |
+| `heb/next_data_build_id.txt` | Plain text HEB Next.js data build ID | `internal/heb` cache helpers | `internal/heb` store-location and product data fetches |
 | `publix/stores/` | JSON `publix.StoreSummary` keyed by numeric Publix store ID | `cmd/publix` and `internal/publix` cache helpers | `internal/publix` location backend |
 | `publix/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Publix stores (`id`, `lat`, `lon`) | `cmd/publix` rebuilds after sync | `internal/publix` location backend |
 | `publix/store_url_map.json` | JSON object mapping numeric Publix store ID to canonical location URL | `cmd/publix` and `internal/publix` cache helpers | `cmd/publix` incremental sync |

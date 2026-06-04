@@ -2,16 +2,19 @@ package heb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"careme/internal/brightdata"
+	"careme/internal/cache"
 )
 
 const (
 	brightDataBrowserWSEnv     = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
+	nextDataBuildIDEnv         = "HEB_NEXT_DATA_BUILD_ID"
 	defaultBuildIDDiscoverWait = 5 * time.Second
 )
 
@@ -42,6 +45,47 @@ func newBrightDataBuildIDLoaderFromEnv() (loadBuildID, error) {
 	return func(ctx context.Context, _ buildIDOptions) (string, error) {
 		return fetchBuildIDFromHomePage(ctx, browser, defaultBuildIDDiscoverWait)
 	}, nil
+}
+
+func DiscoverNextDataBuildIDFromEnv(ctx context.Context) (string, error) {
+	loader, err := newBrightDataBuildIDLoaderFromEnv()
+	if err != nil {
+		return "", err
+	}
+	return loader(ctx, buildIDOptions{})
+}
+
+func CachedNextDataBuildIDProvider(c cache.Cache, provided string) func(context.Context) (string, error) {
+	provided = strings.TrimSpace(provided)
+	if provided == "" {
+		provided = strings.TrimSpace(os.Getenv(nextDataBuildIDEnv))
+	}
+
+	return func(ctx context.Context) (string, error) {
+		if provided != "" {
+			if err := SaveNextDataBuildID(ctx, c, provided); err != nil {
+				return "", err
+			}
+			return provided, nil
+		}
+
+		buildID, err := LoadNextDataBuildID(ctx, c)
+		if err == nil {
+			return buildID, nil
+		}
+		if !errors.Is(err, cache.ErrNotFound) {
+			return "", err
+		}
+
+		buildID, err = DiscoverNextDataBuildIDFromEnv(ctx)
+		if err != nil {
+			return "", err
+		}
+		if err := SaveNextDataBuildID(ctx, c, buildID); err != nil {
+			return "", err
+		}
+		return buildID, nil
+	}
 }
 
 func fetchBuildIDFromHomePage(ctx context.Context, browser browserHTMLClient, wait time.Duration) (string, error) {
