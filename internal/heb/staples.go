@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	StaplesBuildID = "989c6544932987f836f21ec977bac83f5d376a14"
+	StaplesBuildID = "5367623aa767dc1c90ce3ac12f22820104586f40"
 
 	CategoryFruitParent      = "490020"
 	CategoryFruitChild       = "490082"
