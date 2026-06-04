@@ -134,8 +134,14 @@ func TestStaplesProvider_RefreshesBuildIDBeforeFetchingCategories(t *testing.T) 
 	client := &stubHEBQueryClient{}
 	provider := newStaplesProviderWithDeps(client, func(context.Context) (string, error) {
 		return "cached-reese84", nil
-	}, func(context.Context) (string, error) {
+	}, func(_ context.Context, opts buildIDOptions) (string, error) {
 		buildIDLoads++
+		if opts.Reese84 != "cached-reese84" {
+			t.Fatalf("unexpected reese84: %q", opts.Reese84)
+		}
+		if opts.StoreID != "92" {
+			t.Fatalf("unexpected store id: %q", opts.StoreID)
+		}
 		return "fresh-build", nil
 	})
 
@@ -151,10 +157,29 @@ func TestStaplesProvider_RefreshesBuildIDBeforeFetchingCategories(t *testing.T) 
 	}
 }
 
+func TestStaplesProvider_ReturnsBuildIDLoadError(t *testing.T) {
+	t.Parallel()
+
+	client := &stubHEBQueryClient{}
+	provider := newStaplesProviderWithDeps(client, func(context.Context) (string, error) {
+		return "cached-reese84", nil
+	}, func(context.Context, buildIDOptions) (string, error) {
+		return "", errors.New("homepage blocked")
+	})
+
+	_, err := provider.FetchStaples(t.Context(), "heb_92")
+	if err == nil || !strings.Contains(err.Error(), "homepage blocked") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := client.callCount(); got != 0 {
+		t.Fatalf("unexpected category call count: got %d want 0", got)
+	}
+}
+
 func TestNewStaplesProvider_LoadsAlbertsonsCachedReese84(t *testing.T) {
 	unsetEnvForTest(t, "AZURE_STORAGE_ACCOUNT_NAME")
 	unsetEnvForTest(t, "AZURE_STORAGE_PRIMARY_ACCOUNT_KEY")
-	unsetEnvForTest(t, brightDataBrowserWSEnv)
+	t.Setenv(brightDataBrowserWSEnv, "wss://user:pass@example.com")
 
 	oldWD, err := os.Getwd()
 	if err != nil {
@@ -188,8 +213,8 @@ func TestNewStaplesProvider_LoadsAlbertsonsCachedReese84(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *QueryClient, got %T", provider.client)
 	}
-	if queryClient.buildID != StaplesBuildID {
-		t.Fatalf("unexpected build id: got %q want %q", queryClient.buildID, StaplesBuildID)
+	if queryClient.buildID != "" {
+		t.Fatalf("unexpected initial build id: %q", queryClient.buildID)
 	}
 	got, err := provider.loadReese84(t.Context())
 	if err != nil {

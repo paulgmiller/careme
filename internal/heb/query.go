@@ -123,7 +123,10 @@ type nextData struct {
 	BuildID string `json:"buildId"`
 }
 
-var nextStaticBuildIDRe = regexp.MustCompile(`/_next/static/([^/]+)/`)
+var (
+	nextStaticBuildIDRe = regexp.MustCompile(`/_next/static/([^/]+)/`)
+	nextDataBuildIDRe   = regexp.MustCompile(`/_next/data/([^/]+)/`)
+)
 
 func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
@@ -271,44 +274,7 @@ func (c *QueryClient) resolveBuildID(ctx context.Context, opts CategoryOptions) 
 		return c.buildID, nil
 	}
 
-	pageURL, err := c.categoryPageURL(opts)
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("build category page request: %w", err)
-	}
-	c.setStoreCookies(req, opts)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("User-Agent", c.userAgent)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("request %q: %w", pageURL, err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return "", fmt.Errorf("category page request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
-	if err != nil {
-		return "", fmt.Errorf("read category page response: %w", err)
-	}
-
-	buildID, err := extractBuildID(body)
-	if err != nil {
-		return "", err
-	}
-	c.buildID = buildID
-	return buildID, nil
+	return "", fmt.Errorf("heb next data build id is required")
 }
 
 func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (string, error) {
@@ -327,14 +293,6 @@ func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (str
 		query.Set("sct", sct)
 	}
 	endpoint.RawQuery = query.Encode()
-	return endpoint.String(), nil
-}
-
-func (c *QueryClient) categoryPageURL(opts CategoryOptions) (string, error) {
-	endpoint, err := url.Parse(c.baseURL + c.categoryPagePath(opts))
-	if err != nil {
-		return "", fmt.Errorf("parse category page URL: %w", err)
-	}
 	return endpoint.String(), nil
 }
 
@@ -412,6 +370,11 @@ func extractBuildID(body []byte) (string, error) {
 	}
 
 	matches := nextStaticBuildIDRe.FindSubmatch(body)
+	if len(matches) == 2 && strings.TrimSpace(string(matches[1])) != "" {
+		return strings.TrimSpace(string(matches[1])), nil
+	}
+
+	matches = nextDataBuildIDRe.FindSubmatch(body)
 	if len(matches) == 2 && strings.TrimSpace(string(matches[1])) != "" {
 		return strings.TrimSpace(string(matches[1])), nil
 	}

@@ -115,19 +115,11 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 	}
 }
 
-func TestCategoryPageUsesDefaultBuildID(t *testing.T) {
+func TestCategoryPageRequiresBuildID(t *testing.T) {
 	t.Parallel()
 
-	var dataRequestPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/_next/data/" + StaplesBuildID + "/en/category/shop/490020/490083.json":
-			dataRequestPath = r.URL.Path
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
-		default:
-			http.NotFound(w, r)
-		}
+		http.NotFound(w, r)
 	}))
 	defer server.Close()
 
@@ -143,11 +135,8 @@ func TestCategoryPageUsesDefaultBuildID(t *testing.T) {
 		ChildID:      "490083",
 		CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083",
 	})
-	if err != nil {
-		t.Fatalf("CategoryPage returned error: %v", err)
-	}
-	if got, want := dataRequestPath, "/_next/data/"+StaplesBuildID+"/en/category/shop/490020/490083.json"; got != want {
-		t.Fatalf("unexpected data path: got %q want %q", got, want)
+	if err == nil || err.Error() != "heb next data build id is required" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -159,6 +148,18 @@ func TestExtractBuildIDFromNextStaticAsset(t *testing.T) {
 		t.Fatalf("extractBuildID returned error: %v", err)
 	}
 	if buildID != "static-build-id" {
+		t.Fatalf("unexpected build id: %q", buildID)
+	}
+}
+
+func TestExtractBuildIDFromNextDataURL(t *testing.T) {
+	t.Parallel()
+
+	buildID, err := extractBuildID([]byte(`window.__SSR_URL__ = "/_next/data/data-build-id/en/category/shop/490110/490529.json?childId=490529&page=1&parentId=490110"`))
+	if err != nil {
+		t.Fatalf("extractBuildID returned error: %v", err)
+	}
+	if buildID != "data-build-id" {
 		t.Fatalf("unexpected build id: %q", buildID)
 	}
 }
