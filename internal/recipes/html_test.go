@@ -436,6 +436,32 @@ func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	if !strings.Contains(html, ">8/10<") {
 		t.Error("recipe HTML should contain critique score value")
 	}
+	if strings.Contains(html, "This recipe may need another look before cooking.") {
+		t.Error("recipe HTML should not show low-score warning at the retry threshold")
+	}
+}
+
+func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
+	w := httptest.NewRecorder()
+	score := 6
+
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := assertHTTPSuccess(t, w)
+
+	isValidHTML(t, html)
+	if !strings.Contains(html, "This recipe may need another look before cooking.") {
+		t.Error("recipe HTML should show a prominent low-score warning")
+	}
+	if !strings.Contains(html, "It scored 6/10, below our 8/10 retry mark.") {
+		t.Error("recipe HTML should explain why the warning appears")
+	}
+	if !strings.Contains(html, `Read the critique`) || !strings.Contains(html, `href="/critiques/`) {
+		t.Error("recipe HTML should link the warning to the public critique")
+	}
 }
 
 func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {

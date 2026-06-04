@@ -3,15 +3,25 @@ package critique_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/templates"
 )
+
+func TestMain(m *testing.M) {
+	if err := templates.Init(&config.Config{}, "dummyhash.css"); err != nil {
+		panic(err)
+	}
+	os.Exit(m.Run())
+}
 
 func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	t.Parallel()
@@ -184,5 +194,15 @@ func TestCritiquePageRendersSingleCritique(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("response body missing %q: %s", want, body)
 		}
+	}
+
+	fixesIndex := strings.Index(body, "Suggested fixes")
+	issuesIndex := strings.Index(body, "Issues")
+	strengthsIndex := strings.Index(body, "Strengths")
+	if fixesIndex == -1 || issuesIndex == -1 || strengthsIndex == -1 {
+		t.Fatalf("response body missing critique section heading: %s", body)
+	}
+	if fixesIndex >= issuesIndex || issuesIndex >= strengthsIndex {
+		t.Fatalf("critique sections should render fixes, issues, strengths; got indexes fixes=%d issues=%d strengths=%d", fixesIndex, issuesIndex, strengthsIndex)
 	}
 }

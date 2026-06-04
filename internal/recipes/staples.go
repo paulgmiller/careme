@@ -16,10 +16,10 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/albertsons"
+	"careme/internal/aldi"
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
@@ -260,6 +260,7 @@ func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
 		"starmarket_3566",
 		"acmemarkets_806",
 		"publix_1847",
+		"aldi_F219",
 	}
 	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]ai.InputIngredient, error) {
 		return s.provider.FetchStaples(ctx, storeID)
@@ -310,9 +311,13 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		return nil, fmt.Errorf("create publix staples provider: %w", err)
 	}
 
-	hebProvider, err := heb.NewStaplesProvider(brightdataClient)
+	/*hebProvider, err := heb.NewStaplesProvider(brightdataClient)
 	if err != nil {
 		return nil, fmt.Errorf("create heb staples provider: %w", err)
+	}*/
+	aldiProvider, err := aldi.NewStaplesProvider(brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create ALDI staples provider: %w", err)
 	}
 
 	// Kroger is a public API integration, not a scraper. Keep it off Bright Data;
@@ -325,7 +330,8 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 
 	return []backendStaplesProvider{
 		albertsonsProvider,
-		hebProvider,
+		// hebProvider,
+		aldiProvider,
 		krogerBackend,
 		publixProvider,
 		// actowiz.NewStaplesProvider(),
@@ -339,7 +345,8 @@ func defaultIdentityProviders() []identityProvider {
 		kroger.NewIdentityProvider(),
 		// actowiz.NewIdentityProvider(),
 		albertsons.NewIdentityProvider(),
-		heb.NewIdentityProvider(),
+		// heb.NewIdentityProvider(),
+		aldi.NewIdentityProvider(),
 		publix.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),

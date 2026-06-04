@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"careme/internal/cache"
 	"careme/internal/locations/storeindex"
@@ -31,16 +33,41 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 }
 
 func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
-	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey,
-		func(summary StoreSummary) storeindex.Entry {
-			lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
-			return storeindex.Entry{
-				ID:  summary.ID,
-				Lat: lat,
-				Lon: lon,
-			}
+	keys, err := c.List(ctx, StoreCachePrefix, "")
+	if err != nil {
+		return fmt.Errorf("list cached store summaries: %w", err)
+	}
+
+	entries := make([]storeindex.Entry, 0, len(keys))
+	for _, key := range keys {
+		reader, err := c.Get(ctx, StoreCachePrefix+key)
+		if err != nil {
+			return fmt.Errorf("read cached store summary: %w", err)
+		}
+
+		var summary StoreSummary
+		decodeErr := json.NewDecoder(reader).Decode(&summary)
+		_ = reader.Close()
+		if decodeErr != nil {
+			return fmt.Errorf("decode cached store summary: %w", decodeErr)
+		}
+		if strings.TrimSpace(summary.InstoreShopID) == "" {
+			continue
+		}
+
+		lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
+		entries = append(entries, storeindex.Entry{
+			ID:  summary.ID,
+			Lat: lat,
+			Lon: lon,
 		})
-	return err
+	}
+
+	if err := storeindex.Save(ctx, c, LocationIndexCacheKey, entries); err != nil {
+		return err
+	}
+	slog.InfoContext(ctx, "rebuilt compact location index", "count", len(entries))
+	return nil
 }
 
 type loader struct {

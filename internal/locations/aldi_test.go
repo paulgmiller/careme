@@ -35,16 +35,17 @@ func TestNewAddsALDIBackendWhenEnabled(t *testing.T) {
 	lat := 41.894989
 	lon := -87.629197
 	if err := aldi.CacheStoreSummary(context.Background(), listCache, &aldi.StoreSummary{
-		ID:         "aldi_F100",
-		StoreID:    5757831,
-		Identifier: "F100",
-		Name:       "ALDI 201 W Division St",
-		Address:    "201 W Division St",
-		City:       "Chicago",
-		State:      "IL",
-		ZipCode:    "60610",
-		Lat:        &lat,
-		Lon:        &lon,
+		ID:            "aldi_F100",
+		StoreID:       5757831,
+		Identifier:    "F100",
+		Name:          "ALDI 201 W Division St",
+		Address:       "201 W Division St",
+		City:          "Chicago",
+		State:         "IL",
+		ZipCode:       "60610",
+		Lat:           &lat,
+		Lon:           &lon,
+		InstoreShopID: "5443223",
 	}); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}

@@ -1,16 +1,21 @@
 package aldi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -18,6 +23,7 @@ const (
 	StoreCachePrefix = "aldi/stores/"
 	LocationIDPrefix = "aldi_"
 	DefaultBaseURL   = "https://locator.uberall.com"
+	DefaultShopURL   = "https://www.aldi.us"
 	DefaultWidgetKey = "LETA2YVm6txbe0b9lS297XdxDX4qVQ" // what is this?
 	DefaultLanguage  = "en_US"
 	DefaultCountry   = "US"
@@ -25,10 +31,14 @@ const (
 
 type Client struct {
 	BaseURL    string
+	ShopURL    string
 	WidgetKey  string
 	Language   string
 	Country    string
 	HTTPClient *http.Client
+
+	shopCookies []*http.Cookie
+	shopsByZip  map[string][]Shop
 }
 
 type SourceLocation struct {
@@ -45,16 +55,46 @@ type SourceLocation struct {
 }
 
 type StoreSummary struct {
-	ID         string   `json:"id"`
-	StoreID    int64    `json:"store_id"`
-	Identifier string   `json:"identifier"`
-	Name       string   `json:"name"`
-	Address    string   `json:"address"`
-	City       string   `json:"city"`
-	State      string   `json:"state"`
-	ZipCode    string   `json:"zip_code"`
-	Lat        *float64 `json:"lat,omitempty"`
-	Lon        *float64 `json:"lon,omitempty"`
+	ID            string   `json:"id"`
+	StoreID       int64    `json:"store_id"`
+	Identifier    string   `json:"identifier"`
+	InstoreShopID string   `json:"instore_shop_id,omitempty"`
+	Name          string   `json:"name"`
+	Address       string   `json:"address"`
+	City          string   `json:"city"`
+	State         string   `json:"state"`
+	ZipCode       string   `json:"zip_code"`
+	Lat           *float64 `json:"lat,omitempty"`
+	Lon           *float64 `json:"lon,omitempty"`
+}
+
+type Shop struct {
+	ID                string      `json:"id"`
+	Name              string      `json:"name"`
+	RetailerKey       string      `json:"retailer_key"`
+	PhoneNumber       string      `json:"phone_number"`
+	FulfillmentOption string      `json:"fulfillment_option"`
+	Address           ShopAddress `json:"address"`
+	RetailerLogoURL   string      `json:"retailer_logo_url"`
+	BackgroundColor   string      `json:"background_color_hex"`
+	LocationName      string      `json:"location_name"`
+	LocationCode      string      `json:"location_code"`
+}
+
+type ShopAddress struct {
+	StreetAddress string `json:"street_address"`
+	City          string `json:"city"`
+	State         string `json:"state"`
+	PostalCode    string `json:"postal_code"`
+	CountryCode   string `json:"country_code"`
+}
+
+type shopsResponse struct {
+	Shops []Shop `json:"shops"`
+	Error *struct {
+		Message string `json:"message"`
+		Code    string `json:"code"`
+	} `json:"error"`
 }
 
 type allLocationsResponse struct {
@@ -84,10 +124,12 @@ func NewClientWithBaseURL(baseURL, widgetKey string, httpClient *http.Client) *C
 
 	return &Client{
 		BaseURL:    strings.TrimRight(baseURL, "/"),
+		ShopURL:    DefaultShopURL,
 		WidgetKey:  widgetKey,
 		Language:   DefaultLanguage,
 		Country:    DefaultCountry,
 		HTTPClient: httpClient,
+		shopsByZip: make(map[string][]Shop),
 	}
 }
 
@@ -128,6 +170,234 @@ func (c *Client) StoreSummaries(ctx context.Context) ([]*StoreSummary, error) {
 		summaries = append(summaries, summary)
 	}
 	return summaries, nil
+}
+
+func (c *Client) InStoreShopID(ctx context.Context, summary *StoreSummary) (string, error) {
+	if summary == nil {
+		return "", errors.New("store summary is required")
+	}
+
+	shops, err := c.ShopsByPostalCode(ctx, summary.ZipCode)
+	if err != nil {
+		return "", err
+	}
+
+	shop, ok := findInStoreShop(summary, shops)
+	if !ok {
+		return "", fmt.Errorf("instore shop not found for %s %s", summary.ID, summary.Address)
+	}
+	return shop.ID, nil
+}
+
+func (c *Client) ShopsByPostalCode(ctx context.Context, postalCode string) ([]Shop, error) {
+	postalCode = strings.TrimSpace(postalCode)
+	if postalCode == "" {
+		return nil, errors.New("postal code is required")
+	}
+	if shops, ok := c.shopsByZip[postalCode]; ok {
+		return shops, nil
+	}
+
+	if err := c.ensureShopSession(ctx); err != nil {
+		return nil, err
+	}
+
+	endpoint, err := url.Parse(strings.TrimRight(c.ShopURL, "/") + "/idp/v1/shops")
+	if err != nil {
+		return nil, fmt.Errorf("parse shops URL: %w", err)
+	}
+	params := endpoint.Query()
+	params.Set("postal_code", postalCode)
+	endpoint.RawQuery = params.Encode()
+	var response shopsResponse
+	if err := c.shopJSON(ctx, http.MethodGet, endpoint.String(), nil, &response); err != nil {
+		return nil, err
+	}
+	if response.Error != nil {
+		return nil, fmt.Errorf("shops lookup failed: %s", strings.TrimSpace(response.Error.Message))
+	}
+	c.shopsByZip[postalCode] = response.Shops
+	return response.Shops, nil
+}
+
+func (c *Client) ensureShopSession(ctx context.Context) error {
+	if len(c.shopCookies) > 0 {
+		return nil
+	}
+
+	endpoint := strings.TrimRight(c.ShopURL, "/") + "/idp/v1/init"
+	return c.shopJSON(ctx, http.MethodPost, endpoint, bytes.NewReader([]byte("{}")), nil)
+}
+
+func (c *Client) shopJSON(ctx context.Context, method, endpoint string, body io.Reader, dest any) error {
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
+	if err != nil {
+		return fmt.Errorf("build shop request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Referer", strings.TrimRight(c.ShopURL, "/")+"/store/aldi/storefront")
+	for _, cookie := range c.shopCookies {
+		req.AddCookie(cookie)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("fetch %s: %w", endpoint, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if cookies := resp.Cookies(); len(cookies) > 0 {
+		c.shopCookies = mergeCookies(c.shopCookies, cookies)
+	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("fetch %s: status %d: %s", endpoint, resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+
+	if dest == nil {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return nil
+	}
+	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+		return fmt.Errorf("decode %s: %w", endpoint, err)
+	}
+	return nil
+}
+
+func mergeCookies(existing, next []*http.Cookie) []*http.Cookie {
+	byName := make(map[string]*http.Cookie, len(existing)+len(next))
+	for _, cookie := range existing {
+		byName[cookie.Name] = cookie
+	}
+	for _, cookie := range next {
+		byName[cookie.Name] = cookie
+	}
+
+	merged := make([]*http.Cookie, 0, len(byName))
+	for _, cookie := range byName {
+		merged = append(merged, cookie)
+	}
+	return merged
+}
+
+func findInStoreShop(summary *StoreSummary, shops []Shop) (Shop, bool) {
+	var candidates []Shop
+	cities := map[string]bool{}
+	var aldis, instores int
+	for _, shop := range shops {
+		if !strings.EqualFold(strings.TrimSpace(shop.RetailerKey), Container) {
+			continue
+		}
+		aldis++
+		if isInStoreFulfillment(shop) {
+			instores++
+		}
+		if !strings.EqualFold(strings.TrimSpace(summary.City), strings.TrimSpace(shop.Address.City)) {
+			cities[shop.Address.City+", "+shop.Address.State] = true
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(summary.State), strings.TrimSpace(shop.Address.State)) {
+			cities[shop.Address.City+", "+shop.Address.State] = true
+			continue
+		}
+		candidates = append(candidates, shop)
+	}
+
+	if len(candidates) == 0 {
+		slog.Warn("no aldi in store shops", "len", len(shops), "aldis", aldis, "instores", instores, "city", summary.City, "state", summary.State, "other_cities", lo.Keys(cities))
+		return Shop{}, false
+	}
+
+	if len(candidates) == 1 {
+		return candidates[0], true
+	}
+
+	best := candidates[0]
+	bestScore := addressWordMatchScore(summary.Address, best.Address.StreetAddress)
+	bestFulfillmentRank := fulfillmentRank(best)
+	tiedByFulfillment := map[string]int{normalizedFulfillment(best): 1}
+	for _, candidate := range candidates[1:] {
+		score := addressWordMatchScore(summary.Address, candidate.Address.StreetAddress)
+		if score > bestScore {
+			best = candidate
+			bestScore = score
+			bestFulfillmentRank = fulfillmentRank(candidate)
+			tiedByFulfillment = map[string]int{normalizedFulfillment(candidate): 1}
+			continue
+		}
+		if score != bestScore {
+			continue
+		}
+
+		rank := fulfillmentRank(candidate)
+		if rank > bestFulfillmentRank {
+			best = candidate
+			bestFulfillmentRank = rank
+			tiedByFulfillment = map[string]int{normalizedFulfillment(candidate): 0}
+		}
+		if rank == bestFulfillmentRank {
+			tiedByFulfillment[normalizedFulfillment(candidate)]++
+		}
+	}
+	for fulfillment, ties := range tiedByFulfillment {
+		if ties > 1 {
+			slog.Warn("multiple ALDI shop candidates tied after address matching", "address", summary.Address, "fulfillment", fulfillment, "score", bestScore, "ties", ties)
+			return Shop{}, false
+		}
+	}
+	return best, true
+}
+
+func isInStoreFulfillment(shop Shop) bool {
+	return strings.EqualFold(strings.TrimSpace(shop.FulfillmentOption), "instore")
+}
+
+func fulfillmentRank(shop Shop) int {
+	if isInStoreFulfillment(shop) {
+		return 1
+	}
+	return 0
+}
+
+func normalizedFulfillment(shop Shop) string {
+	return normalizeComparable(shop.FulfillmentOption)
+}
+
+var nonAlphaNumeric = regexp.MustCompile(`[^a-z0-9]+`)
+
+func normalizeComparable(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = nonAlphaNumeric.ReplaceAllString(value, " ")
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func addressWordMatchScore(summaryAddress, shopAddress string) int {
+	summaryWords := comparableWordSet(summaryAddress)
+	if len(summaryWords) == 0 {
+		return 0
+	}
+
+	score := 0
+	for _, word := range strings.Fields(normalizeComparable(shopAddress)) {
+		if summaryWords[word] {
+			score++
+			delete(summaryWords, word)
+		}
+	}
+	return score
+}
+
+func comparableWordSet(value string) map[string]bool {
+	words := strings.Fields(normalizeComparable(value))
+	set := make(map[string]bool, len(words))
+	for _, word := range words {
+		set[word] = true
+	}
+	return set
 }
 
 func normalizeLocation(location SourceLocation) (*StoreSummary, error) {
