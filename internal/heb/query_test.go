@@ -115,18 +115,13 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 	}
 }
 
-func TestCategoryPageDiscoversBuildID(t *testing.T) {
+func TestCategoryPageUsesDefaultBuildID(t *testing.T) {
 	t.Parallel()
 
-	var categoryPagePath string
 	var dataRequestPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/category/shop/fruit-vegetables/vegetables/490020/490083":
-			categoryPagePath = r.URL.Path
-			w.Header().Set("Content-Type", "text/html")
-			_, _ = io.WriteString(w, `<!doctype html><html><body><script id="__NEXT_DATA__" type="application/json">{"buildId":"discovered-build"}</script></body></html>`)
-		case "/_next/data/discovered-build/en/category/shop/490020/490083.json":
+		case "/_next/data/" + StaplesBuildID + "/en/category/shop/490020/490083.json":
 			dataRequestPath = r.URL.Path
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
@@ -151,10 +146,7 @@ func TestCategoryPageDiscoversBuildID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CategoryPage returned error: %v", err)
 	}
-	if got, want := categoryPagePath, "/category/shop/fruit-vegetables/vegetables/490020/490083"; got != want {
-		t.Fatalf("unexpected category page path: got %q want %q", got, want)
-	}
-	if got, want := dataRequestPath, "/_next/data/discovered-build/en/category/shop/490020/490083.json"; got != want {
+	if got, want := dataRequestPath, "/_next/data/"+StaplesBuildID+"/en/category/shop/490020/490083.json"; got != want {
 		t.Fatalf("unexpected data path: got %q want %q", got, want)
 	}
 }

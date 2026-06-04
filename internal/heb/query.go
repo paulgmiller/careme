@@ -146,9 +146,14 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		maxPages = defaultMaxPages
 	}
 
+	buildID := strings.TrimSpace(cfg.BuildID)
+	if buildID == "" {
+		buildID = StaplesBuildID
+	}
+
 	return &QueryClient{
 		baseURL:    baseURL,
-		buildID:    strings.TrimSpace(cfg.BuildID),
+		buildID:    buildID,
 		httpClient: httpClient,
 		userAgent:  userAgent,
 		maxPages:   maxPages,
@@ -250,12 +255,7 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 	}, nil
 }
 
-// 989c6544932987f836f21ec977bac83f5d376a14
 func (c *QueryClient) resolveBuildID(ctx context.Context, opts CategoryOptions) (string, error) {
-	return "989c6544932987f836f21ec977bac83f5d376a14", nil
-}
-
-func (c *QueryClient) busted(ctx context.Context, opts CategoryOptions) (string, error) {
 	c.buildIDMu.Lock()
 	defer c.buildIDMu.Unlock()
 

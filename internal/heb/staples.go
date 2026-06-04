@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	StaplesBuildID = "7818000e5b98897ce6caf33b86a3190db6c09e01"
+	StaplesBuildID = "989c6544932987f836f21ec977bac83f5d376a14"
 
 	CategoryFruitParent      = "490020"
 	CategoryFruitChild       = "490082"
@@ -25,10 +25,16 @@ const (
 	CategoryVegetablesChild  = "490083"
 	CategoryBeefParent       = "490110"
 	CategoryBeefChild        = "490529"
-	CategoryDairyEggsParent  = "2863"
-	CategoryDairyEggsChild   = "490016"
-	CategoryPastaRiceParent  = "490024"
-	CategoryPastaRiceChild   = "490121"
+	CategoryPorkParent       = "490110"
+	CategoryPorkChild        = "490536"
+	CategoryChickenParent    = "490110"
+	CategoryChickenChild     = "490531"
+	CategorySausageParent    = "490110"
+	CategorySausageChild     = "490537"
+	CategoryFishParent       = "490111"
+	CategoryFishChild        = "490540"
+	CategoryShrimpParent     = "490111"
+	CategoryShrimpChild      = "490541"
 )
 
 var defaultHEBStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
@@ -39,10 +45,6 @@ type StapleCategory struct {
 	ChildID      string
 	CategoryPath string
 	Int          string
-}
-
-var shoppingStoreIDOverrides = map[string]string{
-	//"heb_773": "465",
 }
 
 type hebQueryClient interface {
@@ -142,11 +144,14 @@ func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []st
 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
-		//{Name: "fruit", ParentID: CategoryFruitParent, ChildID: CategoryFruitChild, CategoryPath: "/category/shop/fruit-vegetables/fruit/490020/490082"},
-		//{Name: "vegetables", ParentID: CategoryVegetablesParent, ChildID: CategoryVegetablesChild, CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083"},
-		{Name: "beef", ParentID: "490110", ChildID: "490529", CategoryPath: "/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef", Int: "curbside-category-shortcuts.meat.beef"},
-		//{Name: "dairy & eggs", ParentID: CategoryDairyEggsParent, ChildID: CategoryDairyEggsChild, CategoryPath: "/category/shop/dairy-eggs/2863/490016"},
-		//{Name: "pasta & rice", ParentID: CategoryPastaRiceParent, ChildID: CategoryPastaRiceChild, CategoryPath: "/category/shop/pantry/pasta-rice/490024/490121"},
+		{Name: "beef", ParentID: CategoryBeefParent, ChildID: CategoryBeefChild, CategoryPath: "/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef", Int: "curbside-category-shortcuts.meat.beef"},
+		{Name: "pork", ParentID: CategoryPorkParent, ChildID: CategoryPorkChild, CategoryPath: "/category/shop/meat-seafood/meat/pork/490110/490536?int=curbside-category-shortcuts.meat.pork", Int: "curbside-category-shortcuts.meat.pork"},
+		{Name: "chicken", ParentID: CategoryChickenParent, ChildID: CategoryChickenChild, CategoryPath: "/category/shop/meat-seafood/meat/chicken/490110/490531?int=curbside-category-shortcuts.meat.chicken", Int: "curbside-category-shortcuts.meat.chicken"},
+		{Name: "sausage", ParentID: CategorySausageParent, ChildID: CategorySausageChild, CategoryPath: "/category/shop/meat-seafood/meat/sausage/490110/490537?int=curbside-category-shortcuts.meat.sausage", Int: "curbside-category-shortcuts.meat.sausage"},
+		{Name: "fish", ParentID: CategoryFishParent, ChildID: CategoryFishChild, CategoryPath: "/category/shop/meat-seafood/seafood/fish/490111/490540?int=curbside-category-shortcuts.seafood.fish", Int: "curbside-category-shortcuts.seafood.fish"},
+		{Name: "shrimp", ParentID: CategoryShrimpParent, ChildID: CategoryShrimpChild, CategoryPath: "/category/shop/meat-seafood/seafood/shrimp-shellfish/490111/490541?int=curbside-category-shortcuts.seafood.shrimp", Int: "curbside-category-shortcuts.seafood.shrimp"},
+		{Name: "vegetables", ParentID: CategoryVegetablesParent, ChildID: CategoryVegetablesChild, CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083"},
+		{Name: "fruit", ParentID: CategoryFruitParent, ChildID: CategoryFruitChild, CategoryPath: "/category/shop/fruit-vegetables/fruit/490020/490082?int=curbside-category-shortcuts.fruit-vegetables.fruits", Int: "curbside-category-shortcuts.fruit-vegetables.fruits"},
 	}
 }
 
@@ -154,9 +159,6 @@ func storeIDFromLocation(locationID string) (string, error) {
 	locationID = strings.TrimSpace(locationID)
 	if !IsID(locationID) {
 		return "", fmt.Errorf("invalid heb location id %q", locationID)
-	}
-	if storeID := shoppingStoreIDOverrides[locationID]; storeID != "" {
-		return storeID, nil
 	}
 	return strings.TrimPrefix(locationID, LocationIDPrefix), nil
 }

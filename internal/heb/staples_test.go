@@ -69,11 +69,11 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 
 	client := &stubHEBQueryClient{
 		results: map[string][]Product{
-			CategoryBeefParent + ":" + CategoryBeefChild: {
+			CategoryPorkParent + ":" + CategoryPorkChild: {
 				{
-					ID:                    "beef-1",
-					DisplayName:           "H-E-B Ground Beef",
-					FullCategoryHierarchy: "Meat & seafood/Meat/Beef",
+					ID:                    "pork-1",
+					DisplayName:           "H-E-B Pork Shoulder Roast",
+					FullCategoryHierarchy: "Meat & seafood/Meat/Pork",
 					Brand:                 &Brand{Name: "H-E-B"},
 					ProductLocation:       &ProductLocation{Location: "Meat Market"},
 				},
@@ -94,23 +94,23 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	if !client.hasCall(CategoryOptions{
 		Reese84:      "cached-reese84",
 		StoreID:      "92",
-		ParentID:     CategoryBeefParent,
-		ChildID:      CategoryBeefChild,
-		CategoryPath: "/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef",
-		Int:          "curbside-category-shortcuts.meat.beef",
+		ParentID:     CategoryPorkParent,
+		ChildID:      CategoryPorkChild,
+		CategoryPath: "/category/shop/meat-seafood/meat/pork/490110/490536?int=curbside-category-shortcuts.meat.pork",
+		Int:          "curbside-category-shortcuts.meat.pork",
 	}) {
-		t.Fatalf("missing beef category call")
+		t.Fatalf("missing pork category call")
 	}
 	if len(got) != 1 {
 		t.Fatalf("expected 1 ingredient, got %d", len(got))
 	}
 
 	assertInputIngredient(t, got[0], ai.InputIngredient{
-		ProductID:   "beef-1",
-		Description: "H-E-B Ground Beef",
+		ProductID:   "pork-1",
+		Description: "H-E-B Pork Shoulder Roast",
 		Brand:       "H-E-B",
 		AisleNumber: "Meat Market",
-		Categories:  []string{"Meat & seafood", "Meat", "Beef"},
+		Categories:  []string{"Meat & seafood", "Meat", "Pork"},
 	})
 }
 
@@ -173,18 +173,6 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	_, err := provider.FetchStaples(t.Context(), "92")
 	if err == nil || err.Error() != `invalid heb location id "92"` {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestStoreIDFromLocation_UsesShoppingStoreOverride(t *testing.T) {
-	t.Parallel()
-
-	got, err := storeIDFromLocation("heb_773")
-	if err != nil {
-		t.Fatalf("storeIDFromLocation returned error: %v", err)
-	}
-	if got != "465" {
-		t.Fatalf("unexpected store id: got %q want %q", got, "465")
 	}
 }
 
