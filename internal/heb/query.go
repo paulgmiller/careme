@@ -147,9 +147,6 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 	}
 
 	buildID := strings.TrimSpace(cfg.BuildID)
-	if buildID == "" {
-		buildID = StaplesBuildID
-	}
 
 	return &QueryClient{
 		baseURL:    baseURL,
@@ -158,6 +155,17 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		userAgent:  userAgent,
 		maxPages:   maxPages,
 	}
+}
+
+func (c *QueryClient) SetBuildID(buildID string) {
+	buildID = strings.TrimSpace(buildID)
+	if buildID == "" {
+		return
+	}
+
+	c.buildIDMu.Lock()
+	defer c.buildIDMu.Unlock()
+	c.buildID = buildID
 }
 
 func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Product, error) {

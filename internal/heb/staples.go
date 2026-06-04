@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	StaplesBuildID = "5367623aa767dc1c90ce3ac12f22820104586f40"
+	// StaplesBuildID = "5367623aa767dc1c90ce3ac12f22820104586f40"
 
 	CategoryFruitParent      = "490020"
 	CategoryFruitChild       = "490082"
@@ -51,6 +51,10 @@ type hebQueryClient interface {
 	Category(ctx context.Context, opts CategoryOptions) ([]Product, error)
 }
 
+type buildIDClient interface {
+	SetBuildID(buildID string)
+}
+
 type loadReese84 func(context.Context) (string, error)
 
 type identityProvider struct{}
@@ -59,6 +63,7 @@ type StaplesProvider struct {
 	identityProvider
 	client      hebQueryClient
 	loadReese84 loadReese84
+	loadBuildID loadBuildID
 }
 
 func NewIdentityProvider() identityProvider {
@@ -70,23 +75,32 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 	if err != nil {
 		return StaplesProvider{}, fmt.Errorf("create albertsons cache for HEB reese84 token: %w", err)
 	}
+	buildIDLoader, err := newBrightDataBuildIDLoaderFromEnv()
+	if err != nil {
+		return StaplesProvider{}, err
+	}
 
-	return newStaplesProviderWithClient(NewQueryClient(QueryClientConfig{
+	return newStaplesProviderWithDeps(NewQueryClient(QueryClientConfig{
 		HTTPClient: httpClient,
-		BuildID:    StaplesBuildID,
+		// BuildID:    StaplesBuildID,
 	}), func(ctx context.Context) (string, error) {
 		record, err := albertsons.LoadLatestReese84(ctx, albertsonsCache)
 		if err != nil {
 			return "", fmt.Errorf("load cached albertsons reese84 token for HEB: %w", err)
 		}
 		return record.Cookie, nil
-	}), nil
+	}, buildIDLoader), nil
 }
 
 func newStaplesProviderWithClient(client hebQueryClient, loadReese84 loadReese84) StaplesProvider {
+	return newStaplesProviderWithDeps(client, loadReese84, nil)
+}
+
+func newStaplesProviderWithDeps(client hebQueryClient, loadReese84 loadReese84, loadBuildID loadBuildID) StaplesProvider {
 	return StaplesProvider{
 		client:      client,
 		loadReese84: loadReese84,
+		loadBuildID: loadBuildID,
 	}
 }
 
@@ -116,6 +130,8 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		return nil, err
 	}
 
+	p.refreshBuildID(ctx)
+
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
 		products, err := p.client.Category(ctx, CategoryOptions{
 			Reese84:      reese84,
@@ -136,6 +152,29 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		slog.InfoContext(ctx, "found heb staples for category", "count", len(ingredients), "category", category.Name, "location", locationID)
 		return ingredients, nil
 	})
+}
+
+func (p StaplesProvider) refreshBuildID(ctx context.Context) {
+	if p.loadBuildID == nil {
+		return
+	}
+	client, ok := p.client.(buildIDClient)
+	if !ok {
+		slog.WarnContext(ctx, "cannot update heb build id for client", "client_type", fmt.Sprintf("%T", p.client))
+		return
+	}
+
+	buildID, err := p.loadBuildID(ctx)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to discover heb build id; using configured fallback", "error", err)
+		return
+	}
+	if strings.TrimSpace(buildID) == "" {
+		slog.WarnContext(ctx, "discovered empty heb build id; using configured fallback")
+		return
+	}
+	client.SetBuildID(buildID)
+	slog.InfoContext(ctx, "updated heb next data build id", "build_id", buildID)
 }
 
 func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {

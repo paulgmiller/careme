@@ -33,6 +33,7 @@ type stubHEBQueryClient struct {
 	mu      sync.Mutex
 	results map[string][]Product
 	calls   []CategoryOptions
+	buildID string
 }
 
 func (s *stubHEBQueryClient) Category(_ context.Context, opts CategoryOptions) ([]Product, error) {
@@ -48,6 +49,18 @@ func (s *stubHEBQueryClient) callCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.calls)
+}
+
+func (s *stubHEBQueryClient) SetBuildID(buildID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.buildID = buildID
+}
+
+func (s *stubHEBQueryClient) currentBuildID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buildID
 }
 
 func (s *stubHEBQueryClient) hasCall(want CategoryOptions) bool {
@@ -114,9 +127,34 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	})
 }
 
+func TestStaplesProvider_RefreshesBuildIDBeforeFetchingCategories(t *testing.T) {
+	t.Parallel()
+
+	var buildIDLoads int
+	client := &stubHEBQueryClient{}
+	provider := newStaplesProviderWithDeps(client, func(context.Context) (string, error) {
+		return "cached-reese84", nil
+	}, func(context.Context) (string, error) {
+		buildIDLoads++
+		return "fresh-build", nil
+	})
+
+	_, err := provider.FetchStaples(t.Context(), "heb_92")
+	if err != nil {
+		t.Fatalf("FetchStaples returned error: %v", err)
+	}
+	if buildIDLoads != 1 {
+		t.Fatalf("unexpected build id load count: got %d want 1", buildIDLoads)
+	}
+	if got := client.currentBuildID(); got != "fresh-build" {
+		t.Fatalf("unexpected build id: got %q want %q", got, "fresh-build")
+	}
+}
+
 func TestNewStaplesProvider_LoadsAlbertsonsCachedReese84(t *testing.T) {
 	unsetEnvForTest(t, "AZURE_STORAGE_ACCOUNT_NAME")
 	unsetEnvForTest(t, "AZURE_STORAGE_PRIMARY_ACCOUNT_KEY")
+	unsetEnvForTest(t, brightDataBrowserWSEnv)
 
 	oldWD, err := os.Getwd()
 	if err != nil {

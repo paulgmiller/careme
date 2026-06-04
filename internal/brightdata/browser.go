@@ -148,6 +148,63 @@ func (c *BrowserClient) Cookies(ctx context.Context, targetURL string, opts Brow
 	return client.getCookies(ctx, sessionID, targetURL)
 }
 
+func (c *BrowserClient) HTML(ctx context.Context, targetURL string, opts BrowserOptions) (string, error) {
+	targetURL = strings.TrimSpace(targetURL)
+	if targetURL == "" {
+		return "", errors.New("target URL is required")
+	}
+
+	wait := opts.WaitAfterNavigation
+	if wait <= 0 {
+		wait = defaultBrowserWait
+	}
+
+	client, err := newCDPClient(ctx, c.wsEndpoint, c.authHeader)
+	if err != nil {
+		return "", fmt.Errorf("dial browser websocket: %w", err)
+	}
+	defer func() {
+		_ = client.Close()
+	}()
+
+	targetID, err := client.createTarget(ctx)
+	if err != nil {
+		return "", fmt.Errorf("create browser target: %w", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = client.closeTarget(closeCtx, targetID)
+	}()
+
+	sessionID, err := client.attachToTarget(ctx, targetID)
+	if err != nil {
+		return "", fmt.Errorf("attach to browser target: %w", err)
+	}
+
+	if err := client.call(ctx, sessionID, "Page.enable", nil, nil); err != nil {
+		return "", fmt.Errorf("enable page domain: %w", err)
+	}
+	if err := client.call(ctx, sessionID, "Runtime.enable", nil, nil); err != nil {
+		return "", fmt.Errorf("enable runtime domain: %w", err)
+	}
+	if err := client.navigate(ctx, sessionID, targetURL); err != nil {
+		return "", fmt.Errorf("navigate browser target: %w", err)
+	}
+
+	if wait > 0 {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-timer.C:
+		}
+	}
+
+	return client.evaluateString(ctx, sessionID, "document.documentElement.outerHTML")
+}
+
 func CookieNamed(cookies []BrowserCookie, name string) (BrowserCookie, bool) {
 	name = strings.TrimSpace(name)
 	for _, cookie := range cookies {
@@ -333,6 +390,25 @@ func (c *cdpClient) getCookies(ctx context.Context, sessionID, targetURL string)
 		})
 	}
 	return cookies, nil
+}
+
+func (c *cdpClient) evaluateString(ctx context.Context, sessionID, expression string) (string, error) {
+	var result struct {
+		Result struct {
+			Type  string `json:"type"`
+			Value string `json:"value"`
+		} `json:"result"`
+	}
+	if err := c.call(ctx, sessionID, "Runtime.evaluate", map[string]any{
+		"expression":    expression,
+		"returnByValue": true,
+	}, &result); err != nil {
+		return "", err
+	}
+	if result.Result.Type != "string" {
+		return "", fmt.Errorf("runtime expression returned %q, want string", result.Result.Type)
+	}
+	return result.Result.Value, nil
 }
 
 func (c *cdpClient) call(ctx context.Context, sessionID, method string, params any, out any) error {
