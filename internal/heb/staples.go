@@ -91,6 +91,7 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 		if err != nil {
 			return "", fmt.Errorf("load cached albertsons reese84 token for HEB: %w", err)
 		}
+		slog.InfoContext(ctx, "reese84", "token", record.Cookie)
 		return record.Cookie, nil
 	}, buildIDLoader), nil
 }

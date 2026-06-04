@@ -429,7 +429,7 @@ func queryAttrValue(n *html.Node, name string) string {
 func decodeCategoryPayload(body []byte) ([]Product, error) {
 	var root any
 	if err := json.Unmarshal(body, &root); err != nil {
-		return nil, fmt.Errorf("decode category json response: %w", err)
+		return nil, fmt.Errorf("decode category json response: %w, %s", err, body)
 	}
 
 	products, err := extractProducts(root)
