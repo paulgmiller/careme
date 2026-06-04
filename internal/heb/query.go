@@ -8,6 +8,7 @@ import (
 	"fmt"
 	htmlstd "html"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -54,12 +55,11 @@ type CategoryOptions struct {
 	CategoryPath string
 	Int          string
 	Page         int
-	SCT          string
+	Limit        int
 }
 
 type CategoryPage struct {
 	Products []Product       `json:"products"`
-	NextSCT  string          `json:"nextSct,omitempty"`
 	Page     int             `json:"page"`
 	Raw      json.RawMessage `json:"-"`
 }
@@ -181,34 +181,58 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 		page = 1
 	}
 
-	sct := strings.TrimSpace(opts.SCT)
-	seenSCT := make(map[string]struct{})
+	seenProducts := make(map[string]struct{})
 	products := make([]Product, 0)
 	for pagesFetched := 0; pagesFetched < c.maxPages; pagesFetched++ {
 		pageOpts := opts
 		pageOpts.Page = page
-		pageOpts.SCT = sct
 
 		resp, err := c.CategoryPage(ctx, pageOpts)
 		if err != nil {
+			if pagesFetched > 0 {
+				slog.InfoContext(ctx, "category pagination stopped after page error", "page", page, "error", err)
+				return products, nil
+			}
 			return nil, err
 		}
-		products = append(products, resp.Products...)
-
-		nextSCT := strings.TrimSpace(resp.NextSCT)
-		if nextSCT == "" {
+		newProducts := appendNewProducts(&products, resp.Products, seenProducts, opts.Limit)
+		if len(resp.Products) == 0 {
+			slog.InfoContext(ctx, "category pagination stopped after empty page", "page", page)
 			return products, nil
 		}
-		if _, ok := seenSCT[nextSCT]; ok {
+		if newProducts == 0 && pagesFetched > 0 {
+			slog.InfoContext(ctx, "category pagination stopped after duplicate page", "page", page)
 			return products, nil
 		}
-		seenSCT[nextSCT] = struct{}{}
+		if opts.Limit > 0 && len(products) >= opts.Limit {
+			slog.InfoContext(ctx, "category pagination stopped after limit", "page", page, "limit", opts.Limit)
+			return products, nil
+		}
 
 		page++
-		sct = nextSCT
 	}
 
 	return products, fmt.Errorf("category pagination exceeded max pages %d", c.maxPages)
+}
+
+func appendNewProducts(products *[]Product, candidates []Product, seen map[string]struct{}, limit int) int {
+	var appended int
+	for _, product := range candidates {
+		if limit > 0 && len(*products) >= limit {
+			break
+		}
+		id := strings.TrimSpace(product.ID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		*products = append(*products, product)
+		appended++
+	}
+	return appended
 }
 
 func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*CategoryPage, error) {
@@ -253,14 +277,13 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 		return nil, fmt.Errorf("read category response: %w", err)
 	}
 
-	products, nextSCT, err := decodeCategoryPayload(body)
+	products, err := decodeCategoryPayload(body)
 	if err != nil {
 		return nil, err
 	}
 
 	return &CategoryPage{
 		Products: products,
-		NextSCT:  nextSCT,
 		Page:     opts.Page,
 		Raw:      body,
 	}, nil
@@ -288,9 +311,6 @@ func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (str
 	query.Set("childId", opts.ChildID)
 	if intValue := strings.TrimSpace(opts.Int); intValue != "" {
 		query.Set("int", intValue)
-	}
-	if sct := strings.TrimSpace(opts.SCT); sct != "" {
-		query.Set("sct", sct)
 	}
 	endpoint.RawQuery = query.Encode()
 	return endpoint.String(), nil
@@ -406,18 +426,17 @@ func queryAttrValue(n *html.Node, name string) string {
 	return ""
 }
 
-func decodeCategoryPayload(body []byte) ([]Product, string, error) {
+func decodeCategoryPayload(body []byte) ([]Product, error) {
 	var root any
 	if err := json.Unmarshal(body, &root); err != nil {
-		return nil, "", fmt.Errorf("decode category json response: %w", err)
+		return nil, fmt.Errorf("decode category json response: %w", err)
 	}
 
 	products, err := extractProducts(root)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	nextSCT := extractNextSCT(root)
-	return products, nextSCT, nil
+	return products, nil
 }
 
 func extractProducts(root any) ([]Product, error) {
@@ -500,48 +519,6 @@ func looksLikeProduct(obj map[string]any) bool {
 		return true
 	}
 	return false
-}
-
-func extractNextSCT(root any) string {
-	preferred := []string{
-		"nextsct",
-		"nextsearchcontexttoken",
-		"nextpagecontexttoken",
-		"nextpagesearchcontexttoken",
-	}
-
-	var found string
-	for _, want := range preferred {
-		walkQueryJSON(root, func(value any) {
-			if found != "" {
-				return
-			}
-			obj, ok := value.(map[string]any)
-			if !ok {
-				return
-			}
-			for key, raw := range obj {
-				if normalizedJSONKey(key) != want {
-					continue
-				}
-				if s, ok := raw.(string); ok {
-					found = strings.TrimSpace(s)
-					return
-				}
-			}
-		})
-		if found != "" {
-			return found
-		}
-	}
-	return ""
-}
-
-func normalizedJSONKey(key string) string {
-	key = strings.ToLower(strings.TrimSpace(key))
-	key = strings.ReplaceAll(key, "_", "")
-	key = strings.ReplaceAll(key, "-", "")
-	return key
 }
 
 func walkQueryJSON(value any, visit func(any)) {

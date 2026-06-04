@@ -39,7 +39,6 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 		ParentID: "490020",
 		ChildID:  "490083",
 		Page:     2,
-		SCT:      "next-token",
 	})
 	if err != nil {
 		t.Fatalf("CategoryPage returned error: %v", err)
@@ -56,7 +55,6 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 
 	query := capturedReq.URL.Query()
 	assertQueryValue(t, query, "page", "2")
-	assertQueryValue(t, query, "sct", "next-token")
 	assertQueryValue(t, query, "parentId", "490020")
 	assertQueryValue(t, query, "childId", "490083")
 
@@ -203,12 +201,9 @@ func TestDecodeCategoryPayloadExtractsProducts(t *testing.T) {
 		}
 	}`)
 
-	products, nextSCT, err := decodeCategoryPayload(body)
+	products, err := decodeCategoryPayload(body)
 	if err != nil {
 		t.Fatalf("decodeCategoryPayload returned error: %v", err)
-	}
-	if nextSCT != "" {
-		t.Fatalf("unexpected next sct: %q", nextSCT)
 	}
 	if len(products) != 1 {
 		t.Fatalf("expected 1 product, got %d", len(products))
@@ -277,7 +272,7 @@ func TestDecodeCategoryPayloadExtractsNormalizedProductObjects(t *testing.T) {
 		}
 	}`)
 
-	products, _, err := decodeCategoryPayload(body)
+	products, err := decodeCategoryPayload(body)
 	if err != nil {
 		t.Fatalf("decodeCategoryPayload returned error: %v", err)
 	}
@@ -293,18 +288,18 @@ func TestDecodeCategoryPayloadExtractsNormalizedProductObjects(t *testing.T) {
 	}
 }
 
-func TestCategoryAutoPaginatesWithSCT(t *testing.T) {
+func TestCategoryPaginatesByPage(t *testing.T) {
 	t.Parallel()
 
-	var pageTwoSCT string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p1","displayName":"Apples"}],"pagination":{"nextSct":"page-two-token"}}}}`)
+			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p1","displayName":"Apples"}]}}}`)
 		case "2":
-			pageTwoSCT = r.URL.Query().Get("sct")
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p2","displayName":"Broccoli"}],"pagination":{}}}}`)
+			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p2","displayName":"Broccoli"}]}}}`)
+		case "3":
+			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
 		default:
 			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
 		}
@@ -335,19 +330,61 @@ func TestCategoryAutoPaginatesWithSCT(t *testing.T) {
 	if got, want := products[1].ID, "p2"; got != want {
 		t.Fatalf("unexpected second product: got %q want %q", got, want)
 	}
-	if got, want := pageTwoSCT, "page-two-token"; got != want {
-		t.Fatalf("unexpected page two sct: got %q want %q", got, want)
+}
+
+func TestCategoryStopsAtLimit(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("page") {
+		case "1":
+			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p1","displayName":"Apples"},{"id":"p2","displayName":"Bananas"}]}}}`)
+		case "2":
+			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p3","displayName":"Broccoli"},{"id":"p4","displayName":"Carrots"}]}}}`)
+		default:
+			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
+		}
+	}))
+	defer server.Close()
+
+	client := NewQueryClient(QueryClientConfig{
+		BaseURL:    server.URL,
+		BuildID:    "test-build",
+		HTTPClient: server.Client(),
+	})
+
+	products, err := client.Category(context.Background(), CategoryOptions{
+		Reese84:  "test-reese",
+		StoreID:  "92",
+		ParentID: "490020",
+		ChildID:  "490083",
+		Limit:    3,
+	})
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+	if len(products) != 3 {
+		t.Fatalf("expected 3 products, got %d", len(products))
+	}
+	if got, want := products[2].ID, "p3"; got != want {
+		t.Fatalf("unexpected limited product: got %q want %q", got, want)
 	}
 }
 
-func TestCategoryDoesNotPaginateOnGenericSCT(t *testing.T) {
+func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 	t.Parallel()
 
-	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p1","displayName":"Apples"}],"sct":"current-page-token"}}}`)
+		switch r.URL.Query().Get("page") {
+		case "1":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p1","displayName":"Apples"}]}}}`)
+		case "2":
+			http.NotFound(w, r)
+		default:
+			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
+		}
 	}))
 	defer server.Close()
 
@@ -368,9 +405,6 @@ func TestCategoryDoesNotPaginateOnGenericSCT(t *testing.T) {
 	}
 	if len(products) != 1 {
 		t.Fatalf("expected 1 product, got %d", len(products))
-	}
-	if calls != 1 {
-		t.Fatalf("expected 1 request, got %d", calls)
 	}
 }
 
@@ -489,7 +523,7 @@ func TestCategoryReturnsMaxPagesError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"props":{"pageProps":{"products":[{"id":"p%s","displayName":"Product"}],"pagination":{"nextSct":"token-%s"}}}}`, r.URL.Query().Get("page"), r.URL.Query().Get("page"))
+		_, _ = fmt.Fprintf(w, `{"props":{"pageProps":{"products":[{"id":"p%s","displayName":"Product"}]}}}`, r.URL.Query().Get("page"))
 	}))
 	defer server.Close()
 

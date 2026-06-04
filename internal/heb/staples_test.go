@@ -73,8 +73,34 @@ func (s *stubHEBQueryClient) hasCall(want CategoryOptions) bool {
 			got.ParentID == want.ParentID &&
 			got.ChildID == want.ChildID &&
 			got.CategoryPath == want.CategoryPath &&
-			got.Int == want.Int
+			got.Int == want.Int &&
+			got.Limit == want.Limit
 	})
+}
+
+func TestStapleCategories_HaveLimits(t *testing.T) {
+	t.Parallel()
+
+	got := make(map[string]int)
+	for _, category := range StapleCategories() {
+		got[category.Name] = category.Limit
+	}
+
+	tests := map[string]int{
+		"vegetables": produceStapleLimit,
+		"fruit":      produceStapleLimit,
+		"beef":       bigStapleLimit,
+		"pork":       bigStapleLimit,
+		"chicken":    bigStapleLimit,
+		"sausage":    defaultStapleLimit,
+		"fish":       seafoodStapleLimit,
+		"shrimp":     seafoodStapleLimit,
+	}
+	for name, want := range tests {
+		if got[name] != want {
+			t.Fatalf("unexpected %s limit: got %d want %d", name, got[name], want)
+		}
+	}
 }
 
 func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
@@ -111,6 +137,7 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 		ChildID:      CategoryPorkChild,
 		CategoryPath: "/category/shop/meat-seafood/meat/pork/490110/490536?int=curbside-category-shortcuts.meat.pork",
 		Int:          "curbside-category-shortcuts.meat.pork",
+		Limit:        bigStapleLimit,
 	}) {
 		t.Fatalf("missing pork category call")
 	}
