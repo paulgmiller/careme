@@ -68,7 +68,7 @@ func (b *LocationBackend) IsID(locationID string) bool {
 }
 
 func (*LocationBackend) HasInventory(locationID string) bool {
-	return IsID(locationID)
+	return false
 }
 
 func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {

@@ -31,9 +31,6 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if !backend.IsID("heb_22") {
 		t.Fatalf("expected heb id to be recognized")
 	}
-	if !backend.HasInventory("heb_22") {
-		t.Fatalf("expected heb location to support inventory")
-	}
 
 	loc, err := backend.GetLocationByID(context.Background(), "heb_22")
 	if err != nil {
