@@ -3,10 +3,12 @@ package heb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 
 	"careme/internal/ai"
 	"careme/internal/albertsons"
@@ -57,6 +59,7 @@ type hebQueryClient interface {
 
 type buildIDClient interface {
 	SetBuildID(buildID string)
+	currentBuildID() string
 }
 
 type loadReese84 func(context.Context) (string, error)
@@ -65,9 +68,11 @@ type identityProvider struct{}
 
 type StaplesProvider struct {
 	identityProvider
-	client      hebQueryClient
-	loadReese84 loadReese84
-	loadBuildID loadBuildID
+	client       hebQueryClient
+	loadReese84  loadReese84
+	loadBuildID  loadBuildID
+	buildIDCache cache.Cache
+	buildIDMu    *sync.Mutex
 }
 
 func NewIdentityProvider() identityProvider {
@@ -79,13 +84,25 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 	if err != nil {
 		return StaplesProvider{}, fmt.Errorf("create albertsons cache for HEB reese84 token: %w", err)
 	}
-	buildIDLoader, err := newBrightDataBuildIDLoaderFromEnv()
+	hebCache, err := cache.EnsureCache(Container)
 	if err != nil {
-		return StaplesProvider{}, err
+		return StaplesProvider{}, fmt.Errorf("create heb cache for build id: %w", err)
+	}
+	buildID, err := LoadLatestBuildID(context.Background(), hebCache)
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		return StaplesProvider{}, fmt.Errorf("load cached heb build id: %w", err)
+	}
+	buildIDLoader := func(ctx context.Context, opts buildIDOptions) (string, error) {
+		loader, err := newBrightDataBuildIDLoaderFromEnv()
+		if err != nil {
+			return "", err
+		}
+		return loader(ctx, opts)
 	}
 
 	return newStaplesProviderWithDeps(NewQueryClient(QueryClientConfig{
 		HTTPClient: httpClient,
+		BuildID:    buildID,
 	}), func(ctx context.Context) (string, error) {
 		record, err := albertsons.LoadLatestReese84(ctx, albertsonsCache)
 		if err != nil {
@@ -93,20 +110,22 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 		}
 		slog.InfoContext(ctx, "reese84", "token", record.Cookie)
 		return record.Cookie, nil
-	}, buildIDLoader), nil
+	}, buildIDLoader, hebCache), nil
 }
 
 func newStaplesProviderWithClient(client hebQueryClient, loadReese84 loadReese84) StaplesProvider {
 	return newStaplesProviderWithDeps(client, loadReese84, func(context.Context, buildIDOptions) (string, error) {
 		return "test-build", nil
-	})
+	}, nil)
 }
 
-func newStaplesProviderWithDeps(client hebQueryClient, loadReese84 loadReese84, loadBuildID loadBuildID) StaplesProvider {
+func newStaplesProviderWithDeps(client hebQueryClient, loadReese84 loadReese84, loadBuildID loadBuildID, buildIDCache cache.Cache) StaplesProvider {
 	return StaplesProvider{
-		client:      client,
-		loadReese84: loadReese84,
-		loadBuildID: loadBuildID,
+		client:       client,
+		loadReese84:  loadReese84,
+		loadBuildID:  loadBuildID,
+		buildIDCache: buildIDCache,
+		buildIDMu:    &sync.Mutex{},
 	}
 }
 
@@ -136,20 +155,9 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		return nil, err
 	}
 
-	if err := p.refreshBuildID(ctx, buildIDOptions{Reese84: reese84, StoreID: storeID}); err != nil {
-		return nil, err
-	}
-
+	buildIDOpts := buildIDOptions{Reese84: reese84, StoreID: storeID}
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
-		products, err := p.client.Category(ctx, CategoryOptions{
-			Reese84:      reese84,
-			StoreID:      storeID,
-			ParentID:     category.ParentID,
-			ChildID:      category.ChildID,
-			CategoryPath: category.CategoryPath,
-			Int:          category.Int,
-			Limit:        category.Limit,
-		})
+		products, err := p.fetchCategory(ctx, buildIDOpts, category)
 		if err != nil {
 			slog.WarnContext(ctx, "failed to fetch heb category", "category", category.Name, "location", locationID, "error", err)
 			return nil, err
@@ -163,13 +171,51 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) refreshBuildID(ctx context.Context, opts buildIDOptions) error {
+func (p StaplesProvider) fetchCategory(ctx context.Context, buildIDOpts buildIDOptions, category StapleCategory) ([]Product, error) {
+	categoryOpts := CategoryOptions{
+		Reese84:      buildIDOpts.Reese84,
+		StoreID:      buildIDOpts.StoreID,
+		ParentID:     category.ParentID,
+		ChildID:      category.ChildID,
+		CategoryPath: category.CategoryPath,
+		Int:          category.Int,
+		Limit:        category.Limit,
+	}
+
+	staleBuildID := ""
+	if client, ok := p.client.(buildIDClient); ok {
+		staleBuildID = client.currentBuildID()
+	}
+	products, err := p.client.Category(ctx, categoryOpts)
+	if err == nil {
+		return products, nil
+	}
+	if !errors.Is(err, ErrBuildIDRequired) && !isCategoryNotFound(err) {
+		return nil, err
+	}
+
+	if err := p.refreshBuildID(ctx, buildIDOpts, staleBuildID); err != nil {
+		return nil, err
+	}
+	return p.client.Category(ctx, categoryOpts)
+}
+
+func (p StaplesProvider) refreshBuildID(ctx context.Context, opts buildIDOptions, staleBuildID string) error {
 	if p.loadBuildID == nil {
 		return fmt.Errorf("heb build id loader is required")
 	}
 	client, ok := p.client.(buildIDClient)
 	if !ok {
 		return fmt.Errorf("cannot update heb build id for client %T", p.client)
+	}
+
+	if p.buildIDMu != nil {
+		p.buildIDMu.Lock()
+		defer p.buildIDMu.Unlock()
+	}
+	if current := client.currentBuildID(); current != "" && current != staleBuildID {
+		slog.InfoContext(ctx, "using heb next data build id refreshed by another request", "build_id", current)
+		return nil
 	}
 
 	buildID, err := p.loadBuildID(ctx, opts)
@@ -180,8 +226,18 @@ func (p StaplesProvider) refreshBuildID(ctx context.Context, opts buildIDOptions
 		return fmt.Errorf("discover heb build id: empty build id")
 	}
 	client.SetBuildID(buildID)
+	if p.buildIDCache != nil {
+		if err := SaveLatestBuildID(ctx, p.buildIDCache, buildID); err != nil {
+			return err
+		}
+	}
 	slog.InfoContext(ctx, "updated heb next data build id", "build_id", buildID)
 	return nil
+}
+
+func isCategoryNotFound(err error) bool {
+	var httpErr *CategoryHTTPError
+	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound
 }
 
 func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {

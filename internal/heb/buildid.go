@@ -2,17 +2,21 @@ package heb
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"careme/internal/brightdata"
+	"careme/internal/cache"
 )
 
 const (
 	brightDataBrowserWSEnv     = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
 	defaultBuildIDDiscoverWait = 5 * time.Second
+	BuildIDLatestCacheKey      = "heb/build_id/latest.json"
 )
 
 type browserHTMLClient interface {
@@ -24,6 +28,11 @@ type loadBuildID func(context.Context, buildIDOptions) (string, error)
 type buildIDOptions struct {
 	Reese84 string
 	StoreID string
+}
+
+type BuildIDRecord struct {
+	BuildID   string    `json:"build_id"`
+	FetchedAt time.Time `json:"fetched_at"`
 }
 
 func newBrightDataBuildIDLoaderFromEnv() (loadBuildID, error) {
@@ -55,6 +64,53 @@ func fetchBuildIDFromHomePage(ctx context.Context, browser browserHTMLClient, wa
 	buildID, err := extractBuildID([]byte(body))
 	if err != nil {
 		return "", fmt.Errorf("extract HEB build id from homepage: %w", err)
+	}
+	return buildID, nil
+}
+
+func SaveLatestBuildID(ctx context.Context, c cache.Cache, buildID string) error {
+	if c == nil {
+		return errors.New("cache is required")
+	}
+	buildID = strings.TrimSpace(buildID)
+	if buildID == "" {
+		return errors.New("build id is required")
+	}
+
+	record := BuildIDRecord{
+		BuildID:   buildID,
+		FetchedAt: time.Now().UTC(),
+	}
+	body, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("marshal heb build id record: %w", err)
+	}
+	if err := c.Put(ctx, BuildIDLatestCacheKey, string(body), cache.Unconditional()); err != nil {
+		return fmt.Errorf("write heb build id cache: %w", err)
+	}
+	return nil
+}
+
+func LoadLatestBuildID(ctx context.Context, c cache.Cache) (string, error) {
+	if c == nil {
+		return "", errors.New("cache is required")
+	}
+
+	reader, err := c.Get(ctx, BuildIDLatestCacheKey)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	var record BuildIDRecord
+	if err := json.NewDecoder(reader).Decode(&record); err != nil {
+		return "", fmt.Errorf("decode heb build id record: %w", err)
+	}
+	buildID := strings.TrimSpace(record.BuildID)
+	if buildID == "" {
+		return "", fmt.Errorf("decode heb build id record: build id is empty")
 	}
 	return buildID, nil
 }

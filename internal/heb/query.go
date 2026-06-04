@@ -27,6 +27,8 @@ const (
 	defaultMaxPages     = 20
 )
 
+var ErrBuildIDRequired = errors.New("heb next data build id is required")
+
 // QueryClient fetches HEB category products from the Next.js data endpoint.
 type QueryClient struct {
 	baseURL    string
@@ -59,6 +61,15 @@ type CategoryPage struct {
 	Products []Product       `json:"products"`
 	Page     int             `json:"page"`
 	Raw      json.RawMessage `json:"-"`
+}
+
+type CategoryHTTPError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *CategoryHTTPError) Error() string {
+	return fmt.Sprintf("category request failed: status %d: %s", e.StatusCode, e.Body)
 }
 
 type Product struct {
@@ -162,6 +173,12 @@ func (c *QueryClient) SetBuildID(buildID string) {
 	c.buildID = buildID
 }
 
+func (c *QueryClient) currentBuildID() string {
+	c.buildIDMu.Lock()
+	defer c.buildIDMu.Unlock()
+	return c.buildID
+}
+
 func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Product, error) {
 	if err := opts.validate(); err != nil {
 		return nil, err
@@ -260,7 +277,7 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("category request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &CategoryHTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
@@ -288,7 +305,7 @@ func (c *QueryClient) resolveBuildID(ctx context.Context, opts CategoryOptions) 
 		return c.buildID, nil
 	}
 
-	return "", fmt.Errorf("heb next data build id is required")
+	return "", ErrBuildIDRequired
 }
 
 func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (string, error) {
@@ -324,9 +341,9 @@ func (c *QueryClient) categoryPagePath(opts CategoryOptions) string {
 
 func (c *QueryClient) setStoreCookies(req *http.Request, opts CategoryOptions) {
 	req.AddCookie(&http.Cookie{Name: "reese84", Value: strings.TrimSpace(opts.Reese84)})
-	// req.AddCookie(&http.Cookie{Name: "SHOPPING_STORE_ID", Value: strings.TrimSpace(opts.StoreID)})
-	// req.AddCookie(&http.Cookie{Name: "CURR_SESSION_STORE", Value: strings.TrimSpace(opts.StoreID)})
-	// /req.AddCookie(&http.Cookie{Name: "USER_CHOSEN_STORE", Value: "true"})
+	req.AddCookie(&http.Cookie{Name: "SHOPPING_STORE_ID", Value: strings.TrimSpace(opts.StoreID)})
+	req.AddCookie(&http.Cookie{Name: "CURR_SESSION_STORE", Value: strings.TrimSpace(opts.StoreID)})
+	req.AddCookie(&http.Cookie{Name: "USER_CHOSEN_STORE", Value: "true"})
 }
 
 func (opts CategoryOptions) validate() error {

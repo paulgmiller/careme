@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"careme/internal/brightdata"
+	"careme/internal/cache"
 )
 
 type stubHTMLClient struct {
@@ -60,5 +61,22 @@ func TestNewBrightDataBuildIDLoaderFromEnvRequiresEndpoint(t *testing.T) {
 	_, err := newBrightDataBuildIDLoaderFromEnv()
 	if err == nil || !strings.Contains(err.Error(), brightDataBrowserWSEnv) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSaveAndLoadLatestBuildID(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	if err := SaveLatestBuildID(t.Context(), cacheStore, " fresh-build "); err != nil {
+		t.Fatalf("SaveLatestBuildID returned error: %v", err)
+	}
+
+	got, err := LoadLatestBuildID(t.Context(), cacheStore)
+	if err != nil {
+		t.Fatalf("LoadLatestBuildID returned error: %v", err)
+	}
+	if got != "fresh-build" {
+		t.Fatalf("unexpected build id: got %q want %q", got, "fresh-build")
 	}
 }
