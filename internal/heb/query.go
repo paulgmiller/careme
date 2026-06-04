@@ -25,14 +25,12 @@ const (
 
 	defaultQueryTimeout = 20 * time.Second
 	defaultMaxPages     = 20
-	defaultUserAgent    = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
 )
 
 // QueryClient fetches HEB category products from the Next.js data endpoint.
 type QueryClient struct {
 	baseURL    string
 	httpClient *http.Client
-	userAgent  string
 	maxPages   int
 
 	buildIDMu sync.Mutex
@@ -43,7 +41,6 @@ type QueryClientConfig struct {
 	BaseURL    string
 	BuildID    string
 	HTTPClient *http.Client
-	UserAgent  string
 	MaxPages   int
 }
 
@@ -139,11 +136,6 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		httpClient = &http.Client{Timeout: defaultQueryTimeout}
 	}
 
-	userAgent := strings.TrimSpace(cfg.UserAgent)
-	if userAgent == "" {
-		userAgent = defaultUserAgent
-	}
-
 	maxPages := cfg.MaxPages
 	if maxPages <= 0 {
 		maxPages = defaultMaxPages
@@ -155,7 +147,6 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		baseURL:    baseURL,
 		buildID:    buildID,
 		httpClient: httpClient,
-		userAgent:  userAgent,
 		maxPages:   maxPages,
 	}
 }
@@ -321,7 +312,6 @@ func (c *QueryClient) setCategoryHeaders(req *http.Request, opts CategoryOptions
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Referer", c.baseURL+c.categoryPagePath(opts))
-	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("X-Nextjs-Data", "1")
 }
 
@@ -334,9 +324,9 @@ func (c *QueryClient) categoryPagePath(opts CategoryOptions) string {
 
 func (c *QueryClient) setStoreCookies(req *http.Request, opts CategoryOptions) {
 	req.AddCookie(&http.Cookie{Name: "reese84", Value: strings.TrimSpace(opts.Reese84)})
-	req.AddCookie(&http.Cookie{Name: "SHOPPING_STORE_ID", Value: strings.TrimSpace(opts.StoreID)})
-	req.AddCookie(&http.Cookie{Name: "CURR_SESSION_STORE", Value: strings.TrimSpace(opts.StoreID)})
-	req.AddCookie(&http.Cookie{Name: "USER_CHOSEN_STORE", Value: "true"})
+	// req.AddCookie(&http.Cookie{Name: "SHOPPING_STORE_ID", Value: strings.TrimSpace(opts.StoreID)})
+	// req.AddCookie(&http.Cookie{Name: "CURR_SESSION_STORE", Value: strings.TrimSpace(opts.StoreID)})
+	// /req.AddCookie(&http.Cookie{Name: "USER_CHOSEN_STORE", Value: "true"})
 }
 
 func (opts CategoryOptions) validate() error {

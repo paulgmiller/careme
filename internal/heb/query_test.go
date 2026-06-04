@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"careme/internal/brightdata"
 )
 
 func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
@@ -67,11 +69,49 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/490020/490083"; got != want {
 		t.Fatalf("unexpected referer: got %q want %q", got, want)
 	}
+	if got, want := capturedReq.Header.Get("User-Agent"), brightdata.DefaultBrowserUserAgent; got != want {
+		t.Fatalf("unexpected user-agent header: got %q want %q", got, want)
+	}
 
 	assertCookieValue(t, capturedReq, "reese84", "test-reese")
 	assertCookieValue(t, capturedReq, "SHOPPING_STORE_ID", "92")
 	assertCookieValue(t, capturedReq, "CURR_SESSION_STORE", "92")
 	assertCookieValue(t, capturedReq, "USER_CHOSEN_STORE", "true")
+}
+
+func TestCategoryPageUsesDefaultBrowserUserAgent(t *testing.T) {
+	t.Parallel()
+
+	var capturedReq *http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedReq = r
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+	}))
+	defer server.Close()
+
+	client := NewQueryClient(QueryClientConfig{
+		BaseURL:    server.URL,
+		BuildID:    "test-build",
+		HTTPClient: server.Client(),
+	})
+
+	_, err := client.CategoryPage(context.Background(), CategoryOptions{
+		Reese84:  "test-reese",
+		StoreID:  "92",
+		ParentID: "490020",
+		ChildID:  "490083",
+		Page:     1,
+	})
+	if err != nil {
+		t.Fatalf("CategoryPage returned error: %v", err)
+	}
+	if capturedReq == nil {
+		t.Fatal("expected request to be captured")
+	}
+	if got, want := capturedReq.Header.Get("User-Agent"), brightdata.DefaultBrowserUserAgent; got != want {
+		t.Fatalf("unexpected user-agent header: got %q want %q", got, want)
+	}
 }
 
 func TestCategoryPageIncludesIntParameter(t *testing.T) {
