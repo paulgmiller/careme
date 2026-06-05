@@ -151,6 +151,10 @@ func queryAttrValue(n *html.Node, name string) string {
 	return ""
 }
 
+type nextData struct {
+	BuildID string `json:"buildId"`
+}
+
 func extractBuildID(body []byte) (string, error) {
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {

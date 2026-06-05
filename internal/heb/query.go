@@ -154,10 +154,6 @@ type DisplayPrice struct {
 	TypeName        string   `json:"__typename"`
 }
 
-type nextData struct {
-	BuildID string `json:"buildId"`
-}
-
 func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
