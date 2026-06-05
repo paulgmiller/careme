@@ -412,26 +412,23 @@ func decodeCategoryPagePayload(r io.Reader, page int) (*CategoryPage, error) {
 	if err := json.NewDecoder(r).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode category json response: %w", err)
 	}
-	if len(payload.PageProps.Layout.VisualComponents) != 1 {
-		return nil, fmt.Errorf("expected 1 layout.visualcompment but got %d", len(payload.PageProps.Layout.VisualComponents))
-	}
-	component := payload.PageProps.Layout.VisualComponents[0]
 
 	var products []Product
-	for _, product := range component.Items {
-		if strings.TrimSpace(product.ID) == "" {
-			continue
+	for _, component := range payload.PageProps.Layout.VisualComponents {
+		for _, product := range component.Items {
+			if strings.TrimSpace(product.ID) == "" {
+				continue
+			}
+			product.ListPrice, product.SalePrice = productPrices(product)
+			products = append(products, product)
 		}
-		product.ListPrice, product.SalePrice = productPrices(product)
-		products = append(products, product)
 	}
 
 	return &CategoryPage{
-		Products: products,
-
-		SearchContextToken: strings.TrimSpace(component.SearchContextToken),
+		Products:           products,
+		SearchContextToken: payload.PageProps.searchContextToken(),
 		Page:               page,
-		Total:              component.Total,
+		Total:              payload.PageProps.total(),
 	}, nil
 }
 
@@ -451,6 +448,25 @@ type categoryProductCollection struct {
 	Items              []Product `json:"items"`
 	SearchContextToken string    `json:"searchContextToken"`
 	Total              int       `json:"total"`
+}
+
+// a little worry that searchContextToken and total just pick first non blank one. Should at least pick same one?
+func (p categoryPageProps) searchContextToken() string {
+	for _, component := range p.Layout.VisualComponents {
+		if searchContextToken := strings.TrimSpace(component.SearchContextToken); searchContextToken != "" {
+			return searchContextToken
+		}
+	}
+	return ""
+}
+
+func (p categoryPageProps) total() int {
+	for _, component := range p.Layout.VisualComponents {
+		if component.Total > 0 {
+			return component.Total
+		}
+	}
+	return 0
 }
 
 func productPrices(product Product) (*float32, *float32) {
