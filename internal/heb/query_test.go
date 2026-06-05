@@ -119,6 +119,7 @@ func TestCategoryPageRequiresBuildIDLoaderWhenMissing(t *testing.T) {
 		ParentID:     "490020",
 		ChildID:      "490083",
 		CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083",
+		Page:         1,
 	})
 	if err == nil || err.Error() != "heb build id loader is required" {
 		t.Fatalf("unexpected error: %v", err)
@@ -154,6 +155,7 @@ func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
+		Page:     1,
 	})
 	if err != nil {
 		t.Fatalf("CategoryPage returned error: %v", err)
@@ -236,6 +238,7 @@ func TestCategoryReturnsBuildIDLoadError(t *testing.T) {
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
+		Page:     1,
 	})
 	if err == nil || !strings.Contains(err.Error(), "homepage blocked") {
 		t.Fatalf("unexpected error: %v", err)
@@ -640,6 +643,7 @@ func TestCategoryPageThrottlesRequestsAcrossCalls(t *testing.T) {
 		ParentID: "490020",
 		ChildID:  "490083",
 		Limit:    10,
+		Page:     1,
 	}
 	if _, err := client.categoryPage(context.Background(), opts); err != nil {
 		t.Fatalf("first CategoryPage returned error: %v", err)
@@ -844,6 +848,7 @@ func TestCategoryPageReturnsHTTPAndJSONErrors(t *testing.T) {
 				StoreID:  "92",
 				ParentID: "490020",
 				ChildID:  "490083",
+				Page:     1,
 			})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("unexpected error: got %v want contains %q", err, tc.want)

@@ -259,7 +259,7 @@ func (c *QueryClient) categoryPage(ctx context.Context, opts CategoryOptions) (*
 		return nil, errors.New("page must be positive")
 	}
 
-	buildID, err := c.resolveBuildID(ctx, opts)
+	buildID, err := c.resolveBuildID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +322,7 @@ func (c *QueryClient) waitForCategoryRequestSlot(ctx context.Context) error {
 	return nil
 }
 
-func (c *QueryClient) resolveBuildID(ctx context.Context, opts CategoryOptions) (string, error) {
+func (c *QueryClient) resolveBuildID(ctx context.Context) (string, error) {
 	c.buildIDMu.Lock()
 	buildID := c.buildID
 	c.buildIDMu.Unlock()
