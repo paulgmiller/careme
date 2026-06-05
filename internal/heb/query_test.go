@@ -431,6 +431,36 @@ func TestDecodeCategoryPagePayloadExtractsLayoutProducts(t *testing.T) {
 	}
 }
 
+func TestDecodeCategoryPagePayloadSkipsBlankProductIDs(t *testing.T) {
+	t.Parallel()
+
+	body := strings.NewReader(`{
+		"pageProps": {
+			"layout": {
+				"visualComponents": [
+					{
+						"items": [
+							{"id": "", "displayName": "Ignore me"},
+							{"id": "valid-1", "displayName": "Valid product"}
+						]
+					}
+				]
+			}
+		}
+	}`)
+
+	payload, err := decodeCategoryPagePayload(body, 1)
+	if err != nil {
+		t.Fatalf("decodeCategoryPagePayload returned error: %v", err)
+	}
+	if len(payload.Products) != 1 {
+		t.Fatalf("expected 1 product, got %d", len(payload.Products))
+	}
+	if got, want := payload.Products[0].ID, "valid-1"; got != want {
+		t.Fatalf("unexpected product id: got %q want %q", got, want)
+	}
+}
+
 func TestCategoryPaginatesByPage(t *testing.T) {
 	t.Parallel()
 
@@ -715,12 +745,12 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 func TestCategoryValidation(t *testing.T) {
 	t.Parallel()
 
-	client := NewQueryClient(QueryClientConfig{BuildID: "test-build"})
 	valid := CategoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
+		Limit:    1,
 	}
 
 	tests := []struct {
@@ -762,7 +792,7 @@ func TestCategoryValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := client.Category(context.Background(), tc.opts)
+			err := tc.opts.validate()
 			if err == nil || err.Error() != tc.want {
 				t.Fatalf("unexpected error: got %v want %q", err, tc.want)
 			}

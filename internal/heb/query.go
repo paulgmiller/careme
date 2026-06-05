@@ -255,6 +255,10 @@ func isCategoryNotFound(err error) bool {
 }
 
 func (c *QueryClient) categoryPage(ctx context.Context, opts CategoryOptions) (*CategoryPage, error) {
+	if opts.Page <= 0 {
+		return nil, errors.New("Page must be positive")
+	}
+
 	buildID, err := c.resolveBuildID(ctx, opts)
 	if err != nil {
 		return nil, err
@@ -293,6 +297,7 @@ func (c *QueryClient) categoryPage(ctx context.Context, opts CategoryOptions) (*
 }
 
 // can we do this smarter? is it even necessary?
+// if we query many stores from same server don't we bust anyways?
 func (c *QueryClient) waitForCategoryRequestSlot(ctx context.Context) error {
 	if c.pageDelay <= 0 {
 		return nil
@@ -460,6 +465,9 @@ func decodeCategoryPagePayload(r io.Reader, page int) (*CategoryPage, error) {
 	var products []Product
 	for _, component := range payload.PageProps.Layout.VisualComponents {
 		for _, product := range component.Items {
+			if strings.TrimSpace(product.ID) == "" {
+				continue
+			}
 			product.ListPrice, product.SalePrice = productPrices(product)
 			products = append(products, product)
 		}
