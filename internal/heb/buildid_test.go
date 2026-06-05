@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"careme/internal/brightdata"
+	"careme/internal/cache"
 )
 
 type stubHTMLClient struct {
@@ -59,6 +60,56 @@ func TestNewBrightDataBuildIDLoaderFromEnvRequiresEndpoint(t *testing.T) {
 
 	_, err := newBrightDataBuildIDLoaderFromEnv()
 	if err == nil || !strings.Contains(err.Error(), brightDataBrowserWSEnv) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSaveAndLoadLatestBuildID(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	if err := saveLatestBuildID(t.Context(), cacheStore, " fresh-build "); err != nil {
+		t.Fatalf("SaveLatestBuildID returned error: %v", err)
+	}
+
+	got, err := loadLatestBuildID(t.Context(), cacheStore)
+	if err != nil {
+		t.Fatalf("LoadLatestBuildID returned error: %v", err)
+	}
+	if got != "fresh-build" {
+		t.Fatalf("unexpected build id: got %q want %q", got, "fresh-build")
+	}
+}
+
+func TestExtractBuildIDFromNextStaticAsset(t *testing.T) {
+	t.Parallel()
+
+	buildID, err := extractBuildID([]byte(`<!doctype html><html><head><script src="/_next/static/static-build-id/_buildManifest.js"></script></head></html>`))
+	if err != nil {
+		t.Fatalf("extractBuildID returned error: %v", err)
+	}
+	if buildID != "static-build-id" {
+		t.Fatalf("unexpected build id: %q", buildID)
+	}
+}
+
+func TestExtractBuildIDFromNextDataURL(t *testing.T) {
+	t.Parallel()
+
+	buildID, err := extractBuildID([]byte(`window.__SSR_URL__ = "/_next/data/data-build-id/en/category/shop/490110/490529.json?childId=490529&page=1&parentId=490110"`))
+	if err != nil {
+		t.Fatalf("extractBuildID returned error: %v", err)
+	}
+	if buildID != "data-build-id" {
+		t.Fatalf("unexpected build id: %q", buildID)
+	}
+}
+
+func TestExtractBuildIDErrorsWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	_, err := extractBuildID([]byte(`<!doctype html><html><body></body></html>`))
+	if err == nil || !errors.Is(err, errors.New("next data build id not found")) && !strings.Contains(err.Error(), "next data build id not found") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/albertsons"
 	"careme/internal/cache"
 )
 
@@ -33,7 +32,6 @@ type stubHEBQueryClient struct {
 	mu      sync.Mutex
 	results map[string][]Product
 	calls   []CategoryOptions
-	buildID string
 }
 
 func (s *stubHEBQueryClient) Category(_ context.Context, opts CategoryOptions) ([]Product, error) {
@@ -49,18 +47,6 @@ func (s *stubHEBQueryClient) callCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.calls)
-}
-
-func (s *stubHEBQueryClient) SetBuildID(buildID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.buildID = buildID
-}
-
-func (s *stubHEBQueryClient) currentBuildID() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.buildID
 }
 
 func (s *stubHEBQueryClient) hasCall(want CategoryOptions) bool {
@@ -106,6 +92,8 @@ func TestStapleCategories_HaveLimits(t *testing.T) {
 func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	t.Parallel()
 
+	listPrice := float32(8.99)
+	salePrice := float32(6.99)
 	client := &stubHEBQueryClient{
 		results: map[string][]Product{
 			CategoryPorkParent + ":" + CategoryPorkChild: {
@@ -115,6 +103,8 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 					FullCategoryHierarchy: "Meat & seafood/Meat/Pork",
 					Brand:                 &Brand{Name: "H-E-B"},
 					ProductLocation:       &ProductLocation{Location: "Meat Market"},
+					ListPrice:             &listPrice,
+					SalePrice:             &salePrice,
 				},
 			},
 		},
@@ -146,64 +136,17 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	}
 
 	assertInputIngredient(t, got[0], ai.InputIngredient{
-		ProductID:   "pork-1",
-		Description: "H-E-B Pork Shoulder Roast",
-		Brand:       "H-E-B",
-		AisleNumber: "Meat Market",
-		Categories:  []string{"Meat & seafood", "Meat", "Pork"},
+		ProductID:    "pork-1",
+		Description:  "H-E-B Pork Shoulder Roast",
+		Brand:        "H-E-B",
+		AisleNumber:  "Meat Market",
+		Categories:   []string{"Meat & seafood", "Meat", "Pork"},
+		PriceRegular: &listPrice,
+		PriceSale:    &salePrice,
 	})
 }
 
-func TestStaplesProvider_RefreshesBuildIDBeforeFetchingCategories(t *testing.T) {
-	t.Parallel()
-
-	var buildIDLoads int
-	client := &stubHEBQueryClient{}
-	provider := newStaplesProviderWithDeps(client, func(context.Context) (string, error) {
-		return "cached-reese84", nil
-	}, func(_ context.Context, opts buildIDOptions) (string, error) {
-		buildIDLoads++
-		if opts.Reese84 != "cached-reese84" {
-			t.Fatalf("unexpected reese84: %q", opts.Reese84)
-		}
-		if opts.StoreID != "92" {
-			t.Fatalf("unexpected store id: %q", opts.StoreID)
-		}
-		return "fresh-build", nil
-	})
-
-	_, err := provider.FetchStaples(t.Context(), "heb_92")
-	if err != nil {
-		t.Fatalf("FetchStaples returned error: %v", err)
-	}
-	if buildIDLoads != 1 {
-		t.Fatalf("unexpected build id load count: got %d want 1", buildIDLoads)
-	}
-	if got := client.currentBuildID(); got != "fresh-build" {
-		t.Fatalf("unexpected build id: got %q want %q", got, "fresh-build")
-	}
-}
-
-func TestStaplesProvider_ReturnsBuildIDLoadError(t *testing.T) {
-	t.Parallel()
-
-	client := &stubHEBQueryClient{}
-	provider := newStaplesProviderWithDeps(client, func(context.Context) (string, error) {
-		return "cached-reese84", nil
-	}, func(context.Context, buildIDOptions) (string, error) {
-		return "", errors.New("homepage blocked")
-	})
-
-	_, err := provider.FetchStaples(t.Context(), "heb_92")
-	if err == nil || !strings.Contains(err.Error(), "homepage blocked") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := client.callCount(); got != 0 {
-		t.Fatalf("unexpected category call count: got %d want 0", got)
-	}
-}
-
-func TestNewStaplesProvider_LoadsAlbertsonsCachedReese84(t *testing.T) {
+func TestNewStaplesProvider_LoadsHEBCachedReese84(t *testing.T) {
 	unsetEnvForTest(t, "AZURE_STORAGE_ACCOUNT_NAME")
 	unsetEnvForTest(t, "AZURE_STORAGE_PRIMARY_ACCOUNT_KEY")
 	t.Setenv(brightDataBrowserWSEnv, "wss://user:pass@example.com")
@@ -220,34 +163,31 @@ func TestNewStaplesProvider_LoadsAlbertsonsCachedReese84(t *testing.T) {
 		_ = os.Chdir(oldWD)
 	})
 
-	albertsonsCache, err := cache.EnsureCache(albertsons.Container)
+	hebCache, err := cache.EnsureCache(Container)
 	if err != nil {
 		t.Fatalf("EnsureCache returned error: %v", err)
 	}
-	if err := albertsons.SaveReese84Record(t.Context(), albertsonsCache, albertsons.CookieRecord{
-		Cookie:    "cached-albertsons-reese84",
+	if err := SaveReese84Record(t.Context(), hebCache, Reese84Record{
+		Cookie:    "cached-heb-reese84",
 		FetchedAt: time.Date(2026, time.June, 1, 12, 0, 0, 0, time.UTC),
 		Provider:  "test",
 	}); err != nil {
 		t.Fatalf("SaveReese84Record returned error: %v", err)
+	}
+	if err := saveLatestBuildID(t.Context(), hebCache, "cached-build"); err != nil {
+		t.Fatalf("SaveLatestBuildID returned error: %v", err)
 	}
 
 	provider, err := NewStaplesProvider(nil)
 	if err != nil {
 		t.Fatalf("NewStaplesProvider returned error: %v", err)
 	}
-	queryClient, ok := provider.client.(*QueryClient)
-	if !ok {
-		t.Fatalf("expected *QueryClient, got %T", provider.client)
-	}
-	if queryClient.buildID != "" {
-		t.Fatalf("unexpected initial build id: %q", queryClient.buildID)
-	}
+
 	got, err := provider.loadReese84(t.Context())
 	if err != nil {
 		t.Fatalf("loadReese84 returned error: %v", err)
 	}
-	if got != "cached-albertsons-reese84" {
+	if got != "cached-heb-reese84" {
 		t.Fatalf("unexpected reese84 token: %q", got)
 	}
 }
@@ -298,9 +238,18 @@ func assertInputIngredient(t *testing.T, got, want ai.InputIngredient) {
 		got.Description != want.Description ||
 		got.Brand != want.Brand ||
 		got.AisleNumber != want.AisleNumber ||
+		!sameFloat32Ptr(got.PriceRegular, want.PriceRegular) ||
+		!sameFloat32Ptr(got.PriceSale, want.PriceSale) ||
 		!slices.Equal(got.Categories, want.Categories) {
 		t.Fatalf("unexpected ingredient: got %+v want %+v", got, want)
 	}
+}
+
+func sameFloat32Ptr(left, right *float32) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 func unsetEnvForTest(t *testing.T, name string) {
