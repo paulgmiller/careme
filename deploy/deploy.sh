@@ -46,8 +46,6 @@ wholefoods_scrape_schedule="0 6 * * 0"
 if [[ "${namespace}" == "caremetest" ]]; then
   manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
   store_disable_env_yaml='
-            - name: HEB_ENABLE
-              value: "false"
             - name: WEGMANS_ENABLE
               value: "false"'
   aldi_scrape_schedule="45 6 1,15 * *"
