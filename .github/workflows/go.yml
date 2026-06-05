@@ -136,12 +136,9 @@ jobs:
           - name: aldi
             cmd_path: ./cmd/aldi
             image_suffix: aldi
-          - name: albertsonsreese84
-            cmd_path: ./cmd/albertsonsreese84
-            image_suffix: albertsonsreese84
-          - name: hebreese84
-            cmd_path: ./cmd/hebreese84
-            image_suffix: hebreese84
+          - name: reese84
+            cmd_path: ./cmd/reese84
+            image_suffix: reese84
           - name: publixabck
             cmd_path: ./cmd/publixabck
             image_suffix: publixabck
