@@ -19,7 +19,6 @@ const (
 	DefaultBaseURL = "https://www.heb.com"
 
 	defaultQueryTimeout = 20 * time.Second
-	defaultPageDelay    = 5 * time.Second
 )
 
 // QueryClient fetches HEB category products from the Next.js data endpoint.
@@ -30,11 +29,6 @@ type QueryClient struct {
 	buildIDMu   sync.Mutex
 	buildID     string
 	loadBuildID loadBuildID
-
-	// is this stopping bot blockcing? unclear
-	pageDelay             time.Duration
-	categoryRequestMu     sync.Mutex
-	lastCategoryRequestAt time.Time
 }
 
 type QueryClientConfig struct {
@@ -179,7 +173,6 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		baseURL:     baseURL,
 		loadBuildID: cfg.LoadBuildID,
 		httpClient:  httpClient,
-		pageDelay:   defaultPageDelay,
 	}
 }
 
@@ -271,10 +264,6 @@ func (c *QueryClient) categoryPage(ctx context.Context, opts CategoryOptions) (*
 	}
 	c.setCategoryHeaders(req, opts)
 
-	if err := c.waitForCategoryRequestSlot(ctx); err != nil {
-		return nil, err
-	}
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request %q: %w", endpoint, err)
@@ -290,32 +279,6 @@ func (c *QueryClient) categoryPage(ctx context.Context, opts CategoryOptions) (*
 
 	// magic number limit reader
 	return decodeCategoryPagePayload(io.LimitReader(resp.Body, 8*1024*1024), opts.Page)
-}
-
-// can we do this smarter? is it even necessary?
-// if we query many stores from same server don't we bust anyways?
-func (c *QueryClient) waitForCategoryRequestSlot(ctx context.Context) error {
-	if c.pageDelay <= 0 {
-		return nil
-	}
-
-	c.categoryRequestMu.Lock()
-	defer c.categoryRequestMu.Unlock()
-
-	if !c.lastCategoryRequestAt.IsZero() {
-		wait := c.pageDelay - time.Since(c.lastCategoryRequestAt)
-		if wait > 0 {
-			timer := time.NewTimer(wait)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return ctx.Err()
-			case <-timer.C:
-			}
-		}
-	}
-	c.lastCategoryRequestAt = time.Now()
-	return nil
 }
 
 func (c *QueryClient) resolveBuildID(ctx context.Context) (string, error) {

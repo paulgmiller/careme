@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
 func freshBuild(_ context.Context, _ string) (string, error) {
@@ -477,7 +476,6 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
-	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
@@ -531,7 +529,6 @@ func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
-	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
@@ -588,7 +585,6 @@ func TestCategoryStopsAtTotal(t *testing.T) {
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
-	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
@@ -605,46 +601,6 @@ func TestCategoryStopsAtTotal(t *testing.T) {
 	}
 	if want := []string{"1", "2"}; !slices.Equal(pages, want) {
 		t.Fatalf("unexpected pages: got %v want %v", pages, want)
-	}
-}
-
-func TestCategoryPageThrottlesRequestsAcrossCalls(t *testing.T) {
-	t.Parallel()
-
-	requestTimes := make(chan time.Time, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestTimes <- time.Now()
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, emptyCategoryProductsJSON())
-	}))
-	defer server.Close()
-
-	client := NewQueryClient(QueryClientConfig{
-		BaseURL:     server.URL,
-		LoadBuildID: freshBuild,
-		HTTPClient:  server.Client(),
-	})
-
-	opts := CategoryOptions{
-		Reese84:  "test-reese",
-		StoreID:  "92",
-		ParentID: "490020",
-		ChildID:  "490083",
-		Limit:    10,
-		Page:     1,
-	}
-	if _, err := client.categoryPage(context.Background(), opts); err != nil {
-		t.Fatalf("first CategoryPage returned error: %v", err)
-	}
-	opts.ChildID = "490082"
-	if _, err := client.categoryPage(context.Background(), opts); err != nil {
-		t.Fatalf("second CategoryPage returned error: %v", err)
-	}
-
-	first := <-requestTimes
-	second := <-requestTimes
-	if elapsed := second.Sub(first); elapsed < 15*time.Millisecond {
-		t.Fatalf("expected throttled requests, elapsed %s", elapsed)
 	}
 }
 
@@ -674,7 +630,6 @@ func TestCategoryStopsAtLimit(t *testing.T) {
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
-	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
@@ -717,7 +672,6 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
-	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
