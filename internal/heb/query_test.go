@@ -22,11 +22,7 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedReq = r
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{
-			"props":{"pageProps":{"products":[
-				{"id":"1895013","storeId":92,"displayName":"H-E-B Mozzarella Cheese Sticks","inventory":{"inventoryState":"IN_STOCK"},"brand":{"name":"H-E-B"},"productImageUrls":[{"url":"https://images.heb.com/001895013.jpg"}]}
-			]}}
-		}`)
+		_, _ = io.WriteString(w, categoryProductsJSON("p", 1, 1))
 	}))
 	defer server.Close()
 
@@ -68,7 +64,7 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 	if got, want := capturedReq.Header.Get("X-Nextjs-Data"), "1"; got != want {
 		t.Fatalf("unexpected x-nextjs-data header: got %q want %q", got, want)
 	}
-	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/490020/490083"; got != want {
+	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/490020/490083?page=2"; got != want {
 		t.Fatalf("unexpected referer: got %q want %q", got, want)
 	}
 
@@ -82,7 +78,7 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedReq = r
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+		_, _ = io.WriteString(w, emptyCategoryProductsJSON())
 	}))
 	defer server.Close()
 
@@ -110,44 +106,7 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 	assertQueryValue(t, query, "int", "curbside-category-shortcuts.meat.beef")
 	assertQueryValue(t, query, "parentId", "490110")
 	assertQueryValue(t, query, "childId", "490529")
-	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef"; got != want {
-		t.Fatalf("unexpected referer: got %q want %q", got, want)
-	}
-}
-
-func TestCategoryPageIncludesSCTParameter(t *testing.T) {
-	t.Parallel()
-
-	var capturedReq *http.Request
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedReq = r
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
-	}))
-	defer server.Close()
-
-	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		BuildID:    "test-build",
-		HTTPClient: server.Client(),
-		PageDelay:  -1,
-	})
-
-	_, err := client.CategoryPage(context.Background(), CategoryOptions{
-		Reese84:  "test-reese",
-		StoreID:  "465",
-		ParentID: "490110",
-		ChildID:  "490529",
-		Page:     3,
-		SCT:      "page-token",
-	})
-	if err != nil {
-		t.Fatalf("CategoryPage returned error: %v", err)
-	}
-
-	query := capturedReq.URL.Query()
-	assertQueryValue(t, query, "sct", "page-token")
-	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/490110/490529?page=3&sct=page-token"; got != want {
+	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef&page=2"; got != want {
 		t.Fatalf("unexpected referer: got %q want %q", got, want)
 	}
 }
@@ -181,7 +140,7 @@ func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+		_, _ = io.WriteString(w, emptyCategoryProductsJSON())
 	}))
 	defer server.Close()
 
@@ -227,7 +186,7 @@ func TestCategoryRefreshesBuildIDAfterFirstPage404(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, categoryProductsJSON("p", 1, 1, ""))
+		_, _ = io.WriteString(w, categoryProductsJSON("p", 1, 1))
 	}))
 	defer server.Close()
 
@@ -287,13 +246,13 @@ func TestCategoryReturnsBuildIDLoadError(t *testing.T) {
 	}
 }
 
-func TestDecodeCategoryPayloadExtractsProducts(t *testing.T) {
+func TestDecodeCategoryPagePayloadExtractsProducts(t *testing.T) {
 	t.Parallel()
 
 	body := []byte(`{
-		"props":{
-			"pageProps":{
-				"categoryData":{
+		"pageProps":{
+			"layout":{
+				"visualComponents":[{
 					"items":[
 						{
 							"id": "1895013",
@@ -337,14 +296,14 @@ func TestDecodeCategoryPayloadExtractsProducts(t *testing.T) {
 								}]
 							}
 						]
-					}
+					}]
 			}
 		}
 	}`)
 
-	products, err := decodeCategoryPayload(body)
+	products, err := decodeCategoryPagePayload(strings.NewReader(string(body)))
 	if err != nil {
-		t.Fatalf("decodeCategoryPayload returned error: %v", err)
+		t.Fatalf("decodeCategoryPagePayload returned error: %v", err)
 	}
 	if len(products) != 1 {
 		t.Fatalf("expected 1 product, got %d", len(products))
@@ -381,81 +340,88 @@ func TestDecodeCategoryPayloadExtractsProducts(t *testing.T) {
 	if product.SalePrice == nil || *product.SalePrice != float32(4.49) {
 		t.Fatalf("unexpected sale price: %v", product.SalePrice)
 	}
-	if len(product.Raw) == 0 {
-		t.Fatal("expected raw product json")
-	}
 }
 
-func TestDecodeCategoryPagePayloadExtractsSCT(t *testing.T) {
+func TestDecodeCategoryPagePayloadExtractsLayoutProducts(t *testing.T) {
 	t.Parallel()
 
-	page, err := decodeCategoryPagePayload([]byte(`{
-		"props":{
-			"pageProps":{
-				"categoryData":{
-					"products":[{"id":"p1","displayName":"Apples"}],
-					"sct":"next-page-token"
-				}
-			}
-		}
-	}`))
-	if err != nil {
-		t.Fatalf("decodeCategoryPagePayload returned error: %v", err)
-	}
-	if got, want := page.SCT, "next-page-token"; got != want {
-		t.Fatalf("unexpected sct: got %q want %q", got, want)
-	}
-	if len(page.Products) != 1 {
-		t.Fatalf("expected 1 product, got %d", len(page.Products))
-	}
-}
-
-func TestDecodeCategoryPayloadExtractsNormalizedProductObjects(t *testing.T) {
-	t.Parallel()
-
-	body := []byte(`{
-		"props": {
-			"pageProps": {
-				"apolloState": {
-					"Product:beef-1": {
-						"__typename": "Product",
-						"id": "beef-1",
-						"storeId": 465,
-						"displayName": "H-E-B Ground Beef",
-						"fullCategoryHierarchy": "Meat & seafood/Meat/Beef",
-						"brand": {"name": "H-E-B"},
-						"productLocation": {"location": "Meat Market"}
-					},
-					"Product:beef-1-duplicate": {
-						"__typename": "Product",
-						"id": "beef-1",
-						"storeId": 465,
-						"displayName": "H-E-B Ground Beef"
-					},
-					"Product:beef-2": {
-						"__typename": "Product",
-						"id": "beef-2",
-						"storeId": 465,
-						"displayName": "Beef Chuck Roast"
+	body := strings.NewReader(`{
+		"pageProps": {
+			"layout": {
+				"visualComponents": [
+					{
+						"__typename": "SearchGridV2",
+						"items": [
+							{
+								"__typename": "Product",
+								"id": "15928526",
+								"storeId": 754,
+								"displayName": "H-E-B Fish Market Fresh Whole Scored Texas Tilapia",
+								"decodedDisplayName": "H-E-B Fish Market Fresh Whole Scored Texas Tilapia, Avg. 2.0 lbs",
+								"fullDisplayName": "H-E-B Fish Market Fresh Whole Scored Texas Tilapia, Avg. 2.0 lbs",
+								"fullCategoryHierarchy": "Meat & seafood/Seafood/Fish",
+								"minimumOrderQuantity": 0.25,
+								"maximumOrderQuantity": 25,
+								"brand": {"name": "H-E-B", "isOwnBrand": true, "__typename": "Brand"},
+								"productCategory": {"id": "490023", "name": "Meat & seafood", "__typename": "ProductCategory"},
+								"productLocation": {"location": "In Seafood on the Left Wall, A13", "__typename": "ProductLocation"},
+								"inventory": {"inventoryState": "IN_STOCK", "__typename": "Inventory"},
+								"productImageUrls": [
+									{"url": "https://images.heb.com/is/image/HEBGrocery/prd-small/015928526.jpg", "__typename": "Image"}
+								],
+								"SKUs": [
+									{
+										"id": "23720900000",
+										"customerFriendlySize": "Avg. 2.0 lbs",
+										"twelveDigitUPC": "237209000009",
+										"contextPrices": [
+											{
+												"context": "ONLINE",
+												"listPrice": {"unit": "each", "formattedAmount": "$9.94", "amount": 9.94},
+												"salePrice": {"unit": "each", "formattedAmount": "$9.94", "amount": 9.94}
+											},
+											{
+												"context": "CURBSIDE",
+												"listPrice": {"unit": "each", "formattedAmount": "$10.44", "amount": 10.44},
+												"salePrice": {"unit": "each", "formattedAmount": "$10.44", "amount": 10.44}
+											}
+										],
+										"__typename": "SKU"
+									}
+								]
+							}
+						]
 					}
-				}
+				]
 			}
 		}
 	}`)
 
-	products, err := decodeCategoryPayload(body)
+	products, err := decodeCategoryPagePayload(body)
 	if err != nil {
-		t.Fatalf("decodeCategoryPayload returned error: %v", err)
+		t.Fatalf("decodeCategoryPagePayload returned error: %v", err)
 	}
-	if len(products) != 2 {
-		t.Fatalf("expected 2 products, got %d: %+v", len(products), products)
+	if len(products) != 1 {
+		t.Fatalf("expected 1 product, got %d", len(products))
 	}
-	productIDs := map[string]bool{}
-	for _, product := range products {
-		productIDs[product.ID] = true
+	product := products[0]
+	if product.ID != "15928526" {
+		t.Fatalf("unexpected id: %q", product.ID)
 	}
-	if !productIDs["beef-1"] || !productIDs["beef-2"] {
-		t.Fatalf("missing normalized products: %+v", products)
+	if product.Brand == nil || product.Brand.Name != "H-E-B" {
+		t.Fatalf("unexpected brand: %+v", product.Brand)
+	}
+	if product.ProductLocation == nil || product.ProductLocation.Location != "In Seafood on the Left Wall, A13" {
+		t.Fatalf("unexpected location: %+v", product.ProductLocation)
+	}
+	if product.MinimumOrderQuantity != float32(0.25) {
+		t.Fatalf("unexpected minimum order quantity: %v", product.MinimumOrderQuantity)
+	}
+	if product.ListPrice == nil || *product.ListPrice != float32(10.44) {
+		t.Fatalf("unexpected list price: %v", product.ListPrice)
+	}
+	if product.SalePrice == nil || *product.SalePrice != float32(10.44) {
+		t.Fatalf("unexpected sale price: %v", product.SalePrice)
 	}
 }
 
@@ -466,11 +432,11 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize, ""))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize))
 		case "2":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, 2, ""))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, 2))
 		case "3":
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+			_, _ = io.WriteString(w, emptyCategoryProductsJSON())
 		default:
 			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
 		}
@@ -504,24 +470,20 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 	}
 }
 
-func TestCategoryCarriesSCTBetweenPages(t *testing.T) {
+func TestCategoryCarriesPageRefererBetweenPages(t *testing.T) {
 	t.Parallel()
 
-	var (
-		pageSCTs []string
-		referers []string
-	)
+	var referers []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pageSCTs = append(pageSCTs, r.URL.Query().Get("sct"))
 		referers = append(referers, r.Header.Get("Referer"))
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize, "page-2-token"))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize))
 		case "2":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, categoryPageSize, "page-3-token"))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, categoryPageSize))
 		case "3":
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+			_, _ = io.WriteString(w, emptyCategoryProductsJSON())
 		default:
 			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
 		}
@@ -547,13 +509,10 @@ func TestCategoryCarriesSCTBetweenPages(t *testing.T) {
 	if len(products) != categoryPageSize*2 {
 		t.Fatalf("expected %d products, got %d", categoryPageSize*2, len(products))
 	}
-	if want := []string{"", "page-2-token", "page-3-token"}; !slices.Equal(pageSCTs, want) {
-		t.Fatalf("unexpected page scts: got %v want %v", pageSCTs, want)
-	}
 	if want := []string{
 		server.URL + "/category/shop/490020/490083",
 		server.URL + "/category/shop/490020/490083",
-		server.URL + "/category/shop/490020/490083?page=2&sct=page-2-token",
+		server.URL + "/category/shop/490020/490083?page=2",
 	}; !slices.Equal(referers, want) {
 		t.Fatalf("unexpected referers: got %v want %v", referers, want)
 	}
@@ -566,7 +525,7 @@ func TestCategoryPageThrottlesRequestsAcrossCalls(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestTimes <- time.Now()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+		_, _ = io.WriteString(w, emptyCategoryProductsJSON())
 	}))
 	defer server.Close()
 
@@ -605,9 +564,9 @@ func TestCategoryStopsAtLimit(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize, ""))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize))
 		case "2":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, 4, ""))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, 4))
 		default:
 			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
 		}
@@ -646,7 +605,7 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 		switch r.URL.Query().Get("page") {
 		case "1":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize, ""))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize))
 		case "2":
 			http.NotFound(w, r)
 		default:
@@ -796,7 +755,7 @@ func TestCategoryReturnsMaxPagesError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
 		}
-		_, _ = io.WriteString(w, categoryProductsJSON("p", ((page-1)*categoryPageSize)+1, categoryPageSize, ""))
+		_, _ = io.WriteString(w, categoryProductsJSON("p", ((page-1)*categoryPageSize)+1, categoryPageSize))
 	}))
 	defer server.Close()
 
@@ -842,9 +801,9 @@ func assertCookieValue(t *testing.T, req *http.Request, name, want string) {
 	}
 }
 
-func categoryProductsJSON(prefix string, start, count int, sct string) string {
+func categoryProductsJSON(prefix string, start, count int) string {
 	var b strings.Builder
-	b.WriteString(`{"props":{"pageProps":{"products":[`)
+	b.WriteString(`{"pageProps":{"layout":{"visualComponents":[{"items":[`)
 	for i := 0; i < count; i++ {
 		if i > 0 {
 			b.WriteByte(',')
@@ -853,9 +812,10 @@ func categoryProductsJSON(prefix string, start, count int, sct string) string {
 		_, _ = fmt.Fprintf(&b, `{"id":"%s-%d","displayName":"Product %d"}`, prefix, id, id)
 	}
 	b.WriteByte(']')
-	if sct != "" {
-		_, _ = fmt.Fprintf(&b, `,"sct":%q`, sct)
-	}
-	b.WriteString(`}}}`)
+	b.WriteString(`}]}}}`)
 	return b.String()
+}
+
+func emptyCategoryProductsJSON() string {
+	return categoryProductsJSON("p", 1, 0)
 }

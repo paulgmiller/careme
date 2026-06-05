@@ -83,6 +83,7 @@ func (e *CategoryHTTPError) Error() string {
 }
 
 type Product struct {
+	TypeName               string            `json:"__typename"`
 	ID                     string            `json:"id"`
 	StoreID                int               `json:"storeId"`
 	ShoppingContext        any               `json:"shoppingContext"`
@@ -90,8 +91,8 @@ type Product struct {
 	DecodedDisplayName     string            `json:"decodedDisplayName"`
 	FullDisplayName        string            `json:"fullDisplayName"`
 	FullCategoryHierarchy  string            `json:"fullCategoryHierarchy"`
-	MinimumOrderQuantity   int               `json:"minimumOrderQuantity"`
-	MaximumOrderQuantity   int               `json:"maximumOrderQuantity"`
+	MinimumOrderQuantity   float32           `json:"minimumOrderQuantity"`
+	MaximumOrderQuantity   float32           `json:"maximumOrderQuantity"`
 	BestAvailable          bool              `json:"bestAvailable"`
 	OnAd                   bool              `json:"onAd"`
 	IsNew                  bool              `json:"isNew"`
@@ -109,8 +110,6 @@ type Product struct {
 	SKUs                   []SKU             `json:"SKUs"`
 	ListPrice              *float32          `json:"-"`
 	SalePrice              *float32          `json:"-"`
-	Raw                    json.RawMessage   `json:"-"`
-	Extra                  map[string]any    `json:"-"`
 }
 
 type ProductLocation struct {
@@ -508,66 +507,47 @@ func queryAttrValue(n *html.Node, name string) string {
 }
 
 func decodeCategoryPagePayload(r io.Reader) ([]Product, error) {
-	var root any
-	if err := json.NewDecoder(r).Decode(&root); err != nil {
+	var payload categoryResponse
+	if err := json.NewDecoder(r).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode category json response: %w", err)
 	}
 
-	return extractProducts(root)
+	return payload.products(), nil
 }
 
-func extractProducts(root any) ([]Product, error) {
-	var products []Product
+type categoryResponse struct {
+	PageProps categoryPageProps `json:"pageProps"`
+}
+
+type categoryPageProps struct {
+	Layout categoryLayout `json:"layout"`
+}
+
+type categoryLayout struct {
+	VisualComponents []categoryProductCollection `json:"visualComponents"`
+}
+
+type categoryProductCollection struct {
+	Items []Product `json:"items"`
+}
+
+func (r categoryResponse) products() []Product {
 	seen := make(map[string]struct{})
-	walkQueryJSON(root, func(value any) {
-		if arr, ok := value.([]any); ok {
-			for _, product := range productsFromArray(arr) {
-				products = appendProduct(products, product, seen)
-			}
-			return
-		}
-		if obj, ok := value.(map[string]any); ok && looksLikeProduct(obj) {
-			product, ok := productFromObject(obj)
-			if ok {
-				products = appendProduct(products, product, seen)
-			}
-		}
-	})
-	if products == nil {
-		return nil, nil
-	}
-	return products, nil
+	return collectProducts(nil, r.PageProps, seen)
 }
 
-func productsFromArray(values []any) []Product {
-	products := make([]Product, 0, len(values))
-	for _, value := range values {
-		obj, ok := value.(map[string]any)
-		if !ok || !looksLikeProduct(obj) {
-			continue
-		}
-		if product, ok := productFromObject(obj); ok {
-			products = append(products, product)
-		}
+func collectProducts(products []Product, page categoryPageProps, seen map[string]struct{}) []Product {
+	for _, component := range page.Layout.VisualComponents {
+		products = appendProducts(products, component.Items, seen)
 	}
 	return products
 }
 
-func productFromObject(obj map[string]any) (Product, bool) {
-	raw, err := json.Marshal(obj)
-	if err != nil {
-		return Product{}, false
+func appendProducts(products []Product, candidates []Product, seen map[string]struct{}) []Product {
+	for _, product := range candidates {
+		products = appendProduct(products, product, seen)
 	}
-	var product Product
-	if err := json.Unmarshal(raw, &product); err != nil {
-		return Product{}, false
-	}
-	if strings.TrimSpace(product.ID) == "" {
-		return Product{}, false
-	}
-	product.ListPrice, product.SalePrice = productPrices(product)
-	product.Raw = raw
-	return product, true
+	return products
 }
 
 func productPrices(product Product) (*float32, *float32) {
@@ -597,43 +577,22 @@ func displayPriceAmount(price *DisplayPrice) *float32 {
 
 func appendProduct(products []Product, product Product, seen map[string]struct{}) []Product {
 	id := strings.TrimSpace(product.ID)
-	if id == "" {
+	if id == "" || !isDecodedProduct(product) {
 		return products
 	}
 	if _, ok := seen[id]; ok {
 		return products
 	}
 	seen[id] = struct{}{}
+	product.ListPrice, product.SalePrice = productPrices(product)
 	return append(products, product)
 }
 
-func looksLikeProduct(obj map[string]any) bool {
-	_, hasID := obj["id"]
-	if !hasID {
-		return false
-	}
-	if _, ok := obj["displayName"]; ok {
+func isDecodedProduct(product Product) bool {
+	if strings.EqualFold(product.TypeName, "Product") {
 		return true
 	}
-	if _, ok := obj["fullDisplayName"]; ok {
-		return true
-	}
-	if _, ok := obj["decodedDisplayName"]; ok {
-		return true
-	}
-	return false
-}
-
-func walkQueryJSON(value any, visit func(any)) {
-	visit(value)
-	switch typed := value.(type) {
-	case map[string]any:
-		for _, child := range typed {
-			walkQueryJSON(child, visit)
-		}
-	case []any:
-		for _, child := range typed {
-			walkQueryJSON(child, visit)
-		}
-	}
+	return strings.TrimSpace(product.DisplayName) != "" ||
+		strings.TrimSpace(product.FullDisplayName) != "" ||
+		strings.TrimSpace(product.DecodedDisplayName) != ""
 }
