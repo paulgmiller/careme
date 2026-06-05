@@ -134,6 +134,15 @@ var (
 	nextDataBuildIDRe   = regexp.MustCompile(`/_next/data/([^/]+)/`)
 )
 
+func queryAttrValue(n *html.Node, name string) string {
+	for _, attr := range n.Attr {
+		if attr.Key == name {
+			return attr.Val
+		}
+	}
+	return ""
+}
+
 func extractBuildID(body []byte) (string, error) {
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {

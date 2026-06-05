@@ -13,24 +13,19 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/net/html"
 )
 
 const (
 	DefaultBaseURL = "https://www.heb.com"
 
 	defaultQueryTimeout = 20 * time.Second
-	defaultMaxPages     = 20
 	defaultPageDelay    = 5 * time.Second
-	categoryPageSize    = 50
 )
 
 // QueryClient fetches HEB category products from the Next.js data endpoint.
 type QueryClient struct {
 	baseURL    string
 	httpClient *http.Client
-	maxPages   int
 
 	buildIDMu   sync.Mutex
 	buildID     string
@@ -188,7 +183,6 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		buildID:     buildID,
 		loadBuildID: cfg.LoadBuildID,
 		httpClient:  httpClient,
-		maxPages:    defaultMaxPages,
 		pageDelay:   defaultPageDelay,
 	}
 }
@@ -204,16 +198,13 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 		return nil, err
 	}
 
-	page := opts.Page
-	if page <= 0 {
-		page = 1
-	}
+	page := min(opts.Page, 1)
 
-	seenProducts := make(map[string]bool)
 	products := make([]Product, 0)
 	referer := strings.TrimSpace(opts.Referer)
 	searchContextToken := strings.TrimSpace(opts.SearchContextToken)
-	for pagesFetched := 0; pagesFetched < c.maxPages; pagesFetched++ {
+	firstFetch := true
+	for {
 		pageOpts := opts
 		pageOpts.Page = page
 		pageOpts.Referer = referer
@@ -221,38 +212,34 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 
 		staleBuildID := c.currentBuildID()
 		resp, err := c.CategoryPage(ctx, pageOpts)
-		if pagesFetched == 0 && isCategoryNotFound(err) {
+
+		// can we only get a build id change at start?
+		if firstFetch && isCategoryNotFound(err) {
 			if _, refreshErr := c.refreshBuildID(ctx, pageOpts, staleBuildID); refreshErr != nil {
 				return nil, refreshErr
 			}
 			resp, err = c.CategoryPage(ctx, pageOpts)
 		}
 		if err != nil {
-			if pagesFetched > 0 {
-				slog.InfoContext(ctx, "category pagination stopped after page error", "page", page, "error", err)
+			if !firstFetch {
+				slog.WarnContext(ctx, "category pagination stopped after page error", "page", page, "error", err)
 				return products, nil
 			}
 			return nil, err
 		}
-		newProducts := appendNewProducts(&products, resp.Products, seenProducts, opts.Limit)
+		firstFetch = false
 		if len(resp.Products) == 0 {
 			slog.InfoContext(ctx, "category pagination stopped after empty page", "page", page)
 			return products, nil
 		}
-		if newProducts == 0 && pagesFetched > 0 {
-			slog.InfoContext(ctx, "category pagination stopped after duplicate page", "page", page)
-			return products, nil
-		}
-		if opts.Limit > 0 && len(products) >= opts.Limit {
+		products = append(products, resp.Products...)
+
+		if len(products) >= opts.Limit {
 			slog.InfoContext(ctx, "category pagination stopped after limit", "page", page, "limit", opts.Limit)
 			return products, nil
 		}
-		if resp.Total > 0 && page*categoryPageSize >= resp.Total {
+		if len(products) >= resp.Total {
 			slog.InfoContext(ctx, "category pagination stopped after total", "page", page, "total", resp.Total)
-			return products, nil
-		}
-		if len(resp.Products) < categoryPageSize {
-			slog.InfoContext(ctx, "category pagination stopped after short page", "page", page, "count", len(resp.Products), "page_size", categoryPageSize)
 			return products, nil
 		}
 
@@ -260,33 +247,11 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 		searchContextToken = strings.TrimSpace(resp.SearchContextToken)
 		page++
 	}
-
-	return products, fmt.Errorf("category pagination exceeded max pages %d", c.maxPages)
 }
 
 func isCategoryNotFound(err error) bool {
 	var httpErr *CategoryHTTPError
 	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound
-}
-
-func appendNewProducts(products *[]Product, candidates []Product, seen map[string]bool, limit int) int {
-	var appended int
-	for _, product := range candidates {
-		if limit > 0 && len(*products) >= limit {
-			break
-		}
-		id := strings.TrimSpace(product.ID)
-		if id == "" {
-			continue
-		}
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		*products = append(*products, product)
-		appended++
-	}
-	return appended
 }
 
 func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*CategoryPage, error) {
@@ -330,17 +295,7 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 		return nil, &CategoryHTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 
-	categoryPayload, err := decodeCategoryPagePayload(io.LimitReader(resp.Body, 8*1024*1024))
-	if err != nil {
-		return nil, err
-	}
-
-	return &CategoryPage{
-		Products:           categoryPayload.Products,
-		Page:               opts.Page,
-		SearchContextToken: categoryPayload.SearchContextToken,
-		Total:              categoryPayload.Total,
-	}, nil
+	return decodeCategoryPagePayload(io.LimitReader(resp.Body, 8*1024*1024), opts.Page)
 }
 
 func (c *QueryClient) waitForCategoryRequestSlot(ctx context.Context) error {
@@ -498,28 +453,23 @@ func normalizeCategoryPath(value string) string {
 	return value
 }
 
-func queryAttrValue(n *html.Node, name string) string {
-	for _, attr := range n.Attr {
-		if attr.Key == name {
-			return attr.Val
-		}
-	}
-	return ""
-}
-
-func decodeCategoryPagePayload(r io.Reader) (categoryPayload, error) {
+func decodeCategoryPagePayload(r io.Reader, page int) (*CategoryPage, error) {
 	var payload categoryResponse
 	if err := json.NewDecoder(r).Decode(&payload); err != nil {
-		return categoryPayload{}, fmt.Errorf("decode category json response: %w", err)
+		return nil, fmt.Errorf("decode category json response: %w", err)
 	}
 
-	return payload.page(), nil
-}
+	var products []Product
+	for _, component := range payload.PageProps.Layout.VisualComponents {
+		products = append(products, component.Items...)
+	}
 
-type categoryPayload struct {
-	Products           []Product
-	SearchContextToken string
-	Total              int
+	return &CategoryPage{
+		Products:           products,
+		SearchContextToken: payload.PageProps.searchContextToken(),
+		Page:               page,
+		Total:              payload.PageProps.total(),
+	}, nil
 }
 
 type categoryResponse struct {
@@ -540,15 +490,6 @@ type categoryProductCollection struct {
 	Total              int       `json:"total"`
 }
 
-func (r categoryResponse) page() categoryPayload {
-	seen := make(map[string]struct{})
-	return categoryPayload{
-		Products:           collectProducts(nil, r.PageProps, seen),
-		SearchContextToken: r.PageProps.searchContextToken(),
-		Total:              r.PageProps.total(),
-	}
-}
-
 // a little worry that searchContextToken and total just pick first non blank one. Should at least pick same one?
 func (p categoryPageProps) searchContextToken() string {
 	for _, component := range p.Layout.VisualComponents {
@@ -566,15 +507,6 @@ func (p categoryPageProps) total() int {
 		}
 	}
 	return 0
-}
-
-func collectProducts(products []Product, page categoryPageProps, seen map[string]struct{}) []Product {
-	for _, component := range page.Layout.VisualComponents {
-		for _, product := range component.Items {
-			products = appendProduct(products, product, seen)
-		}
-	}
-	return products
 }
 
 func productPrices(product Product) (*float32, *float32) {
@@ -602,19 +534,7 @@ func displayPriceAmount(price *DisplayPrice) *float32 {
 	return price.Amount
 }
 
-func appendProduct(products []Product, product Product, seen map[string]struct{}) []Product {
-	id := strings.TrimSpace(product.ID)
-	if id == "" || !isDecodedProduct(product) {
-		return products
-	}
-	if _, ok := seen[id]; ok {
-		return products
-	}
-	seen[id] = struct{}{}
-	product.ListPrice, product.SalePrice = productPrices(product)
-	return append(products, product)
-}
-
+// Are there non products in item?
 func isDecodedProduct(product Product) bool {
 	if strings.EqualFold(product.TypeName, "Product") {
 		return true

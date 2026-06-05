@@ -296,7 +296,7 @@ func TestDecodeCategoryPagePayloadExtractsProducts(t *testing.T) {
 		}
 	}`)
 
-	payload, err := decodeCategoryPagePayload(strings.NewReader(string(body)))
+	payload, err := decodeCategoryPagePayload(strings.NewReader(string(body)), 1)
 	if err != nil {
 		t.Fatalf("decodeCategoryPagePayload returned error: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestDecodeCategoryPagePayloadExtractsLayoutProducts(t *testing.T) {
 		}
 	}`)
 
-	payload, err := decodeCategoryPagePayload(body)
+	payload, err := decodeCategoryPagePayload(body, 1)
 	if err != nil {
 		t.Fatalf("decodeCategoryPagePayload returned error: %v", err)
 	}
