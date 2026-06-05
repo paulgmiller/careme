@@ -107,6 +107,9 @@ type Product struct {
 	Brand                  *Brand            `json:"brand"`
 	ProductCategory        *ProductCategory  `json:"productCategory"`
 	ProductImageURLs       []ProductImageURL `json:"productImageUrls"`
+	SKUs                   []SKU             `json:"SKUs"`
+	ListPrice              *float32          `json:"-"`
+	SalePrice              *float32          `json:"-"`
 	Raw                    json.RawMessage   `json:"-"`
 	Extra                  map[string]any    `json:"-"`
 }
@@ -136,6 +139,33 @@ type ProductCategory struct {
 type ProductImageURL struct {
 	URL      string `json:"url"`
 	TypeName string `json:"__typename"`
+}
+
+type SKU struct {
+	ID                   string      `json:"id"`
+	ContextPrices        []ItemPrice `json:"contextPrices"`
+	CustomerFriendlySize string      `json:"customerFriendlySize"`
+	TwelveDigitUPC       string      `json:"twelveDigitUPC"`
+	TypeName             string      `json:"__typename"`
+}
+
+type ItemPrice struct {
+	Context       string        `json:"context"`
+	IsOnSale      bool          `json:"isOnSale"`
+	IsPriceCut    bool          `json:"isPriceCut"`
+	PriceType     string        `json:"priceType"`
+	ListPrice     *DisplayPrice `json:"listPrice"`
+	SalePrice     *DisplayPrice `json:"salePrice"`
+	UnitListPrice *DisplayPrice `json:"unitListPrice"`
+	UnitSalePrice *DisplayPrice `json:"unitSalePrice"`
+	TypeName      string        `json:"__typename"`
+}
+
+type DisplayPrice struct {
+	Unit            string   `json:"unit"`
+	FormattedAmount string   `json:"formattedAmount"`
+	Amount          *float32 `json:"amount"`
+	TypeName        string   `json:"__typename"`
 }
 
 type nextData struct {
@@ -589,8 +619,34 @@ func productFromObject(obj map[string]any) (Product, bool) {
 	if strings.TrimSpace(product.ID) == "" {
 		return Product{}, false
 	}
+	product.ListPrice, product.SalePrice = productPrices(product)
 	product.Raw = raw
 	return product, true
+}
+
+func productPrices(product Product) (*float32, *float32) {
+	for _, context := range []string{"CURBSIDE", "ONLINE", ""} {
+		for _, sku := range product.SKUs {
+			for _, price := range sku.ContextPrices {
+				if context != "" && !strings.EqualFold(price.Context, context) {
+					continue
+				}
+				listPrice := displayPriceAmount(price.ListPrice)
+				salePrice := displayPriceAmount(price.SalePrice)
+				if listPrice != nil || salePrice != nil {
+					return listPrice, salePrice
+				}
+			}
+		}
+	}
+	return nil, nil
+}
+
+func displayPriceAmount(price *DisplayPrice) *float32 {
+	if price == nil {
+		return nil
+	}
+	return price.Amount
 }
 
 func appendProduct(products []Product, product Product, seen map[string]struct{}) []Product {

@@ -315,13 +315,29 @@ func TestDecodeCategoryPayloadExtractsProducts(t *testing.T) {
 							"productLocation": {"location": "In Meat Market on the Back Wall", "__typename": "ProductLocation"},
 							"pastPurchaseInfo": null,
 							"purchasePreferenceList": null,
-							"inventory": {"inventoryState": "IN_STOCK", "__typename": "Inventory"},
-							"brand": {"name": "H-E-B", "isOwnBrand": true, "__typename": "Brand"},
-							"productCategory": {"id": "490016", "name": "Dairy & eggs", "__typename": "ProductCategory"},
-							"productImageUrls": [{"url": "https://images.heb.com/is/image/HEBGrocery/prd-small/001895013.jpg"}]
-						}
-					]
-				}
+								"inventory": {"inventoryState": "IN_STOCK", "__typename": "Inventory"},
+								"brand": {"name": "H-E-B", "isOwnBrand": true, "__typename": "Brand"},
+								"productCategory": {"id": "490016", "name": "Dairy & eggs", "__typename": "ProductCategory"},
+								"productImageUrls": [{"url": "https://images.heb.com/is/image/HEBGrocery/prd-small/001895013.jpg"}],
+								"SKUs": [{
+									"id": "sku-1",
+									"customerFriendlySize": "24 ct",
+									"contextPrices": [
+										{
+											"context": "ONLINE",
+											"listPrice": {"unit": "each", "formattedAmount": "$4.99", "amount": 4.99},
+											"salePrice": {"unit": "each", "formattedAmount": "$3.99", "amount": 3.99}
+										},
+										{
+											"context": "CURBSIDE",
+											"listPrice": {"unit": "each", "formattedAmount": "$5.49", "amount": 5.49},
+											"salePrice": {"unit": "each", "formattedAmount": "$4.49", "amount": 4.49}
+										}
+									]
+								}]
+							}
+						]
+					}
 			}
 		}
 	}`)
@@ -358,6 +374,12 @@ func TestDecodeCategoryPayloadExtractsProducts(t *testing.T) {
 	}
 	if len(product.ProductImageURLs) != 1 || product.ProductImageURLs[0].URL == "" {
 		t.Fatalf("unexpected product images: %+v", product.ProductImageURLs)
+	}
+	if product.ListPrice == nil || *product.ListPrice != float32(5.49) {
+		t.Fatalf("unexpected list price: %v", product.ListPrice)
+	}
+	if product.SalePrice == nil || *product.SalePrice != float32(4.49) {
+		t.Fatalf("unexpected sale price: %v", product.SalePrice)
 	}
 	if len(product.Raw) == 0 {
 		t.Fatal("expected raw product json")

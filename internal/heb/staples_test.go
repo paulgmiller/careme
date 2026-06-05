@@ -43,47 +43,6 @@ func (s *stubHEBQueryClient) Category(_ context.Context, opts CategoryOptions) (
 	return s.results[key], nil
 }
 
-type concurrencyDetectingHEBQueryClient struct {
-	mu             sync.Mutex
-	active         int
-	maxActive      int
-	calls          int
-	releaseStarted chan struct{}
-	release        chan struct{}
-}
-
-func (s *concurrencyDetectingHEBQueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Product, error) {
-	s.mu.Lock()
-	s.active++
-	s.calls++
-	if s.active > s.maxActive {
-		s.maxActive = s.active
-	}
-	s.mu.Unlock()
-
-	select {
-	case s.releaseStarted <- struct{}{}:
-	default:
-	}
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.release:
-	}
-
-	s.mu.Lock()
-	s.active--
-	s.mu.Unlock()
-	return []Product{{ID: opts.ChildID, DisplayName: opts.ChildID}}, nil
-}
-
-func (s *concurrencyDetectingHEBQueryClient) stats() (int, int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.calls, s.maxActive
-}
-
 func (s *stubHEBQueryClient) callCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -133,6 +92,8 @@ func TestStapleCategories_HaveLimits(t *testing.T) {
 func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	t.Parallel()
 
+	listPrice := float32(8.99)
+	salePrice := float32(6.99)
 	client := &stubHEBQueryClient{
 		results: map[string][]Product{
 			CategoryPorkParent + ":" + CategoryPorkChild: {
@@ -142,6 +103,8 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 					FullCategoryHierarchy: "Meat & seafood/Meat/Pork",
 					Brand:                 &Brand{Name: "H-E-B"},
 					ProductLocation:       &ProductLocation{Location: "Meat Market"},
+					ListPrice:             &listPrice,
+					SalePrice:             &salePrice,
 				},
 			},
 		},
@@ -173,11 +136,13 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	}
 
 	assertInputIngredient(t, got[0], ai.InputIngredient{
-		ProductID:   "pork-1",
-		Description: "H-E-B Pork Shoulder Roast",
-		Brand:       "H-E-B",
-		AisleNumber: "Meat Market",
-		Categories:  []string{"Meat & seafood", "Meat", "Pork"},
+		ProductID:    "pork-1",
+		Description:  "H-E-B Pork Shoulder Roast",
+		Brand:        "H-E-B",
+		AisleNumber:  "Meat Market",
+		Categories:   []string{"Meat & seafood", "Meat", "Pork"},
+		PriceRegular: &listPrice,
+		PriceSale:    &salePrice,
 	})
 }
 
@@ -279,9 +244,18 @@ func assertInputIngredient(t *testing.T, got, want ai.InputIngredient) {
 		got.Description != want.Description ||
 		got.Brand != want.Brand ||
 		got.AisleNumber != want.AisleNumber ||
+		!sameFloat32Ptr(got.PriceRegular, want.PriceRegular) ||
+		!sameFloat32Ptr(got.PriceSale, want.PriceSale) ||
 		!slices.Equal(got.Categories, want.Categories) {
 		t.Fatalf("unexpected ingredient: got %+v want %+v", got, want)
 	}
+}
+
+func sameFloat32Ptr(left, right *float32) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 func unsetEnvForTest(t *testing.T, name string) {
