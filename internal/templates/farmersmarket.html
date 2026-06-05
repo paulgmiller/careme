@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Farmers market finds</title>
+
+  {{template "tailwind_head" .Style}}
+
+  {{.ClarityScript}}
+  {{.GoogleTagScript}}
+</head>
+<body class="relative min-h-screen overflow-x-hidden bg-gradient-to-b from-brand-50/80 via-white to-brand-50/80 text-ink-700 antialiased">
+  {{template "seasonal_background" .}}
+
+  <main class="relative z-10 px-4 py-8 sm:py-10">
+    <section class="mx-auto w-full max-w-3xl">
+      <div class="friendly-card border border-brand-100 bg-white/90 shadow-xl backdrop-blur-[2px]">
+        <div class="border-b border-brand-100 p-8">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 class="font-display text-3xl font-extrabold tracking-tight text-brand-700 sm:text-4xl">Farmers market finds</h1>
+              <p class="mt-2 text-ink-600">Turn today's stalls into dinner ideas.</p>
+            </div>
+            {{if .User}}{{template "account_widget" .}}{{end}}
+          </div>
+        </div>
+
+        <div class="p-8">
+          {{if .Error}}
+          <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800" role="alert">
+            {{.Error}}
+          </div>
+          {{end}}
+
+          <form method="POST" action="/farmersmarket" enctype="multipart/form-data" class="space-y-6">
+            <div>
+              <label for="name" class="block text-sm font-semibold text-ink-700">Market name</label>
+              <input id="name" name="name" type="text" required maxlength="80" autocomplete="off"
+                placeholder="University District Farmers Market"
+                class="mt-2 w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-ink-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-300" />
+            </div>
+
+            <div>
+              <label for="photos" class="block text-sm font-semibold text-ink-700">Market photos</label>
+              <input id="photos" name="photos" type="file" accept="image/*" multiple required
+                class="mt-2 block w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-ink-700 shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-brand-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-200 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-300" />
+            </div>
+
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button type="submit"
+                class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Cook from today's finds
+              </button>
+              <a href="/"
+                class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Back home
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+  {{template "clerk_refresh.html" .}}
+</body>
+</html>

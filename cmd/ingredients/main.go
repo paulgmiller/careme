@@ -32,6 +32,10 @@ func main() {
 		log.Fatalf("failed to load configuration: %s", err)
 	}
 
+	cacheStore, err := cache.MakeCache()
+	if err != nil {
+		log.Fatal(err)
+	}
 	sp, err := recipes.NewStaplesProvider(cfg)
 	if err != nil {
 		log.Fatalf("failed to create recipe generator: %s", err)
@@ -45,10 +49,6 @@ func main() {
 	catMap := make(map[string]int)
 
 	log.Printf("Grading %d ingredients", len(ings))
-	cacheStore, err := cache.MakeCache()
-	if err != nil {
-		log.Fatalf("failed to create cache for ingredient grading: %s", err)
-	}
 	grader := ingredientgrading.NewManager(cfg, cacheStore, http.DefaultClient)
 	graded, err := grader.GradeIngredients(ctx, ings)
 	if err != nil {
