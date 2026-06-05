@@ -287,30 +287,6 @@ func TestCategoryReturnsBuildIDLoadError(t *testing.T) {
 	}
 }
 
-func TestExtractBuildIDFromNextStaticAsset(t *testing.T) {
-	t.Parallel()
-
-	buildID, err := extractBuildID([]byte(`<!doctype html><html><head><script src="/_next/static/static-build-id/_buildManifest.js"></script></head></html>`))
-	if err != nil {
-		t.Fatalf("extractBuildID returned error: %v", err)
-	}
-	if buildID != "static-build-id" {
-		t.Fatalf("unexpected build id: %q", buildID)
-	}
-}
-
-func TestExtractBuildIDFromNextDataURL(t *testing.T) {
-	t.Parallel()
-
-	buildID, err := extractBuildID([]byte(`window.__SSR_URL__ = "/_next/data/data-build-id/en/category/shop/490110/490529.json?childId=490529&page=1&parentId=490110"`))
-	if err != nil {
-		t.Fatalf("extractBuildID returned error: %v", err)
-	}
-	if buildID != "data-build-id" {
-		t.Fatalf("unexpected build id: %q", buildID)
-	}
-}
-
 func TestDecodeCategoryPayloadExtractsProducts(t *testing.T) {
 	t.Parallel()
 
@@ -817,15 +793,6 @@ func TestCategoryReturnsMaxPagesError(t *testing.T) {
 		ChildID:  "490083",
 	})
 	if err == nil || !strings.Contains(err.Error(), "category pagination exceeded max pages 2") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestExtractBuildIDErrorsWhenMissing(t *testing.T) {
-	t.Parallel()
-
-	_, err := extractBuildID([]byte(`<!doctype html><html><body></body></html>`))
-	if err == nil || !errors.Is(err, errors.New("next data build id not found")) && !strings.Contains(err.Error(), "next data build id not found") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -1,16 +1,20 @@
 package heb
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	htmlstd "html"
 	"os"
 	"strings"
 	"time"
 
 	"careme/internal/brightdata"
 	"careme/internal/cache"
+
+	"golang.org/x/net/html"
 )
 
 const (
@@ -23,6 +27,7 @@ type browserHTMLClient interface {
 	HTML(ctx context.Context, targetURL string, opts brightdata.BrowserOptions) (string, error)
 }
 
+// interface?
 type loadBuildID func(context.Context) (string, error)
 
 type BuildIDRecord struct {
@@ -31,6 +36,7 @@ type BuildIDRecord struct {
 }
 
 func newBrightDataBuildIDLoaderFromEnv() (loadBuildID, error) {
+	// move to config?
 	wsEndpoint := strings.TrimSpace(os.Getenv(brightDataBrowserWSEnv))
 	if wsEndpoint == "" {
 		return nil, fmt.Errorf("%s is required for HEB build id discovery", brightDataBrowserWSEnv)
@@ -108,4 +114,51 @@ func loadLatestBuildID(ctx context.Context, c cache.Cache) (string, error) {
 		return "", fmt.Errorf("decode heb build id record: build id is empty")
 	}
 	return buildID, nil
+}
+
+func extractBuildID(body []byte) (string, error) {
+	doc, err := html.Parse(bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("parse category page html: %w", err)
+	}
+
+	var script string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if script != "" {
+			return
+		}
+		if n.Type == html.ElementNode && n.Data == "script" && queryAttrValue(n, "id") == "__NEXT_DATA__" {
+			if n.FirstChild != nil {
+				script = n.FirstChild.Data
+			}
+			return
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(doc)
+
+	if strings.TrimSpace(script) != "" {
+		var data nextData
+		if err := json.Unmarshal([]byte(htmlstd.UnescapeString(script)), &data); err != nil {
+			return "", fmt.Errorf("decode next data json: %w", err)
+		}
+		if strings.TrimSpace(data.BuildID) != "" {
+			return strings.TrimSpace(data.BuildID), nil
+		}
+	}
+
+	matches := nextStaticBuildIDRe.FindSubmatch(body)
+	if len(matches) == 2 && strings.TrimSpace(string(matches[1])) != "" {
+		return strings.TrimSpace(string(matches[1])), nil
+	}
+
+	matches = nextDataBuildIDRe.FindSubmatch(body)
+	if len(matches) == 2 && strings.TrimSpace(string(matches[1])) != "" {
+		return strings.TrimSpace(string(matches[1])), nil
+	}
+
+	return "", errors.New("next data build id not found")
 }
