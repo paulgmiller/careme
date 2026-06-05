@@ -152,18 +152,11 @@ func TestCategoryPageIncludesSCTParameter(t *testing.T) {
 	}
 }
 
-func TestCategoryPageRequiresBuildID(t *testing.T) {
+func TestCategoryPageRequiresBuildIDLoaderWhenMissing(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
 	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		HTTPClient: server.Client(),
-		PageDelay:  -1,
+		PageDelay: -1,
 	})
 
 	_, err := client.CategoryPage(context.Background(), CategoryOptions{
@@ -173,7 +166,129 @@ func TestCategoryPageRequiresBuildID(t *testing.T) {
 		ChildID:      "490083",
 		CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083",
 	})
-	if err == nil || err.Error() != "heb next data build id is required" {
+	if err == nil || err.Error() != "heb build id loader is required" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	var (
+		buildIDLoads int
+		capturedPath string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+	}))
+	defer server.Close()
+
+	client := NewQueryClient(QueryClientConfig{
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		PageDelay:  -1,
+		LoadBuildID: func(_ context.Context, opts buildIDOptions) (string, error) {
+			buildIDLoads++
+			if opts.Reese84 != "test-reese" {
+				return "", fmt.Errorf("unexpected reese84: %q", opts.Reese84)
+			}
+			return "fresh-build", nil
+		},
+	})
+
+	_, err := client.CategoryPage(context.Background(), CategoryOptions{
+		Reese84:  "test-reese",
+		StoreID:  "92",
+		ParentID: "490020",
+		ChildID:  "490083",
+	})
+	if err != nil {
+		t.Fatalf("CategoryPage returned error: %v", err)
+	}
+	if buildIDLoads != 1 {
+		t.Fatalf("unexpected build id load count: got %d want 1", buildIDLoads)
+	}
+	if got := client.currentBuildID(); got != "fresh-build" {
+		t.Fatalf("unexpected build id: got %q want %q", got, "fresh-build")
+	}
+	if !strings.Contains(capturedPath, "/_next/data/fresh-build/") {
+		t.Fatalf("request did not use refreshed build id: %q", capturedPath)
+	}
+}
+
+func TestCategoryRefreshesBuildIDAfterFirstPage404(t *testing.T) {
+	t.Parallel()
+
+	var buildIDLoads int
+	requestPaths := make([]string, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPaths = append(requestPaths, r.URL.Path)
+		if strings.Contains(r.URL.Path, "/_next/data/stale-build/") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, categoryProductsJSON("p", 1, 1, ""))
+	}))
+	defer server.Close()
+
+	client := NewQueryClient(QueryClientConfig{
+		BaseURL:    server.URL,
+		BuildID:    "stale-build",
+		HTTPClient: server.Client(),
+		PageDelay:  -1,
+		LoadBuildID: func(_ context.Context, opts buildIDOptions) (string, error) {
+			buildIDLoads++
+			if opts.Reese84 != "test-reese" {
+				return "", fmt.Errorf("unexpected reese84: %q", opts.Reese84)
+			}
+			return "fresh-build", nil
+		},
+	})
+
+	products, err := client.Category(context.Background(), CategoryOptions{
+		Reese84:  "test-reese",
+		StoreID:  "92",
+		ParentID: "490020",
+		ChildID:  "490083",
+	})
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+	if buildIDLoads != 1 {
+		t.Fatalf("unexpected build id load count: got %d want 1", buildIDLoads)
+	}
+	if got := client.currentBuildID(); got != "fresh-build" {
+		t.Fatalf("unexpected build id: got %q want %q", got, "fresh-build")
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected 1 product, got %d", len(products))
+	}
+	if len(requestPaths) != 2 ||
+		!strings.Contains(requestPaths[0], "/_next/data/stale-build/") ||
+		!strings.Contains(requestPaths[1], "/_next/data/fresh-build/") {
+		t.Fatalf("unexpected request paths: %v", requestPaths)
+	}
+}
+
+func TestCategoryReturnsBuildIDLoadError(t *testing.T) {
+	t.Parallel()
+
+	client := NewQueryClient(QueryClientConfig{
+		LoadBuildID: func(context.Context, buildIDOptions) (string, error) {
+			return "", errors.New("homepage blocked")
+		},
+	})
+
+	_, err := client.CategoryPage(context.Background(), CategoryOptions{
+		Reese84:  "test-reese",
+		StoreID:  "92",
+		ParentID: "490020",
+		ChildID:  "490083",
+	})
+	if err == nil || !strings.Contains(err.Error(), "homepage blocked") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

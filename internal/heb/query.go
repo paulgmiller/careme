@@ -29,8 +29,6 @@ const (
 	categoryPageSize    = 50
 )
 
-var ErrBuildIDRequired = errors.New("heb next data build id is required")
-
 // QueryClient fetches HEB category products from the Next.js data endpoint.
 type QueryClient struct {
 	baseURL    string
@@ -40,16 +38,18 @@ type QueryClient struct {
 
 	buildIDMu             sync.Mutex
 	buildID               string
+	loadBuildID           loadBuildID
 	categoryRequestMu     sync.Mutex
 	lastCategoryRequestAt time.Time
 }
 
 type QueryClientConfig struct {
-	BaseURL    string
-	BuildID    string
-	HTTPClient *http.Client
-	MaxPages   int
-	PageDelay  time.Duration
+	BaseURL     string
+	BuildID     string
+	LoadBuildID loadBuildID
+	HTTPClient  *http.Client
+	MaxPages    int
+	PageDelay   time.Duration
 }
 
 type CategoryOptions struct {
@@ -171,23 +171,13 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 	buildID := strings.TrimSpace(cfg.BuildID)
 
 	return &QueryClient{
-		baseURL:    baseURL,
-		buildID:    buildID,
-		httpClient: httpClient,
-		maxPages:   maxPages,
-		pageDelay:  pageDelay,
+		baseURL:     baseURL,
+		buildID:     buildID,
+		loadBuildID: cfg.LoadBuildID,
+		httpClient:  httpClient,
+		maxPages:    maxPages,
+		pageDelay:   pageDelay,
 	}
-}
-
-func (c *QueryClient) SetBuildID(buildID string) {
-	buildID = strings.TrimSpace(buildID)
-	if buildID == "" {
-		return
-	}
-
-	c.buildIDMu.Lock()
-	defer c.buildIDMu.Unlock()
-	c.buildID = buildID
 }
 
 func (c *QueryClient) currentBuildID() string {
@@ -216,7 +206,14 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 		pageOpts.SCT = sct
 		pageOpts.Referer = referer
 
+		staleBuildID := c.currentBuildID()
 		resp, err := c.CategoryPage(ctx, pageOpts)
+		if pagesFetched == 0 && isCategoryNotFound(err) {
+			if _, refreshErr := c.refreshBuildID(ctx, pageOpts, staleBuildID); refreshErr != nil {
+				return nil, refreshErr
+			}
+			resp, err = c.CategoryPage(ctx, pageOpts)
+		}
 		if err != nil {
 			if pagesFetched > 0 {
 				slog.InfoContext(ctx, "category pagination stopped after page error", "page", page, "error", err)
@@ -354,13 +351,37 @@ func (c *QueryClient) waitForCategoryRequestSlot(ctx context.Context) error {
 
 func (c *QueryClient) resolveBuildID(ctx context.Context, opts CategoryOptions) (string, error) {
 	c.buildIDMu.Lock()
+	buildID := c.buildID
+	c.buildIDMu.Unlock()
+	if buildID != "" {
+		return buildID, nil
+	}
+	return c.refreshBuildID(ctx, opts, "")
+}
+
+func (c *QueryClient) refreshBuildID(ctx context.Context, opts CategoryOptions, staleBuildID string) (string, error) {
+	c.buildIDMu.Lock()
 	defer c.buildIDMu.Unlock()
 
-	if c.buildID != "" {
-		return c.buildID, nil
+	if current := c.buildID; current != "" && current != staleBuildID {
+		slog.InfoContext(ctx, "using heb next data build id refreshed by another request", "build_id", current)
+		return current, nil
+	}
+	if c.loadBuildID == nil {
+		return "", errors.New("heb build id loader is required")
 	}
 
-	return "", ErrBuildIDRequired
+	buildID, err := c.loadBuildID(ctx, buildIDOptions{Reese84: opts.Reese84})
+	if err != nil {
+		return "", fmt.Errorf("discover heb build id: %w", err)
+	}
+	buildID = strings.TrimSpace(buildID)
+	if buildID == "" {
+		return "", fmt.Errorf("discover heb build id: empty build id")
+	}
+	c.buildID = buildID
+	slog.InfoContext(ctx, "updated heb next data build id", "build_id", buildID)
+	return buildID, nil
 }
 
 func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (string, error) {

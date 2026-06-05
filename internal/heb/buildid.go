@@ -27,7 +27,6 @@ type loadBuildID func(context.Context, buildIDOptions) (string, error)
 
 type buildIDOptions struct {
 	Reese84 string
-	StoreID string
 }
 
 type BuildIDRecord struct {
