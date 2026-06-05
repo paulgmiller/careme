@@ -14,6 +14,7 @@ import (
 	"careme/internal/aldi"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/locations/geo"
@@ -60,6 +61,7 @@ type Location = locationtypes.Location
 
 type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
+	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
 type locationBackendFactory func(context.Context) (locationBackend, error)
@@ -104,6 +106,9 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 		},
 		func(ctx context.Context) (locationBackend, error) {
 			return wegmans.NewLocationBackend(ctx, cfg, centroids)
+		},
+		func(context.Context) (locationBackend, error) {
+			return farmersmarket.NewContainerStore(centroids)
 		},
 	}
 

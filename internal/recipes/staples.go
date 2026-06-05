@@ -20,6 +20,7 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/farmersmarket"
 	"careme/internal/kroger"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
@@ -328,12 +329,18 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		return nil, fmt.Errorf("create kroger staples provider: %w", err)
 	}
 
+	farmersMarketProvider, err := farmersmarket.NewStaplesProvider()
+	if err != nil {
+		return nil, fmt.Errorf("create farmers market staples provider: %w", err)
+	}
+
 	return []backendStaplesProvider{
 		albertsonsProvider,
 		// hebProvider,
 		aldiProvider,
 		krogerBackend,
 		publixProvider,
+		farmersMarketProvider,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
@@ -348,6 +355,7 @@ func defaultIdentityProviders() []identityProvider {
 		// heb.NewIdentityProvider(),
 		aldi.NewIdentityProvider(),
 		publix.NewIdentityProvider(),
+		farmersmarket.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),
 	}
