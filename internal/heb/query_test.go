@@ -108,24 +108,6 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 	}
 }
 
-func TestCategoryPageRequiresBuildIDLoaderWhenMissing(t *testing.T) {
-	t.Parallel()
-
-	client := NewQueryClient(QueryClientConfig{})
-
-	_, err := client.categoryPage(context.Background(), CategoryOptions{
-		Reese84:      "test-reese",
-		StoreID:      "92",
-		ParentID:     "490020",
-		ChildID:      "490083",
-		CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083",
-		Page:         1,
-	})
-	if err == nil || err.Error() != "heb build id loader is required" {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
 	t.Parallel()
 

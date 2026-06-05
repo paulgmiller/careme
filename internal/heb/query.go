@@ -340,10 +340,6 @@ func (c *QueryClient) refreshBuildID(ctx context.Context, staleBuildID string) (
 		slog.InfoContext(ctx, "using heb next data build id refreshed by another request", "build_id", current)
 		return current, nil
 	}
-	if c.loadBuildID == nil {
-		return "", errors.New("heb build id loader is required")
-	}
-
 	buildID, err := c.loadBuildID(ctx)
 	if err != nil {
 		return "", fmt.Errorf("discover heb build id: %w", err)
