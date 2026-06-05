@@ -51,16 +51,20 @@ type QueryClientConfig struct {
 }
 
 type CategoryOptions struct {
-	Reese84      string
-	StoreID      string
-	ParentID     string
-	ChildID      string
+	Reese84  string
+	StoreID  string
+	ParentID string
+	ChildID  string
+	// can produce some of this by above two ids?
 	CategoryPath string
-	Int          string
-	SCT          string
-	Referer      string
-	Page         int
-	Limit        int
+
+	Page  int
+	Limit int
+
+	// may not be necessary
+	Int     string
+	SCT     string
+	Referer string
 }
 
 type CategoryPage struct {
@@ -245,6 +249,11 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 	}
 
 	return products, fmt.Errorf("category pagination exceeded max pages %d", c.maxPages)
+}
+
+func isCategoryNotFound(err error) bool {
+	var httpErr *CategoryHTTPError
+	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound
 }
 
 func appendNewProducts(products *[]Product, candidates []Product, seen map[string]struct{}, limit int) int {

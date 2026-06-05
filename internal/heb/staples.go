@@ -47,8 +47,10 @@ type StapleCategory struct {
 	ParentID     string
 	ChildID      string
 	CategoryPath string
-	Int          string
 	Limit        int
+
+	// maybe unnessary?
+	Int string
 }
 
 type hebQueryClient interface {
@@ -158,11 +160,6 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		slog.InfoContext(ctx, "found heb staples for category", "count", len(ingredients), "category", category.Name, "location", locationID)
 		return ingredients, nil
 	})
-}
-
-func isCategoryNotFound(err error) bool {
-	var httpErr *CategoryHTTPError
-	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound
 }
 
 func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
