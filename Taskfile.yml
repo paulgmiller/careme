@@ -114,7 +114,7 @@ tasks:
       - docker-build-publix
       - docker-build-publixabck
       - docker-build-aldi
-      - docker-build-hebreese84
+      - docker-build-reese84
 
   docker-build-careme:
     desc: Build the careme image locally
@@ -170,14 +170,14 @@ tasks:
           CMD_PATH: ./cmd/aldi
           IMAGE: careme-aldi-local
 
-  docker-build-hebreese84:
-    desc: Build the hebreese84 image locally
+  docker-build-reese84:
+    desc: Build the reese84 image locally
     internal: true
     cmds:
       - task: docker-build
         vars:
-          CMD_PATH: ./cmd/hebreese84
-          IMAGE: careme-hebreese84-local
+          CMD_PATH: ./cmd/reese84
+          IMAGE: careme-reese84-local
 
   serve:
     desc: Run the local web server
