@@ -42,14 +42,10 @@ const (
 var defaultHEBStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
 
 type StapleCategory struct {
-	Name         string
-	ParentID     string
-	ChildID      string
-	CategoryPath string
-	Limit        int
-
-	// maybe unnessary?
-	Int string
+	Name     string
+	ParentID string
+	ChildID  string
+	Limit    int
 }
 
 type hebQueryClient interface {
@@ -134,13 +130,11 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
 		products, err := p.client.Category(ctx, CategoryOptions{
-			Reese84:      reese84,
-			StoreID:      storeID,
-			ParentID:     category.ParentID,
-			ChildID:      category.ChildID,
-			CategoryPath: category.CategoryPath,
-			Int:          category.Int,
-			Limit:        category.Limit,
+			Reese84:  reese84,
+			StoreID:  storeID,
+			ParentID: category.ParentID,
+			ChildID:  category.ChildID,
+			Limit:    category.Limit,
 		})
 		if err != nil {
 			slog.WarnContext(ctx, "failed to fetch heb category", "category", category.Name, "location", locationID, "error", err)
@@ -161,14 +155,14 @@ func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []st
 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
-		{Name: "beef", ParentID: CategoryBeefParent, ChildID: CategoryBeefChild, CategoryPath: "/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef", Int: "curbside-category-shortcuts.meat.beef", Limit: bigStapleLimit},
-		{Name: "pork", ParentID: CategoryPorkParent, ChildID: CategoryPorkChild, CategoryPath: "/category/shop/meat-seafood/meat/pork/490110/490536?int=curbside-category-shortcuts.meat.pork", Int: "curbside-category-shortcuts.meat.pork", Limit: bigStapleLimit},
-		{Name: "chicken", ParentID: CategoryChickenParent, ChildID: CategoryChickenChild, CategoryPath: "/category/shop/meat-seafood/meat/chicken/490110/490531?int=curbside-category-shortcuts.meat.chicken", Int: "curbside-category-shortcuts.meat.chicken", Limit: bigStapleLimit},
-		{Name: "sausage", ParentID: CategorySausageParent, ChildID: CategorySausageChild, CategoryPath: "/category/shop/meat-seafood/meat/sausage/490110/490537?int=curbside-category-shortcuts.meat.sausage", Int: "curbside-category-shortcuts.meat.sausage", Limit: defaultStapleLimit},
-		{Name: "fish", ParentID: CategoryFishParent, ChildID: CategoryFishChild, CategoryPath: "/category/shop/meat-seafood/seafood/fish/490111/490540?int=curbside-category-shortcuts.seafood.fish", Int: "curbside-category-shortcuts.seafood.fish", Limit: seafoodStapleLimit},
-		{Name: "shrimp", ParentID: CategoryShrimpParent, ChildID: CategoryShrimpChild, CategoryPath: "/category/shop/meat-seafood/seafood/shrimp-shellfish/490111/490541?int=curbside-category-shortcuts.seafood.shrimp", Int: "curbside-category-shortcuts.seafood.shrimp", Limit: seafoodStapleLimit},
-		{Name: "vegetables", ParentID: CategoryVegetablesParent, ChildID: CategoryVegetablesChild, CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083", Limit: produceStapleLimit},
-		{Name: "fruit", ParentID: CategoryFruitParent, ChildID: CategoryFruitChild, CategoryPath: "/category/shop/fruit-vegetables/fruit/490020/490082?int=curbside-category-shortcuts.fruit-vegetables.fruits", Int: "curbside-category-shortcuts.fruit-vegetables.fruits", Limit: produceStapleLimit},
+		{Name: "beef", ParentID: CategoryBeefParent, ChildID: CategoryBeefChild, Limit: bigStapleLimit},
+		{Name: "pork", ParentID: CategoryPorkParent, ChildID: CategoryPorkChild, Limit: bigStapleLimit},
+		{Name: "chicken", ParentID: CategoryChickenParent, ChildID: CategoryChickenChild, Limit: bigStapleLimit},
+		{Name: "sausage", ParentID: CategorySausageParent, ChildID: CategorySausageChild, Limit: defaultStapleLimit},
+		{Name: "fish", ParentID: CategoryFishParent, ChildID: CategoryFishChild, Limit: seafoodStapleLimit},
+		{Name: "shrimp", ParentID: CategoryShrimpParent, ChildID: CategoryShrimpChild, Limit: seafoodStapleLimit},
+		{Name: "vegetables", ParentID: CategoryVegetablesParent, ChildID: CategoryVegetablesChild, Limit: produceStapleLimit},
+		{Name: "fruit", ParentID: CategoryFruitParent, ChildID: CategoryFruitChild, Limit: produceStapleLimit},
 	}
 }
 

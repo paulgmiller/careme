@@ -58,8 +58,6 @@ func (s *stubHEBQueryClient) hasCall(want CategoryOptions) bool {
 			got.StoreID == want.StoreID &&
 			got.ParentID == want.ParentID &&
 			got.ChildID == want.ChildID &&
-			got.CategoryPath == want.CategoryPath &&
-			got.Int == want.Int &&
 			got.Limit == want.Limit
 	})
 }
@@ -121,13 +119,11 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 		t.Fatalf("unexpected call count: got %d want %d", got, want)
 	}
 	if !client.hasCall(CategoryOptions{
-		Reese84:      "cached-reese84",
-		StoreID:      "92",
-		ParentID:     CategoryPorkParent,
-		ChildID:      CategoryPorkChild,
-		CategoryPath: "/category/shop/meat-seafood/meat/pork/490110/490536?int=curbside-category-shortcuts.meat.pork",
-		Int:          "curbside-category-shortcuts.meat.pork",
-		Limit:        bigStapleLimit,
+		Reese84:  "cached-reese84",
+		StoreID:  "92",
+		ParentID: CategoryPorkParent,
+		ChildID:  CategoryPorkChild,
+		Limit:    bigStapleLimit,
 	}) {
 		t.Fatalf("missing pork category call")
 	}

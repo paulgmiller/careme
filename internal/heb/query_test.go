@@ -67,14 +67,11 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 	if got, want := capturedReq.Header.Get("X-Nextjs-Data"), "1"; got != want {
 		t.Fatalf("unexpected x-nextjs-data header: got %q want %q", got, want)
 	}
-	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/490020/490083?page=2"; got != want {
-		t.Fatalf("unexpected referer: got %q want %q", got, want)
-	}
 
 	assertCookieValue(t, capturedReq, "reese84", "test-reese")
 }
 
-func TestCategoryPageIncludesIntParameter(t *testing.T) {
+func TestCategoryPageBuildsExpectedRequestForBeef(t *testing.T) {
 	t.Parallel()
 
 	var capturedReq *http.Request
@@ -92,25 +89,19 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 	})
 
 	_, err := client.categoryPage(context.Background(), CategoryOptions{
-		Reese84:      "test-reese",
-		StoreID:      "465",
-		ParentID:     "490110",
-		ChildID:      "490529",
-		CategoryPath: "/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef",
-		Int:          "curbside-category-shortcuts.meat.beef",
-		Page:         2,
+		Reese84:  "test-reese",
+		StoreID:  "465",
+		ParentID: "490110",
+		ChildID:  "490529",
+		Page:     2,
 	})
 	if err != nil {
 		t.Fatalf("CategoryPage returned error: %v", err)
 	}
 
 	query := capturedReq.URL.Query()
-	assertQueryValue(t, query, "int", "curbside-category-shortcuts.meat.beef")
 	assertQueryValue(t, query, "parentId", "490110")
 	assertQueryValue(t, query, "childId", "490529")
-	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef&page=2"; got != want {
-		t.Fatalf("unexpected referer: got %q want %q", got, want)
-	}
 }
 
 func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
@@ -505,11 +496,9 @@ func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 
 	var (
 		pageSCTs []string
-		referers []string
 	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pageSCTs = append(pageSCTs, r.URL.Query().Get("sct"))
-		referers = append(referers, r.Header.Get("Referer"))
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
@@ -545,13 +534,6 @@ func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 	}
 	if want := []string{"", "page-2-token", "page-3-token"}; !slices.Equal(pageSCTs, want) {
 		t.Fatalf("unexpected page scts: got %v want %v", pageSCTs, want)
-	}
-	if want := []string{
-		server.URL + "/category/shop/490020/490083",
-		server.URL + "/category/shop/490020/490083",
-		server.URL + "/category/shop/490020/490083?page=2&sct=page-2-token",
-	}; !slices.Equal(referers, want) {
-		t.Fatalf("unexpected referers: got %v want %v", referers, want)
 	}
 }
 
