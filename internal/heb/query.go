@@ -39,7 +39,6 @@ type QueryClient struct {
 
 type QueryClientConfig struct {
 	BaseURL     string
-	BuildID     string
 	LoadBuildID loadBuildID
 	HTTPClient  *http.Client
 }
@@ -176,11 +175,8 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		httpClient = &http.Client{Timeout: defaultQueryTimeout}
 	}
 
-	buildID := strings.TrimSpace(cfg.BuildID)
-
 	return &QueryClient{
 		baseURL:     baseURL,
-		buildID:     buildID,
 		loadBuildID: cfg.LoadBuildID,
 		httpClient:  httpClient,
 		pageDelay:   defaultPageDelay,
@@ -336,11 +332,11 @@ func (c *QueryClient) refreshBuildID(ctx context.Context, staleBuildID string) (
 	c.buildIDMu.Lock()
 	defer c.buildIDMu.Unlock()
 
-	if current := c.buildID; current != "" && current != staleBuildID {
+	if current := c.buildID; current != staleBuildID {
 		slog.InfoContext(ctx, "using heb next data build id refreshed by another request", "build_id", current)
 		return current, nil
 	}
-	buildID, err := c.loadBuildID(ctx)
+	buildID, err := c.loadBuildID(ctx, staleBuildID)
 	if err != nil {
 		return "", fmt.Errorf("discover heb build id: %w", err)
 	}

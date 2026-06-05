@@ -26,8 +26,10 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 	defer server.Close()
 
 	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		BuildID:    "test-build",
+		BaseURL: server.URL,
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
+			return "test-build", nil
+		},
 		HTTPClient: server.Client(),
 	})
 
@@ -81,8 +83,10 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 	defer server.Close()
 
 	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		BuildID:    "test-build",
+		BaseURL: server.URL,
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
+			return "fresh-build", nil
+		},
 		HTTPClient: server.Client(),
 	})
 
@@ -126,7 +130,7 @@ func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
 		BaseURL:    server.URL,
 		HTTPClient: server.Client(),
 
-		LoadBuildID: func(_ context.Context) (string, error) {
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
 			buildIDLoads++
 			return "fresh-build", nil
 		},
@@ -171,14 +175,14 @@ func TestCategoryRefreshesBuildIDAfterFirstPage404(t *testing.T) {
 
 	client := NewQueryClient(QueryClientConfig{
 		BaseURL:    server.URL,
-		BuildID:    "stale-build",
 		HTTPClient: server.Client(),
 
-		LoadBuildID: func(_ context.Context) (string, error) {
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
 			buildIDLoads++
 			return "fresh-build", nil
 		},
 	})
+	client.buildID = "stale-build"
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
@@ -210,7 +214,7 @@ func TestCategoryReturnsBuildIDLoadError(t *testing.T) {
 	t.Parallel()
 
 	client := NewQueryClient(QueryClientConfig{
-		LoadBuildID: func(context.Context) (string, error) {
+		LoadBuildID: func(context.Context, string) (string, error) {
 			return "", errors.New("homepage blocked")
 		},
 	})
@@ -467,8 +471,10 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 	defer server.Close()
 
 	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		BuildID:    "test-build",
+		BaseURL: server.URL,
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
+			return "fresh-build", nil
+		},
 		HTTPClient: server.Client(),
 	})
 	client.pageDelay = -1
@@ -521,8 +527,10 @@ func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 	defer server.Close()
 
 	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		BuildID:    "test-build",
+		BaseURL: server.URL,
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
+			return "fresh-build", nil
+		},
 		HTTPClient: server.Client(),
 	})
 	client.pageDelay = -1
@@ -578,8 +586,10 @@ func TestCategoryStopsAtTotal(t *testing.T) {
 	defer server.Close()
 
 	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		BuildID:    "test-build",
+		BaseURL: server.URL,
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
+			return "fresh-build", nil
+		},
 		HTTPClient: server.Client(),
 	})
 	client.pageDelay = -1
@@ -614,8 +624,10 @@ func TestCategoryPageThrottlesRequestsAcrossCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		BuildID:    "test-build",
+		BaseURL: server.URL,
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
+			return "fresh-build", nil
+		},
 		HTTPClient: server.Client(),
 	})
 
@@ -664,8 +676,10 @@ func TestCategoryStopsAtLimit(t *testing.T) {
 	defer server.Close()
 
 	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		BuildID:    "test-build",
+		BaseURL: server.URL,
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
+			return "fresh-build", nil
+		},
 		HTTPClient: server.Client(),
 	})
 	client.pageDelay = -1
@@ -707,8 +721,10 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 	defer server.Close()
 
 	client := NewQueryClient(QueryClientConfig{
-		BaseURL:    server.URL,
-		BuildID:    "test-build",
+		BaseURL: server.URL,
+		LoadBuildID: func(_ context.Context, _ string) (string, error) {
+			return "fresh-build", nil
+		},
 		HTTPClient: server.Client(),
 	})
 	client.pageDelay = -1
@@ -820,8 +836,10 @@ func TestCategoryPageReturnsHTTPAndJSONErrors(t *testing.T) {
 			defer server.Close()
 
 			client := NewQueryClient(QueryClientConfig{
-				BaseURL:    server.URL,
-				BuildID:    "test-build",
+				BaseURL: server.URL,
+				LoadBuildID: func(_ context.Context, _ string) (string, error) {
+					return "fresh-build", nil
+				},
 				HTTPClient: server.Client(),
 			})
 

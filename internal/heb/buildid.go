@@ -29,7 +29,7 @@ type browserHTMLClient interface {
 }
 
 // interface?
-type loadBuildID func(context.Context) (string, error)
+type loadBuildID func(ctx context.Context, oldbuildId string) (string, error)
 
 type BuildIDRecord struct {
 	BuildID   string    `json:"build_id"`
@@ -55,7 +55,12 @@ func newBrightDataBuildIDLoaderFromEnv() (loadBuildID, error) {
 		return nil, fmt.Errorf("create Bright Data browser client for HEB build id: %w", err)
 	}
 
-	return func(ctx context.Context) (string, error) {
+	return func(ctx context.Context, oldbuildID string) (string, error) {
+		// check the cache first
+		if buildID, err := loadLatestBuildID(ctx, hebCache); err == nil && buildID != oldbuildID {
+			return buildID, nil
+		}
+
 		buildID, err := fetchBuildIDFromHomePage(ctx, browser, defaultBuildIDDiscoverWait)
 		if err != nil {
 			return "", err
@@ -112,6 +117,9 @@ func loadLatestBuildID(ctx context.Context, c cache.Cache) (string, error) {
 
 	reader, err := c.Get(ctx, BuildIDLatestCacheKey)
 	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			return "", nil
+		}
 		return "", err
 	}
 	defer func() {

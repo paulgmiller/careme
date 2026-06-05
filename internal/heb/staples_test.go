@@ -182,13 +182,7 @@ func TestNewStaplesProvider_LoadsHEBCachedReese84(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStaplesProvider returned error: %v", err)
 	}
-	queryClient, ok := provider.client.(*QueryClient)
-	if !ok {
-		t.Fatalf("expected *QueryClient, got %T", provider.client)
-	}
-	if queryClient.buildID != "cached-build" {
-		t.Fatalf("unexpected initial build id: %q", queryClient.buildID)
-	}
+
 	got, err := provider.loadReese84(t.Context())
 	if err != nil {
 		t.Fatalf("loadReese84 returned error: %v", err)

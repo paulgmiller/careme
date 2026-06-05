@@ -3,7 +3,6 @@ package heb
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -76,11 +75,6 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 	if err != nil {
 		return StaplesProvider{}, fmt.Errorf("create heb cache: %w", err)
 	}
-	buildID, err := loadLatestBuildID(context.Background(), hebCache)
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		// should we just call refresh if err not found here?
-		return StaplesProvider{}, fmt.Errorf("load cached heb build id: %w", err)
-	}
 	loadBuildID, err := newBrightDataBuildIDLoaderFromEnv()
 	if err != nil {
 		return StaplesProvider{}, err
@@ -97,7 +91,6 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 
 	return newStaplesProviderWithDeps(NewQueryClient(QueryClientConfig{
 		HTTPClient:  httpClient,
-		BuildID:     buildID,
 		LoadBuildID: loadBuildID,
 	}), loadReese84), nil
 }
