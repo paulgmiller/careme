@@ -8,6 +8,7 @@ import (
 	"fmt"
 	htmlstd "html"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -127,6 +128,11 @@ func loadLatestBuildID(ctx context.Context, c cache.Cache) (string, error) {
 	}
 	return buildID, nil
 }
+
+var (
+	nextStaticBuildIDRe = regexp.MustCompile(`/_next/static/([^/]+)/`)
+	nextDataBuildIDRe   = regexp.MustCompile(`/_next/data/([^/]+)/`)
+)
 
 func extractBuildID(body []byte) (string, error) {
 	doc, err := html.Parse(bytes.NewReader(body))

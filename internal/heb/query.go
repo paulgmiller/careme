@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,8 +47,6 @@ type QueryClientConfig struct {
 	BuildID     string
 	LoadBuildID loadBuildID
 	HTTPClient  *http.Client
-	MaxPages    int
-	PageDelay   time.Duration
 }
 
 type CategoryOptions struct {
@@ -64,13 +61,16 @@ type CategoryOptions struct {
 	Limit int
 
 	// may not be necessary
-	Int     string
-	Referer string
+	Int                string
+	Referer            string
+	SearchContextToken string
 }
 
 type CategoryPage struct {
-	Products []Product `json:"products"`
-	Page     int       `json:"page"`
+	Products           []Product `json:"products"`
+	Page               int       `json:"page"`
+	SearchContextToken string    `json:"searchContextToken,omitempty"`
+	Total              int       `json:"total,omitempty"`
 }
 
 type CategoryHTTPError struct {
@@ -170,11 +170,6 @@ type nextData struct {
 	BuildID string `json:"buildId"`
 }
 
-var (
-	nextStaticBuildIDRe = regexp.MustCompile(`/_next/static/([^/]+)/`)
-	nextDataBuildIDRe   = regexp.MustCompile(`/_next/data/([^/]+)/`)
-)
-
 func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
@@ -186,18 +181,6 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		httpClient = &http.Client{Timeout: defaultQueryTimeout}
 	}
 
-	maxPages := cfg.MaxPages
-	if maxPages <= 0 {
-		maxPages = defaultMaxPages
-	}
-	pageDelay := cfg.PageDelay
-	if pageDelay == 0 {
-		pageDelay = defaultPageDelay
-	}
-	if pageDelay < 0 {
-		pageDelay = 0
-	}
-
 	buildID := strings.TrimSpace(cfg.BuildID)
 
 	return &QueryClient{
@@ -205,8 +188,8 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		buildID:     buildID,
 		loadBuildID: cfg.LoadBuildID,
 		httpClient:  httpClient,
-		maxPages:    maxPages,
-		pageDelay:   pageDelay,
+		maxPages:    defaultMaxPages,
+		pageDelay:   defaultPageDelay,
 	}
 }
 
@@ -226,13 +209,15 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 		page = 1
 	}
 
-	seenProducts := make(map[string]struct{})
+	seenProducts := make(map[string]bool)
 	products := make([]Product, 0)
 	referer := strings.TrimSpace(opts.Referer)
+	searchContextToken := strings.TrimSpace(opts.SearchContextToken)
 	for pagesFetched := 0; pagesFetched < c.maxPages; pagesFetched++ {
 		pageOpts := opts
 		pageOpts.Page = page
 		pageOpts.Referer = referer
+		pageOpts.SearchContextToken = searchContextToken
 
 		staleBuildID := c.currentBuildID()
 		resp, err := c.CategoryPage(ctx, pageOpts)
@@ -262,12 +247,17 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 			slog.InfoContext(ctx, "category pagination stopped after limit", "page", page, "limit", opts.Limit)
 			return products, nil
 		}
+		if resp.Total > 0 && page*categoryPageSize >= resp.Total {
+			slog.InfoContext(ctx, "category pagination stopped after total", "page", page, "total", resp.Total)
+			return products, nil
+		}
 		if len(resp.Products) < categoryPageSize {
 			slog.InfoContext(ctx, "category pagination stopped after short page", "page", page, "count", len(resp.Products), "page_size", categoryPageSize)
 			return products, nil
 		}
 
 		referer = c.categoryPageURL(pageOpts, pageOpts.Page > 1)
+		searchContextToken = strings.TrimSpace(resp.SearchContextToken)
 		page++
 	}
 
@@ -279,7 +269,7 @@ func isCategoryNotFound(err error) bool {
 	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound
 }
 
-func appendNewProducts(products *[]Product, candidates []Product, seen map[string]struct{}, limit int) int {
+func appendNewProducts(products *[]Product, candidates []Product, seen map[string]bool, limit int) int {
 	var appended int
 	for _, product := range candidates {
 		if limit > 0 && len(*products) >= limit {
@@ -289,10 +279,10 @@ func appendNewProducts(products *[]Product, candidates []Product, seen map[strin
 		if id == "" {
 			continue
 		}
-		if _, ok := seen[id]; ok {
+		if seen[id] {
 			continue
 		}
-		seen[id] = struct{}{}
+		seen[id] = true
 		*products = append(*products, product)
 		appended++
 	}
@@ -340,12 +330,17 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 		return nil, &CategoryHTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 
-	products, err := decodeCategoryPagePayload(io.LimitReader(resp.Body, 8*1024*1024))
+	categoryPayload, err := decodeCategoryPagePayload(io.LimitReader(resp.Body, 8*1024*1024))
 	if err != nil {
 		return nil, err
 	}
 
-	return &CategoryPage{Products: products, Page: opts.Page}, nil
+	return &CategoryPage{
+		Products:           categoryPayload.Products,
+		Page:               opts.Page,
+		SearchContextToken: categoryPayload.SearchContextToken,
+		Total:              categoryPayload.Total,
+	}, nil
 }
 
 func (c *QueryClient) waitForCategoryRequestSlot(ctx context.Context) error {
@@ -419,6 +414,9 @@ func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (str
 	if intValue := strings.TrimSpace(opts.Int); intValue != "" {
 		query.Set("int", intValue)
 	}
+	if searchContextToken := strings.TrimSpace(opts.SearchContextToken); searchContextToken != "" {
+		query.Set("sct", searchContextToken)
+	}
 	endpoint.RawQuery = query.Encode()
 	return endpoint.String(), nil
 }
@@ -447,6 +445,9 @@ func (c *QueryClient) categoryPageURL(opts CategoryOptions, includePagination bo
 	query := parsed.Query()
 	if includePagination {
 		query.Set("page", strconv.Itoa(opts.Page))
+	}
+	if searchContextToken := strings.TrimSpace(opts.SearchContextToken); searchContextToken != "" {
+		query.Set("sct", searchContextToken)
 	}
 	parsed.RawQuery = query.Encode()
 	return parsed.String()
@@ -506,13 +507,19 @@ func queryAttrValue(n *html.Node, name string) string {
 	return ""
 }
 
-func decodeCategoryPagePayload(r io.Reader) ([]Product, error) {
+func decodeCategoryPagePayload(r io.Reader) (categoryPayload, error) {
 	var payload categoryResponse
 	if err := json.NewDecoder(r).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("decode category json response: %w", err)
+		return categoryPayload{}, fmt.Errorf("decode category json response: %w", err)
 	}
 
-	return payload.products(), nil
+	return payload.page(), nil
+}
+
+type categoryPayload struct {
+	Products           []Product
+	SearchContextToken string
+	Total              int
 }
 
 type categoryResponse struct {
@@ -528,24 +535,44 @@ type categoryLayout struct {
 }
 
 type categoryProductCollection struct {
-	Items []Product `json:"items"`
+	Items              []Product `json:"items"`
+	SearchContextToken string    `json:"searchContextToken"`
+	Total              int       `json:"total"`
 }
 
-func (r categoryResponse) products() []Product {
+func (r categoryResponse) page() categoryPayload {
 	seen := make(map[string]struct{})
-	return collectProducts(nil, r.PageProps, seen)
+	return categoryPayload{
+		Products:           collectProducts(nil, r.PageProps, seen),
+		SearchContextToken: r.PageProps.searchContextToken(),
+		Total:              r.PageProps.total(),
+	}
+}
+
+// a little worry that searchContextToken and total just pick first non blank one. Should at least pick same one?
+func (p categoryPageProps) searchContextToken() string {
+	for _, component := range p.Layout.VisualComponents {
+		if searchContextToken := strings.TrimSpace(component.SearchContextToken); searchContextToken != "" {
+			return searchContextToken
+		}
+	}
+	return ""
+}
+
+func (p categoryPageProps) total() int {
+	for _, component := range p.Layout.VisualComponents {
+		if component.Total > 0 {
+			return component.Total
+		}
+	}
+	return 0
 }
 
 func collectProducts(products []Product, page categoryPageProps, seen map[string]struct{}) []Product {
 	for _, component := range page.Layout.VisualComponents {
-		products = appendProducts(products, component.Items, seen)
-	}
-	return products
-}
-
-func appendProducts(products []Product, candidates []Product, seen map[string]struct{}) []Product {
-	for _, product := range candidates {
-		products = appendProduct(products, product, seen)
+		for _, product := range component.Items {
+			products = appendProduct(products, product, seen)
+		}
 	}
 	return products
 }
