@@ -36,6 +36,11 @@ type BuildIDRecord struct {
 }
 
 func newBrightDataBuildIDLoaderFromEnv() (loadBuildID, error) {
+	hebCache, err := cache.EnsureCache(Container)
+	if err != nil {
+		return nil, fmt.Errorf("create heb cache: %w", err)
+	}
+
 	// move to config?
 	wsEndpoint := strings.TrimSpace(os.Getenv(brightDataBrowserWSEnv))
 	if wsEndpoint == "" {
@@ -50,7 +55,14 @@ func newBrightDataBuildIDLoaderFromEnv() (loadBuildID, error) {
 	}
 
 	return func(ctx context.Context) (string, error) {
-		return fetchBuildIDFromHomePage(ctx, browser, defaultBuildIDDiscoverWait)
+		buildID, err := fetchBuildIDFromHomePage(ctx, browser, defaultBuildIDDiscoverWait)
+		if err != nil {
+			return "", err
+		}
+		if err := saveLatestBuildID(ctx, hebCache, buildID); err != nil {
+			return "", err
+		}
+		return buildID, nil
 	}, nil
 }
 

@@ -76,27 +76,18 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 	}
 	buildID, err := loadLatestBuildID(context.Background(), hebCache)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		// should we just call refresh if err not found here?
 		return StaplesProvider{}, fmt.Errorf("load cached heb build id: %w", err)
 	}
-	buildIDLoader := func(ctx context.Context) (string, error) {
-		loader, err := newBrightDataBuildIDLoaderFromEnv()
-		if err != nil {
-			return "", err
-		}
-		buildID, err := loader(ctx)
-		if err != nil {
-			return "", err
-		}
-		if err := saveLatestBuildID(ctx, hebCache, buildID); err != nil {
-			return "", err
-		}
-		return buildID, nil
+	loader, err := newBrightDataBuildIDLoaderFromEnv()
+	if err != nil {
+		return StaplesProvider{}, err
 	}
 
 	return newStaplesProviderWithDeps(NewQueryClient(QueryClientConfig{
 		HTTPClient:  httpClient,
 		BuildID:     buildID,
-		LoadBuildID: buildIDLoader,
+		LoadBuildID: loader,
 	}), func(ctx context.Context) (string, error) {
 		record, err := LoadLatestReese84(ctx, hebCache)
 		if err != nil {
