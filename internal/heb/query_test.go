@@ -8,8 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
@@ -31,6 +34,7 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 		BaseURL:    server.URL,
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
+		PageDelay:  -1,
 	})
 
 	page, err := client.CategoryPage(context.Background(), CategoryOptions{
@@ -86,6 +90,7 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 		BaseURL:    server.URL,
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
+		PageDelay:  -1,
 	})
 
 	_, err := client.CategoryPage(context.Background(), CategoryOptions{
@@ -110,6 +115,43 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 	}
 }
 
+func TestCategoryPageIncludesSCTParameter(t *testing.T) {
+	t.Parallel()
+
+	var capturedReq *http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedReq = r
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+	}))
+	defer server.Close()
+
+	client := NewQueryClient(QueryClientConfig{
+		BaseURL:    server.URL,
+		BuildID:    "test-build",
+		HTTPClient: server.Client(),
+		PageDelay:  -1,
+	})
+
+	_, err := client.CategoryPage(context.Background(), CategoryOptions{
+		Reese84:  "test-reese",
+		StoreID:  "465",
+		ParentID: "490110",
+		ChildID:  "490529",
+		Page:     3,
+		SCT:      "page-token",
+	})
+	if err != nil {
+		t.Fatalf("CategoryPage returned error: %v", err)
+	}
+
+	query := capturedReq.URL.Query()
+	assertQueryValue(t, query, "sct", "page-token")
+	if got, want := capturedReq.Header.Get("Referer"), server.URL+"/category/shop/490110/490529?page=3&sct=page-token"; got != want {
+		t.Fatalf("unexpected referer: got %q want %q", got, want)
+	}
+}
+
 func TestCategoryPageRequiresBuildID(t *testing.T) {
 	t.Parallel()
 
@@ -121,6 +163,7 @@ func TestCategoryPageRequiresBuildID(t *testing.T) {
 	client := NewQueryClient(QueryClientConfig{
 		BaseURL:    server.URL,
 		HTTPClient: server.Client(),
+		PageDelay:  -1,
 	})
 
 	_, err := client.CategoryPage(context.Background(), CategoryOptions{
@@ -236,6 +279,30 @@ func TestDecodeCategoryPayloadExtractsProducts(t *testing.T) {
 	}
 }
 
+func TestDecodeCategoryPagePayloadExtractsSCT(t *testing.T) {
+	t.Parallel()
+
+	page, err := decodeCategoryPagePayload([]byte(`{
+		"props":{
+			"pageProps":{
+				"categoryData":{
+					"products":[{"id":"p1","displayName":"Apples"}],
+					"sct":"next-page-token"
+				}
+			}
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("decodeCategoryPagePayload returned error: %v", err)
+	}
+	if got, want := page.SCT, "next-page-token"; got != want {
+		t.Fatalf("unexpected sct: got %q want %q", got, want)
+	}
+	if len(page.Products) != 1 {
+		t.Fatalf("expected 1 product, got %d", len(page.Products))
+	}
+}
+
 func TestDecodeCategoryPayloadExtractsNormalizedProductObjects(t *testing.T) {
 	t.Parallel()
 
@@ -292,9 +359,9 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p1","displayName":"Apples"}]}}}`)
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize, ""))
 		case "2":
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p2","displayName":"Broccoli"}]}}}`)
+			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, 2, ""))
 		case "3":
 			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
 		default:
@@ -307,6 +374,7 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 		BaseURL:    server.URL,
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
+		PageDelay:  -1,
 	})
 
 	products, err := client.Category(context.Background(), CategoryOptions{
@@ -318,27 +386,35 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Category returned error: %v", err)
 	}
-	if len(products) != 2 {
-		t.Fatalf("expected 2 products, got %d", len(products))
+	if len(products) != categoryPageSize+2 {
+		t.Fatalf("expected %d products, got %d", categoryPageSize+2, len(products))
 	}
-	if got, want := products[0].ID, "p1"; got != want {
+	if got, want := products[0].ID, "p-1"; got != want {
 		t.Fatalf("unexpected first product: got %q want %q", got, want)
 	}
-	if got, want := products[1].ID, "p2"; got != want {
+	if got, want := products[categoryPageSize].ID, "p-81"; got != want {
 		t.Fatalf("unexpected second product: got %q want %q", got, want)
 	}
 }
 
-func TestCategoryStopsAtLimit(t *testing.T) {
+func TestCategoryCarriesSCTBetweenPages(t *testing.T) {
 	t.Parallel()
 
+	var (
+		pageSCTs []string
+		referers []string
+	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pageSCTs = append(pageSCTs, r.URL.Query().Get("sct"))
+		referers = append(referers, r.Header.Get("Referer"))
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p1","displayName":"Apples"},{"id":"p2","displayName":"Bananas"}]}}}`)
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize, "page-2-token"))
 		case "2":
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p3","displayName":"Broccoli"},{"id":"p4","displayName":"Carrots"}]}}}`)
+			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, categoryPageSize, "page-3-token"))
+		case "3":
+			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
 		default:
 			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
 		}
@@ -349,6 +425,7 @@ func TestCategoryStopsAtLimit(t *testing.T) {
 		BaseURL:    server.URL,
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
+		PageDelay:  -1,
 	})
 
 	products, err := client.Category(context.Background(), CategoryOptions{
@@ -356,15 +433,101 @@ func TestCategoryStopsAtLimit(t *testing.T) {
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
-		Limit:    3,
 	})
 	if err != nil {
 		t.Fatalf("Category returned error: %v", err)
 	}
-	if len(products) != 3 {
-		t.Fatalf("expected 3 products, got %d", len(products))
+	if len(products) != categoryPageSize*2 {
+		t.Fatalf("expected %d products, got %d", categoryPageSize*2, len(products))
 	}
-	if got, want := products[2].ID, "p3"; got != want {
+	if want := []string{"", "page-2-token", "page-3-token"}; !slices.Equal(pageSCTs, want) {
+		t.Fatalf("unexpected page scts: got %v want %v", pageSCTs, want)
+	}
+	if want := []string{
+		server.URL + "/category/shop/490020/490083",
+		server.URL + "/category/shop/490020/490083",
+		server.URL + "/category/shop/490020/490083?page=2&sct=page-2-token",
+	}; !slices.Equal(referers, want) {
+		t.Fatalf("unexpected referers: got %v want %v", referers, want)
+	}
+}
+
+func TestCategoryPageThrottlesRequestsAcrossCalls(t *testing.T) {
+	t.Parallel()
+
+	requestTimes := make(chan time.Time, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestTimes <- time.Now()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[]}}}`)
+	}))
+	defer server.Close()
+
+	client := NewQueryClient(QueryClientConfig{
+		BaseURL:    server.URL,
+		BuildID:    "test-build",
+		HTTPClient: server.Client(),
+		PageDelay:  20 * time.Millisecond,
+	})
+
+	opts := CategoryOptions{
+		Reese84:  "test-reese",
+		StoreID:  "92",
+		ParentID: "490020",
+		ChildID:  "490083",
+	}
+	if _, err := client.CategoryPage(context.Background(), opts); err != nil {
+		t.Fatalf("first CategoryPage returned error: %v", err)
+	}
+	opts.ChildID = "490082"
+	if _, err := client.CategoryPage(context.Background(), opts); err != nil {
+		t.Fatalf("second CategoryPage returned error: %v", err)
+	}
+
+	first := <-requestTimes
+	second := <-requestTimes
+	if elapsed := second.Sub(first); elapsed < 15*time.Millisecond {
+		t.Fatalf("expected throttled requests, elapsed %s", elapsed)
+	}
+}
+
+func TestCategoryStopsAtLimit(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("page") {
+		case "1":
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize, ""))
+		case "2":
+			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, 4, ""))
+		default:
+			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
+		}
+	}))
+	defer server.Close()
+
+	client := NewQueryClient(QueryClientConfig{
+		BaseURL:    server.URL,
+		BuildID:    "test-build",
+		HTTPClient: server.Client(),
+		PageDelay:  -1,
+	})
+
+	products, err := client.Category(context.Background(), CategoryOptions{
+		Reese84:  "test-reese",
+		StoreID:  "92",
+		ParentID: "490020",
+		ChildID:  "490083",
+		Limit:    categoryPageSize + 3,
+	})
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+	if len(products) != categoryPageSize+3 {
+		t.Fatalf("expected %d products, got %d", categoryPageSize+3, len(products))
+	}
+	if got, want := products[categoryPageSize+2].ID, "p-83"; got != want {
 		t.Fatalf("unexpected limited product: got %q want %q", got, want)
 	}
 }
@@ -376,7 +539,7 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 		switch r.URL.Query().Get("page") {
 		case "1":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, `{"props":{"pageProps":{"products":[{"id":"p1","displayName":"Apples"}]}}}`)
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize, ""))
 		case "2":
 			http.NotFound(w, r)
 		default:
@@ -389,6 +552,7 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 		BaseURL:    server.URL,
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
+		PageDelay:  -1,
 	})
 
 	products, err := client.Category(context.Background(), CategoryOptions{
@@ -400,8 +564,8 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Category returned error: %v", err)
 	}
-	if len(products) != 1 {
-		t.Fatalf("expected 1 product, got %d", len(products))
+	if len(products) != categoryPageSize {
+		t.Fatalf("expected %d products, got %d", categoryPageSize, len(products))
 	}
 }
 
@@ -500,6 +664,7 @@ func TestCategoryPageReturnsHTTPAndJSONErrors(t *testing.T) {
 				BaseURL:    server.URL,
 				BuildID:    "test-build",
 				HTTPClient: server.Client(),
+				PageDelay:  -1,
 			})
 
 			_, err := client.CategoryPage(context.Background(), CategoryOptions{
@@ -520,7 +685,11 @@ func TestCategoryReturnsMaxPagesError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"props":{"pageProps":{"products":[{"id":"p%s","displayName":"Product"}]}}}`, r.URL.Query().Get("page"))
+		page, err := strconv.Atoi(r.URL.Query().Get("page"))
+		if err != nil {
+			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
+		}
+		_, _ = io.WriteString(w, categoryProductsJSON("p", ((page-1)*categoryPageSize)+1, categoryPageSize, ""))
 	}))
 	defer server.Close()
 
@@ -529,6 +698,7 @@ func TestCategoryReturnsMaxPagesError(t *testing.T) {
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
 		MaxPages:   2,
+		PageDelay:  -1,
 	})
 
 	_, err := client.Category(context.Background(), CategoryOptions{
@@ -572,4 +742,22 @@ func assertCookieValue(t *testing.T, req *http.Request, name, want string) {
 	if cookie.Value != want {
 		t.Fatalf("unexpected cookie %s: got %q want %q", name, cookie.Value, want)
 	}
+}
+
+func categoryProductsJSON(prefix string, start, count int, sct string) string {
+	var b strings.Builder
+	b.WriteString(`{"props":{"pageProps":{"products":[`)
+	for i := 0; i < count; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		id := start + i
+		_, _ = fmt.Fprintf(&b, `{"id":"%s-%d","displayName":"Product %d"}`, prefix, id, id)
+	}
+	b.WriteByte(']')
+	if sct != "" {
+		_, _ = fmt.Fprintf(&b, `,"sct":%q`, sct)
+	}
+	b.WriteString(`}}}`)
+	return b.String()
 }

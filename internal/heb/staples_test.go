@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/albertsons"
 	"careme/internal/cache"
 )
 
@@ -52,6 +51,47 @@ func (s *stubHEBQueryClient) Category(_ context.Context, opts CategoryOptions) (
 	}
 	key := opts.ParentID + ":" + opts.ChildID
 	return s.results[key], nil
+}
+
+type concurrencyDetectingHEBQueryClient struct {
+	mu             sync.Mutex
+	active         int
+	maxActive      int
+	calls          int
+	releaseStarted chan struct{}
+	release        chan struct{}
+}
+
+func (s *concurrencyDetectingHEBQueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Product, error) {
+	s.mu.Lock()
+	s.active++
+	s.calls++
+	if s.active > s.maxActive {
+		s.maxActive = s.active
+	}
+	s.mu.Unlock()
+
+	select {
+	case s.releaseStarted <- struct{}{}:
+	default:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.release:
+	}
+
+	s.mu.Lock()
+	s.active--
+	s.mu.Unlock()
+	return []Product{{ID: opts.ChildID, DisplayName: opts.ChildID}}, nil
+}
+
+func (s *concurrencyDetectingHEBQueryClient) stats() (int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls, s.maxActive
 }
 
 func (s *stubHEBQueryClient) callCount() int {
@@ -161,6 +201,48 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 		AisleNumber: "Meat Market",
 		Categories:  []string{"Meat & seafood", "Meat", "Pork"},
 	})
+}
+
+func TestStaplesProvider_FetchesCategoriesSequentially(t *testing.T) {
+	t.Parallel()
+
+	client := &concurrencyDetectingHEBQueryClient{
+		releaseStarted: make(chan struct{}, 1),
+		release:        make(chan struct{}),
+	}
+	provider := newStaplesProviderWithClient(client, func(context.Context) (string, error) {
+		return "cached-reese84", nil
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := provider.FetchStaples(t.Context(), "heb_92")
+		done <- err
+	}()
+
+	for range StapleCategories() {
+		select {
+		case <-client.releaseStarted:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for category fetch")
+		}
+		select {
+		case client.release <- struct{}{}:
+		case <-time.After(time.Second):
+			t.Fatal("timed out releasing category fetch")
+		}
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("FetchStaples returned error: %v", err)
+	}
+	calls, maxActive := client.stats()
+	if calls != len(StapleCategories()) {
+		t.Fatalf("unexpected call count: got %d want %d", calls, len(StapleCategories()))
+	}
+	if maxActive != 1 {
+		t.Fatalf("expected sequential category fetches, max active was %d", maxActive)
+	}
 }
 
 func TestStaplesProvider_RefreshesBuildIDWhenMissing(t *testing.T) {
@@ -281,7 +363,7 @@ func TestStaplesProvider_ReturnsBuildIDLoadError(t *testing.T) {
 	}
 }
 
-func TestNewStaplesProvider_LoadsAlbertsonsCachedReese84(t *testing.T) {
+func TestNewStaplesProvider_LoadsHEBCachedReese84(t *testing.T) {
 	unsetEnvForTest(t, "AZURE_STORAGE_ACCOUNT_NAME")
 	unsetEnvForTest(t, "AZURE_STORAGE_PRIMARY_ACCOUNT_KEY")
 	t.Setenv(brightDataBrowserWSEnv, "wss://user:pass@example.com")
@@ -298,20 +380,16 @@ func TestNewStaplesProvider_LoadsAlbertsonsCachedReese84(t *testing.T) {
 		_ = os.Chdir(oldWD)
 	})
 
-	albertsonsCache, err := cache.EnsureCache(albertsons.Container)
+	hebCache, err := cache.EnsureCache(Container)
 	if err != nil {
 		t.Fatalf("EnsureCache returned error: %v", err)
 	}
-	if err := albertsons.SaveReese84Record(t.Context(), albertsonsCache, albertsons.CookieRecord{
-		Cookie:    "cached-albertsons-reese84",
+	if err := SaveReese84Record(t.Context(), hebCache, Reese84Record{
+		Cookie:    "cached-heb-reese84",
 		FetchedAt: time.Date(2026, time.June, 1, 12, 0, 0, 0, time.UTC),
 		Provider:  "test",
 	}); err != nil {
 		t.Fatalf("SaveReese84Record returned error: %v", err)
-	}
-	hebCache, err := cache.EnsureCache(Container)
-	if err != nil {
-		t.Fatalf("EnsureCache returned error: %v", err)
 	}
 	if err := SaveLatestBuildID(t.Context(), hebCache, "cached-build"); err != nil {
 		t.Fatalf("SaveLatestBuildID returned error: %v", err)
@@ -332,7 +410,7 @@ func TestNewStaplesProvider_LoadsAlbertsonsCachedReese84(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadReese84 returned error: %v", err)
 	}
-	if got != "cached-albertsons-reese84" {
+	if got != "cached-heb-reese84" {
 		t.Fatalf("unexpected reese84 token: %q", got)
 	}
 }

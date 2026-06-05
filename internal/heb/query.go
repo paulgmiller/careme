@@ -25,6 +25,8 @@ const (
 
 	defaultQueryTimeout = 20 * time.Second
 	defaultMaxPages     = 20
+	defaultPageDelay    = 5 * time.Second
+	categoryPageSize    = 50
 )
 
 var ErrBuildIDRequired = errors.New("heb next data build id is required")
@@ -34,9 +36,12 @@ type QueryClient struct {
 	baseURL    string
 	httpClient *http.Client
 	maxPages   int
+	pageDelay  time.Duration
 
-	buildIDMu sync.Mutex
-	buildID   string
+	buildIDMu             sync.Mutex
+	buildID               string
+	categoryRequestMu     sync.Mutex
+	lastCategoryRequestAt time.Time
 }
 
 type QueryClientConfig struct {
@@ -44,6 +49,7 @@ type QueryClientConfig struct {
 	BuildID    string
 	HTTPClient *http.Client
 	MaxPages   int
+	PageDelay  time.Duration
 }
 
 type CategoryOptions struct {
@@ -53,12 +59,15 @@ type CategoryOptions struct {
 	ChildID      string
 	CategoryPath string
 	Int          string
+	SCT          string
+	Referer      string
 	Page         int
 	Limit        int
 }
 
 type CategoryPage struct {
 	Products []Product       `json:"products"`
+	SCT      string          `json:"sct,omitempty"`
 	Page     int             `json:"page"`
 	Raw      json.RawMessage `json:"-"`
 }
@@ -151,6 +160,13 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 	if maxPages <= 0 {
 		maxPages = defaultMaxPages
 	}
+	pageDelay := cfg.PageDelay
+	if pageDelay == 0 {
+		pageDelay = defaultPageDelay
+	}
+	if pageDelay < 0 {
+		pageDelay = 0
+	}
 
 	buildID := strings.TrimSpace(cfg.BuildID)
 
@@ -159,6 +175,7 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		buildID:    buildID,
 		httpClient: httpClient,
 		maxPages:   maxPages,
+		pageDelay:  pageDelay,
 	}
 }
 
@@ -191,9 +208,13 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 
 	seenProducts := make(map[string]struct{})
 	products := make([]Product, 0)
+	sct := strings.TrimSpace(opts.SCT)
+	referer := strings.TrimSpace(opts.Referer)
 	for pagesFetched := 0; pagesFetched < c.maxPages; pagesFetched++ {
 		pageOpts := opts
 		pageOpts.Page = page
+		pageOpts.SCT = sct
+		pageOpts.Referer = referer
 
 		resp, err := c.CategoryPage(ctx, pageOpts)
 		if err != nil {
@@ -216,7 +237,15 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 			slog.InfoContext(ctx, "category pagination stopped after limit", "page", page, "limit", opts.Limit)
 			return products, nil
 		}
+		if len(resp.Products) < categoryPageSize {
+			slog.InfoContext(ctx, "category pagination stopped after short page", "page", page, "count", len(resp.Products), "page_size", categoryPageSize)
+			return products, nil
+		}
 
+		if nextSCT := strings.TrimSpace(resp.SCT); nextSCT != "" {
+			sct = nextSCT
+		}
+		referer = c.categoryPageURL(pageOpts, pageOpts.Page > 1 && strings.TrimSpace(pageOpts.SCT) != "")
 		page++
 	}
 
@@ -267,6 +296,10 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 	}
 	c.setCategoryHeaders(req, opts)
 
+	if err := c.waitForCategoryRequestSlot(ctx); err != nil {
+		return nil, err
+	}
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request %q: %w", endpoint, err)
@@ -285,16 +318,38 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 		return nil, fmt.Errorf("read category response: %w", err)
 	}
 
-	products, err := decodeCategoryPayload(body)
+	page, err := decodeCategoryPagePayload(body)
 	if err != nil {
 		return nil, err
 	}
 
-	return &CategoryPage{
-		Products: products,
-		Page:     opts.Page,
-		Raw:      body,
-	}, nil
+	page.Page = opts.Page
+	page.Raw = body
+	return page, nil
+}
+
+func (c *QueryClient) waitForCategoryRequestSlot(ctx context.Context) error {
+	if c.pageDelay <= 0 {
+		return nil
+	}
+
+	c.categoryRequestMu.Lock()
+	defer c.categoryRequestMu.Unlock()
+
+	if !c.lastCategoryRequestAt.IsZero() {
+		wait := c.pageDelay - time.Since(c.lastCategoryRequestAt)
+		if wait > 0 {
+			timer := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+		}
+	}
+	c.lastCategoryRequestAt = time.Now()
+	return nil
 }
 
 func (c *QueryClient) resolveBuildID(ctx context.Context, opts CategoryOptions) (string, error) {
@@ -320,6 +375,9 @@ func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (str
 	if intValue := strings.TrimSpace(opts.Int); intValue != "" {
 		query.Set("int", intValue)
 	}
+	if sct := strings.TrimSpace(opts.SCT); sct != "" {
+		query.Set("sct", sct)
+	}
 	endpoint.RawQuery = query.Encode()
 	return endpoint.String(), nil
 }
@@ -328,8 +386,32 @@ func (c *QueryClient) setCategoryHeaders(req *http.Request, opts CategoryOptions
 	c.setStoreCookies(req, opts)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Referer", c.baseURL+c.categoryPagePath(opts))
+	req.Header.Set("Referer", c.categoryReferer(opts))
 	req.Header.Set("X-Nextjs-Data", "1")
+}
+
+func (c *QueryClient) categoryReferer(opts CategoryOptions) string {
+	if referer := strings.TrimSpace(opts.Referer); referer != "" {
+		return referer
+	}
+	return c.categoryPageURL(opts, opts.Page > 1 && strings.TrimSpace(opts.SCT) != "")
+}
+
+func (c *QueryClient) categoryPageURL(opts CategoryOptions, includePagination bool) string {
+	rawURL := c.baseURL + c.categoryPagePath(opts)
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	query := parsed.Query()
+	if includePagination {
+		query.Set("page", strconv.Itoa(opts.Page))
+		if sct := strings.TrimSpace(opts.SCT); sct != "" {
+			query.Set("sct", sct)
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func (c *QueryClient) categoryPagePath(opts CategoryOptions) string {
@@ -434,6 +516,14 @@ func queryAttrValue(n *html.Node, name string) string {
 }
 
 func decodeCategoryPayload(body []byte) ([]Product, error) {
+	page, err := decodeCategoryPagePayload(body)
+	if err != nil {
+		return nil, err
+	}
+	return page.Products, nil
+}
+
+func decodeCategoryPagePayload(body []byte) (*CategoryPage, error) {
 	var root any
 	if err := json.Unmarshal(body, &root); err != nil {
 		return nil, fmt.Errorf("decode category json response: %w, %s", err, body)
@@ -443,7 +533,30 @@ func decodeCategoryPayload(body []byte) ([]Product, error) {
 	if err != nil {
 		return nil, err
 	}
-	return products, nil
+	return &CategoryPage{Products: products, SCT: extractSCT(root)}, nil
+}
+
+func extractSCT(root any) string {
+	var sct string
+	walkQueryJSON(root, func(value any) {
+		if sct != "" {
+			return
+		}
+		obj, ok := value.(map[string]any)
+		if !ok {
+			return
+		}
+		for key, child := range obj {
+			if !strings.EqualFold(key, "sct") {
+				continue
+			}
+			if value, ok := child.(string); ok {
+				sct = strings.TrimSpace(value)
+				return
+			}
+		}
+	})
+	return sct
 }
 
 func extractProducts(root any) ([]Product, error) {

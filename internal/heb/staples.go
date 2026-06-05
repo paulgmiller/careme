@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"careme/internal/ai"
-	"careme/internal/albertsons"
 	"careme/internal/cache"
 	"careme/internal/parallelism"
 
@@ -80,13 +79,9 @@ func NewIdentityProvider() identityProvider {
 }
 
 func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
-	albertsonsCache, err := cache.EnsureCache(albertsons.Container)
-	if err != nil {
-		return StaplesProvider{}, fmt.Errorf("create albertsons cache for HEB reese84 token: %w", err)
-	}
 	hebCache, err := cache.EnsureCache(Container)
 	if err != nil {
-		return StaplesProvider{}, fmt.Errorf("create heb cache for build id: %w", err)
+		return StaplesProvider{}, fmt.Errorf("create heb cache: %w", err)
 	}
 	buildID, err := LoadLatestBuildID(context.Background(), hebCache)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
@@ -104,9 +99,9 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 		HTTPClient: httpClient,
 		BuildID:    buildID,
 	}), func(ctx context.Context) (string, error) {
-		record, err := albertsons.LoadLatestReese84(ctx, albertsonsCache)
+		record, err := LoadLatestReese84(ctx, hebCache)
 		if err != nil {
-			return "", fmt.Errorf("load cached albertsons reese84 token for HEB: %w", err)
+			return "", fmt.Errorf("load cached heb reese84 token: %w", err)
 		}
 		slog.InfoContext(ctx, "reese84", "token", record.Cookie)
 		return record.Cookie, nil
