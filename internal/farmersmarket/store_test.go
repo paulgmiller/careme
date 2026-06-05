@@ -168,6 +168,24 @@ func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "location saved")
 }
 
+func TestHandleGetRendersClerkRefreshData(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	handler := NewHandler(
+		NewStore(cache.NewInMemoryCache(), staticZipFinder{zip: "98101", ok: true}),
+		fakeUserLookup{user: &utypes.User{ID: "user_123", Email: []string{"chef@example.com"}}},
+		auth.DefaultMock(),
+		&fakeExtractor{},
+		staticZipFinder{zip: "98101", ok: true},
+	)
+	req := httptest.NewRequest(http.MethodGet, "/farmersmarket", nil)
+	rr := httptest.NewRecorder()
+
+	handler.handleGet(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Farmers market finds")
+}
+
 func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 	handler := NewHandler(
 		NewStore(cache.NewInMemoryCache(), staticZipFinder{zip: "98101", ok: true}),

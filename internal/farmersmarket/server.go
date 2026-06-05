@@ -25,7 +25,7 @@ import (
 const (
 	maxUploadBytes      = 90 << 20
 	maxPhotoBytes       = 10 << 20
-	maxPhotoCount       = 8
+	maxPhotoCount       = 15
 	storeDayStartHour   = 9
 	farmersMarketAction = "/farmersmarket"
 )
@@ -52,6 +52,7 @@ type pageData struct {
 	GoogleTagScript template.HTML
 	Style           seasons.Style
 	User            *utypes.User
+	ServerSignedIn  bool
 }
 
 type uploadedPhoto struct {
@@ -170,6 +171,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, user *utypes.Us
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
 		User:            user,
+		ServerSignedIn:  user != nil,
 	}
 	if err := templates.FarmersMarket.Execute(w, data); err != nil {
 		slog.ErrorContext(r.Context(), "farmers market template execute error", "error", err)

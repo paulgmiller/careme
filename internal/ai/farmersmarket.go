@@ -21,9 +21,9 @@ type FarmersMarketPhoto struct {
 
 type farmersMarketIngredientItem struct {
 	Name       string   `json:"name" jsonschema:"required"`
-	Brand      string   `json:"brand,omitempty"`
-	Size       string   `json:"size,omitempty"`
-	Categories []string `json:"categories,omitempty"`
+	Brand      string   `json:"brand" jsonschema:"required"`
+	Size       string   `json:"size" jsonschema:"required"`
+	Categories []string `json:"categories" jsonschema:"required"`
 }
 
 type farmersMarketIngredientResponse struct {
@@ -40,8 +40,8 @@ Skip non-food items, people, signs that are not tied to a food item, decorations
 For each ingredient:
 - name: plain ingredient name, such as "heirloom tomatoes", "rainier cherries", or "fresh eggs".
 - brand: if a farm, stall, vendor, or store name is visible near that ingredient on a sign, label, tag, crate, tent, or package, use that visible name. If no clear source name is visible, use "Farmers market".
-- size: include a visible package or unit only if useful, such as "1 pint", "per lb", "1 bunch", or "dozen".
-- categories: short grocery categories, such as "produce", "fruit", "vegetables", "herbs", "eggs", "meat", "seafood", "dairy", "bakery", or "pantry".
+- size: include a visible package or unit only if useful, such as "1 pint", "per lb", "1 bunch", or "dozen"; otherwise use an empty string.
+- categories: short grocery categories, such as "produce", "fruit", "vegetables", "herbs", "eggs", "meat", "seafood", "dairy", "bakery", or "pantry"; use an empty array if no category is clear.
 
 Do not invent prices, brands, farms, sizes, or ingredients that are not visible. Return JSON only.`
 
