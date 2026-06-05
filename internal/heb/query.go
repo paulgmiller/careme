@@ -371,7 +371,7 @@ func (c *QueryClient) refreshBuildID(ctx context.Context, opts CategoryOptions, 
 		return "", errors.New("heb build id loader is required")
 	}
 
-	buildID, err := c.loadBuildID(ctx, buildIDOptions{Reese84: opts.Reese84})
+	buildID, err := c.loadBuildID(ctx)
 	if err != nil {
 		return "", fmt.Errorf("discover heb build id: %w", err)
 	}

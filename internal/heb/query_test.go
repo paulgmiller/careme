@@ -189,11 +189,8 @@ func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
 		BaseURL:    server.URL,
 		HTTPClient: server.Client(),
 		PageDelay:  -1,
-		LoadBuildID: func(_ context.Context, opts buildIDOptions) (string, error) {
+		LoadBuildID: func(_ context.Context) (string, error) {
 			buildIDLoads++
-			if opts.Reese84 != "test-reese" {
-				return "", fmt.Errorf("unexpected reese84: %q", opts.Reese84)
-			}
 			return "fresh-build", nil
 		},
 	})
@@ -239,11 +236,8 @@ func TestCategoryRefreshesBuildIDAfterFirstPage404(t *testing.T) {
 		BuildID:    "stale-build",
 		HTTPClient: server.Client(),
 		PageDelay:  -1,
-		LoadBuildID: func(_ context.Context, opts buildIDOptions) (string, error) {
+		LoadBuildID: func(_ context.Context) (string, error) {
 			buildIDLoads++
-			if opts.Reese84 != "test-reese" {
-				return "", fmt.Errorf("unexpected reese84: %q", opts.Reese84)
-			}
 			return "fresh-build", nil
 		},
 	})
@@ -277,7 +271,7 @@ func TestCategoryReturnsBuildIDLoadError(t *testing.T) {
 	t.Parallel()
 
 	client := NewQueryClient(QueryClientConfig{
-		LoadBuildID: func(context.Context, buildIDOptions) (string, error) {
+		LoadBuildID: func(context.Context) (string, error) {
 			return "", errors.New("homepage blocked")
 		},
 	})

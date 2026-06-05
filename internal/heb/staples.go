@@ -78,12 +78,12 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return StaplesProvider{}, fmt.Errorf("load cached heb build id: %w", err)
 	}
-	buildIDLoader := func(ctx context.Context, opts buildIDOptions) (string, error) {
+	buildIDLoader := func(ctx context.Context) (string, error) {
 		loader, err := newBrightDataBuildIDLoaderFromEnv()
 		if err != nil {
 			return "", err
 		}
-		buildID, err := loader(ctx, opts)
+		buildID, err := loader(ctx)
 		if err != nil {
 			return "", err
 		}

@@ -23,11 +23,7 @@ type browserHTMLClient interface {
 	HTML(ctx context.Context, targetURL string, opts brightdata.BrowserOptions) (string, error)
 }
 
-type loadBuildID func(context.Context, buildIDOptions) (string, error)
-
-type buildIDOptions struct {
-	Reese84 string
-}
+type loadBuildID func(context.Context) (string, error)
 
 type BuildIDRecord struct {
 	BuildID   string    `json:"build_id"`
@@ -47,7 +43,7 @@ func newBrightDataBuildIDLoaderFromEnv() (loadBuildID, error) {
 		return nil, fmt.Errorf("create Bright Data browser client for HEB build id: %w", err)
 	}
 
-	return func(ctx context.Context, _ buildIDOptions) (string, error) {
+	return func(ctx context.Context) (string, error) {
 		return fetchBuildIDFromHomePage(ctx, browser, defaultBuildIDDiscoverWait)
 	}, nil
 }
