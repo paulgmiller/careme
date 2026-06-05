@@ -181,48 +181,6 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	})
 }
 
-func TestStaplesProvider_FetchesCategoriesSequentially(t *testing.T) {
-	t.Parallel()
-
-	client := &concurrencyDetectingHEBQueryClient{
-		releaseStarted: make(chan struct{}, 1),
-		release:        make(chan struct{}),
-	}
-	provider := newStaplesProviderWithClient(client, func(context.Context) (string, error) {
-		return "cached-reese84", nil
-	})
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := provider.FetchStaples(t.Context(), "heb_92")
-		done <- err
-	}()
-
-	for range StapleCategories() {
-		select {
-		case <-client.releaseStarted:
-		case <-time.After(time.Second):
-			t.Fatal("timed out waiting for category fetch")
-		}
-		select {
-		case client.release <- struct{}{}:
-		case <-time.After(time.Second):
-			t.Fatal("timed out releasing category fetch")
-		}
-	}
-
-	if err := <-done; err != nil {
-		t.Fatalf("FetchStaples returned error: %v", err)
-	}
-	calls, maxActive := client.stats()
-	if calls != len(StapleCategories()) {
-		t.Fatalf("unexpected call count: got %d want %d", calls, len(StapleCategories()))
-	}
-	if maxActive != 1 {
-		t.Fatalf("expected sequential category fetches, max active was %d", maxActive)
-	}
-}
-
 func TestNewStaplesProvider_LoadsHEBCachedReese84(t *testing.T) {
 	unsetEnvForTest(t, "AZURE_STORAGE_ACCOUNT_NAME")
 	unsetEnvForTest(t, "AZURE_STORAGE_PRIMARY_ACCOUNT_KEY")

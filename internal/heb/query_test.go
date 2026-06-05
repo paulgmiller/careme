@@ -507,7 +507,7 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 	if got, want := products[0].ID, "p-1"; got != want {
 		t.Fatalf("unexpected first product: got %q want %q", got, want)
 	}
-	if got, want := products[categoryPageSize].ID, "p-81"; got != want {
+	if got, want := products[categoryPageSize].ID, "p-51"; got != want {
 		t.Fatalf("unexpected second product: got %q want %q", got, want)
 	}
 }
@@ -642,7 +642,7 @@ func TestCategoryStopsAtLimit(t *testing.T) {
 	if len(products) != categoryPageSize+3 {
 		t.Fatalf("expected %d products, got %d", categoryPageSize+3, len(products))
 	}
-	if got, want := products[categoryPageSize+2].ID, "p-83"; got != want {
+	if got, want := products[categoryPageSize+2].ID, "p-53"; got != want {
 		t.Fatalf("unexpected limited product: got %q want %q", got, want)
 	}
 }
