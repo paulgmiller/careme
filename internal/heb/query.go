@@ -32,11 +32,13 @@ type QueryClient struct {
 	baseURL    string
 	httpClient *http.Client
 	maxPages   int
-	pageDelay  time.Duration
 
-	buildIDMu             sync.Mutex
-	buildID               string
-	loadBuildID           loadBuildID
+	buildIDMu   sync.Mutex
+	buildID     string
+	loadBuildID loadBuildID
+
+	// is this stopping bot blockcing? unclear
+	pageDelay             time.Duration
 	categoryRequestMu     sync.Mutex
 	lastCategoryRequestAt time.Time
 }
@@ -63,15 +65,12 @@ type CategoryOptions struct {
 
 	// may not be necessary
 	Int     string
-	SCT     string
 	Referer string
 }
 
 type CategoryPage struct {
-	Products []Product       `json:"products"`
-	SCT      string          `json:"sct,omitempty"`
-	Page     int             `json:"page"`
-	Raw      json.RawMessage `json:"-"`
+	Products []Product `json:"products"`
+	Page     int       `json:"page"`
 }
 
 type CategoryHTTPError struct {
@@ -230,12 +229,10 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 
 	seenProducts := make(map[string]struct{})
 	products := make([]Product, 0)
-	sct := strings.TrimSpace(opts.SCT)
 	referer := strings.TrimSpace(opts.Referer)
 	for pagesFetched := 0; pagesFetched < c.maxPages; pagesFetched++ {
 		pageOpts := opts
 		pageOpts.Page = page
-		pageOpts.SCT = sct
 		pageOpts.Referer = referer
 
 		staleBuildID := c.currentBuildID()
@@ -271,10 +268,7 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 			return products, nil
 		}
 
-		if nextSCT := strings.TrimSpace(resp.SCT); nextSCT != "" {
-			sct = nextSCT
-		}
-		referer = c.categoryPageURL(pageOpts, pageOpts.Page > 1 && strings.TrimSpace(pageOpts.SCT) != "")
+		referer = c.categoryPageURL(pageOpts, pageOpts.Page > 1)
 		page++
 	}
 
@@ -347,19 +341,12 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 		return nil, &CategoryHTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
-	if err != nil {
-		return nil, fmt.Errorf("read category response: %w", err)
-	}
-
-	page, err := decodeCategoryPagePayload(body)
+	products, err := decodeCategoryPagePayload(io.LimitReader(resp.Body, 8*1024*1024))
 	if err != nil {
 		return nil, err
 	}
 
-	page.Page = opts.Page
-	page.Raw = body
-	return page, nil
+	return &CategoryPage{Products: products, Page: opts.Page}, nil
 }
 
 func (c *QueryClient) waitForCategoryRequestSlot(ctx context.Context) error {
@@ -433,9 +420,6 @@ func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (str
 	if intValue := strings.TrimSpace(opts.Int); intValue != "" {
 		query.Set("int", intValue)
 	}
-	if sct := strings.TrimSpace(opts.SCT); sct != "" {
-		query.Set("sct", sct)
-	}
 	endpoint.RawQuery = query.Encode()
 	return endpoint.String(), nil
 }
@@ -452,7 +436,7 @@ func (c *QueryClient) categoryReferer(opts CategoryOptions) string {
 	if referer := strings.TrimSpace(opts.Referer); referer != "" {
 		return referer
 	}
-	return c.categoryPageURL(opts, opts.Page > 1 && strings.TrimSpace(opts.SCT) != "")
+	return c.categoryPageURL(opts, opts.Page > 1)
 }
 
 func (c *QueryClient) categoryPageURL(opts CategoryOptions, includePagination bool) string {
@@ -464,9 +448,6 @@ func (c *QueryClient) categoryPageURL(opts CategoryOptions, includePagination bo
 	query := parsed.Query()
 	if includePagination {
 		query.Set("page", strconv.Itoa(opts.Page))
-		if sct := strings.TrimSpace(opts.SCT); sct != "" {
-			query.Set("sct", sct)
-		}
 	}
 	parsed.RawQuery = query.Encode()
 	return parsed.String()
@@ -526,48 +507,13 @@ func queryAttrValue(n *html.Node, name string) string {
 	return ""
 }
 
-func decodeCategoryPayload(body []byte) ([]Product, error) {
-	page, err := decodeCategoryPagePayload(body)
-	if err != nil {
-		return nil, err
-	}
-	return page.Products, nil
-}
-
-func decodeCategoryPagePayload(body []byte) (*CategoryPage, error) {
+func decodeCategoryPagePayload(r io.Reader) ([]Product, error) {
 	var root any
-	if err := json.Unmarshal(body, &root); err != nil {
-		return nil, fmt.Errorf("decode category json response: %w, %s", err, body)
+	if err := json.NewDecoder(r).Decode(&root); err != nil {
+		return nil, fmt.Errorf("decode category json response: %w", err)
 	}
 
-	products, err := extractProducts(root)
-	if err != nil {
-		return nil, err
-	}
-	return &CategoryPage{Products: products, SCT: extractSCT(root)}, nil
-}
-
-func extractSCT(root any) string {
-	var sct string
-	walkQueryJSON(root, func(value any) {
-		if sct != "" {
-			return
-		}
-		obj, ok := value.(map[string]any)
-		if !ok {
-			return
-		}
-		for key, child := range obj {
-			if !strings.EqualFold(key, "sct") {
-				continue
-			}
-			if value, ok := child.(string); ok {
-				sct = strings.TrimSpace(value)
-				return
-			}
-		}
-	})
-	return sct
+	return extractProducts(root)
 }
 
 func extractProducts(root any) ([]Product, error) {
