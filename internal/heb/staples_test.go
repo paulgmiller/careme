@@ -209,7 +209,7 @@ func TestNewStaplesProvider_LoadsHEBCachedReese84(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SaveReese84Record returned error: %v", err)
 	}
-	if err := SaveLatestBuildID(t.Context(), hebCache, "cached-build"); err != nil {
+	if err := saveLatestBuildID(t.Context(), hebCache, "cached-build"); err != nil {
 		t.Fatalf("SaveLatestBuildID returned error: %v", err)
 	}
 

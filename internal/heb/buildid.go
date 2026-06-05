@@ -67,7 +67,7 @@ func fetchBuildIDFromHomePage(ctx context.Context, browser browserHTMLClient, wa
 	return buildID, nil
 }
 
-func SaveLatestBuildID(ctx context.Context, c cache.Cache, buildID string) error {
+func saveLatestBuildID(ctx context.Context, c cache.Cache, buildID string) error {
 	if c == nil {
 		return errors.New("cache is required")
 	}
@@ -90,7 +90,7 @@ func SaveLatestBuildID(ctx context.Context, c cache.Cache, buildID string) error
 	return nil
 }
 
-func LoadLatestBuildID(ctx context.Context, c cache.Cache) (string, error) {
+func loadLatestBuildID(ctx context.Context, c cache.Cache) (string, error) {
 	if c == nil {
 		return "", errors.New("cache is required")
 	}

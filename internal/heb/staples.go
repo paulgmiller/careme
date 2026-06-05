@@ -74,7 +74,7 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 	if err != nil {
 		return StaplesProvider{}, fmt.Errorf("create heb cache: %w", err)
 	}
-	buildID, err := LoadLatestBuildID(context.Background(), hebCache)
+	buildID, err := loadLatestBuildID(context.Background(), hebCache)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return StaplesProvider{}, fmt.Errorf("load cached heb build id: %w", err)
 	}
@@ -87,7 +87,7 @@ func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
 		if err != nil {
 			return "", err
 		}
-		if err := SaveLatestBuildID(ctx, hebCache, buildID); err != nil {
+		if err := saveLatestBuildID(ctx, hebCache, buildID); err != nil {
 			return "", err
 		}
 		return buildID, nil

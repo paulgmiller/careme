@@ -68,11 +68,11 @@ func TestSaveAndLoadLatestBuildID(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
-	if err := SaveLatestBuildID(t.Context(), cacheStore, " fresh-build "); err != nil {
+	if err := saveLatestBuildID(t.Context(), cacheStore, " fresh-build "); err != nil {
 		t.Fatalf("SaveLatestBuildID returned error: %v", err)
 	}
 
-	got, err := LoadLatestBuildID(t.Context(), cacheStore)
+	got, err := loadLatestBuildID(t.Context(), cacheStore)
 	if err != nil {
 		t.Fatalf("LoadLatestBuildID returned error: %v", err)
 	}
