@@ -198,7 +198,7 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 		return nil, err
 	}
 
-	page := min(opts.Page, 1)
+	page := max(opts.Page, 1)
 
 	products := make([]Product, 0)
 	referer := strings.TrimSpace(opts.Referer)
@@ -211,14 +211,14 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 		pageOpts.SearchContextToken = searchContextToken
 
 		staleBuildID := c.currentBuildID()
-		resp, err := c.CategoryPage(ctx, pageOpts)
+		resp, err := c.categoryPage(ctx, pageOpts)
 
 		// can we only get a build id change at start?
 		if firstFetch && isCategoryNotFound(err) {
 			if _, refreshErr := c.refreshBuildID(ctx, pageOpts, staleBuildID); refreshErr != nil {
 				return nil, refreshErr
 			}
-			resp, err = c.CategoryPage(ctx, pageOpts)
+			resp, err = c.categoryPage(ctx, pageOpts)
 		}
 		if err != nil {
 			if !firstFetch {
@@ -238,7 +238,7 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 			slog.InfoContext(ctx, "category pagination stopped after limit", "page", page, "limit", opts.Limit)
 			return products, nil
 		}
-		if len(products) >= resp.Total {
+		if resp.Total > 0 && len(products) >= resp.Total {
 			slog.InfoContext(ctx, "category pagination stopped after total", "page", page, "total", resp.Total)
 			return products, nil
 		}
@@ -254,14 +254,7 @@ func isCategoryNotFound(err error) bool {
 	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound
 }
 
-func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*CategoryPage, error) {
-	if err := opts.validate(); err != nil {
-		return nil, err
-	}
-	if opts.Page <= 0 {
-		opts.Page = 1
-	}
-
+func (c *QueryClient) categoryPage(ctx context.Context, opts CategoryOptions) (*CategoryPage, error) {
 	buildID, err := c.resolveBuildID(ctx, opts)
 	if err != nil {
 		return nil, err
@@ -295,9 +288,11 @@ func (c *QueryClient) CategoryPage(ctx context.Context, opts CategoryOptions) (*
 		return nil, &CategoryHTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 
+	// magic number limit reader
 	return decodeCategoryPagePayload(io.LimitReader(resp.Body, 8*1024*1024), opts.Page)
 }
 
+// can we do this smarter? is it even necessary?
 func (c *QueryClient) waitForCategoryRequestSlot(ctx context.Context) error {
 	if c.pageDelay <= 0 {
 		return nil
@@ -435,6 +430,9 @@ func (opts CategoryOptions) validate() error {
 	if strings.TrimSpace(opts.ChildID) == "" {
 		return errors.New("child category id is required")
 	}
+	if opts.Limit <= 0 {
+		return errors.New("need a positive limit")
+	}
 	return nil
 }
 
@@ -461,7 +459,10 @@ func decodeCategoryPagePayload(r io.Reader, page int) (*CategoryPage, error) {
 
 	var products []Product
 	for _, component := range payload.PageProps.Layout.VisualComponents {
-		products = append(products, component.Items...)
+		for _, product := range component.Items {
+			product.ListPrice, product.SalePrice = productPrices(product)
+			products = append(products, product)
+		}
 	}
 
 	return &CategoryPage{
@@ -535,11 +536,3 @@ func displayPriceAmount(price *DisplayPrice) *float32 {
 }
 
 // Are there non products in item?
-func isDecodedProduct(product Product) bool {
-	if strings.EqualFold(product.TypeName, "Product") {
-		return true
-	}
-	return strings.TrimSpace(product.DisplayName) != "" ||
-		strings.TrimSpace(product.FullDisplayName) != "" ||
-		strings.TrimSpace(product.DecodedDisplayName) != ""
-}

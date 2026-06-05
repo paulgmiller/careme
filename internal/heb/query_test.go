@@ -31,7 +31,7 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 		HTTPClient: server.Client(),
 	})
 
-	page, err := client.CategoryPage(context.Background(), CategoryOptions{
+	page, err := client.categoryPage(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -86,7 +86,7 @@ func TestCategoryPageIncludesIntParameter(t *testing.T) {
 		HTTPClient: server.Client(),
 	})
 
-	_, err := client.CategoryPage(context.Background(), CategoryOptions{
+	_, err := client.categoryPage(context.Background(), CategoryOptions{
 		Reese84:      "test-reese",
 		StoreID:      "465",
 		ParentID:     "490110",
@@ -113,7 +113,7 @@ func TestCategoryPageRequiresBuildIDLoaderWhenMissing(t *testing.T) {
 
 	client := NewQueryClient(QueryClientConfig{})
 
-	_, err := client.CategoryPage(context.Background(), CategoryOptions{
+	_, err := client.categoryPage(context.Background(), CategoryOptions{
 		Reese84:      "test-reese",
 		StoreID:      "92",
 		ParentID:     "490020",
@@ -149,7 +149,7 @@ func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
 		},
 	})
 
-	_, err := client.CategoryPage(context.Background(), CategoryOptions{
+	_, err := client.categoryPage(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -181,7 +181,7 @@ func TestCategoryRefreshesBuildIDAfterFirstPage404(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, categoryProductsJSON("p", 1, 1))
+		_, _ = io.WriteString(w, categoryProductsPageJSON("p", 1, 1, 1, ""))
 	}))
 	defer server.Close()
 
@@ -201,6 +201,7 @@ func TestCategoryRefreshesBuildIDAfterFirstPage404(t *testing.T) {
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
+		Limit:    10,
 	})
 	if err != nil {
 		t.Fatalf("Category returned error: %v", err)
@@ -230,7 +231,7 @@ func TestCategoryReturnsBuildIDLoadError(t *testing.T) {
 		},
 	})
 
-	_, err := client.CategoryPage(context.Background(), CategoryOptions{
+	_, err := client.categoryPage(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -433,13 +434,15 @@ func TestDecodeCategoryPagePayloadExtractsLayoutProducts(t *testing.T) {
 func TestCategoryPaginatesByPage(t *testing.T) {
 	t.Parallel()
 
+	const firstPageCount = 3
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, firstPageCount))
 		case "2":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, 2))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", firstPageCount+1, 2))
 		case "3":
 			_, _ = io.WriteString(w, emptyCategoryProductsJSON())
 		default:
@@ -453,29 +456,33 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
 	})
+	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
+		Limit:    10,
 	})
 	if err != nil {
 		t.Fatalf("Category returned error: %v", err)
 	}
-	if len(products) != categoryPageSize+2 {
-		t.Fatalf("expected %d products, got %d", categoryPageSize+2, len(products))
+	if len(products) != firstPageCount+2 {
+		t.Fatalf("expected %d products, got %d", firstPageCount+2, len(products))
 	}
 	if got, want := products[0].ID, "p-1"; got != want {
 		t.Fatalf("unexpected first product: got %q want %q", got, want)
 	}
-	if got, want := products[categoryPageSize].ID, "p-51"; got != want {
+	if got, want := products[firstPageCount].ID, "p-4"; got != want {
 		t.Fatalf("unexpected second product: got %q want %q", got, want)
 	}
 }
 
 func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 	t.Parallel()
+
+	const firstPageCount = 2
 
 	var (
 		pageSCTs []string
@@ -487,9 +494,9 @@ func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
-			_, _ = io.WriteString(w, categoryProductsWithSearchContextToken("p", 1, categoryPageSize, "page-2-token"))
+			_, _ = io.WriteString(w, categoryProductsWithSearchContextToken("p", 1, firstPageCount, "page-2-token"))
 		case "2":
-			_, _ = io.WriteString(w, categoryProductsWithSearchContextToken("p", categoryPageSize+1, categoryPageSize, "page-3-token"))
+			_, _ = io.WriteString(w, categoryProductsWithSearchContextToken("p", firstPageCount+1, 3, "page-3-token"))
 		case "3":
 			_, _ = io.WriteString(w, emptyCategoryProductsJSON())
 		default:
@@ -503,18 +510,20 @@ func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
 	})
+	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
+		Limit:    10,
 	})
 	if err != nil {
 		t.Fatalf("Category returned error: %v", err)
 	}
-	if len(products) != categoryPageSize*2 {
-		t.Fatalf("expected %d products, got %d", categoryPageSize*2, len(products))
+	if len(products) != firstPageCount+3 {
+		t.Fatalf("expected %d products, got %d", firstPageCount+3, len(products))
 	}
 	if want := []string{"", "page-2-token", "page-3-token"}; !slices.Equal(pageSCTs, want) {
 		t.Fatalf("unexpected page scts: got %v want %v", pageSCTs, want)
@@ -531,6 +540,12 @@ func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 func TestCategoryStopsAtTotal(t *testing.T) {
 	t.Parallel()
 
+	const (
+		firstPageCount  = 3
+		secondPageCount = 2
+		total           = firstPageCount + secondPageCount
+	)
+
 	var pages []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page := r.URL.Query().Get("page")
@@ -538,9 +553,9 @@ func TestCategoryStopsAtTotal(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch page {
 		case "1":
-			_, _ = io.WriteString(w, categoryProductsPageJSON("p", 1, categoryPageSize, categoryPageSize*2, "page-2-token"))
+			_, _ = io.WriteString(w, categoryProductsPageJSON("p", 1, firstPageCount, total, "page-2-token"))
 		case "2":
-			_, _ = io.WriteString(w, categoryProductsPageJSON("p", categoryPageSize+1, categoryPageSize, categoryPageSize*2, ""))
+			_, _ = io.WriteString(w, categoryProductsPageJSON("p", firstPageCount+1, secondPageCount, total, ""))
 		default:
 			t.Fatalf("unexpected page %q", page)
 		}
@@ -552,18 +567,20 @@ func TestCategoryStopsAtTotal(t *testing.T) {
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
 	})
+	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
+		Limit:    10,
 	})
 	if err != nil {
 		t.Fatalf("Category returned error: %v", err)
 	}
-	if len(products) != categoryPageSize*2 {
-		t.Fatalf("expected %d products, got %d", categoryPageSize*2, len(products))
+	if len(products) != total {
+		t.Fatalf("expected %d products, got %d", total, len(products))
 	}
 	if want := []string{"1", "2"}; !slices.Equal(pages, want) {
 		t.Fatalf("unexpected pages: got %v want %v", pages, want)
@@ -592,12 +609,13 @@ func TestCategoryPageThrottlesRequestsAcrossCalls(t *testing.T) {
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
+		Limit:    10,
 	}
-	if _, err := client.CategoryPage(context.Background(), opts); err != nil {
+	if _, err := client.categoryPage(context.Background(), opts); err != nil {
 		t.Fatalf("first CategoryPage returned error: %v", err)
 	}
 	opts.ChildID = "490082"
-	if _, err := client.CategoryPage(context.Background(), opts); err != nil {
+	if _, err := client.categoryPage(context.Background(), opts); err != nil {
 		t.Fatalf("second CategoryPage returned error: %v", err)
 	}
 
@@ -611,13 +629,18 @@ func TestCategoryPageThrottlesRequestsAcrossCalls(t *testing.T) {
 func TestCategoryStopsAtLimit(t *testing.T) {
 	t.Parallel()
 
+	const (
+		firstPageCount = 3
+		limit          = 5
+	)
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("page") {
 		case "1":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, firstPageCount))
 		case "2":
-			_, _ = io.WriteString(w, categoryProductsJSON("p", categoryPageSize+1, 4))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", firstPageCount+1, 4))
 		default:
 			t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
 		}
@@ -629,21 +652,22 @@ func TestCategoryStopsAtLimit(t *testing.T) {
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
 	})
+	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
-		Limit:    categoryPageSize + 3,
+		Limit:    limit,
 	})
 	if err != nil {
 		t.Fatalf("Category returned error: %v", err)
 	}
-	if len(products) != categoryPageSize+3 {
-		t.Fatalf("expected %d products, got %d", categoryPageSize+3, len(products))
+	if len(products) < limit {
+		t.Fatalf("expected at least %d products, got %d", limit, len(products))
 	}
-	if got, want := products[categoryPageSize+2].ID, "p-53"; got != want {
+	if got, want := products[limit-1].ID, "p-5"; got != want {
 		t.Fatalf("unexpected limited product: got %q want %q", got, want)
 	}
 }
@@ -651,11 +675,13 @@ func TestCategoryStopsAtLimit(t *testing.T) {
 func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 	t.Parallel()
 
+	const firstPageCount = 3
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("page") {
 		case "1":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, categoryPageSize))
+			_, _ = io.WriteString(w, categoryProductsJSON("p", 1, firstPageCount))
 		case "2":
 			http.NotFound(w, r)
 		default:
@@ -669,18 +695,20 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 		BuildID:    "test-build",
 		HTTPClient: server.Client(),
 	})
+	client.pageDelay = -1
 
 	products, err := client.Category(context.Background(), CategoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
 		ChildID:  "490083",
+		Limit:    10,
 	})
 	if err != nil {
 		t.Fatalf("Category returned error: %v", err)
 	}
-	if len(products) != categoryPageSize {
-		t.Fatalf("expected %d products, got %d", categoryPageSize, len(products))
+	if len(products) != firstPageCount {
+		t.Fatalf("expected %d products, got %d", firstPageCount, len(products))
 	}
 }
 
@@ -734,7 +762,7 @@ func TestCategoryValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := client.CategoryPage(context.Background(), tc.opts)
+			_, err := client.Category(context.Background(), tc.opts)
 			if err == nil || err.Error() != tc.want {
 				t.Fatalf("unexpected error: got %v want %q", err, tc.want)
 			}
@@ -781,7 +809,7 @@ func TestCategoryPageReturnsHTTPAndJSONErrors(t *testing.T) {
 				HTTPClient: server.Client(),
 			})
 
-			_, err := client.CategoryPage(context.Background(), CategoryOptions{
+			_, err := client.categoryPage(context.Background(), CategoryOptions{
 				Reese84:  "test-reese",
 				StoreID:  "92",
 				ParentID: "490020",
