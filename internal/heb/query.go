@@ -38,19 +38,12 @@ type QueryClientConfig struct {
 }
 
 type CategoryOptions struct {
-	Reese84  string
-	StoreID  string
-	ParentID string
-	ChildID  string
-	// can produce some of this by above two ids?
-	CategoryPath string
-
-	Page  int
-	Limit int
-
-	// may not be necessary
-	Int                string
-	Referer            string
+	Reese84            string
+	StoreID            string
+	ParentID           string
+	ChildID            string
+	Page               int
+	Limit              int
 	SearchContextToken string
 }
 
@@ -186,13 +179,11 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 	page := max(opts.Page, 1)
 
 	products := make([]Product, 0)
-	referer := strings.TrimSpace(opts.Referer)
 	searchContextToken := strings.TrimSpace(opts.SearchContextToken)
 	firstFetch := true
 	for {
 		pageOpts := opts
 		pageOpts.Page = page
-		pageOpts.Referer = referer
 		pageOpts.SearchContextToken = searchContextToken
 
 		staleBuildID := c.currentBuildID()
@@ -228,7 +219,6 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 			return products, nil
 		}
 
-		referer = c.categoryPageURL(pageOpts, pageOpts.Page > 1)
 		searchContextToken = strings.TrimSpace(resp.SearchContextToken)
 		page++
 	}
@@ -317,9 +307,6 @@ func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (str
 	query.Set("page", strconv.Itoa(opts.Page))
 	query.Set("parentId", opts.ParentID)
 	query.Set("childId", opts.ChildID)
-	if intValue := strings.TrimSpace(opts.Int); intValue != "" {
-		query.Set("int", intValue)
-	}
 	if searchContextToken := strings.TrimSpace(opts.SearchContextToken); searchContextToken != "" {
 		query.Set("sct", searchContextToken)
 	}
@@ -331,39 +318,7 @@ func (c *QueryClient) setCategoryHeaders(req *http.Request, opts CategoryOptions
 	c.setStoreCookies(req, opts)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Referer", c.categoryReferer(opts))
 	req.Header.Set("X-Nextjs-Data", "1")
-}
-
-func (c *QueryClient) categoryReferer(opts CategoryOptions) string {
-	if referer := strings.TrimSpace(opts.Referer); referer != "" {
-		return referer
-	}
-	return c.categoryPageURL(opts, opts.Page > 1)
-}
-
-func (c *QueryClient) categoryPageURL(opts CategoryOptions, includePagination bool) string {
-	rawURL := c.baseURL + c.categoryPagePath(opts)
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-	query := parsed.Query()
-	if includePagination {
-		query.Set("page", strconv.Itoa(opts.Page))
-	}
-	if searchContextToken := strings.TrimSpace(opts.SearchContextToken); searchContextToken != "" {
-		query.Set("sct", searchContextToken)
-	}
-	parsed.RawQuery = query.Encode()
-	return parsed.String()
-}
-
-func (c *QueryClient) categoryPagePath(opts CategoryOptions) string {
-	if path := normalizeCategoryPath(opts.CategoryPath); path != "" {
-		return path
-	}
-	return "/category/shop/" + url.PathEscape(opts.ParentID) + "/" + url.PathEscape(opts.ChildID)
 }
 
 func (c *QueryClient) setStoreCookies(req *http.Request, opts CategoryOptions) {
@@ -390,21 +345,6 @@ func (opts CategoryOptions) validate() error {
 		return errors.New("need a positive limit")
 	}
 	return nil
-}
-
-func normalizeCategoryPath(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" && parsed.Host != "" {
-		value = parsed.Path
-	}
-	value = "/" + strings.Trim(value, "/")
-	if !strings.HasPrefix(value, "/category/shop/") {
-		return ""
-	}
-	return value
 }
 
 func decodeCategoryPagePayload(r io.Reader, page int) (*CategoryPage, error) {
