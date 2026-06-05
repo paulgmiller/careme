@@ -494,9 +494,7 @@ func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 
 	const firstPageCount = 2
 
-	var (
-		pageSCTs []string
-	)
+	var pageSCTs []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pageSCTs = append(pageSCTs, r.URL.Query().Get("sct"))
 		w.Header().Set("Content-Type", "application/json")
