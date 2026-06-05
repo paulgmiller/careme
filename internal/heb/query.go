@@ -215,7 +215,7 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 
 		// can we only get a build id change at start?
 		if firstFetch && isCategoryNotFound(err) {
-			if _, refreshErr := c.refreshBuildID(ctx, pageOpts, staleBuildID); refreshErr != nil {
+			if _, refreshErr := c.refreshBuildID(ctx, staleBuildID); refreshErr != nil {
 				return nil, refreshErr
 			}
 			resp, err = c.categoryPage(ctx, pageOpts)
@@ -256,7 +256,7 @@ func isCategoryNotFound(err error) bool {
 
 func (c *QueryClient) categoryPage(ctx context.Context, opts CategoryOptions) (*CategoryPage, error) {
 	if opts.Page <= 0 {
-		return nil, errors.New("Page must be positive")
+		return nil, errors.New("page must be positive")
 	}
 
 	buildID, err := c.resolveBuildID(ctx, opts)
@@ -329,10 +329,10 @@ func (c *QueryClient) resolveBuildID(ctx context.Context, opts CategoryOptions) 
 	if buildID != "" {
 		return buildID, nil
 	}
-	return c.refreshBuildID(ctx, opts, "")
+	return c.refreshBuildID(ctx, "")
 }
 
-func (c *QueryClient) refreshBuildID(ctx context.Context, opts CategoryOptions, staleBuildID string) (string, error) {
+func (c *QueryClient) refreshBuildID(ctx context.Context, staleBuildID string) (string, error) {
 	c.buildIDMu.Lock()
 	defer c.buildIDMu.Unlock()
 
