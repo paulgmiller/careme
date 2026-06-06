@@ -256,24 +256,23 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 }
 
 func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
-	storeIDs := []string{
-		"wholefoods_10153",
-		"safeway_490",
-		"70500874",
-		"starmarket_3566",
-		"acmemarkets_806",
-		"publix_1847",
-		"aldi_F219",
+	stores := []locations.Location{
+		{ID: "wholefoods_10153", ZipCode: "97209"},
+		{ID: "safeway_490", ZipCode: "86403"},
+		{ID: "70500874", ZipCode: "98101"},
+		{ID: "starmarket_3566", ZipCode: "02108"},
+		{ID: "acmemarkets_806", ZipCode: "19711"},
+		{ID: "publix_1847", ZipCode: "35401"},
+		{ID: "aldi_F219", ZipCode: "40222"},
 	}
-	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]ai.InputIngredient, error) {
-		return s.FetchStaples(ctx, DefaultParams(&locations.Location{ID: storeID}, watchdogDate(nowFn())))
+	_, err := parallelism.Flatten(stores, func(store locations.Location) ([]ai.InputIngredient, error) {
+		date, err := StoreToDate(ctx, nowFn(), &store)
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchStaples(ctx, DefaultParams(&store, date))
 	})
 	return err
-}
-
-func watchdogDate(now time.Time) time.Time {
-	now = now.UTC()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func staplesSignatureForLocation(locationID string) string {
