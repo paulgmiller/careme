@@ -33,12 +33,6 @@ type locationServer struct {
 	produceScores produceScoreLookup
 }
 
-type locationRow struct {
-	Location
-	SupportsStaples bool
-	ProduceScore    *ProduceScore
-}
-
 type zipFetcher interface {
 	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
@@ -159,6 +153,12 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	// be very forgiving of errors here.
 	if len(locs) == 0 && err != nil {
 		return fmt.Errorf("failed to get locations for zip %s: %w", zip, err)
+	}
+
+	type locationRow struct {
+		Location
+		SupportsStaples bool
+		ProduceScore    *ProduceScore
 	}
 
 	var wg sync.WaitGroup
