@@ -22,6 +22,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/heb"
 	"careme/internal/kroger"
+	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
 	"careme/internal/walmart"
@@ -180,6 +181,7 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
+	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded), "produce_score", sumIngredientGradesAboveCutoff(graded))
 	return graded, nil
 }
 
@@ -264,9 +266,14 @@ func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
 		"aldi_F219",
 	}
 	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]ai.InputIngredient, error) {
-		return s.provider.FetchStaples(ctx, storeID)
+		return s.FetchStaples(ctx, DefaultParams(&locations.Location{ID: storeID}, watchdogDate(nowFn())))
 	})
 	return err
+}
+
+func watchdogDate(now time.Time) time.Time {
+	now = now.UTC()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func staplesSignatureForLocation(locationID string) string {
