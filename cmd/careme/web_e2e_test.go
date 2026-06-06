@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +24,17 @@ import (
 
 	"golang.org/x/net/html"
 )
+
+type fakeProduceScorer struct{}
+
+func (fakeProduceScorer) ProduceScore(_ context.Context, loc locations.Location) *locations.ProduceScore {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(loc.ID))
+	return &locations.ProduceScore{
+		Score: int(hash.Sum32()%99) + 1,
+		Date:  time.Now(),
+	}
+}
 
 func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	srv := newTestServer(t)
@@ -228,7 +241,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 		return mockAuth.WithAuthHTTP(appMiddleware(h))
 	})
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage, nil)
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, fakeProduceScorer{})
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory).Register(appRoutes)

@@ -3,7 +3,6 @@ package locations
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -20,14 +19,10 @@ import (
 
 type fakeProduceScoreLookup struct {
 	scores map[string]*ProduceScore
-	err    error
 }
 
-func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc *Location) (*ProduceScore, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return f.scores[loc.ID], nil
+func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
+	return f.scores[loc.ID]
 }
 
 type recordingProduceScoreLookup struct {
@@ -36,12 +31,12 @@ type recordingProduceScoreLookup struct {
 	scores map[string]*ProduceScore
 }
 
-func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc *Location) (*ProduceScore, error) {
+func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
 	r.mu.Lock()
 	r.calls = append(r.calls, loc.ID)
 	r.mu.Unlock()
 
-	return r.scores[loc.ID], nil
+	return r.scores[loc.ID]
 }
 
 func (r *recordingProduceScoreLookup) callIDs() []string {
@@ -58,7 +53,7 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
-	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, nil)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())
@@ -100,7 +95,7 @@ func TestRequestStoreIsIdempotent(t *testing.T) {
 	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
-	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, nil)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())
@@ -126,7 +121,7 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
 	client.setHasInventory("publix_123", true)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
-	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, nil)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())
@@ -207,7 +202,7 @@ func TestLocationsPageOmitsMissingProduceScoreBadge(t *testing.T) {
 	}
 }
 
-func TestLocationsPageSkipsProduceScoreLookupErrors(t *testing.T) {
+func TestLocationsPageSkipsNilProduceScores(t *testing.T) {
 	mustInitLocationTemplates(t)
 
 	client := newFakeLocationClient()
@@ -218,9 +213,7 @@ func TestLocationsPageSkipsProduceScoreLookupErrors(t *testing.T) {
 		ZipCode: "10001",
 	}})
 	storage := newTestLocationServer(client)
-	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
-		err: errors.New("score lookup failed"),
-	})
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())
@@ -233,7 +226,7 @@ func TestLocationsPageSkipsProduceScoreLookupErrors(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
 	}
 	if body := rr.Body.String(); strings.Contains(body, "score ") {
-		t.Fatalf("expected no produce score badge after lookup error, got %q", body)
+		t.Fatalf("expected no produce score badge for nil score, got %q", body)
 	}
 }
 

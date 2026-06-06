@@ -40,6 +40,7 @@
 - From the repo root, run `golangci-lint run ./...` after Go changes unless the task clearly does not affect linted code.
 - Place tests alongside code in `*_test.go`; prefer table-driven cases and explicit fixtures over implicit globals.
 - Use `go test ./... -run TestName` for targeted debugging; keep deterministic by avoiding network calls and using fakes where possible.
+- Prefer explicit fakes or no-op implementations over passing nil dependencies in tests, unless nil behavior is the thing under test.
 - When touching recipe generation or Kroger client code, add assertions that cover API shape changes and template output (see existing tests in `internal/recipes` and `internal/html`).
 - When changing the generator produce filter list (`internal/recipes/params.go` `Produce()`), also run `go run ./cmd/producecheck -location 70500874` and see if score changes. Will need secrets in .envtest file
   

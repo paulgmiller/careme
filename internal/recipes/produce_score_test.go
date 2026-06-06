@@ -25,9 +25,8 @@ func TestCachedProduceScorerUsesTodayCacheBeforeYesterday(t *testing.T) {
 	seedProduceScoreIngredients(t, c, loc, today, todayIngredients)
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
 
-	score, err := NewCachedProduceScorer(c).ProduceScore(t.Context(), loc)
+	score := NewCachedProduceScorer(IO(c)).ProduceScore(t.Context(), *loc)
 
-	require.NoError(t, err)
 	require.NotNil(t, score)
 	assert.Equal(t, 1, score.Score)
 	assert.Equal(t, "2026-01-15", score.Date.Format("2006-01-02"))
@@ -41,9 +40,8 @@ func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
 	seedProduceScoreIngredients(t, c, loc, yesterday, yesterdayIngredients)
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
 
-	score, err := NewCachedProduceScorer(c).ProduceScore(t.Context(), loc)
+	score := NewCachedProduceScorer(IO(c)).ProduceScore(t.Context(), *loc)
 
-	require.NoError(t, err)
 	require.NotNil(t, score)
 	assert.Equal(t, 1, score.Score)
 	assert.Equal(t, "2026-01-14", score.Date.Format("2006-01-02"))
@@ -54,9 +52,8 @@ func TestCachedProduceScorerReturnsNilWhenCacheMissing(t *testing.T) {
 	loc := testProduceScoreLocation()
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
 
-	score, err := NewCachedProduceScorer(c).ProduceScore(t.Context(), loc)
+	score := NewCachedProduceScorer(IO(c)).ProduceScore(t.Context(), *loc)
 
-	require.NoError(t, err)
 	assert.Nil(t, score)
 }
 

@@ -44,7 +44,7 @@ type zipFetcher interface {
 }
 
 type produceScoreLookup interface {
-	ProduceScore(ctx context.Context, loc *Location) (*ProduceScore, error)
+	ProduceScore(ctx context.Context, loc Location) *ProduceScore
 }
 
 func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup, produceScores produceScoreLookup) *locationServer {
@@ -174,12 +174,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		if l.produceScores != nil && supportsStaples && scored < 10 {
 			scored++
 			wg.Go(func() {
-				score, err := l.produceScores.ProduceScore(ctx, &loc)
-				if err != nil {
-					slog.WarnContext(ctx, "failed to load cached produce score", "location_id", loc.ID, "error", err)
-					return
-				}
-				row.ProduceScore = score
+				row.ProduceScore = l.produceScores.ProduceScore(ctx, loc)
 			})
 		}
 		rows = append(rows, row)

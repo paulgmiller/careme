@@ -3,7 +3,6 @@ package recipes
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -16,35 +15,32 @@ type CachedProduceScorer struct {
 	cache ingredientio
 }
 
-func NewCachedProduceScorer(c cache.Cache) *CachedProduceScorer {
-	return &CachedProduceScorer{cache: IO(c)}
+func NewCachedProduceScorer(c ingredientio) *CachedProduceScorer {
+	return &CachedProduceScorer{cache: c}
 }
 
-func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc *locations.Location) (*locations.ProduceScore, error) {
-	if loc == nil {
-		return nil, fmt.Errorf("location is required")
-	}
-
-	date, err := StoreToDate(ctx, nowFn(), loc)
+func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locations.Location) *locations.ProduceScore {
+	date, err := StoreToDate(ctx, nowFn(), &loc)
 	if err != nil {
-		return nil, err
+		slog.WarnContext(ctx, "bad store date", "zip", loc.ZipCode)
+		return nil
 	}
 
 	for _, candidate := range []time.Time{date, date.AddDate(0, 0, -1)} {
-		params := DefaultParams(loc, candidate)
+		params := DefaultParams(&loc, candidate)
 		ingredients, err := s.cache.IngredientsFromCache(ctx, params.LocationHash())
 		if err == nil {
 			return &locations.ProduceScore{
 				Score: sumIngredientGradesAboveCutoff(ingredients),
 				Date:  candidate,
-			}, nil
+			}
 		}
 		if !errors.Is(err, cache.ErrNotFound) {
 			slog.WarnContext(ctx, "failed to read cached produce score ingredients", "location_id", loc.ID, "date", candidate.Format("2006-01-02"), "error", err)
 		}
 	}
 
-	return nil, nil
+	return nil
 }
 
 func sumIngredientGradesAboveCutoff(ingredients []ai.InputIngredient) int {
