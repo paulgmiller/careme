@@ -55,5 +55,5 @@ func sumIngredientGradesAboveCutoff(ingredients []ai.InputIngredient) int {
 		}
 		score += ingredient.Grade.Score
 	}
-	return score
+	return score / 100
 }

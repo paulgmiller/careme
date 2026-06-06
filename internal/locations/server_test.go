@@ -6,7 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +28,26 @@ func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc *Location) (
 		return nil, f.err
 	}
 	return f.scores[loc.ID], nil
+}
+
+type recordingProduceScoreLookup struct {
+	mu     sync.Mutex
+	calls  []string
+	scores map[string]*ProduceScore
+}
+
+func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc *Location) (*ProduceScore, error) {
+	r.mu.Lock()
+	r.calls = append(r.calls, loc.ID)
+	r.mu.Unlock()
+
+	return r.scores[loc.ID], nil
+}
+
+func (r *recordingProduceScoreLookup) callIDs() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.calls...)
 }
 
 func TestRequestStoreWritesRequestBlob(t *testing.T) {
@@ -150,7 +172,7 @@ func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
 	}
-	if body := rr.Body.String(); !strings.Contains(body, "Produce score 27") {
+	if body := rr.Body.String(); !strings.Contains(body, "score 27") {
 		t.Fatalf("expected produce score badge, got %q", body)
 	}
 }
@@ -180,7 +202,7 @@ func TestLocationsPageOmitsMissingProduceScoreBadge(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
 	}
-	if body := rr.Body.String(); strings.Contains(body, "Produce score") {
+	if body := rr.Body.String(); strings.Contains(body, "score ") {
 		t.Fatalf("expected no produce score badge, got %q", body)
 	}
 }
@@ -210,8 +232,61 @@ func TestLocationsPageSkipsProduceScoreLookupErrors(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
 	}
-	if body := rr.Body.String(); strings.Contains(body, "Produce score") {
+	if body := rr.Body.String(); strings.Contains(body, "score ") {
 		t.Fatalf("expected no produce score badge after lookup error, got %q", body)
+	}
+}
+
+func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	locations := make([]Location, 0, 13)
+	scores := make(map[string]*ProduceScore)
+	for i := 0; i < 13; i++ {
+		id := "store-" + strconv.Itoa(i)
+		locations = append(locations, Location{
+			ID:      id,
+			Name:    "Store " + strconv.Itoa(i),
+			Address: strconv.Itoa(i) + " Market St",
+			ZipCode: "10001",
+		})
+		client.setHasInventory(id, i != 0)
+		scores[id] = &ProduceScore{Score: i}
+	}
+	client.setListResponse("10001", locations)
+
+	scoreLookup := &recordingProduceScoreLookup{scores: scores}
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, scoreLookup)
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "Store 12") {
+		t.Fatalf("expected all locations to render, got %q", body)
+	}
+	if strings.Contains(body, "score 11") || strings.Contains(body, "score 12") {
+		t.Fatalf("expected scores only for first 10 supported stores, got %q", body)
+	}
+
+	gotCalls := scoreLookup.callIDs()
+	if len(gotCalls) != 10 {
+		t.Fatalf("expected 10 score lookups, got %d: %v", len(gotCalls), gotCalls)
+	}
+	for _, id := range gotCalls {
+		if id == "store-0" || id == "store-11" || id == "store-12" {
+			t.Fatalf("unexpected score lookup for %s; calls=%v", id, gotCalls)
+		}
 	}
 }
 
