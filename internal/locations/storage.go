@@ -56,7 +56,10 @@ type locationStore interface {
 }
 
 // Location is kept as an alias for compatibility with existing imports.
-type Location = locationtypes.Location
+type (
+	Location     = locationtypes.Location
+	ProduceScore = locationtypes.ProduceScore
+)
 
 type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)

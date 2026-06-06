@@ -22,6 +22,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/heb"
 	"careme/internal/kroger"
+	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
 	"careme/internal/walmart"
@@ -180,6 +181,7 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
+	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded), "produce_score", sumIngredientGradesAboveCutoff(graded))
 	return graded, nil
 }
 
@@ -254,18 +256,22 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 }
 
 func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
-	storeIDs := []string{
-		"wholefoods_10153",
-		"safeway_490",
-		"70500874",
-		"starmarket_3566",
-		"acmemarkets_806",
-		"publix_1847",
-		"aldi_F219",
-		"heb_540",
+	stores := []locations.Location{
+		{ID: "wholefoods_10153", ZipCode: "97209"},
+		{ID: "safeway_490", ZipCode: "86403"},
+		{ID: "70500874", ZipCode: "98101"},
+		{ID: "starmarket_3566", ZipCode: "02108"},
+		{ID: "acmemarkets_806", ZipCode: "19711"},
+		{ID: "publix_1847", ZipCode: "35401"},
+		{ID: "aldi_F219", ZipCode: "40222"},
+		{ID: "heb_540", ZipCode: "77023"},
 	}
-	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]ai.InputIngredient, error) {
-		return s.provider.FetchStaples(ctx, storeID)
+	_, err := parallelism.Flatten(stores, func(store locations.Location) ([]ai.InputIngredient, error) {
+		date, err := StoreToDate(ctx, nowFn(), &store)
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchStaples(ctx, DefaultParams(&store, date))
 	})
 	return err
 }

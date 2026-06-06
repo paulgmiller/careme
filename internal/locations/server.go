@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"careme/internal/auth"
 	"careme/internal/routing"
@@ -17,6 +18,8 @@ import (
 	"careme/internal/templates"
 
 	utypes "careme/internal/users/types"
+
+	"github.com/samber/lo"
 )
 
 type userLookup interface {
@@ -24,20 +27,26 @@ type userLookup interface {
 }
 
 type locationServer struct {
-	storage     locationStore
-	zipFetcher  zipFetcher
-	userStorage userLookup
+	storage       locationStore
+	zipFetcher    zipFetcher
+	userStorage   userLookup
+	produceScores produceScoreLookup
 }
 
 type zipFetcher interface {
 	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
-func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
+type produceScoreLookup interface {
+	ProduceScore(ctx context.Context, loc Location) *ProduceScore
+}
+
+func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup, produceScores produceScoreLookup) *locationServer {
 	return &locationServer{
-		storage:     storage,
-		zipFetcher:  zipFetcher,
-		userStorage: userStorage,
+		storage:       storage,
+		zipFetcher:    zipFetcher,
+		userStorage:   userStorage,
+		produceScores: produceScores,
 	}
 }
 
@@ -149,15 +158,29 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	type locationRow struct {
 		Location
 		SupportsStaples bool
+		ProduceScore    *ProduceScore
 	}
 
-	rows := make([]locationRow, 0, len(locs))
+	var wg sync.WaitGroup
+	rows := make([]*locationRow, 0, len(locs))
+	scored := 0
 	for _, loc := range locs {
-		rows = append(rows, locationRow{
+		supportsStaples := l.storage.HasInventory(loc.ID)
+		row := &locationRow{
 			Location:        loc,
-			SupportsStaples: l.storage.HasInventory(loc.ID),
-		})
+			SupportsStaples: supportsStaples,
+		}
+		// only do the first 10 rest is a waste.
+		if l.produceScores != nil && supportsStaples && scored < 10 {
+			scored++
+			wg.Go(func() {
+				row.ProduceScore = l.produceScores.ProduceScore(ctx, loc)
+			})
+		}
+		rows = append(rows, row)
 	}
+
+	wg.Wait()
 
 	data := struct {
 		Locations       []locationRow
@@ -168,7 +191,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		Style           seasons.Style
 		ServerSignedIn  bool
 	}{
-		Locations:       rows,
+		Locations:       lo.FromSlicePtr(rows),
 		Zip:             zip,
 		FavoriteStore:   favoriteStore,
 		ClarityScript:   templates.ClarityScript(ctx),

@@ -31,7 +31,12 @@
               {{if .SupportsStaples}}
               <a href="/recipes?location={{.ID}}"
                 class="flex flex-1 flex-col gap-1 rounded-xl py-2 transition hover:bg-brand-50 focus:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                <span class="text-lg font-semibold text-brand-700">{{.Name}}</span>
+                <span class="flex flex-wrap items-center gap-2 text-lg font-semibold text-brand-700">
+                  <span>{{.Name}}</span>
+                  {{with .ProduceScore}}
+                  <span title="Sum of ingredient grades above cutoff, divided by 100." aria-label="Produce score: sum of ingredient grades above cutoff, divided by 100." class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">score {{.Score}}</span>
+                  {{end}}
+                </span>
                 <span class="text-sm text-gray-600">{{.Address}}</span>
               </a>
               {{else}}
