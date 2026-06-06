@@ -18,3 +18,8 @@ type ZipCentroid struct {
 	Lat float64
 	Lon float64
 }
+
+type ProduceScore struct {
+	Score int       `json:"score"`
+	Date  time.Time `json:"date"`
+}

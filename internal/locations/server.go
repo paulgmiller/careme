@@ -24,20 +24,26 @@ type userLookup interface {
 }
 
 type locationServer struct {
-	storage     locationStore
-	zipFetcher  zipFetcher
-	userStorage userLookup
+	storage       locationStore
+	zipFetcher    zipFetcher
+	userStorage   userLookup
+	produceScores produceScoreLookup
 }
 
 type zipFetcher interface {
 	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
-func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup) *locationServer {
+type produceScoreLookup interface {
+	ProduceScore(ctx context.Context, loc *Location) (*ProduceScore, error)
+}
+
+func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup, produceScores produceScoreLookup) *locationServer {
 	return &locationServer{
-		storage:     storage,
-		zipFetcher:  zipFetcher,
-		userStorage: userStorage,
+		storage:       storage,
+		zipFetcher:    zipFetcher,
+		userStorage:   userStorage,
+		produceScores: produceScores,
 	}
 }
 
@@ -149,13 +155,25 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	type locationRow struct {
 		Location
 		SupportsStaples bool
+		ProduceScore    *ProduceScore
 	}
 
 	rows := make([]locationRow, 0, len(locs))
 	for _, loc := range locs {
+		supportsStaples := l.storage.HasInventory(loc.ID)
+		var produceScore *ProduceScore
+		if supportsStaples && l.produceScores != nil {
+			score, err := l.produceScores.ProduceScore(ctx, &loc)
+			if err != nil {
+				slog.WarnContext(ctx, "failed to load cached produce score", "location_id", loc.ID, "error", err)
+			} else {
+				produceScore = score
+			}
+		}
 		rows = append(rows, locationRow{
 			Location:        loc,
-			SupportsStaples: l.storage.HasInventory(loc.ID),
+			SupportsStaples: supportsStaples,
+			ProduceScore:    produceScore,
 		})
 	}
 

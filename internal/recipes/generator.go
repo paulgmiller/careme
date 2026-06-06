@@ -20,6 +20,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
+const IngredientGradeCutoff = 6
+
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
 	RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error)
@@ -160,7 +162,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		}
 		ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 			// TODO make configurable?
-			return ing.Grade == nil || ing.Grade.Score > 6
+			return ing.Grade == nil || ing.Grade.Score > IngredientGradeCutoff
 		})
 		ingMap := inputIngredientMap(ingredients)
 
@@ -204,7 +206,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	ogCount := len(ingredients)
 	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 		// TODO make configurable?
-		return ing.Grade == nil || ing.Grade.Score > 6
+		return ing.Grade == nil || ing.Grade.Score > IngredientGradeCutoff
 	})
 	ingMap := inputIngredientMap(ingredients)
 
