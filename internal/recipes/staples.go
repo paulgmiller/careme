@@ -264,6 +264,7 @@ func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
 		{ID: "acmemarkets_806", ZipCode: "19711"},
 		{ID: "publix_1847", ZipCode: "35401"},
 		{ID: "aldi_F219", ZipCode: "40222"},
+		{ID: "heb_540", ZipCode: "77023"},
 	}
 	_, err := parallelism.Flatten(stores, func(store locations.Location) ([]ai.InputIngredient, error) {
 		date, err := StoreToDate(ctx, nowFn(), &store)
