@@ -17,22 +17,19 @@ func TestCachedProduceScorerUsesTodayCacheBeforeYesterday(t *testing.T) {
 	loc := testProduceScoreLocation()
 	today := time.Date(2026, time.January, 15, 0, 0, 0, 0, time.FixedZone("test", -5*60*60))
 	yesterday := today.AddDate(0, 0, -1)
-	seedProduceScoreIngredients(t, c, loc, yesterday, []ai.InputIngredient{
-		gradedIngredient(10),
-	})
-	seedProduceScoreIngredients(t, c, loc, today, []ai.InputIngredient{
-		gradedIngredient(8),
-		gradedIngredient(7),
+	seedProduceScoreIngredients(t, c, loc, yesterday, repeatGradedIngredients(10, 10))
+	todayIngredients := append(repeatGradedIngredients(10, 11),
 		gradedIngredient(6),
-		{},
-	})
+		ai.InputIngredient{},
+	)
+	seedProduceScoreIngredients(t, c, loc, today, todayIngredients)
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
 
 	score, err := NewCachedProduceScorer(c).ProduceScore(t.Context(), loc)
 
 	require.NoError(t, err)
 	require.NotNil(t, score)
-	assert.Equal(t, 15, score.Score)
+	assert.Equal(t, 1, score.Score)
 	assert.Equal(t, "2026-01-15", score.Date.Format("2006-01-02"))
 }
 
@@ -40,17 +37,15 @@ func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	loc := testProduceScoreLocation()
 	yesterday := time.Date(2026, time.January, 14, 0, 0, 0, 0, time.FixedZone("test", -5*60*60))
-	seedProduceScoreIngredients(t, c, loc, yesterday, []ai.InputIngredient{
-		gradedIngredient(9),
-		gradedIngredient(5),
-	})
+	yesterdayIngredients := append(repeatGradedIngredients(9, 12), gradedIngredient(5))
+	seedProduceScoreIngredients(t, c, loc, yesterday, yesterdayIngredients)
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
 
 	score, err := NewCachedProduceScorer(c).ProduceScore(t.Context(), loc)
 
 	require.NoError(t, err)
 	require.NotNil(t, score)
-	assert.Equal(t, 9, score.Score)
+	assert.Equal(t, 1, score.Score)
 	assert.Equal(t, "2026-01-14", score.Date.Format("2006-01-02"))
 }
 
@@ -66,15 +61,14 @@ func TestCachedProduceScorerReturnsNilWhenCacheMissing(t *testing.T) {
 }
 
 func TestSumIngredientGradesAboveCutoff(t *testing.T) {
-	ingredients := []ai.InputIngredient{
-		gradedIngredient(10),
+	ingredients := append(repeatGradedIngredients(10, 10),
 		gradedIngredient(7),
 		gradedIngredient(6),
 		gradedIngredient(0),
-		{},
-	}
+		ai.InputIngredient{},
+	)
 
-	assert.Equal(t, 17, sumIngredientGradesAboveCutoff(ingredients))
+	assert.Equal(t, 1, sumIngredientGradesAboveCutoff(ingredients))
 }
 
 func testProduceScoreLocation() *locations.Location {
@@ -91,6 +85,14 @@ func gradedIngredient(score int) ai.InputIngredient {
 			Score: score,
 		},
 	}
+}
+
+func repeatGradedIngredients(score, count int) []ai.InputIngredient {
+	ingredients := make([]ai.InputIngredient, 0, count)
+	for range count {
+		ingredients = append(ingredients, gradedIngredient(score))
+	}
+	return ingredients
 }
 
 func seedProduceScoreIngredients(t *testing.T, c cache.Cache, loc *locations.Location, date time.Time, ingredients []ai.InputIngredient) {

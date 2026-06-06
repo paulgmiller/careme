@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"careme/internal/auth"
 	"careme/internal/routing"
@@ -17,6 +18,8 @@ import (
 	"careme/internal/templates"
 
 	utypes "careme/internal/users/types"
+
+	"github.com/samber/lo"
 )
 
 type userLookup interface {
@@ -28,6 +31,12 @@ type locationServer struct {
 	zipFetcher    zipFetcher
 	userStorage   userLookup
 	produceScores produceScoreLookup
+}
+
+type locationRow struct {
+	Location
+	SupportsStaples bool
+	ProduceScore    *ProduceScore
 }
 
 type zipFetcher interface {
@@ -152,30 +161,31 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		return fmt.Errorf("failed to get locations for zip %s: %w", zip, err)
 	}
 
-	type locationRow struct {
-		Location
-		SupportsStaples bool
-		ProduceScore    *ProduceScore
-	}
-
-	rows := make([]locationRow, 0, len(locs))
+	var wg sync.WaitGroup
+	rows := make([]*locationRow, 0, len(locs))
+	scored := 0
 	for _, loc := range locs {
 		supportsStaples := l.storage.HasInventory(loc.ID)
-		var produceScore *ProduceScore
-		if supportsStaples && l.produceScores != nil {
-			score, err := l.produceScores.ProduceScore(ctx, &loc)
-			if err != nil {
-				slog.WarnContext(ctx, "failed to load cached produce score", "location_id", loc.ID, "error", err)
-			} else {
-				produceScore = score
-			}
-		}
-		rows = append(rows, locationRow{
+		row := &locationRow{
 			Location:        loc,
 			SupportsStaples: supportsStaples,
-			ProduceScore:    produceScore,
-		})
+		}
+		// only do the first 10 rest is a waste.
+		if l.produceScores != nil && supportsStaples && scored < 10 {
+			scored++
+			wg.Go(func() {
+				score, err := l.produceScores.ProduceScore(ctx, &loc)
+				if err != nil {
+					slog.WarnContext(ctx, "failed to load cached produce score", "location_id", loc.ID, "error", err)
+					return
+				}
+				row.ProduceScore = score
+			})
+		}
+		rows = append(rows, row)
 	}
+
+	wg.Wait()
 
 	data := struct {
 		Locations       []locationRow
@@ -186,7 +196,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		Style           seasons.Style
 		ServerSignedIn  bool
 	}{
-		Locations:       rows,
+		Locations:       lo.FromSlicePtr(rows),
 		Zip:             zip,
 		FavoriteStore:   favoriteStore,
 		ClarityScript:   templates.ClarityScript(ctx),
