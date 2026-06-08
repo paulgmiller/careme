@@ -25,8 +25,8 @@ const IngredientGradeCutoff = 6
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
 	RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error)
-	PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error)
-	GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error)
+	PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, promptCacheKey string) (*ai.RecipeContext, error)
+	GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext ai.RecipeContext) (*ai.Recipe, error)
 	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error)
@@ -39,6 +39,14 @@ type staplesService interface {
 
 type recipeSaver interface {
 	SaveRecipe(ctx context.Context, recipes ai.Recipe) error
+}
+
+func recipePromptCacheKey(ingredientHash string) string {
+	ingredientHash = strings.TrimSpace(ingredientHash)
+	if ingredientHash == "" {
+		return ""
+	}
+	return "ingredients-" + ingredientHash
 }
 
 type generatorService struct {
@@ -147,8 +155,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			err  error
 		}
 		type asyncContextResult struct {
-			id  string
-			err error
+			context *ai.RecipeContext
+			err     error
 		}
 		menuPlanCh := make(chan asyncMenuPlanResult, 1)
 		contextCh := make(chan asyncContextResult, 1)
@@ -156,9 +164,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			plan, err := g.replacementMenuPlan(ctx, p, regenInstructions, len(p.Dismissed))
 			menuPlanCh <- asyncMenuPlanResult{plan: plan, err: err}
 		}()
+		recipeCacheKey := recipePromptCacheKey(p.LocationHash())
 		go func() {
-			id, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, []string{p.Directive}, p.Date, p.LastRecipes)
-			contextCh <- asyncContextResult{id: id, err: err}
+			recipeContext, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, []string{p.Directive}, p.Date, p.LastRecipes, recipeCacheKey)
+			contextCh <- asyncContextResult{context: recipeContext, err: err}
 		}()
 
 		menuPlanResult := <-menuPlanCh
@@ -170,7 +179,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			return nil, fmt.Errorf("failed to prepare recipe context: %w", contextResult.err)
 		}
 		menuPlan := menuPlanResult.plan
-		contextID := contextResult.id
+		recipeContext := contextResult.context
+		if recipeContext == nil {
+			return nil, fmt.Errorf("failed to prepare recipe context: AI returned no recipe context")
+		}
 		if menuPlan == nil {
 			return nil, fmt.Errorf("failed to plan recipe replacements: AI returned no menu plan")
 		}
@@ -184,7 +196,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			defer span.End()
 
 			instructions := append(slices.Clone(regenInstructions), plan.Instructions()...)
-			recipe, err := g.aiClient.GenerateRecipeFromContext(ctx, instructions, contextID)
+			recipe, err := g.aiClient.GenerateRecipeFromContext(ctx, instructions, *recipeContext)
 			if err != nil {
 				return nil, err
 			}
@@ -234,8 +246,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		err  error
 	}
 	type asyncContextResult struct {
-		id  string
-		err error
+		context *ai.RecipeContext
+		err     error
 	}
 	menuPlanCh := make(chan asyncMenuPlanResult, 1)
 	contextCh := make(chan asyncContextResult, 1)
@@ -243,9 +255,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		plan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, menuPlanInstructions, p.Date, p.LastRecipes, 3)
 		menuPlanCh <- asyncMenuPlanResult{plan: plan, err: err}
 	}()
+	recipeCacheKey := recipePromptCacheKey(p.LocationHash())
 	go func() {
-		id, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, recipeBaseInstructions, p.Date, p.LastRecipes)
-		contextCh <- asyncContextResult{id: id, err: err}
+		recipeContext, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, recipeBaseInstructions, p.Date, p.LastRecipes, recipeCacheKey)
+		contextCh <- asyncContextResult{context: recipeContext, err: err}
 	}()
 
 	menuPlanResult := <-menuPlanCh
@@ -257,14 +270,17 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		return nil, fmt.Errorf("failed to prepare recipe context: %w", contextResult.err)
 	}
 	menuPlan := menuPlanResult.plan
-	contextID := contextResult.id
+	recipeContext := contextResult.context
+	if recipeContext == nil {
+		return nil, fmt.Errorf("failed to prepare recipe context: AI returned no recipe context")
+	}
 	g.writeStatus(ctx, hash, menuPlan.String())
 
 	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
 		recipeInstructions := append(slices.Clone(recipeBaseInstructions), plan.Instructions()...)
-		recipe, err := g.aiClient.GenerateRecipeFromContext(ctx, recipeInstructions, contextID)
+		recipe, err := g.aiClient.GenerateRecipeFromContext(ctx, recipeInstructions, *recipeContext)
 		if err != nil {
 			return nil, err
 		}

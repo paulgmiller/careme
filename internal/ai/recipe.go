@@ -20,6 +20,8 @@ import (
 
 const defaultRecipeModel = "gpt-5.5"
 
+const prepareRecipeContextInstruction = "Store this recipe context for follow-up recipe generation. Reply exactly: OK"
+
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
 	ProductID   string `json:"id"`
@@ -79,6 +81,11 @@ type ShoppingList struct {
 type QuestionResponse struct {
 	Answer     string
 	ResponseID string
+}
+
+type RecipeContext struct {
+	ResponseID     string
+	PromptCacheKey string
 }
 
 // edited out. Which recipe should be richer?!
@@ -156,41 +163,47 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 }
 
 func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
-) (string, error) {
+	instructions []string, date time.Time, lastRecipes []string, promptCacheKey string,
+) (*RecipeContext, error) {
 	promptMessages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
-		return "", fmt.Errorf("failed to build recipe context messages: %w", err)
+		return nil, fmt.Errorf("failed to build recipe context messages: %w", err)
 	}
 
 	params := responses.ResponseNewParams{
-		Model:           c.model,
-		MaxOutputTokens: openai.Int(0),
+		Model:        c.model,
+		Instructions: openai.String(prepareRecipeContextInstruction),
+		// The API currently rejects zero output tokens, so keep this as low as allowed by the model.
+		MaxOutputTokens: openai.Int(16),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
 		},
 		Store: openai.Bool(true),
 	}
+	promptCacheKey = strings.TrimSpace(promptCacheKey)
+	if promptCacheKey != "" {
+		params.PromptCacheKey = openai.String(promptCacheKey)
+	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
-		return "", fmt.Errorf("failed to prepare recipe context: %w", err)
+		return nil, fmt.Errorf("failed to prepare recipe context: %w", err)
 	}
 	if strings.TrimSpace(resp.ID) == "" {
-		return "", fmt.Errorf("failed to get recipe context response ID")
+		return nil, fmt.Errorf("failed to get recipe context response ID")
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 	slog.InfoContext(ctx, "prepared recipe context", "ai_category", aiCategoryRecipe, "model", c.model, responseUsageLogAttr(c.model, resp.Usage))
-	return resp.ID, nil
+	return &RecipeContext{ResponseID: resp.ID, PromptCacheKey: promptCacheKey}, nil
 }
 
-func (c *client) GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*Recipe, error) {
-	if previousResponseID == "" {
+func (c *client) GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext RecipeContext) (*Recipe, error) {
+	if recipeContext.ResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for recipe context generation")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
-		PreviousResponseID: openai.String(previousResponseID),
+		PreviousResponseID: openai.String(recipeContext.ResponseID),
 		// Previous response IDs do not carry over top-level instructions.
 		Instructions: openai.String(systemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
@@ -198,6 +211,9 @@ func (c *client) GenerateRecipeFromContext(ctx context.Context, instructions []s
 		},
 		Store: openai.Bool(true),
 		Text:  scheme(c.recipeSchema),
+	}
+	if strings.TrimSpace(recipeContext.PromptCacheKey) != "" {
+		params.PromptCacheKey = openai.String(recipeContext.PromptCacheKey)
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {

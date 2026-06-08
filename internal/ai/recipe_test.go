@@ -114,7 +114,7 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	}
 }
 
-func TestPrepareRecipeContextStoresZeroOutputResponse(t *testing.T) {
+func TestPrepareRecipeContextStoresMinimalOutputResponseWithPromptCacheKey(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	var requestBody string
 	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -151,19 +151,22 @@ func TestPrepareRecipeContextStoresZeroOutputResponse(t *testing.T) {
 	price := float32(8.99)
 	got, err := client.PrepareRecipeContext(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{
 		{ProductID: "chicken-1", Description: "Chicken thighs", Size: "2 lb", PriceRegular: &price},
-	}, []string{"Use sale ingredients."}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), []string{"Lemon pasta"})
+	}, []string{"Use sale ingredients."}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), []string{"Lemon pasta"}, "ingredients-test-cache-key")
 	if err != nil {
 		t.Fatalf("PrepareRecipeContext returned error: %v", err)
 	}
-	if got != "resp-shared-context" {
-		t.Fatalf("unexpected context response id: %q", got)
+	if got.ResponseID != "resp-shared-context" || got.PromptCacheKey != "ingredients-test-cache-key" {
+		t.Fatalf("unexpected recipe context: %#v", got)
 	}
 	var body map[string]any
 	if err := json.Unmarshal([]byte(requestBody), &body); err != nil {
 		t.Fatalf("unmarshal request body: %v\n%s", err, requestBody)
 	}
-	if body["max_output_tokens"] != float64(0) {
-		t.Fatalf("expected zero max output tokens, got %#v in %s", body["max_output_tokens"], requestBody)
+	if body["max_output_tokens"] != float64(16) {
+		t.Fatalf("expected minimal max output tokens, got %#v in %s", body["max_output_tokens"], requestBody)
+	}
+	if body["prompt_cache_key"] != "ingredients-test-cache-key" {
+		t.Fatalf("expected prompt cache key, got %#v in %s", body["prompt_cache_key"], requestBody)
 	}
 	if body["store"] != true {
 		t.Fatalf("expected stored response, got %s", requestBody)
@@ -223,7 +226,10 @@ func TestGenerateRecipeFromContextUsesPreviousResponseWithoutIngredientTSV(t *te
 		}, nil
 	})}, recorder)
 
-	got, err := client.GenerateRecipeFromContext(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, "resp-shared-context")
+	got, err := client.GenerateRecipeFromContext(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, RecipeContext{
+		ResponseID:     "resp-shared-context",
+		PromptCacheKey: "ingredients-test-cache-key",
+	})
 	if err != nil {
 		t.Fatalf("GenerateRecipeFromContext returned error: %v", err)
 	}
@@ -235,6 +241,9 @@ func TestGenerateRecipeFromContextUsesPreviousResponseWithoutIngredientTSV(t *te
 	}
 	if !strings.Contains(requestBody, `"previous_response_id":"resp-shared-context"`) {
 		t.Fatalf("expected previous response id in request: %s", requestBody)
+	}
+	if !strings.Contains(requestBody, `"prompt_cache_key":"ingredients-test-cache-key"`) {
+		t.Fatalf("expected prompt cache key in request: %s", requestBody)
 	}
 	if !strings.Contains(requestBody, "Cuisine direction for this recipe: Korean.") || !strings.Contains(requestBody, "professional chef and recipe developer") {
 		t.Fatalf("expected recipe instructions and system prompt in request: %s", requestBody)

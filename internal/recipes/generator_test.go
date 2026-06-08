@@ -30,6 +30,7 @@ type captureRegenerateAIClient struct {
 	responseID                 string
 	preparedContextID          string
 	contextInstructions        []string
+	contextPromptCacheKey      string
 	generateContextID          string
 	recipe                     *ai.Recipe
 	menuPlanInstructions       []string
@@ -41,16 +42,17 @@ type captureRegenerateAIClient struct {
 }
 
 type captureGenerateAIClient struct {
-	shoppingList         *ai.ShoppingList
-	menuPlan             *ai.MenuPlan
-	preparedContextID    string
-	contextInstructions  []string
-	generateContextIDs   []string
-	ingredients          []ai.InputIngredient
-	instructions         [][]string
-	generateInstructions [][]string
-	lastRecipes          []string
-	mu                   sync.Mutex
+	shoppingList          *ai.ShoppingList
+	menuPlan              *ai.MenuPlan
+	preparedContextID     string
+	contextInstructions   []string
+	contextPromptCacheKey string
+	generateContextIDs    []string
+	ingredients           []ai.InputIngredient
+	instructions          [][]string
+	generateInstructions  [][]string
+	lastRecipes           []string
+	mu                    sync.Mutex
 }
 
 type sequenceAIClient struct {
@@ -63,6 +65,7 @@ type sequenceAIClient struct {
 	regenerateCalls        int
 	prepareContextCalls    int
 	contextInstructions    [][]string
+	contextPromptCacheKeys []string
 	generateContextIDs     []string
 	regenerateInstructions [][]string
 	regenerateResponseIDs  []string
@@ -128,11 +131,11 @@ func (c *captureWineQuestionAIClient) RegenerateMenuPlan(ctx context.Context, in
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureWineQuestionAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error) {
+func (c *captureWineQuestionAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, promptCacheKey string) (*ai.RecipeContext, error) {
 	panic("unexpected call to PrepareRecipeContext")
 }
 
-func (c *captureWineQuestionAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureWineQuestionAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext ai.RecipeContext) (*ai.Recipe, error) {
 	panic("unexpected call to GenerateRecipeFromContext")
 }
 
@@ -183,17 +186,18 @@ func (c *captureRegenerateAIClient) RegenerateMenuPlan(ctx context.Context, inst
 	return &ai.MenuPlan{}, nil
 }
 
-func (c *captureRegenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error) {
+func (c *captureRegenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, promptCacheKey string) (*ai.RecipeContext, error) {
 	c.contextInstructions = append([]string(nil), instructions...)
+	c.contextPromptCacheKey = promptCacheKey
 	if c.preparedContextID != "" {
-		return c.preparedContextID, nil
+		return &ai.RecipeContext{ResponseID: c.preparedContextID, PromptCacheKey: promptCacheKey}, nil
 	}
-	return "resp-shared-context", nil
+	return &ai.RecipeContext{ResponseID: "resp-shared-context", PromptCacheKey: promptCacheKey}, nil
 }
 
-func (c *captureRegenerateAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureRegenerateAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext ai.RecipeContext) (*ai.Recipe, error) {
 	c.instructions = append([]string(nil), instructions...)
-	c.generateContextID = previousResponseID
+	c.generateContextID = recipeContext.ResponseID
 	if c.recipe != nil {
 		return c.recipe, nil
 	}
@@ -245,22 +249,23 @@ func (c *captureGenerateAIClient) RegenerateMenuPlan(ctx context.Context, instru
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureGenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error) {
+func (c *captureGenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, promptCacheKey string) (*ai.RecipeContext, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.contextInstructions = append([]string(nil), instructions...)
+	c.contextPromptCacheKey = promptCacheKey
 	if c.preparedContextID != "" {
-		return c.preparedContextID, nil
+		return &ai.RecipeContext{ResponseID: c.preparedContextID, PromptCacheKey: promptCacheKey}, nil
 	}
-	return "resp-shared-context", nil
+	return &ai.RecipeContext{ResponseID: "resp-shared-context", PromptCacheKey: promptCacheKey}, nil
 }
 
-func (c *captureGenerateAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureGenerateAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext ai.RecipeContext) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.generateContextIDs = append(c.generateContextIDs, previousResponseID)
+	c.generateContextIDs = append(c.generateContextIDs, recipeContext.ResponseID)
 	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
 	if c.shoppingList == nil {
 		return &ai.Recipe{}, nil
@@ -332,20 +337,21 @@ func (c *sequenceAIClient) RegenerateMenuPlan(ctx context.Context, instructions 
 	return menuPlanForRecipes(resp.Recipes), nil
 }
 
-func (c *sequenceAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error) {
+func (c *sequenceAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, promptCacheKey string) (*ai.RecipeContext, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.prepareContextCalls++
 	c.contextInstructions = append(c.contextInstructions, append([]string(nil), instructions...))
-	return "resp-shared-context", nil
+	c.contextPromptCacheKeys = append(c.contextPromptCacheKeys, promptCacheKey)
+	return &ai.RecipeContext{ResponseID: "resp-shared-context", PromptCacheKey: promptCacheKey}, nil
 }
 
-func (c *sequenceAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *sequenceAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext ai.RecipeContext) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.generateContextIDs = append(c.generateContextIDs, previousResponseID)
+	c.generateContextIDs = append(c.generateContextIDs, recipeContext.ResponseID)
 	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
 	for _, recipe := range c.plannedRecipes {
 		if recipeInstructionsContainAnchor(instructions, recipe.Title) {
@@ -669,6 +675,9 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 	if !slices.Equal(aiStub.contextInstructions, []string{"Use the store's sale ingredients."}) {
 		t.Fatalf("unexpected context instructions: got %v", aiStub.contextInstructions)
+	}
+	if got, want := aiStub.contextPromptCacheKey, recipePromptCacheKey(params.LocationHash()); got != want {
+		t.Fatalf("unexpected prompt cache key: got %q want %q", got, want)
 	}
 	if aiStub.menuPlanResponseID != "resp-menu-old" {
 		t.Fatalf("expected menu plan response ID %q, got %q", "resp-menu-old", aiStub.menuPlanResponseID)
