@@ -89,6 +89,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	data := struct {
 		Location        locations.Location
 		Date            string
+		MetaDescription string
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Instructions    string
@@ -103,6 +104,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	}{
 		Location:        *p.Location,
 		Date:            p.Date.Format("2006-01-02"),
+		MetaDescription: shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Instructions:    p.Instructions,
@@ -120,6 +122,20 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
+	titles := make([]string, 0, len(recipes))
+	for _, recipe := range recipes {
+		title := strings.TrimSpace(recipe.Title)
+		if title != "" {
+			titles = append(titles, title)
+		}
+	}
+	if len(titles) == 0 {
+		return fmt.Sprintf("Recipes for %s on %s.", locationName, date)
+	}
+	return fmt.Sprintf("Recipes for %s on %s: %s.", locationName, date, strings.Join(titles, ", "))
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.

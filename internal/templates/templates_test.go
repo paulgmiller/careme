@@ -74,6 +74,48 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	}
 }
 
+func TestTemplatePageTitlesAreUnique(t *testing.T) {
+	titles := make(map[string]string)
+	for _, name := range []string{
+		"about.html",
+		"auth_establish.html",
+		"critique.html",
+		"home.html",
+		"locations.html",
+		"mail.html",
+		"recipe.html",
+		"shoppinglist.html",
+		"spinner.html",
+		"user.html",
+	} {
+		body, err := htmlFiles.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		title, ok := templateTitle(string(body))
+		if !ok {
+			t.Fatalf("%s should include a title", name)
+		}
+		if previous, exists := titles[title]; exists {
+			t.Fatalf("%s and %s should not share title %q", previous, name, title)
+		}
+		titles[title] = name
+	}
+}
+
+func templateTitle(body string) (string, bool) {
+	start := strings.Index(body, "<title>")
+	if start == -1 {
+		return "", false
+	}
+	start += len("<title>")
+	end := strings.Index(body[start:], "</title>")
+	if end == -1 {
+		return "", false
+	}
+	return strings.TrimSpace(body[start : start+end]), true
+}
+
 func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -89,6 +131,9 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	rendered := buf.String()
 	if rendered == "" {
 		t.Fatal("about page rendered empty HTML")
+	}
+	if !strings.Contains(rendered, `<meta name="description" content="Learn how Careme helps home cooks find fresh nearby ingredients, plan practical recipes, and cook more often." />`) {
+		t.Fatalf("about page should include meta description, body: %s", rendered)
 	}
 	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
 		t.Fatalf("about page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
@@ -316,6 +361,9 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	}
 
 	rendered := buf.String()
+	if !strings.Contains(rendered, `<meta name="description" content="Careme helps you find nearby stores and cook fresh, seasonal recipes with ingredients that are close to home." />`) {
+		t.Fatalf("home page should include meta description, body: %s", rendered)
+	}
 	if !strings.Contains(rendered, "Ballard Market") {
 		t.Fatalf("home page should render favorite store name, body: %s", rendered)
 	}
