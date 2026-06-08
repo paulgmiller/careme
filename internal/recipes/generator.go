@@ -134,8 +134,11 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
+		if menuPlan == nil {
+			return nil, fmt.Errorf("failed to plan recipe replacements: AI returned no menu plan")
+		}
 		if len(menuPlan.Plans) != len(p.Dismissed) {
-			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
+			return nil, fmt.Errorf("failed to plan recipe replacements: planned %d replacements for %d dismissed recipes", len(menuPlan.Plans), len(p.Dismissed))
 		}
 		// does it matter how we associate these?
 		type plannedRegeneration struct {
