@@ -35,11 +35,12 @@ func (p MenuPlan) String() string {
 }
 
 type RecipePlan struct {
-	Cuisine          string `json:"cuisine"`
-	AnchorIngredient string `json:"anchor_ingredient"`
-	Technique        string `json:"technique"`
-	SideVegetable    string `json:"side_vegetable"`
-	Fancy            bool   `json:"fancy"`
+	Cuisine            string   `json:"cuisine"`
+	AnchorIngredient   string   `json:"anchor_ingredient"`
+	Technique          string   `json:"technique"`
+	SideVegetable      string   `json:"side_vegetable"`
+	Fancy              bool     `json:"fancy"`
+	RecipeInstructions []string `json:"recipe_instructions"`
 }
 
 func (p RecipePlan) Instructions() []string {
@@ -51,6 +52,11 @@ func (p RecipePlan) Instructions() []string {
 	}
 	if p.Fancy {
 		instructions = append(instructions, "This meal should be fancier, so it can be more expensive, longer, or richer.")
+	}
+	for _, instruction := range p.RecipeInstructions {
+		if trimmed := strings.TrimSpace(instruction); trimmed != "" {
+			instructions = append(instructions, "User direction for this recipe: "+trimmed)
+		}
 	}
 	return instructions
 }
@@ -128,9 +134,10 @@ const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
 Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and technique. Set fancy to true only for the richer/splurgier/time intensive option.
-Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","side_vegetable":"green beans","fancy":false}
+Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","side_vegetable":"green beans","fancy":false,"recipe_instructions":["Use the user's anise in this recipe."]}
 Try and ensure variety across cuisines, anchor ingredients, techniques, and side vegetables.
-Prioritize seasonal ingredients, sale value, practical weeknight cooking. 
+Prioritize seasonal ingredients, sale value, practical weeknight cooking.
+Assign user directions to recipe_instructions only for the specific recipe plans where they belong. If a user direction applies to every dish, repeat it in every recipe plan's recipe_instructions. If the user mentions having a limited ingredient without asking for it in every dish, assign it to only one fitting recipe.
 Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
 
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
@@ -212,7 +219,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 		return nil, err
 	}
 	messages = append(messages,
-		userPromptMessage(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
+		userPromptMessage(fmt.Sprintf("Build %d distinct recipe plans by default. If the user's directions clearly ask for a different number of recipes, return that many plans instead. Keep the plan count between 1 and 6. Fit the available ingredients, seasonality, and price.", count)),
 	)
 	cuisines := pickN(cuisineList, 5)
 	messages = append(messages, userPromptMessage("For extra variety, loosely draw from one of these cuisine styles if it fits the ingredients: "+strings.Join(cuisines, ", ")))

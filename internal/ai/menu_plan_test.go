@@ -60,7 +60,7 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	}
 }
 
-func TestBuildMenuPlanMessagesUsesRequestedCount(t *testing.T) {
+func TestBuildMenuPlanMessagesUsesRequestedCountAsDefault(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 2)
@@ -68,8 +68,11 @@ func TestBuildMenuPlanMessagesUsesRequestedCount(t *testing.T) {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "Build exactly 2 distinct recipe plans") {
-		t.Fatalf("expected requested menu plan count in prompt: %s", body)
+	if !strings.Contains(body, "Build 2 distinct recipe plans by default") {
+		t.Fatalf("expected requested default menu plan count in prompt: %s", body)
+	}
+	if !strings.Contains(body, "If the user's directions clearly ask for a different number of recipes, return that many plans instead") {
+		t.Fatalf("expected prompt to let user directions change the count: %s", body)
 	}
 	if strings.Contains(body, "Mark one plan fancy") {
 		t.Fatalf("did not expect fancy-plan requirement for a two-plan request: %s", body)
@@ -107,6 +110,24 @@ func TestBuildMenuPlanMessagesIncludesCuisineListInspiration(t *testing.T) {
 		if !slices.Contains(cuisineList, cuisine) {
 			t.Fatalf("expected injected cuisine %q to come from cuisineList; prompt cuisines: %v", cuisine, included)
 		}
+	}
+}
+
+func TestRecipePlanInstructionsIncludesPlanSpecificUserDirections(t *testing.T) {
+	plan := RecipePlan{
+		Cuisine:            "French",
+		AnchorIngredient:   "chicken",
+		Technique:          "braise",
+		SideVegetable:      "carrots",
+		RecipeInstructions: []string{"use the anise here", "  "},
+	}
+
+	got := plan.Instructions()
+	if !slices.Contains(got, "User direction for this recipe: use the anise here") {
+		t.Fatalf("expected recipe-specific user direction, got %v", got)
+	}
+	if slices.Contains(got, "User direction for this recipe: ") {
+		t.Fatalf("expected blank recipe-specific directions to be skipped, got %v", got)
 	}
 }
 
@@ -152,7 +173,7 @@ func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 		t.Fatalf("unexpected instructions: %q", recorder.record.Instructions)
 	}
 	body := mustJSON(t, recorder.record.Input)
-	if !strings.Contains(body, "Build exactly 2 distinct recipe plans") || !strings.Contains(body, "make it vegetarian") {
+	if !strings.Contains(body, "Build 2 distinct recipe plans by default") || !strings.Contains(body, "make it vegetarian") {
 		t.Fatalf("unexpected recorded menu prompt: %s", body)
 	}
 }

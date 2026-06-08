@@ -216,10 +216,10 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	g.writeStatus(ctx, hash, status.Ingredients(ingredients, ogCount))
 	mutable.Shuffle(ingredients)
 
-	instructions := []string{p.Directive, p.Instructions}
+	menuPlanInstructions := []string{p.Directive, p.Instructions}
+	recipeBaseInstructions := []string{p.Directive}
 
-	// 3 is arbitrary let user decide?
-	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, instructions, p.Date, p.LastRecipes, 3)
+	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, menuPlanInstructions, p.Date, p.LastRecipes, 3)
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
@@ -228,7 +228,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
-		recipeInstructions := append(slices.Clone(instructions), plan.Instructions()...)
+		recipeInstructions := append(slices.Clone(recipeBaseInstructions), plan.Instructions()...)
 		recipe, err := g.aiClient.GenerateRecipe(ctx, p.Location, ingredients, recipeInstructions, p.Date, p.LastRecipes)
 		if err != nil {
 			return nil, err

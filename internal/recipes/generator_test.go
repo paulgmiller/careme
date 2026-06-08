@@ -38,11 +38,13 @@ type captureRegenerateAIClient struct {
 }
 
 type captureGenerateAIClient struct {
-	shoppingList *ai.ShoppingList
-	ingredients  []ai.InputIngredient
-	instructions [][]string
-	lastRecipes  []string
-	mu           sync.Mutex
+	shoppingList         *ai.ShoppingList
+	menuPlan             *ai.MenuPlan
+	ingredients          []ai.InputIngredient
+	instructions         [][]string
+	generateInstructions [][]string
+	lastRecipes          []string
+	mu                   sync.Mutex
 }
 
 type sequenceAIClient struct {
@@ -208,6 +210,9 @@ func (c *captureGenerateAIClient) CreateMenuPlan(ctx context.Context, location *
 	c.ingredients = append([]ai.InputIngredient(nil), ingredients...)
 	c.instructions = append(c.instructions, append([]string(nil), instructions...))
 	c.lastRecipes = append([]string(nil), lastRecipes...)
+	if c.menuPlan != nil {
+		return c.menuPlan, nil
+	}
 	if c.shoppingList != nil {
 		return menuPlanForRecipes(c.shoppingList.Recipes), nil
 	}
@@ -222,6 +227,7 @@ func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, location *
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
 	if c.shoppingList == nil {
 		return &ai.Recipe{}, nil
 	}
@@ -720,6 +726,49 @@ func TestGenerateRecipes_RegenerateWithOnlySavedRecipesPreservesSavedRecipes(t *
 	if got == nil || len(got.Recipes) != 1 || got.Recipes[0].ComputeHash() != saved.ComputeHash() {
 		t.Fatalf("expected saved recipe to be preserved, got %+v", got)
 	}
+}
+
+func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirectionsToEveryRecipe(t *testing.T) {
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params.Directive = "Use sale ingredients."
+	params.Instructions = "I have some anise."
+
+	aniseRecipe := ai.Recipe{Title: "Anise Chicken", Description: "Uses the anise", ResponseID: "resp-anise"}
+	plainRecipe := ai.Recipe{Title: "Plain Pasta", Description: "No anise", ResponseID: "resp-plain"}
+	aiStub := &captureGenerateAIClient{
+		shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{aniseRecipe, plainRecipe}},
+		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{
+			{Cuisine: "test", AnchorIngredient: aniseRecipe.Title, Technique: "test", RecipeInstructions: []string{"Use the user's anise in this recipe."}},
+			{Cuisine: "test", AnchorIngredient: plainRecipe.Title, Technique: "test"},
+		}},
+	}
+	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
+
+	got, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 2)
+	require.Len(t, aiStub.generateInstructions, 2)
+
+	for _, instructions := range aiStub.generateInstructions {
+		assert.NotContains(t, instructions, "I have some anise.")
+		assert.Contains(t, instructions, "Use sale ingredients.")
+	}
+
+	aniseInstructions := instructionsForAnchor(t, aiStub.generateInstructions, aniseRecipe.Title)
+	plainInstructions := instructionsForAnchor(t, aiStub.generateInstructions, plainRecipe.Title)
+	assert.Contains(t, aniseInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
+	assert.NotContains(t, plainInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
+}
+
+func instructionsForAnchor(t *testing.T, calls [][]string, title string) []string {
+	t.Helper()
+	for _, instructions := range calls {
+		if recipeInstructionsContainAnchor(instructions, title) {
+			return instructions
+		}
+	}
+	t.Fatalf("missing generate call for %q in %v", title, calls)
+	return nil
 }
 
 func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
