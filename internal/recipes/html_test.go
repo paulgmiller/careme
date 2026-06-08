@@ -136,7 +136,7 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 		DrinkPairing: "Tea",
 	}
 	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{addedRecipe, unaddedRecipe}}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	selection := recipeSelection{SavedHashes: []string{addedRecipe.ComputeHash()}}
 
 	w := httptest.NewRecorder()
@@ -144,6 +144,9 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
+	if !strings.Contains(html, `<meta name="description" content="Recipes for Store on 2026-01-25: Added Bowl, Maybe Pasta." />`) {
+		t.Error("shopping list HTML should include all recipe titles, location, and date in the meta description")
+	}
 	if !strings.Contains(html, "Shopping list") {
 		t.Fatal("shopping list HTML should render the shopping list section when a recipe is added")
 	}
@@ -306,7 +309,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	recipe.OriginHash = p.Hash()
@@ -316,6 +319,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 
 	isValidHTML(t, html)
 
+	if !strings.Contains(html, `<meta name="description" content="A simple quail recipe Recipe for Store on 2026-01-25." />`) {
+		t.Error("recipe HTML should include recipe, location, and date in the meta description")
+	}
 	if strings.Contains(html, "Finalize") {
 		t.Error("recipe HTML should not contain Finalize button")
 	}
