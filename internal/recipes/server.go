@@ -25,6 +25,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
+	recipestatus "careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -92,6 +93,7 @@ type server struct {
 	imageio
 	imagegen     ImageGen
 	statusReader statusReader
+	statusWriter statusWriter
 	cfg          *config.Config
 	storage      *users.Storage
 	generator    generator
@@ -108,11 +110,13 @@ type critiqueStore interface {
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
+	statusStore := StatusStore(c)
 	return &server{
 		recipeio:     IO(c),
 		imageio:      imageio{Cache: imageCache},
 		imagegen:     imagegen,
-		statusReader: StatusStore(c),
+		statusReader: statusStore,
+		statusWriter: statusStore,
 		cfg:          cfg,
 		storage:      storage,
 		generator:    generator,
@@ -1118,6 +1122,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
+			s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
 			return
 		}
 
@@ -1126,6 +1131,15 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 			return
 		}
 	})
+}
+
+func (s *server) writeGenerationStatus(ctx context.Context, hash, status string) {
+	if s.statusWriter == nil || strings.TrimSpace(hash) == "" {
+		return
+	}
+	if err := s.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
+		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "status", status, "error", err)
+	}
 }
 
 func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
