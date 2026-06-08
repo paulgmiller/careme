@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -610,6 +611,7 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 type captureKickgenerationGenerator struct {
 	mu     sync.Mutex
 	last   *generatorParams
+	err    error
 	called chan struct{}
 }
 
@@ -628,6 +630,9 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 		case c.called <- struct{}{}:
 		default:
 		}
+	}
+	if c.err != nil {
+		return nil, c.err
 	}
 	return &ai.ShoppingList{}, nil
 }
@@ -708,6 +713,23 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	if got, want := captured.LastRecipes, []string{"Cooked Recently"}; !slices.Equal(got, want) {
 		t.Fatalf("expected only recently cooked recipes in avoid list, got %v", got)
 	}
+}
+
+func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	generator := &captureKickgenerationGenerator{err: errors.New("plan exploded")}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestGenerator(generator),
+	)
+
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
+	s.kickgeneration(t.Context(), params, &utypes.User{})
+	s.Wait()
+
+	got, err := s.statusReader.GenerationStatusFromCache(t.Context(), params.Hash())
+	require.NoError(t, err)
+	assert.Equal(t, "Something went wrong: plan exploded", got)
 }
 
 func TestSpin_RendersCachedGenerationStatus(t *testing.T) {

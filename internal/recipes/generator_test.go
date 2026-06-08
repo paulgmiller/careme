@@ -2,7 +2,6 @@ package recipes
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -48,7 +47,6 @@ type captureGenerateAIClient struct {
 
 type sequenceAIClient struct {
 	mu                     sync.Mutex
-	createMenuPlanErr      error
 	generateCalls          int
 	generateInstructions   [][]string
 	menuPlanInstructions   [][]string
@@ -262,9 +260,6 @@ func (c *sequenceAIClient) CreateMenuPlan(ctx context.Context, location *locatio
 	c.generateCalls++
 	c.menuPlanInstructions = append(c.menuPlanInstructions, append([]string(nil), instructions...))
 	c.menuPlanCounts = append(c.menuPlanCounts, count)
-	if c.createMenuPlanErr != nil {
-		return nil, c.createMenuPlanErr
-	}
 	if len(c.generateResponses) == 0 {
 		c.plannedRecipes = nil
 		return &ai.MenuPlan{}, nil
@@ -1055,30 +1050,6 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 	_, err := g.GenerateRecipes(t.Context(), params)
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(statuses.status), "got statuses %v", statuses.status)
-}
-
-func TestGenerateRecipes_WritesErrorsToStatus(t *testing.T) {
-	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore)
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
-		t.Fatalf("failed to seed ingredients cache: %v", err)
-	}
-
-	statuses := &statusCounter{}
-	g := newTestGenerator(
-		t,
-		&sequenceAIClient{createMenuPlanErr: errors.New("plan exploded")},
-		&captureCritiqueService{},
-		&cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)},
-		statuses,
-		nil,
-	)
-
-	_, err := g.GenerateRecipes(t.Context(), params)
-	require.ErrorContains(t, err, "failed to plan recipe variety: plan exploded")
-	require.NotEmpty(t, statuses.status)
-	assert.Equal(t, "Something went wrong: failed to plan recipe variety: plan exploded", statuses.status[len(statuses.status)-1])
 }
 
 func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
