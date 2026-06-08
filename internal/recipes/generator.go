@@ -27,7 +27,6 @@ type aiClient interface {
 	RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error)
 	PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error)
 	GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error)
-	GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error)
 	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error)
@@ -132,19 +131,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 		regenInstructions := regenerateInstructions(p)
 
-		menuPlan, err := g.replacementMenuPlan(ctx, p, regenInstructions, len(p.Dismissed))
-		if err != nil {
-			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
-		}
-		if menuPlan == nil {
-			return nil, fmt.Errorf("failed to plan recipe replacements: AI returned no menu plan")
-		}
-		if len(menuPlan.Plans) != len(p.Dismissed) {
-			return nil, fmt.Errorf("failed to plan recipe replacements: planned %d replacements for %d dismissed recipes", len(menuPlan.Plans), len(p.Dismissed))
-		}
-		// does it matter how we associate these?
-		g.writeStatus(ctx, hash, menuPlan.String())
-
 		// this SHOULD hit the cache and we could do it in parallel with menu planning
 		ingredients, err := g.staples.FetchStaples(ctx, p)
 		if err != nil {
@@ -156,10 +142,42 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		})
 		ingMap := inputIngredientMap(ingredients)
 
-		contextID, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, []string{p.Directive}, p.Date, p.LastRecipes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare recipe context: %w", err)
+		type asyncMenuPlanResult struct {
+			plan *ai.MenuPlan
+			err  error
 		}
+		type asyncContextResult struct {
+			id  string
+			err error
+		}
+		menuPlanCh := make(chan asyncMenuPlanResult, 1)
+		contextCh := make(chan asyncContextResult, 1)
+		go func() {
+			plan, err := g.replacementMenuPlan(ctx, p, regenInstructions, len(p.Dismissed))
+			menuPlanCh <- asyncMenuPlanResult{plan: plan, err: err}
+		}()
+		go func() {
+			id, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, []string{p.Directive}, p.Date, p.LastRecipes)
+			contextCh <- asyncContextResult{id: id, err: err}
+		}()
+
+		menuPlanResult := <-menuPlanCh
+		contextResult := <-contextCh
+		if menuPlanResult.err != nil {
+			return nil, fmt.Errorf("failed to plan recipe replacements: %w", menuPlanResult.err)
+		}
+		if contextResult.err != nil {
+			return nil, fmt.Errorf("failed to prepare recipe context: %w", contextResult.err)
+		}
+		menuPlan := menuPlanResult.plan
+		contextID := contextResult.id
+		if menuPlan == nil {
+			return nil, fmt.Errorf("failed to plan recipe replacements: AI returned no menu plan")
+		}
+		if len(menuPlan.Plans) != len(p.Dismissed) {
+			return nil, fmt.Errorf("failed to plan recipe replacements: planned %d replacements for %d dismissed recipes", len(menuPlan.Plans), len(p.Dismissed))
+		}
+		g.writeStatus(ctx, hash, menuPlan.String())
 
 		results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
@@ -211,16 +229,36 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	menuPlanInstructions := []string{p.Directive, p.Instructions}
 	recipeBaseInstructions := []string{p.Directive}
 
-	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, menuPlanInstructions, p.Date, p.LastRecipes, 3)
-	if err != nil {
-		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
+	type asyncMenuPlanResult struct {
+		plan *ai.MenuPlan
+		err  error
 	}
-	g.writeStatus(ctx, hash, menuPlan.String())
+	type asyncContextResult struct {
+		id  string
+		err error
+	}
+	menuPlanCh := make(chan asyncMenuPlanResult, 1)
+	contextCh := make(chan asyncContextResult, 1)
+	go func() {
+		plan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, menuPlanInstructions, p.Date, p.LastRecipes, 3)
+		menuPlanCh <- asyncMenuPlanResult{plan: plan, err: err}
+	}()
+	go func() {
+		id, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, recipeBaseInstructions, p.Date, p.LastRecipes)
+		contextCh <- asyncContextResult{id: id, err: err}
+	}()
 
-	contextID, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, recipeBaseInstructions, p.Date, p.LastRecipes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare recipe context: %w", err)
+	menuPlanResult := <-menuPlanCh
+	contextResult := <-contextCh
+	if menuPlanResult.err != nil {
+		return nil, fmt.Errorf("failed to plan recipe variety: %w", menuPlanResult.err)
 	}
+	if contextResult.err != nil {
+		return nil, fmt.Errorf("failed to prepare recipe context: %w", contextResult.err)
+	}
+	menuPlan := menuPlanResult.plan
+	contextID := contextResult.id
+	g.writeStatus(ctx, hash, menuPlan.String())
 
 	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")

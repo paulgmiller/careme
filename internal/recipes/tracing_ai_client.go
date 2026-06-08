@@ -39,20 +39,6 @@ func (c *tracingAIClient) RegenerateMenuPlan(ctx context.Context, instructions [
 	return c.next.RegenerateMenuPlan(ctx, instructions, previousResponseID, count)
 }
 
-func (c *tracingAIClient) GenerateRecipe(
-	ctx context.Context,
-	location *locations.Location,
-	ingredients []ai.InputIngredient,
-	instructions []string,
-	date time.Time,
-	lastRecipes []string,
-) (*ai.Recipe, error) {
-	ctx, span := tracer.Start(ctx, "recipes.ai.generate_recipe")
-	defer span.End()
-
-	return c.next.GenerateRecipe(ctx, location, ingredients, instructions, date, lastRecipes)
-}
-
 func (c *tracingAIClient) PrepareRecipeContext(
 	ctx context.Context,
 	location *locations.Location,

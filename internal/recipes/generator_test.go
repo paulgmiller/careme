@@ -128,10 +128,6 @@ func (c *captureWineQuestionAIClient) RegenerateMenuPlan(ctx context.Context, in
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureWineQuestionAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error) {
-	panic("unexpected call to GenerateRecipe")
-}
-
 func (c *captureWineQuestionAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error) {
 	panic("unexpected call to PrepareRecipeContext")
 }
@@ -185,14 +181,6 @@ func (c *captureRegenerateAIClient) RegenerateMenuPlan(ctx context.Context, inst
 		return c.menuPlan, nil
 	}
 	return &ai.MenuPlan{}, nil
-}
-
-func (c *captureRegenerateAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error) {
-	c.instructions = append([]string(nil), instructions...)
-	if c.recipe != nil {
-		return c.recipe, nil
-	}
-	return &ai.Recipe{}, nil
 }
 
 func (c *captureRegenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error) {
@@ -255,22 +243,6 @@ func (c *captureGenerateAIClient) CreateMenuPlan(ctx context.Context, location *
 
 func (c *captureGenerateAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error) {
 	panic("unexpected call to RegenerateMenuPlan")
-}
-
-func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
-	if c.shoppingList == nil {
-		return &ai.Recipe{}, nil
-	}
-	for _, recipe := range c.shoppingList.Recipes {
-		if recipeInstructionsContainAnchor(instructions, recipe.Title) {
-			return &recipe, nil
-		}
-	}
-	return &ai.Recipe{}, nil
 }
 
 func (c *captureGenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error) {
@@ -358,19 +330,6 @@ func (c *sequenceAIClient) RegenerateMenuPlan(ctx context.Context, instructions 
 	c.generateResponses = c.generateResponses[1:]
 	c.plannedRecipes = slices.Clone(resp.Recipes)
 	return menuPlanForRecipes(resp.Recipes), nil
-}
-
-func (c *sequenceAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
-	for _, recipe := range c.plannedRecipes {
-		if recipeInstructionsContainAnchor(instructions, recipe.Title) {
-			return &recipe, nil
-		}
-	}
-	return &ai.Recipe{}, nil
 }
 
 func (c *sequenceAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error) {

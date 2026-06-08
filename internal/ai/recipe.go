@@ -162,7 +162,6 @@ func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtyp
 	if err != nil {
 		return "", fmt.Errorf("failed to build recipe context messages: %w", err)
 	}
-	promptMessages = append(promptMessages, userPromptMessage("Default: each recipe should serve 2 people."))
 
 	params := responses.ResponseNewParams{
 		Model:           c.model,
@@ -259,26 +258,6 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 	)
 }
 
-func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
-) (*Recipe, error) {
-	contextID, err := c.PrepareRecipeContext(ctx, location, saleIngredients, nil, date, lastRecipes)
-	if err != nil {
-		return nil, err
-	}
-	return c.GenerateRecipeFromContext(ctx, instructions, contextID)
-}
-
-// buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
-	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
-	if err != nil {
-		return nil, err
-	}
-	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
-	return messages, nil
-}
-
 func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
 	var messages []PromptMessage
 	// constants we might make variable later
@@ -305,6 +284,7 @@ func (c *client) buildRecipeContextMessages(location *locationtypes.Location, sa
 	}
 
 	messages = append(messages, cleanInstructionMessages(instructions)...)
+	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
 
 	return messages, nil
 }

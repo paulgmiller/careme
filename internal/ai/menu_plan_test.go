@@ -33,29 +33,17 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
-	recipeInstructions := append(slices.Clone(instructions), RecipePlan{
-		Cuisine:          "Korean",
-		AnchorIngredient: "chicken thighs",
-		Technique:        "stir-fry",
-	}.Instructions()...)
-	recipeMessages, err := client.buildRecipeMessages(location, ingredients, recipeInstructions, date, lastRecipes)
-	if err != nil {
-		t.Fatalf("buildRecipeMessages returned error: %v", err)
-	}
 
 	prefixLen := len(contextMessages)
 	if prefixLen == 0 {
 		t.Fatal("expected shared context prefix")
 	}
-	if got, want := mustJSON(t, menuMessages[:prefixLen]), mustJSON(t, recipeMessages[:prefixLen]); got != want {
-		t.Fatalf("menu planning and recipe generation should share prompt prefix:\ngot  %s\nwant %s", got, want)
+	if got, want := mustJSON(t, menuMessages[:prefixLen]), mustJSON(t, contextMessages); got != want {
+		t.Fatalf("menu planning should share prompt prefix with recipe context:\ngot  %s\nwant %s", got, want)
 	}
-	if got, want := mustJSON(t, contextMessages), mustJSON(t, recipeMessages[:prefixLen]); got != want {
-		t.Fatalf("recipe generation prefix should match shared context:\ngot  %s\nwant %s", got, want)
-	}
-	for _, message := range recipeMessages {
+	for _, message := range contextMessages {
 		if message.Role != "user" {
-			t.Fatalf("expected only user prompt messages, got %#v", recipeMessages)
+			t.Fatalf("expected only user prompt messages, got %#v", contextMessages)
 		}
 	}
 }
