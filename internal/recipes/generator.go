@@ -109,8 +109,13 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	return selection, nil
 }
 
-func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (shoppingList *ai.ShoppingList, err error) {
 	hash := p.Hash()
+	defer func() {
+		if err != nil {
+			g.writeStatus(ctx, hash, status.Error(err))
+		}
+	}()
 	start := time.Now()
 
 	if len(p.Dismissed) > 0 || len(p.Saved) > 0 {
@@ -392,7 +397,7 @@ func inputIngredientDisplayPrice(input ai.InputIngredient) string {
 
 // just making this best effort
 func (g *generatorService) writeStatus(ctx context.Context, hash string, status string) {
-	if strings.TrimSpace(hash) == "" {
+	if g.statusWriter == nil || strings.TrimSpace(hash) == "" {
 		return
 	}
 	if err := g.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
