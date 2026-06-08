@@ -103,12 +103,15 @@ func main() {
 		panic(err)
 	}
 
-	// adding gets tricky to retain comments
 	if *check {
-		for name, secret := range secrets {
+		for _, name := range secrets.Order {
+			secret := secrets.Secrets[name]
 			fmt.Println(name)
-			for key, entry := range secret.Secrets {
-				fmt.Printf("  %s=%s\n", key, maskedSecretValue(entry.Value))
+			for _, line := range secret.Lines {
+				if line.Key == "" {
+					continue
+				}
+				fmt.Printf("  %s=%s\n", line.Key, maskedSecretValue(line.Value))
 			}
 			fmt.Println()
 		}
@@ -179,70 +182,97 @@ func secretNeedsUpdate(current, desired *corev1.Secret) bool {
 	return false
 }
 
-type secretEntry struct {
+type secretsFile struct {
+	Order   []string
+	Secrets map[string]secret
+}
+
+type secretLine struct {
+	Key     string
 	Value   string
 	Comment string
 }
 
 type secret struct {
-	Secrets  map[string]secretEntry
-	Comments []string
+	Lines []secretLine
 }
 
-func secrets(r io.Reader) (map[string]secret, error) {
+func secrets(r io.Reader) (secretsFile, error) {
 	sc := bufio.NewScanner(r)
 	var currentSecret string
-	secretVals := map[string]secret{}
+	secretVals := secretsFile{Secrets: map[string]secret{}}
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if comment, found := strings.CutPrefix(line, "#"); found {
 			if secretName, found := strings.CutPrefix(comment, secretCommentPrefix); found {
 				currentSecret = secretName
-				if _, found := secretVals[currentSecret]; found {
-					return nil, fmt.Errorf("duplicate secret comment %s", currentSecret)
+				if _, found := secretVals.Secrets[currentSecret]; found {
+					return secretsFile{}, fmt.Errorf("duplicate secret comment %s", currentSecret)
 				}
-				secretVals[currentSecret] = secret{Secrets: map[string]secretEntry{}}
+				secretVals.Order = append(secretVals.Order, currentSecret)
+				secretVals.Secrets[currentSecret] = secret{}
 				continue
 			}
 			if currentSecret != "" {
-				secret := secretVals[currentSecret]
-				secret.Comments = append(secret.Comments, line)
-				secretVals[currentSecret] = secret
+				secret := secretVals.Secrets[currentSecret]
+				secret.Lines = append(secret.Lines, secretLine{Comment: line})
+				secretVals.Secrets[currentSecret] = secret
 			}
 			continue
 		}
 		if len(currentSecret) == 0 {
 			continue
 		}
-		key, entry, err := parseSecretLine(line)
+		entry, err := parseSecretLine(line)
 		if err != nil {
-			return nil, err
+			return secretsFile{}, err
 		}
-		if key == "" {
+		if entry.Key == "" {
 			continue
 		}
-		secret := secretVals[currentSecret]
-		if _, found := secret.Secrets[key]; found {
-			return nil, fmt.Errorf("duplicate secret key %s", key)
-		}
-		if len(entry.Value) < minSecretValueLength {
-			return nil, fmt.Errorf("secret %s/%s must be at least %d characters", currentSecret, key, minSecretValueLength)
-		}
-		secret.Secrets[key] = entry
-		secretVals[currentSecret] = secret
+		secret := secretVals.Secrets[currentSecret]
+		secret.Lines = append(secret.Lines, entry)
+		secretVals.Secrets[currentSecret] = secret
 	}
 	if err := sc.Err(); err != nil {
-		return nil, err
+		return secretsFile{}, err
+	}
+	if err := validateSecrets(secretVals); err != nil {
+		return secretsFile{}, err
 	}
 	return secretVals, nil
 }
 
-func toK8s(secretVals map[string]secret) []*corev1.Secret {
+func validateSecrets(secretVals secretsFile) error {
+	for _, name := range secretVals.Order {
+		secret := secretVals.Secrets[name]
+		keys := map[string]struct{}{}
+		for _, line := range secret.Lines {
+			if line.Key == "" {
+				continue
+			}
+			if _, found := keys[line.Key]; found {
+				return fmt.Errorf("duplicate secret key %s", line.Key)
+			}
+			keys[line.Key] = struct{}{}
+			if len(line.Value) < minSecretValueLength {
+				return fmt.Errorf("secret %s/%s must be at least %d characters", name, line.Key, minSecretValueLength)
+			}
+		}
+	}
+	return nil
+}
+
+func toK8s(secretVals secretsFile) []*corev1.Secret {
 	var secrets []*corev1.Secret
-	for name, vals := range secretVals {
+	for _, name := range secretVals.Order {
+		vals := secretVals.Secrets[name]
 		stringData := map[string]string{}
-		for key, entry := range vals.Secrets {
-			stringData[key] = entry.Value
+		for _, line := range vals.Lines {
+			if line.Key == "" {
+				continue
+			}
+			stringData[line.Key] = line.Value
 		}
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -259,20 +289,20 @@ func toK8s(secretVals map[string]secret) []*corev1.Secret {
 	return secrets
 }
 
-func parseSecretLine(line string) (string, secretEntry, error) {
+func parseSecretLine(line string) (secretLine, error) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
-		return "", secretEntry{}, nil
+		return secretLine{}, nil
 	}
 
 	key, rawValue, found := strings.Cut(trimmed, "=")
 	if !found {
-		return "", secretEntry{}, fmt.Errorf("invalid secret entry %q", line)
+		return secretLine{}, fmt.Errorf("invalid secret entry %q", line)
 	}
 
 	key = strings.TrimSpace(key)
 	if key == "" {
-		return "", secretEntry{}, fmt.Errorf("invalid secret entry %q", line)
+		return secretLine{}, fmt.Errorf("invalid secret entry %q", line)
 	}
 
 	value, comment := splitInlineComment(rawValue)
@@ -280,14 +310,14 @@ func parseSecretLine(line string) (string, secretEntry, error) {
 	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
 		unquoted, err := strconv.Unquote(value)
 		if err != nil {
-			return "", secretEntry{}, err
+			return secretLine{}, err
 		}
 		value = unquoted
 	} else if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
 		value = value[1 : len(value)-1]
 	}
 
-	return key, secretEntry{Value: value, Comment: comment}, nil
+	return secretLine{Key: key, Value: value, Comment: comment}, nil
 }
 
 func parseSetArg(arg string) (string, string, string, error) {
@@ -311,111 +341,64 @@ func parseSetArg(arg string) (string, string, string, error) {
 }
 
 func setSecretValue(input []byte, secretName, key, value string) ([]byte, bool, error) {
-	lines, finalNewline := splitLines(string(input))
-	currentSecret := ""
-	secretStart := -1
-	secretEnd := -1
-	insertAt := -1
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if comment, found := strings.CutPrefix(trimmed, "#"); found {
-			if foundSecret, found := strings.CutPrefix(comment, secretCommentPrefix); found {
-				foundSecret = strings.TrimSpace(foundSecret)
-				if currentSecret == secretName && secretEnd == -1 {
-					secretEnd = i
-				}
-				currentSecret = foundSecret
-				if currentSecret == secretName {
-					secretStart = i
-					insertAt = i + 1
-				}
-			}
+	secretVals, err := secrets(bytes.NewReader(input))
+	if err != nil {
+		return nil, false, err
+	}
+	sec, found := secretVals.Secrets[secretName]
+	if !found {
+		secretVals.Order = append(secretVals.Order, secretName)
+		sec = secret{}
+	}
+	for i, line := range sec.Lines {
+		if line.Key != key {
 			continue
 		}
-		if currentSecret != secretName {
-			continue
-		}
-		lineKey, entry, err := parseSecretLine(line)
-		if err != nil {
-			return nil, false, err
-		}
-		if lineKey == "" {
-			insertAt = i + 1
-			continue
-		}
-		insertAt = i + 1
-		if lineKey != key {
-			continue
-		}
-		if entry.Value == value {
+		if line.Value == value {
 			return input, false, nil
 		}
-		lines[i] = replaceSecretLineValue(line, value)
-		return joinLines(lines, finalNewline), true, nil
+		line.Value = value
+		sec.Lines[i] = line
+		secretVals.Secrets[secretName] = sec
+		return serializeSecrets(secretVals), true, nil
 	}
+	sec.Lines = append(sec.Lines, secretLine{Key: key, Value: value})
+	secretVals.Secrets[secretName] = sec
+	if err := validateSecrets(secretVals); err != nil {
+		return nil, false, err
+	}
+	return serializeSecrets(secretVals), true, nil
+}
 
-	if secretStart != -1 {
-		if secretEnd == -1 {
-			secretEnd = len(lines)
+func serializeSecrets(secretVals secretsFile) []byte {
+	var out strings.Builder
+	for i, name := range secretVals.Order {
+		if i > 0 {
+			out.WriteByte('\n')
 		}
-		if insertAt < secretStart+1 || insertAt > secretEnd {
-			insertAt = secretEnd
+		out.WriteString("#")
+		out.WriteString(secretCommentPrefix)
+		out.WriteString(name)
+		out.WriteByte('\n')
+		for _, line := range secretVals.Secrets[name].Lines {
+			if line.Key == "" {
+				if line.Comment != "" {
+					out.WriteString(line.Comment)
+					out.WriteByte('\n')
+				}
+				continue
+			}
+			out.WriteString(line.Key)
+			out.WriteByte('=')
+			out.WriteString(formatSecretValue(line.Value))
+			if line.Comment != "" {
+				out.WriteByte(' ')
+				out.WriteString(line.Comment)
+			}
+			out.WriteByte('\n')
 		}
-		lines = slicesInsert(lines, insertAt, fmt.Sprintf("%s=%s", key, formatSecretValue(value)))
-		return joinLines(lines, finalNewline), true, nil
 	}
-
-	if len(lines) > 0 && lines[len(lines)-1] != "" {
-		lines = append(lines, "")
-	}
-	lines = append(lines, "#"+secretCommentPrefix+secretName, fmt.Sprintf("%s=%s", key, formatSecretValue(value)))
-	return joinLines(lines, true), true, nil
-}
-
-func splitLines(input string) ([]string, bool) {
-	finalNewline := strings.HasSuffix(input, "\n")
-	if finalNewline {
-		input = strings.TrimSuffix(input, "\n")
-	}
-	if input == "" {
-		return nil, finalNewline
-	}
-	return strings.Split(input, "\n"), finalNewline
-}
-
-func joinLines(lines []string, finalNewline bool) []byte {
-	output := strings.Join(lines, "\n")
-	if finalNewline {
-		output += "\n"
-	}
-	return []byte(output)
-}
-
-func slicesInsert(values []string, index int, value string) []string {
-	values = append(values, "")
-	copy(values[index+1:], values[index:])
-	values[index] = value
-	return values
-}
-
-func replaceSecretLineValue(line, value string) string {
-	eq := strings.IndexByte(line, '=')
-	if eq == -1 {
-		return line
-	}
-	prefix := line[:eq+1]
-	rawValue := line[eq+1:]
-	commentIndex := inlineCommentIndex(rawValue)
-	valuePart := rawValue
-	commentPart := ""
-	if commentIndex != -1 {
-		valuePart = rawValue[:commentIndex]
-		commentPart = rawValue[commentIndex:]
-	}
-	leading := valuePart[:len(valuePart)-len(strings.TrimLeft(valuePart, " \t"))]
-	gap := valuePart[len(strings.TrimRight(valuePart, " \t")):]
-	return prefix + leading + formatSecretValue(value) + gap + commentPart
+	return []byte(out.String())
 }
 
 func formatSecretValue(value string) string {
