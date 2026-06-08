@@ -631,6 +631,23 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 }
 
+func TestGenerateRecipes_RegeneratePlanCountMismatchReturnsHelpfulError(t *testing.T) {
+	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
+	aiStub := &captureRegenerateAIClient{
+		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{}, ResponseID: "resp-menu-next"},
+	}
+
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params.Instructions = "make it brighter"
+	params.Dismissed = []ai.Recipe{dismissed}
+	params.PreviousMenuPlanResponseID = "resp-menu-old"
+
+	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
+	_, err := g.GenerateRecipes(t.Context(), params)
+	require.ErrorContains(t, err, "failed to plan recipe replacements: planned 0 replacements for 1 dismissed recipes")
+	require.NotContains(t, err.Error(), "%!w(<nil>)")
+}
+
 func TestGenerateRecipes_RegenerateBackCompatFallbackUsesFakePlan(t *testing.T) {
 	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
