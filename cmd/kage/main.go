@@ -107,8 +107,8 @@ func main() {
 	if *check {
 		for name, secret := range secrets {
 			fmt.Println(name)
-			for key, value := range secret {
-				fmt.Printf("  %s=%s\n", key, maskedSecretValue(value))
+			for key, entry := range secret.Secrets {
+				fmt.Printf("  %s=%s\n", key, maskedSecretValue(entry.Value))
 			}
 			fmt.Println()
 		}
@@ -179,7 +179,15 @@ func secretNeedsUpdate(current, desired *corev1.Secret) bool {
 	return false
 }
 
-type secret map[string]string
+type secretEntry struct {
+	Value   string
+	Comment string
+}
+
+type secret struct {
+	Secrets  map[string]secretEntry
+	Comments []string
+}
 
 func secrets(r io.Reader) (map[string]secret, error) {
 	sc := bufio.NewScanner(r)
@@ -193,14 +201,20 @@ func secrets(r io.Reader) (map[string]secret, error) {
 				if _, found := secretVals[currentSecret]; found {
 					return nil, fmt.Errorf("duplicate secret comment %s", currentSecret)
 				}
-				secretVals[currentSecret] = secret{}
+				secretVals[currentSecret] = secret{Secrets: map[string]secretEntry{}}
+				continue
+			}
+			if currentSecret != "" {
+				secret := secretVals[currentSecret]
+				secret.Comments = append(secret.Comments, line)
+				secretVals[currentSecret] = secret
 			}
 			continue
 		}
 		if len(currentSecret) == 0 {
 			continue
 		}
-		key, value, err := parseSecretLine(line)
+		key, entry, err := parseSecretLine(line)
 		if err != nil {
 			return nil, err
 		}
@@ -208,13 +222,14 @@ func secrets(r io.Reader) (map[string]secret, error) {
 			continue
 		}
 		secret := secretVals[currentSecret]
-		if _, found := secret[key]; found {
+		if _, found := secret.Secrets[key]; found {
 			return nil, fmt.Errorf("duplicate secret key %s", key)
 		}
-		if len(value) < minSecretValueLength {
+		if len(entry.Value) < minSecretValueLength {
 			return nil, fmt.Errorf("secret %s/%s must be at least %d characters", currentSecret, key, minSecretValueLength)
 		}
-		secret[key] = value
+		secret.Secrets[key] = entry
+		secretVals[currentSecret] = secret
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
@@ -225,6 +240,10 @@ func secrets(r io.Reader) (map[string]secret, error) {
 func toK8s(secretVals map[string]secret) []*corev1.Secret {
 	var secrets []*corev1.Secret
 	for name, vals := range secretVals {
+		stringData := map[string]string{}
+		for key, entry := range vals.Secrets {
+			stringData[key] = entry.Value
+		}
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
@@ -233,42 +252,42 @@ func toK8s(secretVals map[string]secret) []*corev1.Secret {
 				},
 			},
 			Type:       corev1.SecretTypeOpaque,
-			StringData: vals,
+			StringData: stringData,
 		}
 		secrets = append(secrets, secret)
 	}
 	return secrets
 }
 
-func parseSecretLine(line string) (string, string, error) {
+func parseSecretLine(line string) (string, secretEntry, error) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
-		return "", "", nil
+		return "", secretEntry{}, nil
 	}
 
 	key, rawValue, found := strings.Cut(trimmed, "=")
 	if !found {
-		return "", "", fmt.Errorf("invalid secret entry %q", line)
+		return "", secretEntry{}, fmt.Errorf("invalid secret entry %q", line)
 	}
 
 	key = strings.TrimSpace(key)
 	if key == "" {
-		return "", "", fmt.Errorf("invalid secret entry %q", line)
+		return "", secretEntry{}, fmt.Errorf("invalid secret entry %q", line)
 	}
 
-	value := stripInlineComment(rawValue)
+	value, comment := splitInlineComment(rawValue)
 	value = strings.TrimSpace(value)
 	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
 		unquoted, err := strconv.Unquote(value)
 		if err != nil {
-			return "", "", err
+			return "", secretEntry{}, err
 		}
 		value = unquoted
 	} else if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
 		value = value[1 : len(value)-1]
 	}
 
-	return key, value, nil
+	return key, secretEntry{Value: value, Comment: comment}, nil
 }
 
 func parseSetArg(arg string) (string, string, string, error) {
@@ -317,7 +336,7 @@ func setSecretValue(input []byte, secretName, key, value string) ([]byte, bool, 
 		if currentSecret != secretName {
 			continue
 		}
-		lineKey, lineValue, err := parseSecretLine(line)
+		lineKey, entry, err := parseSecretLine(line)
 		if err != nil {
 			return nil, false, err
 		}
@@ -329,7 +348,7 @@ func setSecretValue(input []byte, secretName, key, value string) ([]byte, bool, 
 		if lineKey != key {
 			continue
 		}
-		if lineValue == value {
+		if entry.Value == value {
 			return input, false, nil
 		}
 		lines[i] = replaceSecretLineValue(line, value)
@@ -441,11 +460,11 @@ func maskedSecretValue(value string) string {
 	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
 }
 
-func stripInlineComment(value string) string {
+func splitInlineComment(value string) (string, string) {
 	if commentIndex := inlineCommentIndex(value); commentIndex != -1 {
-		return value[:commentIndex]
+		return value[:commentIndex], strings.TrimSpace(value[commentIndex:])
 	}
-	return value
+	return value, ""
 }
 
 func encrypt(plaintext []byte, recipients []age.Recipient) ([]byte, error) {

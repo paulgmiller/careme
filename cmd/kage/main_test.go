@@ -191,9 +191,9 @@ ZIP=98101
 		require.Len(t, got, 2)
 		require.Contains(t, got, "first")
 		require.Contains(t, got, "second")
-		assert.Equal(t, "alpha", got["first"]["API_KEY"])
-		assert.Equal(t, "bravo", got["first"]["TOKEN"])
-		assert.Equal(t, "98101", got["second"]["ZIP"])
+		assert.Equal(t, "alpha", got["first"].Secrets["API_KEY"].Value)
+		assert.Equal(t, "bravo", got["first"].Secrets["TOKEN"].Value)
+		assert.Equal(t, "98101", got["second"].Secrets["ZIP"].Value)
 
 		secretsK8s := toK8s(got)
 		byName := map[string]*corev1.Secret{}
@@ -229,9 +229,28 @@ PATH=with#hash
 		require.Contains(t, got, "first")
 
 		first := got["first"]
-		assert.Equal(t, "alpha", first["API_KEY"])
-		assert.Equal(t, "beta # still value", first["TOKEN"])
-		assert.Equal(t, "with#hash", first["PATH"])
+		assert.Equal(t, "alpha", first.Secrets["API_KEY"].Value)
+		assert.Equal(t, "# primary key", first.Secrets["API_KEY"].Comment)
+		assert.Equal(t, "beta # still value", first.Secrets["TOKEN"].Value)
+		assert.Equal(t, "# comment", first.Secrets["TOKEN"].Comment)
+		assert.Equal(t, "with#hash", first.Secrets["PATH"].Value)
+		assert.Empty(t, first.Secrets["PATH"].Comment)
+	})
+
+	t.Run("keeps block comments", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := secrets(strings.NewReader(`
+# top comment
+#secret:first
+# key note
+API_KEY=alpha
+# another note
+TOKEN=bravo
+`))
+		require.NoError(t, err)
+		require.Contains(t, got, "first")
+		assert.Equal(t, []string{"# key note", "# another note"}, got["first"].Comments)
 	})
 
 	t.Run("rejects short values", func(t *testing.T) {
