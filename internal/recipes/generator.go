@@ -25,6 +25,8 @@ const IngredientGradeCutoff = 6
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
 	RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error)
+	PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (string, error)
+	GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error)
 	GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error)
 	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
@@ -141,21 +143,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			return nil, fmt.Errorf("failed to plan recipe replacements: planned %d replacements for %d dismissed recipes", len(menuPlan.Plans), len(p.Dismissed))
 		}
 		// does it matter how we associate these?
-		type plannedRegeneration struct {
-			plan       ai.RecipePlan
-			responseID string
-		}
-		var replacements []plannedRegeneration
-		for i, plan := range menuPlan.Plans {
-			if strings.TrimSpace(p.Dismissed[i].ResponseID) == "" {
-				return nil, fmt.Errorf("recipe %q is missing response ID for regeneration", p.Dismissed[i].Title)
-			}
-			replacements = append(replacements, plannedRegeneration{
-				plan:       plan,
-				responseID: p.Dismissed[i].ResponseID,
-			})
-		}
-
 		g.writeStatus(ctx, hash, menuPlan.String())
 
 		// this SHOULD hit the cache and we could do it in parallel with menu planning
@@ -169,12 +156,17 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		})
 		ingMap := inputIngredientMap(ingredients)
 
-		results, err := parallelism.MapWithErrors(replacements, func(replacement plannedRegeneration) (*ai.Recipe, error) {
+		contextID, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, []string{p.Directive}, p.Date, p.LastRecipes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to prepare recipe context: %w", err)
+		}
+
+		results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
-			instructions := append(slices.Clone(regenInstructions), replacement.plan.Instructions()...)
-			recipe, err := g.aiClient.Regenerate(ctx, instructions, replacement.responseID)
+			instructions := append(slices.Clone(regenInstructions), plan.Instructions()...)
+			recipe, err := g.aiClient.GenerateRecipeFromContext(ctx, instructions, contextID)
 			if err != nil {
 				return nil, err
 			}
@@ -225,11 +217,16 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	}
 	g.writeStatus(ctx, hash, menuPlan.String())
 
+	contextID, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, recipeBaseInstructions, p.Date, p.LastRecipes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare recipe context: %w", err)
+	}
+
 	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
 		recipeInstructions := append(slices.Clone(recipeBaseInstructions), plan.Instructions()...)
-		recipe, err := g.aiClient.GenerateRecipe(ctx, p.Location, ingredients, recipeInstructions, p.Date, p.LastRecipes)
+		recipe, err := g.aiClient.GenerateRecipeFromContext(ctx, recipeInstructions, contextID)
 		if err != nil {
 			return nil, err
 		}

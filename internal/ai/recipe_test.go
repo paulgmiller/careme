@@ -1,11 +1,18 @@
 package ai
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	locationtypes "careme/internal/locations/types"
 
 	"github.com/openai/openai-go/v3/responses"
 )
@@ -104,6 +111,136 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)
 		}
+	}
+}
+
+func TestPrepareRecipeContextStoresZeroOutputResponse(t *testing.T) {
+	recorder := &capturePromptRecorder{}
+	var requestBody string
+	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if !strings.HasSuffix(req.URL.Path, "/responses") {
+			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		requestBody = string(body)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"id": "resp-shared-context",
+				"object": "response",
+				"created_at": 1778529600,
+				"status": "completed",
+				"model": %q,
+				"output": [],
+				"usage": {
+					"input_tokens": 120,
+					"input_tokens_details": {"cached_tokens": 0},
+					"output_tokens": 0,
+					"output_tokens_details": {"reasoning_tokens": 0},
+					"total_tokens": 120
+				}
+			}`, defaultRecipeModel))),
+			Request: req,
+		}, nil
+	})}, recorder)
+
+	price := float32(8.99)
+	got, err := client.PrepareRecipeContext(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{
+		{ProductID: "chicken-1", Description: "Chicken thighs", Size: "2 lb", PriceRegular: &price},
+	}, []string{"Use sale ingredients."}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), []string{"Lemon pasta"})
+	if err != nil {
+		t.Fatalf("PrepareRecipeContext returned error: %v", err)
+	}
+	if got != "resp-shared-context" {
+		t.Fatalf("unexpected context response id: %q", got)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(requestBody), &body); err != nil {
+		t.Fatalf("unmarshal request body: %v\n%s", err, requestBody)
+	}
+	if body["max_output_tokens"] != float64(0) {
+		t.Fatalf("expected zero max output tokens, got %#v in %s", body["max_output_tokens"], requestBody)
+	}
+	if body["store"] != true {
+		t.Fatalf("expected stored response, got %s", requestBody)
+	}
+	if _, ok := body["text"]; ok {
+		t.Fatalf("context warmup should not request recipe JSON schema: %s", requestBody)
+	}
+	if !strings.Contains(requestBody, "Chicken thighs") || !strings.Contains(requestBody, "Default: each recipe should serve 2 people.") {
+		t.Fatalf("expected shared ingredient and serving context in request: %s", requestBody)
+	}
+	if recorder.record == nil || recorder.record.ResponseID != "resp-shared-context" {
+		t.Fatalf("expected context prompt record, got %#v", recorder.record)
+	}
+}
+
+func TestGenerateRecipeFromContextUsesPreviousResponseWithoutIngredientTSV(t *testing.T) {
+	recorder := &capturePromptRecorder{}
+	var requestBody string
+	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if !strings.HasSuffix(req.URL.Path, "/responses") {
+			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		requestBody = string(body)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"id": "resp-recipe",
+				"object": "response",
+				"created_at": 1778529600,
+				"status": "completed",
+				"model": %q,
+				"output": [{
+					"id": "msg-recipe",
+					"type": "message",
+					"status": "completed",
+					"role": "assistant",
+					"content": [{
+						"type": "output_text",
+						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$12\",\"ingredients\":[],\"instructions\":[\"Prep.\"],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"annotations": []
+					}]
+				}],
+				"usage": {
+					"input_tokens": 20,
+					"input_tokens_details": {"cached_tokens": 15},
+					"output_tokens": 5,
+					"output_tokens_details": {"reasoning_tokens": 0},
+					"total_tokens": 25
+				}
+			}`, defaultRecipeModel))),
+			Request: req,
+		}, nil
+	})}, recorder)
+
+	got, err := client.GenerateRecipeFromContext(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, "resp-shared-context")
+	if err != nil {
+		t.Fatalf("GenerateRecipeFromContext returned error: %v", err)
+	}
+	if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
+		t.Fatalf("unexpected recipe: %+v", got)
+	}
+	if strings.Contains(requestBody, "Chicken thighs") {
+		t.Fatalf("recipe continuation should not resend ingredient TSV: %s", requestBody)
+	}
+	if !strings.Contains(requestBody, `"previous_response_id":"resp-shared-context"`) {
+		t.Fatalf("expected previous response id in request: %s", requestBody)
+	}
+	if !strings.Contains(requestBody, "Cuisine direction for this recipe: Korean.") || !strings.Contains(requestBody, "professional chef and recipe developer") {
+		t.Fatalf("expected recipe instructions and system prompt in request: %s", requestBody)
+	}
+	if recorder.record == nil || recorder.record.PreviousResponseID != "resp-shared-context" {
+		t.Fatalf("expected prompt record parent response ID, got %#v", recorder.record)
 	}
 }
 

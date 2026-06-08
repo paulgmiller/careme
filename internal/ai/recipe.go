@@ -155,6 +155,60 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
 }
 
+func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
+	instructions []string, date time.Time, lastRecipes []string,
+) (string, error) {
+	promptMessages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return "", fmt.Errorf("failed to build recipe context messages: %w", err)
+	}
+	promptMessages = append(promptMessages, userPromptMessage("Default: each recipe should serve 2 people."))
+
+	params := responses.ResponseNewParams{
+		Model:           c.model,
+		MaxOutputTokens: openai.Int(0),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messagesToInput(promptMessages),
+		},
+		Store: openai.Bool(true),
+	}
+	resp, err := c.oai.Responses.New(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("failed to prepare recipe context: %w", err)
+	}
+	if strings.TrimSpace(resp.ID) == "" {
+		return "", fmt.Errorf("failed to get recipe context response ID")
+	}
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
+	slog.InfoContext(ctx, "prepared recipe context", "ai_category", aiCategoryRecipe, "model", c.model, responseUsageLogAttr(c.model, resp.Usage))
+	return resp.ID, nil
+}
+
+func (c *client) GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*Recipe, error) {
+	if previousResponseID == "" {
+		return nil, fmt.Errorf("response ID is required for recipe context generation")
+	}
+	promptMessages := cleanInstructionMessages(instructions)
+	params := responses.ResponseNewParams{
+		Model:              c.model,
+		PreviousResponseID: openai.String(previousResponseID),
+		// Previous response IDs do not carry over top-level instructions.
+		Instructions: openai.String(systemMessage),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messagesToInput(promptMessages),
+		},
+		Store: openai.Bool(true),
+		Text:  scheme(c.recipeSchema),
+	}
+	resp, err := c.oai.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate recipe from context: %w", err)
+	}
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
+
+	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+}
+
 func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
@@ -208,27 +262,11 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string,
 ) (*Recipe, error) {
-	promptMessages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
-	}
-
-	params := responses.ResponseNewParams{
-		Model:        c.model,
-		Instructions: openai.String(systemMessage),
-		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messagesToInput(promptMessages),
-		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.recipeSchema),
-	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	contextID, err := c.PrepareRecipeContext(ctx, location, saleIngredients, nil, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
-	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+	return c.GenerateRecipeFromContext(ctx, instructions, contextID)
 }
 
 // buildRecipeMessages creates separate messages for the LLM to process more efficiently

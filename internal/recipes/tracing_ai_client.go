@@ -53,6 +53,27 @@ func (c *tracingAIClient) GenerateRecipe(
 	return c.next.GenerateRecipe(ctx, location, ingredients, instructions, date, lastRecipes)
 }
 
+func (c *tracingAIClient) PrepareRecipeContext(
+	ctx context.Context,
+	location *locations.Location,
+	ingredients []ai.InputIngredient,
+	instructions []string,
+	date time.Time,
+	lastRecipes []string,
+) (string, error) {
+	ctx, span := tracer.Start(ctx, "recipes.ai.prepare_recipe_context")
+	defer span.End()
+
+	return c.next.PrepareRecipeContext(ctx, location, ingredients, instructions, date, lastRecipes)
+}
+
+func (c *tracingAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+	ctx, span := tracer.Start(ctx, "recipes.ai.generate_recipe_from_context")
+	defer span.End()
+
+	return c.next.GenerateRecipeFromContext(ctx, instructions, previousResponseID)
+}
+
 func (c *tracingAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
 	ctx, span := tracer.Start(ctx, "recipes.ai.regenerate")
 	defer span.End()
