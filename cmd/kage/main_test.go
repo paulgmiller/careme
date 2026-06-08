@@ -283,3 +283,115 @@ func TestMaskedSecretValue(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "a[5]a", maskedSecretValue("alpha"))
 }
+
+func TestParseSetArg(t *testing.T) {
+	t.Parallel()
+
+	secretName, key, value, err := parseSetArg("app/API_KEY=alpha")
+	require.NoError(t, err)
+	assert.Equal(t, "app", secretName)
+	assert.Equal(t, "API_KEY", key)
+	assert.Equal(t, "alpha", value)
+
+	_, _, _, err = parseSetArg("app/API_KEY=no")
+	require.Error(t, err)
+
+	_, _, _, err = parseSetArg("API_KEY=alpha")
+	require.Error(t, err)
+}
+
+func TestSetSecretValue(t *testing.T) {
+	t.Parallel()
+
+	t.Run("updates existing key and preserves comments", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte(`# top comment
+#secret:first
+# key note
+API_KEY=alpha # primary key
+TOKEN="beta # still value" # token note
+
+# between
+#secret:second
+ZIP=98101
+`)
+
+		got, changed, err := setSecretValue(input, "first", "API_KEY", "bravo")
+		require.NoError(t, err)
+		require.True(t, changed)
+
+		assert.Equal(t, `# top comment
+#secret:first
+# key note
+API_KEY=bravo # primary key
+TOKEN="beta # still value" # token note
+
+# between
+#secret:second
+ZIP=98101
+`, string(got))
+	})
+
+	t.Run("returns unchanged when value already matches", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte("#secret:first\nAPI_KEY=alpha # primary key\n")
+		got, changed, err := setSecretValue(input, "first", "API_KEY", "alpha")
+		require.NoError(t, err)
+		require.False(t, changed)
+		assert.Equal(t, input, got)
+	})
+
+	t.Run("adds key to existing secret without moving comments", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte(`#secret:first
+API_KEY=alpha
+
+# keep this with first
+#secret:second
+ZIP=98101
+`)
+
+		got, changed, err := setSecretValue(input, "first", "TOKEN", "bravo")
+		require.NoError(t, err)
+		require.True(t, changed)
+
+		assert.Equal(t, `#secret:first
+API_KEY=alpha
+
+TOKEN=bravo
+# keep this with first
+#secret:second
+ZIP=98101
+`, string(got))
+	})
+
+	t.Run("adds new secret at end", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte("#secret:first\nAPI_KEY=alpha\n")
+		got, changed, err := setSecretValue(input, "second", "TOKEN", "bravo")
+		require.NoError(t, err)
+		require.True(t, changed)
+
+		assert.Equal(t, `#secret:first
+API_KEY=alpha
+
+#secret:second
+TOKEN=bravo
+`, string(got))
+	})
+
+	t.Run("quotes values with comments", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte("#secret:first\nAPI_KEY=alpha # primary key\n")
+		got, changed, err := setSecretValue(input, "first", "API_KEY", "bravo # value")
+		require.NoError(t, err)
+		require.True(t, changed)
+
+		assert.Equal(t, "#secret:first\nAPI_KEY=\"bravo # value\" # primary key\n", string(got))
+	})
+}

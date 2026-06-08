@@ -36,6 +36,7 @@ func main() {
 	path := flag.String("secret-file", "secrets/envtest", "encrypted file to apply to k8s namespace")
 	namespace := flag.String("ns", "", "k8s namespace")
 	check := flag.Bool("check", false, "dump secret names")
+	setSecret := flag.String("set", "", "add or update a secret value as secret/key=value")
 	forreal := flag.Bool("apply", false, "don't actually apply secrets just print what would be done")
 	flag.Parse()
 	ctx := context.Background()
@@ -61,7 +62,43 @@ func main() {
 		log.Fatalf("decrypt file  %q: %s", *path, err)
 	}
 
-	secrets, err := secrets(reader)
+	plaintext, err := io.ReadAll(reader)
+	if err != nil {
+		log.Fatalf("read decrypted file %q: %s", *path, err)
+	}
+
+	if *setSecret != "" {
+		secretName, key, value, err := parseSetArg(*setSecret)
+		if err != nil {
+			log.Fatal(err)
+		}
+		updated, changed, err := setSecretValue(plaintext, secretName, key, value)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if !changed {
+			log.Printf("%s/%s unchanged", secretName, key)
+			return
+		}
+		if _, err := secrets(bytes.NewReader(updated)); err != nil {
+			log.Fatalf("updated secrets did not validate: %s", err)
+		}
+		recipients, err := loadSSHRecipients()
+		if err != nil {
+			log.Fatal(err)
+		}
+		ciphertext, err := encrypt(updated, recipients)
+		if err != nil {
+			log.Fatalf("encrypt updated file %q: %s", *path, err)
+		}
+		if err := os.WriteFile(*path, ciphertext, 0o600); err != nil {
+			log.Fatalf("write updated file %q: %s", *path, err)
+		}
+		log.Printf("updated %s/%s in %s", secretName, key, *path)
+		return
+	}
+
+	secrets, err := secrets(bytes.NewReader(plaintext))
 	if err != nil {
 		panic(err)
 	}
@@ -234,12 +271,142 @@ func parseSecretLine(line string) (string, string, error) {
 	return key, value, nil
 }
 
-func maskedSecretValue(value string) string {
-	// invariant is value must be 5 or more characters, so this is safe
-	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
+func parseSetArg(arg string) (string, string, string, error) {
+	secretAndKey, value, found := strings.Cut(arg, "=")
+	if !found {
+		return "", "", "", fmt.Errorf("set value must be secret/key=value")
+	}
+	secretName, key, found := strings.Cut(secretAndKey, "/")
+	if !found {
+		return "", "", "", fmt.Errorf("set value must be secret/key=value")
+	}
+	secretName = strings.TrimSpace(secretName)
+	key = strings.TrimSpace(key)
+	if secretName == "" || key == "" {
+		return "", "", "", fmt.Errorf("set value must be secret/key=value")
+	}
+	if len(value) < minSecretValueLength {
+		return "", "", "", fmt.Errorf("secret %s/%s must be at least %d characters", secretName, key, minSecretValueLength)
+	}
+	return secretName, key, value, nil
 }
 
-func stripInlineComment(value string) string {
+func setSecretValue(input []byte, secretName, key, value string) ([]byte, bool, error) {
+	lines, finalNewline := splitLines(string(input))
+	currentSecret := ""
+	secretStart := -1
+	secretEnd := -1
+	insertAt := -1
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if comment, found := strings.CutPrefix(trimmed, "#"); found {
+			if foundSecret, found := strings.CutPrefix(comment, secretCommentPrefix); found {
+				foundSecret = strings.TrimSpace(foundSecret)
+				if currentSecret == secretName && secretEnd == -1 {
+					secretEnd = i
+				}
+				currentSecret = foundSecret
+				if currentSecret == secretName {
+					secretStart = i
+					insertAt = i + 1
+				}
+			}
+			continue
+		}
+		if currentSecret != secretName {
+			continue
+		}
+		lineKey, lineValue, err := parseSecretLine(line)
+		if err != nil {
+			return nil, false, err
+		}
+		if lineKey == "" {
+			insertAt = i + 1
+			continue
+		}
+		insertAt = i + 1
+		if lineKey != key {
+			continue
+		}
+		if lineValue == value {
+			return input, false, nil
+		}
+		lines[i] = replaceSecretLineValue(line, value)
+		return joinLines(lines, finalNewline), true, nil
+	}
+
+	if secretStart != -1 {
+		if secretEnd == -1 {
+			secretEnd = len(lines)
+		}
+		if insertAt < secretStart+1 || insertAt > secretEnd {
+			insertAt = secretEnd
+		}
+		lines = slicesInsert(lines, insertAt, fmt.Sprintf("%s=%s", key, formatSecretValue(value)))
+		return joinLines(lines, finalNewline), true, nil
+	}
+
+	if len(lines) > 0 && lines[len(lines)-1] != "" {
+		lines = append(lines, "")
+	}
+	lines = append(lines, "#"+secretCommentPrefix+secretName, fmt.Sprintf("%s=%s", key, formatSecretValue(value)))
+	return joinLines(lines, true), true, nil
+}
+
+func splitLines(input string) ([]string, bool) {
+	finalNewline := strings.HasSuffix(input, "\n")
+	if finalNewline {
+		input = strings.TrimSuffix(input, "\n")
+	}
+	if input == "" {
+		return nil, finalNewline
+	}
+	return strings.Split(input, "\n"), finalNewline
+}
+
+func joinLines(lines []string, finalNewline bool) []byte {
+	output := strings.Join(lines, "\n")
+	if finalNewline {
+		output += "\n"
+	}
+	return []byte(output)
+}
+
+func slicesInsert(values []string, index int, value string) []string {
+	values = append(values, "")
+	copy(values[index+1:], values[index:])
+	values[index] = value
+	return values
+}
+
+func replaceSecretLineValue(line, value string) string {
+	eq := strings.IndexByte(line, '=')
+	if eq == -1 {
+		return line
+	}
+	prefix := line[:eq+1]
+	rawValue := line[eq+1:]
+	commentIndex := inlineCommentIndex(rawValue)
+	valuePart := rawValue
+	commentPart := ""
+	if commentIndex != -1 {
+		valuePart = rawValue[:commentIndex]
+		commentPart = rawValue[commentIndex:]
+	}
+	leading := valuePart[:len(valuePart)-len(strings.TrimLeft(valuePart, " \t"))]
+	gap := valuePart[len(strings.TrimRight(valuePart, " \t")):]
+	return prefix + leading + formatSecretValue(value) + gap + commentPart
+}
+
+func formatSecretValue(value string) string {
+	if value == "" || strings.ContainsAny(value, " \t\n\r#\"'") {
+		return strconv.Quote(value)
+	}
+	return value
+}
+
+func inlineCommentIndex(value string) int {
 	var quote byte
 	escaped := false
 	for i := 0; i < len(value); i++ {
@@ -263,10 +430,58 @@ func stripInlineComment(value string) string {
 			continue
 		}
 		if ch == '#' && (i == 0 || value[i-1] == ' ' || value[i-1] == '\t') {
-			return value[:i]
+			return i
 		}
 	}
+	return -1
+}
+
+func maskedSecretValue(value string) string {
+	// invariant is value must be 5 or more characters, so this is safe
+	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
+}
+
+func stripInlineComment(value string) string {
+	if commentIndex := inlineCommentIndex(value); commentIndex != -1 {
+		return value[:commentIndex]
+	}
 	return value
+}
+
+func encrypt(plaintext []byte, recipients []age.Recipient) ([]byte, error) {
+	var ciphertext bytes.Buffer
+	writer, err := age.Encrypt(&ciphertext, recipients...)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := writer.Write(plaintext); err != nil {
+		_ = writer.Close()
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return ciphertext.Bytes(), nil
+}
+
+func loadSSHRecipients() ([]age.Recipient, error) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return nil, fmt.Errorf("need a recipient")
+	}
+	path := filepath.Join(home, ".ssh", "id_ed25519.pub")
+
+	key, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read ssh recipient %q: %w", path, err)
+	}
+
+	recipient, err := agessh.ParseRecipient(strings.TrimSpace(string(key)))
+	if err != nil {
+		return nil, fmt.Errorf("parse ssh recipient %q: %w", path, err)
+	}
+
+	return []age.Recipient{recipient}, nil
 }
 
 // share with internal/config?
