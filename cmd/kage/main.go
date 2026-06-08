@@ -104,9 +104,8 @@ func main() {
 	}
 
 	if *check {
-		for _, name := range secrets.Order {
-			secret := secrets.Secrets[name]
-			fmt.Println(name)
+		for _, secret := range secrets {
+			fmt.Println(secret.Name)
 			for _, line := range secret.Lines {
 				if line.Key == "" {
 					continue
@@ -182,10 +181,7 @@ func secretNeedsUpdate(current, desired *corev1.Secret) bool {
 	return false
 }
 
-type secretsFile struct {
-	Order   []string
-	Secrets map[string]secret
-}
+type secretsFile []secret
 
 type secretLine struct {
 	Key     string
@@ -194,29 +190,30 @@ type secretLine struct {
 }
 
 type secret struct {
+	Name  string
 	Lines []secretLine
 }
 
 func secrets(r io.Reader) (secretsFile, error) {
 	sc := bufio.NewScanner(r)
 	var currentSecret string
-	secretVals := secretsFile{Secrets: map[string]secret{}}
+	var secretVals secretsFile
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if comment, found := strings.CutPrefix(line, "#"); found {
 			if secretName, found := strings.CutPrefix(comment, secretCommentPrefix); found {
 				currentSecret = secretName
-				if _, found := secretVals.Secrets[currentSecret]; found {
+				if _, found := secretVals.find(currentSecret); found {
 					return secretsFile{}, fmt.Errorf("duplicate secret comment %s", currentSecret)
 				}
-				secretVals.Order = append(secretVals.Order, currentSecret)
-				secretVals.Secrets[currentSecret] = secret{}
+				secretVals = append(secretVals, secret{Name: currentSecret})
 				continue
 			}
 			if currentSecret != "" {
-				secret := secretVals.Secrets[currentSecret]
+				secretIndex, _ := secretVals.find(currentSecret)
+				secret := secretVals[secretIndex]
 				secret.Lines = append(secret.Lines, secretLine{Comment: line})
-				secretVals.Secrets[currentSecret] = secret
+				secretVals[secretIndex] = secret
 			}
 			continue
 		}
@@ -230,9 +227,10 @@ func secrets(r io.Reader) (secretsFile, error) {
 		if entry.Key == "" {
 			continue
 		}
-		secret := secretVals.Secrets[currentSecret]
+		secretIndex, _ := secretVals.find(currentSecret)
+		secret := secretVals[secretIndex]
 		secret.Lines = append(secret.Lines, entry)
-		secretVals.Secrets[currentSecret] = secret
+		secretVals[secretIndex] = secret
 	}
 	if err := sc.Err(); err != nil {
 		return secretsFile{}, err
@@ -243,9 +241,17 @@ func secrets(r io.Reader) (secretsFile, error) {
 	return secretVals, nil
 }
 
+func (secretVals secretsFile) find(name string) (int, bool) {
+	for i, secret := range secretVals {
+		if secret.Name == name {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
 func validateSecrets(secretVals secretsFile) error {
-	for _, name := range secretVals.Order {
-		secret := secretVals.Secrets[name]
+	for _, secret := range secretVals {
 		keys := map[string]struct{}{}
 		for _, line := range secret.Lines {
 			if line.Key == "" {
@@ -256,7 +262,7 @@ func validateSecrets(secretVals secretsFile) error {
 			}
 			keys[line.Key] = struct{}{}
 			if len(line.Value) < minSecretValueLength {
-				return fmt.Errorf("secret %s/%s must be at least %d characters", name, line.Key, minSecretValueLength)
+				return fmt.Errorf("secret %s/%s must be at least %d characters", secret.Name, line.Key, minSecretValueLength)
 			}
 		}
 	}
@@ -265,8 +271,7 @@ func validateSecrets(secretVals secretsFile) error {
 
 func toK8s(secretVals secretsFile) []*corev1.Secret {
 	var secrets []*corev1.Secret
-	for _, name := range secretVals.Order {
-		vals := secretVals.Secrets[name]
+	for _, vals := range secretVals {
 		stringData := map[string]string{}
 		for _, line := range vals.Lines {
 			if line.Key == "" {
@@ -276,7 +281,7 @@ func toK8s(secretVals secretsFile) []*corev1.Secret {
 		}
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
+				Name: vals.Name,
 				Annotations: map[string]string{
 					managedByAnnotationKey: managedByAnnotationValue,
 				},
@@ -345,10 +350,14 @@ func setSecretValue(input []byte, secretName, key, value string) ([]byte, bool, 
 	if err != nil {
 		return nil, false, err
 	}
-	sec, found := secretVals.Secrets[secretName]
+	secretIndex, found := secretVals.find(secretName)
+	var sec secret
 	if !found {
-		secretVals.Order = append(secretVals.Order, secretName)
-		sec = secret{}
+		sec = secret{Name: secretName}
+		secretVals = append(secretVals, sec)
+		secretIndex = len(secretVals) - 1
+	} else {
+		sec = secretVals[secretIndex]
 	}
 	for i, line := range sec.Lines {
 		if line.Key != key {
@@ -359,11 +368,11 @@ func setSecretValue(input []byte, secretName, key, value string) ([]byte, bool, 
 		}
 		line.Value = value
 		sec.Lines[i] = line
-		secretVals.Secrets[secretName] = sec
+		secretVals[secretIndex] = sec
 		return serializeSecrets(secretVals), true, nil
 	}
 	sec.Lines = append(sec.Lines, secretLine{Key: key, Value: value})
-	secretVals.Secrets[secretName] = sec
+	secretVals[secretIndex] = sec
 	if err := validateSecrets(secretVals); err != nil {
 		return nil, false, err
 	}
@@ -372,15 +381,15 @@ func setSecretValue(input []byte, secretName, key, value string) ([]byte, bool, 
 
 func serializeSecrets(secretVals secretsFile) []byte {
 	var out strings.Builder
-	for i, name := range secretVals.Order {
+	for i, secret := range secretVals {
 		if i > 0 {
 			out.WriteByte('\n')
 		}
 		out.WriteString("#")
 		out.WriteString(secretCommentPrefix)
-		out.WriteString(name)
+		out.WriteString(secret.Name)
 		out.WriteByte('\n')
-		for _, line := range secretVals.Secrets[name].Lines {
+		for _, line := range secret.Lines {
 			if line.Key == "" {
 				if line.Comment != "" {
 					out.WriteString(line.Comment)

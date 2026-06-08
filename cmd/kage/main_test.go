@@ -188,13 +188,12 @@ ZIP=98101
 
 		got, err := secrets(input)
 		require.NoError(t, err)
-		require.Len(t, got.Secrets, 2)
-		require.Contains(t, got.Secrets, "first")
-		require.Contains(t, got.Secrets, "second")
-		assert.Equal(t, []string{"first", "second"}, got.Order)
-		assert.Equal(t, "alpha", got.Secrets["first"].Lines[0].Value)
-		assert.Equal(t, "bravo", got.Secrets["first"].Lines[1].Value)
-		assert.Equal(t, "98101", got.Secrets["second"].Lines[0].Value)
+		require.Len(t, got, 2)
+		assert.Equal(t, "first", got[0].Name)
+		assert.Equal(t, "second", got[1].Name)
+		assert.Equal(t, "alpha", got[0].Lines[0].Value)
+		assert.Equal(t, "bravo", got[0].Lines[1].Value)
+		assert.Equal(t, "98101", got[1].Lines[0].Value)
 
 		secretsK8s := toK8s(got)
 		byName := map[string]*corev1.Secret{}
@@ -224,12 +223,12 @@ ZIP=98101
 API_KEY=alpha # primary key
 TOKEN="beta # still value" # comment
 PATH=with#hash
-`))
+		`))
 		require.NoError(t, err)
-		require.Len(t, got.Secrets, 1)
-		require.Contains(t, got.Secrets, "first")
+		require.Len(t, got, 1)
+		assert.Equal(t, "first", got[0].Name)
 
-		first := got.Secrets["first"]
+		first := got[0]
 		require.Len(t, first.Lines, 3)
 		assert.Equal(t, secretLine{Key: "API_KEY", Value: "alpha", Comment: "# primary key"}, first.Lines[0])
 		assert.Equal(t, secretLine{Key: "TOKEN", Value: "beta # still value", Comment: "# comment"}, first.Lines[1])
@@ -248,13 +247,14 @@ API_KEY=alpha
 TOKEN=bravo
 		`))
 		require.NoError(t, err)
-		require.Contains(t, got.Secrets, "first")
+		require.Len(t, got, 1)
+		assert.Equal(t, "first", got[0].Name)
 		assert.Equal(t, []secretLine{
 			{Comment: "# key note"},
 			{Key: "API_KEY", Value: "alpha"},
 			{Comment: "# another note"},
 			{Key: "TOKEN", Value: "bravo"},
-		}, got.Secrets["first"].Lines)
+		}, got[0].Lines)
 	})
 
 	t.Run("rejects short values", func(t *testing.T) {
