@@ -169,10 +169,11 @@ func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtyp
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe context messages: %w", err)
 	}
+	promptMessages = append(promptMessages, userPromptMessage(prepareRecipeContextInstruction))
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
-		Instructions: openai.String(prepareRecipeContextInstruction),
+		Instructions: openai.String(systemMessage),
 		// The API currently rejects zero output tokens, so keep this as low as allowed by the model.
 		MaxOutputTokens: openai.Int(16),
 		Input: responses.ResponseNewParamsInputUnion{
@@ -275,10 +276,19 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 }
 
 func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
+	messages, err := c.buildSharedContextMessages(location, saleIngredients, instructions, date, lastRecipes)
+	if err != nil {
+		return nil, err
+	}
+	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
+	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
+	return messages, nil
+}
+
+func (c *client) buildSharedContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
 	var messages []PromptMessage
 	// constants we might make variable later
 	messages = append(messages, userPromptMessage("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
-	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
 	messages = append(messages, userPromptMessage("Default: cooking methods: oven, stove, grill, slow cooker"))
 
 	// todo reuse context via response id?
@@ -300,7 +310,6 @@ func (c *client) buildRecipeContextMessages(location *locationtypes.Location, sa
 	}
 
 	messages = append(messages, cleanInstructionMessages(instructions)...)
-	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
 
 	return messages, nil
 }

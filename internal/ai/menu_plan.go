@@ -214,7 +214,7 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string, count int,
 ) ([]PromptMessage, error) {
-	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
+	messages, err := c.buildSharedContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}

@@ -25,9 +25,9 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	lastRecipes := []string{"Lemon chicken pasta"}
 	date := time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC)
 
-	contextMessages, err := client.buildRecipeContextMessages(location, ingredients, instructions, date, lastRecipes)
+	contextMessages, err := client.buildSharedContextMessages(location, ingredients, instructions, date, lastRecipes)
 	if err != nil {
-		t.Fatalf("buildRecipeContextMessages returned error: %v", err)
+		t.Fatalf("buildSharedContextMessages returned error: %v", err)
 	}
 	menuMessages, err := client.buildMenuPlanMessages(location, ingredients, instructions, date, lastRecipes, 3)
 	if err != nil {
@@ -44,6 +44,24 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	for _, message := range contextMessages {
 		if message.Role != "user" {
 			t.Fatalf("expected only user prompt messages, got %#v", contextMessages)
+		}
+	}
+}
+
+func TestBuildMenuPlanMessagesOmitsRecipeOnlyDefaults(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil, nil)
+	location := &locationtypes.Location{State: "WA"}
+	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 3)
+	if err != nil {
+		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
+	}
+	body := mustJSON(t, messages)
+	for _, excluded := range []string{
+		"Default: each recipe should serve 2 people.",
+		"Default: total recipe time, including prep and all timed steps, should stay under 1 hour",
+	} {
+		if strings.Contains(body, excluded) {
+			t.Fatalf("menu planning should not receive recipe-only default %q: %s", excluded, body)
 		}
 	}
 }

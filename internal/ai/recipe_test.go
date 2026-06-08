@@ -177,6 +177,9 @@ func TestPrepareRecipeContextStoresMinimalOutputResponseWithPromptCacheKey(t *te
 	if !strings.Contains(requestBody, "Chicken thighs") || !strings.Contains(requestBody, "Default: each recipe should serve 2 people.") {
 		t.Fatalf("expected shared ingredient and serving context in request: %s", requestBody)
 	}
+	if !strings.Contains(requestBody, "professional chef and recipe developer") || !strings.Contains(requestBody, prepareRecipeContextInstruction) {
+		t.Fatalf("expected recipe system prompt and context seed instruction in request: %s", requestBody)
+	}
 	if recorder.record == nil || recorder.record.ResponseID != "resp-shared-context" {
 		t.Fatalf("expected context prompt record, got %#v", recorder.record)
 	}
