@@ -97,9 +97,13 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer writer.Close()
+		defer func() {
+			_ = writer.Close()
+		}()
 
-		newSecretsFile.write(writer)
+		if err := newSecretsFile.write(writer); err != nil {
+			log.Fatal(err)
+		}
 		log.Printf("updated %s/%s in %s", secretName, key, *path)
 		return
 	}

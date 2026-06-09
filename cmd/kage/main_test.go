@@ -346,7 +346,7 @@ ZIP=98101
 		got, changed := setSecretValue(ogFile, "first", "API_KEY", "bravo")
 		require.True(t, changed)
 		var sb strings.Builder
-		got.write(&sb)
+		require.NoError(t, got.write(&sb))
 		assert.Equal(t, `#secret:first
 # key note
 API_KEY=bravo # primary key
@@ -385,7 +385,7 @@ ZIP=98101
 		got, changed := setSecretValue(ogFile, "first", "TOKEN", "bravo")
 		require.True(t, changed)
 		var sb strings.Builder
-		got.write(&sb)
+		require.NoError(t, got.write(&sb))
 		assert.Equal(t, `#secret:first
 API_KEY=alpha
 # keep this with first
@@ -405,7 +405,7 @@ ZIP=98101
 		got, changed := setSecretValue(ogFile, "second", "TOKEN", "bravo")
 		require.True(t, changed)
 		var sb strings.Builder
-		got.write(&sb)
+		require.NoError(t, got.write(&sb))
 		assert.Equal(t, `#secret:first
 API_KEY=alpha
 
@@ -423,7 +423,7 @@ TOKEN=bravo
 		got, changed := setSecretValue(ogFile, "first", "API_KEY", "bravo")
 		require.True(t, changed)
 		var sb strings.Builder
-		got.write(&sb)
+		require.NoError(t, got.write(&sb))
 
 		assert.Equal(t, "#secret:first\nAPI_KEY=bravo # primary key\n", sb.String())
 	})

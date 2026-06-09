@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -53,37 +54,9 @@ func (secretVals secretsFile) validate() error {
 	return nil
 }
 
-type errWriter struct {
-	w   *bufio.Writer
-	err error
-}
-
-func (e *errWriter) Flush() error {
-	if e.err != nil {
-		return e.err
-	}
-	return e.w.Flush()
-}
-
-func (e *errWriter) WriteString(s string) {
-	if e.err != nil {
-		return
-	}
-
-	_, e.err = io.WriteString(e.w, s)
-}
-
-func (e *errWriter) WriteByte(b byte) {
-	if e.err != nil {
-		return
-	}
-
-	e.err = e.w.WriteByte(b)
-}
-
 func (secretVals secretsFile) write(w io.Writer) error {
 
-	out := errWriter{w: bufio.NewWriter(w)}
+	var out bytes.Buffer
 	for i, secret := range secretVals {
 		if i > 0 {
 			out.WriteByte('\n')
@@ -111,7 +84,8 @@ func (secretVals secretsFile) write(w io.Writer) error {
 			out.WriteByte('\n')
 		}
 	}
-	return out.Flush()
+	_, err := w.Write(out.Bytes())
+	return err
 }
 
 func secrets(r io.Reader) (secretsFile, error) {
