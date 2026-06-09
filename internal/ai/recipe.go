@@ -20,8 +20,6 @@ import (
 
 const defaultRecipeModel = "gpt-5.5"
 
-const prepareRecipeContextInstruction = "Store this recipe context for follow-up recipe generation. Reply exactly: OK"
-
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
 	ProductID   string `json:"id"`
@@ -80,10 +78,6 @@ type ShoppingList struct {
 // question threads go off from the response that generated the recipe.
 type QuestionResponse struct {
 	Answer     string
-	ResponseID string
-}
-
-type RecipeContext struct {
 	ResponseID string
 }
 
@@ -161,43 +155,15 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
 }
 
-func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, date time.Time) (*RecipeContext, error) {
-	promptMessages, err := c.buildSharedContextMessages(location, saleIngredients, date)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build recipe context messages: %w", err)
-	}
-	promptMessages = append(promptMessages, userPromptMessage(prepareRecipeContextInstruction))
-
-	params := responses.ResponseNewParams{
-		Model:        c.model,
-		Instructions: openai.String(systemMessage),
-		// The API currently rejects zero output tokens, so keep this as low as allowed by the model.
-		MaxOutputTokens: openai.Int(16),
-		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messagesToInput(promptMessages),
-		},
-		Store: openai.Bool(true),
-	}
-	resp, err := c.oai.Responses.New(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare recipe context: %w", err)
-	}
-	if strings.TrimSpace(resp.ID) == "" {
-		return nil, fmt.Errorf("failed to get recipe context response ID")
-	}
-	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	slog.InfoContext(ctx, "prepared recipe context", "ai_category", aiCategoryRecipe, "model", c.model, responseUsageLogAttr(c.model, resp.Usage))
-	return &RecipeContext{ResponseID: resp.ID}, nil
-}
-
-func (c *client) GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext RecipeContext) (*Recipe, error) {
-	if recipeContext.ResponseID == "" {
-		return nil, fmt.Errorf("response ID is required for recipe context generation")
+func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*Recipe, error) {
+	menuResponseID = strings.TrimSpace(menuResponseID)
+	if menuResponseID == "" {
+		return nil, fmt.Errorf("response ID is required for menu response generation")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
-		PreviousResponseID: openai.String(recipeContext.ResponseID),
+		PreviousResponseID: openai.String(menuResponseID),
 		// Previous response IDs do not carry over top-level instructions.
 		Instructions: openai.String(systemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
@@ -208,7 +174,7 @@ func (c *client) GenerateRecipeFromContext(ctx context.Context, instructions []s
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate recipe from context: %w", err)
+		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 

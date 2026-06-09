@@ -17,7 +17,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const recipePlanModel = openai.ChatModelGPT5Mini // need to play witht this
+const recipePlanModel = defaultRecipeModel
 
 type MenuPlan struct {
 	Plans      []RecipePlan `json:"plans"`
@@ -35,11 +35,12 @@ func (p MenuPlan) String() string {
 }
 
 type RecipePlan struct {
-	Cuisine            string   `json:"cuisine"`
-	AnchorIngredient   string   `json:"anchor_ingredient"`
-	Technique          string   `json:"technique"`
-	SideVegetable      string   `json:"side_vegetable"`
-	Fancy              bool     `json:"fancy"`
+	Cuisine          string `json:"cuisine"`
+	AnchorIngredient string `json:"anchor_ingredient"`
+	Technique        string `json:"technique"`
+	SideVegetable    string `json:"side_vegetable"`
+	Fancy            bool   `json:"fancy"`
+	// so generic this is directive, user instructions, servings, time? Split it up?
 	RecipeInstructions []string `json:"recipe_instructions"`
 }
 
@@ -249,7 +250,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptMessage {
 	messages := cleanInstructionMessages(instructions)
 	messages = append(messages,
-		userPromptMessage(fmt.Sprintf("Pick exactly %d replacement plans. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
+		userPromptMessage(fmt.Sprintf("Build %d replacement recipe plan(s) by default. If the user's directions clearly ask for a different number of recipes, return that many plans instead. Keep the plan count between 1 and 6. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
 	)
 	// ideally do this if they dismissed fancy.
 	if count >= 3 {
