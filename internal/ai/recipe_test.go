@@ -151,7 +151,7 @@ func TestPrepareRecipeContextStoresMinimalOutputResponse(t *testing.T) {
 	price := float32(8.99)
 	got, err := client.PrepareRecipeContext(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{
 		{ProductID: "chicken-1", Description: "Chicken thighs", Size: "2 lb", PriceRegular: &price},
-	}, []string{"Use sale ingredients."}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), []string{"Lemon pasta"})
+	}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), []string{"Lemon pasta"})
 	if err != nil {
 		t.Fatalf("PrepareRecipeContext returned error: %v", err)
 	}
@@ -173,6 +173,9 @@ func TestPrepareRecipeContextStoresMinimalOutputResponse(t *testing.T) {
 	}
 	if !strings.Contains(requestBody, "Chicken thighs") || !strings.Contains(requestBody, "Default: each recipe should serve 2 people.") {
 		t.Fatalf("expected shared ingredient and serving context in request: %s", requestBody)
+	}
+	if strings.Contains(requestBody, "Use sale ingredients.") {
+		t.Fatalf("recipe context should not receive planner instructions: %s", requestBody)
 	}
 	if !strings.Contains(requestBody, "professional chef and recipe developer") || !strings.Contains(requestBody, prepareRecipeContextInstruction) {
 		t.Fatalf("expected recipe system prompt and context seed instruction in request: %s", requestBody)

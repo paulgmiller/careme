@@ -25,7 +25,7 @@ const IngredientGradeCutoff = 6
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
 	RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error)
-	PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.RecipeContext, error)
+	PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, date time.Time, lastRecipes []string) (*ai.RecipeContext, error)
 	GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext ai.RecipeContext) (*ai.Recipe, error)
 	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
@@ -157,7 +157,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			menuPlanCh <- asyncMenuPlanResult{plan: plan, err: err}
 		}()
 		go func() {
-			recipeContext, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, []string{p.Directive}, p.Date, p.LastRecipes)
+			recipeContext, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, p.Date, p.LastRecipes)
 			contextCh <- asyncContextResult{context: recipeContext, err: err}
 		}()
 
@@ -247,7 +247,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		menuPlanCh <- asyncMenuPlanResult{plan: plan, err: err}
 	}()
 	go func() {
-		recipeContext, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, recipeBaseInstructions, p.Date, p.LastRecipes)
+		recipeContext, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, p.Date, p.LastRecipes)
 		contextCh <- asyncContextResult{context: recipeContext, err: err}
 	}()
 

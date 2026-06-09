@@ -43,14 +43,13 @@ func (c *tracingAIClient) PrepareRecipeContext(
 	ctx context.Context,
 	location *locations.Location,
 	ingredients []ai.InputIngredient,
-	instructions []string,
 	date time.Time,
 	lastRecipes []string,
 ) (*ai.RecipeContext, error) {
 	ctx, span := tracer.Start(ctx, "recipes.ai.prepare_recipe_context")
 	defer span.End()
 
-	return c.next.PrepareRecipeContext(ctx, location, ingredients, instructions, date, lastRecipes)
+	return c.next.PrepareRecipeContext(ctx, location, ingredients, date, lastRecipes)
 }
 
 func (c *tracingAIClient) GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext ai.RecipeContext) (*ai.Recipe, error) {

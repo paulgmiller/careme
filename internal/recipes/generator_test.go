@@ -29,7 +29,6 @@ type captureRegenerateAIClient struct {
 	instructions               []string
 	responseID                 string
 	preparedContextID          string
-	contextInstructions        []string
 	generateContextID          string
 	recipe                     *ai.Recipe
 	menuPlanInstructions       []string
@@ -44,7 +43,6 @@ type captureGenerateAIClient struct {
 	shoppingList         *ai.ShoppingList
 	menuPlan             *ai.MenuPlan
 	preparedContextID    string
-	contextInstructions  []string
 	generateContextIDs   []string
 	ingredients          []ai.InputIngredient
 	instructions         [][]string
@@ -62,7 +60,6 @@ type sequenceAIClient struct {
 	menuPlanCounts         []int
 	regenerateCalls        int
 	prepareContextCalls    int
-	contextInstructions    [][]string
 	generateContextIDs     []string
 	regenerateInstructions [][]string
 	regenerateResponseIDs  []string
@@ -128,7 +125,7 @@ func (c *captureWineQuestionAIClient) RegenerateMenuPlan(ctx context.Context, in
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureWineQuestionAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.RecipeContext, error) {
+func (c *captureWineQuestionAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, date time.Time, lastRecipes []string) (*ai.RecipeContext, error) {
 	panic("unexpected call to PrepareRecipeContext")
 }
 
@@ -183,8 +180,7 @@ func (c *captureRegenerateAIClient) RegenerateMenuPlan(ctx context.Context, inst
 	return &ai.MenuPlan{}, nil
 }
 
-func (c *captureRegenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.RecipeContext, error) {
-	c.contextInstructions = append([]string(nil), instructions...)
+func (c *captureRegenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, date time.Time, lastRecipes []string) (*ai.RecipeContext, error) {
 	if c.preparedContextID != "" {
 		return &ai.RecipeContext{ResponseID: c.preparedContextID}, nil
 	}
@@ -245,11 +241,10 @@ func (c *captureGenerateAIClient) RegenerateMenuPlan(ctx context.Context, instru
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureGenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.RecipeContext, error) {
+func (c *captureGenerateAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, date time.Time, lastRecipes []string) (*ai.RecipeContext, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.contextInstructions = append([]string(nil), instructions...)
 	if c.preparedContextID != "" {
 		return &ai.RecipeContext{ResponseID: c.preparedContextID}, nil
 	}
@@ -332,12 +327,11 @@ func (c *sequenceAIClient) RegenerateMenuPlan(ctx context.Context, instructions 
 	return menuPlanForRecipes(resp.Recipes), nil
 }
 
-func (c *sequenceAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.RecipeContext, error) {
+func (c *sequenceAIClient) PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, date time.Time, lastRecipes []string) (*ai.RecipeContext, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.prepareContextCalls++
-	c.contextInstructions = append(c.contextInstructions, append([]string(nil), instructions...))
 	return &ai.RecipeContext{ResponseID: "resp-shared-context"}, nil
 }
 
@@ -666,9 +660,6 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 	if aiStub.generateContextID != "resp-shared-context" {
 		t.Fatalf("expected shared recipe context ID %q, got %q", "resp-shared-context", aiStub.generateContextID)
-	}
-	if !slices.Equal(aiStub.contextInstructions, []string{"Use the store's sale ingredients."}) {
-		t.Fatalf("unexpected context instructions: got %v", aiStub.contextInstructions)
 	}
 	if aiStub.menuPlanResponseID != "resp-menu-old" {
 		t.Fatalf("expected menu plan response ID %q, got %q", "resp-menu-old", aiStub.menuPlanResponseID)
