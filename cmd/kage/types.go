@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -93,4 +95,81 @@ func (secretVals secretsFile) write(w io.Writer) {
 			out.WriteByte('\n')
 		}
 	}
+}
+
+func secrets(r io.Reader) (secretsFile, error) {
+	sc := bufio.NewScanner(r)
+	var currentSecret *secret
+	var secretVals secretsFile
+
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if len(line) == 0 {
+			continue
+		}
+
+		if comment, found := strings.CutPrefix(line, "#"); found {
+			if secretName, found := strings.CutPrefix(comment, secretCommentPrefix); found {
+				if currentSecret != nil {
+					secretVals = append(secretVals, *currentSecret)
+				}
+				currentSecret = &secret{Name: secretName}
+				continue
+			}
+			if currentSecret != nil {
+				currentSecret.Lines = append(currentSecret.Lines, secretLine{Comment: comment})
+			}
+			continue
+		}
+		if currentSecret == nil {
+			return nil, fmt.Errorf("a #%s prefix must come before non commented lines ", secretCommentPrefix)
+		}
+		entry, err := parseSecretLine(line)
+		if err != nil {
+			return secretsFile{}, err
+		}
+		//just a comemnt
+		if entry.Key == "" {
+			continue
+		}
+		currentSecret.Lines = append(currentSecret.Lines, entry)
+	}
+	secretVals = append(secretVals, *currentSecret)
+
+	if err := sc.Err(); err != nil {
+		return secretsFile{}, err
+	}
+	if err := secretVals.validate(); err != nil {
+		return secretsFile{}, err
+	}
+	return secretVals, nil
+}
+
+func parseSecretLine(line string) (secretLine, error) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return secretLine{}, nil
+	}
+
+	key, rawValue, found := strings.Cut(trimmed, "=")
+	if !found {
+		return secretLine{}, fmt.Errorf("invalid secret entry %q", line)
+	}
+
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return secretLine{}, fmt.Errorf("invalid secret entry %q", line)
+	}
+
+	value, comment := splitInlineComment(rawValue)
+	value = strings.TrimSpace(value)
+	unqouted, err := strconv.Unquote(value)
+	if err != nil {
+		if err != strconv.ErrSyntax {
+			return secretLine{}, err
+		}
+	} else {
+		value = unqouted
+	}
+	return secretLine{Key: key, Value: value, Comment: comment}, nil
 }

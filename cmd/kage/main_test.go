@@ -252,9 +252,9 @@ TOKEN=bravo
 		assert.Equal(t, "first", got[0].Name)
 		assert.Len(t, got[0].Lines, 4)
 		assert.Equal(t, []secretLine{
-			{Comment: "key note"},
+			{Comment: " key note"},
 			{Key: "API_KEY", Value: "alpha"},
-			{Comment: "another note"},
+			{Comment: " another note"},
 			{Key: "TOKEN", Value: "bravo"},
 		}, got[0].Lines)
 	})
@@ -348,10 +348,10 @@ ZIP=98101
 		var sb strings.Builder
 		got.write(&sb)
 		assert.Equal(t, `#secret:first
-#key note
+# key note
 API_KEY=bravo #primary key
 TOKEN="beta # still value" #token note
-#between
+# between
 
 #secret:second
 ZIP=98101
@@ -388,7 +388,7 @@ ZIP=98101
 		got.write(&sb)
 		assert.Equal(t, `#secret:first
 API_KEY=alpha
-#keep this with first
+# keep this with first
 TOKEN=bravo
 
 #secret:second
