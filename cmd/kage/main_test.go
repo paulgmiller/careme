@@ -231,8 +231,8 @@ PATH=with#hash
 
 		first := got[0]
 		require.Len(t, first.Lines, 3)
-		assert.Equal(t, secretLine{Key: "API_KEY", Value: "alpha", Comment: "primary key"}, first.Lines[0])
-		assert.Equal(t, secretLine{Key: "TOKEN", Value: "beta # still value", Comment: "comment"}, first.Lines[1])
+		assert.Equal(t, secretLine{Key: "API_KEY", Value: "alpha", Comment: " primary key"}, first.Lines[0])
+		assert.Equal(t, secretLine{Key: "TOKEN", Value: "beta # still value", Comment: " comment"}, first.Lines[1])
 		assert.Equal(t, secretLine{Key: "PATH", Value: "with#hash"}, first.Lines[2])
 	})
 
@@ -349,8 +349,8 @@ ZIP=98101
 		got.write(&sb)
 		assert.Equal(t, `#secret:first
 # key note
-API_KEY=bravo #primary key
-TOKEN="beta # still value" #token note
+API_KEY=bravo # primary key
+TOKEN="beta # still value" # token note
 # between
 
 #secret:second
@@ -425,6 +425,6 @@ TOKEN=bravo
 		var sb strings.Builder
 		got.write(&sb)
 
-		assert.Equal(t, "#secret:first\nAPI_KEY=bravo #primary key\n", sb.String())
+		assert.Equal(t, "#secret:first\nAPI_KEY=bravo # primary key\n", sb.String())
 	})
 }

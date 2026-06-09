@@ -268,46 +268,9 @@ func formatSecretValue(value string) string {
 	return value
 }
 
-func inlineCommentIndex(value string) int {
-	var quote byte
-	escaped := false
-	for i := 0; i < len(value); i++ {
-		ch := value[i]
-		if escaped {
-			escaped = false
-			continue
-		}
-		if quote == '"' && ch == '\\' {
-			escaped = true
-			continue
-		}
-		if quote != 0 {
-			if ch == quote {
-				quote = 0
-			}
-			continue
-		}
-		if ch == '"' || ch == '\'' {
-			quote = ch
-			continue
-		}
-		if ch == '#' && (i == 0 || value[i-1] == ' ' || value[i-1] == '\t') {
-			return i
-		}
-	}
-	return -1
-}
-
 func maskedSecretValue(value string) string {
 	// invariant is value must be 5 or more characters, so this is safe
 	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
-}
-
-func splitInlineComment(value string) (string, string) {
-	if commentIndex := inlineCommentIndex(value); commentIndex != -1 {
-		return value[:commentIndex], strings.TrimSpace(value[commentIndex+1:])
-	}
-	return value, ""
 }
 
 func loadSSHRecipients() ([]age.Recipient, error) {

@@ -161,15 +161,42 @@ func parseSecretLine(line string) (secretLine, error) {
 		return secretLine{}, fmt.Errorf("invalid secret entry %q", line)
 	}
 
-	value, comment := splitInlineComment(rawValue)
-	value = strings.TrimSpace(value)
-	unqouted, err := strconv.Unquote(value)
-	if err != nil {
-		if err != strconv.ErrSyntax {
+	trimmedValue := strings.TrimSpace(rawValue)
+	if len(trimmedValue) == 0 {
+		return secretLine{}, fmt.Errorf("empty value")
+	}
+	if trimmedValue[0] == '"' {
+		close, err := findClosingQuote(trimmedValue)
+		if err != nil {
 			return secretLine{}, err
 		}
-	} else {
-		value = unqouted
+		unqouted, err := strconv.Unquote(trimmedValue[0 : close+1])
+		if err != nil {
+			return secretLine{}, err
+		}
+		_, comment, _ := strings.Cut(trimmedValue[close:], "#")
+		return secretLine{Key: key, Value: unqouted, Comment: comment}, nil
 	}
+	value, comment, _ := strings.Cut(trimmedValue, " #")
 	return secretLine{Key: key, Value: value, Comment: comment}, nil
+
+}
+
+func findClosingQuote(s string) (int, error) {
+	escaped := false
+
+	for i := 1; i < len(s); i++ {
+		switch {
+		case escaped:
+			escaped = false
+
+		case s[i] == '\\':
+			escaped = true
+
+		case s[i] == '"':
+			return i, nil
+		}
+	}
+
+	return -1, fmt.Errorf("unterminated quoted value")
 }
