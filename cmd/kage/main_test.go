@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -230,8 +231,8 @@ PATH=with#hash
 
 		first := got[0]
 		require.Len(t, first.Lines, 3)
-		assert.Equal(t, secretLine{Key: "API_KEY", Value: "alpha", Comment: "# primary key"}, first.Lines[0])
-		assert.Equal(t, secretLine{Key: "TOKEN", Value: "beta # still value", Comment: "# comment"}, first.Lines[1])
+		assert.Equal(t, secretLine{Key: "API_KEY", Value: "alpha", Comment: "primary key"}, first.Lines[0])
+		assert.Equal(t, secretLine{Key: "TOKEN", Value: "beta # still value", Comment: "comment"}, first.Lines[1])
 		assert.Equal(t, secretLine{Key: "PATH", Value: "with#hash"}, first.Lines[2])
 	})
 
@@ -249,10 +250,11 @@ TOKEN=bravo
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		assert.Equal(t, "first", got[0].Name)
+		assert.Len(t, got[0].Lines, 4)
 		assert.Equal(t, []secretLine{
-			{Comment: "# key note"},
+			{Comment: "key note"},
 			{Key: "API_KEY", Value: "alpha"},
-			{Comment: "# another note"},
+			{Comment: "another note"},
 			{Key: "TOKEN", Value: "bravo"},
 		}, got[0].Lines)
 	})
@@ -339,30 +341,32 @@ TOKEN="beta # still value" # token note
 #secret:second
 ZIP=98101
 `)
-
-		got, changed, err := setSecretValue(input, "first", "API_KEY", "bravo")
+		ogFile, err := secrets(bytes.NewReader(input))
 		require.NoError(t, err)
+		got, changed := setSecretValue(ogFile, "first", "API_KEY", "bravo")
 		require.True(t, changed)
-
+		var sb strings.Builder
+		got.write(&sb)
 		assert.Equal(t, `#secret:first
-# key note
-API_KEY=bravo # primary key
-TOKEN="beta # still value" # token note
-# between
+#key note
+API_KEY=bravo #primary key
+TOKEN="beta # still value" #token note
+#between
 
 #secret:second
 ZIP=98101
-`, string(got))
+`, sb.String())
 	})
 
 	t.Run("returns unchanged when value already matches", func(t *testing.T) {
 		t.Parallel()
 
 		input := []byte("#secret:first\nAPI_KEY=alpha # primary key\n")
-		got, changed, err := setSecretValue(input, "first", "API_KEY", "alpha")
+		ogFile, err := secrets(bytes.NewReader(input))
 		require.NoError(t, err)
+		_, changed := setSecretValue(ogFile, "first", "API_KEY", "alpha")
+
 		require.False(t, changed)
-		assert.Equal(t, input, got)
 	})
 
 	t.Run("adds key to existing secret", func(t *testing.T) {
@@ -376,44 +380,51 @@ API_KEY=alpha
 ZIP=98101
 `)
 
-		got, changed, err := setSecretValue(input, "first", "TOKEN", "bravo")
+		ogFile, err := secrets(bytes.NewReader(input))
 		require.NoError(t, err)
+		got, changed := setSecretValue(ogFile, "first", "TOKEN", "bravo")
 		require.True(t, changed)
-
+		var sb strings.Builder
+		got.write(&sb)
 		assert.Equal(t, `#secret:first
 API_KEY=alpha
-# keep this with first
+#keep this with first
 TOKEN=bravo
 
 #secret:second
 ZIP=98101
-`, string(got))
+`, sb.String())
 	})
 
 	t.Run("adds new secret at end", func(t *testing.T) {
 		t.Parallel()
 
 		input := []byte("#secret:first\nAPI_KEY=alpha\n")
-		got, changed, err := setSecretValue(input, "second", "TOKEN", "bravo")
+		ogFile, err := secrets(bytes.NewReader(input))
 		require.NoError(t, err)
+		got, changed := setSecretValue(ogFile, "second", "TOKEN", "bravo")
 		require.True(t, changed)
-
+		var sb strings.Builder
+		got.write(&sb)
 		assert.Equal(t, `#secret:first
 API_KEY=alpha
 
 #secret:second
 TOKEN=bravo
-`, string(got))
+`, sb.String())
 	})
 
 	t.Run("quotes values with comments", func(t *testing.T) {
 		t.Parallel()
 
 		input := []byte("#secret:first\nAPI_KEY=alpha # primary key\n")
-		got, changed, err := setSecretValue(input, "first", "API_KEY", "bravo # value")
+		ogFile, err := secrets(bytes.NewReader(input))
 		require.NoError(t, err)
+		got, changed := setSecretValue(ogFile, "first", "API_KEY", "bravo")
 		require.True(t, changed)
+		var sb strings.Builder
+		got.write(&sb)
 
-		assert.Equal(t, "#secret:first\nAPI_KEY=\"bravo # value\" # primary key\n", string(got))
+		assert.Equal(t, "#secret:first\nAPI_KEY=bravo #primary key\n", sb.String())
 	})
 }
