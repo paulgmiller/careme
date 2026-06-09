@@ -606,9 +606,10 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	aiStub := &captureRegenerateAIClient{
 		recipe: &newResult,
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
-			Cuisine:          "test",
-			AnchorIngredient: "Brand New Dinner",
-			Technique:        "test",
+			Cuisine:            "test",
+			AnchorIngredient:   "Brand New Dinner",
+			Technique:          "test",
+			RecipeInstructions: []string{"make it vegetarian"},
 		}}, ResponseID: "resp-menu-next"},
 	}
 	cacheStore := cache.NewFileCache(t.TempDir())
@@ -631,21 +632,22 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		t.Fatalf("GenerateRecipes returned error: %v", err)
 	}
 
-	wantInstructions := []string{
+	wantMenuPlanInstructions := []string{
 		"make it vegetarian",
 		"Enjoyed and saved so don't repeat: Newly Saved",
 		"Passed on Dismissed Recipe",
 	}
-	wantRecipeInstructions := append(slices.Clone(wantInstructions), ai.RecipePlan{
-		Cuisine:          "test",
-		AnchorIngredient: "Brand New Dinner",
-		Technique:        "test",
-	}.Instructions()...)
+	wantRecipeInstructions := ai.RecipePlan{
+		Cuisine:            "test",
+		AnchorIngredient:   "Brand New Dinner",
+		Technique:          "test",
+		RecipeInstructions: []string{"make it vegetarian"},
+	}.Instructions()
 	if !slices.Equal(aiStub.instructions, wantRecipeInstructions) {
 		t.Fatalf("unexpected recipe instructions: got %v want %v", aiStub.instructions, wantRecipeInstructions)
 	}
-	if !slices.Equal(aiStub.menuPlanInstructions, wantInstructions) {
-		t.Fatalf("unexpected menu plan instructions: got %v want %v", aiStub.menuPlanInstructions, wantInstructions)
+	if !slices.Equal(aiStub.menuPlanInstructions, wantMenuPlanInstructions) {
+		t.Fatalf("unexpected menu plan instructions: got %v want %v", aiStub.menuPlanInstructions, wantMenuPlanInstructions)
 	}
 	if aiStub.generateMenuResponseID != "resp-menu-next" {
 		t.Fatalf("expected menu plan response ID %q, got %q", "resp-menu-next", aiStub.generateMenuResponseID)
@@ -719,7 +721,7 @@ func TestGenerateRecipes_RegenerateWithoutMenuPlanResponseIDErrors(t *testing.T)
 
 	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
 	_, err := g.GenerateRecipes(t.Context(), params)
-	require.ErrorContains(t, err, "missing previous menu plan response ID for menu date 2026-05-22")
+	require.ErrorContains(t, err, "missing previous menu plan response ID for menu")
 
 	if aiStub.createMenuPlanCount != 0 || aiStub.menuPlanCount != 0 {
 		t.Fatalf("missing response ID should fail before menu planning calls, got create=%d regenerate=%d", aiStub.createMenuPlanCount, aiStub.menuPlanCount)

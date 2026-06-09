@@ -144,19 +144,13 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
 		g.writeStatus(ctx, hash, plan.String())
-
 		menuResponseID := strings.TrimSpace(plan.ResponseID)
-		if menuResponseID == "" {
-			return nil, fmt.Errorf("failed to plan recipe replacements: AI returned no menu plan response ID")
-		}
 
 		results, err := parallelism.MapWithErrors(plan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
-			// start fresh here?
-			instructions := append(slices.Clone(regenInstructions), plan.Instructions()...)
-			recipe, err := g.aiClient.GenerateRecipe(ctx, instructions, menuResponseID)
+			recipe, err := g.aiClient.GenerateRecipe(ctx, plan.Instructions(), menuResponseID)
 			if err != nil {
 				return nil, err
 			}
@@ -204,13 +198,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
-	if menuPlan == nil {
-		return nil, fmt.Errorf("failed to plan recipe variety: AI returned no menu plan")
-	}
 	menuResponseID := strings.TrimSpace(menuPlan.ResponseID)
-	if menuResponseID == "" {
-		return nil, fmt.Errorf("failed to plan recipe variety: AI returned no menu plan response ID")
-	}
+
 	g.writeStatus(ctx, hash, menuPlan.String())
 
 	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
@@ -241,20 +230,23 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 }
 
 func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generatorParams, instructions []string, count int) (*ai.MenuPlan, error) {
-	if strings.TrimSpace(p.PreviousMenuPlanResponseID) != "" {
-		plan, err := g.aiClient.RegenerateMenuPlan(ctx, instructions, p.PreviousMenuPlanResponseID, count)
-		if err != nil {
-			return nil, err
-		}
-		if plan == nil {
-			return nil, fmt.Errorf("AI returned no menu plan")
-		}
-		if len(plan.Plans) == 0 {
-			return nil, fmt.Errorf("planned 0 replacement recipes")
-		}
-		return plan, nil
+	if strings.TrimSpace(p.PreviousMenuPlanResponseID) == "" {
+		return nil, fmt.Errorf("missing previous menu plan response ID for menu")
 	}
-	return nil, fmt.Errorf("missing previous menu plan response ID for menu date %s", p.Date.Format("2006-01-02"))
+	plan, err := g.aiClient.RegenerateMenuPlan(ctx, instructions, p.PreviousMenuPlanResponseID, count)
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil {
+		return nil, fmt.Errorf("AI returned no menu plan")
+	}
+	if len(plan.Plans) == 0 {
+		return nil, fmt.Errorf("planned 0 replacement recipes")
+	}
+	if strings.TrimSpace(plan.ResponseID) == "" {
+		return nil, fmt.Errorf("failed to plan recipe replacements: AI returned no menu plan response ID")
+	}
+	return plan, nil
 }
 
 // generator not prociding a lot of value here. Should sever just hold an ai client?
