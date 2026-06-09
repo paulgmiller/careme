@@ -77,9 +77,6 @@ func main() {
 			log.Fatal(err)
 		}
 		newSecretsFile, changed := setSecretValue(secrets, secretName, key, value)
-		if err != nil {
-			log.Fatal(err)
-		}
 		if !changed {
 			log.Printf("%s/%s unchanged", secretName, key)
 			return
