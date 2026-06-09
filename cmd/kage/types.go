@@ -55,7 +55,6 @@ func (secretVals secretsFile) validate() error {
 }
 
 func (secretVals secretsFile) write(w io.Writer) error {
-
 	var out bytes.Buffer
 	for i, secret := range secretVals {
 		if i > 0 {
