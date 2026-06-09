@@ -212,6 +212,23 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 	return &plan, nil
 }
 
+func (c *client) buildSharedContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, date time.Time) ([]PromptMessage, error) {
+	var messages []PromptMessage
+	// constants we might make variable later
+	messages = append(messages, userPromptMessage("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
+
+	// todo reuse context via response id?
+	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
+	var buf strings.Builder
+	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
+		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
+	}
+	ingredientsMessage += buf.String()
+	messages = append(messages, userPromptMessage(ingredientsMessage))
+
+	return messages, nil
+}
+
 func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string, count int,
 ) ([]PromptMessage, error) {
