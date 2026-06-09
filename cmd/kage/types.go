@@ -66,7 +66,7 @@ func (a writerAdapter) WriteByte(c byte) {
 }
 
 func (secretVals secretsFile) write(w io.Writer) {
-	//ignores all errors?
+	// ignores all errors?
 	out := writerAdapter{w}
 	for i, secret := range secretVals {
 		if i > 0 {
@@ -128,7 +128,7 @@ func secrets(r io.Reader) (secretsFile, error) {
 		if err != nil {
 			return secretsFile{}, err
 		}
-		//just a comemnt
+		// just a comemnt
 		if entry.Key == "" {
 			continue
 		}
@@ -179,7 +179,6 @@ func parseSecretLine(line string) (secretLine, error) {
 	}
 	value, comment, _ := strings.Cut(trimmedValue, " #")
 	return secretLine{Key: key, Value: value, Comment: comment}, nil
-
 }
 
 func findClosingQuote(s string) (int, error) {
