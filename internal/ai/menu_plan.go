@@ -214,10 +214,11 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string, count int,
 ) ([]PromptMessage, error) {
-	messages, err := c.buildSharedContextMessages(location, saleIngredients, instructions, date, lastRecipes)
+	messages, err := c.buildSharedContextMessages(location, saleIngredients, date)
 	if err != nil {
 		return nil, err
 	}
+
 	messages = append(messages,
 		userPromptMessage(fmt.Sprintf("Build %d distinct recipe plans by default. If the user's directions clearly ask for a different number of recipes, return that many plans instead. Keep the plan count between 1 and 6. Fit the available ingredients, seasonality, and price.", count)),
 	)
@@ -228,6 +229,20 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 		messages = append(messages, userPromptMessage("Mark one plan fancy."))
 		// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 	}
+
+	if len(lastRecipes) > 0 {
+		var prevRecipesMsg strings.Builder
+		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
+		for _, recipe := range lastRecipes {
+			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
+		}
+		messages = append(messages, userPromptMessage(prevRecipesMsg.String()))
+	}
+
+	messages = append(messages, userPromptMessage("Default: cooking methods: oven, stove, grill, slow cooker"))
+	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
+	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
+	messages = append(messages, cleanInstructionMessages(instructions)...)
 	return messages, nil
 }
 

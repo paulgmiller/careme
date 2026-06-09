@@ -161,10 +161,8 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
 }
 
-func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
-) (*RecipeContext, error) {
-	promptMessages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
+func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient, date time.Time) (*RecipeContext, error) {
+	promptMessages, err := c.buildSharedContextMessages(location, saleIngredients, date)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe context messages: %w", err)
 	}
@@ -267,21 +265,11 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 	)
 }
 
-func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
-	messages, err := c.buildSharedContextMessages(location, saleIngredients, instructions, date, lastRecipes)
-	if err != nil {
-		return nil, err
-	}
-	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
-	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
-	return messages, nil
-}
-
-func (c *client) buildSharedContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
+// should just be directive for menu
+func (c *client) buildSharedContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, date time.Time) ([]PromptMessage, error) {
 	var messages []PromptMessage
 	// constants we might make variable later
 	messages = append(messages, userPromptMessage("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
-	messages = append(messages, userPromptMessage("Default: cooking methods: oven, stove, grill, slow cooker"))
 
 	// todo reuse context via response id?
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
@@ -291,17 +279,6 @@ func (c *client) buildSharedContextMessages(location *locationtypes.Location, sa
 	}
 	ingredientsMessage += buf.String()
 	messages = append(messages, userPromptMessage(ingredientsMessage))
-
-	if len(lastRecipes) > 0 {
-		var prevRecipesMsg strings.Builder
-		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
-		for _, recipe := range lastRecipes {
-			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
-		}
-		messages = append(messages, userPromptMessage(prevRecipesMsg.String()))
-	}
-
-	messages = append(messages, cleanInstructionMessages(instructions)...)
 
 	return messages, nil
 }

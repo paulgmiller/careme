@@ -25,7 +25,8 @@ const IngredientGradeCutoff = 6
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
 	RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error)
-	PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.RecipeContext, error)
+	// should last recipes just be sent to menuplan?
+	PrepareRecipeContext(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, date time.Time) (*ai.RecipeContext, error)
 	GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext ai.RecipeContext) (*ai.Recipe, error)
 	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
@@ -142,52 +143,24 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		})
 		ingMap := inputIngredientMap(ingredients)
 
-		type asyncMenuPlanResult struct {
-			plan *ai.MenuPlan
-			err  error
+		plan, err := g.replacementMenuPlan(ctx, p, regenInstructions, len(p.Dismissed))
+		if err != nil {
+			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
-		type asyncContextResult struct {
-			context *ai.RecipeContext
-			err     error
-		}
-		menuPlanCh := make(chan asyncMenuPlanResult, 1)
-		contextCh := make(chan asyncContextResult, 1)
-		go func() {
-			plan, err := g.replacementMenuPlan(ctx, p, regenInstructions, len(p.Dismissed))
-			menuPlanCh <- asyncMenuPlanResult{plan: plan, err: err}
-		}()
-		go func() {
-			recipeContext, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, []string{p.Directive}, p.Date, p.LastRecipes)
-			contextCh <- asyncContextResult{context: recipeContext, err: err}
-		}()
+		g.writeStatus(ctx, hash, plan.String())
 
-		menuPlanResult := <-menuPlanCh
-		contextResult := <-contextCh
-		if menuPlanResult.err != nil {
-			return nil, fmt.Errorf("failed to plan recipe replacements: %w", menuPlanResult.err)
+		// better to save the intiial recipe context like we save PreviousMenuPlanResponseID
+		rctx := ai.RecipeContext{
+			ResponseID: p.Dismissed[0].ResponseID,
 		}
-		if contextResult.err != nil {
-			return nil, fmt.Errorf("failed to prepare recipe context: %w", contextResult.err)
-		}
-		menuPlan := menuPlanResult.plan
-		recipeContext := contextResult.context
-		if recipeContext == nil {
-			return nil, fmt.Errorf("failed to prepare recipe context: AI returned no recipe context")
-		}
-		if menuPlan == nil {
-			return nil, fmt.Errorf("failed to plan recipe replacements: AI returned no menu plan")
-		}
-		if len(menuPlan.Plans) != len(p.Dismissed) {
-			return nil, fmt.Errorf("failed to plan recipe replacements: planned %d replacements for %d dismissed recipes", len(menuPlan.Plans), len(p.Dismissed))
-		}
-		g.writeStatus(ctx, hash, menuPlan.String())
 
-		results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
+		results, err := parallelism.MapWithErrors(plan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
+			// start fresh here?
 			instructions := append(slices.Clone(regenInstructions), plan.Instructions()...)
-			recipe, err := g.aiClient.GenerateRecipeFromContext(ctx, instructions, *recipeContext)
+			recipe, err := g.aiClient.GenerateRecipeFromContext(ctx, instructions, rctx)
 			if err != nil {
 				return nil, err
 			}
@@ -207,7 +180,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		slog.InfoContext(ctx, "regenerated chat", "location", p.String(), "duration", time.Since(start), "hash", hash)
 		return &ai.ShoppingList{
 			Recipes: recipes,
-			Plan:    menuPlan,
+			Plan:    plan, // should we append to last plan? only saved ones?
 		}, nil
 	}
 
@@ -230,7 +203,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	mutable.Shuffle(ingredients)
 
 	menuPlanInstructions := []string{p.Directive, p.Instructions}
-	recipeBaseInstructions := []string{p.Directive}
 
 	type asyncMenuPlanResult struct {
 		plan *ai.MenuPlan
@@ -247,7 +219,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		menuPlanCh <- asyncMenuPlanResult{plan: plan, err: err}
 	}()
 	go func() {
-		recipeContext, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, recipeBaseInstructions, p.Date, p.LastRecipes)
+		// not clear this gets us any extra caching. Does it get us speed?
+		recipeContext, err := g.aiClient.PrepareRecipeContext(ctx, p.Location, ingredients, p.Date)
 		contextCh <- asyncContextResult{context: recipeContext, err: err}
 	}()
 
@@ -269,7 +242,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
-		recipeInstructions := append(slices.Clone(recipeBaseInstructions), plan.Instructions()...)
+		recipeInstructions := append([]string{p.Directive}, plan.Instructions()...)
 		recipe, err := g.aiClient.GenerateRecipeFromContext(ctx, recipeInstructions, *recipeContext)
 		if err != nil {
 			return nil, err
@@ -297,24 +270,7 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 	if strings.TrimSpace(p.PreviousMenuPlanResponseID) != "" {
 		return g.aiClient.RegenerateMenuPlan(ctx, instructions, p.PreviousMenuPlanResponseID, count)
 	}
-	if p.Date.After(menuPlanResponseIDBackCompatLastDate) {
-		return nil, fmt.Errorf("missing previous menu plan response ID for menu date %s", p.Date.Format("2006-01-02"))
-	}
-	// Backward compatibility for cached shopping lists created before menu plan response IDs were persisted.
-	slog.WarnContext(ctx, "no menuplan on regen")
-	return backCompatMenuPlan(count), nil
-}
-
-func backCompatMenuPlan(count int) *ai.MenuPlan {
-	plans := make([]ai.RecipePlan, 0, count)
-	for range count {
-		plans = append(plans, ai.RecipePlan{
-			Cuisine:          "anything",
-			AnchorIngredient: "anything",
-			Technique:        "anything",
-		})
-	}
-	return &ai.MenuPlan{Plans: plans}
+	return nil, fmt.Errorf("missing previous menu plan response ID for menu date %s", p.Date.Format("2006-01-02"))
 }
 
 // generator not prociding a lot of value here. Should sever just hold an ai client?
