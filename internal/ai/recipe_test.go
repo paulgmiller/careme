@@ -1,7 +1,10 @@
 package ai
 
 import (
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"reflect"
 	"slices"
 	"strings"
@@ -104,6 +107,71 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)
 		}
+	}
+}
+
+func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
+	recorder := &capturePromptRecorder{}
+	var requestBody string
+	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if !strings.HasSuffix(req.URL.Path, "/responses") {
+			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		requestBody = string(body)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"id": "resp-recipe",
+				"object": "response",
+				"created_at": 1778529600,
+				"status": "completed",
+				"model": %q,
+				"output": [{
+					"id": "msg-recipe",
+					"type": "message",
+					"status": "completed",
+					"role": "assistant",
+					"content": [{
+						"type": "output_text",
+						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$12\",\"ingredients\":[],\"instructions\":[\"Prep.\"],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"annotations": []
+					}]
+				}],
+				"usage": {
+					"input_tokens": 20,
+					"input_tokens_details": {"cached_tokens": 15},
+					"output_tokens": 5,
+					"output_tokens_details": {"reasoning_tokens": 0},
+					"total_tokens": 25
+				}
+			}`, defaultRecipeModel))),
+			Request: req,
+		}, nil
+	})}, recorder)
+
+	got, err := client.GenerateRecipe(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, "resp-menu-plan")
+	if err != nil {
+		t.Fatalf("GenerateRecipe returned error: %v", err)
+	}
+	if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
+		t.Fatalf("unexpected recipe: %+v", got)
+	}
+	if strings.Contains(requestBody, "Chicken thighs") {
+		t.Fatalf("recipe continuation should not resend ingredient TSV: %s", requestBody)
+	}
+	if !strings.Contains(requestBody, `"previous_response_id":"resp-menu-plan"`) {
+		t.Fatalf("expected previous response id in request: %s", requestBody)
+	}
+	if !strings.Contains(requestBody, "Cuisine direction for this recipe: Korean.") || !strings.Contains(requestBody, "professional chef and recipe developer") {
+		t.Fatalf("expected recipe instructions and system prompt in request: %s", requestBody)
+	}
+	if recorder.record == nil || recorder.record.PreviousResponseID != "resp-menu-plan" {
+		t.Fatalf("expected prompt record parent response ID, got %#v", recorder.record)
 	}
 }
 

@@ -12,50 +12,20 @@ import (
 	locationtypes "careme/internal/locations/types"
 )
 
-func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
+func TestBuildMenuPlanMessagesIncludesRecipeParentDefaults(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	location := &locationtypes.Location{State: "WA"}
-	ingredients := []InputIngredient{
-		{ProductID: "chicken-1", Description: "Chicken thighs", Size: "2 lb", PriceRegular: new(float32)},
-		{ProductID: "beans-1", Description: "Green beans", Size: "12 oz", PriceRegular: new(float32)},
-	}
-	*ingredients[0].PriceRegular = 8.99
-	*ingredients[1].PriceRegular = 2.99
-	instructions := []string{"make it high protein"}
-	lastRecipes := []string{"Lemon chicken pasta"}
-	date := time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC)
-
-	contextMessages, err := client.buildRecipeContextMessages(location, ingredients, instructions, date, lastRecipes)
-	if err != nil {
-		t.Fatalf("buildRecipeContextMessages returned error: %v", err)
-	}
-	menuMessages, err := client.buildMenuPlanMessages(location, ingredients, instructions, date, lastRecipes, 3)
+	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 3)
 	if err != nil {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
-	recipeInstructions := append(slices.Clone(instructions), RecipePlan{
-		Cuisine:          "Korean",
-		AnchorIngredient: "chicken thighs",
-		Technique:        "stir-fry",
-	}.Instructions()...)
-	recipeMessages, err := client.buildRecipeMessages(location, ingredients, recipeInstructions, date, lastRecipes)
-	if err != nil {
-		t.Fatalf("buildRecipeMessages returned error: %v", err)
-	}
-
-	prefixLen := len(contextMessages)
-	if prefixLen == 0 {
-		t.Fatal("expected shared context prefix")
-	}
-	if got, want := mustJSON(t, menuMessages[:prefixLen]), mustJSON(t, recipeMessages[:prefixLen]); got != want {
-		t.Fatalf("menu planning and recipe generation should share prompt prefix:\ngot  %s\nwant %s", got, want)
-	}
-	if got, want := mustJSON(t, contextMessages), mustJSON(t, recipeMessages[:prefixLen]); got != want {
-		t.Fatalf("recipe generation prefix should match shared context:\ngot  %s\nwant %s", got, want)
-	}
-	for _, message := range recipeMessages {
-		if message.Role != "user" {
-			t.Fatalf("expected only user prompt messages, got %#v", recipeMessages)
+	body := mustJSON(t, messages)
+	for _, included := range []string{
+		"Default: each recipe should serve 2 people.",
+		"Default: total recipe time, including prep and all timed steps, should stay under 1 hour",
+	} {
+		if !strings.Contains(body, included) {
+			t.Fatalf("menu planning should include recipe parent default %q: %s", included, body)
 		}
 	}
 }
@@ -134,12 +104,13 @@ func TestRecipePlanInstructionsIncludesPlanSpecificUserDirections(t *testing.T) 
 func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	location := &locationtypes.Location{State: "WA"}
-	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 3)
+	date := time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC)
+	messages, err := client.buildMenuPlanMessages(location, nil, nil, date, nil, 3)
 	if err != nil {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "Mark one plan fancy") {
+	if !strings.Contains(body, "If doing more than 3 plans mark one plan fancy.") {
 		t.Fatalf("expected menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
@@ -181,8 +152,14 @@ func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "Pick exactly 1 replacement plans") {
-		t.Fatalf("expected replacement count in prompt: %s", body)
+	for _, want := range []string{
+		"Build 1 replacement recipe plan(s) by default",
+		"If the user's directions clearly ask for a different number of recipes, return that many plans instead",
+		"Keep the plan count between 1 and 6",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected replacement prompt to contain %q: %s", want, body)
+		}
 	}
 	if !strings.Contains(body, "make it vegetarian") || !strings.Contains(body, "Passed on roast chicken") {
 		t.Fatalf("expected feedback instructions in prompt: %s", body)
@@ -192,7 +169,7 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 func TestBuildRegenerateMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages(nil, 3)
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "Mark one replacement plan fancy") {
+	if !strings.Contains(body, "make one of the new ones fancy") {
 		t.Fatalf("expected regenerate menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
@@ -245,7 +222,7 @@ func TestRegenerateMenuPlanRecordsPrompt(t *testing.T) {
 		t.Fatalf("unexpected prompt record: %#v", recorder.record)
 	}
 	body := mustJSON(t, recorder.record.Input)
-	if !strings.Contains(body, "Pick exactly 1 replacement plans") || !strings.Contains(body, "less spicy") {
+	if !strings.Contains(body, "Build 1 replacement recipe plan(s) by default") || !strings.Contains(body, "less spicy") {
 		t.Fatalf("unexpected recorded regenerate prompt: %s", body)
 	}
 }
