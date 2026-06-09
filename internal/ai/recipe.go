@@ -84,8 +84,7 @@ type QuestionResponse struct {
 }
 
 type RecipeContext struct {
-	ResponseID     string
-	PromptCacheKey string
+	ResponseID string
 }
 
 // edited out. Which recipe should be richer?!
@@ -163,7 +162,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 }
 
 func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string, promptCacheKey string,
+	instructions []string, date time.Time, lastRecipes []string,
 ) (*RecipeContext, error) {
 	promptMessages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
@@ -181,10 +180,6 @@ func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtyp
 		},
 		Store: openai.Bool(true),
 	}
-	promptCacheKey = strings.TrimSpace(promptCacheKey)
-	if promptCacheKey != "" {
-		params.PromptCacheKey = openai.String(promptCacheKey)
-	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare recipe context: %w", err)
@@ -194,7 +189,7 @@ func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtyp
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 	slog.InfoContext(ctx, "prepared recipe context", "ai_category", aiCategoryRecipe, "model", c.model, responseUsageLogAttr(c.model, resp.Usage))
-	return &RecipeContext{ResponseID: resp.ID, PromptCacheKey: promptCacheKey}, nil
+	return &RecipeContext{ResponseID: resp.ID}, nil
 }
 
 func (c *client) GenerateRecipeFromContext(ctx context.Context, instructions []string, recipeContext RecipeContext) (*Recipe, error) {
@@ -212,9 +207,6 @@ func (c *client) GenerateRecipeFromContext(ctx context.Context, instructions []s
 		},
 		Store: openai.Bool(true),
 		Text:  scheme(c.recipeSchema),
-	}
-	if strings.TrimSpace(recipeContext.PromptCacheKey) != "" {
-		params.PromptCacheKey = openai.String(recipeContext.PromptCacheKey)
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
