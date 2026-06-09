@@ -236,6 +236,21 @@ PATH=with#hash
 		assert.Equal(t, secretLine{Key: "PATH", Value: "with#hash"}, first.Lines[2])
 	})
 
+	t.Run("unquotes single quoted values before converting to k8s secrets", func(t *testing.T) {
+		t.Parallel()
+
+		const endpoint = "wss://user:pass@brd.superproxy.io:9222"
+		got, err := secrets(strings.NewReader(`
+#secret:brightdata-proxy
+BRIGHTDATA_BROWSER_WS_ENDPOINT='` + endpoint + `'
+		`))
+		require.NoError(t, err)
+
+		secretsK8s := toK8s(got)
+		require.Len(t, secretsK8s, 1)
+		assert.Equal(t, endpoint, secretsK8s[0].StringData["BRIGHTDATA_BROWSER_WS_ENDPOINT"])
+	})
+
 	t.Run("keeps block comments", func(t *testing.T) {
 		t.Parallel()
 

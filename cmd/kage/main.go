@@ -36,7 +36,7 @@ func main() {
 	namespace := flag.String("ns", "", "k8s namespace")
 	check := flag.Bool("check", false, "dump secret names")
 	setSecret := flag.String("set", "", "add or update a secret value as secret/key=value")
-	forreal := flag.Bool("apply", false, "don't actually apply secrets just print what would be done")
+	forreal := flag.Bool("apply", false, "actually apply secrets. Don't just print what would be done")
 	flag.Parse()
 	ctx := context.Background()
 
@@ -88,7 +88,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		file, err := os.OpenFile(*path, 0o600, os.FileMode(os.O_WRONLY))
+		file, err := os.OpenFile(*path, os.O_WRONLY|os.O_TRUNC, 0o600)
 		if err != nil {
 			log.Fatal(err)
 		}
