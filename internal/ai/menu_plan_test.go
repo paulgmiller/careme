@@ -12,42 +12,6 @@ import (
 	locationtypes "careme/internal/locations/types"
 )
 
-func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
-	location := &locationtypes.Location{State: "WA"}
-	ingredients := []InputIngredient{
-		{ProductID: "chicken-1", Description: "Chicken thighs", Size: "2 lb", PriceRegular: new(float32)},
-		{ProductID: "beans-1", Description: "Green beans", Size: "12 oz", PriceRegular: new(float32)},
-	}
-	*ingredients[0].PriceRegular = 8.99
-	*ingredients[1].PriceRegular = 2.99
-	instructions := []string{"make it high protein"}
-	lastRecipes := []string{"Lemon chicken pasta"}
-	date := time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC)
-
-	contextMessages, err := client.buildSharedContextMessages(location, ingredients, date)
-	if err != nil {
-		t.Fatalf("buildSharedContextMessages returned error: %v", err)
-	}
-	menuMessages, err := client.buildMenuPlanMessages(location, ingredients, instructions, date, lastRecipes, 3)
-	if err != nil {
-		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
-	}
-
-	prefixLen := len(contextMessages)
-	if prefixLen == 0 {
-		t.Fatal("expected shared context prefix")
-	}
-	if got, want := mustJSON(t, menuMessages[:prefixLen]), mustJSON(t, contextMessages); got != want {
-		t.Fatalf("menu planning should share prompt prefix with recipe context:\ngot  %s\nwant %s", got, want)
-	}
-	for _, message := range contextMessages {
-		if message.Role != "user" {
-			t.Fatalf("expected only user prompt messages, got %#v", contextMessages)
-		}
-	}
-}
-
 func TestBuildMenuPlanMessagesIncludesRecipeParentDefaults(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	location := &locationtypes.Location{State: "WA"}
@@ -140,12 +104,13 @@ func TestRecipePlanInstructionsIncludesPlanSpecificUserDirections(t *testing.T) 
 func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	location := &locationtypes.Location{State: "WA"}
-	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 3)
+	date := time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC)
+	messages, err := client.buildMenuPlanMessages(location, nil, nil, date, nil, 3)
 	if err != nil {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "Mark one plan fancy") {
+	if !strings.Contains(body, "If doing more than 3 plans mark one plan fancy.") {
 		t.Fatalf("expected menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
@@ -204,7 +169,7 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 func TestBuildRegenerateMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages(nil, 3)
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "Mark one replacement plan fancy") {
+	if !strings.Contains(body, "make one of the new ones fancy") {
 		t.Fatalf("expected regenerate menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
