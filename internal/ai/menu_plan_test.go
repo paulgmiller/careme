@@ -25,7 +25,7 @@ func TestMenuPlanAndRecipeMessagesShareCachePrefix(t *testing.T) {
 	lastRecipes := []string{"Lemon chicken pasta"}
 	date := time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC)
 
-	contextMessages, err := client.buildSharedContextMessages(location, ingredients, date, lastRecipes)
+	contextMessages, err := client.buildSharedContextMessages(location, ingredients, instructions, date, lastRecipes)
 	if err != nil {
 		t.Fatalf("buildSharedContextMessages returned error: %v", err)
 	}

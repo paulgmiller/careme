@@ -162,9 +162,9 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 }
 
 func (c *client) PrepareRecipeContext(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	date time.Time, lastRecipes []string,
+	instructions []string, date time.Time, lastRecipes []string,
 ) (*RecipeContext, error) {
-	promptMessages, err := c.buildRecipeContextMessages(location, saleIngredients, date, lastRecipes)
+	promptMessages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe context messages: %w", err)
 	}
@@ -267,8 +267,8 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 	)
 }
 
-func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
-	messages, err := c.buildSharedContextMessages(location, saleIngredients, date, lastRecipes)
+func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
+	messages, err := c.buildSharedContextMessages(location, saleIngredients, instructions, date, lastRecipes)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +277,7 @@ func (c *client) buildRecipeContextMessages(location *locationtypes.Location, sa
 	return messages, nil
 }
 
-func (c *client) buildSharedContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
+func (c *client) buildSharedContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
 	var messages []PromptMessage
 	// constants we might make variable later
 	messages = append(messages, userPromptMessage("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
@@ -300,6 +300,8 @@ func (c *client) buildSharedContextMessages(location *locationtypes.Location, sa
 		}
 		messages = append(messages, userPromptMessage(prevRecipesMsg.String()))
 	}
+
+	messages = append(messages, cleanInstructionMessages(instructions)...)
 
 	return messages, nil
 }
