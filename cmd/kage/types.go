@@ -53,21 +53,37 @@ func (secretVals secretsFile) validate() error {
 	return nil
 }
 
-type writerAdapter struct {
-	w io.Writer
+type errWriter struct {
+	w   *bufio.Writer
+	err error
 }
 
-func (a writerAdapter) WriteString(s string) {
-	a.w.Write([]byte(s))
+func (e *errWriter) Flush() error {
+	if e.err != nil {
+		return e.err
+	}
+	return e.w.Flush()
 }
 
-func (a writerAdapter) WriteByte(c byte) {
-	a.w.Write([]byte{c})
+func (e *errWriter) WriteString(s string) {
+	if e.err != nil {
+		return
+	}
+
+	_, e.err = io.WriteString(e.w, s)
 }
 
-func (secretVals secretsFile) write(w io.Writer) {
-	// ignores all errors?
-	out := writerAdapter{w}
+func (e *errWriter) WriteByte(b byte) {
+	if e.err != nil {
+		return
+	}
+
+	e.err = e.w.WriteByte(b)
+}
+
+func (secretVals secretsFile) write(w io.Writer) error {
+
+	out := errWriter{w: bufio.NewWriter(w)}
 	for i, secret := range secretVals {
 		if i > 0 {
 			out.WriteByte('\n')
@@ -95,6 +111,7 @@ func (secretVals secretsFile) write(w io.Writer) {
 			out.WriteByte('\n')
 		}
 	}
+	return out.Flush()
 }
 
 func secrets(r io.Reader) (secretsFile, error) {
@@ -188,10 +205,8 @@ func findClosingQuote(s string) (int, error) {
 		switch {
 		case escaped:
 			escaped = false
-
 		case s[i] == '\\':
 			escaped = true
-
 		case s[i] == '"':
 			return i, nil
 		}
