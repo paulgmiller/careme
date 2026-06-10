@@ -172,19 +172,21 @@ func CritiquePage(s store, rio recipeio) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if err := templates.Critique.Execute(w, struct {
-			RecipeTitle     string
-			RecipeURL       string
-			ClarityScript   template.HTML
-			GoogleTagScript template.HTML
-			Style           seasons.Style
+			RecipeTitle      string
+			RecipeURL        string
+			ClarityScript    template.HTML
+			GoogleTagScript  template.HTML
+			ConversionScript template.HTML
+			Style            seasons.Style
 			ai.RecipeCritique
 		}{
-			RecipeTitle:     recipeTitle,
-			RecipeURL:       "/recipe/" + hash,
-			ClarityScript:   templates.ClarityScript(r.Context()),
-			GoogleTagScript: templates.GoogleTagScript(),
-			Style:           seasons.GetCurrentStyle(),
-			RecipeCritique:  *cachedCritique,
+			RecipeTitle:      recipeTitle,
+			RecipeURL:        "/recipe/" + hash,
+			ClarityScript:    templates.ClarityScript(r.Context()),
+			GoogleTagScript:  templates.GoogleTagScript(),
+			ConversionScript: templates.ConversionScript(""),
+			Style:            seasons.GetCurrentStyle(),
+			RecipeCritique:   *cachedCritique,
 		}); err != nil {
 			slog.ErrorContext(r.Context(), "failed to render recipe critique page", "hash", hash, "error", err)
 			http.Error(w, "unable to render critique", http.StatusInternalServerError)

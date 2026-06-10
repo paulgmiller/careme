@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Signing In</title>
     {{.GoogleTagScript}}
+    {{.ConversionScript}}
   </head>
   <body>
     <script
@@ -38,13 +39,9 @@
         };
 
         checkUserExists().then((payload) => {
-          if (!payload.exists &&
-              "{{.GoogleConversionTag}}" !== "" &&
-              typeof gtag === "function") {
-            gtag("event", "conversion", {
-              send_to: "{{.GoogleConversionTag}}",
-              event_callback: finishRedirect,
-            });
+          if (payload.conversion &&
+              typeof window.caremeConversion === "function") {
+            window.caremeConversion("sign_in");
             setTimeout(finishRedirect, 1500);
             return;
           }

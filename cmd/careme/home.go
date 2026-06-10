@@ -56,6 +56,7 @@ func (h home) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
+		ConversionScript  template.HTML
 		User              *utypes.User
 		FavoriteStoreName string
 		Style             seasons.Style
@@ -63,6 +64,7 @@ func (h home) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}{
 		ClarityScript:     templates.ClarityScript(ctx),
 		GoogleTagScript:   templates.GoogleTagScript(),
+		ConversionScript:  templates.ConversionScript(""),
 		User:              currentUser,
 		FavoriteStoreName: favoriteStoreName,
 		Style:             seasons.GetCurrentStyle(),

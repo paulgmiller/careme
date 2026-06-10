@@ -15,6 +15,7 @@ import (
 	"unicode"
 
 	"careme/internal/ai"
+	"careme/internal/conversions"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
@@ -61,7 +62,12 @@ type shoppingListGroup struct {
 // should shove wine recs into recipe instead of having them seperate.
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
 	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
+	pendingConversions ...conversions.Event,
 ) {
+	var pendingConversion conversions.Event
+	if len(pendingConversions) > 0 {
+		pendingConversion = pendingConversions[0]
+	}
 	serverSignedIn := currentUser != nil
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
@@ -87,35 +93,37 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		}
 	}
 	data := struct {
-		Location        locations.Location
-		Date            string
-		MetaDescription string
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Instructions    string
-		Hash            string
-		Recipes         []shoppingRecipeView
-		ShoppingList    []shoppingListGroup
-		HasSavedRecipes bool
-		Style           seasons.Style
-		ServerSignedIn  bool
-		User            *utypes.User
-		AuthReturnTo    string
+		Location         locations.Location
+		Date             string
+		MetaDescription  string
+		ClarityScript    template.HTML
+		GoogleTagScript  template.HTML
+		ConversionScript template.HTML
+		Instructions     string
+		Hash             string
+		Recipes          []shoppingRecipeView
+		ShoppingList     []shoppingListGroup
+		HasSavedRecipes  bool
+		Style            seasons.Style
+		ServerSignedIn   bool
+		User             *utypes.User
+		AuthReturnTo     string
 	}{
-		Location:        *p.Location,
-		Date:            p.Date.Format("2006-01-02"),
-		MetaDescription: shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Instructions:    p.Instructions,
-		Hash:            hash,
-		Recipes:         recipeViews,
-		ShoppingList:    shoppingListForDisplay(combinedIngredients),
-		HasSavedRecipes: hasSavedRecipes,
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  serverSignedIn,
-		User:            currentUser,
-		AuthReturnTo:    "/recipes?h=" + hash,
+		Location:         *p.Location,
+		Date:             p.Date.Format("2006-01-02"),
+		MetaDescription:  shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
+		ClarityScript:    templates.ClarityScript(ctx),
+		GoogleTagScript:  templates.GoogleTagScript(),
+		ConversionScript: templates.ConversionScript(pendingConversion),
+		Instructions:     p.Instructions,
+		Hash:             hash,
+		Recipes:          recipeViews,
+		ShoppingList:     shoppingListForDisplay(combinedIngredients),
+		HasSavedRecipes:  hasSavedRecipes,
+		Style:            seasons.GetCurrentStyle(),
+		ServerSignedIn:   serverSignedIn,
+		User:             currentUser,
+		AuthReturnTo:     "/recipes?h=" + hash,
 	}
 
 	setTextContent(writer)
@@ -157,6 +165,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		Date                    string
 		ClarityScript           template.HTML
 		GoogleTagScript         template.HTML
+		ConversionScript        template.HTML
 		Recipe                  ai.Recipe
 		Saved                   bool
 		DisplayIngredients      []ai.Ingredient
@@ -180,6 +189,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		Date:                    p.Date.Format("2006-01-02"),
 		ClarityScript:           templates.ClarityScript(ctx),
 		GoogleTagScript:         templates.GoogleTagScript(),
+		ConversionScript:        templates.ConversionScript(""),
 		Recipe:                  recipe,
 		Saved:                   saved,
 		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
