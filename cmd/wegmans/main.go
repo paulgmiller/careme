@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/wegmans"
@@ -50,6 +51,10 @@ func main() {
 	flag.IntVar(&endID, "end-id", 150, "last numeric Wegmans store id to probe")
 	flag.Parse()
 
+	err := config.LoadEncryptedEnv("secrets/envtest")
+	if err != nil {
+		log.Fatalf("failed to load env vars %v", err)
+	}
 	ctx := context.Background()
 	closeLogger, err := logsetup.Configure(ctx)
 	if err != nil {
