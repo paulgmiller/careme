@@ -801,12 +801,6 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	cookedRecent := utypes.Recipe{Title: "Cooked Recently", Hash: "hash-cooked-recent", CreatedAt: now.Add(-48 * time.Hour)}
 	notCookedRecent := utypes.Recipe{Title: "Only Saved", Hash: "hash-saved-recent", CreatedAt: now.Add(-24 * time.Hour)}
 	tooOldCooked := utypes.Recipe{Title: "Cooked Too Old", Hash: "hash-cooked-old", CreatedAt: now.Add(-15 * 24 * time.Hour)}
-	currentUser := &utypes.User{
-		ID:          "user-1",
-		Email:       []string{"chef@example.com"},
-		ShoppingDay: "Saturday",
-		LastRecipes: []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked},
-	}
 
 	if err := s.SaveFeedback(t.Context(), cookedRecent.Hash, feedback.Feedback{Cooked: true, UpdatedAt: now}); err != nil {
 		t.Fatalf("failed to seed cooked feedback: %v", err)
@@ -819,7 +813,8 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
-	s.kickgeneration(t.Context(), params, currentUser)
+	params.LastRecipes = s.recentCookedTitles(t.Context(), []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked})
+	s.kickgeneration(t.Context(), params)
 
 	select {
 	case <-generator.called:
@@ -843,7 +838,7 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	s.kickgeneration(t.Context(), params, &utypes.User{})
+	s.kickgeneration(t.Context(), params)
 	s.Wait()
 
 	got, err := s.statusReader.GenerationStatusFromCache(t.Context(), params.Hash())

@@ -31,6 +31,7 @@ import (
 	"careme/internal/templates"
 	"careme/internal/users"
 
+	"careme/internal/users/types"
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
@@ -802,7 +803,8 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
-	s.kickgeneration(ctx, p, currentUser)
+	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
+	s.kickgeneration(ctx, p)
 
 	redirectToHash(w, r, newHash, true /*useStart*/)
 }
@@ -985,7 +987,8 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		slog.WarnContext(ctx, "no valid session found from spin page.", "hash", hashParam)
 		currentUser = nil
 	}
-	s.kickgeneration(ctx, p, currentUser)
+	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
+	s.kickgeneration(ctx, p)
 	redirectToHash(w, r, p.Hash(), true /*useStart*/)
 }
 
@@ -1106,12 +1109,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
 			return
 		}
-		currentUser = nil
+		setGuestShoppingListCount(w, r, guestShoppingListCount(r)+1)
+		// be careful. Formalize this more?
+		currentUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
 	}
 
-	if currentUser != nil {
-		p.Directive = currentUser.Directive
-	}
+	p.Directive = currentUser.Directive
+	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
 	// if params are already saved redirect and assume someone kicks off genration
 
 	if err := s.SaveParams(ctx, p); err != nil {
@@ -1126,37 +1130,37 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash := p.Hash()
-	if currentUser == nil {
-		setGuestShoppingListCount(w, r, guestShoppingListCount(r)+1)
-	}
 
-	s.kickgeneration(ctx, p, currentUser)
+	s.kickgeneration(ctx, p)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
 }
 
-func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
+func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []types.Recipe) []string {
+	var recent []utypes.Recipe
+
+	recent = lo.Filter(lastRecipes, func(r utypes.Recipe, _ int) bool {
+		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
+	})
+	hashes := make([]string, 0, len(recent))
+	for _, recipe := range recent {
+		hashes = append(hashes, recipe.Hash)
+	}
+
+	// just checking exist enough?
+	cooked := s.FeedbackByHash(ctx, hashes)
+
+	return lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+		return r.Title, cooked[r.Hash].Cooked
+	})
+}
+
+func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 	hash := p.Hash()
 
 	s.wg.Go(func() {
 		// copy over request id to new context? can't be same context because end of http request will cancel it.
 		ctx := context.WithoutCancel(ctx)
-
-		var recent []utypes.Recipe
-		if currentUser != nil {
-			recent = lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
-				return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
-			})
-		}
-		hashes := make([]string, 0, len(recent))
-		for _, recipe := range recent {
-			hashes = append(hashes, recipe.Hash)
-		}
-		cooked := s.FeedbackByHash(ctx, hashes)
-
-		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-			return r.Title, cooked[r.Hash].Cooked
-		})
 
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
