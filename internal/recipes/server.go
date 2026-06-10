@@ -71,6 +71,36 @@ func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int) {
 	http.Error(w, "must be logged in", status)
 }
 
+const (
+	guestShoppingListCookieName = "careme_guest_shopping_lists"
+	guestShoppingListLimit      = 2
+	guestShoppingListCookieAge  = 90 * 24 * time.Hour
+)
+
+func guestShoppingListCount(r *http.Request) int {
+	cookie, err := r.Cookie(guestShoppingListCookieName)
+	if err != nil {
+		return 0
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(cookie.Value))
+	if err != nil || count < 0 {
+		return 0
+	}
+	return count
+}
+
+func setGuestShoppingListCount(w http.ResponseWriter, r *http.Request, count int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     guestShoppingListCookieName,
+		Value:    strconv.Itoa(count),
+		Path:     "/",
+		MaxAge:   int(guestShoppingListCookieAge.Seconds()),
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
@@ -772,7 +802,8 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
-	s.kickgeneration(ctx, p, currentUser)
+	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
+	s.kickgeneration(ctx, p)
 
 	redirectToHash(w, r, newHash, true /*useStart*/)
 }
@@ -953,10 +984,10 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			return
 		}
 		slog.WarnContext(ctx, "no valid session found from spin page.", "hash", hashParam)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
+		currentUser = nil
 	}
-	s.kickgeneration(ctx, p, currentUser)
+	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
+	s.kickgeneration(ctx, p)
 	redirectToHash(w, r, p.Hash(), true /*useStart*/)
 }
 
@@ -1073,11 +1104,17 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			redirectToHash(w, r, p.Hash(), false /*useStart*/)
 			return
 		}
-		http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
-		return
+		if guestShoppingListCount(r) >= guestShoppingListLimit {
+			http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
+			return
+		}
+		setGuestShoppingListCount(w, r, guestShoppingListCount(r)+1)
+		// be careful. Formalize this more?
+		currentUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
 	}
 
 	p.Directive = currentUser.Directive
+	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
 	// if params are already saved redirect and assume someone kicks off genration
 
 	if err := s.SaveParams(ctx, p); err != nil {
@@ -1093,30 +1130,35 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	s.kickgeneration(ctx, p, currentUser)
+	s.kickgeneration(ctx, p)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
 }
 
-func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
+func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Recipe) []string {
+	recent := lo.Filter(lastRecipes, func(r utypes.Recipe, _ int) bool {
+		// magic number of days. Also should we include non feedback ones in shorter window
+		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14))
+	})
+	hashes := make([]string, 0, len(recent))
+	for _, recipe := range recent {
+		hashes = append(hashes, recipe.Hash)
+	}
+
+	// just checking exist enough?
+	cooked := s.FeedbackByHash(ctx, hashes)
+
+	return lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+		return r.Title, cooked[r.Hash].Cooked
+	})
+}
+
+func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 	hash := p.Hash()
 
 	s.wg.Go(func() {
 		// copy over request id to new context? can't be same context because end of http request will cancel it.
 		ctx := context.WithoutCancel(ctx)
-
-		recent := lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
-			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
-		})
-		hashes := make([]string, 0, len(recent))
-		for _, recipe := range recent {
-			hashes = append(hashes, recipe.Hash)
-		}
-		cooked := s.FeedbackByHash(ctx, hashes)
-
-		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-			return r.Title, cooked[r.Hash].Cooked
-		})
 
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
