@@ -31,7 +31,6 @@ import (
 	"careme/internal/templates"
 	"careme/internal/users"
 
-	"careme/internal/users/types"
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
@@ -1136,11 +1135,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, hash, true /*useStart*/)
 }
 
-func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []types.Recipe) []string {
-	var recent []utypes.Recipe
-
-	recent = lo.Filter(lastRecipes, func(r utypes.Recipe, _ int) bool {
-		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
+func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Recipe) []string {
+	recent := lo.Filter(lastRecipes, func(r utypes.Recipe, _ int) bool {
+		// magic number of days. Also should we include non feedback ones in shorter window
+		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14))
 	})
 	hashes := make([]string, 0, len(recent))
 	for _, recipe := range recent {
