@@ -137,9 +137,7 @@
 
 {{define "shopping_finalize_controls"}}
 <div id="shopping-finalize-controls" class="mt-10 flex flex-wrap items-center gap-4">
-  {{if .ServerSignedIn}}
   {{template "shopping_finalize_controls_content" .}}
-  {{end}}
 </div>
 {{end}}
 
@@ -259,8 +257,8 @@
 
 {{define "shopping_recipe_actions"}}
 <div class="shopping-recipe-actions flex flex-wrap items-center gap-3">
-  {{if .ServerSignedIn}}
   {{if .Dismissed}}
+  {{if .ServerSignedIn}}
   <button type="button"
           hx-post="/recipe/{{.Hash}}/save"
           hx-vals='{"h":"{{.ShoppingListHash}}"}'
@@ -270,6 +268,7 @@
           class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
     Restore
   </button>
+  {{end}}
   {{else}}
   {{if not .Saved}}
   <button type="button"
@@ -287,6 +286,7 @@
     ✓ Added
   </span>
   {{end}}
+  {{if .ServerSignedIn}}
   <button type="button"
           hx-post="/recipe/{{.Hash}}/dismiss"
           hx-vals='{"h":"{{.ShoppingListHash}}"}'

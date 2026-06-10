@@ -470,7 +470,7 @@ func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T)
 	}
 }
 
-func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
+func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	multiRecipeList := ai.ShoppingList{
@@ -496,8 +496,8 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `/recipes/`) && strings.Contains(html, `/regenerate"`) {
 		t.Error("shopping list HTML should not expose regenerate endpoint when signed out")
 	}
-	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/save"`) {
-		t.Error("shopping list HTML should not expose save endpoint when signed out")
+	if !strings.Contains(html, `/recipe/`) || !strings.Contains(html, `/save"`) {
+		t.Error("shopping list HTML should expose save endpoint when signed out")
 	}
 	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/dismiss"`) {
 		t.Error("shopping list HTML should not expose dismiss endpoint when signed out")
@@ -511,11 +511,8 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, "Try again, chef") {
 		t.Error("shopping list HTML should hide regenerate action when signed out")
 	}
-	if strings.Contains(html, "Build Shopping List") {
-		t.Error("shopping list HTML should hide finalize action when signed out")
-	}
-	if strings.Contains(html, `id="save-`) {
-		t.Error("shopping list HTML should hide save controls when signed out")
+	if !strings.Contains(html, "Build Shopping List") {
+		t.Error("shopping list HTML should show finalize action when signed out")
 	}
 	if strings.Contains(html, `id="dismiss-`) {
 		t.Error("shopping list HTML should hide dismiss controls when signed out")

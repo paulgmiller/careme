@@ -71,6 +71,36 @@ func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int) {
 	http.Error(w, "must be logged in", status)
 }
 
+const (
+	guestShoppingListCookieName = "careme_guest_shopping_lists"
+	guestShoppingListLimit      = 2
+	guestShoppingListCookieAge  = 90 * 24 * time.Hour
+)
+
+func guestShoppingListCount(r *http.Request) int {
+	cookie, err := r.Cookie(guestShoppingListCookieName)
+	if err != nil {
+		return 0
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(cookie.Value))
+	if err != nil || count < 0 {
+		return 0
+	}
+	return count
+}
+
+func setGuestShoppingListCount(w http.ResponseWriter, r *http.Request, count int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     guestShoppingListCookieName,
+		Value:    strconv.Itoa(count),
+		Path:     "/",
+		MaxAge:   int(guestShoppingListCookieAge.Seconds()),
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
@@ -953,8 +983,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			return
 		}
 		slog.WarnContext(ctx, "no valid session found from spin page.", "hash", hashParam)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
+		currentUser = nil
 	}
 	s.kickgeneration(ctx, p, currentUser)
 	redirectToHash(w, r, p.Hash(), true /*useStart*/)
@@ -1073,11 +1102,16 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			redirectToHash(w, r, p.Hash(), false /*useStart*/)
 			return
 		}
-		http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
-		return
+		if guestShoppingListCount(r) >= guestShoppingListLimit {
+			http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
+			return
+		}
+		currentUser = nil
 	}
 
-	p.Directive = currentUser.Directive
+	if currentUser != nil {
+		p.Directive = currentUser.Directive
+	}
 	// if params are already saved redirect and assume someone kicks off genration
 
 	if err := s.SaveParams(ctx, p); err != nil {
@@ -1092,6 +1126,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash := p.Hash()
+	if currentUser == nil {
+		setGuestShoppingListCount(w, r, guestShoppingListCount(r)+1)
+	}
 
 	s.kickgeneration(ctx, p, currentUser)
 
@@ -1105,9 +1142,12 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 		// copy over request id to new context? can't be same context because end of http request will cancel it.
 		ctx := context.WithoutCancel(ctx)
 
-		recent := lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
-			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
-		})
+		var recent []utypes.Recipe
+		if currentUser != nil {
+			recent = lo.Filter(currentUser.LastRecipes, func(r utypes.Recipe, _ int) bool {
+				return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
+			})
+		}
 		hashes := make([]string, 0, len(recent))
 		for _, recipe := range recent {
 			hashes = append(hashes, recipe.Hash)

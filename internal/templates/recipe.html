@@ -341,9 +341,9 @@
 {{end}}
 
 {{define "recipe_save_action"}}
-{{if and .ServerSignedIn .OriginHash}}
+{{if .OriginHash}}
 <div class="recipe-save-action pt-2">
-  {{if .Saved}}
+  {{if and .ServerSignedIn .Saved}}
   <button type="button"
           hx-post="/recipe/{{.RecipeHash}}/dismiss"
           hx-vals='{"h":"{{.OriginHash}}","source":"recipe"}'
