@@ -67,19 +67,21 @@ func (mock) RequestedStoreIDs(ctx context.Context) ([]string, error) {
 func (m mock) Register(mux routing.Registrar, _ auth.AuthClient) {
 	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
 		data := struct {
-			Locations       []Location
-			Zip             string
-			FavoriteStore   string
-			ClarityScript   template.HTML
-			GoogleTagScript template.HTML
-			Style           seasons.Style
+			Locations        []Location
+			Zip              string
+			FavoriteStore    string
+			ClarityScript    template.HTML
+			GoogleTagScript  template.HTML
+			ConversionScript template.HTML
+			Style            seasons.Style
 		}{
-			Locations:       lo.Values(fakes),
-			Zip:             r.URL.Query().Get("zip"),
-			FavoriteStore:   "",
-			ClarityScript:   templates.ClarityScript(r.Context()),
-			GoogleTagScript: templates.GoogleTagScript(),
-			Style:           seasons.GetCurrentStyle(),
+			Locations:        lo.Values(fakes),
+			Zip:              r.URL.Query().Get("zip"),
+			FavoriteStore:    "",
+			ClarityScript:    templates.ClarityScript(r.Context()),
+			GoogleTagScript:  templates.GoogleTagScript(),
+			ConversionScript: templates.ConversionScript(""),
+			Style:            seasons.GetCurrentStyle(),
 		}
 		if err := templates.Location.Execute(w, data); err != nil {
 			http.Error(w, "template error", http.StatusInternalServerError)

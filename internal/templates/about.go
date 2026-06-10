@@ -35,18 +35,20 @@ func (p AboutAlbumPhoto) CommentHTML() template.HTML {
 }
 
 type AboutPageData struct {
-	ClarityScript   template.HTML
-	GoogleTagScript template.HTML
-	Style           seasons.Style
-	AlbumPhotos     []AboutAlbumPhoto
+	ClarityScript    template.HTML
+	GoogleTagScript  template.HTML
+	ConversionScript template.HTML
+	Style            seasons.Style
+	AlbumPhotos      []AboutAlbumPhoto
 }
 
 func NewAboutPageData(ctx context.Context, style seasons.Style) AboutPageData {
 	return AboutPageData{
-		ClarityScript:   ClarityScript(ctx),
-		GoogleTagScript: GoogleTagScript(),
-		Style:           style,
-		AlbumPhotos:     DefaultAboutAlbumPhotos(),
+		ClarityScript:    ClarityScript(ctx),
+		GoogleTagScript:  GoogleTagScript(),
+		ConversionScript: ConversionScript(""),
+		Style:            style,
+		AlbumPhotos:      DefaultAboutAlbumPhotos(),
 	}
 }
 

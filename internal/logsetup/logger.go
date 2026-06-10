@@ -13,10 +13,12 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	otlplogglobal "go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	logsdk "go.opentelemetry.io/otel/sdk/log"
+	metricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
@@ -70,6 +72,15 @@ func Configure(ctx context.Context) (func(), error) {
 	}
 	otlplogglobal.SetLoggerProvider(logProvider)
 
+	meterProvider, err := newMeterProvider(ctx, res)
+	if err != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), telemetryShutdownTimeout)
+		defer cancel()
+		_ = errors.Join(logProvider.Shutdown(shutdownCtx), traceProvider.Shutdown(shutdownCtx))
+		return nil, fmt.Errorf("create meter provider: %w", err)
+	}
+	otel.SetMeterProvider(meterProvider)
+
 	slog.SetDefault(slog.New(slog.NewMultiHandler(
 		stdouthandler,
 		newContextHandler(otelslog.NewHandler(
@@ -80,6 +91,7 @@ func Configure(ctx context.Context) (func(), error) {
 	)))
 	return recoverAndClose(ctx, func(shutdownCtx context.Context) error {
 		return errors.Join(
+			meterProvider.Shutdown(shutdownCtx),
 			logProvider.Shutdown(shutdownCtx),
 			traceProvider.Shutdown(shutdownCtx),
 		)
@@ -125,6 +137,17 @@ func newLoggerProvider(ctx context.Context, res *resource.Resource) (*logsdk.Log
 		return nil, err
 	}
 	return logsdk.NewLoggerProvider(logsdk.WithResource(res), logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter))), nil
+}
+
+func newMeterProvider(ctx context.Context, res *resource.Resource) (*metricsdk.MeterProvider, error) {
+	exporter, err := otlpmetrichttp.New(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return metricsdk.NewMeterProvider(
+		metricsdk.WithResource(res),
+		metricsdk.WithReader(metricsdk.NewPeriodicReader(exporter)),
+	), nil
 }
 
 func newResource(ctx context.Context) (*resource.Resource, error) {

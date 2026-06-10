@@ -700,7 +700,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
-	s.kickgeneration(t.Context(), params, currentUser)
+	s.kickgeneration(t.Context(), params, currentUser, "")
 
 	select {
 	case <-generator.called:
@@ -724,7 +724,7 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	s.kickgeneration(t.Context(), params, &utypes.User{})
+	s.kickgeneration(t.Context(), params, &utypes.User{}, "")
 	s.Wait()
 
 	got, err := s.statusReader.GenerationStatusFromCache(t.Context(), params.Hash())

@@ -14,6 +14,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/conversions"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
@@ -35,6 +36,7 @@ type server struct {
 	locGetter          locationGetter
 	clerk              auth.AuthClient // make an interface
 	unsubscribeFactory UnsubscribeTokenFactory
+	conversions        *conversions.Recorder
 }
 
 type pastRecipeView struct {
@@ -57,6 +59,7 @@ func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.Aut
 		locGetter:          locGetter,
 		clerk:              clerkClient,
 		unsubscribeFactory: unsubscribe,
+		conversions:        conversions.NewRecorder(storage.cache),
 	}
 }
 
@@ -84,12 +87,18 @@ func (s *server) handleExists(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to check account", http.StatusInternalServerError)
 		return
 	}
+	conversion := false
+	if !exists {
+		conversion = s.conversions.RecordOnce(r.Context(), conversions.EventSignIn, clerkUserID)
+	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if err := json.NewEncoder(w).Encode(struct {
-		Exists bool `json:"exists"`
+		Exists     bool `json:"exists"`
+		Conversion bool `json:"conversion"`
 	}{
-		Exists: exists,
+		Exists:     exists,
+		Conversion: conversion,
 	}); err != nil {
 		slog.ErrorContext(r.Context(), "auth user exists encode failed", "clerk_user_id", clerkUserID, "error", err)
 	}
@@ -219,6 +228,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
+		ConversionScript  template.HTML
 		User              *utypes.User
 		Success           bool
 		FavoriteStoreName string
@@ -229,6 +239,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	}{
 		ClarityScript:     templates.ClarityScript(ctx),
 		GoogleTagScript:   templates.GoogleTagScript(),
+		ConversionScript:  templates.ConversionScript(""),
 		User:              userForTemplate,
 		Success:           success,
 		FavoriteStoreName: favoriteStoreName,

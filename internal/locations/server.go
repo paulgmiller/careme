@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"careme/internal/auth"
+	"careme/internal/conversions"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -31,6 +32,7 @@ type locationServer struct {
 	zipFetcher    zipFetcher
 	userStorage   userLookup
 	produceScores produceScoreLookup
+	conversions   *conversions.Recorder
 }
 
 type zipFetcher interface {
@@ -47,6 +49,7 @@ func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLoo
 		zipFetcher:    zipFetcher,
 		userStorage:   userStorage,
 		produceScores: produceScores,
+		conversions:   conversions.NewRecorder(nil),
 	}
 }
 
@@ -105,7 +108,9 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 		if err := l.renderLocationsPage(w, ctx, zip, favoriteStore, currentUser != nil); err != nil {
 			slog.ErrorContext(ctx, "failed to render locations page", "zip", zip, "error", err)
 			http.Error(w, "Failed to render locations page. ", http.StatusInternalServerError)
+			return
 		}
+		l.conversions.Record(ctx, conversions.EventLocationLookup)
 	})
 
 	mux.HandleFunc("POST /locations/request-store", func(w http.ResponseWriter, r *http.Request) {
@@ -183,21 +188,23 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	wg.Wait()
 
 	data := struct {
-		Locations       []locationRow
-		Zip             string
-		FavoriteStore   string
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Style           seasons.Style
-		ServerSignedIn  bool
+		Locations        []locationRow
+		Zip              string
+		FavoriteStore    string
+		ClarityScript    template.HTML
+		GoogleTagScript  template.HTML
+		ConversionScript template.HTML
+		Style            seasons.Style
+		ServerSignedIn   bool
 	}{
-		Locations:       lo.FromSlicePtr(rows),
-		Zip:             zip,
-		FavoriteStore:   favoriteStore,
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  serverSignedIn,
+		Locations:        lo.FromSlicePtr(rows),
+		Zip:              zip,
+		FavoriteStore:    favoriteStore,
+		ClarityScript:    templates.ClarityScript(ctx),
+		GoogleTagScript:  templates.GoogleTagScript(),
+		ConversionScript: templates.ConversionScript(conversions.EventLocationLookup),
+		Style:            seasons.GetCurrentStyle(),
+		ServerSignedIn:   serverSignedIn,
 	}
 	return templates.Location.Execute(w, data)
 }

@@ -201,12 +201,13 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	})
 
 	data := struct {
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Style           seasons.Style
-		ServerSignedIn  bool
-		RefreshInterval string
-		StatusMessage   string
+		ClarityScript    template.HTML
+		GoogleTagScript  template.HTML
+		ConversionScript template.HTML
+		Style            seasons.Style
+		ServerSignedIn   bool
+		RefreshInterval  string
+		StatusMessage    string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
@@ -269,6 +270,7 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 	data := struct {
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
+		ConversionScript  template.HTML
 		Style             seasons.Style
 		User              *utypes.User
 		Success           bool
@@ -306,12 +308,13 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 	}
 
 	data := struct {
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Style           seasons.Style
-		ServerSignedIn  bool
-		RefreshInterval string
-		StatusMessage   string
+		ClarityScript    template.HTML
+		GoogleTagScript  template.HTML
+		ConversionScript template.HTML
+		Style            seasons.Style
+		ServerSignedIn   bool
+		RefreshInterval  string
+		StatusMessage    string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
@@ -341,6 +344,7 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	data := struct {
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
+		ConversionScript  template.HTML
 		User              *utypes.User
 		FavoriteStoreName string
 		Style             seasons.Style
@@ -389,6 +393,7 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 	data := struct {
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
+		ConversionScript  template.HTML
 		User              *utypes.User
 		FavoriteStoreName string
 		Style             seasons.Style
@@ -436,6 +441,7 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	data := struct {
 		PublishableKey      string
 		GoogleTagScript     template.HTML
+		ConversionScript    template.HTML
 		GoogleConversionTag string
 		UserExistsURL       string
 		ReturnTo            string
@@ -464,14 +470,11 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	if strings.Contains(rendered, `for (let attempt = 0; attempt < 5; attempt++)`) {
 		t.Fatalf("auth establish page should not retry user exists check, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `if (!payload.exists &&`) {
-		t.Fatalf("auth establish page should gate conversion on missing user, body: %s", rendered)
+	if !strings.Contains(rendered, `if (payload.conversion &&`) {
+		t.Fatalf("auth establish page should gate conversion on server conversion flag, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `send_to: "AW-123\/abc"`) {
-		t.Fatalf("auth establish page should emit configured conversion tag, body: %s", rendered)
-	}
-	if !strings.Contains(rendered, `event_callback: finishRedirect`) {
-		t.Fatalf("auth establish page should redirect after gtag callback, body: %s", rendered)
+	if !strings.Contains(rendered, `window.caremeConversion("sign_in")`) {
+		t.Fatalf("auth establish page should emit sign-in conversion through shared helper, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, "console.warn(`auth user exists failed: ${response.status}`)") {
 		t.Fatalf("auth establish page should log when user exists endpoint returns a failure, body: %s", rendered)

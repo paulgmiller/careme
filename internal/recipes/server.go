@@ -22,6 +22,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/conversions"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
@@ -101,6 +102,7 @@ type server struct {
 	wg           sync.WaitGroup
 	clerk        auth.AuthClient
 	critiques    critiqueStore
+	conversions  *conversions.Recorder
 }
 
 type critiqueStore interface {
@@ -123,6 +125,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		locServer:    locServer,
 		clerk:        clerkClient,
 		critiques:    critique.NewStore(c),
+		conversions:  conversions.NewRecorder(c),
 	}
 }
 
@@ -388,6 +391,8 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.conversions.Record(ctx, conversions.EventRecipeQuestion)
+	conversions.TriggerHTMX(w, conversions.EventRecipeQuestion)
 	FormatRecipeThreadHTML(thread, true, answer.ResponseID, w)
 }
 
@@ -460,6 +465,10 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	if err := s.SaveFeedback(ctx, hash, feedback); err != nil {
 		http.Error(w, "failed to save feedback", http.StatusInternalServerError)
 		return
+	}
+	if feedback.Cooked {
+		s.conversions.Record(ctx, conversions.EventRecipeCooked)
+		conversions.TriggerHTMX(w, conversions.EventRecipeCooked)
 	}
 
 	setTextContent(w)
@@ -565,6 +574,8 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.startSavedRecipeBackgroundGeneration(ctx, recipeHash, *recipe, p.Location.ID, p.Date)
+	s.conversions.Record(ctx, conversions.EventRecipeSave)
+	conversions.TriggerHTMX(w, conversions.EventRecipeSave)
 
 	setTextContent(w)
 	_, err = w.Write(response.Bytes())
@@ -772,7 +783,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
-	s.kickgeneration(ctx, p, currentUser)
+	s.kickgeneration(ctx, p, currentUser, conversions.EventRecipeRegeneration)
 
 	redirectToHash(w, r, newHash, true /*useStart*/)
 }
@@ -956,7 +967,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.kickgeneration(ctx, p, currentUser)
+	s.kickgeneration(ctx, p, currentUser, conversions.EventRecipeGeneration)
 	redirectToHash(w, r, p.Hash(), true /*useStart*/)
 }
 
@@ -1050,7 +1061,14 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		wineWG.Wait()
 
-		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, currentUser, hashParam, selection, w)
+		var pendingConversion conversions.Event
+		if s.conversions.ConsumeBrowserPending(ctx, conversions.EventRecipeGeneration, hashParam) {
+			pendingConversion = conversions.EventRecipeGeneration
+		}
+		if s.conversions.ConsumeBrowserPending(ctx, conversions.EventRecipeRegeneration, hashParam) {
+			pendingConversion = conversions.EventRecipeRegeneration
+		}
+		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, currentUser, hashParam, selection, w, pendingConversion)
 		return
 	}
 
@@ -1093,12 +1111,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	s.kickgeneration(ctx, p, currentUser)
+	s.kickgeneration(ctx, p, currentUser, conversions.EventRecipeGeneration)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
 }
 
-func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User) {
+func (s *server) kickgeneration(ctx context.Context, p *generatorParams, currentUser *utypes.User, event conversions.Event) {
 	hash := p.Hash()
 
 	s.wg.Go(func() {
@@ -1130,6 +1148,10 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, current
 			slog.ErrorContext(ctx, "save error", "error", err)
 			return
 		}
+		if event != "" {
+			s.conversions.RecordOnce(ctx, event, hash)
+			s.conversions.MarkBrowserPending(ctx, event, hash)
+		}
 	})
 }
 
@@ -1151,19 +1173,21 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
 	}
 
 	spinnerData := struct {
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Style           seasons.Style
-		RefreshInterval string // seconds
-		StatusMessage   string
-		ServerSignedIn  bool
+		ClarityScript    template.HTML
+		GoogleTagScript  template.HTML
+		ConversionScript template.HTML
+		Style            seasons.Style
+		RefreshInterval  string // seconds
+		StatusMessage    string
+		ServerSignedIn   bool
 	}{
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Style:           seasons.GetCurrentStyle(),
-		RefreshInterval: "10", // seconds
-		StatusMessage:   status,
-		ServerSignedIn:  true, // clerk refresh doesn't need to reload because spin will just do it anwyays
+		ClarityScript:    templates.ClarityScript(ctx),
+		GoogleTagScript:  templates.GoogleTagScript(),
+		ConversionScript: templates.ConversionScript(""),
+		Style:            seasons.GetCurrentStyle(),
+		RefreshInterval:  "10", // seconds
+		StatusMessage:    status,
+		ServerSignedIn:   true, // clerk refresh doesn't need to reload because spin will just do it anwyays
 	}
 
 	if err := templates.Spin.Execute(w, spinnerData); err != nil {

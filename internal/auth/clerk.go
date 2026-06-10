@@ -171,12 +171,14 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 		data := struct {
 			PublishableKey      string
 			GoogleTagScript     template.HTML
+			ConversionScript    template.HTML
 			GoogleConversionTag string
 			UserExistsURL       string
 			ReturnTo            string // read from a data- attribute in the template to avoid JS-string escaping concerns
 		}{
 			PublishableKey:      c.cfg.Clerk.PublishableKey,
 			GoogleTagScript:     templates.GoogleTagScript(),
+			ConversionScript:    templates.ConversionScript(""),
 			GoogleConversionTag: templates.GoogleConversionTag(),
 			UserExistsURL:       "/user/exists",
 			ReturnTo:            returnToFromRequest(r),

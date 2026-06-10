@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"careme/internal/config"
+	"careme/internal/conversions"
 	"careme/internal/logsetup"
 )
 
@@ -64,6 +65,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Clarityproject = os.Getenv("CLARITY_PROJECT_ID")
 	GoogleTagID = os.Getenv("GOOGLE_TAG_ID")
 	GoogleConversionLabel = os.Getenv("GOOGLE_CONVERSION_LABEL")
+	BrowserConversions = conversions.BrowserConfigFromEnv(GoogleTagID, GoogleConversionLabel)
 	return nil
 }
 
@@ -88,6 +90,7 @@ var (
 	Clarityproject        string
 	GoogleTagID           string
 	GoogleConversionLabel string
+	BrowserConversions    conversions.BrowserConfig
 )
 
 // ClarityScript generates the Microsoft Clarity tracking script HTML.
@@ -134,8 +137,9 @@ func GoogleTagScript() template.HTML {
 }
 
 func GoogleConversionTag() string {
-	if GoogleTagID == "" || GoogleConversionLabel == "" {
-		return ""
-	}
-	return GoogleTagID + "/" + GoogleConversionLabel
+	return BrowserConversions.GoogleConversionTag(conversions.EventSignIn)
+}
+
+func ConversionScript(pending conversions.Event) template.HTML {
+	return BrowserConversions.Script(pending)
 }
