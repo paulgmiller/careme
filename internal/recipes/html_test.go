@@ -254,40 +254,40 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
+func TestFormatShoppingListHTML_IncludesGoogleTagManagerScript(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 
-	prev := templates.GoogleTagID
+	prev := templates.GoogleTagManagerID
 	t.Cleanup(func() {
-		templates.GoogleTagID = prev
+		templates.GoogleTagManagerID = prev
 	})
-	templates.GoogleTagID = "AW-1234567890"
+	templates.GoogleTagManagerID = "GTM-ABC123"
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	assertHTTPSuccess(t, w)
-	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtag/js?id=AW-1234567890")) {
-		t.Error("HTML should contain Google tag script URL")
+	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtm.js?id=")) {
+		t.Error("HTML should contain Google Tag Manager script URL")
 	}
 
-	if !bytes.Contains(w.Body.Bytes(), []byte("gtag('config', 'AW-1234567890');")) {
-		t.Error("HTML should contain Google tag ID")
+	if !bytes.Contains(w.Body.Bytes(), []byte("'GTM-ABC123'")) {
+		t.Error("HTML should contain Google Tag Manager ID")
 	}
 }
 
 func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	prev := templates.GoogleTagID
+	prev := templates.GoogleTagManagerID
 	t.Cleanup(func() {
-		templates.GoogleTagID = prev
+		templates.GoogleTagManagerID = prev
 	})
-	templates.GoogleTagID = ""
+	templates.GoogleTagManagerID = ""
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	assertHTTPSuccess(t, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("googletagmanager.com")) {
-		t.Error("HTML should not contain Google tag script when tag ID is empty")
+		t.Error("HTML should not contain Google Tag Manager script when tag ID is empty")
 	}
 }
 

@@ -60,10 +60,8 @@ spec:
               value: "deployment.environment.name=production,k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.app=$(WORKLOAD_NAME)"
             - name: CLARITY_PROJECT_ID
               value: "td2gxd3sq9"
-            - name: GOOGLE_TAG_ID
-              value: "AW-17902827663"
-            - name: GOOGLE_CONVERSION_LABEL
-              value: "xDzACMu074AcEI_x3dhC"
+            - name: GOOGLE_TAG_MANAGER_ID
+              value: ""
             - name: ADMIN_EMAILS
               value: "paul.miller@gmail.com"
             - name: PUBLIC_ORIGIN

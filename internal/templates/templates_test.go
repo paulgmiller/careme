@@ -434,16 +434,14 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	})
 
 	data := struct {
-		PublishableKey      string
-		GoogleTagScript     template.HTML
-		GoogleConversionTag string
-		UserExistsURL       string
-		ReturnTo            string
+		PublishableKey  string
+		GoogleTagScript template.HTML
+		UserExistsURL   string
+		ReturnTo        string
 	}{
-		PublishableKey:      "pk_test_123",
-		GoogleConversionTag: "AW-123/abc",
-		UserExistsURL:       "/auth/user-exists",
-		ReturnTo:            "/recipe/hash",
+		PublishableKey: "pk_test_123",
+		UserExistsURL:  "/auth/user-exists",
+		ReturnTo:       "/recipe/hash",
 	}
 
 	var buf bytes.Buffer
@@ -467,11 +465,11 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	if !strings.Contains(rendered, `if (!payload.exists &&`) {
 		t.Fatalf("auth establish page should gate conversion on missing user, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `send_to: "AW-123\/abc"`) {
-		t.Fatalf("auth establish page should emit configured conversion tag, body: %s", rendered)
+	if !strings.Contains(rendered, `event: "signup_completed"`) {
+		t.Fatalf("auth establish page should push signup event to dataLayer, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `event_callback: finishRedirect`) {
-		t.Fatalf("auth establish page should redirect after gtag callback, body: %s", rendered)
+	if !strings.Contains(rendered, `eventCallback: finishRedirect`) {
+		t.Fatalf("auth establish page should redirect after GTM event callback, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, "console.warn(`auth user exists failed: ${response.status}`)") {
 		t.Fatalf("auth establish page should log when user exists endpoint returns a failure, body: %s", rendered)

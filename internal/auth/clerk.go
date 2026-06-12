@@ -169,17 +169,15 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data := struct {
-			PublishableKey      string
-			GoogleTagScript     template.HTML
-			GoogleConversionTag string
-			UserExistsURL       string
-			ReturnTo            string // read from a data- attribute in the template to avoid JS-string escaping concerns
+			PublishableKey  string
+			GoogleTagScript template.HTML
+			UserExistsURL   string
+			ReturnTo        string // read from a data- attribute in the template to avoid JS-string escaping concerns
 		}{
-			PublishableKey:      c.cfg.Clerk.PublishableKey,
-			GoogleTagScript:     templates.GoogleTagScript(),
-			GoogleConversionTag: templates.GoogleConversionTag(),
-			UserExistsURL:       "/user/exists",
-			ReturnTo:            returnToFromRequest(r),
+			PublishableKey:  c.cfg.Clerk.PublishableKey,
+			GoogleTagScript: templates.GoogleTagScript(),
+			UserExistsURL:   "/user/exists",
+			ReturnTo:        returnToFromRequest(r),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
 			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)

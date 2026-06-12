@@ -38,12 +38,11 @@
         };
 
         checkUserExists().then((payload) => {
-          if (!payload.exists &&
-              "{{.GoogleConversionTag}}" !== "" &&
-              typeof gtag === "function") {
-            gtag("event", "conversion", {
-              send_to: "{{.GoogleConversionTag}}",
-              event_callback: finishRedirect,
+          if (!payload.exists && Array.isArray(window.dataLayer)) {
+            window.dataLayer.push({
+              event: "signup_completed",
+              eventCallback: finishRedirect,
+              eventTimeout: 1500,
             });
             setTimeout(finishRedirect, 1500);
             return;
