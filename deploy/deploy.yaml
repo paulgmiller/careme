@@ -61,7 +61,7 @@ spec:
             - name: CLARITY_PROJECT_ID
               value: "td2gxd3sq9"
             - name: GOOGLE_TAG_MANAGER_ID
-              value: ""
+              value: "GTM-KP55TPW6"
             - name: ADMIN_EMAILS
               value: "paul.miller@gmail.com"
             - name: PUBLIC_ORIGIN

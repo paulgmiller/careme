@@ -4,7 +4,7 @@ Careme loads a Google Tag Manager (GTM) web container when `GOOGLE_TAG_MANAGER_I
 
 ## Container ID
 
-Set `GOOGLE_TAG_MANAGER_ID` to your GTM web container ID, for example `GTM-ABC1234`. Do not use a Google Ads ID like `AW-...` here; Google Ads conversion IDs and labels belong inside GTM tags.
+Set `GOOGLE_TAG_MANAGER_ID` to your GTM web container ID, for example `GTM-KP55TPW6`. Do not use a Google Ads ID like `AW-...` here; Google Ads conversion IDs and labels belong inside GTM tags.
 
 ## Signup conversion event
 
@@ -18,7 +18,7 @@ window.dataLayer.push({
 });
 ```
 
-Use a GTM custom event trigger named `signup_completed` for conversion tags.
+The app renders both the GTM head script and the GTM `noscript` iframe fallback immediately after the opening `<body>` tag when this environment variable is set. Use a GTM custom event trigger named `signup_completed` for conversion tags.
 
 ## Google Ads conversion tag
 

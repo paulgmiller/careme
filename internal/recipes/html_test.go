@@ -273,6 +273,10 @@ func TestFormatShoppingListHTML_IncludesGoogleTagManagerScript(t *testing.T) {
 	if !bytes.Contains(w.Body.Bytes(), []byte("'GTM-ABC123'")) {
 		t.Error("HTML should contain Google Tag Manager ID")
 	}
+
+	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/ns.html?id=GTM-ABC123")) {
+		t.Error("HTML should contain Google Tag Manager noscript URL")
+	}
 }
 
 func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {

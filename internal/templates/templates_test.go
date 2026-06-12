@@ -44,6 +44,22 @@ func TestClarityScriptOmitsIdentifyWhenSessionIDEmpty(t *testing.T) {
 	}
 }
 
+func TestGoogleTagNoScriptIncludesContainerID(t *testing.T) {
+	prev := GoogleTagManagerID
+	t.Cleanup(func() {
+		GoogleTagManagerID = prev
+	})
+	GoogleTagManagerID = "GTM-KP55TPW6"
+
+	script := string(GoogleTagNoScript())
+	if !strings.Contains(script, `www.googletagmanager.com/ns.html?id=GTM-KP55TPW6`) {
+		t.Fatalf("expected GTM noscript iframe URL, got %q", script)
+	}
+	if !strings.Contains(script, `<!-- Google Tag Manager (noscript) -->`) {
+		t.Fatalf("expected GTM noscript comments, got %q", script)
+	}
+}
+
 func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	for _, name := range []string{
 		"about.html",
