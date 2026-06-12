@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -18,6 +17,7 @@ import (
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
+	"careme/internal/parallelism"
 	"careme/internal/recipes"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -26,7 +26,6 @@ import (
 const defaultLimit = 15
 
 type scoreRow struct {
-	Rank            int
 	Location        locations.Location
 	SupportsStaples bool
 	IngredientCount int
@@ -86,10 +85,9 @@ func main() {
 		log.Fatalf("failed to get locations for zip %s: %v", zip, err)
 	}
 
-	rows := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, recipes.NewCachedProduceScorer(recipes.IO(cacheStore)))
+	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, recipes.NewCachedProduceScorer(recipes.IO(cacheStore)))
 	printRows(os.Stdout, rows)
-
-	if err := rowsErr(rows); err != nil {
+	if err := (rows); err != nil {
 		log.Fatalf("one or more locations failed: %v", err)
 	}
 }
@@ -107,39 +105,31 @@ func scoreLocations(
 	hasInventory inventoryLookup,
 	staples staplesFetcher,
 	scorer *recipes.CachedProduceScorer,
-) []scoreRow {
+) ([]scoreRow, error) {
 	selected := topLocations(locs, limit)
-	rows := make([]scoreRow, 0, len(selected))
-	for i, loc := range selected {
+	return parallelism.MapWithErrors(selected, func(loc locations.Location) (scoreRow, error) {
 		row := scoreRow{
-			Rank:            i + 1,
 			Location:        loc,
 			SupportsStaples: hasInventory(loc.ID),
 		}
 		if !row.SupportsStaples {
-			rows = append(rows, row)
-			continue
+			return row, nil
 		}
 
 		date, err := recipes.StoreToDate(ctx, time.Now(), &loc)
 		if err != nil {
-			row.Error = err
-			rows = append(rows, row)
-			continue
+			return row, err
 		}
 
 		ingredients, err := staples.FetchStaples(ctx, recipes.DefaultParams(&loc, date))
 		if err != nil {
-			row.Error = err
-			rows = append(rows, row)
-			continue
+			return row, err
 		}
 
 		row.IngredientCount = len(ingredients)
 		row.ProduceScore = scorer.ProduceScore(ctx, loc)
-		rows = append(rows, row)
-	}
-	return rows
+		return row, nil
+	})
 }
 
 func topLocations(locs []locations.Location, limit int) []locations.Location {
@@ -154,7 +144,7 @@ func topLocations(locs []locations.Location, limit int) []locations.Location {
 
 func printRows(out *os.File, rows []scoreRow) {
 	writer := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(writer, "RANK\tID\tCHAIN\tNAME\tZIP\tINGREDIENTS\tPRODUCE_SCORE\tDATE\tSTATUS")
+	_, _ = fmt.Fprintln(writer, "ID\tCHAIN\tNAME\tZIP\tINGREDIENTS\tPRODUCE_SCORE\tDATE\tSTATUS")
 	for _, row := range rows {
 		score := ""
 		scoreDate := ""
@@ -162,8 +152,6 @@ func printRows(out *os.File, rows []scoreRow) {
 		switch {
 		case !row.SupportsStaples:
 			status = "unsupported"
-		case row.Error != nil:
-			status = row.Error.Error()
 		case row.ProduceScore == nil:
 			status = "score unavailable"
 		default:
@@ -173,8 +161,7 @@ func printRows(out *os.File, rows []scoreRow) {
 
 		_, _ = fmt.Fprintf(
 			writer,
-			"%d\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
-			row.Rank,
+			"%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
 			row.Location.ID,
 			row.Location.Chain,
 			row.Location.Name,
@@ -186,14 +173,4 @@ func printRows(out *os.File, rows []scoreRow) {
 		)
 	}
 	_ = writer.Flush()
-}
-
-func rowsErr(rows []scoreRow) error {
-	var errs []error
-	for _, row := range rows {
-		if row.Error != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", row.Location.ID, row.Error))
-		}
-	}
-	return errors.Join(errs...)
 }
