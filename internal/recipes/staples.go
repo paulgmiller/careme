@@ -256,6 +256,19 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 }
 
 func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
+	stores := StaplesWatchdogLocations()
+	_, err := parallelism.Flatten(stores, func(store locations.Location) ([]ai.InputIngredient, error) {
+		date, err := StoreToDate(ctx, nowFn(), &store)
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchStaples(ctx, DefaultParams(&store, date))
+	})
+	return err
+}
+
+// StaplesWatchdogLocations returns the stores checked by the staples watchdog.
+func StaplesWatchdogLocations() []locations.Location {
 	stores := []locations.Location{
 		{ID: "wholefoods_10153", ZipCode: "97209"},
 		{ID: "safeway_490", ZipCode: "86403"},
@@ -266,14 +279,7 @@ func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
 		{ID: "aldi_F219", ZipCode: "40222"},
 		{ID: "heb_540", ZipCode: "77023"},
 	}
-	_, err := parallelism.Flatten(stores, func(store locations.Location) ([]ai.InputIngredient, error) {
-		date, err := StoreToDate(ctx, nowFn(), &store)
-		if err != nil {
-			return nil, err
-		}
-		return s.FetchStaples(ctx, DefaultParams(&store, date))
-	})
-	return err
+	return stores
 }
 
 func staplesSignatureForLocation(locationID string) string {
