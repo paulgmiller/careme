@@ -1093,6 +1093,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// what do we do with this?
 	// p.UserID = currentUser.ID
 
+	signedIn := true
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
 	if err != nil {
 		if !errors.Is(err, auth.ErrNoSession) {
@@ -1100,6 +1101,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
+		signedIn = false
 		if _, cacheErr := s.FromCache(ctx, p.Hash()); cacheErr == nil {
 			redirectToHash(w, r, p.Hash(), false /*useStart*/)
 			return
@@ -1111,6 +1113,18 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		setGuestShoppingListCount(w, r, guestShoppingListCount(r)+1)
 		// be careful. Formalize this more?
 		currentUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
+	}
+
+	if signedIn {
+		if err := s.setFavoriteStoreFromGeneratedLocation(ctx, currentUser, p.Location); err != nil {
+			locationID := ""
+			if p.Location != nil {
+				locationID = p.Location.ID
+			}
+			slog.ErrorContext(ctx, "failed to set favorite store from generated recipes location", "location_id", locationID, "error", err)
+			http.Error(w, "unable to update favorite store", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	p.Directive = currentUser.Directive
@@ -1133,6 +1147,25 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	s.kickgeneration(ctx, p)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
+}
+
+func (s *server) setFavoriteStoreFromGeneratedLocation(ctx context.Context, currentUser *utypes.User, loc *locations.Location) error {
+	if currentUser == nil || loc == nil {
+		return nil
+	}
+	if strings.TrimSpace(currentUser.FavoriteStore) != "" {
+		return nil
+	}
+	locationID := strings.TrimSpace(loc.ID)
+	if locationID == "" {
+		return nil
+	}
+	currentUser.FavoriteStore = locationID
+	if err := s.storage.Update(currentUser); err != nil {
+		return err
+	}
+	slog.InfoContext(ctx, "set favorite store from recipe generation", "user_id", currentUser.ID, "location_id", locationID)
+	return nil
 }
 
 func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Recipe) []string {
