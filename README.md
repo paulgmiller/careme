@@ -35,8 +35,7 @@ The application is configured via environment variables:
 - `GEMINI_API_KEY` - Gemini API key for cached recipe critique generation
 - `GEMINI_CRITIQUE_MODEL` - Gemini model for recipe critique (defaults to `gemini-2.5-flash`)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
-- `GOOGLE_TAG_ID` - Google Ads/gtag ID for web analytics (optional)
-- `GOOGLE_CONVERSION_LABEL` - Google Ads conversion label used on `/auth/establish?signup=true` (optional)
+- `GOOGLE_TAG_MANAGER_ID` - Google Tag Manager container ID for web analytics and ad conversion tags (optional); see `docs/gtm-ads.md` for conversion setup
 - `OTEL_EXPORTER_OTLP_ENDPOINT` - OTLP HTTP endpoint. For Grafana Cloud, use the endpoint from the OpenTelemetry connection tile.
 - `OTEL_EXPORTER_OTLP_HEADERS` - OTLP headers. For Grafana Cloud, use the generated `Authorization=Basic ...` header value from the OpenTelemetry connection tile.
 - `SENDGRID_API_KEY` - To allow sending weekly recipe lists via email
