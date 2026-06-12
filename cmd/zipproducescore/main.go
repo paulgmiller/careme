@@ -36,16 +36,18 @@ type scoreRow struct {
 func main() {
 	var zip string
 	var limit int
+	var useStaplesWatchdogLocations bool
 
 	flag.StringVar(&zip, "zip", "", "ZIP code to search")
 	flag.IntVar(&limit, "n", defaultLimit, "Number of top locations to fetch and score")
+	flag.BoolVar(&useStaplesWatchdogLocations, "staples-watchdog-locations", false, "Use the store IDs checked by the staples watchdog instead of a ZIP search")
 	flag.Parse()
 
 	if zip == "" && flag.NArg() > 0 {
 		zip = flag.Arg(0)
 	}
 	zip = strings.TrimSpace(zip)
-	if zip == "" {
+	if zip == "" && !useStaplesWatchdogLocations {
 		log.Fatal("provide a ZIP code with -zip 98101 or as the first argument")
 	}
 	if limit <= 0 {
@@ -80,8 +82,11 @@ func main() {
 		log.Fatalf("failed to create staples service: %v", err)
 	}
 
-	locs, err := locationStorage.GetLocationsByZip(ctx, zip)
+	locs, err := locationsToScore(ctx, locationStorage, zip, useStaplesWatchdogLocations)
 	if err != nil {
+		if useStaplesWatchdogLocations {
+			log.Fatalf("failed to get staples watchdog locations: %v", err)
+		}
 		log.Fatalf("failed to get locations for zip %s: %v", zip, err)
 	}
 
@@ -94,8 +99,19 @@ func main() {
 
 type inventoryLookup func(string) bool
 
+type zipLocationLookup interface {
+	GetLocationsByZip(ctx context.Context, zipcode string) ([]locations.Location, error)
+}
+
 type staplesFetcher interface {
 	FetchStaples(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
+}
+
+func locationsToScore(ctx context.Context, lookup zipLocationLookup, zip string, useStaplesWatchdogLocations bool) ([]locations.Location, error) {
+	if useStaplesWatchdogLocations {
+		return recipes.StaplesWatchdogLocations(), nil
+	}
+	return lookup.GetLocationsByZip(ctx, zip)
 }
 
 func scoreLocations(
