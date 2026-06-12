@@ -257,6 +257,66 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 	}
 }
 
+func TestHandleRecipes_SetsEmptyFavoriteStoreFromGeneratedLocation(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	location := &locations.Location{
+		ID:      "wholefoods_70001002",
+		Name:    "Test Store",
+		ZipCode: "94105",
+	}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+		withTestLocationServer(staticLocationLookup{location: location}),
+	)
+	t.Cleanup(s.Wait)
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=wholefoods_70001002&date=2026-03-06", nil)
+	currentUser, err := storage.FromRequest(t.Context(), req, auth.DefaultMock())
+	require.NoError(t, err)
+	require.Empty(t, currentUser.FavoriteStore)
+
+	rr := httptest.NewRecorder()
+	s.handleRecipes(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	updated, err := storage.GetByID(currentUser.ID)
+	require.NoError(t, err)
+	require.Equal(t, "wholefoods_70001002", updated.FavoriteStore)
+	require.False(t, updated.MailOptIn)
+}
+
+func TestHandleRecipes_DoesNotOverwriteExistingFavoriteStore(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	location := &locations.Location{
+		ID:      "70001003",
+		Name:    "Test Store",
+		ZipCode: "94105",
+	}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+		withTestLocationServer(staticLocationLookup{location: location}),
+	)
+	t.Cleanup(s.Wait)
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001003&date=2026-03-06", nil)
+	currentUser, err := storage.FromRequest(t.Context(), req, auth.DefaultMock())
+	require.NoError(t, err)
+	currentUser.FavoriteStore = "70009999"
+	require.NoError(t, storage.Update(currentUser))
+
+	rr := httptest.NewRecorder()
+	s.handleRecipes(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	updated, err := storage.GetByID(currentUser.ID)
+	require.NoError(t, err)
+	require.Equal(t, "70009999", updated.FavoriteStore)
+}
+
 func TestHandleRecipes_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}

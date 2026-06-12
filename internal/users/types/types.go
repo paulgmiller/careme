@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/mail"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -41,8 +40,8 @@ func (u User) Validate() error {
 		}
 	}
 	if u.FavoriteStore != "" {
-		if _, err := strconv.Atoi(u.FavoriteStore); err != nil {
-			return fmt.Errorf("invalid favorite store id %s: %w", u.FavoriteStore, err)
+		if !validFavoriteStoreID(u.FavoriteStore) {
+			return fmt.Errorf("invalid favorite store id %s", u.FavoriteStore)
 		}
 	}
 	// trim out recipes older than 2 months? store them in seperate file?
@@ -51,6 +50,28 @@ func (u User) Validate() error {
 	})
 
 	return nil
+}
+
+func validFavoriteStoreID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		if r >= 'a' && r <= 'z' {
+			continue
+		}
+		if r >= 'A' && r <= 'Z' {
+			continue
+		}
+		if r >= '0' && r <= '9' {
+			continue
+		}
+		if r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 var daysOfWeek = [...]string{

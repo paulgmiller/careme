@@ -991,6 +991,8 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	redirectToHash(w, r, p.Hash(), true /*useStart*/)
 }
 
+var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
+
 func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// The shopping list page is mutated in-place via HTMX (save/dismiss/wine picks).
 	// We disable browser/intermediary caching so Back/Forward revalidation fetches the
@@ -1110,8 +1112,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		setGuestShoppingListCount(w, r, guestShoppingListCount(r)+1)
 		// be careful. Formalize this more?
-		currentUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
+		currentUser = guestUser
 	}
+
+	s.setFavoriteStore(ctx, currentUser, p.Location)
 
 	p.Directive = currentUser.Directive
 	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
@@ -1133,6 +1137,23 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	s.kickgeneration(ctx, p)
 
 	redirectToHash(w, r, hash, true /*useStart*/)
+}
+
+// best effort attempt to set favorite store if non is thre
+func (s *server) setFavoriteStore(ctx context.Context, currentUser *utypes.User, loc *locations.Location) {
+	if strings.TrimSpace(currentUser.FavoriteStore) != "" {
+		return
+	}
+	if currentUser.ID == guestUser.ID {
+		return
+	}
+
+	currentUser.FavoriteStore = strings.TrimSpace(loc.ID)
+	if err := s.storage.Update(currentUser); err != nil {
+		slog.ErrorContext(ctx, "failed to set favorite store from generated recipes location", "location_id", currentUser.FavoriteStore, "error", err)
+		return
+	}
+	slog.InfoContext(ctx, "set favorite store from recipe generation", "user_id", currentUser.ID, "location_id", currentUser.FavoriteStore)
 }
 
 func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Recipe) []string {
