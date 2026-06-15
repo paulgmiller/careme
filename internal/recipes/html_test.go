@@ -497,8 +497,8 @@ func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
-	if strings.Contains(html, `/recipes/`) && strings.Contains(html, `/regenerate"`) {
-		t.Error("shopping list HTML should not expose regenerate endpoint when signed out")
+	if !strings.Contains(html, `/recipes/`) || !strings.Contains(html, `/regenerate"`) {
+		t.Error("shopping list HTML should expose regenerate endpoint when signed out")
 	}
 	if !strings.Contains(html, `/recipe/`) || !strings.Contains(html, `/save"`) {
 		t.Error("shopping list HTML should expose save endpoint when signed out")
@@ -512,8 +512,8 @@ func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *
 	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/wine?view=shopping`) {
 		t.Error("shopping list HTML should not expose shopping wine endpoint when signed out")
 	}
-	if strings.Contains(html, "Try again, chef") {
-		t.Error("shopping list HTML should hide regenerate action when signed out")
+	if !strings.Contains(html, "Try again, chef") {
+		t.Error("shopping list HTML should show regenerate action when signed out")
 	}
 	if !strings.Contains(html, "Build Shopping List") {
 		t.Error("shopping list HTML should show finalize action when signed out")

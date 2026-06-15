@@ -771,11 +771,20 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r, http.StatusUnauthorized)
+			if guestShoppingListCount(r) >= guestShoppingListLimit {
+				if isHTMXRequest(r) {
+					redirectToSignIn(w, r, http.StatusUnauthorized)
+					return
+				}
+				http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
+				return
+			}
+			setGuestShoppingListCount(w, r, guestShoppingListCount(r)+1)
+			currentUser = guestUser
+		} else {
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
 	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
