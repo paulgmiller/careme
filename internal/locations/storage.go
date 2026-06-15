@@ -17,6 +17,7 @@ import (
 	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/locations/geo"
+	"careme/internal/locations/nearby"
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
@@ -67,11 +68,9 @@ type centroidByZip interface {
 
 type locationBackendFactory func(context.Context) (locationBackend, error)
 
-// bad for rural areas if zip code is huge?
 const (
-	maxLocationDistanceMiles = 20.0
-	locationCachePrefix      = "location/"
-	storeRequestPrefix       = "location-store-requests/"
+	locationCachePrefix = "location/"
+	storeRequestPrefix  = "location-store-requests/"
 )
 
 func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locationStore, error) {
@@ -188,6 +187,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 			slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "zip", zipcode)
 			return nil, err
 		}
+		locations = l.limitLocationsForZip(ctx, zipcode, locations)
 		slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
 		return locations, err
 	})
@@ -215,8 +215,8 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		}
 
 		distance := locationDistanceTo(requestedCentroid, loc, l.zipCentroids)
-		if distance > maxLocationDistanceMiles {
-			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", maxLocationDistanceMiles)
+		if distance > nearby.MaxLocationDistanceMiles {
+			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", nearby.MaxLocationDistanceMiles)
 			continue
 		}
 		filtered = append(filtered, loc)
@@ -225,6 +225,33 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 	sortLocationsByDistanceFromCentroid(allLocations, requestedCentroid, l.zipCentroids)
 
 	return allLocations, fetcherrors
+}
+
+func (l *locationStorage) limitLocationsForZip(ctx context.Context, zipcode string, locations []Location) []Location {
+	requestedCentroid, hasRequestedCentroid := l.zipCentroids.ZipCentroidByZIP(zipcode)
+	if !hasRequestedCentroid {
+		if len(locations) <= nearby.MaxLocationResults {
+			return locations
+		}
+		slog.WarnContext(ctx, "requested zip has no centroid; limiting unsorted provider locations", "zip", zipcode, "count", len(locations), "limit", nearby.MaxLocationResults)
+		return nearby.Limit(locations, nearby.MaxLocationResults)
+	}
+
+	filtered := make([]Location, 0, len(locations))
+	for _, loc := range locations {
+		if loc.Lat == nil || loc.Lon == nil {
+			if _, hasZipCentroid := l.zipCentroids.ZipCentroidByZIP(loc.ZipCode); !hasZipCentroid {
+				slog.WarnContext(ctx, "location has no zip centroid; skipping distance filter and sort", "location_id", loc.ID, "zip", loc.ZipCode)
+				continue
+			}
+		}
+
+		if distance := locationDistanceTo(requestedCentroid, loc, l.zipCentroids); distance <= nearby.MaxLocationDistanceMiles {
+			filtered = append(filtered, loc)
+		}
+	}
+	sortLocationsByDistanceFromCentroid(filtered, requestedCentroid, l.zipCentroids)
+	return nearby.Limit(filtered, nearby.MaxLocationResults)
 }
 
 func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID string) (Location, bool) {

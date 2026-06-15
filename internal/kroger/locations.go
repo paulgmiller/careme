@@ -86,8 +86,12 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 }
 
 func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
+	radius := 15
+	limit := 10
 	params := &krogerlocations.SearchLocationsParams{
-		FilterZipCodeNear: &zipcode,
+		FilterZipCodeNear:   &zipcode,
+		FilterRadiusInMiles: &radius,
+		FilterLimit:         &limit,
 	}
 	resp, err := b.client.SearchLocationsWithResponse(ctx, params)
 	if err != nil {

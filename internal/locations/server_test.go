@@ -230,7 +230,7 @@ func TestLocationsPageSkipsNilProduceScores(t *testing.T) {
 	}
 }
 
-func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *testing.T) {
+func TestLocationsPageLimitsProviderLocationsBeforeScoring(t *testing.T) {
 	mustInitLocationTemplates(t)
 
 	client := newFakeLocationClient()
@@ -265,19 +265,22 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 	}
 
 	body := rr.Body.String()
-	if !strings.Contains(body, "Store 12") {
-		t.Fatalf("expected all locations to render, got %q", body)
+	if !strings.Contains(body, "Store 9") {
+		t.Fatalf("expected capped locations to render, got %q", body)
 	}
-	if strings.Contains(body, "score 11") || strings.Contains(body, "score 12") {
-		t.Fatalf("expected scores only for first 10 supported stores, got %q", body)
+	if strings.Contains(body, "Store 10") || strings.Contains(body, "Store 11") || strings.Contains(body, "Store 12") {
+		t.Fatalf("expected locations from one provider to be capped at 10, got %q", body)
+	}
+	if strings.Contains(body, "score 10") || strings.Contains(body, "score 11") || strings.Contains(body, "score 12") {
+		t.Fatalf("expected scores only for capped supported stores, got %q", body)
 	}
 
 	gotCalls := scoreLookup.callIDs()
-	if len(gotCalls) != 10 {
-		t.Fatalf("expected 10 score lookups, got %d: %v", len(gotCalls), gotCalls)
+	if len(gotCalls) != 9 {
+		t.Fatalf("expected 9 score lookups, got %d: %v", len(gotCalls), gotCalls)
 	}
 	for _, id := range gotCalls {
-		if id == "store-0" || id == "store-11" || id == "store-12" {
+		if id == "store-0" || id == "store-10" || id == "store-11" || id == "store-12" {
 			t.Fatalf("unexpected score lookup for %s; calls=%v", id, gotCalls)
 		}
 	}

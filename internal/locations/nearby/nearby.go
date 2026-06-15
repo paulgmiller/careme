@@ -14,7 +14,10 @@ type CentroidLookup interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
-const MaxLocationDistanceMiles = 20.0
+const (
+	MaxLocationDistanceMiles = 15.0
+	MaxLocationResults       = 10
+)
 
 func FilterAndSortByZip(ctx context.Context, zipLookup CentroidLookup, zipcode string, candidates []locationtypes.Location, maxDistanceMiles float64) []locationtypes.Location {
 	centroid, ok := zipLookup.ZipCentroidByZIP(strings.TrimSpace(zipcode))
@@ -50,4 +53,11 @@ func FilterAndSortByZip(ctx context.Context, zipLookup CentroidLookup, zipcode s
 		out = append(out, item.location)
 	}
 	return out
+}
+
+func Limit(locations []locationtypes.Location, maxResults int) []locationtypes.Location {
+	if maxResults <= 0 || len(locations) <= maxResults {
+		return locations
+	}
+	return locations[:maxResults]
 }

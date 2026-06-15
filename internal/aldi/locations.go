@@ -82,6 +82,7 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 
 func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
 	candidates := nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, b.spatial, nearby.MaxLocationDistanceMiles)
+	candidates = nearby.Limit(candidates, nearby.MaxLocationResults)
 	return storeindex.HydrateLocations(ctx, candidates, b.hydrator.Hydrate)
 }
 

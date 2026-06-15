@@ -278,6 +278,37 @@ func TestGetLocationsByZipSortsUsingLocationZipCentroidFallback(t *testing.T) {
 	}
 }
 
+func TestGetLocationsByZipLimitsResultsPerBackend(t *testing.T) {
+	first := newFakeLocationClient()
+	second := newFakeLocationClient()
+	first.setListResponse("00601", testZipLocations("first", 12, "00601"))
+	second.setListResponse("00601", testZipLocations("second", 12, "00601"))
+
+	server := newTestLocationServerWithBackends([]locationBackend{first, second})
+	locs, err := server.GetLocationsByZip(context.Background(), "00601")
+	if err != nil {
+		t.Fatalf("GetLocationsByZip returned error: %v", err)
+	}
+	if len(locs) != 20 {
+		t.Fatalf("expected 10 locations per backend, got %d", len(locs))
+	}
+
+	counts := map[string]int{}
+	for _, loc := range locs {
+		switch {
+		case strings.HasPrefix(loc.ID, "first-"):
+			counts["first"]++
+		case strings.HasPrefix(loc.ID, "second-"):
+			counts["second"]++
+		default:
+			t.Fatalf("unexpected location id: %q", loc.ID)
+		}
+	}
+	if counts["first"] != 10 || counts["second"] != 10 {
+		t.Fatalf("unexpected per-backend counts: %v", counts)
+	}
+}
+
 func TestGetLocationsByZipLeavesOrderWhenQueryZipCentroidUnknown(t *testing.T) {
 	client := newFakeLocationClient()
 	client.setListResponse("not-a-zip", []Location{
@@ -293,6 +324,18 @@ func TestGetLocationsByZipLeavesOrderWhenQueryZipCentroidUnknown(t *testing.T) {
 	if got, want := []string{locs[0].ID, locs[1].ID}, []string{"first", "second"}; got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("unexpected order: got %v want %v", got, want)
 	}
+}
+
+func testZipLocations(prefix string, count int, zip string) []Location {
+	locations := make([]Location, 0, count)
+	for i := range count {
+		locations = append(locations, Location{
+			ID:      fmt.Sprintf("%s-%02d", prefix, i),
+			Name:    fmt.Sprintf("%s store %02d", prefix, i),
+			ZipCode: zip,
+		})
+	}
+	return locations
 }
 
 func TestGetLocationsByZipResolvesMissingRequestedZipCentroid(t *testing.T) {
