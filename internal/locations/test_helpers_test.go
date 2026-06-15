@@ -123,12 +123,19 @@ func newTestLocationServer(client locationBackend) *locationStorage {
 	return newTestLocationServerWithBackends([]locationBackend{client})
 }
 
+func newTestLocationServerWithCentroids(client locationBackend, centroids centroidByZip) *locationStorage {
+	return newTestLocationServerWithBackendsCacheAndCentroids([]locationBackend{client}, cachepkg.NewInMemoryCache(), centroids)
+}
+
 func newTestLocationServerWithBackends(backends []locationBackend) *locationStorage {
 	return newTestLocationServerWithBackendsAndCache(backends, cachepkg.NewInMemoryCache())
 }
 
 func newTestLocationServerWithBackendsAndCache(backends []locationBackend, c cachepkg.ListCache) *locationStorage {
-	zipCentroids := LoadCentroids()
+	return newTestLocationServerWithBackendsCacheAndCentroids(backends, c, LoadCentroids())
+}
+
+func newTestLocationServerWithBackendsCacheAndCentroids(backends []locationBackend, c cachepkg.ListCache, zipCentroids centroidByZip) *locationStorage {
 	return &locationStorage{
 		clients:      backends,
 		zipCentroids: zipCentroids,
