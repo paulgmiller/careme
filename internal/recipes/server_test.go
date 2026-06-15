@@ -1764,6 +1764,120 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 	}
 }
 
+func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestClerk(noSessionAuth{}),
+		withTestGenerator(generator),
+	)
+	t.Cleanup(s.Wait)
+
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	originHash := p.Hash()
+	if err := s.SaveParams(t.Context(), p); err != nil {
+		t.Fatalf("failed to save params: %v", err)
+	}
+	recipe := ai.Recipe{Title: "Guest Recipe", Description: "Guest", ResponseID: "resp-guest"}
+	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes: []ai.Recipe{recipe},
+		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},
+	}, originHash); err != nil {
+		t.Fatalf("failed to save shopping list: %v", err)
+	}
+
+	form := url.Values{"instructions": {"make it vegetarian"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+originHash+"/regenerate", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.AddCookie(&http.Cookie{Name: guestShoppingListCookieName, Value: "1"})
+	req.SetPathValue("hash", originHash)
+	rr := httptest.NewRecorder()
+
+	s.handleRegenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	location := rr.Header().Get("HX-Redirect")
+	if location == "" {
+		t.Fatal("expected HX-Redirect header")
+	}
+	u, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("failed to parse HX-Redirect: %v", err)
+	}
+	newHash := u.Query().Get("h")
+	if newHash == "" || newHash == originHash {
+		t.Fatalf("expected new regenerate hash, got %q", newHash)
+	}
+	var guestCookie *http.Cookie
+	for _, cookie := range rr.Result().Cookies() {
+		if cookie.Name == guestShoppingListCookieName {
+			guestCookie = cookie
+			break
+		}
+	}
+	if guestCookie == nil || guestCookie.Value != "2" {
+		t.Fatalf("expected guest generation cookie value 2, got %#v", guestCookie)
+	}
+	select {
+	case <-generator.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for generator call")
+	}
+	captured := generator.LastParams()
+	require.NotNil(t, captured)
+	require.Equal(t, "make it vegetarian", captured.Instructions)
+	require.Empty(t, captured.LastRecipes)
+}
+
+func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestClerk(noSessionAuth{}),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/recipes/origin-hash/regenerate", nil)
+	req.AddCookie(&http.Cookie{Name: guestShoppingListCookieName, Value: strconv.Itoa(guestShoppingListLimit)})
+	req.SetPathValue("hash", "origin-hash")
+	rr := httptest.NewRecorder()
+
+	s.handleRegenerate(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
+	}
+	if got, want := rr.Header().Get("Location"), signInPath("/recipes/origin-hash/regenerate"); got != want {
+		t.Fatalf("expected redirect location %q, got %q", want, got)
+	}
+}
+
+func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestClerk(noSessionAuth{}),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/recipes/origin-hash/regenerate", nil)
+	req.Header.Set("HX-Request", "true")
+	req.AddCookie(&http.Cookie{Name: guestShoppingListCookieName, Value: strconv.Itoa(guestShoppingListLimit)})
+	req.SetPathValue("hash", "origin-hash")
+	rr := httptest.NewRecorder()
+
+	s.handleRegenerate(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipes/origin-hash/regenerate"); got != want {
+		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
+	}
+}
+
 func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)

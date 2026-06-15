@@ -43,6 +43,8 @@ spec:
                     name: storage
                 - secretRef:
                     name: walmart
+                - secretRef:
+                    name: brightdata-proxy
               env:
                 - name: POD_NAME
                   valueFrom:
