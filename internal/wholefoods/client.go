@@ -6,10 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 const (
@@ -17,16 +21,13 @@ const (
 	DefaultBaseURL               = "https://www.wholefoodsmarket.com"
 	defaultCategoryLimit         = 60
 	defaultCategoryTimeout       = 20 * time.Second
-	defaultRequestAttemptMax     = 3
 	defaultRequestAttemptTimeout = 5 * time.Second
 )
 
 // client calls the public Whole Foods category products endpoint.
 type client struct {
-	baseURL               string
-	httpClient            *http.Client
-	requestAttemptMax     int
-	requestAttemptTimeout time.Duration
+	baseURL    string
+	httpClient *http.Client
 }
 
 // categoryResponse matches the public category API payload shape used in wf-output/beef.json.
@@ -154,10 +155,8 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 	}
 
 	return &client{
-		baseURL:               strings.TrimRight(baseURL, "/"),
-		httpClient:            httpClient,
-		requestAttemptMax:     defaultRequestAttemptMax,
-		requestAttemptTimeout: defaultRequestAttemptTimeout,
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		httpClient: withWholeFoodsRetries(httpClient),
 	}
 }
 
@@ -222,38 +221,7 @@ func (c *client) StoreSummary(ctx context.Context, store string) (*StoreSummaryR
 }
 
 func (c *client) getJSON(ctx context.Context, endpoint string, dest any) error {
-	maxAttempts := c.requestAttemptMax
-	if maxAttempts < 1 {
-		maxAttempts = 1
-	}
-
-	var lastErr error
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("request %q: %w", endpoint, err)
-		}
-
-		err := c.getJSONAttempt(ctx, endpoint, dest)
-		if err == nil {
-			return nil
-		}
-		lastErr = err
-		if attempt == maxAttempts || !retryableRequestError(err) {
-			return err
-		}
-	}
-	return lastErr
-}
-
-func (c *client) getJSONAttempt(ctx context.Context, endpoint string, dest any) error {
-	attemptCtx := ctx
-	cancel := func() {}
-	if c.requestAttemptTimeout > 0 {
-		attemptCtx, cancel = context.WithTimeout(ctx, c.requestAttemptTimeout)
-	}
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
@@ -282,9 +250,45 @@ func (c *client) getJSONAttempt(ctx context.Context, endpoint string, dest any) 
 	return nil
 }
 
-func retryableRequestError(err error) bool {
-	if errors.Is(err, context.Canceled) {
-		return false
+func withWholeFoodsRetries(baseClient *http.Client) *http.Client {
+	if baseClient == nil {
+		baseClient = http.DefaultClient
 	}
-	return errors.Is(err, context.DeadlineExceeded)
+	retryHTTPClient := *baseClient
+	if retryHTTPClient.Timeout == 0 {
+		retryHTTPClient.Timeout = defaultRequestAttemptTimeout
+	}
+
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient = &retryHTTPClient
+	retryClient.Logger = wholeFoodsRetryLogger{}
+	retryClient.RetryMax = 2
+	retryClient.RetryWaitMin = 100 * time.Millisecond
+	retryClient.RetryWaitMax = time.Second
+	retryClient.CheckRetry = wholeFoodsRetryPolicy
+	retryClient.ErrorHandler = retryablehttp.PassthroughErrorHandler
+	return retryClient.StandardClient()
+}
+
+func wholeFoodsRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return false, err
+		}
+		var netErr net.Error
+		return errors.Is(err, context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout(), nil
+	}
+	if resp == nil || resp.Request == nil || resp.Request.Method != http.MethodGet {
+		return false, nil
+	}
+	return resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
+}
+
+type wholeFoodsRetryLogger struct{}
+
+func (wholeFoodsRetryLogger) Printf(format string, args ...any) {
+	slog.Info(fmt.Sprintf(format, args...), "source", "wholefoods-retryablehttp")
 }
