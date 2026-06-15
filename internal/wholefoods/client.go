@@ -14,14 +14,19 @@ import (
 
 const (
 	// DefaultBaseURL is the public Whole Foods Market website origin.
-	DefaultBaseURL       = "https://www.wholefoodsmarket.com"
-	defaultCategoryLimit = 60
+	DefaultBaseURL               = "https://www.wholefoodsmarket.com"
+	defaultCategoryLimit         = 60
+	defaultCategoryTimeout       = 20 * time.Second
+	defaultRequestAttemptMax     = 3
+	defaultRequestAttemptTimeout = 5 * time.Second
 )
 
 // client calls the public Whole Foods category products endpoint.
 type client struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL               string
+	httpClient            *http.Client
+	requestAttemptMax     int
+	requestAttemptTimeout time.Duration
 }
 
 // categoryResponse matches the public category API payload shape used in wf-output/beef.json.
@@ -149,15 +154,17 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 	}
 
 	return &client{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: httpClient,
+		baseURL:               strings.TrimRight(baseURL, "/"),
+		httpClient:            httpClient,
+		requestAttemptMax:     defaultRequestAttemptMax,
+		requestAttemptTimeout: defaultRequestAttemptTimeout,
 	}
 }
 
 // Category fetches category products and follows limit/offset pagination until
 // the API returns fewer items than the requested page size.
 func (c *client) Category(ctx context.Context, queryterm, store string) ([]product, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
+	ctx, cancel := context.WithTimeout(ctx, defaultCategoryTimeout)
 	defer cancel()
 
 	queryterm = strings.TrimSpace(queryterm)
@@ -215,7 +222,38 @@ func (c *client) StoreSummary(ctx context.Context, store string) (*StoreSummaryR
 }
 
 func (c *client) getJSON(ctx context.Context, endpoint string, dest any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	maxAttempts := c.requestAttemptMax
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("request %q: %w", endpoint, err)
+		}
+
+		err := c.getJSONAttempt(ctx, endpoint, dest)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if attempt == maxAttempts || !retryableRequestError(err) {
+			return err
+		}
+	}
+	return lastErr
+}
+
+func (c *client) getJSONAttempt(ctx context.Context, endpoint string, dest any) error {
+	attemptCtx := ctx
+	cancel := func() {}
+	if c.requestAttemptTimeout > 0 {
+		attemptCtx, cancel = context.WithTimeout(ctx, c.requestAttemptTimeout)
+	}
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
@@ -242,4 +280,11 @@ func (c *client) getJSON(ctx context.Context, endpoint string, dest any) error {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
+}
+
+func retryableRequestError(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	return errors.Is(err, context.DeadlineExceeded)
 }

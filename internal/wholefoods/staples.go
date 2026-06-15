@@ -59,7 +59,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	return parallelism.Flatten(defaultStaples(), func(category string) ([]ai.InputIngredient, error) {
 		resp, err := p.client.Category(ctx, category, storeID)
 		if err != nil {
-			slog.WarnContext(ctx, "Failed to fetch category", "category", category, "location", locationID, "error", err)
+			slog.ErrorContext(ctx, "Failed to fetch category", "category", category, "location", locationID, "error", err)
 			return nil, err
 		}
 
