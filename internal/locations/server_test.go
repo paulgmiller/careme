@@ -147,6 +147,7 @@ func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
 		Address: "1 Market St",
 		ZipCode: "10001",
 	}})
+	client.setHasInventory("12345678", true)
 	storage := newTestLocationServer(client)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
 		scores: map[string]*ProduceScore{
@@ -236,7 +237,8 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 	client := newFakeLocationClient()
 	locations := make([]Location, 0, 13)
 	scores := make(map[string]*ProduceScore)
-	for i := 0; i < 13; i++ {
+	// 10 will get cut off
+	for i := range 11 {
 		id := "store-" + strconv.Itoa(i)
 		locations = append(locations, Location{
 			ID:      id,
@@ -249,8 +251,23 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 	}
 	client.setListResponse("10001", locations)
 
+	client2 := newFakeLocationClient()
+	locations = make([]Location, 0, 13)
+	for i := 10; i < 15; i++ {
+		id := "store-" + strconv.Itoa(i)
+		locations = append(locations, Location{
+			ID:      id,
+			Name:    "Store " + strconv.Itoa(i),
+			Address: strconv.Itoa(i) + " Market St",
+			ZipCode: "10001",
+		})
+		client2.setHasInventory(id, true)
+		scores[id] = &ProduceScore{Score: i}
+	}
+	client2.setListResponse("10001", locations)
+
 	scoreLookup := &recordingProduceScoreLookup{scores: scores}
-	storage := newTestLocationServer(client)
+	storage := newTestLocationServerWithBackends([]locationBackend{client, client2})
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, scoreLookup)
 
 	mux := http.NewServeMux()
