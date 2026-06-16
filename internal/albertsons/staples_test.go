@@ -18,7 +18,13 @@ func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
 	t.Parallel()
 
 	got := NewIdentityProvider().Signature()
-	want, err := json.Marshal(query.StapleCategories())
+	want, err := json.Marshal(struct {
+		Categories []string        `json:"categories"`
+		Rows       map[string]uint `json:"rows"`
+	}{
+		Categories: query.StapleCategories(),
+		Rows:       stapleRows,
+	})
 	if err != nil {
 		t.Fatalf("marshal staple categories: %v", err)
 	}
@@ -34,7 +40,7 @@ type stubSearchClient struct {
 	starts  []uint
 }
 
-func (s *stubSearchClient) Search(_ context.Context, storeID, category string, opts query.SearchOptions) (*query.PathwaySearchPayload, error) {
+func (s *stubSearchClient) SearchAll(_ context.Context, storeID, category string, opts query.SearchOptions) (*query.PathwaySearchPayload, error) {
 	s.mu.Lock()
 	s.calls = append(s.calls, storeID+":"+category+":"+opts.Query)
 	s.starts = append(s.starts, opts.Start)

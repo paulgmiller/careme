@@ -37,7 +37,8 @@ func StapleCategories() []string {
 const (
 	DefaultSearchBaseURL = "https://www.safeway.com"
 	defaultSearchPath    = "/abs/pub/xapi/wcax/pathway/search"
-	defaultSearchRows    = 60 // how high can we go. Shoudl we paginate just to
+	defaultSearchRows    = 60
+	maxSearchPageRows    = 60
 	defaultSearchChannel = "instore"
 	defaultSearchUser    = "G"
 )
@@ -86,6 +87,53 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 		reese84Provider: cfg.Reese84Provider,
 		httpClient:      httpClient,
 	}, nil
+}
+
+func (c *SearchClient) SearchAll(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
+	if opts.Rows == 0 {
+		opts.Rows = defaultSearchRows
+	}
+
+	wantedRows := opts.Rows
+	pageRows := wantedRows
+	if pageRows > maxSearchPageRows {
+		pageRows = maxSearchPageRows
+	}
+
+	var merged *PathwaySearchPayload
+	for start := opts.Start; ; start += pageRows {
+		pageOpts := opts
+		pageOpts.Start = start
+		pageOpts.Rows = pageRows
+
+		payload, err := c.Search(ctx, storeID, category, pageOpts)
+		if err != nil {
+			return nil, err
+		}
+		if merged == nil {
+			copyPayload := *payload
+			copyPayload.Response.Docs = nil
+			merged = &copyPayload
+		}
+		merged.Response.Docs = append(merged.Response.Docs, payload.Response.Docs...)
+		merged.Response.NumFound = payload.Response.NumFound
+		merged.Response.MiscInfo = payload.Response.MiscInfo
+
+		if len(payload.Response.Docs) == 0 || uint(len(merged.Response.Docs)) >= wantedRows {
+			break
+		}
+		if payload.Response.NumFound > 0 && opts.Start+uint(len(merged.Response.Docs)) >= uint(payload.Response.NumFound) {
+			break
+		}
+	}
+
+	if merged == nil {
+		return &PathwaySearchPayload{}, nil
+	}
+	if uint(len(merged.Response.Docs)) > wantedRows {
+		merged.Response.Docs = merged.Response.Docs[:wantedRows]
+	}
+	return merged, nil
 }
 
 func (c *SearchClient) Search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {

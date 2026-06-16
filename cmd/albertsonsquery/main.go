@@ -77,7 +77,7 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("create search client: %w", err)
 	}
 
-	payload, err := client.Search(ctx, storeID, query.Category_Vegatables, query.SearchOptions{
+	payload, err := client.SearchAll(ctx, storeID, query.Category_Vegatables, query.SearchOptions{
 		Query: searchQuery,
 		Start: start,
 		Rows:  rows,
