@@ -71,6 +71,19 @@ func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int) {
 	http.Error(w, "must be logged in", status)
 }
 
+func redirectToSignInForSave(w http.ResponseWriter, r *http.Request, shoppingListHash, recipeHash string, status int) {
+	returnTo := requestURIOrPath(r)
+	if shoppingListHash != "" && recipeHash != "" {
+		values := url.Values{queryArgHash: []string{shoppingListHash}, queryArgPendingSave: []string{recipeHash}}
+		returnTo = "/recipes?" + values.Encode()
+	}
+	target := signInPath(returnTo)
+	if isHTMXRequest(r) {
+		w.Header().Set("HX-Redirect", target)
+	}
+	http.Error(w, "must be logged in", status)
+}
+
 const (
 	guestShoppingListCookieName = "careme_guest_shopping_lists"
 	guestShoppingListLimit      = 2
@@ -512,53 +525,33 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
-	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r, http.StatusUnauthorized)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load user for recipe save", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
 
 	shoppingListHash := strings.TrimSpace(r.FormValue(queryArgHash))
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			redirectToSignInForSave(w, r, shoppingListHash, recipeHash, http.StatusUnauthorized)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for recipe save", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
 	if shoppingListHash == "" {
 		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
 		return
 	}
-	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, shoppingListHash)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to load recipe selection for save", "shoppingListHash", shoppingListHash, "error", err)
-		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
-		return
-	}
-	selection.markSaved(recipeHash)
-	if err := s.saveRecipeSelection(ctx, currentUser.ID, shoppingListHash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe selection", "shoppingListHash", shoppingListHash, "error", err)
-		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
-		return
-	}
-
-	// could pass this in with htmx instead of loading title
-	recipe, err := s.SingleFromCache(ctx, recipeHash)
+	recipe, err := s.saveRecipeForUser(ctx, currentUser, shoppingListHash, recipeHash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe not found", http.StatusNotFound)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load recipe for profile save", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to load recipe", http.StatusInternalServerError)
-		return
-	}
-
-	if err := s.saveRecipesToUserProfile(ctx, currentUser, *recipe); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe to user profile", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to save recipe", "shoppingListHash", shoppingListHash, "recipe_hash", recipeHash, "error", err)
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
@@ -586,22 +579,39 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// move into startSavedRecipeBackgroundGeneration
-	p, err := s.ParamsFromCache(ctx, shoppingListHash)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for save response", "shoppingListHash", shoppingListHash, "error", err)
-		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
-		return
-	}
-
-	s.startSavedRecipeBackgroundGeneration(ctx, recipeHash, *recipe, p.Location.ID, p.Date)
-
 	setTextContent(w)
 	_, err = w.Write(response.Bytes())
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write save response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
+}
+
+func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User, shoppingListHash, recipeHash string) (*ai.Recipe, error) {
+	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, shoppingListHash)
+	if err != nil {
+		return nil, fmt.Errorf("load recipe selection: %w", err)
+	}
+	selection.markSaved(recipeHash)
+	if err := s.saveRecipeSelection(ctx, currentUser.ID, shoppingListHash, selection); err != nil {
+		return nil, fmt.Errorf("save recipe selection: %w", err)
+	}
+
+	recipe, err := s.SingleFromCache(ctx, recipeHash)
+	if err != nil {
+		return nil, fmt.Errorf("load recipe: %w", err)
+	}
+	if err := s.saveRecipesToUserProfile(ctx, currentUser, *recipe); err != nil {
+		return nil, fmt.Errorf("save recipe to user profile: %w", err)
+	}
+
+	params, err := s.ParamsFromCache(ctx, shoppingListHash)
+	if err != nil {
+		return nil, fmt.Errorf("load recipe params: %w", err)
+	}
+	s.startSavedRecipeBackgroundGeneration(ctx, recipeHash, *recipe, params.Location.ID, params.Date)
+
+	return recipe, nil
 }
 
 func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
@@ -941,9 +951,19 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	queryArgHash  = "h"
-	queryArgStart = "start"
+	queryArgHash        = "h"
+	queryArgStart       = "start"
+	queryArgPendingSave = "save"
 )
+
+func (s *server) recipeFromShoppingList(list ai.ShoppingList, recipeHash string) (*ai.Recipe, error) {
+	for i := range list.Recipes {
+		if list.Recipes[i].ComputeHash() == recipeHash {
+			return &list.Recipes[i], nil
+		}
+	}
+	return nil, cache.ErrNotFound
+}
 
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	startArg := r.URL.Query().Get(queryArgStart)
@@ -1054,6 +1074,24 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			selection = selection.override(userSelection)
+
+			if pendingSave := strings.TrimSpace(r.URL.Query().Get(queryArgPendingSave)); pendingSave != "" {
+				if _, err := s.recipeFromShoppingList(*slist, pendingSave); err != nil {
+					http.Error(w, "recipe not found", http.StatusNotFound)
+					return
+				}
+				if _, err := s.saveRecipeForUser(ctx, currentUser, hashParam, pendingSave); err != nil {
+					if errors.Is(err, cache.ErrNotFound) {
+						http.Error(w, "recipe not found", http.StatusNotFound)
+						return
+					}
+					slog.ErrorContext(ctx, "failed to save pending recipe", "hash", hashParam, "recipe_hash", pendingSave, "error", err)
+					http.Error(w, "failed to save recipe", http.StatusInternalServerError)
+					return
+				}
+				redirectToHash(w, r, hashParam, false /*useStart*/)
+				return
+			}
 		}
 		if r.URL.Query().Get("mail") == "true" {
 			tf := users.NewUnsubscribeTokenFactory(*s.cfg)
