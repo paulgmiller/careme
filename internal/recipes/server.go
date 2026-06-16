@@ -545,7 +545,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
 		return
 	}
-	result, err := s.saveRecipeForUser(ctx, currentUser, shoppingListHash, recipeHash)
+	recipe, err := s.saveRecipeForUser(ctx, currentUser, shoppingListHash, recipeHash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe not found", http.StatusNotFound)
@@ -555,7 +555,6 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 		return
 	}
-	recipe := result.recipe
 
 	saved := true
 	var response bytes.Buffer
@@ -588,11 +587,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type saveRecipeResult struct {
-	recipe *ai.Recipe
-}
-
-func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User, shoppingListHash, recipeHash string) (*saveRecipeResult, error) {
+func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User, shoppingListHash, recipeHash string) (*ai.Recipe, error) {
 	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, shoppingListHash)
 	if err != nil {
 		return nil, fmt.Errorf("load recipe selection: %w", err)
@@ -616,7 +611,7 @@ func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User
 	}
 	s.startSavedRecipeBackgroundGeneration(ctx, recipeHash, *recipe, params.Location.ID, params.Date)
 
-	return &saveRecipeResult{recipe: recipe}, nil
+	return recipe, nil
 }
 
 func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
