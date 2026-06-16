@@ -1247,6 +1247,23 @@ func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeaderToShoppingListPendingSa
 	}
 }
 
+func TestHandleSaveRecipe_NoSessionFromRecipePageRedirectsToShoppingListPendingSave(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
+
+	form := url.Values{"h": {"origin-hash"}, "source": {"recipe"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/recipe-hash/save", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "recipe-hash")
+	rr := httptest.NewRecorder()
+
+	s.handleSaveRecipe(rr, req)
+
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
+	require.Equal(t, signInPath("/recipes?h=origin-hash&save=recipe-hash"), rr.Header().Get("HX-Redirect"))
+}
+
 func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
