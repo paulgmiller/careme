@@ -130,8 +130,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			return ing.Grade == nil || ing.Grade.Score > IngredientGradeCutoff
 		})
 		ingMap := inputIngredientMap(ingredients)
-
-		plan, err := g.replacementMenuPlan(ctx, p, regenInstructions, replacementRecipeCount(p))
+		replacmentCount := max(len(p.Dismissed), 1) // if no dismissed then just regenerate one and hope for better, if dismissed then regenerate all dismissed
+		plan, err := g.replacementMenuPlan(ctx, p, regenInstructions, replacmentCount)
 		if err != nil {
 			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
@@ -223,13 +223,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 func (p *generatorParams) isRegeneration() bool {
 	return len(p.Dismissed) > 0 || len(p.Saved) > 0 || strings.TrimSpace(p.PreviousMenuPlanResponseID) != ""
-}
-
-func replacementRecipeCount(p *generatorParams) int {
-	if len(p.Dismissed) > 0 {
-		return len(p.Dismissed)
-	}
-	return 1
 }
 
 func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generatorParams, instructions []string, count int) (*ai.MenuPlan, error) {
