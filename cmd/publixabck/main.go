@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,16 +10,15 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/albertsons"
 	"careme/internal/brightdata"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/logsetup"
+	"careme/internal/publix"
 )
 
 const (
-	// should we rotate between chains?
-	defaultTargetURL       = "https://www.acmemarkets.com/aisle-vs/meat-seafood/seafood-favorites.html"
-	defaultCookieName      = "reese84"
+	defaultTargetURL       = "https://www.publix.com/c/beef/163c7c04-5495-404e-81fc-34f71b241093"
 	brightDataBrowserWSEnv = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
 )
 
@@ -39,28 +37,27 @@ func main() {
 }
 
 func runWithDeps(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("albertsonsreese84", flag.ContinueOnError)
+	fs := flag.NewFlagSet("publixabck", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	var (
 		targetURL  string
-		cookieName string
 		wsEndpoint string
 		waitMS     int
 		timeoutSec int
 	)
 
+	if err := config.LoadEncryptedEnv("secrets/envtest"); err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
 	fs.StringVar(&targetURL, "url", defaultTargetURL, "page to navigate before reading cookies")
-	fs.StringVar(&cookieName, "cookie-name", defaultCookieName, "cookie name to store")
 	fs.StringVar(&wsEndpoint, "ws-endpoint", strings.TrimSpace(os.Getenv(brightDataBrowserWSEnv)), "Bright Data Browser API websocket endpoint including credentials")
 	fs.IntVar(&waitMS, "wait-ms", int((5*time.Second)/time.Millisecond), "wait after initial navigation before reading cookies")
 	fs.IntVar(&timeoutSec, "timeout", 120, "overall timeout in seconds")
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-	if strings.TrimSpace(cookieName) == "" {
-		return errors.New("cookie-name is required")
 	}
 	wsEndpoint = strings.TrimSpace(wsEndpoint)
 	if wsEndpoint == "" {
@@ -77,24 +74,23 @@ func runWithDeps(ctx context.Context, args []string) error {
 		return fmt.Errorf("create Bright Data browser client: %w", err)
 	}
 
-	record, err := albertsons.FetchCookie(fetchCtx, browser, albertsons.CookieParams{
+	record, err := publix.FetchAbck(fetchCtx, browser, publix.AbckParams{
 		TargetURL:           targetURL,
-		CookieName:          cookieName,
 		WaitAfterNavigation: time.Duration(waitMS) * time.Millisecond,
 	})
 	if err != nil {
 		return err
 	}
 
-	cacheStore, err := cache.EnsureCache(albertsons.Container)
+	cacheStore, err := cache.EnsureCache(publix.Container)
 	if err != nil {
-		return fmt.Errorf("create albertsons cache: %w", err)
+		return fmt.Errorf("create publix cache: %w", err)
 	}
 
-	if err := albertsons.SaveReese84Record(fetchCtx, cacheStore, record); err != nil {
-		return fmt.Errorf("cache reese84 cookie: %w", err)
+	if err := publix.SaveAbckRecord(fetchCtx, cacheStore, record); err != nil {
+		return fmt.Errorf("cache _abck cookie: %w", err)
 	}
 
-	fmt.Printf("cached %s at %s from %s\n", cookieName, record.FetchedAt.Format(time.RFC3339), targetURL)
+	fmt.Printf("cached _abck at %s from %s\n", record.FetchedAt.Format(time.RFC3339), targetURL)
 	return nil
 }

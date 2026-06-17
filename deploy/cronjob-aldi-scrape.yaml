@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: aldi-scrape
+  labels:
+    app: aldi-scrape
+spec:
+  schedule: "${ALDI_SCRAPE_SCHEDULE}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: aldi-scrape
+            job: aldi-scrape
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          containers:
+            - name: aldi
+              image: ghcr.io/paulgmiller/careme-aldi:${IMAGE_TAG}
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - secretRef:
+                    name: grafana
+                - secretRef:
+                    name: storage
+              env:
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: WORKLOAD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['app']
+                - name: OTEL_RESOURCE_ATTRIBUTES
+                  value: "deployment.environment.name=production,k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.app=$(WORKLOAD_NAME)"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi

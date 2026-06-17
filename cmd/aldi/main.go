@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"careme/internal/aldi"
@@ -17,6 +18,7 @@ import (
 
 type summaryClient interface {
 	StoreSummaries(ctx context.Context) ([]*aldi.StoreSummary, error)
+	InStoreShopID(ctx context.Context, summary *aldi.StoreSummary) (string, error)
 }
 
 func main() {
@@ -37,6 +39,7 @@ func main() {
 		log.Fatalf("failed to configure logging: %v", err)
 	}
 	defer closeLogger()
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	cacheStore, err := cache.EnsureCache(aldi.Container)
 	if err != nil {
@@ -62,6 +65,7 @@ func syncLocations(ctx context.Context, cacheStore cache.ListCache, client summa
 
 	var synced int
 	for _, summary := range summaries {
+		enrichInStoreShopID(ctx, client, summary)
 		if err := aldi.CacheStoreSummary(ctx, cacheStore, summary); err != nil {
 			slog.Warn("failed to cache ALDI store summary", "location_id", summary.ID, "error", err)
 			continue
@@ -73,4 +77,17 @@ func syncLocations(ctx context.Context, cacheStore cache.ListCache, client summa
 		return synced, err
 	}
 	return synced, nil
+}
+
+func enrichInStoreShopID(ctx context.Context, client summaryClient, summary *aldi.StoreSummary) {
+	if summary == nil || strings.TrimSpace(summary.InstoreShopID) != "" {
+		return
+	}
+
+	shopID, err := client.InStoreShopID(ctx, summary)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to resolve ALDI instore shop id", "location_id", summary.ID, "zip_code", summary.ZipCode, "error", err)
+		return
+	}
+	summary.InstoreShopID = shopID
 }

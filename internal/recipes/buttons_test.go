@@ -210,7 +210,7 @@ func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
 	}
 }
 
-func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
+func TestFormatShoppingListHTML_SignedOutShowsSaveAction(t *testing.T) {
 	list := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
@@ -233,14 +233,17 @@ func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
 	if strings.Contains(html, `type="radio"`) {
 		t.Error("HTML should not contain save/dismiss radio inputs when signed out")
 	}
-	if strings.Contains(html, `Try again, chef`) {
-		t.Error("HTML should not contain regenerate action text when signed out")
+	if !strings.Contains(html, `Try again, chef`) {
+		t.Error("HTML should contain regenerate action text when signed out")
 	}
-	if strings.Contains(html, `Build Shopping List`) {
-		t.Error("HTML should not contain finalize action text when signed out")
+	if !strings.Contains(html, `Build Shopping List`) {
+		t.Error("HTML should contain finalize action text when signed out")
 	}
-	if strings.Contains(html, `Add`) {
-		t.Error("HTML should not contain add action text when signed out")
+	if !strings.Contains(html, `Add`) {
+		t.Error("HTML should contain add action text when signed out")
+	}
+	if !strings.Contains(html, `/save"`) {
+		t.Error("HTML should contain save endpoint when signed out")
 	}
 	if strings.Contains(html, `Hide`) {
 		t.Error("HTML should not contain hide action text when signed out")

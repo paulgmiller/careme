@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -36,7 +35,8 @@ func main() {
 	path := flag.String("secret-file", "secrets/envtest", "encrypted file to apply to k8s namespace")
 	namespace := flag.String("ns", "", "k8s namespace")
 	check := flag.Bool("check", false, "dump secret names")
-	forreal := flag.Bool("apply", false, "don't actually apply secrets just print what would be done")
+	setSecret := flag.String("set", "", "add or update a secret value as secret/key=value")
+	forreal := flag.Bool("apply", false, "actually apply secrets. Don't just print what would be done")
 	flag.Parse()
 	ctx := context.Background()
 
@@ -61,17 +61,61 @@ func main() {
 		log.Fatalf("decrypt file  %q: %s", *path, err)
 	}
 
-	secrets, err := secrets(reader)
+	plaintext, err := io.ReadAll(reader)
+	if err != nil {
+		log.Fatalf("read decrypted file %q: %s", *path, err)
+	}
+
+	secrets, err := secrets(bytes.NewReader(plaintext))
 	if err != nil {
 		panic(err)
 	}
 
-	// adding gets tricky to retain comments
+	if *setSecret != "" {
+		secretName, key, value, err := parseSetArg(*setSecret)
+		if err != nil {
+			log.Fatal(err)
+		}
+		newSecretsFile, changed := setSecretValue(secrets, secretName, key, value)
+		if !changed {
+			log.Printf("%s/%s unchanged", secretName, key)
+			return
+		}
+		if err := newSecretsFile.validate(); err != nil {
+			log.Fatalf("updated secrets did not validate: %s", err)
+		}
+		recipients, err := loadSSHRecipients()
+		if err != nil {
+			log.Fatal(err)
+		}
+		file, err := os.OpenFile(*path, os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		writer, err := age.Encrypt(file, recipients...)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer func() {
+			_ = writer.Close()
+		}()
+
+		if err := newSecretsFile.write(writer); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("updated %s/%s in %s", secretName, key, *path)
+		return
+	}
+
 	if *check {
-		for name, secret := range secrets {
-			fmt.Println(name)
-			for key, value := range secret {
-				fmt.Printf("  %s=%s\n", key, maskedSecretValue(value))
+		for _, secret := range secrets {
+			fmt.Println(secret.Name)
+			for _, line := range secret.Lines {
+				if line.Key == "" {
+					continue
+				}
+				fmt.Printf("  %s=%s\n", line.Key, maskedSecretValue(line.Value))
 			}
 			fmt.Println()
 		}
@@ -142,96 +186,90 @@ func secretNeedsUpdate(current, desired *corev1.Secret) bool {
 	return false
 }
 
-type secret map[string]string
-
-func secrets(r io.Reader) (map[string]secret, error) {
-	sc := bufio.NewScanner(r)
-	var currentSecret string
-	secretVals := map[string]secret{}
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if comment, found := strings.CutPrefix(line, "#"); found {
-			if secretName, found := strings.CutPrefix(comment, secretCommentPrefix); found {
-				currentSecret = secretName
-				if _, found := secretVals[currentSecret]; found {
-					return nil, fmt.Errorf("duplicate secret comment %s", currentSecret)
-				}
-				secretVals[currentSecret] = secret{}
-			}
-			continue
-		}
-		if len(currentSecret) == 0 {
-			continue
-		}
-		key, value, err := parseSecretLine(line)
-		if err != nil {
-			return nil, err
-		}
-		if key == "" {
-			continue
-		}
-		secret := secretVals[currentSecret]
-		if _, found := secret[key]; found {
-			return nil, fmt.Errorf("duplicate secret key %s", key)
-		}
-		if len(value) < minSecretValueLength {
-			return nil, fmt.Errorf("secret %s/%s must be at least %d characters", currentSecret, key, minSecretValueLength)
-		}
-		secret[key] = value
-	}
-	if err := sc.Err(); err != nil {
-		return nil, err
-	}
-	return secretVals, nil
-}
-
-func toK8s(secretVals map[string]secret) []*corev1.Secret {
+func toK8s(secretVals secretsFile) []*corev1.Secret {
 	var secrets []*corev1.Secret
-	for name, vals := range secretVals {
+	for _, vals := range secretVals {
+		stringData := map[string]string{}
+		for _, line := range vals.Lines {
+			if line.Key == "" {
+				continue
+			}
+			stringData[line.Key] = line.Value
+		}
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
+				Name: vals.Name,
 				Annotations: map[string]string{
 					managedByAnnotationKey: managedByAnnotationValue,
 				},
 			},
 			Type:       corev1.SecretTypeOpaque,
-			StringData: vals,
+			StringData: stringData,
 		}
 		secrets = append(secrets, secret)
 	}
 	return secrets
 }
 
-func parseSecretLine(line string) (string, string, error) {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" {
-		return "", "", nil
-	}
-
-	key, rawValue, found := strings.Cut(trimmed, "=")
+func parseSetArg(arg string) (string, string, string, error) {
+	secretAndKey, value, found := strings.Cut(arg, "=")
 	if !found {
-		return "", "", fmt.Errorf("invalid secret entry %q", line)
+		return "", "", "", fmt.Errorf("set value must be secret/key=value")
 	}
-
+	secretName, key, found := strings.Cut(secretAndKey, "/")
+	if !found {
+		return "", "", "", fmt.Errorf("set value must be secret/key=value")
+	}
+	secretName = strings.TrimSpace(secretName)
 	key = strings.TrimSpace(key)
-	if key == "" {
-		return "", "", fmt.Errorf("invalid secret entry %q", line)
+	if secretName == "" || key == "" {
+		return "", "", "", fmt.Errorf("set value must be secret/key=value")
 	}
+	if len(value) < minSecretValueLength {
+		return "", "", "", fmt.Errorf("secret %s/%s must be at least %d characters", secretName, key, minSecretValueLength)
+	}
+	return secretName, key, value, nil
+}
 
-	value := stripInlineComment(rawValue)
-	value = strings.TrimSpace(value)
-	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
-		unquoted, err := strconv.Unquote(value)
-		if err != nil {
-			return "", "", err
+func setSecretValue(input secretsFile, secretName, key, value string) (secretsFile, bool) {
+	var output secretsFile
+	var secretFound bool
+	for _, existingSecret := range input {
+		if existingSecret.Name != secretName {
+			output = append(output, existingSecret)
+			continue
 		}
-		value = unquoted
-	} else if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
-		value = value[1 : len(value)-1]
+		secretFound = true
+		var lineFound bool
+		for i, line := range existingSecret.Lines {
+			if line.Key != key {
+				continue
+			}
+			if line.Value == value {
+				return secretsFile{}, false
+			}
+			line.Value = value
+			existingSecret.Lines[i] = line
+			lineFound = true
+			continue
+		}
+		if !lineFound {
+			existingSecret.Lines = append(existingSecret.Lines, secretLine{Key: key, Value: value})
+		}
+		output = append(output, existingSecret)
+	}
+	if !secretFound {
+		output = append(output, secret{Name: secretName, Lines: []secretLine{{Key: key, Value: value}}})
 	}
 
-	return key, value, nil
+	return output, true
+}
+
+func formatSecretValue(value string) string {
+	if value == "" || strings.ContainsAny(value, " \t\n\r#\"'") {
+		return strconv.Quote(value)
+	}
+	return value
 }
 
 func maskedSecretValue(value string) string {
@@ -239,34 +277,24 @@ func maskedSecretValue(value string) string {
 	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
 }
 
-func stripInlineComment(value string) string {
-	var quote byte
-	escaped := false
-	for i := 0; i < len(value); i++ {
-		ch := value[i]
-		if escaped {
-			escaped = false
-			continue
-		}
-		if quote == '"' && ch == '\\' {
-			escaped = true
-			continue
-		}
-		if quote != 0 {
-			if ch == quote {
-				quote = 0
-			}
-			continue
-		}
-		if ch == '"' || ch == '\'' {
-			quote = ch
-			continue
-		}
-		if ch == '#' && (i == 0 || value[i-1] == ' ' || value[i-1] == '\t') {
-			return value[:i]
-		}
+func loadSSHRecipients() ([]age.Recipient, error) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return nil, fmt.Errorf("need a recipient")
 	}
-	return value
+	path := filepath.Join(home, ".ssh", "id_ed25519.pub")
+
+	key, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read ssh recipient %q: %w", path, err)
+	}
+
+	recipient, err := agessh.ParseRecipient(strings.TrimSpace(string(key)))
+	if err != nil {
+		return nil, fmt.Errorf("parse ssh recipient %q: %w", path, err)
+	}
+
+	return []age.Recipient{recipient}, nil
 }
 
 // share with internal/config?

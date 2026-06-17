@@ -193,6 +193,7 @@ func resetStoreEnvs(t *testing.T) {
 		"GEMINI_API_KEY",
 		"GEMINI_CRITIQUE_MODEL",
 		"PUBLIX_ENABLE",
+		"PUBLIX_ABCK",
 		"HEB_ENABLE",
 	} {
 		t.Setenv(name, "")

@@ -1,0 +1,212 @@
+package heb
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/parallelism"
+
+	"github.com/samber/lo"
+)
+
+const (
+	CategoryFruitParent      = "490020"
+	CategoryFruitChild       = "490082"
+	CategoryVegetablesParent = "490020"
+	CategoryVegetablesChild  = "490083"
+	CategoryBeefParent       = "490110"
+	CategoryBeefChild        = "490529"
+	CategoryPorkParent       = "490110"
+	CategoryPorkChild        = "490536"
+	CategoryChickenParent    = "490110"
+	CategoryChickenChild     = "490531"
+	CategorySausageParent    = "490110"
+	CategorySausageChild     = "490537"
+	CategoryFishParent       = "490111"
+	CategoryFishChild        = "490540"
+	CategoryShrimpParent     = "490111"
+	CategoryShrimpChild      = "490541"
+
+	defaultStapleLimit = 48
+	bigStapleLimit     = 100
+	produceStapleLimit = 300
+	seafoodStapleLimit = 60
+)
+
+var defaultHEBStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
+
+type StapleCategory struct {
+	Name     string
+	ParentID string
+	ChildID  string
+	Limit    int
+}
+
+type hebQueryClient interface {
+	Category(ctx context.Context, opts CategoryOptions) ([]Product, error)
+}
+
+type loadReese84 func(context.Context) (string, error)
+
+type identityProvider struct{}
+
+type StaplesProvider struct {
+	identityProvider
+	client      hebQueryClient
+	loadReese84 loadReese84
+}
+
+func NewIdentityProvider() identityProvider {
+	return identityProvider{}
+}
+
+func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
+	hebCache, err := cache.EnsureCache(Container)
+	if err != nil {
+		return StaplesProvider{}, fmt.Errorf("create heb cache: %w", err)
+	}
+	loadBuildID, err := newBrightDataBuildIDLoaderFromEnv()
+	if err != nil {
+		return StaplesProvider{}, err
+	}
+
+	loadReese84 := func(ctx context.Context) (string, error) {
+		record, err := LoadLatestReese84(ctx, hebCache)
+		if err != nil {
+			return "", fmt.Errorf("load cached heb reese84 token: %w", err)
+		}
+		slog.InfoContext(ctx, "reese84", "token", record.Cookie)
+		return record.Cookie, nil
+	}
+
+	return newStaplesProviderWithDeps(NewQueryClient(QueryClientConfig{
+		HTTPClient:  httpClient,
+		LoadBuildID: loadBuildID,
+	}), loadReese84), nil
+}
+
+func newStaplesProviderWithClient(client hebQueryClient, loadReese84 loadReese84) StaplesProvider {
+	return newStaplesProviderWithDeps(client, loadReese84)
+}
+
+func newStaplesProviderWithDeps(client hebQueryClient, loadReese84 loadReese84) StaplesProvider {
+	return StaplesProvider{
+		client:      client,
+		loadReese84: loadReese84,
+	}
+}
+
+func (p identityProvider) Signature() string {
+	return string(defaultHEBStaplesSignature)
+}
+
+func (p identityProvider) IsID(locationID string) bool {
+	return IsID(locationID)
+}
+
+func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	if p.client == nil {
+		return nil, fmt.Errorf("heb client is required")
+	}
+	if p.loadReese84 == nil {
+		return nil, fmt.Errorf("heb reese84 loader is required")
+	}
+
+	storeID, err := storeIDFromLocation(locationID)
+	if err != nil {
+		return nil, err
+	}
+
+	reese84, err := p.loadReese84(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
+		products, err := p.client.Category(ctx, CategoryOptions{
+			Reese84:  reese84,
+			StoreID:  storeID,
+			ParentID: category.ParentID,
+			ChildID:  category.ChildID,
+			Limit:    category.Limit,
+		})
+		if err != nil {
+			slog.WarnContext(ctx, "failed to fetch heb category", "category", category.Name, "location", locationID, "error", err)
+			return nil, err
+		}
+
+		ingredients := lo.Map(products, func(product Product, _ int) ai.InputIngredient {
+			return productToIngredient(product, category)
+		})
+		slog.InfoContext(ctx, "found heb staples for category", "count", len(ingredients), "category", category.Name, "location", locationID)
+		return ingredients, nil
+	})
+}
+
+func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+	return nil, fmt.Errorf("wine lookup is not supported for location %q", locationID)
+}
+
+func StapleCategories() []StapleCategory {
+	return []StapleCategory{
+		{Name: "beef", ParentID: CategoryBeefParent, ChildID: CategoryBeefChild, Limit: bigStapleLimit},
+		{Name: "pork", ParentID: CategoryPorkParent, ChildID: CategoryPorkChild, Limit: bigStapleLimit},
+		{Name: "chicken", ParentID: CategoryChickenParent, ChildID: CategoryChickenChild, Limit: bigStapleLimit},
+		{Name: "sausage", ParentID: CategorySausageParent, ChildID: CategorySausageChild, Limit: defaultStapleLimit},
+		{Name: "fish", ParentID: CategoryFishParent, ChildID: CategoryFishChild, Limit: seafoodStapleLimit},
+		{Name: "shrimp", ParentID: CategoryShrimpParent, ChildID: CategoryShrimpChild, Limit: seafoodStapleLimit},
+		{Name: "vegetables", ParentID: CategoryVegetablesParent, ChildID: CategoryVegetablesChild, Limit: produceStapleLimit},
+		{Name: "fruit", ParentID: CategoryFruitParent, ChildID: CategoryFruitChild, Limit: produceStapleLimit},
+	}
+}
+
+func storeIDFromLocation(locationID string) (string, error) {
+	locationID = strings.TrimSpace(locationID)
+	if !IsID(locationID) {
+		return "", fmt.Errorf("invalid heb location id %q", locationID)
+	}
+	return strings.TrimPrefix(locationID, LocationIDPrefix), nil
+}
+
+func productToIngredient(product Product, category StapleCategory) ai.InputIngredient {
+	categories := categoryNames(product, category)
+	location := ""
+	if product.ProductLocation != nil {
+		location = product.ProductLocation.Location
+	}
+	brand := ""
+	if product.Brand != nil {
+		brand = product.Brand.Name
+	}
+
+	return ai.NormalizeInputIngredient(ai.InputIngredient{
+		ProductID:    product.ID,
+		Description:  product.DisplayName,
+		Brand:        brand,
+		Categories:   categories,
+		AisleNumber:  location,
+		PriceRegular: product.ListPrice,
+		PriceSale:    product.SalePrice,
+	})
+}
+
+func categoryNames(product Product, category StapleCategory) []string {
+	parts := strings.Split(product.FullCategoryHierarchy, "/")
+	names := make([]string, 0, len(parts)+1)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			names = append(names, part)
+		}
+	}
+	if len(names) == 0 {
+		names = append(names, category.Name)
+	}
+	return names
+}

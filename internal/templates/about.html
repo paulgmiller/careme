@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Learn how Careme helps home cooks find fresh nearby ingredients, plan practical recipes, and cook more often." />
   <title>About Careme</title>
 
   {{template "app_head" .Style}}
@@ -14,6 +15,7 @@
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
+  {{GoogleTagNoScript}}
   {{template "seasonal_background" .}}
   <main class="relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-5xl">
@@ -162,6 +164,10 @@
             <details class="rounded-xl border border-brand-100 bg-white p-4">
               <summary class="cursor-pointer font-semibold text-brand-700">Can't I just use ChatGPT?</summary>
               <p class="mt-2 text-gray-700">That's where this started, but I found ChatGPT did much better with real ingredients, both as a constraint and as a reason to explore. The critiquing agent and recipe questions also add a lot of value. Lastly, we can focus the UI more tightly around cooking.</p>
+            </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Do I need special equipment?</summary>
+              <p class="mt-2 text-gray-700">Careme is happy to excercise your new gear if you ask it but tries to keep things to stovetop, oven and grill by default. I have an <a href="https://blog.northbriton.net/posts/2026-05-16-kitchengear/">amazon list of gear</a> for the basics.</p>
             </details>
           </div>
         </section>

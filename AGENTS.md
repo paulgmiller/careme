@@ -40,6 +40,7 @@
 - From the repo root, run `golangci-lint run ./...` after Go changes unless the task clearly does not affect linted code.
 - Place tests alongside code in `*_test.go`; prefer table-driven cases and explicit fixtures over implicit globals.
 - Use `go test ./... -run TestName` for targeted debugging; keep deterministic by avoiding network calls and using fakes where possible.
+- Prefer explicit fakes or no-op implementations over passing nil dependencies in tests, unless nil behavior is the thing under test.
 - When touching recipe generation or Kroger client code, add assertions that cover API shape changes and template output (see existing tests in `internal/recipes` and `internal/html`).
 - When changing the generator produce filter list (`internal/recipes/params.go` `Produce()`), also run `go run ./cmd/producecheck -location 70500874` and see if score changes. Will need secrets in .envtest file
   
@@ -49,6 +50,6 @@
 - Keep commits scoped and reviewable; avoid mixing refactors with feature changes unless necessary.
 
 ## Security & Configuration Notes
-- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `GEMINI_API_KEY`, `GEMINI_CRITIQUE_MODEL`, `CLARITY_PROJECT_ID`, `GOOGLE_TAG_ID`, `GOOGLE_CONVERSION_LABEL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`. Azure Blob cache still uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`. Grafana Cloud direct OTLP uses the standard upstream OpenTelemetry endpoint and headers env vars.
+- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `GEMINI_API_KEY`, `GEMINI_CRITIQUE_MODEL`, `CLARITY_PROJECT_ID`, `GOOGLE_TAG_MANAGER_ID`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`. Azure Blob cache still uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`. Grafana Cloud direct OTLP uses the standard upstream OpenTelemetry endpoint and headers env vars.
 - Never commit secrets or generated recipe outputs. If testing against real APIs, use minimal scopes and rotate keys promptly.
 - Any handler that lets you see data from multiple users should go behind the /admin mux to secure it. 

@@ -1,10 +1,10 @@
 package static
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"io/fs"
 	"testing"
 
 	"careme/internal/seasons"
@@ -78,10 +78,9 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 		},
 	}
 
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			rec := httptest.NewRecorder()
 
 			mux.ServeHTTP(rec, req)
@@ -131,7 +130,6 @@ func TestBackgroundBySeason(t *testing.T) {
 	}
 }
 
-
 func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
 	Init()
 	script, err := renderServiceWorker()
@@ -150,7 +148,7 @@ func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
 		t.Fatalf("service worker should keep inline comments for auth behavior, script: %s", rendered)
 	}
 }
-		
+
 func TestFontFilesEmbedded(t *testing.T) {
 	matches, err := fs.Glob(fontFiles, "fonts/*.woff2")
 	if err != nil {
@@ -181,6 +179,29 @@ func TestRegisterServesFontFiles(t *testing.T) {
 	}
 	if rec.Body.Len() == 0 {
 		t.Fatal("font response body should not be empty")
+	}
+}
+
+func TestRegisterServesUserClerkBillingJS(t *testing.T) {
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/static/user-clerk-billing.js", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("billing js response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
+		t.Fatalf("billing js content type = %q, want application/javascript; charset=utf-8", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=3600" {
+		t.Fatalf("billing js cache control = %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), "mountPricingTable") {
+		t.Fatal("billing js response should include Clerk pricing table mount logic")
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/publix"
@@ -61,6 +62,10 @@ func main() {
 	}
 	if endID < startID {
 		log.Fatalf("end-id must be greater than or equal to start-id")
+	}
+
+	if err := config.LoadEncryptedEnv("secrets/envtest"); err != nil {
+		log.Fatalf("load config: %s", err)
 	}
 
 	cacheStore, err := cache.EnsureCache(publix.Container)

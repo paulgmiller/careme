@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,9 +20,11 @@ import (
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/parallelism"
 	"careme/internal/recipes"
 	"careme/internal/recipes/prompts"
 
+	"github.com/samber/lo"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -99,21 +102,25 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 
 	results := makeStoreMenuPlans(ctx, service, stores, instructions, time.Now())
-
-	if err := writeMenuPlans(out, zip, results); err != nil {
-		return err
-	}
-
-	var failures int
-	for _, result := range results {
-		if result.Err != nil {
-			failures++
-		}
-	}
-	if failures > 0 {
-		return fmt.Errorf("failed to create %d of %d menu plans", failures, len(results))
-	}
+	printHistogram(results, func(r ai.RecipePlan, _ int) string {
+		return r.SideVegetable
+	})
 	return nil
+}
+
+func printHistogram(respices []ai.RecipePlan, transform func(ai.RecipePlan, int) string) {
+	histogram := lo.CountValues(lo.Map(respices, transform))
+	keys := lo.Keys(histogram)
+	slices.Sort(keys)
+	for _, key := range keys {
+		count := histogram[key]
+
+		// Use strings.Repeat to dynamically build the horizontal bar
+		bar := strings.Repeat("■", count)
+
+		// %-10s left-aligns the key text with a 10-character padded margin
+		fmt.Printf("%-10s (%d) %s\n", key, count, bar)
+	}
 }
 
 func newCache(cfg *config.Config) (cache.ListCache, error) {
@@ -147,7 +154,7 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 	}, nil
 }
 
-func makeMenuPlan(ctx context.Context, service planService, store locations.Location, date time.Time, instructions string, count int) (*ai.MenuPlan, error) {
+func makeMenuPlans(ctx context.Context, service planService, store locations.Location, date time.Time, instructions string, count int) ([]ai.RecipePlan, error) {
 	params := recipes.DefaultParams(&store, date)
 	params.Instructions = instructions
 
@@ -157,38 +164,37 @@ func makeMenuPlan(ctx context.Context, service planService, store locations.Loca
 	}
 	ingredients = filterMenuIngredients(ingredients)
 
-	plan, err := service.planner.CreateMenuPlan(ctx, &store, ingredients, compactStrings(params.Instructions), date, nil, count)
-	if err != nil {
-		return nil, fmt.Errorf("create menu plan: %w", err)
-	}
-	return plan, nil
+	return parallelism.Flatten(lo.Range(10), func(int) ([]ai.RecipePlan, error) {
+		plan, err := service.planner.CreateMenuPlan(ctx, &store, ingredients, compactStrings(params.Instructions), date, nil, count)
+		if err != nil {
+			return nil, fmt.Errorf("create menu plan: %w", err)
+		}
+		return plan.Plans, nil
+	})
 }
 
-func makeStoreMenuPlans(ctx context.Context, service planService, stores []locations.Location, instructions string, now time.Time) []storeMenuPlan {
-	results := make([]storeMenuPlan, len(stores))
+func makeStoreMenuPlans(ctx context.Context, service planService, stores []locations.Location, instructions string, now time.Time) []ai.RecipePlan {
+	results := make([][]ai.RecipePlan, len(stores))
 	var wg sync.WaitGroup
 	wg.Add(len(stores))
 	for i, store := range stores {
-		i, store := i, store
 		go func() {
 			defer wg.Done()
 			date, err := recipes.StoreToDate(ctx, now, &store)
 			if err != nil {
-				results[i] = storeMenuPlan{Location: store, Err: err}
+				slog.Warn("go error on store to date %s", "error", err)
 				return
 			}
 
-			plan, err := makeMenuPlan(ctx, service, store, date, instructions, 3)
-			results[i] = storeMenuPlan{
-				Location: store,
-				Date:     date,
-				Plan:     plan,
-				Err:      err,
+			cuisines, err := makeMenuPlans(ctx, service, store, date, instructions, 3)
+			if err != nil {
+				slog.Warn("go error %s", "error", err)
 			}
+			results[i] = cuisines
 		}()
 	}
 	wg.Wait()
-	return results
+	return lo.Flatten(results)
 }
 
 func filterMenuIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
@@ -216,9 +222,9 @@ type mockMenuPlanner struct{}
 
 func (mockMenuPlanner) CreateMenuPlan(context.Context, *locations.Location, []ai.InputIngredient, []string, time.Time, []string, int) (*ai.MenuPlan, error) {
 	return &ai.MenuPlan{Plans: []ai.RecipePlan{
-		{Cuisine: "Korean", AnchorIngredient: "chicken thighs", Technique: "sheet pan"},
-		{Cuisine: "Mexican", AnchorIngredient: "black beans", Technique: "quick simmer"},
-		{Cuisine: "Mediterranean", AnchorIngredient: "seasonal greens", Technique: "grain bowl", Fancy: true},
+		{Cuisine: "Korean", AnchorIngredient: "chicken thighs", Technique: "sheet pan", SideVegetable: "bok choy"},
+		{Cuisine: "Mexican", AnchorIngredient: "black beans", Technique: "quick simmer", SideVegetable: "zucchini"},
+		{Cuisine: "Mediterranean", AnchorIngredient: "seasonal greens", Technique: "grain bowl", SideVegetable: "eggplant", Fancy: true},
 	}}, nil
 }
 
@@ -298,7 +304,11 @@ func writeStoreMenuPlan(w io.Writer, number int, result storeMenuPlan) error {
 		if plan.Fancy {
 			fancy = " (fancier)"
 		}
-		if _, err := fmt.Fprintf(w, "   - %d: %s with %s, %s%s\n", i+1, plan.Cuisine, plan.AnchorIngredient, plan.Technique, fancy); err != nil {
+		sideVegetable := ""
+		if strings.TrimSpace(plan.SideVegetable) != "" {
+			sideVegetable = fmt.Sprintf(", side veg: %s", plan.SideVegetable)
+		}
+		if _, err := fmt.Fprintf(w, "   - %d: %s with %s, %s%s%s\n", i+1, plan.Cuisine, plan.AnchorIngredient, plan.Technique, sideVegetable, fancy); err != nil {
 			return err
 		}
 	}

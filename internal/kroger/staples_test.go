@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -114,6 +115,46 @@ func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
 	}
 }
 
+func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
+	var mu sync.Mutex
+	var terms []string
+	baseClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		mu.Lock()
+		terms = append(terms, req.URL.Query().Get("filter.term"))
+		mu.Unlock()
+		return jsonResponse(req, http.StatusOK, `{"data":[{
+			"productId":"wine-1",
+			"brand":"Kroger",
+			"description":"Pinot Noir",
+			"categories":["Wine"],
+			"items":[{"size":"750mL","price":{"regular":12.99}}]
+		}]}`), nil
+	})}
+
+	client, err := products.NewClientWithResponses(
+		"https://kroger.test",
+		products.WithHTTPClient(baseClient),
+	)
+	if err != nil {
+		t.Fatalf("NewClientWithResponses returned error: %v", err)
+	}
+
+	provider := StaplesProvider{client: client}
+	got, err := provider.FetchWines(t.Context(), "70500874", []string{"Pinot Noir", "Sauvignon Blanc"})
+	if err != nil {
+		t.Fatalf("FetchWines returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected one result per style, got %d", len(got))
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	slices.Sort(terms)
+	if !slices.Equal(terms, []string{"Pinot Noir", "Sauvignon Blanc"}) {
+		t.Fatalf("unexpected search terms: got %v", terms)
+	}
+}
+
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -149,11 +190,11 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	sale := float32(3.49)
 	categories := []string{"Produce", "Fresh Fruit"}
 	ingredient := inputIngredientFromKrogerIngredient(Ingredient{
-		ProductId:    stringPtr(" apple-1 "),
-		AisleNumber:  stringPtr(" 12 "),
-		Brand:        stringPtr(" Orchard Co "),
-		Description:  stringPtr(" Honeycrisp Apple "),
-		Size:         stringPtr(" 3 lb "),
+		ProductId:    new(" apple-1 "),
+		AisleNumber:  new(" 12 "),
+		Brand:        new(" Orchard Co "),
+		Description:  new(" Honeycrisp Apple "),
+		Size:         new(" 3 lb "),
 		PriceRegular: &regular,
 		PriceSale:    &sale,
 		Categories:   &categories,
@@ -174,8 +215,4 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	if !slices.Equal(ingredient.Categories, categories) {
 		t.Fatalf("unexpected categories: got %v want %v", ingredient.Categories, categories)
 	}
-}
-
-func stringPtr(value string) *string {
-	return &value
 }

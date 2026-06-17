@@ -59,7 +59,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	return parallelism.Flatten(defaultStaples(), func(category string) ([]ai.InputIngredient, error) {
 		resp, err := p.client.Category(ctx, category, storeID)
 		if err != nil {
-			slog.WarnContext(ctx, "Failed to fetch category", "category", category, "location", locationID, "error", err)
+			slog.ErrorContext(ctx, "Failed to fetch category", "category", category, "location", locationID, "error", err)
 			return nil, err
 		}
 
@@ -72,7 +72,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, _ int) ([]ai.InputIngredient, error) {
+func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	if p.client == nil {
 		return nil, fmt.Errorf("whole foods client is required")
 	}
@@ -82,15 +82,15 @@ func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, 
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
 	}
 
-	// no pagination so no skip
-	resp, err := p.client.Category(ctx, searchTerm, storeID)
-	if err != nil {
-		return nil, err
-	}
-
-	return lo.Map(resp, func(p product, _ int) ai.InputIngredient {
-		return productToIngredient(p, searchTerm)
-	}), nil
+	return parallelism.Flatten(defaultWineCategories(), func(category string) ([]ai.InputIngredient, error) {
+		resp, err := p.client.Category(ctx, category, storeID)
+		if err != nil {
+			return nil, err
+		}
+		return lo.Map(resp, func(p product, _ int) ai.InputIngredient {
+			return productToIngredient(p, category)
+		}), nil
+	})
 }
 
 func defaultStaples() []string {
@@ -108,7 +108,10 @@ func defaultStaples() []string {
 		"rice-grains",
 		"pasta-noodles",
 	}
-	// red-wine, white-wine, sparkling
+}
+
+func defaultWineCategories() []string {
+	return []string{"red-wine", "white-wine", "sparkling"}
 }
 
 func productToIngredient(product product, category string) ai.InputIngredient {

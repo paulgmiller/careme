@@ -16,6 +16,7 @@ import (
 	"careme/internal/logsetup"
 	"careme/internal/recipes/feedback"
 	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 
 	"golang.org/x/net/html"
 )
@@ -39,7 +40,17 @@ func assertHTTPSuccess(t *testing.T, w *httptest.ResponseRecorder) string {
 }
 
 func formatShoppingListHTMLForTest(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, selection recipeSelection, w *httptest.ResponseRecorder) {
-	FormatShoppingListHTMLForHash(ctx, p, l, nil, signedIn, p.Hash(), selection, w)
+	FormatShoppingListHTMLForHash(ctx, p, l, nil, renderTestUser(signedIn), p.Hash(), selection, w)
+}
+
+func renderTestUser(signedIn bool) *utypes.User {
+	if !signedIn {
+		return nil
+	}
+	return &utypes.User{
+		ID:    "test-user",
+		Email: []string{"chef@example.com"},
+	}
 }
 
 func TestMain(m *testing.M) {
@@ -101,6 +112,9 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `disabled`) {
 		t.Error("shopping list HTML should disable finalize button when nothing is saved")
 	}
+	if !strings.Contains(html, "chef@example.com") {
+		t.Error("shopping list HTML should render signed-in account widget")
+	}
 }
 
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
@@ -122,7 +136,7 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 		DrinkPairing: "Tea",
 	}
 	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{addedRecipe, unaddedRecipe}}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	selection := recipeSelection{SavedHashes: []string{addedRecipe.ComputeHash()}}
 
 	w := httptest.NewRecorder()
@@ -130,6 +144,9 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
+	if !strings.Contains(html, `<meta name="description" content="Recipes for Store on 2026-01-25: Added Bowl, Maybe Pasta." />`) {
+		t.Error("shopping list HTML should include all recipe titles, location, and date in the meta description")
+	}
 	if !strings.Contains(html, "Shopping list") {
 		t.Fatal("shopping list HTML should render the shopping list section when a recipe is added")
 	}
@@ -237,40 +254,44 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
+func TestFormatShoppingListHTML_IncludesGoogleTagManagerScript(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 
-	prev := templates.GoogleTagID
+	prev := templates.GoogleTagManagerID
 	t.Cleanup(func() {
-		templates.GoogleTagID = prev
+		templates.GoogleTagManagerID = prev
 	})
-	templates.GoogleTagID = "AW-1234567890"
+	templates.GoogleTagManagerID = "GTM-ABC123"
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	assertHTTPSuccess(t, w)
-	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtag/js?id=AW-1234567890")) {
-		t.Error("HTML should contain Google tag script URL")
+	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtm.js?id=")) {
+		t.Error("HTML should contain Google Tag Manager script URL")
 	}
 
-	if !bytes.Contains(w.Body.Bytes(), []byte("gtag('config', 'AW-1234567890');")) {
-		t.Error("HTML should contain Google tag ID")
+	if !bytes.Contains(w.Body.Bytes(), []byte("'GTM-ABC123'")) {
+		t.Error("HTML should contain Google Tag Manager ID")
+	}
+
+	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/ns.html?id=GTM-ABC123")) {
+		t.Error("HTML should contain Google Tag Manager noscript URL")
 	}
 }
 
 func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	prev := templates.GoogleTagID
+	prev := templates.GoogleTagManagerID
 	t.Cleanup(func() {
-		templates.GoogleTagID = prev
+		templates.GoogleTagManagerID = prev
 	})
-	templates.GoogleTagID = ""
+	templates.GoogleTagManagerID = ""
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	assertHTTPSuccess(t, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("googletagmanager.com")) {
-		t.Error("HTML should not contain Google tag script when tag ID is empty")
+		t.Error("HTML should not contain Google Tag Manager script when tag ID is empty")
 	}
 }
 
@@ -292,16 +313,19 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	recipe.OriginHash = p.Hash()
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 
+	if !strings.Contains(html, `<meta name="description" content="A simple quail recipe Recipe for Store on 2026-01-25." />`) {
+		t.Error("recipe HTML should include recipe, location, and date in the meta description")
+	}
 	if strings.Contains(html, "Finalize") {
 		t.Error("recipe HTML should not contain Finalize button")
 	}
@@ -365,6 +389,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if strings.Contains(html, "Recipe score:") {
 		t.Error("recipe HTML should hide recipe score when no critique exists")
 	}
+	if !strings.Contains(html, "chef@example.com") {
+		t.Error("recipe HTML should render signed-in account widget")
+	}
 }
 
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
@@ -373,7 +400,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, recipe, false, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, nil, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -393,6 +420,9 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `name="feedback"`) {
 		t.Error("recipe HTML should not contain feedback form when signed out")
 	}
+	if !strings.Contains(html, `href="/sign-in?return_to_b64=`) {
+		t.Error("recipe HTML should render a header sign-in link when signed out")
+	}
 }
 
 func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
@@ -403,7 +433,7 @@ func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	w := httptest.NewRecorder()
 	score := 8
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -416,9 +446,35 @@ func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	if !strings.Contains(html, ">8/10<") {
 		t.Error("recipe HTML should contain critique score value")
 	}
+	if strings.Contains(html, "This recipe may need another look before cooking.") {
+		t.Error("recipe HTML should not show low-score warning at the retry threshold")
+	}
 }
 
-func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
+func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	recipe := list.Recipes[0]
+	recipe.ResponseID = "resp-123"
+	w := httptest.NewRecorder()
+	score := 6
+
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	html := assertHTTPSuccess(t, w)
+
+	isValidHTML(t, html)
+	if !strings.Contains(html, "This recipe may need another look before cooking.") {
+		t.Error("recipe HTML should show a prominent low-score warning")
+	}
+	if !strings.Contains(html, "It scored 6/10, below our 8/10 retry mark.") {
+		t.Error("recipe HTML should explain why the warning appears")
+	}
+	if !strings.Contains(html, `Read the critique`) || !strings.Contains(html, `href="/critiques/`) {
+		t.Error("recipe HTML should link the warning to the public critique")
+	}
+}
+
+func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	multiRecipeList := ai.ShoppingList{
@@ -441,11 +497,11 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
-	if strings.Contains(html, `/recipes/`) && strings.Contains(html, `/regenerate"`) {
-		t.Error("shopping list HTML should not expose regenerate endpoint when signed out")
+	if !strings.Contains(html, `/recipes/`) || !strings.Contains(html, `/regenerate"`) {
+		t.Error("shopping list HTML should expose regenerate endpoint when signed out")
 	}
-	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/save"`) {
-		t.Error("shopping list HTML should not expose save endpoint when signed out")
+	if !strings.Contains(html, `/recipe/`) || !strings.Contains(html, `/save"`) {
+		t.Error("shopping list HTML should expose save endpoint when signed out")
 	}
 	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/dismiss"`) {
 		t.Error("shopping list HTML should not expose dismiss endpoint when signed out")
@@ -456,17 +512,17 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/wine?view=shopping`) {
 		t.Error("shopping list HTML should not expose shopping wine endpoint when signed out")
 	}
-	if strings.Contains(html, "Try again, chef") {
-		t.Error("shopping list HTML should hide regenerate action when signed out")
+	if !strings.Contains(html, "Try again, chef") {
+		t.Error("shopping list HTML should show regenerate action when signed out")
 	}
-	if strings.Contains(html, "Build Shopping List") {
-		t.Error("shopping list HTML should hide finalize action when signed out")
-	}
-	if strings.Contains(html, `id="save-`) {
-		t.Error("shopping list HTML should hide save controls when signed out")
+	if !strings.Contains(html, "Build Shopping List") {
+		t.Error("shopping list HTML should show finalize action when signed out")
 	}
 	if strings.Contains(html, `id="dismiss-`) {
 		t.Error("shopping list HTML should hide dismiss controls when signed out")
+	}
+	if !strings.Contains(html, `href="/sign-in?return_to_b64=`) {
+		t.Error("shopping list HTML should render a header sign-in link when signed out")
 	}
 }
 
@@ -476,7 +532,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Oregon Pinot Noir", Price: "$14.99"},
 			{Name: "Backup Chardonnay", Price: "$11.99"},
@@ -522,7 +578,7 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		ResponseID:   "resp-123",
 	}
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -581,7 +637,7 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	recipe.ResponseID = "resp-123"
 	recipeHash := recipe.ComputeHash()
 
-	FormatRecipeHTML(t.Context(), p, recipe, true, false, nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -631,7 +687,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 			},
 			Commentary: "Good with roasted flavors.",
 		},
-	}, true, p.Hash(), selection, w)
+	}, renderTestUser(true), p.Hash(), selection, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -650,6 +706,33 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	}
 	if strings.Index(html, "Drink pairing:") > strings.Index(html, "Good with roasted flavors.") {
 		t.Fatalf("shopping list should render wine commentary beneath drink pairing, body: %s", html)
+	}
+}
+
+func TestShoppingListForDisplay_SumsMatchingQuantitiesWithSuffix(t *testing.T) {
+	groups := shoppingListForDisplay([]ai.Ingredient{
+		{Name: "Garlic", Quantity: "2 cloves, finely grated or minced"},
+		{Name: "Garlic", Quantity: "2 cloves, minced"},
+		{Name: "Garlic", Quantity: "2 cloves"},
+	})
+	if len(groups) != 1 || len(groups[0].Items) != 1 {
+		t.Fatalf("expected one grouped garlic item, got %+v", groups)
+	}
+	if got, want := groups[0].Items[0].Quantity, "6 cloves"; got != want {
+		t.Fatalf("expected summed quantity %q, got %q", want, got)
+	}
+}
+
+func TestShoppingListForDisplay_KeepsDistinctSuffixesSeparate(t *testing.T) {
+	groups := shoppingListForDisplay([]ai.Ingredient{
+		{Name: "Garlic", Quantity: "2 cloves"},
+		{Name: "Garlic", Quantity: "1 bulb"},
+	})
+	if len(groups) != 1 || len(groups[0].Items) != 1 {
+		t.Fatalf("expected one grouped garlic item, got %+v", groups)
+	}
+	if got, want := groups[0].Items[0].Quantity, "2 cloves, 1 bulb"; got != want {
+		t.Fatalf("expected quantity %q, got %q", want, got)
 	}
 }
 
@@ -679,5 +762,14 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	}
 	if newerIndex > olderIndex {
 		t.Fatalf("expected newer question before older question, body: %s", body)
+	}
+	if !strings.Contains(body, "<details") {
+		t.Fatalf("expected thread entries to render as expandable details, body: %s", body)
+	}
+	if !strings.Contains(body, "<details class=\"group rounded-xl border border-brand-100 bg-brand-50/70 p-4\" open>") {
+		t.Fatalf("expected newest thread entry to be expanded by default, body: %s", body)
+	}
+	if !strings.Contains(body, "group-open:hidden") || !strings.Contains(body, "group-open:block") {
+		t.Fatalf("expected thread entries to include chevron expand/collapse indicator, body: %s", body)
 	}
 }

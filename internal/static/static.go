@@ -3,8 +3,8 @@ package static
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/json"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -21,6 +21,9 @@ var tailwindCSS []byte
 //go:embed htmx@2.0.8.js
 var htmx208JS []byte
 
+//go:embed user-clerk-billing.js
+var userClerkBillingJS []byte
+
 //go:embed fonts/*.woff2
 var fontFiles embed.FS
 
@@ -35,7 +38,6 @@ var faviconSpring []byte
 
 //go:embed favicon-summer.png
 var faviconSummer []byte
-
 
 //go:embed app-icon-192.png
 var appIcon192 []byte
@@ -90,6 +92,14 @@ func Register(mux routing.Registrar) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		if _, err := w.Write(htmx208JS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write htmx js", "error", err)
+		}
+	})
+
+	mux.HandleFunc("/static/user-clerk-billing.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		if _, err := w.Write(userClerkBillingJS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write user Clerk billing js", "error", err)
 		}
 	})
 
@@ -188,7 +198,6 @@ func faviconBySeason(season seasons.Season) []byte {
 	}
 }
 
-
 func renderOfflinePage() ([]byte, error) {
 	scheme := seasons.GetCurrentColorScheme()
 	data := struct {
@@ -244,7 +253,7 @@ func renderServiceWorker() ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
-} 
+}
 
 func backgroundBySeason(season seasons.Season) []byte {
 	switch season {

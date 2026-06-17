@@ -5,7 +5,7 @@ metadata:
   labels:
     app: albertsons-reese84
 spec:
-  schedule: "0 */6 * * *"
+  schedule: "${ALBERTSONS_REESE84_SCHEDULE}"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 3
@@ -25,7 +25,7 @@ spec:
             runAsGroup: 65532
           containers:
             - name: albertsons-reese84
-              image: ghcr.io/paulgmiller/careme-albertsonsreese84:${IMAGE_TAG}
+              image: ghcr.io/paulgmiller/careme-reese84:${IMAGE_TAG}
               imagePullPolicy: IfNotPresent
               envFrom:
                 - secretRef:
@@ -34,7 +34,22 @@ spec:
                     name: storage
                 - secretRef:
                     name: brightdata-proxy
-              args: ["wait-ms", "10000"]
+              env:
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: WORKLOAD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['app']
+                - name: OTEL_RESOURCE_ATTRIBUTES
+                  value: "deployment.environment.name=production,k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.app=$(WORKLOAD_NAME)"
+              args: ["-site", "albertsons", "-container", "albertsons", "-wait-ms", "10000"]
               resources:
                 requests:
                   cpu: 50m

@@ -111,6 +111,7 @@ func (c *AlbertsonsConfig) HasInventory() bool {
 
 type PublixConfig struct {
 	Enable bool `json:"enable"`
+	// Abck   string `json:"abck"`
 }
 
 func (c *PublixConfig) IsEnabled() bool {
@@ -208,6 +209,7 @@ func Load() (*Config, error) {
 		},
 		Publix: PublixConfig{
 			Enable: envEnabled("PUBLIX_ENABLE"),
+			//	Abck:   os.Getenv("PUBLIX_ABCK"),
 		},
 		HEB: HEBConfig{
 			Enable: envEnabled("HEB_ENABLE"),

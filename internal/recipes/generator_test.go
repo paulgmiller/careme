@@ -26,8 +26,10 @@ type captureWineQuestionAIClient struct {
 }
 
 type captureRegenerateAIClient struct {
+	mu                         sync.Mutex
 	instructions               []string
 	responseID                 string
+	generateMenuResponseID     string
 	recipe                     *ai.Recipe
 	menuPlanInstructions       []string
 	menuPlanResponseID         string
@@ -38,27 +40,31 @@ type captureRegenerateAIClient struct {
 }
 
 type captureGenerateAIClient struct {
-	shoppingList *ai.ShoppingList
-	ingredients  []ai.InputIngredient
-	instructions [][]string
-	lastRecipes  []string
-	mu           sync.Mutex
+	shoppingList            *ai.ShoppingList
+	menuPlan                *ai.MenuPlan
+	generateMenuResponseIDs []string
+	ingredients             []ai.InputIngredient
+	instructions            [][]string
+	generateInstructions    [][]string
+	lastRecipes             []string
+	mu                      sync.Mutex
 }
 
 type sequenceAIClient struct {
-	mu                     sync.Mutex
-	generateCalls          int
-	generateInstructions   [][]string
-	menuPlanInstructions   [][]string
-	menuPlanResponseIDs    []string
-	menuPlanCounts         []int
-	regenerateCalls        int
-	regenerateInstructions [][]string
-	regenerateResponseIDs  []string
-	generateResponses      []*ai.ShoppingList
-	menuPlanResponses      []*ai.MenuPlan
-	plannedRecipes         []ai.Recipe
-	regenerateResponses    []*ai.Recipe
+	mu                      sync.Mutex
+	generateCalls           int
+	generateInstructions    [][]string
+	menuPlanInstructions    [][]string
+	menuPlanResponseIDs     []string
+	menuPlanCounts          []int
+	regenerateCalls         int
+	generateMenuResponseIDs []string
+	regenerateInstructions  [][]string
+	regenerateResponseIDs   []string
+	generateResponses       []*ai.ShoppingList
+	menuPlanResponses       []*ai.MenuPlan
+	plannedRecipes          []ai.Recipe
+	regenerateResponses     []*ai.Recipe
 }
 
 type captureCritiqueService struct {
@@ -117,7 +123,7 @@ func (c *captureWineQuestionAIClient) RegenerateMenuPlan(ctx context.Context, in
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureWineQuestionAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error) {
+func (c *captureWineQuestionAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
 	panic("unexpected call to GenerateRecipe")
 }
 
@@ -150,37 +156,58 @@ func (c *captureWineQuestionAIClient) Ready(ctx context.Context) error {
 }
 
 func (c *captureRegenerateAIClient) CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.createMenuPlanInstructions = append([]string(nil), instructions...)
 	c.createMenuPlanCount = count
 	if c.menuPlan != nil {
+		if c.menuPlan.ResponseID == "" {
+			c.menuPlan.ResponseID = "resp-menu-next"
+		}
 		return c.menuPlan, nil
 	}
-	return &ai.MenuPlan{}, nil
+	return &ai.MenuPlan{ResponseID: "resp-menu-next"}, nil
 }
 
 func (c *captureRegenerateAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.menuPlanInstructions = append([]string(nil), instructions...)
 	c.menuPlanResponseID = previousResponseID
 	c.menuPlanCount = count
 	if c.menuPlan != nil {
+		if c.menuPlan.ResponseID == "" {
+			c.menuPlan.ResponseID = "resp-menu-next"
+		}
 		return c.menuPlan, nil
 	}
-	return &ai.MenuPlan{}, nil
+	return &ai.MenuPlan{ResponseID: "resp-menu-next"}, nil
 }
 
-func (c *captureRegenerateAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error) {
+func (c *captureRegenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.instructions = append([]string(nil), instructions...)
+	c.generateMenuResponseID = menuResponseID
 	if c.recipe != nil {
-		return c.recipe, nil
+		recipe := *c.recipe
+		return &recipe, nil
 	}
 	return &ai.Recipe{}, nil
 }
 
 func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.instructions = append([]string(nil), newinstructions...)
 	c.responseID = previousResponseID
 	if c.recipe != nil {
-		return c.recipe, nil
+		recipe := *c.recipe
+		return &recipe, nil
 	}
 	return &ai.Recipe{}, nil
 }
@@ -208,6 +235,9 @@ func (c *captureGenerateAIClient) CreateMenuPlan(ctx context.Context, location *
 	c.ingredients = append([]ai.InputIngredient(nil), ingredients...)
 	c.instructions = append(c.instructions, append([]string(nil), instructions...))
 	c.lastRecipes = append([]string(nil), lastRecipes...)
+	if c.menuPlan != nil {
+		return c.menuPlan, nil
+	}
 	if c.shoppingList != nil {
 		return menuPlanForRecipes(c.shoppingList.Recipes), nil
 	}
@@ -218,10 +248,12 @@ func (c *captureGenerateAIClient) RegenerateMenuPlan(ctx context.Context, instru
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error) {
+func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.generateMenuResponseIDs = append(c.generateMenuResponseIDs, menuResponseID)
+	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
 	if c.shoppingList == nil {
 		return &ai.Recipe{}, nil
 	}
@@ -292,10 +324,11 @@ func (c *sequenceAIClient) RegenerateMenuPlan(ctx context.Context, instructions 
 	return menuPlanForRecipes(resp.Recipes), nil
 }
 
-func (c *sequenceAIClient) GenerateRecipe(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string) (*ai.Recipe, error) {
+func (c *sequenceAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.generateMenuResponseIDs = append(c.generateMenuResponseIDs, menuResponseID)
 	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
 	for _, recipe := range c.plannedRecipes {
 		if recipeInstructionsContainAnchor(instructions, recipe.Title) {
@@ -358,7 +391,7 @@ func menuPlanForRecipes(recipes []ai.Recipe) *ai.MenuPlan {
 			Technique:        "test",
 		})
 	}
-	return &ai.MenuPlan{Plans: plans}
+	return &ai.MenuPlan{Plans: plans, ResponseID: "resp-menu-plan"}
 }
 
 func (c *sequenceAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
@@ -413,11 +446,16 @@ func (s *captureWineStaplesProvider) FetchStaples(ctx context.Context, locationI
 	panic("unexpected call to FetchStaples")
 }
 
-func (s *captureWineStaplesProvider) GetIngredients(_ context.Context, _ string, searchTerm string, _ int) ([]ai.InputIngredient, error) {
+func (s *captureWineStaplesProvider) FetchWines(_ context.Context, _ string, styles []string) ([]ai.InputIngredient, error) {
 	s.mu.Lock()
-	s.searches = append(s.searches, searchTerm)
+	s.searches = append(s.searches, styles...)
 	s.mu.Unlock()
-	return slices.Clone(s.responses[searchTerm]), nil
+
+	var ingredients []ai.InputIngredient
+	for _, style := range styles {
+		ingredients = append(ingredients, s.responses[style]...)
+	}
+	return slices.Clone(ingredients), nil
 }
 
 func (s *captureWineStaplesProvider) searchTerms() []string {
@@ -430,8 +468,8 @@ func (panicStaplesService) FetchStaples(context.Context, *GeneratorParams) ([]ai
 	panic("unexpected call to FetchStaples")
 }
 
-func (panicStaplesService) GetIngredients(context.Context, string, string, int, time.Time) ([]ai.InputIngredient, error) {
-	panic("unexpected call to GetIngredients")
+func (panicStaplesService) FetchWines(context.Context, string, []string, time.Time) ([]ai.InputIngredient, error) {
+	panic("unexpected call to FetchWines")
 }
 
 func (noopRecipeSaver) SaveRecipe(context.Context, ai.Recipe) error {
@@ -519,23 +557,19 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 }
 
-func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
+func TestPickAWine_PassesRecipeWineStylesToStaplesService(t *testing.T) {
 	aiStub := &captureWineQuestionAIClient{
 		answer: "Try one of these bottles.",
 		selection: &ai.WineSelection{
 			Wines: []ai.Ingredient{
-				{ProductID: "wholefoods-red", Name: "Whole Foods Red"},
-				{ProductID: "wholefoods-white", Name: "Whole Foods White"},
-				{ProductID: "wholefoods-bubbly", Name: "Whole Foods Bubbly"},
+				{ProductID: "pinot", Name: "Pinot Noir"},
 			},
 			Commentary: "Try one of these bottles.",
 		},
 	}
 	staplesStub := &captureWineStaplesProvider{
 		responses: map[string][]ai.InputIngredient{
-			"red-wine":   {{ProductID: "wholefoods-red", Description: "Whole Foods Red", AisleNumber: "red-wine"}},
-			"white-wine": {{ProductID: "wholefoods-white", Description: "Whole Foods White", AisleNumber: "white-wine"}},
-			"sparkling":  {{ProductID: "wholefoods-bubbly", Description: "Whole Foods Bubbly", AisleNumber: "sparkling"}},
+			"Pinot Noir": {{ProductID: "pinot", Description: "Pinot Noir", AisleNumber: "wine"}},
 		},
 	}
 	rio := IO(cache.NewFileCache(t.TempDir()))
@@ -550,17 +584,14 @@ func TestPickAWine_WholeFoodsUsesHardcodedWineCategories(t *testing.T) {
 	}
 
 	searches := staplesStub.searchTerms()
-	slices.Sort(searches)
-	wantSearches := []string{"red-wine", "sparkling", "white-wine"}
+	wantSearches := []string{"Pinot Noir"}
 	if !slices.Equal(searches, wantSearches) {
-		t.Fatalf("unexpected whole foods wine searches: got %v want %v", searches, wantSearches)
+		t.Fatalf("unexpected wine searches: got %v want %v", searches, wantSearches)
 	}
-	if got == nil || len(got.Wines) != 3 {
+	if got == nil || len(got.Wines) != 1 {
 		t.Fatalf("unexpected wine selection: %+v", got)
 	}
-	assert.Equal(t, "red-wine", got.Wines[0].AisleNumber)
-	assert.Equal(t, "white-wine", got.Wines[1].AisleNumber)
-	assert.Equal(t, "sparkling", got.Wines[2].AisleNumber)
+	assert.Equal(t, "wine", got.Wines[0].AisleNumber)
 	if aiStub.recipe.Title != "Salmon" {
 		t.Fatalf("expected recipe title %q, got %q", "Salmon", aiStub.recipe.Title)
 	}
@@ -575,9 +606,10 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	aiStub := &captureRegenerateAIClient{
 		recipe: &newResult,
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
-			Cuisine:          "test",
-			AnchorIngredient: "Brand New Dinner",
-			Technique:        "test",
+			Cuisine:            "test",
+			AnchorIngredient:   "Brand New Dinner",
+			Technique:          "test",
+			RecipeInstructions: []string{"make it vegetarian"},
 		}}, ResponseID: "resp-menu-next"},
 	}
 	cacheStore := cache.NewFileCache(t.TempDir())
@@ -600,24 +632,25 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		t.Fatalf("GenerateRecipes returned error: %v", err)
 	}
 
-	wantInstructions := []string{
+	wantMenuPlanInstructions := []string{
 		"make it vegetarian",
 		"Enjoyed and saved so don't repeat: Newly Saved",
 		"Passed on Dismissed Recipe",
 	}
-	wantRecipeInstructions := append(slices.Clone(wantInstructions), ai.RecipePlan{
-		Cuisine:          "test",
-		AnchorIngredient: "Brand New Dinner",
-		Technique:        "test",
-	}.Instructions()...)
+	wantRecipeInstructions := ai.RecipePlan{
+		Cuisine:            "test",
+		AnchorIngredient:   "Brand New Dinner",
+		Technique:          "test",
+		RecipeInstructions: []string{"make it vegetarian"},
+	}.Instructions()
 	if !slices.Equal(aiStub.instructions, wantRecipeInstructions) {
 		t.Fatalf("unexpected recipe instructions: got %v want %v", aiStub.instructions, wantRecipeInstructions)
 	}
-	if !slices.Equal(aiStub.menuPlanInstructions, wantInstructions) {
-		t.Fatalf("unexpected menu plan instructions: got %v want %v", aiStub.menuPlanInstructions, wantInstructions)
+	if !slices.Equal(aiStub.menuPlanInstructions, wantMenuPlanInstructions) {
+		t.Fatalf("unexpected menu plan instructions: got %v want %v", aiStub.menuPlanInstructions, wantMenuPlanInstructions)
 	}
-	if aiStub.responseID != "resp-123" {
-		t.Fatalf("expected recipe response ID %q, got %q", "resp-123", aiStub.responseID)
+	if aiStub.generateMenuResponseID != "resp-menu-next" {
+		t.Fatalf("expected menu plan response ID %q, got %q", "resp-menu-next", aiStub.generateMenuResponseID)
 	}
 	if aiStub.menuPlanResponseID != "resp-menu-old" {
 		t.Fatalf("expected menu plan response ID %q, got %q", "resp-menu-old", aiStub.menuPlanResponseID)
@@ -633,39 +666,65 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 }
 
-func TestGenerateRecipes_RegenerateBackCompatFallbackUsesFakePlan(t *testing.T) {
+func TestGenerateRecipes_RegenerateNoReplacementPlansReturnsHelpfulError(t *testing.T) {
+	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
+	aiStub := &captureRegenerateAIClient{
+		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{}, ResponseID: "resp-menu-next"},
+	}
+
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params.Instructions = "make it brighter"
+	params.Dismissed = []ai.Recipe{dismissed}
+	params.PreviousMenuPlanResponseID = "resp-menu-old"
+
+	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
+	_, err := g.GenerateRecipes(t.Context(), params)
+	require.ErrorContains(t, err, "failed to plan recipe replacements: planned 0 replacement recipes")
+	require.NotContains(t, err.Error(), "%!w(<nil>)")
+}
+
+func TestGenerateRecipes_RegenerateAllowsUserRequestedCountDifferentFromDismissedCount(t *testing.T) {
+	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
+	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
+	aiStub := &captureRegenerateAIClient{
+		recipe: &newResult,
+		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{
+			{Cuisine: "test", AnchorIngredient: "Slow Cooker Dinner", Technique: "slow cooker"},
+			{Cuisine: "test", AnchorIngredient: "Different Pasta", Technique: "pasta"},
+		}, ResponseID: "resp-menu-next"},
+	}
+
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params.Instructions = "give me two more recipes, a slow cooker recipe and a different pasta"
+	params.Dismissed = []ai.Recipe{dismissed}
+	params.PreviousMenuPlanResponseID = "resp-menu-old"
+
+	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
+	got, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 2)
+	require.Equal(t, 1, aiStub.menuPlanCount)
+	require.Equal(t, "resp-menu-next", aiStub.generateMenuResponseID)
+}
+
+func TestGenerateRecipes_RegenerateWithoutMenuPlanResponseIDErrors(t *testing.T) {
 	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
 	aiStub := &captureRegenerateAIClient{
 		recipe: &newResult,
 	}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Date(2026, time.May, 22, 0, 0, 0, 0, time.UTC))
 	params.Directive = "Use the store's sale ingredients."
 	params.Instructions = "make it brighter"
 	params.Dismissed = []ai.Recipe{dismissed}
 
 	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
 	_, err := g.GenerateRecipes(t.Context(), params)
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "missing previous menu plan response ID for menu")
 
-	wantInstructions := []string{
-		"make it brighter",
-		"Passed on Dismissed Recipe",
-	}
-	if aiStub.createMenuPlanCount != 0 || len(aiStub.createMenuPlanInstructions) != 0 {
-		t.Fatalf("back-compat fallback should not create a fresh menu plan, got count=%d instructions=%v", aiStub.createMenuPlanCount, aiStub.createMenuPlanInstructions)
-	}
-	if aiStub.menuPlanCount != 0 || len(aiStub.menuPlanInstructions) != 0 {
-		t.Fatalf("back-compat fallback should not regenerate a menu plan, got count=%d instructions=%v", aiStub.menuPlanCount, aiStub.menuPlanInstructions)
-	}
-	wantRecipeInstructions := append(slices.Clone(wantInstructions), ai.RecipePlan{
-		Cuisine:          "anything",
-		AnchorIngredient: "anything",
-		Technique:        "anything",
-	}.Instructions()...)
-	if !slices.Equal(aiStub.instructions, wantRecipeInstructions) {
-		t.Fatalf("unexpected fallback recipe instructions: got %v want %v", aiStub.instructions, wantRecipeInstructions)
+	if aiStub.createMenuPlanCount != 0 || aiStub.menuPlanCount != 0 {
+		t.Fatalf("missing response ID should fail before menu planning calls, got create=%d regenerate=%d", aiStub.createMenuPlanCount, aiStub.menuPlanCount)
 	}
 }
 
@@ -684,6 +743,49 @@ func TestGenerateRecipes_RegenerateWithOnlySavedRecipesPreservesSavedRecipes(t *
 	if got == nil || len(got.Recipes) != 1 || got.Recipes[0].ComputeHash() != saved.ComputeHash() {
 		t.Fatalf("expected saved recipe to be preserved, got %+v", got)
 	}
+}
+
+func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirectionsToEveryRecipe(t *testing.T) {
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params.Directive = "Use sale ingredients."
+	params.Instructions = "I have some anise."
+
+	aniseRecipe := ai.Recipe{Title: "Anise Chicken", Description: "Uses the anise", ResponseID: "resp-anise"}
+	plainRecipe := ai.Recipe{Title: "Plain Pasta", Description: "No anise", ResponseID: "resp-plain"}
+	aiStub := &captureGenerateAIClient{
+		shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{aniseRecipe, plainRecipe}},
+		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{
+			{Cuisine: "test", AnchorIngredient: aniseRecipe.Title, Technique: "test", RecipeInstructions: []string{"Use the user's anise in this recipe."}},
+			{Cuisine: "test", AnchorIngredient: plainRecipe.Title, Technique: "test"},
+		}, ResponseID: "resp-menu-plan"},
+	}
+	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
+
+	got, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 2)
+	require.Len(t, aiStub.generateInstructions, 2)
+
+	for _, instructions := range aiStub.generateInstructions {
+		assert.NotContains(t, instructions, "I have some anise.")
+		assert.Contains(t, instructions, "Use sale ingredients.")
+	}
+
+	aniseInstructions := instructionsForAnchor(t, aiStub.generateInstructions, aniseRecipe.Title)
+	plainInstructions := instructionsForAnchor(t, aiStub.generateInstructions, plainRecipe.Title)
+	assert.Contains(t, aniseInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
+	assert.NotContains(t, plainInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
+}
+
+func instructionsForAnchor(t *testing.T, calls [][]string, title string) []string {
+	t.Helper()
+	for _, instructions := range calls {
+		if recipeInstructionsContainAnchor(instructions, title) {
+			return instructions
+		}
+	}
+	t.Fatalf("missing generate call for %q in %v", title, calls)
+	return nil
 }
 
 func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
@@ -808,6 +910,7 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Saved = []ai.Recipe{alreadySaved}
 	params.Dismissed = []ai.Recipe{dismissed}
+	params.PreviousMenuPlanResponseID = "resp-menu-old"
 
 	critiquer := &captureCritiqueService{}
 	aiStub := &captureRegenerateAIClient{
@@ -831,7 +934,10 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 		t.Fatalf("expected only the newly generated recipe to be critiqued, got %+v", critiquer.recipes)
 	}
 	if aiStub.createMenuPlanCount != 0 {
-		t.Fatalf("expected back-compat fallback not to create a fresh menu plan, got %d calls", aiStub.createMenuPlanCount)
+		t.Fatalf("expected regeneration not to create a fresh menu plan, got %d calls", aiStub.createMenuPlanCount)
+	}
+	if aiStub.menuPlanResponseID != "resp-menu-old" {
+		t.Fatalf("expected menu plan response ID %q, got %q", "resp-menu-old", aiStub.menuPlanResponseID)
 	}
 }
 
@@ -1045,10 +1151,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 		generateResponses: []*ai.ShoppingList{{
 			Recipes: []ai.Recipe{initial},
 		}},
-		regenerateResponses: []*ai.Recipe{
-			&initial,
-			&retried,
-		},
+		regenerateResponses: []*ai.Recipe{&retried},
 	}
 	critiquer := &captureCritiqueService{
 		fn: func(recipe ai.Recipe) (*ai.RecipeCritique, error) {
@@ -1098,17 +1201,20 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	if got := aiStub.menuPlanCounts; !slices.Equal(got, []int{1}) {
 		t.Fatalf("unexpected menu plan counts: got %v", got)
 	}
-	if aiStub.regenerateCalls != 2 {
-		t.Fatalf("expected initial replacement plus one critique retry, got %d calls", aiStub.regenerateCalls)
+	if aiStub.regenerateCalls != 1 {
+		t.Fatalf("expected one critique retry, got %d calls", aiStub.regenerateCalls)
 	}
-	if got := aiStub.regenerateResponseIDs; !slices.Equal(got, []string{"resp-original", "resp-first-pass"}) {
+	if got := aiStub.generateMenuResponseIDs; !slices.Equal(got, []string{"resp-menu-plan"}) {
+		t.Fatalf("unexpected replacement menu response IDs: got %v", got)
+	}
+	if got := aiStub.regenerateResponseIDs; !slices.Equal(got, []string{"resp-first-pass"}) {
 		t.Fatalf("unexpected regenerate response IDs: got %v", got)
 	}
 	wantRetryInstructions := []string{
 		"Revise recipe. Description should focus on selling the dish not these corrections.",
 		"scored 5/10.\n Issues: [timing/medium] Cooking times are inconsistent.\n Suggested fixes: make the timing consistent",
 	}
-	if got := aiStub.regenerateInstructions[1]; !slices.Equal(got, wantRetryInstructions) {
+	if got := aiStub.regenerateInstructions[0]; !slices.Equal(got, wantRetryInstructions) {
 		t.Fatalf("unexpected critique retry instructions: got %v want %v", got, wantRetryInstructions)
 	}
 }
@@ -1127,10 +1233,7 @@ func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
 		generateResponses: []*ai.ShoppingList{{
 			Recipes: []ai.Recipe{firstPass},
 		}},
-		regenerateResponses: []*ai.Recipe{
-			&firstPass,
-			&retried,
-		},
+		regenerateResponses: []*ai.Recipe{&retried},
 	}
 	critiquer := &captureCritiqueService{
 		fn: func(recipe ai.Recipe) (*ai.RecipeCritique, error) {

@@ -102,7 +102,7 @@ func TestRecipeCritiqueJSONSchemaTracksStruct(t *testing.T) {
 
 func TestGeminiUsageLogAttr(t *testing.T) {
 	t.Run("nil usage", func(t *testing.T) {
-		attr := geminiUsageLogAttr(nil)
+		attr := geminiUsageLogAttr(defaultGeminiCritiqueModel, nil)
 		assert.Equal(t, "usage", attr.Key)
 		assert.Equal(t, slog.KindGroup, attr.Value.Kind())
 		require.Len(t, attr.Value.Group(), 1)
@@ -110,7 +110,7 @@ func TestGeminiUsageLogAttr(t *testing.T) {
 	})
 
 	t.Run("usage becomes a slog group", func(t *testing.T) {
-		attr := geminiUsageLogAttr(&genai.GenerateContentResponseUsageMetadata{
+		attr := geminiUsageLogAttr(defaultGeminiCritiqueModel, &genai.GenerateContentResponseUsageMetadata{
 			CachedContentTokenCount: 22,
 			PromptTokenCount:        448,
 			CandidatesTokenCount:    986,
@@ -130,6 +130,13 @@ func TestGeminiUsageLogAttr(t *testing.T) {
 			slog.Int("toolUsePromptTokenCount", 310),
 			slog.Int("totalTokenCount", 1877),
 			slog.String("trafficType", string(genai.TrafficTypeOnDemand)),
+			slog.Group("spend",
+				slog.String("currency", "USD"),
+				slog.Float64("totalUSD", 0.0146404),
+				slog.Float64("inputUSD", 0.001472),
+				slog.Float64("cachedInputUSD", 0.0000044),
+				slog.Float64("outputUSD", 0.013164),
+			),
 		}, attr.Value.Group())
 	})
 }

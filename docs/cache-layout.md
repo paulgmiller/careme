@@ -27,7 +27,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
-| `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or JSON `[]kroger.Ingredient` keyed by wine style/date/location hash for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/generator.go` (`FetchStaples`, `PickAWine`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/generator.go` (`FetchStaples`, `PickAWine`) and `internal/ingredients/server.go` |
+| `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or by location/date/normalized wine style set for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) and `internal/ingredients/server.go` |
 | `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
 | `generation_status/` | JSON `recipes.GenerationStatus` (`stage`, `message`, `updated_at`) keyed by shopping hash for spinner progress | `internal/recipes/generation_status.go` (`SaveGenerationStatus`) via `internal/recipes/server.go` (`kickgeneration`) and `internal/recipes/generator.go` (`GenerateRecipes`) | `internal/recipes/generation_status.go` (`GenerationStatusFromCache`) via `internal/recipes/server.go` (`Spin`) |
 | `recipe_prompts/` | JSON `ai.PromptRecord` (`created_at`, `response_id`, `model`, optional `instructions`, optional `previous_response_id`, OpenAI `input`) keyed by `<response_id>.json` for recipe generation evals | `internal/recipes/prompts/recorder.go` via `internal/ai/client.go` for successful initial generation and regeneration responses | Admin prompt endpoints in `internal/recipes/prompts/admin.go` and eval-building workflows that find the response ID on `shoppinglist/` records, then join prompt fields with `recipe_critiques/` |
@@ -46,16 +46,21 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `albertsons/stores/` | JSON `albertsons.StoreSummary` keyed by prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `internal/albertsons` location backend |
 | `albertsons/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Albertsons-family stores (`id`, `lat`, `lon`) | `cmd/albertsons` rebuilds after sync | `internal/albertsons` location backend |
 | `albertsons/store_url_map.json` | JSON object mapping store URL to prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `cmd/albertsons` incremental sync |
-| `albertsons/reese84/latest.json` | JSON `albertsons.Reese84Record` containing the freshest ACME/Albertsons-family `reese84` cookie plus metadata | `cmd/albertsonsreese84` | `internal/albertsons` staples/search cookie resolver |
-| `albertsons/reese84/history/` | JSON `albertsons.Reese84Record` append-only history keyed by fetch timestamp | `cmd/albertsonsreese84` | Operational debugging and manual rollback/reference |
+| `albertsons/reese84/latest.json` | JSON `albertsons.CookieRecord` containing the freshest ACME/Albertsons-family `reese84` cookie plus metadata | `cmd/reese84 -site albertsons -container albertsons` | `internal/albertsons` staples/search cookie resolver |
+| `albertsons/reese84/history/` | JSON `albertsons.CookieRecord` append-only history keyed by fetch timestamp | `cmd/reese84 -site albertsons -container albertsons` | Operational debugging and manual rollback/reference |
 | `aldi/store_locations.json` | JSON `[]storeindex.Entry` spatial index for ALDI stores (`id`, `lat`, `lon`) | `cmd/aldi` rebuilds after sync | `internal/aldi` location backend |
 | `heb/stores/` | JSON `heb.StoreSummary` keyed by prefixed HEB location ID | `cmd/heb` and `internal/heb` cache helpers | `internal/heb` location backend |
 | `heb/store_locations.json` | JSON `[]storeindex.Entry` spatial index for HEB stores (`id`, `lat`, `lon`) | `cmd/heb` rebuilds after sync | `internal/heb` location backend |
 | `heb/store_url_map.json` | JSON object mapping store URL to prefixed HEB location ID | `cmd/heb` and `internal/heb` cache helpers | `cmd/heb` incremental sync |
+| `heb/reese84/latest.json` | JSON `heb.Reese84Record` containing the freshest HEB `reese84` cookie plus metadata | `cmd/reese84 -site heb -container heb` | `internal/heb` staples provider |
+| `heb/reese84/history/` | JSON `heb.Reese84Record` append-only history keyed by fetch timestamp | `cmd/reese84 -site heb -container heb` | Operational debugging and manual rollback/reference |
+| `heb/build_id/latest.json` | JSON `heb.BuildIDRecord` containing the latest HEB Next.js data build ID | `internal/heb` staples provider after discovery | `internal/heb` staples provider before category fetches |
 | `publix/stores/` | JSON `publix.StoreSummary` keyed by numeric Publix store ID | `cmd/publix` and `internal/publix` cache helpers | `internal/publix` location backend |
 | `publix/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Publix stores (`id`, `lat`, `lon`) | `cmd/publix` rebuilds after sync | `internal/publix` location backend |
 | `publix/store_url_map.json` | JSON object mapping numeric Publix store ID to canonical location URL | `cmd/publix` and `internal/publix` cache helpers | `cmd/publix` incremental sync |
 | `publix/missing_store_ids.json` | JSON array of numeric Publix store IDs known to redirect back to `/locations` | `cmd/publix` and `internal/publix` cache helpers | `cmd/publix` incremental sync |
+| `publix/abck/latest.json` | JSON `publix.AbckRecord` containing the freshest Publix `_abck` cookie plus metadata | `cmd/publixabck` | `internal/publix` staples cookie resolver |
+| `publix/abck/history/` | JSON `publix.AbckRecord` append-only history keyed by fetch timestamp | `cmd/publixabck` | Operational debugging and manual rollback/reference |
 | `wegmans/stores/` | JSON `wegmans.StoreSummary` keyed by numeric Wegmans store ID | `cmd/wegmans` and `internal/wegmans` cache helpers | `internal/wegmans` location backend |
 | `wegmans/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Wegmans stores (`id`, `lat`, `lon`) | `cmd/wegmans` rebuilds after sync | `internal/wegmans` location backend |
 | `wholefoods/stores/` | JSON `wholefoods.StoreSummaryResponse` keyed by Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `internal/wholefoods` location backend |
@@ -71,7 +76,9 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 - Albertsons-family `reese84` cookie refresh also uses `cache.EnsureCache("albertsons")`; the latest record is overwritten while timestamped history remains append-only.
 - Wegmans locations use a separate cache created via `cache.EnsureCache("wegmans")`.
 - HEB locations use a separate cache created via `cache.EnsureCache("heb")`.
+- HEB `reese84` cookie refresh also uses `cache.EnsureCache("heb")`; the latest record is overwritten while timestamped history remains append-only.
 - Publix uses a separate cache created via `cache.EnsureCache("publix")`; it does not share the `recipes` container/directory.
+- Publix `_abck` cookie refresh also uses `cache.EnsureCache("publix")`; the latest record is overwritten while timestamped history remains append-only.
 - Recipe images use a separate cache created via `cache.EnsureCache("recipe-images")`; they do not share the main `recipes` container/directory.
 - Whole Foods uses a separate cache created via `cache.EnsureCache("wholefoods")`; it does not share the `recipes` container/directory.
 - Local cache paths when filesystem backend is used. are

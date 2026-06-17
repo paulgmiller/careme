@@ -1,17 +1,49 @@
 package locations
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/templates"
 )
+
+type fakeProduceScoreLookup struct {
+	scores map[string]*ProduceScore
+}
+
+func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
+	return f.scores[loc.ID]
+}
+
+type recordingProduceScoreLookup struct {
+	mu     sync.Mutex
+	calls  []string
+	scores map[string]*ProduceScore
+}
+
+func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
+	r.mu.Lock()
+	r.calls = append(r.calls, loc.ID)
+	r.mu.Unlock()
+
+	return r.scores[loc.ID]
+}
+
+func (r *recordingProduceScoreLookup) callIDs() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.calls...)
+}
 
 func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	mustInitLocationTemplates(t)
@@ -21,7 +53,7 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
-	server := NewServer(storage, LoadCentroids(), fakeUserLookup{})
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())
@@ -63,12 +95,12 @@ func TestRequestStoreIsIdempotent(t *testing.T) {
 	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
-	server := NewServer(storage, LoadCentroids(), fakeUserLookup{})
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		req := httptest.NewRequest(http.MethodPost, "/locations/request-store", strings.NewReader("store_id=publix_123"))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("HX-Request", "true")
@@ -89,7 +121,7 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
 	client.setHasInventory("publix_123", true)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
-	server := NewServer(storage, LoadCentroids(), fakeUserLookup{})
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())
@@ -102,6 +134,169 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.setListResponse("10001", []Location{{
+		ID:      "12345678",
+		Name:    "Kroger Test",
+		Address: "1 Market St",
+		ZipCode: "10001",
+	}})
+	client.setHasInventory("12345678", true)
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
+		scores: map[string]*ProduceScore{
+			"12345678": {
+				Score: 27,
+				Date:  time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC),
+			},
+		},
+	})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "score 27") {
+		t.Fatalf("expected produce score badge, got %q", body)
+	}
+}
+
+func TestLocationsPageOmitsMissingProduceScoreBadge(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.setListResponse("10001", []Location{{
+		ID:      "12345678",
+		Name:    "Kroger Test",
+		Address: "1 Market St",
+		ZipCode: "10001",
+	}})
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
+		scores: map[string]*ProduceScore{},
+	})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if body := rr.Body.String(); strings.Contains(body, "score ") {
+		t.Fatalf("expected no produce score badge, got %q", body)
+	}
+}
+
+func TestLocationsPageSkipsNilProduceScores(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.setListResponse("10001", []Location{{
+		ID:      "12345678",
+		Name:    "Kroger Test",
+		Address: "1 Market St",
+		ZipCode: "10001",
+	}})
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if body := rr.Body.String(); strings.Contains(body, "score ") {
+		t.Fatalf("expected no produce score badge for nil score, got %q", body)
+	}
+}
+
+func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	locations := make([]Location, 0, 13)
+	scores := make(map[string]*ProduceScore)
+	// 10 will get cut off
+	for i := range 11 {
+		id := "store-" + strconv.Itoa(i)
+		locations = append(locations, Location{
+			ID:      id,
+			Name:    "Store " + strconv.Itoa(i),
+			Address: strconv.Itoa(i) + " Market St",
+			ZipCode: "10001",
+		})
+		client.setHasInventory(id, i != 0)
+		scores[id] = &ProduceScore{Score: i}
+	}
+	client.setListResponse("10001", locations)
+
+	client2 := newFakeLocationClient()
+	locations = make([]Location, 0, 13)
+	for i := 10; i < 15; i++ {
+		id := "store-" + strconv.Itoa(i)
+		locations = append(locations, Location{
+			ID:      id,
+			Name:    "Store " + strconv.Itoa(i),
+			Address: strconv.Itoa(i) + " Market St",
+			ZipCode: "10001",
+		})
+		client2.setHasInventory(id, true)
+		scores[id] = &ProduceScore{Score: i}
+	}
+	client2.setListResponse("10001", locations)
+
+	scoreLookup := &recordingProduceScoreLookup{scores: scores}
+	storage := newTestLocationServerWithBackends([]locationBackend{client, client2})
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, scoreLookup)
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "Store 12") {
+		t.Fatalf("expected all locations to render, got %q", body)
+	}
+	if strings.Contains(body, "score 11") || strings.Contains(body, "score 12") {
+		t.Fatalf("expected scores only for first 10 supported stores, got %q", body)
+	}
+
+	gotCalls := scoreLookup.callIDs()
+	if len(gotCalls) != 10 {
+		t.Fatalf("expected 10 score lookups, got %d: %v", len(gotCalls), gotCalls)
+	}
+	for _, id := range gotCalls {
+		if id == "store-0" || id == "store-11" || id == "store-12" {
+			t.Fatalf("unexpected score lookup for %s; calls=%v", id, gotCalls)
+		}
 	}
 }
 

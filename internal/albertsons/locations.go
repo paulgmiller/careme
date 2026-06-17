@@ -19,10 +19,9 @@ type centroidByZip interface {
 }
 
 type LocationBackend struct {
-	zipLookup    centroidByZip
-	spatial      []locationtypes.Location
-	hydrator     *hydrator.LazyHydrator
-	hasInventory bool
+	zipLookup centroidByZip
+	spatial   []locationtypes.Location
+	hydrator  *hydrator.LazyHydrator
 }
 
 func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
@@ -39,10 +38,10 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 		return nil, fmt.Errorf("create Albertsons list cache: %w", err)
 	}
 
-	return newLocationBackend(ctx, listCache, zipLookup, true /*hasInventory*/)
+	return newLocationBackend(ctx, listCache, zipLookup)
 }
 
-func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip, inventory bool) (*LocationBackend, error) {
+func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centroidByZip) (*LocationBackend, error) {
 	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
 		return nil, fmt.Errorf("load albertsons locations index: %w", err)
@@ -54,10 +53,9 @@ func newLocationBackend(ctx context.Context, c cache.ListCache, zipLookup centro
 	}
 
 	return &LocationBackend{
-		zipLookup:    zipLookup,
-		spatial:      spatial,
-		hydrator:     hydrator.NewLazyHydrator(&loader{c}),
-		hasInventory: inventory,
+		zipLookup: zipLookup,
+		spatial:   spatial,
+		hydrator:  hydrator.NewLazyHydrator(&loader{c}),
 	}, nil
 }
 
@@ -66,8 +64,7 @@ func (b *LocationBackend) IsID(locationID string) bool {
 }
 
 func (l *LocationBackend) HasInventory(locationID string) bool {
-	// do we want to make this dynamic
-	return l.hasInventory
+	return true
 }
 
 func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {

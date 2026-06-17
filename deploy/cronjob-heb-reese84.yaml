@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: heb-reese84
+  labels:
+    app: heb-reese84
+spec:
+  schedule: "${HEB_REESE84_SCHEDULE}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 6 # keep trying to get that token
+      template:
+        metadata:
+          labels:
+            app: heb-reese84
+            job: heb-reese84
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          containers:
+            - name: heb-reese84
+              image: ghcr.io/paulgmiller/careme-reese84:${IMAGE_TAG}
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - secretRef:
+                    name: grafana
+                - secretRef:
+                    name: storage
+                - secretRef:
+                    name: brightdata-proxy
+              env:
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: WORKLOAD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['app']
+                - name: OTEL_RESOURCE_ATTRIBUTES
+                  value: "deployment.environment.name=production,k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.app=$(WORKLOAD_NAME)"
+              args: ["-site", "heb", "-container", "heb", "-wait-ms", "10000"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi

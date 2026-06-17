@@ -17,6 +17,7 @@ import (
 	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/locations/geo"
+	"careme/internal/locations/nearby"
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
@@ -56,7 +57,10 @@ type locationStore interface {
 }
 
 // Location is kept as an alias for compatibility with existing imports.
-type Location = locationtypes.Location
+type (
+	Location     = locationtypes.Location
+	ProduceScore = locationtypes.ProduceScore
+)
 
 type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
@@ -64,12 +68,12 @@ type centroidByZip interface {
 
 type locationBackendFactory func(context.Context) (locationBackend, error)
 
-// bad for rural areas if zip code is huge?
 const (
-	maxLocationDistanceMiles = 20.0
-	locationCachePrefix      = "location/"
-	storeRequestPrefix       = "location-store-requests/"
+	locationCachePrefix = "location/"
+	storeRequestPrefix  = "location-store-requests/"
 )
+
+var MaxLocationCount = 10 // far not a count so tools can muck with it?
 
 func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locationStore, error) {
 	if c == nil {
@@ -123,7 +127,6 @@ func initializeLocationBackends(ctx context.Context, factories []locationBackend
 	g, ctx := errgroup.WithContext(ctx)
 	results := make(chan locationBackend, len(factories))
 	for i, factory := range factories {
-		i, factory := i, factory
 		g.Go(func() error {
 			start := time.Now()
 			backend, err := factory(ctx)
@@ -187,7 +190,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 			return nil, err
 		}
 		slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
-		return locations, err
+		return lo.Take(locations, nearby.MaxLocationCount), err
 	})
 
 	for _, loc := range allLocations {
@@ -213,8 +216,8 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		}
 
 		distance := locationDistanceTo(requestedCentroid, loc, l.zipCentroids)
-		if distance > maxLocationDistanceMiles {
-			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", maxLocationDistanceMiles)
+		if distance > nearby.MaxLocationDistanceMiles {
+			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", nearby.MaxLocationDistanceMiles)
 			continue
 		}
 		filtered = append(filtered, loc)

@@ -83,6 +83,19 @@ func TestUserValidate(t *testing.T) {
 		}
 	})
 
+	t.Run("valid prefixed favorite store", func(t *testing.T) {
+		user := &User{
+			ID:            "user-1",
+			ShoppingDay:   time.Monday.String(),
+			Email:         []string{"alice@example.com"},
+			FavoriteStore: "wholefoods_123",
+		}
+
+		if err := user.Validate(); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
 	t.Run("invalid shopping day", func(t *testing.T) {
 		user := &User{
 			ShoppingDay: "Caturday",

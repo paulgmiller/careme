@@ -3,9 +3,12 @@ package recipes
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"html/template"
 	"io"
+	"math"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,9 +16,11 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
 	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 )
 
 type recipeImageView struct {
@@ -55,8 +60,9 @@ type shoppingListGroup struct {
 // FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, signedIn bool, hash string, selection recipeSelection, writer http.ResponseWriter,
+	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
 ) {
+	serverSignedIn := currentUser != nil
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
@@ -69,7 +75,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			Recipe:             recipe,
 			Hash:               recipeHash,
 			ShoppingListHash:   hash,
-			ServerSignedIn:     signedIn,
+			ServerSignedIn:     serverSignedIn,
 			DisplayIngredients: displayIngredients,
 			Saved:              saved,
 			Dismissed:          selection.IsDismissed(recipeHash),
@@ -83,6 +89,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	data := struct {
 		Location        locations.Location
 		Date            string
+		MetaDescription string
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Instructions    string
@@ -92,9 +99,12 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		HasSavedRecipes bool
 		Style           seasons.Style
 		ServerSignedIn  bool
+		User            *utypes.User
+		AuthReturnTo    string
 	}{
 		Location:        *p.Location,
 		Date:            p.Date.Format("2006-01-02"),
+		MetaDescription: shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Instructions:    p.Instructions,
@@ -103,7 +113,9 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		ShoppingList:    shoppingListForDisplay(combinedIngredients),
 		HasSavedRecipes: hasSavedRecipes,
 		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  signedIn,
+		ServerSignedIn:  serverSignedIn,
+		User:            currentUser,
+		AuthReturnTo:    "/recipes?h=" + hash,
 	}
 
 	setTextContent(writer)
@@ -112,9 +124,23 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	}
 }
 
+func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
+	titles := make([]string, 0, len(recipes))
+	for _, recipe := range recipes {
+		title := strings.TrimSpace(recipe.Title)
+		if title != "" {
+			titles = append(titles, title)
+		}
+	}
+	if len(titles) == 0 {
+		return fmt.Sprintf("Recipes for %s on %s.", locationName, date)
+	}
+	return fmt.Sprintf("Recipes for %s on %s: %s.", locationName, date, strings.Join(titles, ", "))
+}
+
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, signedIn bool, saved bool,
-	critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry,
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, saved bool,
+	currentUser *utypes.User, critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry,
 	fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter,
 ) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
@@ -125,44 +151,53 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
 		activeResponseID = threadResponseID
 	}
+	serverSignedIn := currentUser != nil
 	data := struct {
-		Location            locations.Location
-		Date                string
-		ClarityScript       template.HTML
-		GoogleTagScript     template.HTML
-		Recipe              ai.Recipe
-		Saved               bool
-		DisplayIngredients  []ai.Ingredient
-		OriginHash          string
-		ResponseID          string
-		WineRecommendation  *ai.WineSelection
-		Thread              []RecipeThreadEntry
-		Feedback            feedback.Feedback
-		RecipeHash          string
-		RecipeImage         recipeImageView
-		Style               seasons.Style
-		ServerSignedIn      bool
-		RecipeCritiqueURL   string
-		RecipeCritiqueScore *int
+		Location                locations.Location
+		Date                    string
+		ClarityScript           template.HTML
+		GoogleTagScript         template.HTML
+		Recipe                  ai.Recipe
+		Saved                   bool
+		DisplayIngredients      []ai.Ingredient
+		OriginHash              string
+		ResponseID              string
+		WineRecommendation      *ai.WineSelection
+		Thread                  []RecipeThreadEntry
+		Feedback                feedback.Feedback
+		RecipeHash              string
+		RecipeImage             recipeImageView
+		Style                   seasons.Style
+		ServerSignedIn          bool
+		User                    *utypes.User
+		AuthReturnTo            string
+		RecipeCritiqueURL       string
+		RecipeCritiqueScore     *int
+		RecipeCritiqueNeedsCare bool
+		MinimumRecipeScore      int
 	}{
-		Location:            *p.Location,
-		Date:                p.Date.Format("2006-01-02"),
-		ClarityScript:       templates.ClarityScript(ctx),
-		GoogleTagScript:     templates.GoogleTagScript(),
-		Recipe:              recipe,
-		Saved:               saved,
-		DisplayIngredients:  ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
-		OriginHash:          recipe.OriginHash,
-		ResponseID:          activeResponseID,
-		WineRecommendation:  wineRecommendation,
-		Thread:              thread,
-		Feedback:            fb,
-		RecipeHash:          recipeHash,
-		RecipeImage:         recipeImageData(recipeHash, hasRecipeImage, false),
-		Style:               seasons.GetCurrentStyle(),
-		ServerSignedIn:      signedIn,
-		RecipeCritiqueURL:   "/critiques/" + recipeHash,
-		RecipeCritiqueScore: critiqueScore,
+		Location:                *p.Location,
+		Date:                    p.Date.Format("2006-01-02"),
+		ClarityScript:           templates.ClarityScript(ctx),
+		GoogleTagScript:         templates.GoogleTagScript(),
+		Recipe:                  recipe,
+		Saved:                   saved,
+		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		OriginHash:              recipe.OriginHash,
+		ResponseID:              activeResponseID,
+		WineRecommendation:      wineRecommendation,
+		Thread:                  thread,
+		Feedback:                fb,
+		RecipeHash:              recipeHash,
+		RecipeImage:             recipeImageData(recipeHash, hasRecipeImage, false),
+		Style:                   seasons.GetCurrentStyle(),
+		ServerSignedIn:          serverSignedIn,
+		User:                    currentUser,
+		AuthReturnTo:            "/recipe/" + recipeHash,
+		RecipeCritiqueURL:       "/critiques/" + recipeHash,
+		RecipeCritiqueScore:     critiqueScore,
+		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
+		MinimumRecipeScore:      critique.MinimumRecipeScore,
 	}
 
 	setTextContent(writer)
@@ -307,14 +342,7 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []shoppingListGroup {
 
 			continue
 		}
-		qty := strings.TrimSpace(ingredient.Quantity)
-		switch {
-		case qty == "":
-		case existing.Quantity == "":
-			existing.Quantity = qty
-		default:
-			existing.Quantity = existing.Quantity + ", " + qty
-		}
+		existing.Quantity = mergeShoppingQuantities(existing.Quantity, ingredient.Quantity)
 	}
 
 	slices.SortStableFunc(combined, func(a, b *ai.Ingredient) int {
@@ -332,6 +360,60 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []shoppingListGroup {
 		groups[len(groups)-1].Items = append(groups[len(groups)-1].Items, item)
 	}
 	return groups
+}
+
+var shoppingQtyWithSuffixPattern = regexp.MustCompile(`^\s*(\d+(?:\.\d+)?)\s+(.+?)\s*$`)
+
+func mergeShoppingQuantities(existing string, incoming string) string {
+	existing = strings.TrimSpace(existing)
+	incoming = strings.TrimSpace(incoming)
+	switch {
+	case incoming == "":
+		return existing
+	case existing == "":
+		return incoming
+	}
+
+	existingNumber, existingSuffix, okExisting := parseShoppingQuantity(existing)
+	incomingNumber, incomingSuffix, okIncoming := parseShoppingQuantity(incoming)
+	if okExisting && okIncoming && normalizeShoppingQuantitySuffix(existingSuffix) == normalizeShoppingQuantitySuffix(incomingSuffix) {
+		return formatShoppingQuantity(existingNumber+incomingNumber, existingSuffix)
+	}
+	return existing + ", " + incoming
+}
+
+func parseShoppingQuantity(raw string) (float64, string, bool) {
+	match := shoppingQtyWithSuffixPattern.FindStringSubmatch(beforeFirstComma(raw))
+	if len(match) != 3 {
+		return 0, "", false
+	}
+	value, err := strconv.ParseFloat(match[1], 64)
+	if err != nil {
+		return 0, "", false
+	}
+	suffix := strings.TrimSpace(match[2])
+	if suffix == "" {
+		return 0, "", false
+	}
+	return value, suffix, true
+}
+
+func beforeFirstComma(value string) string {
+	if index := strings.Index(value, ","); index >= 0 {
+		return strings.TrimSpace(value[:index])
+	}
+	return strings.TrimSpace(value)
+}
+
+func normalizeShoppingQuantitySuffix(suffix string) string {
+	return strings.ToLower(strings.Join(strings.Fields(suffix), " "))
+}
+
+func formatShoppingQuantity(value float64, suffix string) string {
+	if math.Abs(value-math.Round(value)) < 1e-9 {
+		return fmt.Sprintf("%d %s", int64(math.Round(value)), suffix)
+	}
+	return fmt.Sprintf("%s %s", strconv.FormatFloat(value, 'f', -1, 64), suffix)
 }
 
 func shoppingAisleHeading(aisle string) string {
