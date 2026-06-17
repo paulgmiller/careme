@@ -56,8 +56,10 @@ var offlineHTML []byte
 //go:embed sw.js.tmpl
 var serviceWorkerJS []byte
 
-var offlinePageTemplate = template.Must(template.New("offline").Parse(string(offlineHTML)))
-var serviceWorkerTemplate = texttemplate.Must(texttemplate.New("sw").Parse(string(serviceWorkerJS)))
+var (
+	offlinePageTemplate   = template.Must(template.New("offline").Parse(string(offlineHTML)))
+	serviceWorkerTemplate = texttemplate.Must(texttemplate.New("sw").Parse(string(serviceWorkerJS)))
+)
 
 //go:embed fall.png
 var backgroundFall []byte
