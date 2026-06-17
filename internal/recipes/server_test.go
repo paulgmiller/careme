@@ -1888,7 +1888,8 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	require.Equal(t, "make it vegetarian", captured.Instructions)
 	require.Equal(t, "resp-menu-original", captured.PreviousMenuPlanResponseID)
 	require.Empty(t, captured.Saved)
-	require.Empty(t, captured.Dismissed)
+	require.Len(t, captured.Dismissed, 1)
+	require.Equal(t, recipe.ComputeHash(), captured.Dismissed[0].ComputeHash())
 	require.Empty(t, captured.LastRecipes)
 }
 

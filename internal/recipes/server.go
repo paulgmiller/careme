@@ -806,7 +806,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if len(p.Dismissed) == 0 && len(p.Saved) > 0 {
+	if len(p.Dismissed) == 0 {
 		currentList, err := s.FromCache(ctx, hash)
 		if err != nil {
 			http.Error(w, "failed to load recipe list", http.StatusBadRequest)
