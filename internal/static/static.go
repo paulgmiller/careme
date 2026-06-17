@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	texttemplate "text/template"
 
 	"careme/internal/routing"
@@ -139,7 +141,13 @@ func Register(mux routing.Registrar) {
 	mux.HandleFunc("/manifest.webmanifest", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
-		if _, err := w.Write(manifestWebmanifest); err != nil {
+		manifest, err := renderManifest(r.Host)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to render web manifest", "error", err)
+			http.Error(w, "manifest error", http.StatusInternalServerError)
+			return
+		}
+		if _, err := w.Write(manifest); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write web manifest", "error", err)
 		}
 	})
@@ -196,6 +204,28 @@ func faviconBySeason(season seasons.Season) []byte {
 	default:
 		return faviconFall
 	}
+}
+
+func renderManifest(host string) ([]byte, error) {
+	var manifest map[string]any
+	if err := json.Unmarshal(manifestWebmanifest, &manifest); err != nil {
+		return nil, err
+	}
+
+	if isTestHost(host) {
+		manifest["name"] = "Careme Test"
+		manifest["short_name"] = "Careme Test"
+	}
+
+	return json.MarshalIndent(manifest, "", "  ")
+}
+
+func isTestHost(host string) bool {
+	hostname, _, err := net.SplitHostPort(host)
+	if err != nil {
+		hostname = host
+	}
+	return strings.EqualFold(hostname, "test.careme.cooking")
 }
 
 func renderOfflinePage() ([]byte, error) {

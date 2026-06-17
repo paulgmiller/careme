@@ -1,6 +1,7 @@
 package static
 
 import (
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -99,6 +100,66 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			}
 			if tt.path == "/offline" && !strings.Contains(rec.Body.String(), "Careme needs a connection.") {
 				t.Fatalf("GET %s body missing offline copy", tt.path)
+			}
+		})
+	}
+}
+
+func TestRegisterServesManifestNameByHost(t *testing.T) {
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	tests := []struct {
+		name          string
+		host          string
+		wantName      string
+		wantShortName string
+	}{
+		{
+			name:          "production",
+			host:          "careme.cooking",
+			wantName:      "Careme",
+			wantShortName: "Careme",
+		},
+		{
+			name:          "test",
+			host:          "test.careme.cooking",
+			wantName:      "Careme Test",
+			wantShortName: "Careme Test",
+		},
+		{
+			name:          "test with port",
+			host:          "test.careme.cooking:8080",
+			wantName:      "Careme Test",
+			wantShortName: "Careme Test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/manifest.webmanifest", nil)
+			req.Host = tt.host
+			rec := httptest.NewRecorder()
+
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("manifest response status = %d, want %d", rec.Code, http.StatusOK)
+			}
+
+			var manifest struct {
+				Name      string `json:"name"`
+				ShortName string `json:"short_name"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &manifest); err != nil {
+				t.Fatalf("decode manifest: %v", err)
+			}
+			if manifest.Name != tt.wantName {
+				t.Fatalf("manifest name = %q, want %q", manifest.Name, tt.wantName)
+			}
+			if manifest.ShortName != tt.wantShortName {
+				t.Fatalf("manifest short_name = %q, want %q", manifest.ShortName, tt.wantShortName)
 			}
 		})
 	}
