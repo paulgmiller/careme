@@ -1226,11 +1226,13 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	}
 }
 
-func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
+func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeaderToShoppingListPendingSave(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
-	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/save", nil)
+	form := url.Values{"h": {"shopping-hash"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/save", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("hash", "hash")
 	rr := httptest.NewRecorder()
@@ -1240,9 +1242,63 @@ func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
-	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/save"); got != want {
+	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipes?h=shopping-hash&save=hash"); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
+}
+
+func TestHandleSaveRecipe_NoSessionFromRecipePageRedirectsToShoppingListPendingSave(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
+
+	form := url.Values{"h": {"origin-hash"}, "source": {"recipe"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipe/recipe-hash/save", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", "recipe-hash")
+	rr := httptest.NewRecorder()
+
+	s.handleSaveRecipe(rr, req)
+
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
+	require.Equal(t, signInPath("/recipes?h=origin-hash&save=recipe-hash"), rr.Header().Get("HX-Redirect"))
+}
+
+func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+	)
+
+	recipe := ai.Recipe{
+		Title:       "Save After Login",
+		Description: "Recipe to save after login",
+		ResponseID:  "resp-pending-save",
+	}
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	hash := params.Hash()
+	recipeHash := recipe.ComputeHash()
+	require.NoError(t, s.SaveParams(t.Context(), params))
+	saveRecipesForOrigin(t, s, hash, recipe)
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, hash))
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&save="+recipeHash, nil)
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+	s.Wait()
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	require.Equal(t, "/recipes?h="+hash, rr.Header().Get("Location"))
+	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
+	require.NoError(t, err)
+	require.Equal(t, []string{recipeHash}, selection.SavedHashes)
+	user, err := storage.GetByID("mock-clerk-user-id")
+	require.NoError(t, err)
+	require.Len(t, user.LastRecipes, 1)
+	require.Equal(t, recipeHash, user.LastRecipes[0].Hash)
 }
 
 func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
@@ -1830,6 +1886,10 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	captured := generator.LastParams()
 	require.NotNil(t, captured)
 	require.Equal(t, "make it vegetarian", captured.Instructions)
+	require.Equal(t, "resp-menu-original", captured.PreviousMenuPlanResponseID)
+	require.Empty(t, captured.Saved)
+	require.Len(t, captured.Dismissed, 1)
+	require.Equal(t, recipe.ComputeHash(), captured.Dismissed[0].ComputeHash())
 	require.Empty(t, captured.LastRecipes)
 }
 
@@ -1878,7 +1938,7 @@ func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *te
 	}
 }
 
-func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
+func TestHandleRegenerate_PassesPriorSavedHashesAndDismissesUnsavedRecipesToGenerator(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
