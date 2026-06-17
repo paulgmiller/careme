@@ -1886,6 +1886,10 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	captured := generator.LastParams()
 	require.NotNil(t, captured)
 	require.Equal(t, "make it vegetarian", captured.Instructions)
+	require.Equal(t, "resp-menu-original", captured.PreviousMenuPlanResponseID)
+	require.Empty(t, captured.Saved)
+	require.Len(t, captured.Dismissed, 1)
+	require.Equal(t, recipe.ComputeHash(), captured.Dismissed[0].ComputeHash())
 	require.Empty(t, captured.LastRecipes)
 }
 
@@ -1934,7 +1938,7 @@ func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *te
 	}
 }
 
-func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
+func TestHandleRegenerate_PassesPriorSavedHashesAndDismissesUnsavedRecipesToGenerator(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
