@@ -201,16 +201,8 @@ func TestNewStaplesProvider_UsesInjectedHTTPClient(t *testing.T) {
 			if got, want := r.URL.Host, "www.acmemarkets.com"; got != want {
 				return nil, fmt.Errorf("unexpected host: got %q want %q", got, want)
 			}
-			if r.URL.Query().Get("start") != "0" {
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Header: http.Header{
-						"Content-Type": []string{"application/json"},
-					},
-					Body: io.NopCloser(strings.NewReader(`{
-					"response":{"docs":[]}
-				}`)),
-				}, nil
+			if got, want := r.URL.Query().Get("start"), "0"; got != want {
+				return nil, fmt.Errorf("unexpected start query param: got %q want %q", got, want)
 			}
 			if got, want := r.Header.Get("Ocp-Apim-Subscription-Key"), "test-sub-key"; got != want {
 				return nil, fmt.Errorf("unexpected subscription key: got %q want %q", got, want)
