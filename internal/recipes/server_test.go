@@ -1937,7 +1937,7 @@ func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *te
 	}
 }
 
-func TestHandleRegenerate_PassesPriorSavedHashesAndDoesNotAutoDismissToGenerator(t *testing.T) {
+func TestHandleRegenerate_PassesPriorSavedHashesAndDismissesUnsavedRecipesToGenerator(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
@@ -2003,7 +2003,9 @@ func TestHandleRegenerate_PassesPriorSavedHashesAndDoesNotAutoDismissToGenerator
 	if len(captured.Saved) != 2 {
 		t.Fatalf("expected both current saved recipes, got %#v", captured.Saved)
 	}
-	require.Empty(t, captured.Dismissed)
+	if len(captured.Dismissed) != 1 || captured.Dismissed[0].ComputeHash() != available.ComputeHash() {
+		t.Fatalf("expected only unsaved current recipes to be dismissed, got %#v", captured.Dismissed)
+	}
 }
 
 func TestHandleRegenerate_AllRecipesSavedDoesNotCarryBaseDismissed(t *testing.T) {
