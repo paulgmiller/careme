@@ -111,20 +111,12 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	hash := p.Hash()
 	start := time.Now()
 
-	if len(p.Dismissed) > 0 || len(p.Saved) > 0 {
+	if p.isRegeneration() {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "dismissed_count", len(p.Dismissed))
 		ctx, span := tracer.Start(ctx, "recipes.regenerate")
 		defer span.End()
 
 		g.writeStatus(ctx, hash, status.Regen(p.Instructions, p.Dismissed))
-
-		if len(p.Dismissed) == 0 {
-			// should disallow this in ui?
-			slog.ErrorContext(ctx, "regenerated chat with only saved recipes", "location", p.String(), "duration", time.Since(start), "hash", hash)
-			return &ai.ShoppingList{
-				Recipes: p.Saved,
-			}, nil
-		}
 
 		regenInstructions := regenerateInstructions(p)
 
@@ -139,7 +131,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		})
 		ingMap := inputIngredientMap(ingredients)
 
-		plan, err := g.replacementMenuPlan(ctx, p, regenInstructions, len(p.Dismissed))
+		plan, err := g.replacementMenuPlan(ctx, p, regenInstructions, replacementRecipeCount(p))
 		if err != nil {
 			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
@@ -227,6 +219,17 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		Recipes: lo.FromSlicePtr(results),
 		Plan:    menuPlan,
 	}, nil
+}
+
+func (p *generatorParams) isRegeneration() bool {
+	return len(p.Dismissed) > 0 || len(p.Saved) > 0 || strings.TrimSpace(p.PreviousMenuPlanResponseID) != ""
+}
+
+func replacementRecipeCount(p *generatorParams) int {
+	if len(p.Dismissed) > 0 {
+		return len(p.Dismissed)
+	}
+	return 1
 }
 
 func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generatorParams, instructions []string, count int) (*ai.MenuPlan, error) {

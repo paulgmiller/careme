@@ -728,21 +728,55 @@ func TestGenerateRecipes_RegenerateWithoutMenuPlanResponseIDErrors(t *testing.T)
 	}
 }
 
-func TestGenerateRecipes_RegenerateWithOnlySavedRecipesPreservesSavedRecipes(t *testing.T) {
+func TestGenerateRecipes_RegenerateWithOnlySavedRecipesAddsOneRecipeByDefault(t *testing.T) {
 	saved := ai.Recipe{Title: "Saved Dinner", Description: "Keep this one"}
-	g := newTestGenerator(t, &captureGenerateAIClient{}, nil, nil, noopstatuswriter{}, nil)
+	newResult := ai.Recipe{Title: "One More Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
+	aiStub := &captureRegenerateAIClient{
+		recipe: &newResult,
+		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
+			Cuisine:          "test",
+			AnchorIngredient: "One More Dinner",
+			Technique:        "test",
+		}}, ResponseID: "resp-menu-next"},
+	}
 
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "make the next round brighter"
 	params.Saved = []ai.Recipe{saved}
+	params.PreviousMenuPlanResponseID = "resp-menu-old"
 
+	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
 	got, err := g.GenerateRecipes(t.Context(), params)
-	if err != nil {
-		t.Fatalf("GenerateRecipes returned error: %v", err)
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 2)
+	require.Equal(t, "One More Dinner", got.Recipes[0].Title)
+	require.Equal(t, saved.ComputeHash(), got.Recipes[1].ComputeHash())
+	require.Equal(t, 1, aiStub.menuPlanCount)
+	require.Equal(t, "resp-menu-old", aiStub.menuPlanResponseID)
+}
+
+func TestGenerateRecipes_RegenerateWithNoSelectionsAddsOneRecipeByDefault(t *testing.T) {
+	newResult := ai.Recipe{Title: "One More Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
+	aiStub := &captureRegenerateAIClient{
+		recipe: &newResult,
+		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
+			Cuisine:          "test",
+			AnchorIngredient: "One More Dinner",
+			Technique:        "test",
+		}}, ResponseID: "resp-menu-next"},
 	}
-	if got == nil || len(got.Recipes) != 1 || got.Recipes[0].ComputeHash() != saved.ComputeHash() {
-		t.Fatalf("expected saved recipe to be preserved, got %+v", got)
-	}
+
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	params.Instructions = "more recipes"
+	params.PreviousMenuPlanResponseID = "resp-menu-old"
+
+	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
+	got, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 1)
+	require.Equal(t, "One More Dinner", got.Recipes[0].Title)
+	require.Equal(t, 1, aiStub.menuPlanCount)
+	require.Equal(t, "resp-menu-old", aiStub.menuPlanResponseID)
 }
 
 func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirectionsToEveryRecipe(t *testing.T) {

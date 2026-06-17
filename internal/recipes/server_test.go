@@ -1886,6 +1886,9 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	captured := generator.LastParams()
 	require.NotNil(t, captured)
 	require.Equal(t, "make it vegetarian", captured.Instructions)
+	require.Equal(t, "resp-menu-original", captured.PreviousMenuPlanResponseID)
+	require.Empty(t, captured.Saved)
+	require.Empty(t, captured.Dismissed)
 	require.Empty(t, captured.LastRecipes)
 }
 
@@ -1934,7 +1937,7 @@ func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *te
 	}
 }
 
-func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
+func TestHandleRegenerate_PassesPriorSavedHashesAndDoesNotAutoDismissToGenerator(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
@@ -2000,9 +2003,7 @@ func TestHandleRegenerate_PassesPriorSavedHashesToGenerator(t *testing.T) {
 	if len(captured.Saved) != 2 {
 		t.Fatalf("expected both current saved recipes, got %#v", captured.Saved)
 	}
-	if len(captured.Dismissed) != 1 || captured.Dismissed[0].ComputeHash() != available.ComputeHash() {
-		t.Fatalf("expected only unsaved current recipes to be dismissed, got %#v", captured.Dismissed)
-	}
+	require.Empty(t, captured.Dismissed)
 }
 
 func TestHandleRegenerate_AllRecipesSavedDoesNotCarryBaseDismissed(t *testing.T) {
