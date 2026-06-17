@@ -2,6 +2,8 @@ const CACHE_NAME = {{.CacheName}};
 const PRECACHE_URLS = {{.PrecacheURLs}};
 const AUTH_PATHS = new Set({{.AuthPaths}});
 
+// Install-time precache is the tiny app shell needed to open while offline.
+// Keep season-sensitive assets out of this list so they can refresh online.
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -11,6 +13,8 @@ self.addEventListener("install", (event) => {
   );
 });
 
+// Delete old named caches when a new service worker version activates.
+// self.clients.claim() lets the refreshed worker control open tabs promptly.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
@@ -24,13 +28,44 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+function cacheSuccessfulResponse(request, response) {
+  if (!response || !response.ok) {
+    return response;
+  }
+
+  const responseCopy = response.clone();
+  caches.open(CACHE_NAME).then((cache) => cache.put(request, responseCopy));
+  return response;
+}
+
+function networkFirstWithCacheFallback(request) {
+  return fetch(request)
+    .then((response) => cacheSuccessfulResponse(request, response))
+    .catch(() => caches.match(request));
+}
+
+function cacheFirstWithNetworkFill(request) {
+  return caches.match(request).then((cached) => {
+    if (cached) {
+      return cached;
+    }
+
+    return fetch(request).then((response) => cacheSuccessfulResponse(request, response));
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
+
+  // Non-GET requests may change server state; do not replay or cache them.
   if (request.method !== "GET") {
     return;
   }
 
   const url = new URL(request.url);
+
+  // This worker only owns same-origin pages and assets. CDN/API requests use
+  // the browser default behavior so we do not mask third-party failures.
   if (url.origin !== self.location.origin) {
     return;
   }
@@ -40,37 +75,29 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // For page navigations, prefer fresh content and fall back to the offline page.
+  // Page navigations should show fresh server content when possible, then fall
+  // back to the rendered offline page from the install cache.
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).catch(() => caches.match("/offline")));
     return;
   }
 
+  // Favicons change with the season. Prefer the network so online users see the
+  // current icon, but keep the last successful response for offline launches.
+  if (url.pathname === "/favicon.ico") {
+    event.respondWith(networkFirstWithCacheFallback(request));
+    return;
+  }
+
   const isStaticAsset =
     url.pathname.startsWith("/static/") ||
-    url.pathname === "/favicon.ico" ||
     url.pathname === "/manifest.webmanifest" ||
     url.pathname === "/offline";
   if (!isStaticAsset) {
     return;
   }
 
-  // Keep the static shell fast and available offline.
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-
-      return fetch(request).then((response) => {
-        if (!response || !response.ok) {
-          return response;
-        }
-
-        const responseCopy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseCopy));
-        return response;
-      });
-    }),
-  );
+  // Versioned CSS/JS and app icons are stable. Serve them from cache first and
+  // populate the cache after the first successful network response.
+  event.respondWith(cacheFirstWithNetworkFill(request));
 });

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -208,6 +209,47 @@ func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
 	if !strings.Contains(rendered, "Clerk redirects and auth bootstrap should always hit the network.") {
 		t.Fatalf("service worker should keep inline comments for auth behavior, script: %s", rendered)
 	}
+}
+
+func TestServiceWorkerRefreshesSeasonalFavicon(t *testing.T) {
+	Init()
+	script, err := renderServiceWorker()
+	if err != nil {
+		t.Fatalf("renderServiceWorker() error = %v", err)
+	}
+	rendered := string(script)
+
+	precacheURLs := serviceWorkerPrecacheURLs(t, rendered)
+	for _, url := range precacheURLs {
+		if url == "/favicon.ico" {
+			t.Fatalf("service worker should not precache seasonal favicon, precache URLs: %v", precacheURLs)
+		}
+	}
+
+	if !strings.Contains(rendered, `url.pathname === "/favicon.ico"`) {
+		t.Fatalf("service worker should special-case favicon, script: %s", rendered)
+	}
+	if !strings.Contains(rendered, "event.respondWith(networkFirstWithCacheFallback(request))") {
+		t.Fatalf("service worker should fetch favicon network-first, script: %s", rendered)
+	}
+	if !strings.Contains(rendered, "Favicons change with the season.") {
+		t.Fatalf("service worker should document seasonal favicon cache behavior, script: %s", rendered)
+	}
+}
+
+func serviceWorkerPrecacheURLs(t *testing.T, script string) []string {
+	t.Helper()
+
+	matches := regexp.MustCompile(`const PRECACHE_URLS = (\[[^\n]+\]);`).FindStringSubmatch(script)
+	if len(matches) != 2 {
+		t.Fatalf("service worker missing PRECACHE_URLS declaration: %s", script)
+	}
+
+	var urls []string
+	if err := json.Unmarshal([]byte(matches[1]), &urls); err != nil {
+		t.Fatalf("decode service worker precache URLs: %v", err)
+	}
+	return urls
 }
 
 func TestFontFilesEmbedded(t *testing.T) {

@@ -251,7 +251,6 @@ func renderServiceWorker() ([]byte, error) {
 	precachePaths := []string{
 		"/offline",
 		"/manifest.webmanifest",
-		"/favicon.ico",
 		"/static/app-icon-192.png",
 		"/static/app-icon-512.png",
 		"/static/htmx@2.0.8.js",
