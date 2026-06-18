@@ -89,7 +89,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 	}, nil
 }
 
-func (c *SearchClient) SearchAll(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
+func (c *SearchClient) SearchAll(ctx context.Context, storeID, category string, opts SearchOptions) ([]PathwaySearchProduct, error) {
 	if opts.Rows == 0 {
 		opts.Rows = defaultSearchRows
 	}
@@ -100,43 +100,31 @@ func (c *SearchClient) SearchAll(ctx context.Context, storeID, category string, 
 		pageRows = maxSearchPageRows
 	}
 
-	var merged *PathwaySearchPayload
+	var products []PathwaySearchProduct
 	for start := opts.Start; ; start += pageRows {
 		pageOpts := opts
 		pageOpts.Start = start
 		pageOpts.Rows = pageRows
 
-		payload, err := c.Search(ctx, storeID, category, pageOpts)
+		payload, err := c.search(ctx, storeID, category, pageOpts)
 		if err != nil {
 			return nil, err
 		}
-		if merged == nil {
-			copyPayload := *payload
-			copyPayload.Response.Docs = nil
-			merged = &copyPayload
-		}
-		merged.Response.Docs = append(merged.Response.Docs, payload.Response.Docs...)
-		merged.Response.NumFound = payload.Response.NumFound
-		merged.Response.MiscInfo = payload.Response.MiscInfo
 
-		if len(payload.Response.Docs) == 0 || uint(len(merged.Response.Docs)) >= wantedRows {
+		products = append(products, payload.Response.Docs...)
+
+		if len(products) >= int(wantedRows) {
 			break
 		}
-		if payload.Response.NumFound > 0 && opts.Start+uint(len(merged.Response.Docs)) >= uint(payload.Response.NumFound) {
+		if len(payload.Response.Docs) < int(pageRows) {
 			break
 		}
 	}
 
-	if merged == nil {
-		return &PathwaySearchPayload{}, nil
-	}
-	if uint(len(merged.Response.Docs)) > wantedRows {
-		merged.Response.Docs = merged.Response.Docs[:wantedRows]
-	}
-	return merged, nil
+	return products, nil
 }
 
-func (c *SearchClient) Search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
+func (c *SearchClient) search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
