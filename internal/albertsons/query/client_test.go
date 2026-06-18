@@ -49,7 +49,7 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	payload, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	payload, err := client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	if _, err := client.Search(context.Background(), "1444", Category_Vegatables, SearchOptions{}); err != nil {
+	if _, err := client.search(context.Background(), "1444", Category_Vegatables, SearchOptions{}); err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
 
@@ -146,7 +146,7 @@ func TestSearchUsesReese84ProviderWhenConfigured(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	if _, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err != nil {
+	if _, err := client.search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
 
@@ -178,7 +178,7 @@ func TestSearchReturnsProviderError(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	_, err = client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	_, err = client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err == nil || !strings.Contains(err.Error(), "resolve reese84") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestSearch_RetriesTransient5xx(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	payload, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	payload, err := client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -257,11 +257,11 @@ func TestSearchAllPaginatesUntilRequestedRows(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	payload, err := client.SearchAll(context.Background(), "806", Category_Vegatables, SearchOptions{Rows: 125})
+	products, err := client.SearchAll(context.Background(), "806", Category_Vegatables, SearchOptions{Rows: 125})
 	if err != nil {
 		t.Fatalf("SearchAll returned error: %v", err)
 	}
-	if got, want := len(payload.Response.Docs), 125; got != want {
+	if got, want := len(products), 125; got != want {
 		t.Fatalf("unexpected docs: got %d want %d", got, want)
 	}
 	if got, want := strings.Join(starts, ","), "0,60,120"; got != want {

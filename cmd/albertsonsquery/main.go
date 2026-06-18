@@ -77,7 +77,7 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("create search client: %w", err)
 	}
 
-	payload, err := client.SearchAll(ctx, storeID, query.Category_Vegatables, query.SearchOptions{
+	products, err := client.SearchAll(ctx, storeID, query.Category_Vegatables, query.SearchOptions{
 		Query: searchQuery,
 		Start: start,
 		Rows:  rows,
@@ -86,10 +86,10 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("run search: %w", err)
 	}
 
-	for i, doc := range payload.Response.Docs {
+	for i, doc := range products {
 		fmt.Printf("%d: %s (price: %.2f)\n", i+1, doc.Name, doc.Price)
 	}
-	fmt.Printf("total products: %d\n", len(payload.Response.Docs))
+	fmt.Printf("total products: %d\n", len(products))
 	return nil
 }
 
