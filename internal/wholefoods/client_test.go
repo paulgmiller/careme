@@ -287,10 +287,9 @@ func TestCategory_LogsRetryAttemptsWithCategoryStoreAndOffset(t *testing.T) {
 
 	logs := logBuf.String()
 	for _, want := range []string{
-		"Retrying Whole Foods request",
-		"category=fresh-vegetables",
-		"store=10153",
-		"offset=120",
+		"Retrying HTTP request",
+		"source=wholefoods",
+		`url="https://example.com/api/products/category/fresh-vegetables?limit=60&offset=120&store=10153"`,
 		"attempt=2",
 	} {
 		if !strings.Contains(logs, want) {
