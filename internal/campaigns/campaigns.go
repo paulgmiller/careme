@@ -8,14 +8,13 @@ import (
 )
 
 var locations = map[string]string{
-	"issiquah-carts": "70100658",
-	"issaquah-carts": "70100658",
+	"issaquah": "70100658",
 }
 
 // Register adds campaign redirect routes to mux.
 func Register(mux routing.Registrar) {
 	for campaign, location := range locations {
-		mux.HandleFunc("GET /campaigns/"+campaign, redirectToLocation(location))
+		mux.HandleFunc("GET /c/"+campaign, redirectToLocation(location))
 	}
 }
 
