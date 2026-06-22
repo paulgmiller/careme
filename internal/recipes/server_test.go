@@ -656,7 +656,7 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 	}
 }
 
-func TestHandleSingle_UsesSelectionForSavedState(t *testing.T) {
+func TestHandleSingle_UsesUserProfileForSavedState(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -678,8 +678,16 @@ func TestHandleSingle_UsesSelectionForSavedState(t *testing.T) {
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
-	require.NoError(t, s.saveRecipeSelection(t.Context(), "mock-clerk-user-id", originHash, recipeSelection{
-		SavedHashes: []string{recipeHash},
+	require.NoError(t, s.storage.Update(&utypes.User{
+		ID:          "mock-clerk-user-id",
+		Email:       []string{"you@careme.cooking"},
+		CreatedAt:   time.Now(),
+		ShoppingDay: time.Saturday.String(),
+		LastRecipes: []utypes.Recipe{{
+			Title:     recipe.Title,
+			Hash:      recipeHash,
+			CreatedAt: time.Now(),
+		}},
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash, nil)

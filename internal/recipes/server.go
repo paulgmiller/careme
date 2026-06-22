@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -295,19 +296,16 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "recipe's origin shpppinglist not found or expired", http.StatusInternalServerError)
 		return
 	}
-	selection := selectionFromSaved(p.Saved)
+	saved := false
 	if signedIn {
-		latestSel, selErr := s.loadRecipeSelection(ctx, currentUser.ID, recipe.OriginHash)
-		if selErr != nil {
-			slog.ErrorContext(ctx, "failed to load recipe selection for single recipe render", "hash", recipe.OriginHash, "error", selErr)
-			http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
-			return
-		}
-		selection = selection.override(latestSel)
+		// this is going to be slow once we paginate recipes...
+		saved = slices.ContainsFunc(currentUser.LastRecipes, func(r utypes.Recipe) bool {
+			return r.Hash == hash
+		})
 	}
 
 	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(ctx, p, *recipe, selection.IsSaved(recipe.ComputeHash()), currentUser, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
+	FormatRecipeHTML(ctx, p, *recipe, saved, currentUser, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
