@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIssiquahCartsRedirect(t *testing.T) {
+func TestIssaquahRedirect(t *testing.T) {
 	tests := []struct {
 		name     string
 		request  string
@@ -16,17 +16,17 @@ func TestIssiquahCartsRedirect(t *testing.T) {
 	}{
 		{
 			name:     "sets campaign location",
-			request:  "/campaigns/issiquah-carts",
+			request:  "/c/issaquah",
 			expected: "/recipes?location=70100658",
 		},
 		{
 			name:     "preserves attribution parameters",
-			request:  "/campaigns/issiquah-carts?utm_source=facebook&utm_campaign=carts",
+			request:  "/c/issaquah?utm_source=facebook&utm_campaign=carts",
 			expected: "/recipes?location=70100658&utm_campaign=carts&utm_source=facebook",
 		},
 		{
 			name:     "overrides incoming location",
-			request:  "/campaigns/issiquah-carts?location=other&utm_source=facebook",
+			request:  "/c/issaquah?location=other&utm_source=facebook",
 			expected: "/recipes?location=70100658&utm_source=facebook",
 		},
 	}
@@ -51,7 +51,7 @@ func TestCampaignRoutesOnlyAcceptGET(t *testing.T) {
 	Register(mux)
 
 	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/campaigns/issiquah-carts", nil)
+	request := httptest.NewRequest(http.MethodPost, "/c/issaquah", nil)
 	mux.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusMethodNotAllowed, response.Code)
