@@ -9,6 +9,7 @@ import (
 
 var locations = map[string]string{
 	"issiquah-carts": "70100658",
+	"issaquah-carts": "70100658",
 }
 
 // Register adds campaign redirect routes to mux.
