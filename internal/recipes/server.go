@@ -433,7 +433,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	FormatRecipeThreadHTML(thread, true, answer.ResponseID, w)
+	FormatRecipeThreadHTML(thread, true, answer.ResponseID, hash, w)
 }
 
 func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Request) {
@@ -495,7 +495,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		http.Error(w, "failed to save refreshed recipe", http.StatusInternalServerError)
 		return
 	}
-	replaced, err := s.storage.ReplaceRecipe(currentUser, hash, utypes.Recipe{
+	err := s.storage.ReplaceRecipe(currentUser, hash, utypes.Recipe{
 		Title:     replacement.Title,
 		Hash:      newHash,
 		CreatedAt: time.Now(),
@@ -505,11 +505,6 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		http.Error(w, "failed to save refreshed recipe", http.StatusInternalServerError)
 		return
 	}
-	if !replaced {
-		http.Error(w, "save the recipe before refreshing it", http.StatusBadRequest)
-		return
-	}
-
 	http.Redirect(w, r, "/recipe/"+url.PathEscape(newHash), http.StatusSeeOther)
 }
 

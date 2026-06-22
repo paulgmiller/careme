@@ -752,7 +752,7 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 		},
 	}
 
-	FormatRecipeThreadHTML(thread, true, "conv123", w)
+	FormatRecipeThreadHTML(thread, true, "conv123", "recipe123", w)
 	body := assertHTTPSuccess(t, w)
 
 	newerIndex := strings.Index(body, "newer question")
