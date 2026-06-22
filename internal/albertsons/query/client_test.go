@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -48,7 +49,7 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	payload, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	payload, err := client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -113,7 +114,7 @@ func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	if _, err := client.Search(context.Background(), "1444", Category_Vegatables, SearchOptions{}); err != nil {
+	if _, err := client.search(context.Background(), "1444", Category_Vegatables, SearchOptions{}); err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
 
@@ -145,7 +146,7 @@ func TestSearchUsesReese84ProviderWhenConfigured(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	if _, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err != nil {
+	if _, err := client.search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
 
@@ -177,7 +178,7 @@ func TestSearchReturnsProviderError(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	_, err = client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	_, err = client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err == nil || !strings.Contains(err.Error(), "resolve reese84") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -216,7 +217,7 @@ func TestSearch_RetriesTransient5xx(t *testing.T) {
 		t.Fatalf("NewSearchClient returned error: %v", err)
 	}
 
-	payload, err := client.Search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	payload, err := client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -225,6 +226,46 @@ func TestSearch_RetriesTransient5xx(t *testing.T) {
 	}
 	if got, want := payload.Response.NumFound, 1; got != want {
 		t.Fatalf("unexpected numFound: got %d want %d", got, want)
+	}
+}
+
+func TestSearchAllPaginatesUntilRequestedRows(t *testing.T) {
+	t.Parallel()
+
+	var starts []string
+	client, err := NewSearchClient(SearchClientConfig{
+		BaseURL:         "https://www.acmemarkets.com",
+		SubscriptionKey: "test-subscription-key",
+		Reese84Provider: func(context.Context) (string, error) { return "reese-cookie", nil },
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				query := r.URL.Query()
+				starts = append(starts, query.Get("start"))
+				docs := make([]string, 60)
+				for i := range docs {
+					docs[i] = fmt.Sprintf(`{"id":"%d","name":"Product %d"}`, i, i)
+				}
+				if query.Get("start") == "120" {
+					docs = docs[:5]
+				}
+				body := fmt.Sprintf(`{"response":{"numFound":125,"start":%s,"docs":[%s]}}`, query.Get("start"), strings.Join(docs, ","))
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewSearchClient returned error: %v", err)
+	}
+
+	products, err := client.SearchAll(context.Background(), "806", Category_Vegatables, SearchOptions{Rows: 125})
+	if err != nil {
+		t.Fatalf("SearchAll returned error: %v", err)
+	}
+	if got, want := len(products), 125; got != want {
+		t.Fatalf("unexpected docs: got %d want %d", got, want)
+	}
+	if got, want := strings.Join(starts, ","), "0,60,120"; got != want {
+		t.Fatalf("unexpected starts: got %q want %q", got, want)
 	}
 }
 

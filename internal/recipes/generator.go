@@ -245,6 +245,10 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 	return plan, nil
 }
 
+func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+	return g.aiClient.Regenerate(ctx, instructions, previousResponseID)
+}
+
 // generator not prociding a lot of value here. Should sever just hold an ai client?
 func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	return g.aiClient.AskQuestion(ctx, question, previousResponseID)

@@ -215,17 +215,19 @@ func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeIma
 }
 
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
-func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseID string, writer http.ResponseWriter) {
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseID, recipeHash string, writer http.ResponseWriter) {
 	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	data := struct {
 		ResponseID     string
+		RecipeHash     string
 		Thread         []RecipeThreadEntry
 		ServerSignedIn bool
 	}{
 		ResponseID:     responseID,
+		RecipeHash:     recipeHash,
 		Thread:         thread,
 		ServerSignedIn: signedIn,
 	}
