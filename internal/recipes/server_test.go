@@ -1143,8 +1143,11 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	if !strings.Contains(body, `name="response_id" value="resp-next"`) {
 		t.Fatalf("expected updated response id in thread fragment, got body: %s", body)
 	}
-	if !strings.Contains(body, `action="/recipe/`+recipeHash+`/regenerate"`) || !strings.Contains(body, "Try again, chef") {
+	if !strings.Contains(body, `action="/recipe/`+recipeHash+`/regenerate"`) || !strings.Contains(body, "Tweak it, chef") {
 		t.Fatalf("expected regenerate action after first question, got body: %s", body)
+	}
+	if !strings.Contains(body, `button.textContent='Tweaking...'; button.disabled=true;`) {
+		t.Fatalf("expected regenerate action to show its pending state, got body: %s", body)
 	}
 }
 

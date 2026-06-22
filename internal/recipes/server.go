@@ -495,7 +495,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		http.Error(w, "failed to save refreshed recipe", http.StatusInternalServerError)
 		return
 	}
-	err := s.storage.ReplaceRecipe(currentUser, hash, utypes.Recipe{
+	replaced, err := s.storage.ReplaceRecipe(currentUser, hash, utypes.Recipe{
 		Title:     replacement.Title,
 		Hash:      newHash,
 		CreatedAt: time.Now(),
@@ -505,6 +505,14 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		http.Error(w, "failed to save refreshed recipe", http.StatusInternalServerError)
 		return
 	}
+	if replaced {
+		if params, err := s.ParamsFromCache(ctx, recipe.OriginHash); err != nil {
+			slog.ErrorContext(ctx, "couldn't look up params", "hash", newHash, "origin", recipe.OriginHash)
+		} else {
+			s.startSavedRecipeBackgroundGeneration(ctx, newHash, *replacement, params.Location.ID, params.Date)
+		}
+	}
+
 	http.Redirect(w, r, "/recipe/"+url.PathEscape(newHash), http.StatusSeeOther)
 }
 

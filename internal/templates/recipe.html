@@ -312,10 +312,13 @@
   <p class="text-sm text-gray-500">No questions yet.</p>
   {{end}}
   {{if and .ServerSignedIn .Thread}}
-  <form method="POST" action="/recipe/{{.RecipeHash}}/regenerate" class="pt-2">
+  <form method="POST"
+        action="/recipe/{{.RecipeHash}}/regenerate"
+        onsubmit="const button=this.querySelector('button[type=submit]'); button.textContent='Tweaking...'; button.disabled=true;"
+        class="pt-2">
     <button type="submit"
-            class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-      Try again, chef
+            class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-brand-400 disabled:text-white/90">
+      Tweak it, chef
     </button>
     <p class="mt-2 text-xs text-gray-500">Keeps this version linked, updates your saved recipe, and leaves the shopping list as-is.</p>
   </form>
