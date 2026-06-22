@@ -1,10 +1,12 @@
 package wholefoods
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -179,6 +181,124 @@ func TestCategory_RetriesRequestAttemptTimeoutWithinCategoryBudget(t *testing.T)
 	}
 }
 
+func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T) {
+	t.Parallel()
+
+	attemptsByOffset := map[string]int{}
+	client := NewClientWithBaseURL("https://example.com", &http.Client{
+		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			offset := r.URL.Query().Get("offset")
+			attemptsByOffset[offset]++
+			if offset == strconv.Itoa(defaultCategoryLimit*2) && attemptsByOffset[offset] == 1 {
+				return nil, wholeFoodsTimeoutError{}
+			}
+
+			pageSize := defaultCategoryLimit
+			if offset == strconv.Itoa(defaultCategoryLimit*2) {
+				pageSize = 1
+			}
+
+			results := make([]product, 0, pageSize)
+			for i := 0; i < pageSize; i++ {
+				results = append(results, product{
+					Name:  fmt.Sprintf("Product %s-%d", offset, i),
+					Slug:  fmt.Sprintf("product-%s-%d", offset, i),
+					Brand: "Whole Foods Market",
+					Store: 10216,
+				})
+			}
+
+			payload, err := json.Marshal(categoryResponse{Results: results})
+			if err != nil {
+				return nil, err
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Content-Type": []string{"application/json"},
+				},
+				Body:    io.NopCloser(strings.NewReader(string(payload))),
+				Request: r,
+			}, nil
+		}),
+	})
+
+	resp, err := client.Category(context.Background(), "fresh-vegetables", "10153")
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+	if got, want := attemptsByOffset[strconv.Itoa(defaultCategoryLimit*2)], 2; got != want {
+		t.Fatalf("unexpected late page attempts: got %d want %d", got, want)
+	}
+	if got, want := len(resp), defaultCategoryLimit*2+1; got != want {
+		t.Fatalf("unexpected result count: got %d want %d", got, want)
+	}
+}
+
+func TestCategory_LogsRetryAttemptsWithCategoryStoreAndOffset(t *testing.T) {
+	var logBuf bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() {
+		slog.SetDefault(previousLogger)
+	})
+
+	attemptsByOffset := map[string]int{}
+	client := NewClientWithBaseURL("https://example.com", &http.Client{
+		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			offset := r.URL.Query().Get("offset")
+			attemptsByOffset[offset]++
+			if offset == strconv.Itoa(defaultCategoryLimit*2) && attemptsByOffset[offset] == 1 {
+				return nil, wholeFoodsTimeoutError{}
+			}
+
+			pageSize := defaultCategoryLimit
+			if offset == strconv.Itoa(defaultCategoryLimit*2) {
+				pageSize = 1
+			}
+
+			results := make([]product, 0, pageSize)
+			for i := 0; i < pageSize; i++ {
+				results = append(results, product{
+					Name:  fmt.Sprintf("Product %s-%d", offset, i),
+					Slug:  fmt.Sprintf("product-%s-%d", offset, i),
+					Brand: "Whole Foods Market",
+					Store: 10216,
+				})
+			}
+
+			payload, err := json.Marshal(categoryResponse{Results: results})
+			if err != nil {
+				return nil, err
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(string(payload))),
+				Request:    r,
+			}, nil
+		}),
+	})
+
+	_, err := client.Category(context.Background(), "fresh-vegetables", "10153")
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+
+	logs := logBuf.String()
+	for _, want := range []string{
+		"Retrying Whole Foods request",
+		"category=fresh-vegetables",
+		"store=10153",
+		"offset=120",
+		"attempt=2",
+	} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("retry log missing %q in logs:\n%s", want, logs)
+		}
+	}
+}
+
 func TestCategory_PaginatesUntilShortPage(t *testing.T) {
 	t.Parallel()
 
@@ -326,4 +446,18 @@ func (f wholeFoodsRoundTripFunc) RoundTrip(r *http.Request) (*http.Response, err
 
 func ioNopCloserString(body string) io.ReadCloser {
 	return io.NopCloser(strings.NewReader(body))
+}
+
+type wholeFoodsTimeoutError struct{}
+
+func (wholeFoodsTimeoutError) Error() string {
+	return "timeout awaiting headers"
+}
+
+func (wholeFoodsTimeoutError) Timeout() bool {
+	return true
+}
+
+func (wholeFoodsTimeoutError) Temporary() bool {
+	return true
 }

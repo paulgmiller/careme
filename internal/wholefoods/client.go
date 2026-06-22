@@ -20,8 +20,8 @@ const (
 	// DefaultBaseURL is the public Whole Foods Market website origin.
 	DefaultBaseURL               = "https://www.wholefoodsmarket.com"
 	defaultCategoryLimit         = 60
-	defaultCategoryTimeout       = 20 * time.Second
-	defaultRequestAttemptTimeout = 5 * time.Second
+	defaultCategoryTimeout       = 2 * time.Minute
+	defaultRequestAttemptTimeout = 10 * time.Second
 )
 
 // client calls the public Whole Foods category products endpoint.
@@ -255,17 +255,17 @@ func withWholeFoodsRetries(baseClient *http.Client) *http.Client {
 		baseClient = http.DefaultClient
 	}
 	retryHTTPClient := *baseClient
-	if retryHTTPClient.Timeout == 0 {
+	if retryHTTPClient.Timeout == 0 || retryHTTPClient.Timeout > defaultRequestAttemptTimeout {
 		retryHTTPClient.Timeout = defaultRequestAttemptTimeout
 	}
-
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = &retryHTTPClient
-	retryClient.Logger = wholeFoodsRetryLogger{}
+	retryClient.Logger = nil
 	retryClient.RetryMax = 2
 	retryClient.RetryWaitMin = 100 * time.Millisecond
 	retryClient.RetryWaitMax = time.Second
 	retryClient.CheckRetry = wholeFoodsRetryPolicy
+	retryClient.RequestLogHook = wholeFoodsRetryLogHook
 	retryClient.ErrorHandler = retryablehttp.PassthroughErrorHandler
 	return retryClient.StandardClient()
 }
@@ -287,8 +287,36 @@ func wholeFoodsRetryPolicy(ctx context.Context, resp *http.Response, err error) 
 	return resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
 }
 
-type wholeFoodsRetryLogger struct{}
+func wholeFoodsRetryLogHook(_ retryablehttp.Logger, req *http.Request, attempt int) {
+	if attempt == 0 || req == nil {
+		return
+	}
 
-func (wholeFoodsRetryLogger) Printf(format string, args ...any) {
-	slog.Info(fmt.Sprintf(format, args...), "source", "wholefoods-retryablehttp")
+	slog.InfoContext(req.Context(), "Retrying Whole Foods request", wholeFoodsRequestLogAttrs(req, "attempt", attempt+1)...)
+}
+
+func wholeFoodsRequestLogAttrs(req *http.Request, extra ...any) []any {
+	attrs := []any{
+		"source", "wholefoods-retryablehttp",
+	}
+	attrs = append(attrs, extra...)
+	if req == nil || req.URL == nil {
+		return attrs
+	}
+
+	attrs = append(attrs, "url", req.URL.String())
+	if category := strings.TrimPrefix(req.URL.Path, "/api/products/category/"); category != req.URL.Path && category != "" {
+		if unescaped, err := url.PathUnescape(category); err == nil {
+			category = unescaped
+		}
+		attrs = append(attrs, "category", category)
+	}
+	query := req.URL.Query()
+	if store := query.Get("store"); store != "" {
+		attrs = append(attrs, "store", store)
+	}
+	if offset := query.Get("offset"); offset != "" {
+		attrs = append(attrs, "offset", offset)
+	}
+	return attrs
 }
