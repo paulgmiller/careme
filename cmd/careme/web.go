@@ -14,6 +14,7 @@ import (
 	"careme/internal/admin"
 	"careme/internal/ai"
 	"careme/internal/auth"
+	"careme/internal/campaigns"
 	"careme/internal/config"
 	"careme/internal/ingredients"
 	ingredientgrading "careme/internal/ingredients/grading"
@@ -56,6 +57,7 @@ func runServer(cfg *config.Config, addr string) error {
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
 	authClient.Register(appRoutes)
+	campaigns.Register(appRoutes)
 	static.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
