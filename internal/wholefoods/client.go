@@ -6,12 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"careme/internal/httpretry"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
@@ -260,12 +261,11 @@ func withWholeFoodsRetries(baseClient *http.Client) *http.Client {
 	}
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = &retryHTTPClient
-	retryClient.Logger = nil
 	retryClient.RetryMax = 2
 	retryClient.RetryWaitMin = 100 * time.Millisecond
 	retryClient.RetryWaitMax = time.Second
 	retryClient.CheckRetry = wholeFoodsRetryPolicy
-	retryClient.RequestLogHook = wholeFoodsRetryLogHook
+	retryClient.RequestLogHook = httpretry.LogRetry("wholefoods")
 	retryClient.ErrorHandler = retryablehttp.PassthroughErrorHandler
 	return retryClient.StandardClient()
 }
@@ -285,38 +285,4 @@ func wholeFoodsRetryPolicy(ctx context.Context, resp *http.Response, err error) 
 		return false, nil
 	}
 	return resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
-}
-
-func wholeFoodsRetryLogHook(_ retryablehttp.Logger, req *http.Request, attempt int) {
-	if attempt == 0 || req == nil {
-		return
-	}
-
-	slog.InfoContext(req.Context(), "Retrying Whole Foods request", wholeFoodsRequestLogAttrs(req, "attempt", attempt+1)...)
-}
-
-func wholeFoodsRequestLogAttrs(req *http.Request, extra ...any) []any {
-	attrs := []any{
-		"source", "wholefoods-retryablehttp",
-	}
-	attrs = append(attrs, extra...)
-	if req == nil || req.URL == nil {
-		return attrs
-	}
-
-	attrs = append(attrs, "url", req.URL.String())
-	if category := strings.TrimPrefix(req.URL.Path, "/api/products/category/"); category != req.URL.Path && category != "" {
-		if unescaped, err := url.PathUnescape(category); err == nil {
-			category = unescaped
-		}
-		attrs = append(attrs, "category", category)
-	}
-	query := req.URL.Query()
-	if store := query.Get("store"); store != "" {
-		attrs = append(attrs, "store", store)
-	}
-	if offset := query.Get("offset"); offset != "" {
-		attrs = append(attrs, "offset", offset)
-	}
-	return attrs
 }
