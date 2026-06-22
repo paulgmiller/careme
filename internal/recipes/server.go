@@ -441,42 +441,62 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
-	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
+
+	var (
+		currentUser *utypes.User
+		recipe      *ai.Recipe
+		thread      []RecipeThreadEntry
+		userErr     error
+		recipeErr   error
+		threadErr   error
+		loadWG      sync.WaitGroup
+	)
+	loadWG.Go(func() {
+		currentUser, userErr = s.storage.FromRequest(ctx, r, s.clerk)
+	})
+	loadWG.Go(func() {
+		recipe, recipeErr = s.SingleFromCache(ctx, hash)
+	})
+	loadWG.Go(func() {
+		thread, threadErr = s.ThreadFromCache(ctx, hash)
+	})
+	loadWG.Wait()
+
+	if userErr != nil {
+		if errors.Is(userErr, auth.ErrNoSession) {
 			redirectToSignIn(w, r, http.StatusUnauthorized)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load user for recipe regeneration", "hash", hash, "error", err)
+		slog.ErrorContext(ctx, "failed to load user for recipe regeneration", "hash", hash, "error", userErr)
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
-	recipe, err := s.SingleFromCache(ctx, hash)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
+	if recipeErr != nil {
+		if errors.Is(recipeErr, cache.ErrNotFound) {
 			http.Error(w, "recipe not found", http.StatusNotFound)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load recipe for regeneration", "hash", hash, "error", err)
+		slog.ErrorContext(ctx, "failed to load recipe for regeneration", "hash", hash, "error", recipeErr)
 		http.Error(w, "failed to load recipe", http.StatusInternalServerError)
 		return
 	}
-	thread, err := s.ThreadFromCache(ctx, hash)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
+	if threadErr != nil {
+		if errors.Is(threadErr, cache.ErrNotFound) {
 			http.Error(w, "ask a question before refreshing this recipe", http.StatusBadRequest)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load recipe thread for regeneration", "hash", hash, "error", err)
+		slog.ErrorContext(ctx, "failed to load recipe thread for regeneration", "hash", hash, "error", threadErr)
 		http.Error(w, "failed to load recipe questions", http.StatusInternalServerError)
 		return
 	}
 	responseID := latestThreadResponseID(thread)
 	if responseID == "" {
+		// should never get here
 		http.Error(w, "ask a question before refreshing this recipe", http.StatusBadRequest)
 		return
 	}
 
+	// spin page?
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 90*time.Second)
 	defer cancel()
 	replacement, err := s.generator.RegenerateRecipe(ctx, []string{"Rewrite the recipe to incorporate the user's question thread and your answers. Return a complete updated recipe."}, responseID)
@@ -485,6 +505,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		http.Error(w, "failed to refresh recipe", http.StatusInternalServerError)
 		return
 	}
+	// TODO generate a new shoppinglist? only if ingredients changed or user asked?
 	replacement.OriginHash = recipe.OriginHash
 	replacement.ParentHash = hash
 	newHash := replacement.ComputeHash()
