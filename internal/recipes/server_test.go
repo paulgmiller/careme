@@ -787,6 +787,76 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 	}
 }
 
+func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShoppingList(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	generator := &captureQuestionGenerator{}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+		withTestGenerator(generator),
+	)
+
+	now := time.Now()
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
+	shoppingListHash := params.Hash()
+	original := ai.Recipe{
+		Title:        "Original Steak Dinner",
+		Description:  "Original.",
+		Ingredients:  []ai.Ingredient{{Name: "Steak", Quantity: "1 lb"}},
+		Instructions: []string{"Cook steak.", "Serve."},
+		OriginHash:   shoppingListHash,
+		ResponseID:   "resp-original",
+	}
+	originalHash := original.ComputeHash()
+	params.Saved = []ai.Recipe{original}
+	require.NoError(t, s.SaveParams(t.Context(), params))
+	require.NoError(t, s.SaveRecipe(t.Context(), original))
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{original}}, shoppingListHash))
+	require.NoError(t, s.SaveThread(t.Context(), originalHash, []RecipeThreadEntry{{
+		Question:   "Can I use skirt steak?",
+		Answer:     "Yes.",
+		ResponseID: "resp-question",
+		CreatedAt:  now,
+	}}))
+	user := &utypes.User{
+		ID:          "mock-clerk-user-id",
+		Email:       []string{"you@careme.cooking"},
+		CreatedAt:   now,
+		ShoppingDay: time.Saturday.String(),
+		LastRecipes: []utypes.Recipe{{Title: original.Title, Hash: originalHash, CreatedAt: now}},
+	}
+	require.NoError(t, storage.Update(user))
+
+	req := httptest.NewRequest(http.MethodPost, "/recipe/"+url.PathEscape(originalHash)+"/regenerate", nil)
+	req.SetPathValue("hash", originalHash)
+	rr := httptest.NewRecorder()
+
+	s.handleRegenerateSingleRecipe(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	newLocation := rr.Header().Get("Location")
+	require.Contains(t, newLocation, "/recipe/")
+	newHash := strings.TrimPrefix(newLocation, "/recipe/")
+	require.NotEqual(t, originalHash, newHash)
+
+	updatedUser, err := storage.GetByID("mock-clerk-user-id")
+	require.NoError(t, err)
+	require.Len(t, updatedUser.LastRecipes, 1)
+	assert.Equal(t, newHash, updatedUser.LastRecipes[0].Hash)
+	assert.Equal(t, "Updated Skirt Steak Dinner", updatedUser.LastRecipes[0].Title)
+
+	updatedRecipe, err := s.SingleFromCache(t.Context(), newHash)
+	require.NoError(t, err)
+	assert.Equal(t, originalHash, updatedRecipe.ParentHash)
+	assert.Equal(t, shoppingListHash, updatedRecipe.OriginHash)
+
+	shoppingList, err := s.FromCache(t.Context(), shoppingListHash)
+	require.NoError(t, err)
+	require.Len(t, shoppingList.Recipes, 1)
+	assert.Equal(t, originalHash, shoppingList.Recipes[0].ComputeHash())
+}
+
 type captureKickgenerationGenerator struct {
 	mu     sync.Mutex
 	last   *generatorParams
@@ -814,6 +884,10 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 		return nil, c.err
 	}
 	return &ai.ShoppingList{}, nil
+}
+
+func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+	panic("unexpected call to RegenerateRecipe")
 }
 
 func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
@@ -940,6 +1014,16 @@ type captureQuestionGenerator struct {
 
 func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	return &ai.ShoppingList{}, nil
+}
+
+func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+	return &ai.Recipe{
+		Title:        "Updated Skirt Steak Dinner",
+		Description:  "Updated after questions.",
+		Ingredients:  []ai.Ingredient{{Name: "Skirt steak", Quantity: "1 lb"}},
+		Instructions: []string{"Cook the steak.", "Serve."},
+		ResponseID:   "resp-regenerated",
+	}, nil
 }
 
 func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
