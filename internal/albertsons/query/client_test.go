@@ -12,15 +12,15 @@ import (
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewSearchClientRequiresSubscriptionKey(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewSearchClient(SearchClientConfig{})
-	if err == nil || !strings.Contains(err.Error(), "subscription key is required") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.ErrorContains(t, err, "subscription key is required")
 }
 
 func TestSearchBuildsExpectedRequest(t *testing.T) {
@@ -45,24 +45,14 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 			}),
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewSearchClient returned error: %v", err)
-	}
+	require.NoError(t, err)
 
 	payload, err := client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
-	if err != nil {
-		t.Fatalf("Search returned error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if capturedReq == nil {
-		t.Fatal("expected request to be captured")
-	}
-	if capturedReq.URL.Path != defaultSearchPath {
-		t.Fatalf("unexpected path: %s", capturedReq.URL.Path)
-	}
-	if payload.Response.NumFound != 3 {
-		t.Fatalf("expected 3 docs")
-	}
+	require.NotNil(t, capturedReq)
+	assert.Equal(t, defaultSearchPath, capturedReq.URL.Path)
+	assert.Equal(t, 3, payload.Response.NumFound)
 
 	query := capturedReq.URL.Query()
 	assertQueryValue(t, query, "url", "https://www.acmemarkets.com")
@@ -74,23 +64,13 @@ func TestSearchBuildsExpectedRequest(t *testing.T) {
 	assertQueryValue(t, query, "sort", "")
 	assertQueryValue(t, query, "widget-id", Category_Vegatables)
 
-	if got := capturedReq.Header.Get("Accept"); got != "application/json, text/plain, */*" {
-		t.Fatalf("unexpected accept header: %q", got)
-	}
-	if got := capturedReq.Header.Get("Accept-Language"); got != "en-US,en;q=0.9" {
-		t.Fatalf("unexpected accept-language header: %q", got)
-	}
-	if got := capturedReq.Header.Get("Ocp-Apim-Subscription-Key"); got != "test-subscription-key" {
-		t.Fatalf("unexpected subscription header: %q", got)
-	}
+	assert.Equal(t, "application/json, text/plain, */*", capturedReq.Header.Get("Accept"))
+	assert.Equal(t, "en-US,en;q=0.9", capturedReq.Header.Get("Accept-Language"))
+	assert.Equal(t, "test-subscription-key", capturedReq.Header.Get("Ocp-Apim-Subscription-Key"))
 
 	reese84Cookie, err := capturedReq.Cookie("reese84")
-	if err != nil {
-		t.Fatalf("expected reese84 cookie: %v", err)
-	}
-	if reese84Cookie.Value != "reese-cookie" {
-		t.Fatalf("unexpected reese84 cookie: %q", reese84Cookie.Value)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "reese-cookie", reese84Cookie.Value)
 }
 
 func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
@@ -110,17 +90,13 @@ func TestSearchInfersSafewayBannerByDefault(t *testing.T) {
 			}),
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewSearchClient returned error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if _, err := client.search(context.Background(), "1444", Category_Vegatables, SearchOptions{}); err != nil {
-		t.Fatalf("Search returned error: %v", err)
-	}
+	_, err = client.search(context.Background(), "1444", Category_Vegatables, SearchOptions{})
+	require.NoError(t, err)
 
-	if got := capturedReq.URL.Query().Get("url"); got != DefaultSearchBaseURL {
-		t.Fatalf("unexpected url query value: %q", got)
-	}
+	require.NotNil(t, capturedReq)
+	assert.Equal(t, DefaultSearchBaseURL, capturedReq.URL.Query().Get("url"))
 }
 
 func TestSearchUsesReese84ProviderWhenConfigured(t *testing.T) {
@@ -142,21 +118,15 @@ func TestSearchUsesReese84ProviderWhenConfigured(t *testing.T) {
 			}),
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewSearchClient returned error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if _, err := client.search(context.Background(), "806", Category_Vegatables, SearchOptions{}); err != nil {
-		t.Fatalf("Search returned error: %v", err)
-	}
+	_, err = client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
+	require.NoError(t, err)
 
+	require.NotNil(t, capturedReq)
 	reese84Cookie, err := capturedReq.Cookie("reese84")
-	if err != nil {
-		t.Fatalf("expected reese84 cookie: %v", err)
-	}
-	if reese84Cookie.Value != "fresh-cookie" {
-		t.Fatalf("unexpected reese84 cookie: %q", reese84Cookie.Value)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "fresh-cookie", reese84Cookie.Value)
 }
 
 func TestSearchReturnsProviderError(t *testing.T) {
@@ -169,19 +139,15 @@ func TestSearchReturnsProviderError(t *testing.T) {
 		},
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				t.Fatalf("unexpected HTTP call")
-				return nil, nil
+				assert.Fail(t, "unexpected HTTP call")
+				return nil, errors.New("unexpected HTTP call")
 			}),
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewSearchClient returned error: %v", err)
-	}
+	require.NoError(t, err)
 
 	_, err = client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
-	if err == nil || !strings.Contains(err.Error(), "resolve reese84") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.ErrorContains(t, err, "resolve reese84")
 }
 
 func TestSearch_RetriesTransient5xx(t *testing.T) {
@@ -213,20 +179,12 @@ func TestSearch_RetriesTransient5xx(t *testing.T) {
 			}),
 		}),
 	})
-	if err != nil {
-		t.Fatalf("NewSearchClient returned error: %v", err)
-	}
+	require.NoError(t, err)
 
 	payload, err := client.search(context.Background(), "806", Category_Vegatables, SearchOptions{})
-	if err != nil {
-		t.Fatalf("Search returned error: %v", err)
-	}
-	if got, want := attempts, 3; got != want {
-		t.Fatalf("unexpected attempts: got %d want %d", got, want)
-	}
-	if got, want := payload.Response.NumFound, 1; got != want {
-		t.Fatalf("unexpected numFound: got %d want %d", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 3, attempts)
+	assert.Equal(t, 1, payload.Response.NumFound)
 }
 
 func TestSearchAllPaginatesUntilRequestedRows(t *testing.T) {
@@ -253,20 +211,12 @@ func TestSearchAllPaginatesUntilRequestedRows(t *testing.T) {
 			}),
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewSearchClient returned error: %v", err)
-	}
+	require.NoError(t, err)
 
 	products, err := client.SearchAll(context.Background(), "806", Category_Vegatables, SearchOptions{Rows: 125})
-	if err != nil {
-		t.Fatalf("SearchAll returned error: %v", err)
-	}
-	if got, want := len(products), 125; got != want {
-		t.Fatalf("unexpected docs: got %d want %d", got, want)
-	}
-	if got, want := strings.Join(starts, ","), "0,60,120"; got != want {
-		t.Fatalf("unexpected starts: got %q want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Len(t, products, 125)
+	assert.Equal(t, []string{"0", "60", "120"}, starts)
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -277,9 +227,7 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func assertQueryValue(t *testing.T, values url.Values, key, want string) {
 	t.Helper()
-	if got := values.Get(key); got != want {
-		t.Fatalf("unexpected %s: got %q want %q", key, got, want)
-	}
+	assert.Equal(t, want, values.Get(key), "unexpected %s", key)
 }
 
 func retryingHTTPClient(base *http.Client) *http.Client {
