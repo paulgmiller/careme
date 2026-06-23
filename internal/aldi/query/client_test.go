@@ -359,7 +359,7 @@ func TestProductsHydratesItemIDsUpToLimit(t *testing.T) {
 						}
 					}`), nil
 				default:
-					t.Fatalf("unexpected operation: %s", r.URL.Query().Get("operationName"))
+					require.FailNowf(t, "unexpected operation", "operation: %s", r.URL.Query().Get("operationName"))
 					return nil, nil
 				}
 			}),
@@ -419,7 +419,7 @@ func TestProductsReusesGeneratedZoneIDForStore(t *testing.T) {
 						}
 					}`), nil
 				default:
-					t.Fatalf("unexpected operation: %s", r.URL.Query().Get("operationName"))
+					require.FailNowf(t, "unexpected operation", "operation: %s", r.URL.Query().Get("operationName"))
 					return nil, nil
 				}
 			}),
@@ -459,7 +459,7 @@ func TestCollectionProductsValidatesRequiredFields(t *testing.T) {
 	client := NewClient(ClientConfig{
 		HTTPClient: &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				t.Fatal("unexpected HTTP call")
+				require.FailNow(t, "unexpected HTTP call")
 				return nil, nil
 			}),
 		},
