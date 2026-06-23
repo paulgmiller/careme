@@ -4,22 +4,22 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"careme/internal/kroger/products"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
 	got := NewIdentityProvider().Signature()
 	want := mustJSONSignature(defaultStaples())
 
-	if got != want {
-		t.Fatalf("unexpected signature: got %q want %q", got, want)
-	}
+	assert.Equal(t, want, got)
 }
 
 func TestParseProductGetResponse_KeepsJSON400Body(t *testing.T) {
@@ -29,15 +29,10 @@ func TestParseProductGetResponse_KeepsJSON400Body(t *testing.T) {
 	_, _ = rsp.WriteString(`{"errors":{"timestamp":1776969026460,"code":"PRODUCT-2011","reason":"Field 'locationId' must have a length of 8 alphanumeric characters"}}`)
 
 	parsed, err := products.ParseProductGetResponse(rsp.Result())
-	if err != nil {
-		t.Fatalf("ParseProductGetResponse returned error: %v", err)
-	}
-	if parsed.JSON400 == nil {
-		t.Fatalf("expected JSON400 marker, got %+v", parsed.JSON400)
-	}
-	if got := string(parsed.Body); !strings.Contains(got, "PRODUCT-2011") || !strings.Contains(got, "length of 8") {
-		t.Fatalf("expected raw body to include kroger error details, got %q", got)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, parsed.JSON400)
+	assert.Contains(t, string(parsed.Body), "PRODUCT-2011")
+	assert.Contains(t, string(parsed.Body), "length of 8")
 }
 
 func TestParseProductGetResponse_IgnoresUnusedPriceDateTimes(t *testing.T) {
@@ -56,12 +51,9 @@ func TestParseProductGetResponse_IgnoresUnusedPriceDateTimes(t *testing.T) {
 	}`)
 
 	parsed, err := products.ParseProductGetResponse(rsp.Result())
-	if err != nil {
-		t.Fatalf("ParseProductGetResponse returned error: %v", err)
-	}
-	if parsed.JSON200 == nil || parsed.JSON200.Data == nil {
-		t.Fatalf("expected JSON200 payload, got %+v", parsed.JSON200)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, parsed.JSON200)
+	require.NotNil(t, parsed.JSON200.Data)
 }
 
 func TestParseProductGetResponse_IgnoresUnusedNutritionInformationArray(t *testing.T) {
@@ -77,12 +69,9 @@ func TestParseProductGetResponse_IgnoresUnusedNutritionInformationArray(t *testi
 	}`)
 
 	parsed, err := products.ParseProductGetResponse(rsp.Result())
-	if err != nil {
-		t.Fatalf("ParseProductGetResponse returned error: %v", err)
-	}
-	if parsed.JSON200 == nil || parsed.JSON200.Data == nil {
-		t.Fatalf("expected JSON200 payload, got %+v", parsed.JSON200)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, parsed.JSON200)
+	require.NotNil(t, parsed.JSON200.Data)
 }
 
 func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
@@ -99,20 +88,12 @@ func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
 		"https://kroger.test",
 		products.WithHTTPClient(withRetries(baseClient)),
 	)
-	if err != nil {
-		t.Fatalf("NewClientWithResponses returned error: %v", err)
-	}
+	require.NoError(t, err)
 
 	got, err := searchIngredients(t.Context(), client, "70500874", "pork", []string{"*"}, false, 0)
-	if err != nil {
-		t.Fatalf("searchIngredients returned error after transient 503s: %v", err)
-	}
-	if len(got) != 0 {
-		t.Fatalf("expected empty ingredient list from test payload, got %+v", got)
-	}
-	if gotCalls := calls.Load(); gotCalls != 3 {
-		t.Fatalf("expected 2 retries before success, got %d calls", gotCalls)
-	}
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	assert.Equal(t, int32(3), calls.Load())
 }
 
 func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
@@ -135,24 +116,15 @@ func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
 		"https://kroger.test",
 		products.WithHTTPClient(baseClient),
 	)
-	if err != nil {
-		t.Fatalf("NewClientWithResponses returned error: %v", err)
-	}
+	require.NoError(t, err)
 
 	provider := StaplesProvider{client: client}
 	got, err := provider.FetchWines(t.Context(), "70500874", []string{"Pinot Noir", "Sauvignon Blanc"})
-	if err != nil {
-		t.Fatalf("FetchWines returned error: %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("expected one result per style, got %d", len(got))
-	}
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
 	mu.Lock()
 	defer mu.Unlock()
-	slices.Sort(terms)
-	if !slices.Equal(terms, []string{"Pinot Noir", "Sauvignon Blanc"}) {
-		t.Fatalf("unexpected search terms: got %v", terms)
-	}
+	assert.ElementsMatch(t, []string{"Pinot Noir", "Sauvignon Blanc"}, terms)
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -177,12 +149,8 @@ func TestProductSearchErrorPayloadPrefersRawBody(t *testing.T) {
 	}
 
 	payload := productSearchErrorPayload(resp)
-	if payload == nil {
-		t.Fatal("expected non-nil payload")
-	}
-	if !strings.Contains(krogerError(http.StatusBadRequest, payload).Error(), "PRODUCT-2011") {
-		t.Fatalf("expected krogerError to include decoded payload, got %v", krogerError(http.StatusBadRequest, payload))
-	}
+	require.NotNil(t, payload)
+	assert.Contains(t, krogerError(http.StatusBadRequest, payload).Error(), "PRODUCT-2011")
 }
 
 func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
@@ -200,19 +168,14 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 		Categories:   &categories,
 	}, 0)
 
-	if ingredient.ProductID != "apple-1" {
-		t.Fatalf("unexpected product id: %+v", ingredient)
-	}
-	if ingredient.AisleNumber != "12" || ingredient.Brand != "Orchard Co" || ingredient.Description != "Honeycrisp Apple" || ingredient.Size != "3 lb" {
-		t.Fatalf("unexpected normalized ingredient: %+v", ingredient)
-	}
-	if ingredient.PriceRegular == nil || *ingredient.PriceRegular != regular {
-		t.Fatalf("unexpected regular price: %+v", ingredient.PriceRegular)
-	}
-	if ingredient.PriceSale == nil || *ingredient.PriceSale != sale {
-		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
-	}
-	if !slices.Equal(ingredient.Categories, categories) {
-		t.Fatalf("unexpected categories: got %v want %v", ingredient.Categories, categories)
-	}
+	assert.Equal(t, "apple-1", ingredient.ProductID)
+	assert.Equal(t, "12", ingredient.AisleNumber)
+	assert.Equal(t, "Orchard Co", ingredient.Brand)
+	assert.Equal(t, "Honeycrisp Apple", ingredient.Description)
+	assert.Equal(t, "3 lb", ingredient.Size)
+	require.NotNil(t, ingredient.PriceRegular)
+	assert.Equal(t, regular, *ingredient.PriceRegular)
+	require.NotNil(t, ingredient.PriceSale)
+	assert.Equal(t, sale, *ingredient.PriceSale)
+	assert.Equal(t, categories, ingredient.Categories)
 }
