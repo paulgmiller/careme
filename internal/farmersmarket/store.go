@@ -35,7 +35,10 @@ type ZipFinder interface {
 	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
+type identityProvider struct{}
+
 type Store struct {
+	identityProvider
 	cache cache.ListCache
 }
 
@@ -92,15 +95,15 @@ func NewStaplesProvider() (*Store, error) {
 	return NewStore(cacheStore), nil
 }
 
-func NewIdentityProvider() *Store {
-	return &Store{}
+func NewIdentityProvider() identityProvider {
+	return identityProvider{}
 }
 
-func (s *Store) IsID(locationID string) bool {
+func (s identityProvider) IsID(locationID string) bool {
 	return strings.HasPrefix(locationID, LocationIDPrefix) && strings.TrimPrefix(locationID, LocationIDPrefix) != ""
 }
 
-func (s *Store) Signature() string {
+func (s identityProvider) Signature() string {
 	return signature
 }
 

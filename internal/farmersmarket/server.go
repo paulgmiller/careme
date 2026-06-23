@@ -24,6 +24,9 @@ import (
 )
 
 const (
+	// TODO: Revisit upload memory before raising these caps. A max-size upload keeps
+	// multipart data plus base64 data URLs in memory, and concurrent uploads can
+	// pressure the 750Mi production pod limit.
 	maxUploadBytes      = 90 << 20
 	maxPhotoBytes       = 10 << 20
 	maxPhotoCount       = 32
