@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"fmt"
 
+	locationtypes "careme/internal/locations/types"
+
 	"github.com/rwcarlsen/goexif/exif"
 )
 
-type Coordinate struct {
-	Lat float64
-	Lon float64
-}
+type Coordinate = locationtypes.Coordinate
 
 func GPSFromImage(data []byte) (Coordinate, error) {
 	x, err := exif.Decode(bytes.NewReader(data))

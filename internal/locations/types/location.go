@@ -14,7 +14,9 @@ type Location struct {
 	Chain    string    `json:"chain,omitempty"`
 }
 
-type ZipCentroid struct {
+type Coordinate struct {
 	Lat float64
 	Lon float64
 }
+
+type ZipCentroid = Coordinate
