@@ -19,6 +19,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	locationtypes "careme/internal/locations/types"
 	"careme/internal/templates"
 
 	utypes "careme/internal/users/types"
@@ -34,6 +35,13 @@ type staticZipFinder struct {
 
 func (s staticZipFinder) NearestZIPToCoordinates(float64, float64) (string, bool) {
 	return s.zip, s.ok
+}
+
+type staticZipLookup map[string]locationtypes.Coordinate
+
+func (s staticZipLookup) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
+	coord, ok := s[zip]
+	return coord, ok
 }
 
 type fakeUserLookup struct {
@@ -124,21 +132,35 @@ func TestFetchStaplesIgnoresInventoryOlderThan24Hours(t *testing.T) {
 
 	_, err = store.FetchStaples(t.Context(), locationID)
 	require.ErrorIs(t, err, cache.ErrNotFound)
+	assert.False(t, store.HasInventory(locationID))
 }
 
-func TestGetLocationsByZipReturnsFarmersMarkets(t *testing.T) {
+func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
-	uploader := NewUploader(store, staticZipFinder{zip: "98101", ok: true})
-	_, _, err := uploader.SaveUpload(t.Context(), "Neighborhood Market", 47.61, -122.33, 1, time.Now(), []ai.InputIngredient{
+	uploader := NewUploader(store, staticZipFinder{zip: "98199", ok: true})
+	_, _, err := uploader.SaveUpload(t.Context(), "Far Market", 48.2, -122.33, 1, time.Now(), []ai.InputIngredient{
+		{Brand: "Farmers market", Description: "turnips"},
+	})
+	require.NoError(t, err)
+	_, _, err = uploader.SaveUpload(t.Context(), "Near Market", 47.62, -122.33, 1, time.Now(), []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "kale"},
 	})
 	require.NoError(t, err)
-
-	got, err := store.GetLocationsByZip(t.Context(), "98101")
+	_, _, err = uploader.SaveUpload(t.Context(), "Closer Market", 47.611, -122.33, 1, time.Now(), []ai.InputIngredient{
+		{Brand: "Farmers market", Description: "chard"},
+	})
 	require.NoError(t, err)
-	require.Len(t, got, 1)
+
+	backend := NewLocationBackend(store, staticZipLookup{
+		"98101": {Lat: 47.61, Lon: -122.33},
+	})
+
+	got, err := backend.GetLocationsByZip(t.Context(), "98101")
+	require.NoError(t, err)
+	require.Len(t, got, 2)
 	assert.True(t, store.HasInventory(got[0].ID))
-	assert.Equal(t, "Neighborhood Market", got[0].Name)
+	assert.Equal(t, "Closer Market", got[0].Name)
+	assert.Equal(t, "Near Market", got[1].Name)
 	assert.Equal(t, ChainName, got[0].Chain)
 }
 

@@ -17,6 +17,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/locations/geo"
+	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -35,11 +36,21 @@ type ZipFinder interface {
 	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
+type ZipCentroidLookup interface {
+	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
+}
+
 type identityProvider struct{}
 
 type Store struct {
 	identityProvider
 	cache cache.ListCache
+}
+
+type LocationBackend struct {
+	identityProvider
+	store     *Store
+	zipLookup ZipCentroidLookup
 }
 
 type Uploader struct {
@@ -75,6 +86,18 @@ func NewContainerStore() (*Store, error) {
 	return NewStore(cacheStore), nil
 }
 
+func NewLocationBackend(store *Store, zipLookup ZipCentroidLookup) *LocationBackend {
+	return &LocationBackend{store: store, zipLookup: zipLookup}
+}
+
+func NewContainerLocationBackend(zipLookup ZipCentroidLookup) (*LocationBackend, error) {
+	store, err := NewContainerStore()
+	if err != nil {
+		return nil, err
+	}
+	return NewLocationBackend(store, zipLookup), nil
+}
+
 func NewUploader(store *Store, zipFinder ZipFinder) *Uploader {
 	return &Uploader{store: store, zipFinder: zipFinder}
 }
@@ -108,11 +131,19 @@ func (s identityProvider) Signature() string {
 }
 
 func (s *Store) HasInventory(locationID string) bool {
-	return s.IsID(locationID)
+	if s == nil || s.cache == nil {
+		return false
+	}
+	_, err := s.freshInventory(context.Background(), locationID)
+	return err == nil
 }
 
-func (s *Store) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
-	market, err := s.loadMarket(ctx, locationID)
+func (b *LocationBackend) HasInventory(locationID string) bool {
+	return b != nil && b.store != nil && b.store.HasInventory(locationID)
+}
+
+func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
+	market, err := b.store.loadMarket(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
@@ -120,25 +151,40 @@ func (s *Store) GetLocationByID(ctx context.Context, locationID string) (*locati
 	return &loc, nil
 }
 
-func (s *Store) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	markets, err := s.listMarkets(ctx)
+func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
+	if b == nil || b.store == nil {
+		return nil, cache.ErrNotFound
+	}
+	if b.zipLookup == nil {
+		return nil, fmt.Errorf("zip lookup is required")
+	}
+
+	markets, err := b.store.listMarkets(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	locations := make([]locationtypes.Location, 0, len(markets))
 	for _, market := range markets {
-		if market.ZipCode != zipcode {
-			continue
-		}
 		locations = append(locations, market.Location())
 	}
-	return locations, nil
+	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, locations, nearby.MaxLocationDistanceMiles), nil
 }
 
 func (s *Store) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	record, err := s.freshInventory(ctx, locationID)
+	if err != nil {
+		return nil, err
+	}
+	return record.Ingredients, nil
+}
+
+func (s *Store) freshInventory(ctx context.Context, locationID string) (*inventoryRecord, error) {
 	if !s.IsID(locationID) {
 		return nil, fmt.Errorf("invalid farmers market location id %q", locationID)
+	}
+	if s.cache == nil {
+		return nil, cache.ErrNotFound
 	}
 
 	// this will get expensive. Need to just take first 1/2 (assuming they are odered ) or try gets on last couple of days.
@@ -167,7 +213,7 @@ func (s *Store) FetchStaples(ctx context.Context, locationID string) ([]ai.Input
 	if newest == nil {
 		return nil, cache.ErrNotFound
 	}
-	return newest.Ingredients, nil
+	return newest, nil
 }
 
 func (s *Store) FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error) {
@@ -285,6 +331,7 @@ func (s *Store) findNearbyMarket(ctx context.Context, lat, lon float64) (*Market
 	return nearest, nil
 }
 
+// this won't scale long term but maybe doesn't matter if we only ever have a dozen markets?
 func (s *Store) listMarkets(ctx context.Context) ([]Market, error) {
 	keys, err := s.cache.List(ctx, locationPrefix, "")
 	if err != nil {
