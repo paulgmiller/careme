@@ -9,20 +9,18 @@ import (
 type MockExtractor struct{}
 
 func (MockExtractor) ExtractFarmersMarketIngredients(context.Context, []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error) {
+	tomatoPrice := float32(4.99)
 	return []ai.InputIngredient{
 		{
-			ProductID:   "farmersmarket_mock_tomatoes",
-			Brand:       "Mock Farm",
-			Description: "heirloom tomatoes",
-			Size:        "per lb",
-			Categories:  []string{"produce", "vegetables"},
+			ProductID:    "farmersmarket_mock_tomatoes",
+			AisleNumber:  "Mock Farm",
+			Description:  "heirloom tomatoes",
+			PriceRegular: &tomatoPrice,
 		},
 		{
 			ProductID:   "farmersmarket_mock_basil",
-			Brand:       "Farmers market",
+			AisleNumber: "Farmers market",
 			Description: "fresh basil",
-			Size:        "1 bunch",
-			Categories:  []string{"produce", "herbs"},
 		},
 	}, nil
 }

@@ -20,10 +20,9 @@ type FarmersMarketPhoto struct {
 }
 
 type farmersMarketIngredientItem struct {
-	Name       string   `json:"name" jsonschema:"required"`
-	Brand      string   `json:"brand" jsonschema:"required"`
-	Size       string   `json:"size" jsonschema:"required"`
-	Categories []string `json:"categories" jsonschema:"required"`
+	Name  string   `json:"name" jsonschema:"required"`
+	Brand string   `json:"brand" jsonschema:"required"`
+	Price *float32 `json:"price" jsonschema:"required"`
 }
 
 type farmersMarketIngredientResponse struct {
@@ -40,10 +39,9 @@ Skip non-food items, people, signs that are not tied to a food item, decorations
 For each ingredient:
 - name: plain ingredient name, such as "heirloom tomatoes", "rainier cherries", or "fresh eggs".
 - brand: if a farm, stall, vendor, or store name is visible near that ingredient on a sign, label, tag, crate, tent, or package, use that visible name. If no clear source name is visible, use "Farmers market".
-- size: include a visible package or unit only if useful, such as "1 pint", "per lb", "1 bunch", or "dozen"; otherwise use an empty string.
-- categories: short grocery categories, such as "produce", "fruit", "vegetables", "herbs", "eggs", "meat", "seafood", "dairy", "bakery", or "pantry"; use an empty array if no category is clear.
+- price: if signage visibly ties a price to that ingredient, return the best-effort numeric dollar price, such as 4.99 for "$4.99/lb" or 6 for "$6 per basket"; otherwise use null.
 
-Do not invent prices, brands, farms, sizes, or ingredients that are not visible. Return JSON only.`
+Do not invent prices, brands, farms, or ingredients that are not visible. Return JSON only.`
 
 func (c *client) ExtractFarmersMarketIngredients(ctx context.Context, photos []FarmersMarketPhoto) ([]InputIngredient, error) {
 	if len(photos) == 0 {
@@ -100,10 +98,9 @@ func (c *client) ExtractFarmersMarketIngredients(ctx context.Context, photos []F
 			brand = "Farmers market"
 		}
 		ingredient := NormalizeInputIngredient(InputIngredient{
-			Brand:       brand,
-			Description: name,
-			Size:        strings.TrimSpace(item.Size),
-			Categories:  normalizedCategories(item.Categories),
+			AisleNumber:  brand,
+			Description:  name,
+			PriceRegular: item.Price,
 		})
 		ingredient.ProductID = "farmersmarket_item_" + ingredient.Hash()
 		ingredients = append(ingredients, ingredient)
@@ -120,22 +117,5 @@ func farmersMarketIngredientSchema() map[string]any {
 	raw, _ := json.Marshal(schema)
 	var out map[string]any
 	_ = json.Unmarshal(raw, &out)
-	return out
-}
-
-func normalizedCategories(categories []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(categories))
-	for _, category := range categories {
-		category = strings.ToLower(strings.TrimSpace(category))
-		if category == "" {
-			continue
-		}
-		if _, ok := seen[category]; ok {
-			continue
-		}
-		seen[category] = struct{}{}
-		out = append(out, category)
-	}
 	return out
 }
