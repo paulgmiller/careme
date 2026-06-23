@@ -15,10 +15,6 @@ import (
 
 const farmersMarketIngredientModel = "gpt-5"
 
-type FarmersMarketPhoto struct {
-	DataURL string
-}
-
 type farmersMarketIngredientItem struct {
 	Name  string   `json:"name" jsonschema:"required"`
 	Brand string   `json:"brand" jsonschema:"required"`
@@ -30,7 +26,7 @@ type farmersMarketIngredientResponse struct {
 }
 
 const farmersMarketIngredientInstructions = `
-Identify recipe-friendly ingredients visible in farmers market photos.
+Identify recipe-friendly ingredients visible in a farmers market photo.
 
 Return only foods or cooking ingredients that a home cook could buy and cook with today.
 Include produce, herbs, eggs, meat, seafood, dairy, bread, grains, legumes, mushrooms, preserves, and similar market foods.
@@ -43,26 +39,20 @@ For each ingredient:
 
 Do not invent prices, brands, farms, or ingredients that are not visible. Return JSON only.`
 
-func (c *client) ExtractFarmersMarketIngredients(ctx context.Context, photos []FarmersMarketPhoto) ([]InputIngredient, error) {
-	if len(photos) == 0 {
-		return nil, fmt.Errorf("at least one photo is required")
+// url here can be public remote or data: url that bin64 encodes the image
+// https://developers.openai.com/api/docs/guides/images-vision?format=base64-encoded
+func (c *client) ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]InputIngredient, error) {
+	imageDataURL = strings.TrimSpace(imageDataURL)
+	if imageDataURL == "" {
+		return nil, fmt.Errorf("image data URL is required")
 	}
 
 	content := responses.ResponseInputMessageContentListParam{
-		responses.ResponseInputContentParamOfInputText("Extract the farmers market ingredients from these photos."),
+		responses.ResponseInputContentParamOfInputText("Extract the farmers market ingredients from this photo."),
 	}
-	for _, photo := range photos {
-		dataURL := strings.TrimSpace(photo.DataURL)
-		if dataURL == "" {
-			continue
-		}
-		image := responses.ResponseInputContentParamOfInputImage(responses.ResponseInputImageDetailAuto)
-		image.OfInputImage.ImageURL = openai.String(dataURL)
-		content = append(content, image)
-	}
-	if len(content) == 1 {
-		return nil, fmt.Errorf("at least one image is required")
-	}
+	image := responses.ResponseInputContentParamOfInputImage(responses.ResponseInputImageDetailAuto)
+	image.OfInputImage.ImageURL = openai.String(imageDataURL)
+	content = append(content, image)
 
 	params := responses.ResponseNewParams{
 		Model:        farmersMarketIngredientModel,
@@ -93,12 +83,8 @@ func (c *client) ExtractFarmersMarketIngredients(ctx context.Context, photos []F
 		if name == "" {
 			continue
 		}
-		brand := strings.TrimSpace(item.Brand)
-		if brand == "" {
-			brand = "Farmers market"
-		}
 		ingredient := NormalizeInputIngredient(InputIngredient{
-			AisleNumber:  brand,
+			AisleNumber:  strings.TrimSpace(item.Brand),
 			Description:  name,
 			PriceRegular: item.Price,
 		})

@@ -1,0 +1,87 @@
+package ai
+
+import (
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestExtractFarmersMarketIngredientsUsesVisiblePrice(t *testing.T) {
+	client := NewClient("test-key", "ignored", farmersMarketResponseClient(t), nil)
+
+	got, err := client.ExtractFarmersMarketIngredients(t.Context(), "data:image/jpeg;base64,abc")
+
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "heirloom tomatoes", got[0].Description)
+	assert.Equal(t, "River Farm", got[0].AisleNumber)
+	assert.Empty(t, got[0].Brand)
+	assert.Empty(t, got[0].Size)
+	require.NotNil(t, got[0].PriceRegular)
+	assert.InDelta(t, 4.99, *got[0].PriceRegular, 0.001)
+	assert.Empty(t, got[0].Categories)
+	assert.Nil(t, got[1].PriceRegular)
+}
+
+func TestFarmersMarketIngredientSchemaUsesPriceNotSizeOrCategories(t *testing.T) {
+	schema := farmersMarketIngredientSchema()
+	properties := schemaProperties(t, schema)
+	ingredients := schemaObject(t, properties["ingredients"])
+	items := schemaObject(t, ingredients["items"])
+	itemProperties := schemaProperties(t, items)
+
+	assert.Contains(t, itemProperties, "price")
+	assert.NotContains(t, itemProperties, "size")
+	assert.NotContains(t, itemProperties, "categories")
+	assert.Contains(t, schemaRequired(t, items), "price")
+}
+
+func farmersMarketResponseClient(t *testing.T) *http.Client {
+	t.Helper()
+	return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if !strings.HasSuffix(req.URL.Path, "/responses") {
+			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
+		}
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		assert.Contains(t, string(body), "price")
+		assert.NotContains(t, string(body), `"size"`)
+		assert.NotContains(t, string(body), `"categories"`)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"id": "resp-farmers-market",
+				"object": "response",
+				"created_at": 1778529600,
+				"status": "completed",
+				"model": %q,
+				"output": [{
+					"id": "msg-farmers-market",
+					"type": "message",
+					"status": "completed",
+					"role": "assistant",
+					"content": [{
+						"type": "output_text",
+						"text": "{\"ingredients\":[{\"name\":\"heirloom tomatoes\",\"brand\":\"River Farm\",\"price\":4.99},{\"name\":\"fresh basil\",\"brand\":\"Farmers market\",\"price\":null}]}",
+						"annotations": []
+					}]
+				}],
+				"usage": {
+					"input_tokens": 1,
+					"input_tokens_details": {"cached_tokens": 0},
+					"output_tokens": 1,
+					"output_tokens_details": {"reasoning_tokens": 0},
+					"total_tokens": 2
+				}
+			}`, farmersMarketIngredientModel))),
+			Request: req,
+		}, nil
+	})}
+}

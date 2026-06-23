@@ -48,17 +48,17 @@ func (f fakeUserLookup) FromRequest(context.Context, *http.Request, auth.AuthCli
 type fakeExtractor struct {
 	called bool
 	mu     sync.Mutex
-	calls  [][]ai.FarmersMarketPhoto
-	fn     func(context.Context, []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error)
+	calls  []string
+	fn     func(context.Context, string) ([]ai.InputIngredient, error)
 }
 
-func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, photos []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error) {
+func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]ai.InputIngredient, error) {
 	f.mu.Lock()
 	f.called = true
-	f.calls = append(f.calls, photos)
+	f.calls = append(f.calls, imageDataURL)
 	f.mu.Unlock()
 	if f.fn != nil {
-		return f.fn(ctx, photos)
+		return f.fn(ctx, imageDataURL)
 	}
 	return []ai.InputIngredient{{Brand: "Test Farm", Description: "apples"}}, nil
 }
@@ -163,26 +163,26 @@ func TestParseUploadedPhotosRejectsImagesWithoutGPS(t *testing.T) {
 
 func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 	extractor := &fakeExtractor{
-		fn: func(_ context.Context, photos []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error) {
-			if len(photos) != 1 {
-				return nil, errors.New("expected one photo")
+		fn: func(_ context.Context, imageDataURL string) ([]ai.InputIngredient, error) {
+			if imageDataURL == "" {
+				return nil, errors.New("expected image data URL")
 			}
 			return []ai.InputIngredient{
-				{Brand: "Farmers market", Description: photos[0].DataURL},
+				{Brand: "Farmers market", Description: imageDataURL},
 				{Brand: "Farmers market", Description: "shared basil"},
 			}, nil
 		},
 	}
 
-	got, err := extractFarmersMarketIngredients(t.Context(), extractor, []ai.FarmersMarketPhoto{
-		{DataURL: "tomatoes"},
-		{DataURL: "radishes"},
+	got, err := extractFarmersMarketIngredients(t.Context(), extractor, []uploadedPhoto{
+		{dataURL: "tomatoes"},
+		{dataURL: "radishes"},
 	})
 
 	require.NoError(t, err)
 	require.Len(t, extractor.calls, 2)
-	assert.Len(t, extractor.calls[0], 1)
-	assert.Len(t, extractor.calls[1], 1)
+	assert.Contains(t, extractor.calls, "tomatoes")
+	assert.Contains(t, extractor.calls, "radishes")
 	assert.Len(t, got, 3)
 	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "tomatoes")
 	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "radishes")

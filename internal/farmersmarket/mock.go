@@ -8,7 +8,7 @@ import (
 
 type MockExtractor struct{}
 
-func (MockExtractor) ExtractFarmersMarketIngredients(context.Context, []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error) {
+func (MockExtractor) ExtractFarmersMarketIngredients(context.Context, string) ([]ai.InputIngredient, error) {
 	tomatoPrice := float32(4.99)
 	return []ai.InputIngredient{
 		{

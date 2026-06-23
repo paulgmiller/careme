@@ -33,7 +33,7 @@ const (
 )
 
 type IngredientExtractor interface {
-	ExtractFarmersMarketIngredients(ctx context.Context, photos []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error)
+	ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]ai.InputIngredient, error)
 }
 
 type UserLookup interface {
@@ -136,11 +136,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ingredientPhotos := make([]ai.FarmersMarketPhoto, 0, len(photos))
-	for _, photo := range photos {
-		ingredientPhotos = append(ingredientPhotos, ai.FarmersMarketPhoto{DataURL: photo.dataURL})
-	}
-	ingredients, err := extractFarmersMarketIngredients(ctx, h.extractor, ingredientPhotos)
+	ingredients, err := extractFarmersMarketIngredients(ctx, h.extractor, photos)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to extract farmers market ingredients", "error", err)
 		h.renderStatus(w, r, currentUser, "Could not identify today's market finds. Try again, chef.", http.StatusBadGateway)
@@ -162,7 +158,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/recipes?location="+url.QueryEscape(market.ID)+"&date="+url.QueryEscape(date.Format("2006-01-02")), http.StatusSeeOther)
 }
 
-func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error) {
+func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []uploadedPhoto) ([]ai.InputIngredient, error) {
 	if len(photos) == 0 {
 		return nil, fmt.Errorf("at least one photo is required")
 	}
@@ -188,7 +184,7 @@ func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientEx
 			}
 
 			slog.InfoContext(ctx, "analyzing farmers market photo", "photo_number", photoNumber, "photo_count", len(photos))
-			ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, []ai.FarmersMarketPhoto{photo})
+			ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL)
 			if err != nil {
 				results[i].err = fmt.Errorf("photo %d: %w", photoNumber, err)
 				slog.WarnContext(ctx, "failed to analyze farmers market photo", "photo_number", photoNumber, "photo_count", len(photos), "error", err)
