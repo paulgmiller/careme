@@ -41,7 +41,7 @@ type UserLookup interface {
 }
 
 type Handler struct {
-	store      *Store
+	uploader   *Uploader
 	users      UserLookup
 	authClient auth.AuthClient
 	extractor  IngredientExtractor
@@ -67,9 +67,9 @@ type photoAnalysisResult struct {
 	err         error
 }
 
-func NewHandler(store *Store, users UserLookup, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
+func NewHandler(uploader *Uploader, users UserLookup, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
 	return &Handler{
-		store:      store,
+		uploader:   uploader,
 		users:      users,
 		authClient: authClient,
 		extractor:  extractor,
@@ -152,7 +152,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	date := farmersMarketDate(time.Now(), zip)
-	market, _, err := h.store.SaveUpload(ctx, name, avg.Lat, avg.Lon, len(coords), date, ingredients)
+	market, _, err := h.uploader.SaveUpload(ctx, name, avg.Lat, avg.Lon, len(coords), date, ingredients)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to save farmers market upload", "error", err)
 		h.renderStatus(w, r, currentUser, "Could not save this market. Try again, chef.", http.StatusInternalServerError)

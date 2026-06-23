@@ -110,11 +110,12 @@ func runServer(cfg *config.Config, addr string) error {
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
-	farmersMarketStore, err := farmersmarket.NewContainerStore(centroids)
+	farmersMarketStore, err := farmersmarket.NewContainerStore()
 	if err != nil {
 		return fmt.Errorf("failed to create farmers market store: %w", err)
 	}
-	farmersmarket.NewHandler(farmersMarketStore, userStorage, authClient, marketExtractor, centroids).Register(appRoutes)
+	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore, centroids)
+	farmersmarket.NewHandler(farmersMarketUploader, userStorage, authClient, marketExtractor, centroids).Register(appRoutes)
 
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
 	sitemapHandler.Register(infraRoutes)

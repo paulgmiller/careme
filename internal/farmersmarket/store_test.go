@@ -64,17 +64,17 @@ func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, pho
 }
 
 func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
-	store := NewStore(cache.NewInMemoryCache(), staticZipFinder{zip: "98101", ok: true})
+	uploader := NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true})
 	date := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 
-	first, ingredients, err := store.SaveUpload(t.Context(), "Saturday Market", 47.61, -122.33, 2, date, []ai.InputIngredient{
+	first, ingredients, err := uploader.SaveUpload(t.Context(), "Saturday Market", 47.61, -122.33, 2, date, []ai.InputIngredient{
 		{Brand: "River Farm", Description: "Strawberries", Size: "1 pint"},
 	})
 	require.NoError(t, err)
 	require.Len(t, ingredients, 1)
 	require.Equal(t, "98101", first.ZipCode)
 
-	second, ingredients, err := store.SaveUpload(t.Context(), "River Stalls", 47.611, -122.331, 1, date, []ai.InputIngredient{
+	second, ingredients, err := uploader.SaveUpload(t.Context(), "River Stalls", 47.611, -122.331, 1, date, []ai.InputIngredient{
 		{Brand: "River Farm", Description: "strawberries", Size: "1 pint"},
 		{Brand: "Hill Farm", Description: "Fresh basil", Size: "1 bunch"},
 	})
@@ -89,15 +89,16 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 }
 
 func TestFetchStaplesReturnsNewestFreshInventory(t *testing.T) {
-	store := NewStore(cache.NewInMemoryCache(), staticZipFinder{zip: "98101", ok: true})
+	store := NewStore(cache.NewInMemoryCache())
+	uploader := NewUploader(store, staticZipFinder{zip: "98101", ok: true})
 	firstDate := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 	secondDate := firstDate.AddDate(0, 0, 1)
 
-	market, _, err := store.SaveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, firstDate, []ai.InputIngredient{
+	market, _, err := uploader.SaveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, firstDate, []ai.InputIngredient{
 		{Brand: "Friday Farm", Description: "peas"},
 	})
 	require.NoError(t, err)
-	_, _, err = store.SaveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, secondDate, []ai.InputIngredient{
+	_, _, err = uploader.SaveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, secondDate, []ai.InputIngredient{
 		{Brand: "Saturday Farm", Description: "carrots"},
 	})
 	require.NoError(t, err)
@@ -110,7 +111,7 @@ func TestFetchStaplesReturnsNewestFreshInventory(t *testing.T) {
 
 func TestFetchStaplesIgnoresInventoryOlderThan24Hours(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
-	store := NewStore(cacheStore, staticZipFinder{zip: "98101", ok: true})
+	store := NewStore(cacheStore)
 	locationID := LocationIDPrefix + "stale"
 	raw, err := json.Marshal(inventoryRecord{
 		CachedAt: time.Now().Add(-25 * time.Hour),
@@ -126,8 +127,9 @@ func TestFetchStaplesIgnoresInventoryOlderThan24Hours(t *testing.T) {
 }
 
 func TestGetLocationsByZipReturnsFarmersMarkets(t *testing.T) {
-	store := NewStore(cache.NewInMemoryCache(), staticZipFinder{zip: "98101", ok: true})
-	_, _, err := store.SaveUpload(t.Context(), "Neighborhood Market", 47.61, -122.33, 1, time.Now(), []ai.InputIngredient{
+	store := NewStore(cache.NewInMemoryCache())
+	uploader := NewUploader(store, staticZipFinder{zip: "98101", ok: true})
+	_, _, err := uploader.SaveUpload(t.Context(), "Neighborhood Market", 47.61, -122.33, 1, time.Now(), []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "kale"},
 	})
 	require.NoError(t, err)
@@ -191,7 +193,7 @@ func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	extractor := &fakeExtractor{}
 	handler := NewHandler(
-		NewStore(cache.NewInMemoryCache(), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
 		fakeUserLookup{user: &utypes.User{ID: "user_123", Email: []string{"chef@example.com"}}},
 		auth.DefaultMock(),
 		extractor,
@@ -210,7 +212,7 @@ func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	handler := NewHandler(
-		NewStore(cache.NewInMemoryCache(), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
 		fakeUserLookup{user: &utypes.User{ID: "user_123", Email: []string{"chef@example.com"}}},
 		auth.DefaultMock(),
 		&fakeExtractor{},
@@ -227,7 +229,7 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 
 func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 	handler := NewHandler(
-		NewStore(cache.NewInMemoryCache(), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
 		fakeUserLookup{err: auth.ErrNoSession},
 		auth.DefaultMock(),
 		&fakeExtractor{},

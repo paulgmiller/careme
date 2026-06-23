@@ -36,7 +36,11 @@ type ZipFinder interface {
 }
 
 type Store struct {
-	cache     cache.ListCache
+	cache cache.ListCache
+}
+
+type Uploader struct {
+	store     *Store
 	zipFinder ZipFinder
 }
 
@@ -56,16 +60,28 @@ type inventoryRecord struct {
 	Ingredients []ai.InputIngredient `json:"ingredients"`
 }
 
-func NewStore(c cache.ListCache, zipFinder ZipFinder) *Store {
-	return &Store{cache: c, zipFinder: zipFinder}
+func NewStore(c cache.ListCache) *Store {
+	return &Store{cache: c}
 }
 
-func NewContainerStore(zipFinder ZipFinder) (*Store, error) {
+func NewContainerStore() (*Store, error) {
 	cacheStore, err := cache.EnsureCache(Container)
 	if err != nil {
 		return nil, fmt.Errorf("create farmers market cache: %w", err)
 	}
-	return NewStore(cacheStore, zipFinder), nil
+	return NewStore(cacheStore), nil
+}
+
+func NewUploader(store *Store, zipFinder ZipFinder) *Uploader {
+	return &Uploader{store: store, zipFinder: zipFinder}
+}
+
+func NewContainerUploader(zipFinder ZipFinder) (*Uploader, error) {
+	store, err := NewContainerStore()
+	if err != nil {
+		return nil, err
+	}
+	return NewUploader(store, zipFinder), nil
 }
 
 func NewStaplesProvider() (*Store, error) {
@@ -73,7 +89,7 @@ func NewStaplesProvider() (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create farmers market cache: %w", err)
 	}
-	return NewStore(cacheStore, nil), nil
+	return NewStore(cacheStore), nil
 }
 
 func NewIdentityProvider() *Store {
@@ -122,6 +138,7 @@ func (s *Store) FetchStaples(ctx context.Context, locationID string) ([]ai.Input
 		return nil, fmt.Errorf("invalid farmers market location id %q", locationID)
 	}
 
+	// this will get expensive. Need to just take first 1/2 (assuming they are odered ) or try gets on last couple of days.
 	keys, err := s.cache.List(ctx, inventoryPrefix+locationID+"/", "")
 	if err != nil {
 		return nil, fmt.Errorf("list farmers market inventory: %w", err)
@@ -154,9 +171,12 @@ func (s *Store) FetchWines(context.Context, string, []string) ([]ai.InputIngredi
 	return nil, nil
 }
 
-func (s *Store) SaveUpload(ctx context.Context, name string, lat, lon float64, photoCount int, date time.Time, ingredients []ai.InputIngredient) (*Market, []ai.InputIngredient, error) {
-	if s.cache == nil {
+func (u *Uploader) SaveUpload(ctx context.Context, name string, lat, lon float64, photoCount int, date time.Time, ingredients []ai.InputIngredient) (*Market, []ai.InputIngredient, error) {
+	if u == nil || u.store == nil || u.store.cache == nil {
 		return nil, nil, fmt.Errorf("cache is required")
+	}
+	if u.zipFinder == nil {
+		return nil, nil, fmt.Errorf("zip finder is required")
 	}
 	if photoCount <= 0 {
 		return nil, nil, fmt.Errorf("at least one geotagged photo is required")
@@ -169,17 +189,14 @@ func (s *Store) SaveUpload(ctx context.Context, name string, lat, lon float64, p
 		return nil, nil, fmt.Errorf("invalid market coordinates")
 	}
 
-	market, err := s.findNearbyMarket(ctx, lat, lon)
+	market, err := u.store.findNearbyMarket(ctx, lat, lon)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	now := time.Now().UTC()
 	if market == nil {
-		zip := ""
-		if s.zipFinder != nil {
-			zip, _ = s.zipFinder.NearestZIPToCoordinates(lat, lon)
-		}
+		zip, _ := u.zipFinder.NearestZIPToCoordinates(lat, lon)
 		market = &Market{
 			ID:         marketID(name, lat, lon),
 			Names:      []string{name},
@@ -192,16 +209,16 @@ func (s *Store) SaveUpload(ctx context.Context, name string, lat, lon float64, p
 		}
 	} else {
 		market.merge(name, lat, lon, photoCount, now)
-		if market.ZipCode == "" && s.zipFinder != nil {
-			market.ZipCode, _ = s.zipFinder.NearestZIPToCoordinates(market.Lat, market.Lon)
+		if market.ZipCode == "" {
+			market.ZipCode, _ = u.zipFinder.NearestZIPToCoordinates(market.Lat, market.Lon)
 		}
 	}
 
-	if err := s.saveMarket(ctx, *market); err != nil {
+	if err := u.store.saveMarket(ctx, *market); err != nil {
 		return nil, nil, err
 	}
 
-	merged, err := s.mergeInventory(ctx, market.ID, date, ingredients)
+	merged, err := u.store.mergeInventory(ctx, market.ID, date, ingredients)
 	if err != nil {
 		return nil, nil, err
 	}
