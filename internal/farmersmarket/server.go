@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"careme/internal/ai"
@@ -25,7 +26,8 @@ import (
 const (
 	maxUploadBytes      = 90 << 20
 	maxPhotoBytes       = 10 << 20
-	maxPhotoCount       = 15
+	maxPhotoCount       = 32
+	photoAnalysisLimit  = 4
 	storeDayStartHour   = 9
 	farmersMarketAction = "/farmersmarket"
 )
@@ -58,6 +60,11 @@ type pageData struct {
 type uploadedPhoto struct {
 	dataURL string
 	coord   *Coordinate
+}
+
+type photoAnalysisResult struct {
+	ingredients []ai.InputIngredient
+	err         error
 }
 
 func NewHandler(store *Store, users UserLookup, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
@@ -113,7 +120,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		h.renderStatus(w, r, currentUser, "Add a market name.", http.StatusBadRequest)
 		return
 	}
-	photos, coords, err := parseUploadedPhotos(r)
+	photos, coords, err := parseUploadedPhotos(ctx, r)
 	if err != nil {
 		h.renderStatus(w, r, currentUser, err.Error(), http.StatusBadRequest)
 		return
@@ -133,7 +140,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	for _, photo := range photos {
 		ingredientPhotos = append(ingredientPhotos, ai.FarmersMarketPhoto{DataURL: photo.dataURL})
 	}
-	ingredients, err := h.extractor.ExtractFarmersMarketIngredients(ctx, ingredientPhotos)
+	ingredients, err := extractFarmersMarketIngredients(ctx, h.extractor, ingredientPhotos)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to extract farmers market ingredients", "error", err)
 		h.renderStatus(w, r, currentUser, "Could not identify today's market finds. Try again, chef.", http.StatusBadGateway)
@@ -153,6 +160,65 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/recipes?location="+url.QueryEscape(market.ID)+"&date="+url.QueryEscape(date.Format("2006-01-02")), http.StatusSeeOther)
+}
+
+func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error) {
+	if len(photos) == 0 {
+		return nil, fmt.Errorf("at least one photo is required")
+	}
+
+	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos), "parallelism", photoAnalysisLimit)
+	results := make([]photoAnalysisResult, len(photos))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, photoAnalysisLimit)
+
+	for i, photo := range photos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			photoNumber := i + 1
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				results[i].err = ctx.Err()
+				slog.WarnContext(ctx, "farmers market photo analysis canceled before start", "photo_number", photoNumber, "photo_count", len(photos), "error", ctx.Err())
+				return
+			}
+
+			slog.InfoContext(ctx, "analyzing farmers market photo", "photo_number", photoNumber, "photo_count", len(photos))
+			ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, []ai.FarmersMarketPhoto{photo})
+			if err != nil {
+				results[i].err = fmt.Errorf("photo %d: %w", photoNumber, err)
+				slog.WarnContext(ctx, "failed to analyze farmers market photo", "photo_number", photoNumber, "photo_count", len(photos), "error", err)
+				return
+			}
+			results[i].ingredients = ingredients
+			slog.InfoContext(ctx, "finished farmers market photo analysis", "photo_number", photoNumber, "photo_count", len(photos), "ingredient_count", len(ingredients))
+		}()
+	}
+	wg.Wait()
+
+	var ingredients []ai.InputIngredient
+	var errs []error
+	for _, result := range results {
+		if result.err != nil {
+			errs = append(errs, result.err)
+			continue
+		}
+		ingredients = append(ingredients, result.ingredients...)
+	}
+
+	if len(errs) > 0 {
+		err := errors.Join(errs...)
+		if len(ingredients) == 0 {
+			return nil, err
+		}
+		slog.WarnContext(ctx, "some farmers market photos failed analysis", "error", err, "failed_count", len(errs), "ingredient_count", len(ingredients))
+	}
+
+	return dedupeIngredients(ingredients), nil
 }
 
 func (h *Handler) currentUser(r *http.Request) (*utypes.User, error) {
@@ -179,7 +245,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, user *utypes.Us
 	}
 }
 
-func parseUploadedPhotos(r *http.Request) ([]uploadedPhoto, []Coordinate, error) {
+func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]uploadedPhoto, []Coordinate, error) {
 	if r.MultipartForm == nil || r.MultipartForm.File == nil {
 		return nil, nil, fmt.Errorf("add a few market photos")
 	}
@@ -193,7 +259,7 @@ func parseUploadedPhotos(r *http.Request) ([]uploadedPhoto, []Coordinate, error)
 
 	photos := make([]uploadedPhoto, 0, len(files))
 	coords := make([]Coordinate, 0, len(files))
-	for _, header := range files {
+	for i, header := range files {
 		if header.Size > maxPhotoBytes {
 			return nil, nil, fmt.Errorf("keep each photo under 10 MB")
 		}
@@ -224,6 +290,7 @@ func parseUploadedPhotos(r *http.Request) ([]uploadedPhoto, []Coordinate, error)
 			coords = append(coords, coord)
 		}
 		photos = append(photos, photo)
+		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", len(data), "content_type", contentType, "has_location", photo.coord != nil)
 	}
 	if len(coords) == 0 {
 		return nil, nil, fmt.Errorf("add at least one photo with location saved")

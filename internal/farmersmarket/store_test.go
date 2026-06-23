@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -45,10 +47,19 @@ func (f fakeUserLookup) FromRequest(context.Context, *http.Request, auth.AuthCli
 
 type fakeExtractor struct {
 	called bool
+	mu     sync.Mutex
+	calls  [][]ai.FarmersMarketPhoto
+	fn     func(context.Context, []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error)
 }
 
-func (f *fakeExtractor) ExtractFarmersMarketIngredients(context.Context, []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error) {
+func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, photos []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error) {
+	f.mu.Lock()
 	f.called = true
+	f.calls = append(f.calls, photos)
+	f.mu.Unlock()
+	if f.fn != nil {
+		return f.fn(ctx, photos)
+	}
 	return []ai.InputIngredient{{Brand: "Test Farm", Description: "apples"}}, nil
 }
 
@@ -143,9 +154,37 @@ func TestParseUploadedPhotosRejectsImagesWithoutGPS(t *testing.T) {
 	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
-	_, _, err := parseUploadedPhotos(req)
+	_, _, err := parseUploadedPhotos(t.Context(), req)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "location saved")
+}
+
+func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
+	extractor := &fakeExtractor{
+		fn: func(_ context.Context, photos []ai.FarmersMarketPhoto) ([]ai.InputIngredient, error) {
+			if len(photos) != 1 {
+				return nil, errors.New("expected one photo")
+			}
+			return []ai.InputIngredient{
+				{Brand: "Farmers market", Description: photos[0].DataURL},
+				{Brand: "Farmers market", Description: "shared basil"},
+			}, nil
+		},
+	}
+
+	got, err := extractFarmersMarketIngredients(t.Context(), extractor, []ai.FarmersMarketPhoto{
+		{DataURL: "tomatoes"},
+		{DataURL: "radishes"},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, extractor.calls, 2)
+	assert.Len(t, extractor.calls[0], 1)
+	assert.Len(t, extractor.calls[1], 1)
+	assert.Len(t, got, 3)
+	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "tomatoes")
+	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "radishes")
+	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "shared basil")
 }
 
 func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
