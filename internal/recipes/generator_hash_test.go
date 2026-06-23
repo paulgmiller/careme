@@ -77,6 +77,17 @@ func TestGeneratorParamsLocationHash_DiffersAcrossStoreBackends(t *testing.T) {
 	}
 }
 
+func TestGeneratorParamsLocationHash_AllowsFarmersMarketLocations(t *testing.T) {
+	params := DefaultParams(
+		&locations.Location{ID: "farmersmarket_XsbD1XNK-FQ", Name: "Farmers Market"},
+		time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC),
+	)
+
+	if got := params.LocationHash(); got == "" {
+		t.Fatal("expected location hash for farmers market location")
+	}
+}
+
 func TestGeneratorParamsHash_IgnoresPriorSavedHashes(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 
@@ -122,12 +133,9 @@ func TestNormalizeLegacyRecipeHash(t *testing.T) {
 	}
 }
 
-func TestStaplesSignatureForLocation_PanicsForUnknownLocation(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic for unknown location")
-		}
-	}()
-
-	_ = staplesSignatureForLocation("loc-unknown")
+func TestStaplesSignatureForLocation_UsesUnsupportedSignatureForUnknownLocation(t *testing.T) {
+	got := staplesSignatureForLocation("loc-unknown")
+	if got != "unsupported-staples-v1" {
+		t.Fatalf("expected unsupported signature for unknown location, got %q", got)
+	}
 }

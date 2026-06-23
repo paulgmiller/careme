@@ -85,6 +85,37 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 	}
 }
 
+func TestServerReturnsIngredientsForFarmersMarketParams(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
+	rio := recipes.IO(cacheStore)
+	params := recipes.DefaultParams(
+		&locations.Location{ID: "farmersmarket_XsbD1XNK-FQ", Name: "Farmers Market"},
+		time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC),
+	)
+	if err := rio.SaveParams(t.Context(), params); err != nil {
+		t.Fatalf("SaveParams failed: %v", err)
+	}
+
+	entries := []ai.InputIngredient{{ProductID: "tomato-1", Description: "Tomato"}}
+	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
+		t.Fatalf("SaveIngredients failed: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	NewHandler(cacheStore).Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash(), nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Tomato") {
+		t.Fatalf("expected response body to include ingredient description, got %q", rr.Body.String())
+	}
+}
+
 func TestServerReturnsNotFoundWhenParamsMissing(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	mux := http.NewServeMux()

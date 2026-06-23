@@ -293,7 +293,7 @@ func staplesSignatureForLocation(locationID string) string {
 		return kroger.NewIdentityProvider().Signature()
 	}
 
-	panic("unknown staples provider for location " + locationID)
+	return "unsupported-staples-v1"
 }
 
 func (p routingStaplesProvider) providerForLocation(locationID string) (backendStaplesProvider, error) {
