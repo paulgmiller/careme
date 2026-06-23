@@ -43,10 +43,11 @@ func main() {
 	}
 
 	catMap := make(map[string]int)
+
 	log.Printf("Grading %d ingredients", len(ings))
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to create cache for ingredient grading: %s", err)
 	}
 	grader := ingredientgrading.NewManager(cfg, cacheStore, http.DefaultClient)
 	graded, err := grader.GradeIngredients(ctx, ings)
