@@ -42,13 +42,13 @@ type IngredientExtractor interface {
 	ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]ai.InputIngredient, error)
 }
 
-type UserLookup interface {
-	FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error)
+type AuthClient interface {
+	GetUserIDFromRequest(r *http.Request) (string, error)
 }
 
 type Handler struct {
 	uploader   *uploader
-	users      UserLookup
+	auth       AuthClient
 	authClient auth.AuthClient
 	extractor  IngredientExtractor
 	zipFinder  ZipFinder
@@ -69,13 +69,17 @@ type Photo struct {
 	coord       *Coordinate
 }
 
-func NewHandler(uploader *uploader, users UserLookup, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
+// who knew data: was  valid url just like http:? see comment in ai/farmersmarket.go
+func (p Photo) dataURL() string {
+	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
+}
+
+func NewHandler(uploader *uploader, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
 	return &Handler{
-		uploader:   uploader,
-		users:      users,
-		authClient: authClient,
-		extractor:  extractor,
-		zipFinder:  zipFinder,
+		uploader:  uploader,
+		auth:      authClient,
+		extractor: extractor,
+		zipFinder: zipFinder,
 	}
 }
 
@@ -85,7 +89,7 @@ func (h *Handler) Register(mux routing.Registrar) {
 }
 
 func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
-	currentUser, err := h.currentUser(r)
+	_, err := h.auth.GetUserIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			redirectToSignIn(w, r)
@@ -95,12 +99,20 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
-	h.render(w, r, currentUser, "")
+	data := pageData{
+		ClarityScript:   templates.ClarityScript(r.Context()),
+		GoogleTagScript: templates.GoogleTagScript(),
+		Style:           seasons.GetCurrentStyle(),
+	}
+	if err := templates.FarmersMarket.Execute(w, data); err != nil {
+		slog.ErrorContext(r.Context(), "farmers market template execute error", "error", err)
+		http.Error(w, "template error", http.StatusInternalServerError)
+	}
 }
 
 func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	currentUser, err := h.currentUser(r)
+	_, err := h.auth.GetUserIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			redirectToSignIn(w, r)
@@ -113,18 +125,18 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
-		h.renderStatus(w, r, currentUser, "Could not read those photos. Try fewer or smaller images.", http.StatusBadRequest)
+		http.Error(w, "Could not read those photos. Try fewer or smaller images.", http.StatusBadRequest)
 		return
 	}
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
-		h.renderStatus(w, r, currentUser, "Add a market name.", http.StatusBadRequest)
+		http.Error(w, "Add a market name.", http.StatusBadRequest)
 		return
 	}
 	photos, err := parseUploadedPhotos(ctx, r)
 	if err != nil {
-		h.renderStatus(w, r, currentUser, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	coords := lo.Map(photos, func(photo Photo, _ int) Coordinate {
@@ -132,23 +144,23 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	})
 	avg, err := AverageCoordinate(coords)
 	if err != nil {
-		h.renderStatus(w, r, currentUser, "Add at least one photo with location saved.", http.StatusBadRequest)
+		http.Error(w, "Add at least one photo with location saved.", http.StatusBadRequest)
 		return
 	}
 	zip, ok := h.zipFinder.NearestZIPToCoordinates(avg.Lat, avg.Lon)
 	if !ok {
-		h.renderStatus(w, r, currentUser, "Could not match those photos to a ZIP code.", http.StatusBadRequest)
+		http.Error(w, "Could not match those photos to a ZIP code.", http.StatusBadRequest)
 		return
 	}
 
 	ingredients, err := extractFarmersMarketIngredients(ctx, h.extractor, photos)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to extract farmers market ingredients", "error", err)
-		h.renderStatus(w, r, currentUser, "Could not identify today's market finds. Try again, chef.", http.StatusBadGateway)
+		http.Error(w, "Could not identify today's market finds. Try again, chef.", http.StatusBadGateway)
 		return
 	}
 	if len(ingredients) == 0 {
-		h.renderStatus(w, r, currentUser, "Could not spot recipe ingredients in those photos.", http.StatusBadRequest)
+		http.Error(w, "Could not spot recipe ingredients in those photos.", http.StatusBadRequest)
 		return
 	}
 
@@ -156,7 +168,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	market, _, err := h.uploader.saveUpload(ctx, name, avg.Lat, avg.Lon, len(coords), date, ingredients)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to save farmers market upload", "error", err)
-		h.renderStatus(w, r, currentUser, "Could not save this market. Try again, chef.", http.StatusInternalServerError)
+		http.Error(w, "Could not save this market. Try again, chef.", http.StatusInternalServerError)
 		return
 	}
 
@@ -181,30 +193,6 @@ func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientEx
 	return lo.UniqBy(ingredients, func(i ai.InputIngredient) string {
 		return i.ProductID
 	}), nil
-}
-
-func (h *Handler) currentUser(r *http.Request) (*utypes.User, error) {
-	return h.users.FromRequest(r.Context(), r, h.authClient)
-}
-
-func (h *Handler) renderStatus(w http.ResponseWriter, r *http.Request, user *utypes.User, message string, status int) {
-	w.WriteHeader(status)
-	h.render(w, r, user, message)
-}
-
-func (h *Handler) render(w http.ResponseWriter, r *http.Request, user *utypes.User, message string) {
-	data := pageData{
-		Error:           message,
-		ClarityScript:   templates.ClarityScript(r.Context()),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Style:           seasons.GetCurrentStyle(),
-		User:            user,
-		ServerSignedIn:  user != nil,
-	}
-	if err := templates.FarmersMarket.Execute(w, data); err != nil {
-		slog.ErrorContext(r.Context(), "farmers market template execute error", "error", err)
-		http.Error(w, "template error", http.StatusInternalServerError)
-	}
 }
 
 func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) {
@@ -255,11 +243,6 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", len(data), "content_type", contentType, "has_location", photo.coord != nil)
 	}
 	return photos, nil
-}
-
-// who knew data: was  valid url just like http:? see comment in ai/farmersmarket.go
-func (p Photo) dataURL() string {
-	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
 func farmersMarketDate(now time.Time, zip string) time.Time {

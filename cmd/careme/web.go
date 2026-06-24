@@ -117,7 +117,7 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create farmers market store: %w", err)
 	}
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore, centroids)
-	farmersmarket.NewHandler(farmersMarketUploader, userStorage, authClient, marketExtractor, centroids).Register(appRoutes)
+	farmersmarket.NewHandler(farmersMarketUploader, authClient, marketExtractor, centroids).Register(appRoutes)
 
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
 	sitemapHandler.Register(infraRoutes)
