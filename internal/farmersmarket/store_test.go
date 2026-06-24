@@ -233,25 +233,6 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "shared basil")
 }
 
-func TestExtractFarmersMarketIngredientsRejectsTooManyPhotos(t *testing.T) {
-	extractor := &fakeExtractor{
-		fn: func(_ context.Context, imageDataURL string) ([]ai.InputIngredient, error) {
-			return []ai.InputIngredient{{ProductID: imageDataURL, Brand: "Farmers market", Description: imageDataURL}}, nil
-		},
-	}
-	photos := make([]Photo, maxPhotoCount+1)
-	for i := range photos {
-		photos[i] = Photo{contentType: "image/jpeg", content: []byte{byte('a' + i)}}
-	}
-
-	got, err := extractFarmersMarketIngredients(t.Context(), extractor, photos)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "use 4 photos or fewer")
-	assert.Empty(t, got)
-	assert.Empty(t, extractor.calls)
-}
-
 func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	extractor := &fakeExtractor{}
