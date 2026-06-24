@@ -19,5 +19,9 @@ type Location struct {
 	Chain    string    `json:"chain,omitempty"`
 }
 
-// can probably replace with just geo coordinate
 type ZipCentroid = geo.Coordinate
+
+type ProduceScore struct {
+	Score int       `json:"score"`
+	Date  time.Time `json:"date"`
+}

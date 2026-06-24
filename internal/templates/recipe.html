@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{.Recipe.Title}} | Careme</title>
+  <meta name="description" content="{{.Recipe.Description}} Recipe for {{.Location.Name}} on {{.Date}}." />
 
   {{if .Recipe.Title}}
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
@@ -26,6 +27,7 @@
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
+  {{GoogleTagNoScript}}
   {{template "seasonal_background" .}}
   <main class="relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-4xl space-y-8">
@@ -309,6 +311,18 @@
   {{else if and .ServerSignedIn .ResponseID}}
   <p class="text-sm text-gray-500">No questions yet.</p>
   {{end}}
+  {{if and .ServerSignedIn .Thread}}
+  <form method="POST"
+        action="/recipe/{{.RecipeHash}}/regenerate"
+        onsubmit="const button=this.querySelector('button[type=submit]'); button.textContent='Tweaking...'; button.disabled=true;"
+        class="pt-2">
+    <button type="submit"
+            class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-brand-400 disabled:text-white/90">
+      Tweak it, chef
+    </button>
+    <p class="mt-2 text-xs text-gray-500">Keeps this version linked, updates your saved recipe, and leaves the shopping list as-is.</p>
+  </form>
+  {{end}}
 </div>
 {{end}}
 
@@ -340,9 +354,9 @@
 {{end}}
 
 {{define "recipe_save_action"}}
-{{if and .ServerSignedIn .OriginHash}}
+{{if .OriginHash}}
 <div class="recipe-save-action pt-2">
-  {{if .Saved}}
+  {{if and .ServerSignedIn .Saved}}
   <button type="button"
           hx-post="/recipe/{{.RecipeHash}}/dismiss"
           hx-vals='{"h":"{{.OriginHash}}","source":"recipe"}'

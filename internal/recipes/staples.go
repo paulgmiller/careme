@@ -21,7 +21,9 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
+	"careme/internal/heb"
 	"careme/internal/kroger"
+	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
 	"careme/internal/walmart"
@@ -180,6 +182,7 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
+	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded), "produce_score", sumIngredientGradesAboveCutoff(graded))
 	return graded, nil
 }
 
@@ -254,19 +257,30 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 }
 
 func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
-	storeIDs := []string{
-		"wholefoods_10153",
-		"safeway_490",
-		"70500874",
-		"starmarket_3566",
-		"acmemarkets_806",
-		"publix_1847",
-		"aldi_F219",
-	}
-	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]ai.InputIngredient, error) {
-		return s.provider.FetchStaples(ctx, storeID)
+	stores := StaplesWatchdogLocations()
+	_, err := parallelism.Flatten(stores, func(store locations.Location) ([]ai.InputIngredient, error) {
+		date, err := StoreToDate(ctx, nowFn(), &store)
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchStaples(ctx, DefaultParams(&store, date))
 	})
 	return err
+}
+
+// StaplesWatchdogLocations returns the stores checked by the staples watchdog.
+func StaplesWatchdogLocations() []locations.Location {
+	stores := []locations.Location{
+		{ID: "wholefoods_10153", ZipCode: "97209"},
+		{ID: "safeway_490", ZipCode: "86403"},
+		{ID: "70500874", ZipCode: "98101"},
+		{ID: "starmarket_3566", ZipCode: "02108"},
+		{ID: "acmemarkets_806", ZipCode: "19711"},
+		{ID: "publix_1847", ZipCode: "35401"},
+		{ID: "aldi_F219", ZipCode: "40222"},
+		{ID: "heb_540", ZipCode: "77023"},
+	}
+	return stores
 }
 
 func staplesSignatureForLocation(locationID string) string {
@@ -312,10 +326,10 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		return nil, fmt.Errorf("create publix staples provider: %w", err)
 	}
 
-	/*hebProvider, err := heb.NewStaplesProvider(brightdataClient)
+	hebProvider, err := heb.NewStaplesProvider(brightdataClient)
 	if err != nil {
 		return nil, fmt.Errorf("create heb staples provider: %w", err)
-	}*/
+	}
 	aldiProvider, err := aldi.NewStaplesProvider(brightdataClient)
 	if err != nil {
 		return nil, fmt.Errorf("create ALDI staples provider: %w", err)
@@ -336,7 +350,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 
 	return []backendStaplesProvider{
 		albertsonsProvider,
-		// hebProvider,
+		hebProvider,
 		aldiProvider,
 		krogerBackend,
 		publixProvider,
@@ -352,7 +366,7 @@ func defaultIdentityProviders() []identityProvider {
 		kroger.NewIdentityProvider(),
 		// actowiz.NewIdentityProvider(),
 		albertsons.NewIdentityProvider(),
-		// heb.NewIdentityProvider(),
+		heb.NewIdentityProvider(),
 		aldi.NewIdentityProvider(),
 		publix.NewIdentityProvider(),
 		farmersmarket.NewIdentityProvider(),

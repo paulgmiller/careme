@@ -9,9 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"strings"
-	"time"
-
-	locationtypes "careme/internal/locations/types"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
@@ -155,6 +152,32 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
 }
 
+func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*Recipe, error) {
+	menuResponseID = strings.TrimSpace(menuResponseID)
+	if menuResponseID == "" {
+		return nil, fmt.Errorf("response ID is required for menu response generation")
+	}
+	promptMessages := cleanInstructionMessages(instructions)
+	params := responses.ResponseNewParams{
+		Model:              c.model,
+		PreviousResponseID: openai.String(menuResponseID),
+		// Previous response IDs do not carry over top-level instructions.
+		Instructions: openai.String(systemMessage),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messagesToInput(promptMessages),
+		},
+		Store: openai.Bool(true),
+		Text:  scheme(c.recipeSchema),
+	}
+	resp, err := c.oai.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
+	}
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
+
+	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+}
+
 func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
@@ -203,72 +226,6 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 		slog.Int64("totalTokens", usage.TotalTokens),
 		estimatedSpendLogAttr(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.OutputTokens)),
 	)
-}
-
-func (c *client) GenerateRecipe(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
-	instructions []string, date time.Time, lastRecipes []string,
-) (*Recipe, error) {
-	promptMessages, err := c.buildRecipeMessages(location, saleIngredients, instructions, date, lastRecipes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build recipe messages: %w", err)
-	}
-
-	params := responses.ResponseNewParams{
-		Model:        c.model,
-		Instructions: openai.String(systemMessage),
-		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messagesToInput(promptMessages),
-		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.recipeSchema),
-	}
-	resp, err := c.oai.Responses.New(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
-}
-
-// buildRecipeMessages creates separate messages for the LLM to process more efficiently
-func (c *client) buildRecipeMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
-	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
-	if err != nil {
-		return nil, err
-	}
-	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
-	return messages, nil
-}
-
-func (c *client) buildRecipeContextMessages(location *locationtypes.Location, saleIngredients []InputIngredient, instructions []string, date time.Time, lastRecipes []string) ([]PromptMessage, error) {
-	var messages []PromptMessage
-	// constants we might make variable later
-	messages = append(messages, userPromptMessage("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
-	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
-	messages = append(messages, userPromptMessage("Default: cooking methods: oven, stove, grill, slow cooker"))
-
-	// todo reuse context via response id?
-	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
-	var buf strings.Builder
-	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
-		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
-	}
-	ingredientsMessage += buf.String()
-	messages = append(messages, userPromptMessage(ingredientsMessage))
-
-	if len(lastRecipes) > 0 {
-		var prevRecipesMsg strings.Builder
-		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
-		for _, recipe := range lastRecipes {
-			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
-		}
-		messages = append(messages, userPromptMessage(prevRecipesMsg.String()))
-	}
-
-	messages = append(messages, cleanInstructionMessages(instructions)...)
-
-	return messages, nil
 }
 
 func normalizeRecipeWineStyles(styles []string) []string {

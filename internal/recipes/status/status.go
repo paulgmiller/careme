@@ -35,6 +35,13 @@ func Ingredients(ings []ai.InputIngredient, originalCount int) string {
 	return b.String()
 }
 
+func Error(err error) string {
+	if err == nil {
+		return ""
+	}
+	return "Something went wrong: " + err.Error()
+}
+
 func Regen(instructions string, dismissed []ai.Recipe) string {
 	var sb strings.Builder
 	if len(instructions) > 0 {

@@ -42,6 +42,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 			}
 			return "https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js"
 		},
+		"GoogleTagNoScript": GoogleTagNoScript,
 		"PublicOrigin":      func() string { return config.ResolvedPublicOrigin() },
 		"SignInPath":        signInPath,
 		"TailwindAssetPath": func() string { return tailwindAssetPath },
@@ -64,8 +65,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 
 	// todo pull from config.
 	Clarityproject = os.Getenv("CLARITY_PROJECT_ID")
-	GoogleTagID = os.Getenv("GOOGLE_TAG_ID")
-	GoogleConversionLabel = os.Getenv("GOOGLE_CONVERSION_LABEL")
+	GoogleTagManagerID = os.Getenv("GOOGLE_TAG_MANAGER_ID")
 	return nil
 }
 
@@ -87,9 +87,8 @@ func signInPath(returnTo string) string {
 }
 
 var (
-	Clarityproject        string
-	GoogleTagID           string
-	GoogleConversionLabel string
+	Clarityproject     string
+	GoogleTagManagerID string
 )
 
 // ClarityScript generates the Microsoft Clarity tracking script HTML.
@@ -117,27 +116,34 @@ func ClarityScript(ctx context.Context) template.HTML {
 	return template.HTML(script)
 }
 
-// GoogleTagScript generates the Google tag snippet HTML.
+// GoogleTagScript generates the Google Tag Manager snippet HTML.
 func GoogleTagScript() template.HTML {
-	if GoogleTagID == "" {
+	if GoogleTagManagerID == "" {
 		return ""
 	}
 
-	script := `<script async src="https://www.googletagmanager.com/gtag/js?id=` + GoogleTagID + `"></script>
+	script := `<!-- Google Tag Manager -->
 <script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', '` + GoogleTagID + `');
-</script>`
+  (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','` + template.JSEscapeString(GoogleTagManagerID) + `');
+</script>
+<!-- End Google Tag Manager -->`
 
 	return template.HTML(script)
 }
 
-func GoogleConversionTag() string {
-	if GoogleTagID == "" || GoogleConversionLabel == "" {
+// GoogleTagNoScript generates the Google Tag Manager noscript fallback HTML.
+func GoogleTagNoScript() template.HTML {
+	if GoogleTagManagerID == "" {
 		return ""
 	}
-	return GoogleTagID + "/" + GoogleConversionLabel
+
+	iframe := `<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=` + template.HTMLEscapeString(GoogleTagManagerID) + `" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->`
+
+	return template.HTML(iframe)
 }

@@ -14,6 +14,7 @@ import (
 	"careme/internal/admin"
 	"careme/internal/ai"
 	"careme/internal/auth"
+	"careme/internal/campaigns"
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/ingredients"
@@ -57,6 +58,7 @@ func runServer(cfg *config.Config, addr string) error {
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
 	authClient.Register(appRoutes)
+	campaigns.Register(appRoutes)
 	static.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
@@ -106,7 +108,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg))
 	userHandler.Register(appRoutes)
 
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, recipes.NewCachedProduceScorer(recipes.IO(cache)))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
@@ -132,6 +134,7 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
 	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))
 	adminMux.Handle("/prompt/recipe/{hash}", prompts.AdminRecipePromptJSON(cache))
+	adminMux.Handle("/mealplan/{hash}", recipes.AdminMealPlanPage(recipeIO))
 	adminMux.Handle("/critiques", critique.AdminCritiquesPage(critique.NewStore(cache), recipeIO))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)

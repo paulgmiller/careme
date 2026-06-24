@@ -71,7 +71,7 @@ func (f *fakeLocationClient) HasInventory(locationID string) bool {
 	if hasInventory, ok := f.inv[locationID]; ok {
 		return hasInventory
 	}
-	return true
+	return false
 }
 
 type inventoryBackend struct {

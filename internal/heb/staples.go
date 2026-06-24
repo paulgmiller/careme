@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"careme/internal/ai"
-	"careme/internal/albertsons"
 	"careme/internal/cache"
 	"careme/internal/parallelism"
 
@@ -43,20 +42,14 @@ const (
 var defaultHEBStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
 
 type StapleCategory struct {
-	Name         string
-	ParentID     string
-	ChildID      string
-	CategoryPath string
-	Int          string
-	Limit        int
+	Name     string
+	ParentID string
+	ChildID  string
+	Limit    int
 }
 
 type hebQueryClient interface {
 	Category(ctx context.Context, opts CategoryOptions) ([]Product, error)
-}
-
-type buildIDClient interface {
-	SetBuildID(buildID string)
 }
 
 type loadReese84 func(context.Context) (string, error)
@@ -67,7 +60,6 @@ type StaplesProvider struct {
 	identityProvider
 	client      hebQueryClient
 	loadReese84 loadReese84
-	loadBuildID loadBuildID
 }
 
 func NewIdentityProvider() identityProvider {
@@ -75,38 +67,38 @@ func NewIdentityProvider() identityProvider {
 }
 
 func NewStaplesProvider(httpClient *http.Client) (StaplesProvider, error) {
-	albertsonsCache, err := cache.EnsureCache(albertsons.Container)
+	hebCache, err := cache.EnsureCache(Container)
 	if err != nil {
-		return StaplesProvider{}, fmt.Errorf("create albertsons cache for HEB reese84 token: %w", err)
+		return StaplesProvider{}, fmt.Errorf("create heb cache: %w", err)
 	}
-	buildIDLoader, err := newBrightDataBuildIDLoaderFromEnv()
+	loadBuildID, err := newBrightDataBuildIDLoaderFromEnv()
 	if err != nil {
 		return StaplesProvider{}, err
 	}
 
-	return newStaplesProviderWithDeps(NewQueryClient(QueryClientConfig{
-		HTTPClient: httpClient,
-	}), func(ctx context.Context) (string, error) {
-		record, err := albertsons.LoadLatestReese84(ctx, albertsonsCache)
+	loadReese84 := func(ctx context.Context) (string, error) {
+		record, err := LoadLatestReese84(ctx, hebCache)
 		if err != nil {
-			return "", fmt.Errorf("load cached albertsons reese84 token for HEB: %w", err)
+			return "", fmt.Errorf("load cached heb reese84 token: %w", err)
 		}
 		slog.InfoContext(ctx, "reese84", "token", record.Cookie)
 		return record.Cookie, nil
-	}, buildIDLoader), nil
+	}
+
+	return newStaplesProviderWithDeps(NewQueryClient(QueryClientConfig{
+		HTTPClient:  httpClient,
+		LoadBuildID: loadBuildID,
+	}), loadReese84), nil
 }
 
 func newStaplesProviderWithClient(client hebQueryClient, loadReese84 loadReese84) StaplesProvider {
-	return newStaplesProviderWithDeps(client, loadReese84, func(context.Context, buildIDOptions) (string, error) {
-		return "test-build", nil
-	})
+	return newStaplesProviderWithDeps(client, loadReese84)
 }
 
-func newStaplesProviderWithDeps(client hebQueryClient, loadReese84 loadReese84, loadBuildID loadBuildID) StaplesProvider {
+func newStaplesProviderWithDeps(client hebQueryClient, loadReese84 loadReese84) StaplesProvider {
 	return StaplesProvider{
 		client:      client,
 		loadReese84: loadReese84,
-		loadBuildID: loadBuildID,
 	}
 }
 
@@ -136,19 +128,13 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		return nil, err
 	}
 
-	if err := p.refreshBuildID(ctx, buildIDOptions{Reese84: reese84, StoreID: storeID}); err != nil {
-		return nil, err
-	}
-
 	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
 		products, err := p.client.Category(ctx, CategoryOptions{
-			Reese84:      reese84,
-			StoreID:      storeID,
-			ParentID:     category.ParentID,
-			ChildID:      category.ChildID,
-			CategoryPath: category.CategoryPath,
-			Int:          category.Int,
-			Limit:        category.Limit,
+			Reese84:  reese84,
+			StoreID:  storeID,
+			ParentID: category.ParentID,
+			ChildID:  category.ChildID,
+			Limit:    category.Limit,
 		})
 		if err != nil {
 			slog.WarnContext(ctx, "failed to fetch heb category", "category", category.Name, "location", locationID, "error", err)
@@ -163,41 +149,20 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) refreshBuildID(ctx context.Context, opts buildIDOptions) error {
-	if p.loadBuildID == nil {
-		return fmt.Errorf("heb build id loader is required")
-	}
-	client, ok := p.client.(buildIDClient)
-	if !ok {
-		return fmt.Errorf("cannot update heb build id for client %T", p.client)
-	}
-
-	buildID, err := p.loadBuildID(ctx, opts)
-	if err != nil {
-		return fmt.Errorf("discover heb build id: %w", err)
-	}
-	if strings.TrimSpace(buildID) == "" {
-		return fmt.Errorf("discover heb build id: empty build id")
-	}
-	client.SetBuildID(buildID)
-	slog.InfoContext(ctx, "updated heb next data build id", "build_id", buildID)
-	return nil
-}
-
 func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	return nil, fmt.Errorf("wine lookup is not supported for location %q", locationID)
 }
 
 func StapleCategories() []StapleCategory {
 	return []StapleCategory{
-		{Name: "beef", ParentID: CategoryBeefParent, ChildID: CategoryBeefChild, CategoryPath: "/category/shop/meat-seafood/meat/beef/490110/490529?int=curbside-category-shortcuts.meat.beef", Int: "curbside-category-shortcuts.meat.beef", Limit: bigStapleLimit},
-		{Name: "pork", ParentID: CategoryPorkParent, ChildID: CategoryPorkChild, CategoryPath: "/category/shop/meat-seafood/meat/pork/490110/490536?int=curbside-category-shortcuts.meat.pork", Int: "curbside-category-shortcuts.meat.pork", Limit: bigStapleLimit},
-		{Name: "chicken", ParentID: CategoryChickenParent, ChildID: CategoryChickenChild, CategoryPath: "/category/shop/meat-seafood/meat/chicken/490110/490531?int=curbside-category-shortcuts.meat.chicken", Int: "curbside-category-shortcuts.meat.chicken", Limit: bigStapleLimit},
-		{Name: "sausage", ParentID: CategorySausageParent, ChildID: CategorySausageChild, CategoryPath: "/category/shop/meat-seafood/meat/sausage/490110/490537?int=curbside-category-shortcuts.meat.sausage", Int: "curbside-category-shortcuts.meat.sausage", Limit: defaultStapleLimit},
-		{Name: "fish", ParentID: CategoryFishParent, ChildID: CategoryFishChild, CategoryPath: "/category/shop/meat-seafood/seafood/fish/490111/490540?int=curbside-category-shortcuts.seafood.fish", Int: "curbside-category-shortcuts.seafood.fish", Limit: seafoodStapleLimit},
-		{Name: "shrimp", ParentID: CategoryShrimpParent, ChildID: CategoryShrimpChild, CategoryPath: "/category/shop/meat-seafood/seafood/shrimp-shellfish/490111/490541?int=curbside-category-shortcuts.seafood.shrimp", Int: "curbside-category-shortcuts.seafood.shrimp", Limit: seafoodStapleLimit},
-		{Name: "vegetables", ParentID: CategoryVegetablesParent, ChildID: CategoryVegetablesChild, CategoryPath: "/category/shop/fruit-vegetables/vegetables/490020/490083", Limit: produceStapleLimit},
-		{Name: "fruit", ParentID: CategoryFruitParent, ChildID: CategoryFruitChild, CategoryPath: "/category/shop/fruit-vegetables/fruit/490020/490082?int=curbside-category-shortcuts.fruit-vegetables.fruits", Int: "curbside-category-shortcuts.fruit-vegetables.fruits", Limit: produceStapleLimit},
+		{Name: "beef", ParentID: CategoryBeefParent, ChildID: CategoryBeefChild, Limit: bigStapleLimit},
+		{Name: "pork", ParentID: CategoryPorkParent, ChildID: CategoryPorkChild, Limit: bigStapleLimit},
+		{Name: "chicken", ParentID: CategoryChickenParent, ChildID: CategoryChickenChild, Limit: bigStapleLimit},
+		{Name: "sausage", ParentID: CategorySausageParent, ChildID: CategorySausageChild, Limit: defaultStapleLimit},
+		{Name: "fish", ParentID: CategoryFishParent, ChildID: CategoryFishChild, Limit: seafoodStapleLimit},
+		{Name: "shrimp", ParentID: CategoryShrimpParent, ChildID: CategoryShrimpChild, Limit: seafoodStapleLimit},
+		{Name: "vegetables", ParentID: CategoryVegetablesParent, ChildID: CategoryVegetablesChild, Limit: produceStapleLimit},
+		{Name: "fruit", ParentID: CategoryFruitParent, ChildID: CategoryFruitChild, Limit: produceStapleLimit},
 	}
 }
 
@@ -221,11 +186,13 @@ func productToIngredient(product Product, category StapleCategory) ai.InputIngre
 	}
 
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
-		ProductID:   product.ID,
-		Description: product.DisplayName,
-		Brand:       brand,
-		Categories:  categories,
-		AisleNumber: location,
+		ProductID:    product.ID,
+		Description:  product.DisplayName,
+		Brand:        brand,
+		Categories:   categories,
+		AisleNumber:  location,
+		PriceRegular: product.ListPrice,
+		PriceSale:    product.SalePrice,
 	})
 }
 

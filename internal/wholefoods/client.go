@@ -6,16 +6,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"careme/internal/httpretry"
+
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 const (
 	// DefaultBaseURL is the public Whole Foods Market website origin.
-	DefaultBaseURL       = "https://www.wholefoodsmarket.com"
-	defaultCategoryLimit = 60
+	DefaultBaseURL               = "https://www.wholefoodsmarket.com"
+	defaultCategoryLimit         = 60
+	defaultCategoryTimeout       = 2 * time.Minute
+	defaultRequestAttemptTimeout = 10 * time.Second
 )
 
 // client calls the public Whole Foods category products endpoint.
@@ -150,14 +157,14 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 
 	return &client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: httpClient,
+		httpClient: withWholeFoodsRetries(httpClient),
 	}
 }
 
 // Category fetches category products and follows limit/offset pagination until
 // the API returns fewer items than the requested page size.
 func (c *client) Category(ctx context.Context, queryterm, store string) ([]product, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
+	ctx, cancel := context.WithTimeout(ctx, defaultCategoryTimeout)
 	defer cancel()
 
 	queryterm = strings.TrimSpace(queryterm)
@@ -242,4 +249,40 @@ func (c *client) getJSON(ctx context.Context, endpoint string, dest any) error {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
+}
+
+func withWholeFoodsRetries(baseClient *http.Client) *http.Client {
+	if baseClient == nil {
+		baseClient = http.DefaultClient
+	}
+	retryHTTPClient := *baseClient
+	if retryHTTPClient.Timeout == 0 || retryHTTPClient.Timeout > defaultRequestAttemptTimeout {
+		retryHTTPClient.Timeout = defaultRequestAttemptTimeout
+	}
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient = &retryHTTPClient
+	retryClient.RetryMax = 2
+	retryClient.RetryWaitMin = 100 * time.Millisecond
+	retryClient.RetryWaitMax = time.Second
+	retryClient.CheckRetry = wholeFoodsRetryPolicy
+	retryClient.RequestLogHook = httpretry.LogRetry("wholefoods")
+	retryClient.ErrorHandler = retryablehttp.PassthroughErrorHandler
+	return retryClient.StandardClient()
+}
+
+func wholeFoodsRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return false, err
+		}
+		var netErr net.Error
+		return errors.Is(err, context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout(), nil
+	}
+	if resp == nil || resp.Request == nil || resp.Request.Method != http.MethodGet {
+		return false, nil
+	}
+	return resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
 }

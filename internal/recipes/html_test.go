@@ -18,6 +18,7 @@ import (
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/html"
 )
 
@@ -117,6 +118,32 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingListHTML_ChefNotesUsesPreviousInstructionsAsPlaceholder(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.Instructions = "make it vegetarian"
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, `name="instructions"`)
+	assert.Contains(t, html, `placeholder="make it vegetarian"`)
+	assert.NotContains(t, html, `value="make it vegetarian"`)
+}
+
+func TestFormatShoppingListHTML_ChefNotesUsesDefaultPlaceholderWithoutPreviousInstructions(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, `name="instructions"`)
+	assert.Contains(t, html, `placeholder="e.g. make it vegetarian"`)
+}
+
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	addedRecipe := ai.Recipe{
@@ -136,7 +163,7 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 		DrinkPairing: "Tea",
 	}
 	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{addedRecipe, unaddedRecipe}}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	selection := recipeSelection{SavedHashes: []string{addedRecipe.ComputeHash()}}
 
 	w := httptest.NewRecorder()
@@ -144,6 +171,9 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
+	if !strings.Contains(html, `<meta name="description" content="Recipes for Store on 2026-01-25: Added Bowl, Maybe Pasta." />`) {
+		t.Error("shopping list HTML should include all recipe titles, location, and date in the meta description")
+	}
 	if !strings.Contains(html, "Shopping list") {
 		t.Fatal("shopping list HTML should render the shopping list section when a recipe is added")
 	}
@@ -251,40 +281,44 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestFormatShoppingListHTML_IncludesGoogleTagScript(t *testing.T) {
+func TestFormatShoppingListHTML_IncludesGoogleTagManagerScript(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 
-	prev := templates.GoogleTagID
+	prev := templates.GoogleTagManagerID
 	t.Cleanup(func() {
-		templates.GoogleTagID = prev
+		templates.GoogleTagManagerID = prev
 	})
-	templates.GoogleTagID = "AW-1234567890"
+	templates.GoogleTagManagerID = "GTM-ABC123"
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	assertHTTPSuccess(t, w)
-	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtag/js?id=AW-1234567890")) {
-		t.Error("HTML should contain Google tag script URL")
+	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/gtm.js?id=")) {
+		t.Error("HTML should contain Google Tag Manager script URL")
 	}
 
-	if !bytes.Contains(w.Body.Bytes(), []byte("gtag('config', 'AW-1234567890');")) {
-		t.Error("HTML should contain Google tag ID")
+	if !bytes.Contains(w.Body.Bytes(), []byte("'GTM-ABC123'")) {
+		t.Error("HTML should contain Google Tag Manager ID")
+	}
+
+	if !bytes.Contains(w.Body.Bytes(), []byte("www.googletagmanager.com/ns.html?id=GTM-ABC123")) {
+		t.Error("HTML should contain Google Tag Manager noscript URL")
 	}
 }
 
 func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	prev := templates.GoogleTagID
+	prev := templates.GoogleTagManagerID
 	t.Cleanup(func() {
-		templates.GoogleTagID = prev
+		templates.GoogleTagManagerID = prev
 	})
-	templates.GoogleTagID = ""
+	templates.GoogleTagManagerID = ""
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	assertHTTPSuccess(t, w)
 	if bytes.Contains(w.Body.Bytes(), []byte("googletagmanager.com")) {
-		t.Error("HTML should not contain Google tag script when tag ID is empty")
+		t.Error("HTML should not contain Google Tag Manager script when tag ID is empty")
 	}
 }
 
@@ -306,7 +340,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	recipe.OriginHash = p.Hash()
@@ -316,6 +350,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 
 	isValidHTML(t, html)
 
+	if !strings.Contains(html, `<meta name="description" content="A simple quail recipe Recipe for Store on 2026-01-25." />`) {
+		t.Error("recipe HTML should include recipe, location, and date in the meta description")
+	}
 	if strings.Contains(html, "Finalize") {
 		t.Error("recipe HTML should not contain Finalize button")
 	}
@@ -464,7 +501,7 @@ func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T)
 	}
 }
 
-func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
+func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	multiRecipeList := ai.ShoppingList{
@@ -487,11 +524,11 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
-	if strings.Contains(html, `/recipes/`) && strings.Contains(html, `/regenerate"`) {
-		t.Error("shopping list HTML should not expose regenerate endpoint when signed out")
+	if !strings.Contains(html, `/recipes/`) || !strings.Contains(html, `/regenerate"`) {
+		t.Error("shopping list HTML should expose regenerate endpoint when signed out")
 	}
-	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/save"`) {
-		t.Error("shopping list HTML should not expose save endpoint when signed out")
+	if !strings.Contains(html, `/recipe/`) || !strings.Contains(html, `/save"`) {
+		t.Error("shopping list HTML should expose save endpoint when signed out")
 	}
 	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/dismiss"`) {
 		t.Error("shopping list HTML should not expose dismiss endpoint when signed out")
@@ -502,14 +539,11 @@ func TestFormatShoppingListHTML_HidesMutationsWhenSignedOut(t *testing.T) {
 	if strings.Contains(html, `/recipe/`) && strings.Contains(html, `/wine?view=shopping`) {
 		t.Error("shopping list HTML should not expose shopping wine endpoint when signed out")
 	}
-	if strings.Contains(html, "Try again, chef") {
-		t.Error("shopping list HTML should hide regenerate action when signed out")
+	if !strings.Contains(html, "Try again, chef") {
+		t.Error("shopping list HTML should show regenerate action when signed out")
 	}
-	if strings.Contains(html, "Build Shopping List") {
-		t.Error("shopping list HTML should hide finalize action when signed out")
-	}
-	if strings.Contains(html, `id="save-`) {
-		t.Error("shopping list HTML should hide save controls when signed out")
+	if !strings.Contains(html, "Build Shopping List") {
+		t.Error("shopping list HTML should show finalize action when signed out")
 	}
 	if strings.Contains(html, `id="dismiss-`) {
 		t.Error("shopping list HTML should hide dismiss controls when signed out")
@@ -745,7 +779,7 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 		},
 	}
 
-	FormatRecipeThreadHTML(thread, true, "conv123", w)
+	FormatRecipeThreadHTML(thread, true, "conv123", "recipe123", w)
 	body := assertHTTPSuccess(t, w)
 
 	newerIndex := strings.Index(body, "newer question")

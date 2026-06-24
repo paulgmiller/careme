@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -189,11 +190,11 @@ ZIP=98101
 		got, err := secrets(input)
 		require.NoError(t, err)
 		require.Len(t, got, 2)
-		require.Contains(t, got, "first")
-		require.Contains(t, got, "second")
-		assert.Equal(t, "alpha", got["first"]["API_KEY"])
-		assert.Equal(t, "bravo", got["first"]["TOKEN"])
-		assert.Equal(t, "98101", got["second"]["ZIP"])
+		assert.Equal(t, "first", got[0].Name)
+		assert.Equal(t, "second", got[1].Name)
+		assert.Equal(t, "alpha", got[0].Lines[0].Value)
+		assert.Equal(t, "bravo", got[0].Lines[1].Value)
+		assert.Equal(t, "98101", got[1].Lines[0].Value)
 
 		secretsK8s := toK8s(got)
 		byName := map[string]*corev1.Secret{}
@@ -223,15 +224,54 @@ ZIP=98101
 API_KEY=alpha # primary key
 TOKEN="beta # still value" # comment
 PATH=with#hash
-`))
+		`))
 		require.NoError(t, err)
 		require.Len(t, got, 1)
-		require.Contains(t, got, "first")
+		assert.Equal(t, "first", got[0].Name)
 
-		first := got["first"]
-		assert.Equal(t, "alpha", first["API_KEY"])
-		assert.Equal(t, "beta # still value", first["TOKEN"])
-		assert.Equal(t, "with#hash", first["PATH"])
+		first := got[0]
+		require.Len(t, first.Lines, 3)
+		assert.Equal(t, secretLine{Key: "API_KEY", Value: "alpha", Comment: " primary key"}, first.Lines[0])
+		assert.Equal(t, secretLine{Key: "TOKEN", Value: "beta # still value", Comment: " comment"}, first.Lines[1])
+		assert.Equal(t, secretLine{Key: "PATH", Value: "with#hash"}, first.Lines[2])
+	})
+
+	t.Run("unquotes single quoted values before converting to k8s secrets", func(t *testing.T) {
+		t.Parallel()
+
+		const endpoint = "wss://user:pass@brd.superproxy.io:9222"
+		got, err := secrets(strings.NewReader(`
+#secret:brightdata-proxy
+BRIGHTDATA_BROWSER_WS_ENDPOINT='` + endpoint + `'
+		`))
+		require.NoError(t, err)
+
+		secretsK8s := toK8s(got)
+		require.Len(t, secretsK8s, 1)
+		assert.Equal(t, endpoint, secretsK8s[0].StringData["BRIGHTDATA_BROWSER_WS_ENDPOINT"])
+	})
+
+	t.Run("keeps block comments", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := secrets(strings.NewReader(`
+# top comment
+#secret:first
+# key note
+API_KEY=alpha
+# another note
+TOKEN=bravo
+		`))
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, "first", got[0].Name)
+		assert.Len(t, got[0].Lines, 4)
+		assert.Equal(t, []secretLine{
+			{Comment: " key note"},
+			{Key: "API_KEY", Value: "alpha"},
+			{Comment: " another note"},
+			{Key: "TOKEN", Value: "bravo"},
+		}, got[0].Lines)
 	})
 
 	t.Run("rejects short values", func(t *testing.T) {
@@ -282,4 +322,124 @@ not-an-env-line
 func TestMaskedSecretValue(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "a[5]a", maskedSecretValue("alpha"))
+}
+
+func TestParseSetArg(t *testing.T) {
+	t.Parallel()
+
+	secretName, key, value, err := parseSetArg("app/API_KEY=alpha")
+	require.NoError(t, err)
+	assert.Equal(t, "app", secretName)
+	assert.Equal(t, "API_KEY", key)
+	assert.Equal(t, "alpha", value)
+
+	_, _, _, err = parseSetArg("app/API_KEY=no")
+	require.Error(t, err)
+
+	_, _, _, err = parseSetArg("API_KEY=alpha")
+	require.Error(t, err)
+}
+
+func TestSetSecretValue(t *testing.T) {
+	t.Parallel()
+
+	t.Run("updates existing key and serializes parsed comments", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte(`# top comment
+#secret:first
+# key note
+API_KEY=alpha # primary key
+TOKEN="beta # still value" # token note
+
+# between
+#secret:second
+ZIP=98101
+`)
+		ogFile, err := secrets(bytes.NewReader(input))
+		require.NoError(t, err)
+		got, changed := setSecretValue(ogFile, "first", "API_KEY", "bravo")
+		require.True(t, changed)
+		var sb strings.Builder
+		require.NoError(t, got.write(&sb))
+		assert.Equal(t, `#secret:first
+# key note
+API_KEY=bravo # primary key
+TOKEN="beta # still value" # token note
+# between
+
+#secret:second
+ZIP=98101
+`, sb.String())
+	})
+
+	t.Run("returns unchanged when value already matches", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte("#secret:first\nAPI_KEY=alpha # primary key\n")
+		ogFile, err := secrets(bytes.NewReader(input))
+		require.NoError(t, err)
+		_, changed := setSecretValue(ogFile, "first", "API_KEY", "alpha")
+
+		require.False(t, changed)
+	})
+
+	t.Run("adds key to existing secret", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte(`#secret:first
+API_KEY=alpha
+
+# keep this with first
+#secret:second
+ZIP=98101
+`)
+
+		ogFile, err := secrets(bytes.NewReader(input))
+		require.NoError(t, err)
+		got, changed := setSecretValue(ogFile, "first", "TOKEN", "bravo")
+		require.True(t, changed)
+		var sb strings.Builder
+		require.NoError(t, got.write(&sb))
+		assert.Equal(t, `#secret:first
+API_KEY=alpha
+# keep this with first
+TOKEN=bravo
+
+#secret:second
+ZIP=98101
+`, sb.String())
+	})
+
+	t.Run("adds new secret at end", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte("#secret:first\nAPI_KEY=alpha\n")
+		ogFile, err := secrets(bytes.NewReader(input))
+		require.NoError(t, err)
+		got, changed := setSecretValue(ogFile, "second", "TOKEN", "bravo")
+		require.True(t, changed)
+		var sb strings.Builder
+		require.NoError(t, got.write(&sb))
+		assert.Equal(t, `#secret:first
+API_KEY=alpha
+
+#secret:second
+TOKEN=bravo
+`, sb.String())
+	})
+
+	t.Run("quotes values with comments", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte("#secret:first\nAPI_KEY=alpha # primary key\n")
+		ogFile, err := secrets(bytes.NewReader(input))
+		require.NoError(t, err)
+		got, changed := setSecretValue(ogFile, "first", "API_KEY", "bravo")
+		require.True(t, changed)
+		var sb strings.Builder
+		require.NoError(t, got.write(&sb))
+
+		assert.Equal(t, "#secret:first\nAPI_KEY=bravo # primary key\n", sb.String())
+	})
 }

@@ -417,6 +417,16 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	}, nil
 }
 
+func (m mock) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+	_ = ctx
+	_ = instructions
+	_ = previousResponseID
+	recipe := mockRecipes[0]
+	recipe.Title = "Fresh " + recipe.Title
+	recipe.ResponseID = uuid.NewString()
+	return &recipe, nil
+}
+
 func (m mock) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
 	_ = previousResponseID
 	return &ai.QuestionResponse{

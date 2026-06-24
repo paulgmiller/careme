@@ -1,9 +1,13 @@
 package wholefoods
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -111,6 +115,38 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	}
 	if got, want := err.Error(), `invalid whole foods location id "10216"`; got != want {
 		t.Fatalf("unexpected error: got %q want %q", got, want)
+	}
+}
+
+func TestStaplesProvider_LogsCategoryFailureAsFinalError(t *testing.T) {
+	var logs bytes.Buffer
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(originalLogger)
+	})
+
+	client := &stubCategoryClient{
+		errs: map[string]error{
+			"fresh-fruit": errors.New("giving up after 1 attempt(s): context deadline exceeded"),
+		},
+	}
+	provider := NewStaplesProvider(client)
+
+	_, err := provider.FetchStaples(t.Context(), "wholefoods_10216")
+	if err == nil {
+		t.Fatal("expected category failure")
+	}
+
+	got := logs.String()
+	if !strings.Contains(got, `level=ERROR`) {
+		t.Fatalf("expected final category failure to be logged as error, got logs:\n%s", got)
+	}
+	if !strings.Contains(got, `msg="Failed to fetch category"`) {
+		t.Fatalf("expected category failure log, got logs:\n%s", got)
+	}
+	if !strings.Contains(got, `category=fresh-fruit`) {
+		t.Fatalf("expected failed category attribute, got logs:\n%s", got)
 	}
 }
 

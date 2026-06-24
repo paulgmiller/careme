@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Learn how Careme helps home cooks find fresh nearby ingredients, plan practical recipes, and cook more often." />
   <title>About Careme</title>
 
   {{template "tailwind_head" .Style}}
@@ -14,6 +15,7 @@
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
+  {{GoogleTagNoScript}}
   {{template "seasonal_background" .}}
   <main class="relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-5xl">

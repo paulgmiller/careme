@@ -17,7 +17,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const recipePlanModel = openai.ChatModelGPT5Mini // need to play witht this
+const recipePlanModel = defaultRecipeModel
 
 type MenuPlan struct {
 	Plans      []RecipePlan `json:"plans"`
@@ -40,6 +40,8 @@ type RecipePlan struct {
 	Technique        string `json:"technique"`
 	SideVegetable    string `json:"side_vegetable"`
 	Fancy            bool   `json:"fancy"`
+	// so generic this is directive, user instructions, servings, time? Split it up?
+	RecipeInstructions []string `json:"recipe_instructions"`
 }
 
 func (p RecipePlan) Instructions() []string {
@@ -51,6 +53,11 @@ func (p RecipePlan) Instructions() []string {
 	}
 	if p.Fancy {
 		instructions = append(instructions, "This meal should be fancier, so it can be more expensive, longer, or richer.")
+	}
+	for _, instruction := range p.RecipeInstructions {
+		if trimmed := strings.TrimSpace(instruction); trimmed != "" {
+			instructions = append(instructions, "User direction for this recipe: "+trimmed)
+		}
 	}
 	return instructions
 }
@@ -128,9 +135,10 @@ const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
 Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and technique. Set fancy to true only for the richer/splurgier/time intensive option.
-Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","side_vegetable":"green beans","fancy":false}
+Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","side_vegetable":"green beans","fancy":false,"recipe_instructions":["Use the user's anise in this recipe."]}
 Try and ensure variety across cuisines, anchor ingredients, techniques, and side vegetables.
-Prioritize seasonal ingredients, sale value, practical weeknight cooking. 
+Prioritize seasonal ingredients, sale value, practical weeknight cooking.
+Assign user directions to recipe_instructions only for the specific recipe plans where they belong. If a user direction applies to every dish, repeat it in every recipe plan's recipe_instructions. If the user mentions having a limited ingredient without asking for it in every dish, assign it to only one fitting recipe.
 Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
 
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
@@ -207,32 +215,50 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIngredients []InputIngredient,
 	instructions []string, date time.Time, lastRecipes []string, count int,
 ) ([]PromptMessage, error) {
-	messages, err := c.buildRecipeContextMessages(location, saleIngredients, instructions, date, lastRecipes)
-	if err != nil {
-		return nil, err
+	var messages []PromptMessage
+	messages = append(messages, userPromptMessage("Prioritize ingredients that are in season for the current date and user's state location "+date.Format("January 2nd")+" in "+location.State+"."))
+
+	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
+	var buf strings.Builder
+	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
+		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
+	ingredientsMessage += buf.String()
+	messages = append(messages, userPromptMessage(ingredientsMessage))
+
 	messages = append(messages,
-		userPromptMessage(fmt.Sprintf("Build exactly %d distinct recipe plans that fit the available ingredients, seasonality, and price.", count)),
+		userPromptMessage(fmt.Sprintf("Build %d distinct recipe plans by default. If the user's directions clearly ask for a different number of recipes, return that many plans instead. Keep the plan count between 1 and 6. Fit the available ingredients, seasonality, and price.", count)),
 	)
-	cuisines := pickN(cuisineList, 5)
+	cuisines := pickN(cuisineList, 6)
 	messages = append(messages, userPromptMessage("For extra variety, loosely draw from one of these cuisine styles if it fits the ingredients: "+strings.Join(cuisines, ", ")))
 	// messages = append(messages, userPromptMessage("but don't overlook local cuisine"))
-	if count >= 3 {
-		messages = append(messages, userPromptMessage("Mark one plan fancy."))
-		// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
+
+	// this fails on regen
+	messages = append(messages, userPromptMessage("If doing more than 3 plans mark one plan fancy."))
+
+	if len(lastRecipes) > 0 {
+		var prevRecipesMsg strings.Builder
+		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
+		for _, recipe := range lastRecipes {
+			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
+		}
+		messages = append(messages, userPromptMessage(prevRecipesMsg.String()))
 	}
+
+	messages = append(messages, userPromptMessage("Default: cooking methods: oven, stove, grill, slow cooker"))
+	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
+	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
+	messages = append(messages, cleanInstructionMessages(instructions)...)
 	return messages, nil
 }
 
 func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptMessage {
 	messages := cleanInstructionMessages(instructions)
 	messages = append(messages,
-		userPromptMessage(fmt.Sprintf("Pick exactly %d replacement plans. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
+		userPromptMessage(fmt.Sprintf("Build %d replacement recipe plan(s) by default. If the user's directions clearly ask for a different number of recipes, return that many plans instead. Keep the plan count between 1 and 6. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
 	)
-	// ideally do this if they dismissed fancy.
-	if count >= 3 {
-		messages = append(messages, userPromptMessage("Mark one replacement plan fancy."))
-		// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
-	}
+	messages = append(messages, userPromptMessage("If fancy plan was dismissed make one of the new ones fancy"))
+	// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
+
 	return messages
 }

@@ -7,8 +7,8 @@ This document covers the first-time generation path inside `generatorService.Gen
 ```mermaid
 flowchart TD
     subgraph Legend["Model color"]
-        MiniLegend["gpt-5-mini<br/>Grading + menu planning"]
-        GPT5Legend["gpt-5.5<br/>Recipe generation + retry"]
+        MiniLegend["gpt-5-mini<br/>Grading"]
+        GPT5Legend["gpt-5.5<br/>Menu planning + recipe generation + retry"]
         GeminiLegend["Gemini<br/>Recipe critique"]
     end
 
@@ -85,7 +85,7 @@ The model boundary in this section is ingredient grading. Fetching staples is st
 
 ## Menu Plan And Recipe Fan-Out
 
-After grading, `GenerateRecipes` shuffles the ingredient list and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-5-mini`.
+After grading, `GenerateRecipes` shuffles the ingredient list and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-5.5`.
 
 The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-5.5` recipe model call:
 

@@ -18,7 +18,13 @@ func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
 	t.Parallel()
 
 	got := NewIdentityProvider().Signature()
-	want, err := json.Marshal(query.StapleCategories())
+	want, err := json.Marshal(struct {
+		Categories []string        `json:"categories"`
+		Rows       map[string]uint `json:"rows"`
+	}{
+		Categories: query.StapleCategories(),
+		Rows:       stapleRows,
+	})
 	if err != nil {
 		t.Fatalf("marshal staple categories: %v", err)
 	}
@@ -28,20 +34,18 @@ func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
 }
 
 type stubSearchClient struct {
-	results map[string]query.PathwaySearchPayload
+	results map[string][]query.PathwaySearchProduct
 	mu      sync.Mutex
 	calls   []string
 	starts  []uint
 }
 
-func (s *stubSearchClient) Search(_ context.Context, storeID, category string, opts query.SearchOptions) (*query.PathwaySearchPayload, error) {
+func (s *stubSearchClient) SearchAll(_ context.Context, storeID, category string, opts query.SearchOptions) ([]query.PathwaySearchProduct, error) {
 	s.mu.Lock()
 	s.calls = append(s.calls, storeID+":"+category+":"+opts.Query)
 	s.starts = append(s.starts, opts.Start)
 	s.mu.Unlock()
-
-	payload := s.results[category]
-	return &payload, nil
+	return s.results[category], nil
 }
 
 func (s *stubSearchClient) hasCall(want string) bool {
@@ -72,23 +76,22 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 
 	var requestedBaseURL string
 	client := &stubSearchClient{
-		results: map[string]query.PathwaySearchPayload{
+		results: map[string][]query.PathwaySearchProduct{
 			query.Category_Vegatables: {
-				Response: query.PathwaySearchResponse{
-					Docs: []query.PathwaySearchProduct{{
-						ID:             "veg-1",
-						Name:           "Broccoli Crown",
-						Price:          2.99,
-						BasePrice:      3.49,
-						ItemSizeQty:    "1",
-						UnitOfMeasure:  "EA",
-						DepartmentName: "Produce",
-						ShelfName:      "Vegetables",
-					}},
+				{
+					ID:             "veg-1",
+					Name:           "Broccoli Crown",
+					Price:          2.99,
+					BasePrice:      3.49,
+					ItemSizeQty:    "1",
+					UnitOfMeasure:  "EA",
+					DepartmentName: "Produce",
+					ShelfName:      "Vegetables",
 				},
 			},
 		},
 	}
+
 	provider := newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
 		requestedBaseURL = baseURL
 		return client, nil
@@ -150,16 +153,13 @@ func TestStaplesProvider_FetchWines_UsesWineCategoryAndStyles(t *testing.T) {
 	t.Parallel()
 
 	client := &stubSearchClient{
-		results: map[string]query.PathwaySearchPayload{
+		results: map[string][]query.PathwaySearchProduct{
 			query.Category_Wine: {
-				Response: query.PathwaySearchResponse{
-					Docs: []query.PathwaySearchProduct{
-						{ID: "wine-1", Name: "Pinot Noir", Price: 12.99},
-					},
-				},
+				{ID: "wine-1", Name: "Pinot Noir", Price: 12.99},
 			},
 		},
 	}
+
 	provider := newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
 		if baseURL != "https://www.acmemarkets.com" {
 			t.Fatalf("unexpected base URL: %q", baseURL)
