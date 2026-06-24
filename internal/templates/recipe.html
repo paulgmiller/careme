@@ -28,11 +28,11 @@
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
   {{GoogleTagNoScript}}
-  {{template "seasonal_background" .}}
-  <main class="relative z-10 px-4 py-10">
+  <div class="print-hidden">{{template "seasonal_background" .}}</div>
+  <main class="recipe-page relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-4xl space-y-8">
-      <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
-        <div class="border-b border-brand-100 p-8">
+      <div class="recipe-shell rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
+        <div class="print-hidden border-b border-brand-100 p-8">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
               <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">
@@ -53,13 +53,21 @@
         </div>
 
         <div class="p-8 space-y-8">
-          <article class="space-y-6 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+          <article class="printable-recipe space-y-6 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
             <header class="space-y-2">
               <h2 class="font-display text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
               <p class="text-sm text-gray-500">{{.Recipe.Description}}</p>
-              {{template "recipe_save_action" .}}
+              <div class="mt-4 flex flex-wrap items-center gap-3 print-hidden">
+                <button type="button"
+                        onclick="window.print()"
+                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Print recipe
+                </button>
+                {{template "recipe_save_action" .}}
+              </div>
             </header>
 
+            <div class="print-hidden">
             {{if .RecipeCritiqueNeedsCare}}
             <div class="rounded-2xl border-2 border-amber-400 bg-amber-50 p-5 text-amber-950 shadow-md" role="alert">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -73,8 +81,9 @@
               </div>
             </div>
             {{end}}
+            </div>
 
-            {{template "recipe_image_panel" .}}
+            <div class="print-hidden">{{template "recipe_image_panel" .}}</div>
 
             <div class="grid gap-6 md:grid-cols-2">
               <div>
@@ -124,7 +133,7 @@
             </div>
           </article>
 
-          <section class="space-y-4 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+          <section class="print-hidden space-y-4 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
             <div class="space-y-1">
               <h3 class="text-lg font-semibold text-brand-700">Chef Feedback</h3>
               <p class="text-xs text-gray-500">Ask about the recipe and share how it turned out.</p>
@@ -224,6 +233,7 @@
         </div>
       </div>
 
+      <div class="print-hidden">
       {{if .RecipeCritiqueScore}}
       <p class="text-center text-xs text-gray-400">
         Recipe score:
@@ -236,6 +246,7 @@
       </p>
       {{end}}
       <p class="text-center text-sm text-gray-500">Planned by Careme.</p>
+      </div>
     </section>
   </main>
   <script>
