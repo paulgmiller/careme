@@ -10,11 +10,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/locations/geo"
 
 	"github.com/samber/lo"
 )
@@ -139,7 +139,7 @@ func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time
 	if l == nil {
 		return nil, fmt.Errorf("nil location")
 	}
-	tzName, ok := timezoneNameForZip(l.ZipCode)
+	tzName, ok := geo.TimezoneNameForZip(l.ZipCode)
 	if !ok {
 		return nil, fmt.Errorf("unable to infer timezone from zipcode %s", l.ZipCode)
 	}
@@ -149,25 +149,6 @@ func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time
 		return nil, err
 	}
 	return storeLoc, nil
-}
-
-func timezoneNameForZip(zip string) (string, bool) {
-	trimmed := strings.TrimSpace(zip)
-	if trimmed == "" {
-		return "", false
-	}
-	switch first := trimmed[0]; {
-	case first >= '0' && first <= '3':
-		return "America/New_York", true
-	case first >= '4' && first <= '7':
-		return "America/Chicago", true
-	case first == '8':
-		return "America/Denver", true
-	case first == '9':
-		return "America/Los_Angeles", true
-	default:
-		return "", false
-	}
 }
 
 func StoreToDate(ctx context.Context, now time.Time, l *locations.Location) (time.Time, error) {

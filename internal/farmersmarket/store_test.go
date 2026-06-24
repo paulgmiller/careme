@@ -190,9 +190,9 @@ func TestParseUploadedPhotosRejectsImagesWithoutGPS(t *testing.T) {
 	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
-	_, _, err := parseUploadedPhotos(t.Context(), req)
+	_, err := parseUploadedPhotos(t.Context(), req)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "location saved")
+	assert.Contains(t, err.Error(), "could not read location")
 }
 
 func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
@@ -208,18 +208,19 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 		},
 	}
 
-	got, err := extractFarmersMarketIngredients(t.Context(), extractor, []uploadedPhoto{
-		{dataURL: "tomatoes"},
-		{dataURL: "radishes"},
-	})
+	photos := []Photo{
+		{contentType: "image/jpeg", content: []byte("tomatoes")},
+		{contentType: "image/jpeg", content: []byte("radishes")},
+	}
+
+	got, err := extractFarmersMarketIngredients(t.Context(), extractor, photos)
 
 	require.NoError(t, err)
 	require.Len(t, extractor.calls, 2)
-	assert.Contains(t, extractor.calls, "tomatoes")
-	assert.Contains(t, extractor.calls, "radishes")
+	assert.ElementsMatch(t, []string{photos[0].dataURL(), photos[1].dataURL()}, extractor.calls)
 	require.Len(t, got, 3)
-	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "tomatoes")
-	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "radishes")
+	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, photos[0].dataURL())
+	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, photos[1].dataURL())
 	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "shared basil")
 }
 
@@ -240,7 +241,7 @@ func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.False(t, extractor.called)
-	assert.Contains(t, rr.Body.String(), "location saved")
+	assert.Contains(t, rr.Body.String(), "could not read location")
 }
 
 func TestHandleGetRendersClerkRefreshData(t *testing.T) {

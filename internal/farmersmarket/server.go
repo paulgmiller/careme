@@ -15,6 +15,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/auth"
+	"careme/internal/locations/geo"
 	"careme/internal/parallelism"
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -62,9 +63,10 @@ type pageData struct {
 	ServerSignedIn  bool
 }
 
-type uploadedPhoto struct {
-	dataURL string
-	coord   *Coordinate
+type Photo struct {
+	contentType string
+	content     []byte
+	coord       *Coordinate
 }
 
 func NewHandler(uploader *Uploader, users UserLookup, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
@@ -120,11 +122,14 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		h.renderStatus(w, r, currentUser, "Add a market name.", http.StatusBadRequest)
 		return
 	}
-	photos, coords, err := parseUploadedPhotos(ctx, r)
+	photos, err := parseUploadedPhotos(ctx, r)
 	if err != nil {
 		h.renderStatus(w, r, currentUser, err.Error(), http.StatusBadRequest)
 		return
 	}
+	coords := lo.Map(photos, func(photo Photo, _ int) Coordinate {
+		return *photo.coord
+	})
 	avg, err := AverageCoordinate(coords)
 	if err != nil {
 		h.renderStatus(w, r, currentUser, "Add at least one photo with location saved.", http.StatusBadRequest)
@@ -158,14 +163,14 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/recipes?location="+url.QueryEscape(market.ID)+"&date="+url.QueryEscape(date.Format("2006-01-02")), http.StatusSeeOther)
 }
 
-func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []uploadedPhoto) ([]ai.InputIngredient, error) {
+func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []Photo) ([]ai.InputIngredient, error) {
 	if len(photos) == 0 {
 		return nil, fmt.Errorf("at least one photo is required")
 	}
 
 	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos))
-	ingredients, err := parallelism.Flatten(photos, func(photo uploadedPhoto) ([]ai.InputIngredient, error) {
-		ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL)
+	ingredients, err := parallelism.Flatten(photos, func(photo Photo) ([]ai.InputIngredient, error) {
+		ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL())
 		slog.InfoContext(ctx, "finished farmers market photo analysis", "ingredient_count", len(ingredients))
 		return ingredients, err
 	})
@@ -202,65 +207,66 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, user *utypes.Us
 	}
 }
 
-func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]uploadedPhoto, []Coordinate, error) {
+func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) {
 	if r.MultipartForm == nil || r.MultipartForm.File == nil {
-		return nil, nil, fmt.Errorf("add a few market photos")
+		return nil, fmt.Errorf("add a few market photos")
 	}
 	files := r.MultipartForm.File["photos"]
 	if len(files) == 0 {
-		return nil, nil, fmt.Errorf("add a few market photos")
+		return nil, fmt.Errorf("add a few market photos")
 	}
 	if len(files) > maxPhotoCount {
-		return nil, nil, fmt.Errorf("use %d photos or fewer", maxPhotoCount)
+		return nil, fmt.Errorf("use %d photos or fewer", maxPhotoCount)
 	}
 
-	photos := make([]uploadedPhoto, 0, len(files))
-	coords := make([]Coordinate, 0, len(files))
+	photos := make([]Photo, 0, len(files))
 	for i, header := range files {
 		if header.Size > maxPhotoBytes {
-			return nil, nil, fmt.Errorf("keep each photo under 10 MB")
+			return nil, fmt.Errorf("keep each photo under 10 MB")
 		}
 		file, err := header.Open()
 		if err != nil {
-			return nil, nil, fmt.Errorf("could not open one of those photos")
+			return nil, fmt.Errorf("could not open one of those photos")
 		}
 		data, readErr := io.ReadAll(io.LimitReader(file, maxPhotoBytes+1))
 		closeErr := file.Close()
 		if readErr != nil {
-			return nil, nil, fmt.Errorf("could not read one of those photos")
+			return nil, fmt.Errorf("could not read one of those photos")
 		}
 		if closeErr != nil {
-			return nil, nil, fmt.Errorf("could not read one of those photos")
+			return nil, fmt.Errorf("could not read one of those photos")
 		}
 		if len(data) > maxPhotoBytes {
-			return nil, nil, fmt.Errorf("keep each photo under 10 MB")
+			return nil, fmt.Errorf("keep each photo under 10 MB")
 		}
 		contentType := http.DetectContentType(data)
 		if !strings.HasPrefix(contentType, "image/") {
-			return nil, nil, fmt.Errorf("upload image files only")
+			return nil, fmt.Errorf("upload image files only")
 		}
 
-		photo := uploadedPhoto{dataURL: dataURL(contentType, data)}
-		if coord, err := GPSFromImage(data); err == nil {
-			coordCopy := coord
-			photo.coord = &coordCopy
-			coords = append(coords, coord)
+		photo := Photo{contentType: contentType, content: data}
+		coord, err := GPSFromImage(data)
+		if err != nil {
+			return nil, fmt.Errorf("could not read location from one of those photos %w", err)
 		}
+		photo.coord = &coord
+
 		photos = append(photos, photo)
 		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", len(data), "content_type", contentType, "has_location", photo.coord != nil)
 	}
-	if len(coords) == 0 {
-		return nil, nil, fmt.Errorf("add at least one photo with location saved")
-	}
-	return photos, coords, nil
+	return photos, nil
 }
 
-func dataURL(contentType string, data []byte) string {
-	return "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(data)
+// who knew data: was  valid url just like http:? see comment in ai/farmersmarket.go
+func (p Photo) dataURL() string {
+	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
 func farmersMarketDate(now time.Time, zip string) time.Time {
-	tzName := timezoneNameForZip(zip)
+	tzName, ok := geo.TimezoneNameForZip(zip)
+	if !ok {
+		tzName = "UTC"
+	}
 	storeLoc, err := time.LoadLocation(tzName)
 	if err != nil {
 		storeLoc = time.UTC
@@ -270,25 +276,6 @@ func farmersMarketDate(now time.Time, zip string) time.Time {
 		localNow = localNow.AddDate(0, 0, -1)
 	}
 	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
-}
-
-func timezoneNameForZip(zip string) string {
-	trimmed := strings.TrimSpace(zip)
-	if trimmed == "" {
-		return "UTC"
-	}
-	switch first := trimmed[0]; {
-	case first >= '0' && first <= '3':
-		return "America/New_York"
-	case first >= '4' && first <= '7':
-		return "America/Chicago"
-	case first == '8':
-		return "America/Denver"
-	case first == '9':
-		return "America/Los_Angeles"
-	default:
-		return "UTC"
-	}
 }
 
 func redirectToSignIn(w http.ResponseWriter, r *http.Request) {
