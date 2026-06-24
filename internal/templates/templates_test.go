@@ -349,6 +349,39 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 	}
 }
 
+func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
+		Error           string
+	}{
+		Style: seasons.GetCurrentStyle(),
+	}
+
+	var buf bytes.Buffer
+	if err := FarmersMarket.Execute(&buf, data); err != nil {
+		t.Fatalf("FarmersMarket.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	for _, want := range []string{
+		`<script src="/static/htmx@2.0.8.js"></script>`,
+		`hx-post="/farmersmarket"`,
+		`hx-encoding="multipart/form-data"`,
+		`hx-target="#farmers-market-work"`,
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("farmers market page should include %q, body: %s", want, rendered)
+		}
+	}
+}
+
 func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
