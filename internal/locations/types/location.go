@@ -12,7 +12,7 @@ type Location struct {
 	Address string `json:"address"`
 	State   string `json:"state"`
 	ZipCode string `json:"zip_code"`
-	//TOOD embed go.Coordinate
+	// TOOD embed go.Coordinate
 	Lat      *float64  `json:"lat,omitempty"`
 	Lon      *float64  `json:"lon,omitempty"`
 	CachedAt time.Time `json:"cached_at"`
