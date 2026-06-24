@@ -14,12 +14,14 @@ func (MockExtractor) ExtractFarmersMarketIngredients(context.Context, string) ([
 		{
 			ProductID:    "farmersmarket_mock_tomatoes",
 			AisleNumber:  "Mock Farm",
+			Brand:        "Mock Farm",
 			Description:  "heirloom tomatoes",
 			PriceRegular: &tomatoPrice,
 		},
 		{
 			ProductID:   "farmersmarket_mock_basil",
 			AisleNumber: "Farmers market",
+			Brand:       "Farmers market",
 			Description: "fresh basil",
 		},
 	}, nil
