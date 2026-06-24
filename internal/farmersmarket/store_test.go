@@ -125,13 +125,12 @@ func TestFetchStaplesIgnoresInventoryOlderThan24Hours(t *testing.T) {
 	provider := NewStaplesProviderFromStore(store)
 	locationID := LocationIDPrefix + "stale"
 	require.NoError(t, store.saveMarket(t.Context(), Market{
-		ID:        locationID,
-		Names:     []string{"Stale Market"},
-		Lat:       47.61,
-		Lon:       -122.33,
-		ZipCode:   "98101",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:         locationID,
+		Names:      []string{"Stale Market"},
+		Coordinate: geo.Coordinate{Lat: 47.61, Lon: -122.33},
+		ZipCode:    "98101",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}))
 	raw, err := json.Marshal(inventoryRecord{
 		CachedAt: time.Now().Add(-25 * time.Hour),

@@ -20,6 +20,12 @@ type Uploader struct {
 
 // private for tests
 func NewUploader(store *store, zipFinder ZipFinder) *Uploader {
+	if store == nil {
+		panic("store is required")
+	}
+	if zipFinder == nil {
+		panic("zip finder is required")
+	}
 	return &Uploader{store: store, zipFinder: zipFinder}
 }
 
@@ -32,20 +38,11 @@ func NewContainerUploader(zipFinder ZipFinder) (*Uploader, error) {
 }
 
 func (u *Uploader) SaveUpload(ctx context.Context, name string, lat, lon float64, photoCount int, date time.Time, ingredients []ai.InputIngredient) (*Market, []ai.InputIngredient, error) {
-	if u == nil || u.store == nil || u.store.cache == nil {
-		return nil, nil, fmt.Errorf("cache is required")
-	}
-	if u.zipFinder == nil {
-		return nil, nil, fmt.Errorf("zip finder is required")
-	}
 	if photoCount <= 0 {
 		return nil, nil, fmt.Errorf("at least one geotagged photo is required")
 	}
-	name = normalizeName(name)
-	if name == "" {
-		return nil, nil, fmt.Errorf("market name is required")
-	}
-	if !(geo.Coordinate{Lat: lat, Lon: lon}).Valid() {
+	coor := geo.Coordinate{Lat: lat, Lon: lon}
+	if !coor.Valid() {
 		return nil, nil, fmt.Errorf("invalid market coordinates")
 	}
 
@@ -58,10 +55,9 @@ func (u *Uploader) SaveUpload(ctx context.Context, name string, lat, lon float64
 	if market == nil {
 		zip, _ := u.zipFinder.NearestZIPToCoordinates(lat, lon)
 		market = &Market{
+			Coordinate: coor,
 			ID:         marketID(name, lat, lon),
 			Names:      []string{name},
-			Lat:        lat,
-			Lon:        lon,
 			ZipCode:    zip,
 			PhotoCount: photoCount,
 			CreatedAt:  now,

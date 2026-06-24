@@ -40,10 +40,9 @@ type store struct {
 }
 
 type Market struct {
-	ID         string    `json:"id"`
-	Names      []string  `json:"names"`
-	Lat        float64   `json:"lat"`
-	Lon        float64   `json:"lon"`
+	ID    string   `json:"id"`
+	Names []string `json:"names"`
+	geo.Coordinate
 	ZipCode    string    `json:"zip_code"`
 	PhotoCount int       `json:"photo_count"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -274,10 +273,6 @@ func marketID(name string, lat, lon float64) string {
 	_, _ = io.WriteString(h, strings.ToLower(strings.TrimSpace(name)))
 	_, _ = io.WriteString(h, fmt.Sprintf("|%.4f|%.4f", lat, lon))
 	return LocationIDPrefix + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
-}
-
-func normalizeName(name string) string {
-	return strings.Join(strings.Fields(strings.TrimSpace(name)), " ")
 }
 
 func isID(locationID string) bool {
