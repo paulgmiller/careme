@@ -254,6 +254,7 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Farmers market finds")
+	assert.NotContains(t, rr.Body.String(), "template error")
 }
 
 func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
