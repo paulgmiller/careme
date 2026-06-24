@@ -17,7 +17,6 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/locations/geo"
-	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -32,30 +31,10 @@ const (
 	signature       = "farmersmarket-staples-v1"
 )
 
-type ZipFinder interface {
-	NearestZIPToCoordinates(lat, lon float64) (string, bool)
-}
-
-type ZipCentroidLookup interface {
-	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
-}
-
 type identityProvider struct{}
 
 type Store struct {
-	identityProvider
 	cache cache.ListCache
-}
-
-type LocationBackend struct {
-	identityProvider
-	store     *Store
-	zipLookup ZipCentroidLookup
-}
-
-type Uploader struct {
-	store     *Store
-	zipFinder ZipFinder
 }
 
 type Market struct {
@@ -86,192 +65,40 @@ func NewContainerStore() (*Store, error) {
 	return NewStore(cacheStore), nil
 }
 
-func NewLocationBackend(store *Store, zipLookup ZipCentroidLookup) *LocationBackend {
-	return &LocationBackend{store: store, zipLookup: zipLookup}
-}
-
-func NewContainerLocationBackend(zipLookup ZipCentroidLookup) (*LocationBackend, error) {
-	store, err := NewContainerStore()
-	if err != nil {
-		return nil, err
-	}
-	return NewLocationBackend(store, zipLookup), nil
-}
-
-func NewUploader(store *Store, zipFinder ZipFinder) *Uploader {
-	return &Uploader{store: store, zipFinder: zipFinder}
-}
-
-func NewContainerUploader(zipFinder ZipFinder) (*Uploader, error) {
-	store, err := NewContainerStore()
-	if err != nil {
-		return nil, err
-	}
-	return NewUploader(store, zipFinder), nil
-}
-
-func NewStaplesProvider() (*Store, error) {
-	cacheStore, err := cache.EnsureCache(Container)
-	if err != nil {
-		return nil, fmt.Errorf("create farmers market cache: %w", err)
-	}
-	return NewStore(cacheStore), nil
-}
-
 func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
 func (s identityProvider) IsID(locationID string) bool {
-	return strings.HasPrefix(locationID, LocationIDPrefix) && strings.TrimPrefix(locationID, LocationIDPrefix) != ""
+	return isID(locationID)
 }
 
 func (s identityProvider) Signature() string {
 	return signature
 }
 
-func (s *Store) HasInventory(locationID string) bool {
-	if s == nil || s.cache == nil {
-		return false
-	}
-	_, err := s.freshInventory(context.Background(), locationID)
-	return err == nil
-}
-
-func (b *LocationBackend) HasInventory(locationID string) bool {
-	return b != nil && b.store != nil && b.store.HasInventory(locationID)
-}
-
-func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
-	market, err := b.store.loadMarket(ctx, locationID)
-	if err != nil {
-		return nil, err
-	}
-	loc := market.Location()
-	return &loc, nil
-}
-
-func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	if b == nil || b.store == nil {
-		return nil, cache.ErrNotFound
-	}
-	if b.zipLookup == nil {
-		return nil, fmt.Errorf("zip lookup is required")
-	}
-
-	markets, err := b.store.listMarkets(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	locations := make([]locationtypes.Location, 0, len(markets))
-	for _, market := range markets {
-		locations = append(locations, market.Location())
-	}
-	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, locations, nearby.MaxLocationDistanceMiles), nil
-}
-
-func (s *Store) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	record, err := s.freshInventory(ctx, locationID)
-	if err != nil {
-		return nil, err
-	}
-	return record.Ingredients, nil
-}
-
 func (s *Store) freshInventory(ctx context.Context, locationID string) (*inventoryRecord, error) {
-	if !s.IsID(locationID) {
+	if !isID(locationID) {
 		return nil, fmt.Errorf("invalid farmers market location id %q", locationID)
 	}
 	if s.cache == nil {
 		return nil, cache.ErrNotFound
 	}
 
-	// this will get expensive. Need to just take first 1/2 (assuming they are odered ) or try gets on last couple of days.
-	keys, err := s.cache.List(ctx, inventoryPrefix+locationID+"/", "")
+	market, err := s.loadMarket(ctx, locationID)
 	if err != nil {
-		return nil, fmt.Errorf("list farmers market inventory: %w", err)
+		return nil, err
 	}
-
-	cutoff := time.Now().Add(-24 * time.Hour)
-	var newest *inventoryRecord
-	for _, key := range keys {
-		record, err := s.loadInventoryByKey(ctx, inventoryPrefix+locationID+"/"+key)
-		if err != nil {
-			slog.WarnContext(ctx, "failed to load farmers market inventory", "location", locationID, "key", key, "error", err)
-			continue
-		}
-		if record.CachedAt.Before(cutoff) {
-			continue
-		}
-		if newest == nil || record.CachedAt.After(newest.CachedAt) {
-			recordCopy := record
-			newest = &recordCopy
-		}
+	now := time.Now()
+	date := farmersMarketDate(now, market.ZipCode)
+	record, err := s.loadInventoryByKey(ctx, inventoryKey(locationID, date))
+	if err != nil {
+		return nil, err
 	}
-
-	if newest == nil {
+	if record.CachedAt.Before(now.Add(-24 * time.Hour)) {
 		return nil, cache.ErrNotFound
 	}
-	return newest, nil
-}
-
-func (s *Store) FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error) {
-	return nil, nil
-}
-
-func (u *Uploader) SaveUpload(ctx context.Context, name string, lat, lon float64, photoCount int, date time.Time, ingredients []ai.InputIngredient) (*Market, []ai.InputIngredient, error) {
-	if u == nil || u.store == nil || u.store.cache == nil {
-		return nil, nil, fmt.Errorf("cache is required")
-	}
-	if u.zipFinder == nil {
-		return nil, nil, fmt.Errorf("zip finder is required")
-	}
-	if photoCount <= 0 {
-		return nil, nil, fmt.Errorf("at least one geotagged photo is required")
-	}
-	name = normalizeName(name)
-	if name == "" {
-		return nil, nil, fmt.Errorf("market name is required")
-	}
-	if !validCoordinate(lat, lon) {
-		return nil, nil, fmt.Errorf("invalid market coordinates")
-	}
-
-	market, err := u.store.findNearbyMarket(ctx, lat, lon)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	now := time.Now().UTC()
-	if market == nil {
-		zip, _ := u.zipFinder.NearestZIPToCoordinates(lat, lon)
-		market = &Market{
-			ID:         marketID(name, lat, lon),
-			Names:      []string{name},
-			Lat:        lat,
-			Lon:        lon,
-			ZipCode:    zip,
-			PhotoCount: photoCount,
-			CreatedAt:  now,
-			UpdatedAt:  now,
-		}
-	} else {
-		market.merge(name, lat, lon, photoCount, now)
-		if market.ZipCode == "" {
-			market.ZipCode, _ = u.zipFinder.NearestZIPToCoordinates(market.Lat, market.Lon)
-		}
-	}
-
-	if err := u.store.saveMarket(ctx, *market); err != nil {
-		return nil, nil, err
-	}
-
-	merged, err := u.store.mergeInventory(ctx, market.ID, date, ingredients)
-	if err != nil {
-		return nil, nil, err
-	}
-	return market, merged, nil
+	return &record, nil
 }
 
 func (m Market) Location() locationtypes.Location {
@@ -350,7 +177,7 @@ func (s *Store) listMarkets(ctx context.Context) ([]Market, error) {
 }
 
 func (s *Store) loadMarket(ctx context.Context, locationID string) (Market, error) {
-	if !s.IsID(locationID) {
+	if !isID(locationID) {
 		return Market{}, fmt.Errorf("invalid farmers market location id %q", locationID)
 	}
 	return s.loadMarketByKey(ctx, locationKey(locationID))
@@ -470,4 +297,8 @@ func normalizeName(name string) string {
 
 func validCoordinate(lat, lon float64) bool {
 	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 && !(lat == 0 && lon == 0)
+}
+
+func isID(locationID string) bool {
+	return strings.HasPrefix(locationID, LocationIDPrefix) && strings.TrimPrefix(locationID, LocationIDPrefix) != ""
 }

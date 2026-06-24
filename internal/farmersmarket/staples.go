@@ -1,0 +1,49 @@
+package farmersmarket
+
+import (
+	"context"
+	"fmt"
+
+	"careme/internal/ai"
+	"careme/internal/cache"
+)
+
+type StaplesProvider struct {
+	identityProvider
+	store *Store
+}
+
+func NewStaplesProvider() (*StaplesProvider, error) {
+	cacheStore, err := cache.EnsureCache(Container)
+	if err != nil {
+		return nil, fmt.Errorf("create farmers market cache: %w", err)
+	}
+	return NewStaplesProviderFromStore(NewStore(cacheStore)), nil
+}
+
+func NewStaplesProviderFromStore(store *Store) *StaplesProvider {
+	return &StaplesProvider{store: store}
+}
+
+func (p *StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	if p == nil || p.store == nil {
+		return nil, cache.ErrNotFound
+	}
+	record, err := p.store.freshInventory(ctx, locationID)
+	if err != nil {
+		return nil, err
+	}
+	return record.Ingredients, nil
+}
+
+func (p *StaplesProvider) FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error) {
+	return nil, nil
+}
+
+func (s *Store) hasFreshInventory(locationID string) bool {
+	if s == nil || s.cache == nil {
+		return false
+	}
+	_, err := s.freshInventory(context.Background(), locationID)
+	return err == nil
+}
