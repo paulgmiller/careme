@@ -21,8 +21,6 @@ import (
 	"careme/internal/seasons"
 	"careme/internal/templates"
 
-	utypes "careme/internal/users/types"
-
 	"github.com/samber/lo"
 )
 
@@ -42,24 +40,15 @@ type IngredientExtractor interface {
 	ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]ai.InputIngredient, error)
 }
 
-type AuthClient interface {
+type authClient interface {
 	GetUserIDFromRequest(r *http.Request) (string, error)
 }
 
 type Handler struct {
 	uploader  *uploader
-	auth      AuthClient
+	auth      authClient
 	extractor IngredientExtractor
 	zipFinder ZipFinder
-}
-
-type pageData struct {
-	Error           string
-	ClarityScript   template.HTML
-	GoogleTagScript template.HTML
-	Style           seasons.Style
-	User            *utypes.User
-	ServerSignedIn  bool
 }
 
 type Photo struct {
@@ -73,7 +62,7 @@ func (p Photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, authClient AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
+func NewHandler(uploader *uploader, authClient authClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
 	return &Handler{
 		uploader:  uploader,
 		auth:      authClient,
@@ -98,7 +87,12 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
-	data := pageData{
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+	}{
 		ClarityScript:   templates.ClarityScript(r.Context()),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
