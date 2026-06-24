@@ -191,6 +191,19 @@ func TestParseUploadedPhotosRejectsImagesWithoutGPS(t *testing.T) {
 	assert.Contains(t, err.Error(), "could not read location")
 }
 
+func TestParseUploadedPhotosRejectsTooManyPhotos(t *testing.T) {
+	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
+	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
+	for len(req.MultipartForm.File["photos"]) < maxPhotoCount+1 {
+		req.MultipartForm.File["photos"] = append(req.MultipartForm.File["photos"], req.MultipartForm.File["photos"][0])
+	}
+
+	_, err := parseUploadedPhotos(t.Context(), req)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "use 4 photos or fewer")
+}
+
 func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 	extractor := &fakeExtractor{
 		fn: func(_ context.Context, imageDataURL string) ([]ai.InputIngredient, error) {
