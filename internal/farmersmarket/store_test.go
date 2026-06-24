@@ -19,6 +19,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 	"careme/internal/templates"
 
@@ -37,7 +38,7 @@ func (s staticZipFinder) NearestZIPToCoordinates(float64, float64) (string, bool
 	return s.zip, s.ok
 }
 
-type staticZipLookup map[string]locationtypes.Coordinate
+type staticZipLookup map[string]geo.Coordinate
 
 func (s staticZipLookup) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
 	coord, ok := s[zip]

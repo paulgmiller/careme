@@ -280,10 +280,6 @@ func normalizeName(name string) string {
 	return strings.Join(strings.Fields(strings.TrimSpace(name)), " ")
 }
 
-func validCoordinate(lat, lon float64) bool {
-	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 && !(lat == 0 && lon == 0)
-}
-
 func isID(locationID string) bool {
 	return strings.HasPrefix(locationID, LocationIDPrefix) && strings.TrimPrefix(locationID, LocationIDPrefix) != ""
 }

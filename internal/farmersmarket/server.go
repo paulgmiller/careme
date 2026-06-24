@@ -67,11 +67,6 @@ type uploadedPhoto struct {
 	coord   *Coordinate
 }
 
-type photoAnalysisResult struct {
-	ingredients []ai.InputIngredient
-	err         error
-}
-
 func NewHandler(uploader *Uploader, users UserLookup, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
 	return &Handler{
 		uploader:   uploader,

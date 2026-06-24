@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"fmt"
 
-	locationtypes "careme/internal/locations/types"
+	"careme/internal/locations/geo"
 
 	"github.com/rwcarlsen/goexif/exif"
 )
 
-type Coordinate = locationtypes.Coordinate
+type Coordinate = geo.Coordinate
 
 func GPSFromImage(data []byte) (Coordinate, error) {
 	x, err := exif.Decode(bytes.NewReader(data))
@@ -20,7 +20,7 @@ func GPSFromImage(data []byte) (Coordinate, error) {
 	if err != nil {
 		return Coordinate{}, fmt.Errorf("read exif gps: %w", err)
 	}
-	if !validCoordinate(lat, lon) {
+	if !(Coordinate{Lat: lat, Lon: lon}).Valid() {
 		return Coordinate{}, fmt.Errorf("invalid exif gps")
 	}
 	return Coordinate{Lat: lat, Lon: lon}, nil
@@ -32,7 +32,7 @@ func AverageCoordinate(coords []Coordinate) (Coordinate, error) {
 	}
 	var lat, lon float64
 	for _, coord := range coords {
-		if !validCoordinate(coord.Lat, coord.Lon) {
+		if !coord.Valid() {
 			return Coordinate{}, fmt.Errorf("invalid coordinate")
 		}
 		lat += coord.Lat

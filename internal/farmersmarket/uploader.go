@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/locations/geo"
 )
 
 type ZipFinder interface {
@@ -44,7 +45,7 @@ func (u *Uploader) SaveUpload(ctx context.Context, name string, lat, lon float64
 	if name == "" {
 		return nil, nil, fmt.Errorf("market name is required")
 	}
-	if !validCoordinate(lat, lon) {
+	if !(geo.Coordinate{Lat: lat, Lon: lon}).Valid() {
 		return nil, nil, fmt.Errorf("invalid market coordinates")
 	}
 
