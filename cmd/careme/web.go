@@ -16,6 +16,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/campaigns"
 	"careme/internal/config"
+	"careme/internal/farmersmarket"
 	"careme/internal/ingredients"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
@@ -69,16 +70,19 @@ func runServer(cfg *config.Config, addr string) error {
 
 	var generator recipes.ExtGenerator
 	var imageGen recipes.ImageGen
+	var marketExtractor farmersmarket.IngredientExtractor
 	var waitFns []func()
 	if cfg.Mocks.Enable {
 		generator = recipes.NewMockGenerator(recipes.IO(cache))
 		imageGen = recipes.NewMockImageGen()
+		marketExtractor = farmersmarket.MockExtractor{}
 	} else {
 		mc := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(mc)
 
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
 		imageGen = aiclient
+		marketExtractor = aiclient
 		ro.add(aiclient)
 		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
 		if err != nil {
@@ -107,6 +111,13 @@ func runServer(cfg *config.Config, addr string) error {
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage, recipes.NewCachedProduceScorer(recipes.IO(cache)))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
+
+	farmersMarketStore, err := farmersmarket.NewContainerStore()
+	if err != nil {
+		return fmt.Errorf("failed to create farmers market store: %w", err)
+	}
+	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore, centroids)
+	farmersmarket.NewHandler(farmersMarketUploader, authClient, marketExtractor, centroids).Register(appRoutes)
 
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
 	sitemapHandler.Register(infraRoutes)

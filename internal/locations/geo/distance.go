@@ -4,6 +4,7 @@ import "math"
 
 // HaversineMiles returns great-circle distance between two latitude/longitude
 // points in statute miles. Inputs are decimal degrees.
+// TOOD take coordinate
 func HaversineMiles(lat1, lon1, lat2, lon2 float64) float64 {
 	const earthRadiusMiles = 3958.7613
 	toRadians := math.Pi / 180.0

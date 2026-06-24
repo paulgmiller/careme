@@ -14,6 +14,7 @@ import (
 	"careme/internal/aldi"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/locations/geo"
@@ -108,6 +109,9 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 		},
 		func(ctx context.Context) (locationBackend, error) {
 			return wegmans.NewLocationBackend(ctx, cfg, centroids)
+		},
+		func(context.Context) (locationBackend, error) {
+			return farmersmarket.NewContainerLocationBackend(centroids)
 		},
 	}
 
