@@ -76,14 +76,14 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 	uploader := NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true})
 	date := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 
-	first, ingredients, err := uploader.SaveUpload(t.Context(), "Saturday Market", 47.61, -122.33, 2, date, []ai.InputIngredient{
+	first, ingredients, err := uploader.saveUpload(t.Context(), "Saturday Market", 47.61, -122.33, 2, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "Strawberries", Size: "1 pint"},
 	})
 	require.NoError(t, err)
 	require.Len(t, ingredients, 1)
 	require.Equal(t, "98101", first.ZipCode)
 
-	second, ingredients, err := uploader.SaveUpload(t.Context(), "River Stalls", 47.611, -122.331, 1, date, []ai.InputIngredient{
+	second, ingredients, err := uploader.saveUpload(t.Context(), "River Stalls", 47.611, -122.331, 1, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "strawberries", Size: "1 pint"},
 		{ProductID: "B", Brand: "Hill Farm", Description: "Fresh basil", Size: "1 bunch"},
 	})
@@ -104,11 +104,11 @@ func TestFetchStaplesReturnsCurrentStoreDateInventory(t *testing.T) {
 	currentDate := farmersMarketDate(time.Now(), "98101")
 	olderDate := currentDate.AddDate(0, 0, -1)
 
-	market, _, err := uploader.SaveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, olderDate, []ai.InputIngredient{
+	market, _, err := uploader.saveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, olderDate, []ai.InputIngredient{
 		{Brand: "Friday Farm", Description: "peas"},
 	})
 	require.NoError(t, err)
-	_, _, err = uploader.SaveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, currentDate, []ai.InputIngredient{
+	_, _, err = uploader.saveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, currentDate, []ai.InputIngredient{
 		{Brand: "Saturday Farm", Description: "carrots"},
 	})
 	require.NoError(t, err)
@@ -150,15 +150,15 @@ func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
 	uploader := NewUploader(store, staticZipFinder{zip: "98199", ok: true})
-	_, _, err := uploader.SaveUpload(t.Context(), "Far Market", 48.2, -122.33, 1, time.Now(), []ai.InputIngredient{
+	_, _, err := uploader.saveUpload(t.Context(), "Far Market", 48.2, -122.33, 1, time.Now(), []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "turnips"},
 	})
 	require.NoError(t, err)
-	_, _, err = uploader.SaveUpload(t.Context(), "Near Market", 47.62, -122.33, 1, time.Now(), []ai.InputIngredient{
+	_, _, err = uploader.saveUpload(t.Context(), "Near Market", 47.62, -122.33, 1, time.Now(), []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "kale"},
 	})
 	require.NoError(t, err)
-	_, _, err = uploader.SaveUpload(t.Context(), "Closer Market", 47.611, -122.33, 1, time.Now(), []ai.InputIngredient{
+	_, _, err = uploader.saveUpload(t.Context(), "Closer Market", 47.611, -122.33, 1, time.Now(), []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "chard"},
 	})
 	require.NoError(t, err)

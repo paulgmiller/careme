@@ -47,7 +47,7 @@ type UserLookup interface {
 }
 
 type Handler struct {
-	uploader   *Uploader
+	uploader   *uploader
 	users      UserLookup
 	authClient auth.AuthClient
 	extractor  IngredientExtractor
@@ -69,7 +69,7 @@ type Photo struct {
 	coord       *Coordinate
 }
 
-func NewHandler(uploader *Uploader, users UserLookup, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
+func NewHandler(uploader *uploader, users UserLookup, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
 	return &Handler{
 		uploader:   uploader,
 		users:      users,
@@ -153,7 +153,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	date := farmersMarketDate(time.Now(), zip)
-	market, _, err := h.uploader.SaveUpload(ctx, name, avg.Lat, avg.Lon, len(coords), date, ingredients)
+	market, _, err := h.uploader.saveUpload(ctx, name, avg.Lat, avg.Lon, len(coords), date, ingredients)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to save farmers market upload", "error", err)
 		h.renderStatus(w, r, currentUser, "Could not save this market. Try again, chef.", http.StatusInternalServerError)

@@ -13,23 +13,23 @@ type ZipFinder interface {
 	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
-type Uploader struct {
+type uploader struct {
 	store     *store
 	zipFinder ZipFinder
 }
 
 // private for tests
-func NewUploader(store *store, zipFinder ZipFinder) *Uploader {
+func NewUploader(store *store, zipFinder ZipFinder) *uploader {
 	if store == nil {
 		panic("store is required")
 	}
 	if zipFinder == nil {
 		panic("zip finder is required")
 	}
-	return &Uploader{store: store, zipFinder: zipFinder}
+	return &uploader{store: store, zipFinder: zipFinder}
 }
 
-func NewContainerUploader(zipFinder ZipFinder) (*Uploader, error) {
+func NewContainerUploader(zipFinder ZipFinder) (*uploader, error) {
 	store, err := NewContainerStore()
 	if err != nil {
 		return nil, err
@@ -37,7 +37,8 @@ func NewContainerUploader(zipFinder ZipFinder) (*Uploader, error) {
 	return NewUploader(store, zipFinder), nil
 }
 
-func (u *Uploader) SaveUpload(ctx context.Context, name string, lat, lon float64, photoCount int, date time.Time, ingredients []ai.InputIngredient) (*Market, []ai.InputIngredient, error) {
+// this is a terrible signature
+func (u *uploader) saveUpload(ctx context.Context, name string, lat, lon float64, photoCount int, date time.Time, ingredients []ai.InputIngredient) (*Market, []ai.InputIngredient, error) {
 	if photoCount <= 0 {
 		return nil, nil, fmt.Errorf("at least one geotagged photo is required")
 	}
