@@ -79,15 +79,46 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 			if !strings.Contains(string(body), `{{template "seasonal_background" .}}`) {
 				t.Fatalf("%s should include seasonal background", name)
 			}
-			wantMain := `<main class="relative z-10`
-			if name == "user.html" {
-				wantMain = `<main class="relative px-4`
+			doc, err := html.Parse(strings.NewReader(string(body)))
+			if err != nil {
+				t.Fatalf("parse %s: %v", name, err)
 			}
-			if !strings.Contains(string(body), wantMain) {
-				t.Fatalf("%s should keep page content in a relative main container", name)
+			mainClasses, ok := firstElementClasses(doc, "main")
+			if !ok {
+				t.Fatalf("%s should include a main element", name)
+			}
+			for _, class := range []string{"relative", "px-4"} {
+				if !mainClasses[class] {
+					t.Fatalf("%s should keep page content in a relative main container with class %q", name, class)
+				}
+			}
+			if name != "user.html" && !mainClasses["z-10"] {
+				t.Fatalf("%s should layer page content above the seasonal background", name)
 			}
 		})
 	}
+}
+
+func firstElementClasses(node *html.Node, element string) (map[string]bool, bool) {
+	if node.Type == html.ElementNode && node.Data == element {
+		classes := make(map[string]bool)
+		for _, attr := range node.Attr {
+			if attr.Key != "class" {
+				continue
+			}
+			for _, class := range strings.Fields(attr.Val) {
+				classes[class] = true
+			}
+			return classes, true
+		}
+		return classes, true
+	}
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if classes, ok := firstElementClasses(child, element); ok {
+			return classes, true
+		}
+	}
+	return nil, false
 }
 
 func TestTemplatePageTitlesAreUnique(t *testing.T) {
