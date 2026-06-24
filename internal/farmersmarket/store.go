@@ -48,7 +48,6 @@ type Market struct {
 }
 
 type inventoryRecord struct {
-	CachedAt    time.Time            `json:"cached_at"`
 	Ingredients []ai.InputIngredient `json:"ingredients"`
 }
 
@@ -64,33 +63,20 @@ func NewContainerStore() (*store, error) {
 	return NewStore(cacheStore), nil
 }
 
-func (s *store) freshInventory(ctx context.Context, locationID string) (*inventoryRecord, error) {
+func (s *store) freshInventory(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	if !isID(locationID) {
 		return nil, fmt.Errorf("invalid farmers market location id %q", locationID)
-	}
-	if s.cache == nil {
-		return nil, cache.ErrNotFound
 	}
 
 	market, err := s.loadMarket(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now()
-	date := farmersMarketDate(now, market.ZipCode)
-	record, err := s.loadInventoryByKey(ctx, inventoryKey(locationID, date))
-	if err != nil {
-		return nil, err
-	}
-	if record.CachedAt.Before(now.Add(-24 * time.Hour)) {
-		return nil, cache.ErrNotFound
-	}
-	return &record, nil
+	date := farmersMarketDate(time.Now(), market.ZipCode)
+	return s.loadInventoryByDate(ctx, locationID, date)
 }
 
 func (m Market) Location() locationtypes.Location {
-	lat := m.Lat
-	lon := m.Lon
 	name := "Farmers Market"
 	if len(m.Names) > 0 {
 		name = m.Names[0]
@@ -104,8 +90,8 @@ func (m Market) Location() locationtypes.Location {
 		Name:     name,
 		Address:  address,
 		ZipCode:  m.ZipCode,
-		Lat:      &lat,
-		Lon:      &lon,
+		Lat:      &m.Lat,
+		Lon:      &m.Lon,
 		CachedAt: m.UpdatedAt,
 		Chain:    ChainName,
 	}
@@ -208,7 +194,6 @@ func (s *store) mergeInventory(ctx context.Context, locationID string, date time
 	})
 
 	raw, err := json.Marshal(inventoryRecord{
-		CachedAt:    time.Now().UTC(),
 		Ingredients: merged,
 	})
 	if err != nil {
@@ -221,29 +206,21 @@ func (s *store) mergeInventory(ctx context.Context, locationID string, date time
 }
 
 func (s *store) loadInventoryByDate(ctx context.Context, locationID string, date time.Time) ([]ai.InputIngredient, error) {
-	record, err := s.loadInventoryByKey(ctx, inventoryKey(locationID, date))
+	reader, err := s.cache.Get(ctx, inventoryKey(locationID, date))
 	if err != nil {
 		return nil, err
 	}
-	return record.Ingredients, nil
-}
-
-func (s *store) loadInventoryByKey(ctx context.Context, key string) (inventoryRecord, error) {
-	reader, err := s.cache.Get(ctx, key)
-	if err != nil {
-		return inventoryRecord{}, err
-	}
 	defer func() {
 		if closeErr := reader.Close(); closeErr != nil {
-			slog.ErrorContext(ctx, "failed to close farmers market inventory", "key", key, "error", closeErr)
+			slog.ErrorContext(ctx, "failed to close farmers market inventory", "key", inventoryKey(locationID, date), "error", closeErr)
 		}
 	}()
 
 	var record inventoryRecord
 	if err := json.NewDecoder(reader).Decode(&record); err == nil && len(record.Ingredients) > 0 {
-		return record, nil
+		return record.Ingredients, nil
 	}
-	return inventoryRecord{}, fmt.Errorf("decode farmers market inventory")
+	return nil, fmt.Errorf("decode farmers market inventory")
 }
 
 func locationKey(locationID string) string {

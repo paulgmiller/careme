@@ -119,11 +119,13 @@ func TestFetchStaplesReturnsCurrentStoreDateInventory(t *testing.T) {
 	assert.Equal(t, "carrots", got[0].Description)
 }
 
-func TestFetchStaplesIgnoresInventoryOlderThan24Hours(t *testing.T) {
+func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	store := NewStore(cacheStore)
 	provider := NewStaplesProviderFromStore(store)
 	locationID := LocationIDPrefix + "stale"
+	currentDate := farmersMarketDate(time.Now(), "98101")
+	olderDate := currentDate.AddDate(0, 0, -1)
 	require.NoError(t, store.saveMarket(t.Context(), Market{
 		ID:         locationID,
 		Names:      []string{"Stale Market"},
@@ -133,13 +135,12 @@ func TestFetchStaplesIgnoresInventoryOlderThan24Hours(t *testing.T) {
 		UpdatedAt:  time.Now(),
 	}))
 	raw, err := json.Marshal(inventoryRecord{
-		CachedAt: time.Now().Add(-25 * time.Hour),
 		Ingredients: []ai.InputIngredient{
 			{Brand: "Old Farm", Description: "old lettuce"},
 		},
 	})
 	require.NoError(t, err)
-	require.NoError(t, cacheStore.Put(t.Context(), inventoryKey(locationID, farmersMarketDate(time.Now(), "98101")), string(raw), cache.Unconditional()))
+	require.NoError(t, cacheStore.Put(t.Context(), inventoryKey(locationID, olderDate), string(raw), cache.Unconditional()))
 
 	_, err = provider.FetchStaples(t.Context(), locationID)
 	require.ErrorIs(t, err, cache.ErrNotFound)

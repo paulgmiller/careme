@@ -29,11 +29,11 @@ func NewStaplesProviderFromStore(store *store) *staplesProvider {
 }
 
 func (p *staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	record, err := p.store.freshInventory(ctx, locationID)
+	ingredients, err := p.store.freshInventory(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
-	return record.Ingredients, nil
+	return ingredients, nil
 }
 
 func (p *staplesProvider) FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error) {
