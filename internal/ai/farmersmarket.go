@@ -18,7 +18,7 @@ const farmersMarketIngredientModel = "gpt-5"
 type farmersMarketIngredientItem struct {
 	Name  string   `json:"name" jsonschema:"required"`
 	Brand string   `json:"brand" jsonschema:"required"`
-	Price *float32 `json:"price" jsonschema:"required"`
+	Price *float32 `json:"price" jsonschema:"required,nullable"`
 }
 
 type farmersMarketIngredientResponse struct {
@@ -85,6 +85,7 @@ func (c *client) ExtractFarmersMarketIngredients(ctx context.Context, imageDataU
 		}
 		ingredient := NormalizeInputIngredient(InputIngredient{
 			AisleNumber:  strings.TrimSpace(item.Brand),
+			Brand:        strings.TrimSpace(item.Brand),
 			Description:  name,
 			PriceRegular: item.Price,
 		})

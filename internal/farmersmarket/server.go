@@ -30,8 +30,7 @@ const (
 	// pressure the 750Mi production pod limit.
 	maxUploadBytes      = 90 << 20
 	maxPhotoBytes       = 10 << 20
-	maxPhotoCount       = 32
-	photoAnalysisLimit  = 4
+	maxPhotoCount       = 4
 	storeDayStartHour   = 9
 	farmersMarketAction = "/farmersmarket"
 )
@@ -171,6 +170,9 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []Photo) ([]ai.InputIngredient, error) {
 	if len(photos) == 0 {
 		return nil, fmt.Errorf("at least one photo is required")
+	}
+	if len(photos) > maxPhotoCount {
+		return nil, fmt.Errorf("use %d photos or fewer", maxPhotoCount)
 	}
 
 	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos))
