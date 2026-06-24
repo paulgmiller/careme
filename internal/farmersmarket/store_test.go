@@ -76,15 +76,15 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 	date := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 
 	first, ingredients, err := uploader.SaveUpload(t.Context(), "Saturday Market", 47.61, -122.33, 2, date, []ai.InputIngredient{
-		{Brand: "River Farm", Description: "Strawberries", Size: "1 pint"},
+		{ProductID: "A", Brand: "River Farm", Description: "Strawberries", Size: "1 pint"},
 	})
 	require.NoError(t, err)
 	require.Len(t, ingredients, 1)
 	require.Equal(t, "98101", first.ZipCode)
 
 	second, ingredients, err := uploader.SaveUpload(t.Context(), "River Stalls", 47.611, -122.331, 1, date, []ai.InputIngredient{
-		{Brand: "River Farm", Description: "strawberries", Size: "1 pint"},
-		{Brand: "Hill Farm", Description: "Fresh basil", Size: "1 bunch"},
+		{ProductID: "A", Brand: "River Farm", Description: "strawberries", Size: "1 pint"},
+		{ProductID: "B", Brand: "Hill Farm", Description: "Fresh basil", Size: "1 bunch"},
 	})
 	require.NoError(t, err)
 
@@ -201,8 +201,8 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 				return nil, errors.New("expected image data URL")
 			}
 			return []ai.InputIngredient{
-				{Brand: "Farmers market", Description: imageDataURL},
-				{Brand: "Farmers market", Description: "shared basil"},
+				{ProductID: imageDataURL, Brand: "Farmers market", Description: imageDataURL},
+				{ProductID: "B", Brand: "Farmers market", Description: "shared basil"},
 			}, nil
 		},
 	}
