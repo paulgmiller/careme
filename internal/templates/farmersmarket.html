@@ -26,7 +26,7 @@
         </div>
 
         <div class="p-8">
-          {{template "farmersmarket_form" .}}
+          {{template "farmersmarket_form" ""}}
         </div>
       </div>
     </section>
@@ -38,9 +38,9 @@
 
 {{define "farmersmarket_form"}}
 <div id="farmers-market-work">
-  {{if .Error}}
+  {{if .}}
   <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800" role="alert">
-    {{.Error}}
+    {{.}}
   </div>
   {{end}}
 

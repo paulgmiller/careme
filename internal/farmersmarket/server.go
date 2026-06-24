@@ -104,7 +104,6 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
-		Error           string
 	}{
 		ClarityScript:   templates.ClarityScript(r.Context()),
 		GoogleTagScript: templates.GoogleTagScript(),
@@ -469,12 +468,7 @@ func isHTMXRequest(r *http.Request) bool {
 }
 
 func renderFarmersMarketForm(w http.ResponseWriter, errorMessage string) error {
-	data := struct {
-		Error string
-	}{
-		Error: errorMessage,
-	}
-	return templates.FarmersMarket.ExecuteTemplate(w, "farmersmarket_form", data)
+	return templates.FarmersMarket.ExecuteTemplate(w, "farmersmarket_form", errorMessage)
 }
 
 func renderFarmersMarketProgress(w http.ResponseWriter, status analysisStatus) error {

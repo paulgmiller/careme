@@ -247,6 +247,33 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+	}{
+		Style: seasons.GetCurrentStyle(),
+	}
+
+	var buf bytes.Buffer
+	if err := FarmersMarket.Execute(&buf, data); err != nil {
+		t.Fatalf("FarmersMarket.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, "Farmers market finds") {
+		t.Fatalf("farmers market page should render title, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `.Error`) {
+		t.Fatalf("farmers market page should not reference an Error field, body: %s", rendered)
+	}
+}
+
 func TestClerkJSScriptsUsePinnedVersion(t *testing.T) {
 	for _, name := range []string{"auth_establish.html", "clerk_refresh.html"} {
 		t.Run(name, func(t *testing.T) {
