@@ -23,8 +23,6 @@ import (
 	locationtypes "careme/internal/locations/types"
 	"careme/internal/templates"
 
-	utypes "careme/internal/users/types"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,20 +43,17 @@ func (s staticZipLookup) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid
 	return coord, ok
 }
 
-type fakeUserLookup struct {
-	user *utypes.User
-	err  error
-}
-
-func (f fakeUserLookup) FromRequest(context.Context, *http.Request, auth.AuthClient) (*utypes.User, error) {
-	return f.user, f.err
-}
-
 type fakeExtractor struct {
 	called bool
 	mu     sync.Mutex
 	calls  []string
 	fn     func(context.Context, string) ([]ai.InputIngredient, error)
+}
+
+type noSessionAuth struct{}
+
+func (noSessionAuth) GetUserIDFromRequest(*http.Request) (string, error) {
+	return "", auth.ErrNoSession
 }
 
 func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]ai.InputIngredient, error) {
@@ -150,15 +145,16 @@ func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
 	uploader := NewUploader(store, staticZipFinder{zip: "98199", ok: true})
-	_, _, err := uploader.saveUpload(t.Context(), "Far Market", 48.2, -122.33, 1, time.Now(), []ai.InputIngredient{
+	marketDate := farmersMarketDate(time.Now(), "98199")
+	_, _, err := uploader.saveUpload(t.Context(), "Far Market", 48.2, -122.33, 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "turnips"},
 	})
 	require.NoError(t, err)
-	_, _, err = uploader.saveUpload(t.Context(), "Near Market", 47.62, -122.33, 1, time.Now(), []ai.InputIngredient{
+	_, _, err = uploader.saveUpload(t.Context(), "Near Market", 47.62, -122.33, 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "kale"},
 	})
 	require.NoError(t, err)
-	_, _, err = uploader.saveUpload(t.Context(), "Closer Market", 47.611, -122.33, 1, time.Now(), []ai.InputIngredient{
+	_, _, err = uploader.saveUpload(t.Context(), "Closer Market", 47.611, -122.33, 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "chard"},
 	})
 	require.NoError(t, err)
@@ -229,7 +225,6 @@ func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 	extractor := &fakeExtractor{}
 	handler := NewHandler(
 		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
-		fakeUserLookup{user: &utypes.User{ID: "user_123", Email: []string{"chef@example.com"}}},
 		auth.DefaultMock(),
 		extractor,
 		staticZipFinder{zip: "98101", ok: true},
@@ -248,7 +243,6 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	handler := NewHandler(
 		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
-		fakeUserLookup{user: &utypes.User{ID: "user_123", Email: []string{"chef@example.com"}}},
 		auth.DefaultMock(),
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
@@ -265,8 +259,7 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 	handler := NewHandler(
 		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
-		fakeUserLookup{err: auth.ErrNoSession},
-		auth.DefaultMock(),
+		noSessionAuth{},
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
 	)

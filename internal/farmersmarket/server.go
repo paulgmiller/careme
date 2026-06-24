@@ -47,11 +47,10 @@ type AuthClient interface {
 }
 
 type Handler struct {
-	uploader   *uploader
-	auth       AuthClient
-	authClient auth.AuthClient
-	extractor  IngredientExtractor
-	zipFinder  ZipFinder
+	uploader  *uploader
+	auth      AuthClient
+	extractor IngredientExtractor
+	zipFinder ZipFinder
 }
 
 type pageData struct {
@@ -74,7 +73,7 @@ func (p Photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, authClient auth.AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
+func NewHandler(uploader *uploader, authClient AuthClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
 	return &Handler{
 		uploader:  uploader,
 		auth:      authClient,
