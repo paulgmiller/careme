@@ -30,7 +30,7 @@
             <input id="instructions-{{.ID}}" type="checkbox" class="peer/instructions hidden" />
             <div class="flex flex-col {{if .SupportsStaples}}gap-4 sm:flex-row sm:items-center{{else}}gap-2 sm:flex-row sm:items-start{{end}} sm:justify-between">
               {{if .SupportsStaples}}
-              <a href="/recipes?location={{.ID}}"
+              <a href="/recipes?location={{.ID}}{{with $.Instructions}}&amp;instructions={{urlquery .}}{{end}}{{with $.HelpMessage}}&amp;help={{urlquery .}}{{end}}"
                 class="flex flex-1 flex-col gap-1 rounded-xl py-2 transition hover:bg-brand-50 focus:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                 <span class="flex flex-wrap items-center gap-2 text-lg font-semibold text-brand-700">
                   <span>{{.Name}}</span>
@@ -66,7 +66,7 @@
                   </button>
                 </form>
                 {{end}}
-                <a href="/recipes?location={{.ID}}"
+                <a href="/recipes?location={{.ID}}{{with $.Instructions}}&amp;instructions={{urlquery .}}{{end}}{{with $.HelpMessage}}&amp;help={{urlquery .}}{{end}}"
                   class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Recipes!
                 </a>
@@ -83,8 +83,9 @@
             <div class="mt-4 hidden rounded-xl border border-brand-100 bg-brand-50/40 p-4 peer-checked/instructions:block">
               <form method="GET" action="/recipes" class="flex flex-col gap-3">
                 <input type="hidden" name="location" value="{{.ID}}" />
+                {{with $.HelpMessage}}<input type="hidden" name="help" value="{{.}}" />{{end}}
                 <textarea name="instructions" rows="3" aria-label="Recipe instructions" placeholder="Example: No seafood, focus on quick weeknight meals."
-                  class="w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300"></textarea>
+                  class="w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300">{{$.Instructions}}</textarea>
                 <div class="flex flex-wrap items-center gap-2">
                   <button type="submit"
                     class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">

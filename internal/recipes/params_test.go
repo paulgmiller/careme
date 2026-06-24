@@ -65,6 +65,27 @@ func TestParseQueryArgs_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 	}
 }
 
+func TestParseQueryArgs_CampaignInstructionsAndHelp(t *testing.T) {
+	location := &locations.Location{
+		ID:      "store-1",
+		Name:    "Test Store",
+		ZipCode: "10001",
+	}
+
+	req := httptest.NewRequest("GET", "/recipes?location=store-1&instructions=make%20it%20vegetarian&help=Save%20two%20meals", nil)
+	p, err := ParseQueryArgs(context.Background(), req, staticLocationLookup{location: location})
+	if err != nil {
+		t.Fatalf("ParseQueryArgs returned error: %v", err)
+	}
+
+	if got, want := p.Instructions, "make it vegetarian"; got != want {
+		t.Fatalf("expected instructions %q, got %q", want, got)
+	}
+	if got, want := p.HelpMessage, "Save two meals"; got != want {
+		t.Fatalf("expected help message %q, got %q", want, got)
+	}
+}
+
 func TestTimezoneNameForZip(t *testing.T) {
 	cases := []struct {
 		zip      string

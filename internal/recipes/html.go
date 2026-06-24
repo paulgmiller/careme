@@ -93,6 +93,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Instructions    string
+		HelpMessage     string
 		Hash            string
 		Recipes         []shoppingRecipeView
 		ShoppingList    []shoppingListGroup
@@ -108,6 +109,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Instructions:    p.Instructions,
+		HelpMessage:     strings.TrimSpace(p.HelpMessage),
 		Hash:            hash,
 		Recipes:         recipeViews,
 		ShoppingList:    shoppingListForDisplay(combinedIngredients),

@@ -33,6 +33,7 @@ type generatorParams struct {
 	// People       int
 	// per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
+	HelpMessage  string   `json:"help_message,omitempty"`
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
 	LastRecipes  []string `json:"-"`                   // this doesn't get populated until after save.
 	// UserID         string      `json:"user_id,omitempty"`
@@ -71,6 +72,7 @@ func (g *generatorParams) Hash() string {
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
 	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
+	lo.Must(io.WriteString(fnv, g.HelpMessage))
 	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
 		lo.Must(io.WriteString(fnv, "saved"+saved.ComputeHash()))
@@ -131,8 +133,18 @@ func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*genera
 
 	p := DefaultParams(l, date)
 	p.Instructions = r.URL.Query().Get("instructions")
+	p.HelpMessage = firstQueryValue(r, "help", "help_message", "shoppinglist_help")
 
 	return p, nil
+}
+
+func firstQueryValue(r *http.Request, names ...string) string {
+	for _, name := range names {
+		if value := r.URL.Query().Get(name); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {

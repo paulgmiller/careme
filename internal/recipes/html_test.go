@@ -144,6 +144,19 @@ func TestFormatShoppingListHTML_ChefNotesUsesDefaultPlaceholderWithoutPreviousIn
 	assert.Contains(t, html, `placeholder="e.g. make it vegetarian"`)
 }
 
+func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	p.HelpMessage = "Save two dinners before building your shopping list."
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, "Chef&#39;s note")
+	assert.Contains(t, html, "Save two dinners before building your shopping list.")
+}
+
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	addedRecipe := ai.Recipe{

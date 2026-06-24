@@ -48,6 +48,13 @@
         </div>
 
         <div class="p-8">
+          {{if .HelpMessage}}
+          <aside class="mb-6 rounded-2xl border border-brand-200 bg-brand-50/80 p-4 text-sm text-ink-700 shadow-sm">
+            <p class="font-semibold text-brand-700">Chef's note</p>
+            <p class="mt-1">{{.HelpMessage}}</p>
+          </aside>
+          {{end}}
+
           <form id="regenerateForm"
                 method="POST"
                 action="/recipes/{{.Hash}}/regenerate"
