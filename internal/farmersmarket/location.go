@@ -15,11 +15,11 @@ type ZipCentroidLookup interface {
 
 type locationBackend struct {
 	identityProvider
-	store     *Store
+	store     *store
 	zipLookup ZipCentroidLookup
 }
 
-func NewLocationBackend(store *Store, zipLookup ZipCentroidLookup) *locationBackend {
+func NewLocationBackend(store *store, zipLookup ZipCentroidLookup) *locationBackend {
 	if store == nil {
 		panic("nil store given to location backend")
 	}

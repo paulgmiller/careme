@@ -18,6 +18,8 @@ import (
 	"careme/internal/cache"
 	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -33,7 +35,7 @@ const (
 
 type identityProvider struct{}
 
-type Store struct {
+type store struct {
 	cache cache.ListCache
 }
 
@@ -53,11 +55,11 @@ type inventoryRecord struct {
 	Ingredients []ai.InputIngredient `json:"ingredients"`
 }
 
-func NewStore(c cache.ListCache) *Store {
-	return &Store{cache: c}
+func NewStore(c cache.ListCache) *store {
+	return &store{cache: c}
 }
 
-func NewContainerStore() (*Store, error) {
+func NewContainerStore() (*store, error) {
 	cacheStore, err := cache.EnsureCache(Container)
 	if err != nil {
 		return nil, fmt.Errorf("create farmers market cache: %w", err)
@@ -77,7 +79,7 @@ func (s identityProvider) Signature() string {
 	return signature
 }
 
-func (s *Store) freshInventory(ctx context.Context, locationID string) (*inventoryRecord, error) {
+func (s *store) freshInventory(ctx context.Context, locationID string) (*inventoryRecord, error) {
 	if !isID(locationID) {
 		return nil, fmt.Errorf("invalid farmers market location id %q", locationID)
 	}
@@ -139,7 +141,7 @@ func (m *Market) merge(name string, lat, lon float64, photoCount int, now time.T
 	m.UpdatedAt = now
 }
 
-func (s *Store) findNearbyMarket(ctx context.Context, lat, lon float64) (*Market, error) {
+func (s *store) findNearbyMarket(ctx context.Context, lat, lon float64) (*Market, error) {
 	markets, err := s.listMarkets(ctx)
 	if err != nil {
 		return nil, err
@@ -159,7 +161,7 @@ func (s *Store) findNearbyMarket(ctx context.Context, lat, lon float64) (*Market
 }
 
 // this won't scale long term but maybe doesn't matter if we only ever have a dozen markets?
-func (s *Store) listMarkets(ctx context.Context) ([]Market, error) {
+func (s *store) listMarkets(ctx context.Context) ([]Market, error) {
 	keys, err := s.cache.List(ctx, locationPrefix, "")
 	if err != nil {
 		return nil, fmt.Errorf("list farmers markets: %w", err)
@@ -176,14 +178,14 @@ func (s *Store) listMarkets(ctx context.Context) ([]Market, error) {
 	return markets, nil
 }
 
-func (s *Store) loadMarket(ctx context.Context, locationID string) (Market, error) {
+func (s *store) loadMarket(ctx context.Context, locationID string) (Market, error) {
 	if !isID(locationID) {
 		return Market{}, fmt.Errorf("invalid farmers market location id %q", locationID)
 	}
 	return s.loadMarketByKey(ctx, locationKey(locationID))
 }
 
-func (s *Store) loadMarketByKey(ctx context.Context, key string) (Market, error) {
+func (s *store) loadMarketByKey(ctx context.Context, key string) (Market, error) {
 	reader, err := s.cache.Get(ctx, key)
 	if err != nil {
 		return Market{}, err
@@ -198,7 +200,7 @@ func (s *Store) loadMarketByKey(ctx context.Context, key string) (Market, error)
 	return market, nil
 }
 
-func (s *Store) saveMarket(ctx context.Context, market Market) error {
+func (s *store) saveMarket(ctx context.Context, market Market) error {
 	raw, err := json.Marshal(market)
 	if err != nil {
 		return fmt.Errorf("marshal farmers market: %w", err)
@@ -209,13 +211,17 @@ func (s *Store) saveMarket(ctx context.Context, market Market) error {
 	return nil
 }
 
-func (s *Store) mergeInventory(ctx context.Context, locationID string, date time.Time, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
+func (s *store) mergeInventory(ctx context.Context, locationID string, date time.Time, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	existing, err := s.loadInventoryByDate(ctx, locationID, date)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return nil, fmt.Errorf("load farmers market inventory: %w", err)
 	}
 
-	merged := dedupeIngredients(append(existing, ingredients...))
+	all := append(existing, ingredients...)
+	merged := lo.UniqBy(all, func(i ai.InputIngredient) string {
+		return i.ProductID
+	})
+
 	raw, err := json.Marshal(inventoryRecord{
 		CachedAt:    time.Now().UTC(),
 		Ingredients: merged,
@@ -229,7 +235,7 @@ func (s *Store) mergeInventory(ctx context.Context, locationID string, date time
 	return merged, nil
 }
 
-func (s *Store) loadInventoryByDate(ctx context.Context, locationID string, date time.Time) ([]ai.InputIngredient, error) {
+func (s *store) loadInventoryByDate(ctx context.Context, locationID string, date time.Time) ([]ai.InputIngredient, error) {
 	record, err := s.loadInventoryByKey(ctx, inventoryKey(locationID, date))
 	if err != nil {
 		return nil, err
@@ -237,7 +243,7 @@ func (s *Store) loadInventoryByDate(ctx context.Context, locationID string, date
 	return record.Ingredients, nil
 }
 
-func (s *Store) loadInventoryByKey(ctx context.Context, key string) (inventoryRecord, error) {
+func (s *store) loadInventoryByKey(ctx context.Context, key string) (inventoryRecord, error) {
 	reader, err := s.cache.Get(ctx, key)
 	if err != nil {
 		return inventoryRecord{}, err
@@ -253,27 +259,6 @@ func (s *Store) loadInventoryByKey(ctx context.Context, key string) (inventoryRe
 		return record, nil
 	}
 	return inventoryRecord{}, fmt.Errorf("decode farmers market inventory")
-}
-
-func dedupeIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
-	seen := make(map[string]struct{}, len(ingredients))
-	deduped := make([]ai.InputIngredient, 0, len(ingredients))
-	for _, ingredient := range ingredients {
-		ingredient = ai.NormalizeInputIngredient(ingredient)
-		if ingredient.Description == "" {
-			continue
-		}
-		if ingredient.ProductID == "" {
-			ingredient.ProductID = "farmersmarket_item_" + ingredient.Hash()
-		}
-		key := strings.ToLower(ingredient.Description) + "\x00" + strings.ToLower(ingredient.Size)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		deduped = append(deduped, ingredient)
-	}
-	return deduped
 }
 
 func locationKey(locationID string) string {

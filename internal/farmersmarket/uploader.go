@@ -13,11 +13,12 @@ type ZipFinder interface {
 }
 
 type Uploader struct {
-	store     *Store
+	store     *store
 	zipFinder ZipFinder
 }
 
-func NewUploader(store *Store, zipFinder ZipFinder) *Uploader {
+// private for tests
+func NewUploader(store *store, zipFinder ZipFinder) *Uploader {
 	return &Uploader{store: store, zipFinder: zipFinder}
 }
 

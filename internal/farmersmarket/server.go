@@ -21,6 +21,8 @@ import (
 	"careme/internal/templates"
 
 	utypes "careme/internal/users/types"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -217,7 +219,9 @@ func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientEx
 		slog.WarnContext(ctx, "some farmers market photos failed analysis", "error", err, "failed_count", len(errs), "ingredient_count", len(ingredients))
 	}
 
-	return dedupeIngredients(ingredients), nil
+	return lo.UniqBy(ingredients, func(i ai.InputIngredient) string {
+		return i.ProductID
+	}), nil
 }
 
 func (h *Handler) currentUser(r *http.Request) (*utypes.User, error) {

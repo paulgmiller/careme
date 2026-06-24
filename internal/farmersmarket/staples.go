@@ -10,7 +10,7 @@ import (
 
 type staplesProvider struct {
 	identityProvider
-	store *Store
+	store *store
 }
 
 func NewStaplesProvider() (*staplesProvider, error) {
@@ -21,7 +21,7 @@ func NewStaplesProvider() (*staplesProvider, error) {
 	return NewStaplesProviderFromStore(NewStore(cacheStore)), nil
 }
 
-func NewStaplesProviderFromStore(store *Store) *staplesProvider {
+func NewStaplesProviderFromStore(store *store) *staplesProvider {
 	if store == nil {
 		panic("nil store given to staples provider")
 	}
@@ -40,7 +40,7 @@ func (p *staplesProvider) FetchWines(context.Context, string, []string) ([]ai.In
 	return nil, nil
 }
 
-func (s *Store) hasFreshInventory(locationID string) bool {
+func (s *store) hasFreshInventory(locationID string) bool {
 	_, err := s.freshInventory(context.Background(), locationID)
 	return err == nil
 }
