@@ -11,11 +11,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/auth"
+	"careme/internal/parallelism"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -168,55 +168,14 @@ func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientEx
 		return nil, fmt.Errorf("at least one photo is required")
 	}
 
-	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos), "parallelism", photoAnalysisLimit)
-	results := make([]photoAnalysisResult, len(photos))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, photoAnalysisLimit)
-
-	for i, photo := range photos {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			photoNumber := i + 1
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-				results[i].err = ctx.Err()
-				slog.WarnContext(ctx, "farmers market photo analysis canceled before start", "photo_number", photoNumber, "photo_count", len(photos), "error", ctx.Err())
-				return
-			}
-
-			slog.InfoContext(ctx, "analyzing farmers market photo", "photo_number", photoNumber, "photo_count", len(photos))
-			ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL)
-			if err != nil {
-				results[i].err = fmt.Errorf("photo %d: %w", photoNumber, err)
-				slog.WarnContext(ctx, "failed to analyze farmers market photo", "photo_number", photoNumber, "photo_count", len(photos), "error", err)
-				return
-			}
-			results[i].ingredients = ingredients
-			slog.InfoContext(ctx, "finished farmers market photo analysis", "photo_number", photoNumber, "photo_count", len(photos), "ingredient_count", len(ingredients))
-		}()
-	}
-	wg.Wait()
-
-	var ingredients []ai.InputIngredient
-	var errs []error
-	for _, result := range results {
-		if result.err != nil {
-			errs = append(errs, result.err)
-			continue
-		}
-		ingredients = append(ingredients, result.ingredients...)
-	}
-
-	if len(errs) > 0 {
-		err := errors.Join(errs...)
-		if len(ingredients) == 0 {
-			return nil, err
-		}
-		slog.WarnContext(ctx, "some farmers market photos failed analysis", "error", err, "failed_count", len(errs), "ingredient_count", len(ingredients))
+	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos))
+	ingredients, err := parallelism.Flatten(photos, func(photo uploadedPhoto) ([]ai.InputIngredient, error) {
+		ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL)
+		slog.InfoContext(ctx, "finished farmers market photo analysis", "ingredient_count", len(ingredients))
+		return ingredients, err
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return lo.UniqBy(ingredients, func(i ai.InputIngredient) string {

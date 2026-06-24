@@ -143,7 +143,7 @@ func TestFetchStaplesIgnoresInventoryOlderThan24Hours(t *testing.T) {
 
 	_, err = provider.FetchStaples(t.Context(), locationID)
 	require.ErrorIs(t, err, cache.ErrNotFound)
-	assert.False(t, NewLocationBackend(store, nil).HasInventory(locationID))
+	assert.False(t, NewLocationBackend(store, staticZipLookup{}).HasInventory(locationID))
 }
 
 func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.T) {
@@ -216,7 +216,7 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 	require.Len(t, extractor.calls, 2)
 	assert.Contains(t, extractor.calls, "tomatoes")
 	assert.Contains(t, extractor.calls, "radishes")
-	assert.Len(t, got, 3)
+	require.Len(t, got, 3)
 	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "tomatoes")
 	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "radishes")
 	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "shared basil")
