@@ -33,8 +33,6 @@ const (
 	signature       = "farmersmarket-staples-v1"
 )
 
-type identityProvider struct{}
-
 type store struct {
 	cache cache.ListCache
 }
@@ -64,18 +62,6 @@ func NewContainerStore() (*store, error) {
 		return nil, fmt.Errorf("create farmers market cache: %w", err)
 	}
 	return NewStore(cacheStore), nil
-}
-
-func NewIdentityProvider() identityProvider {
-	return identityProvider{}
-}
-
-func (s identityProvider) IsID(locationID string) bool {
-	return isID(locationID)
-}
-
-func (s identityProvider) Signature() string {
-	return signature
 }
 
 func (s *store) freshInventory(ctx context.Context, locationID string) (*inventoryRecord, error) {
@@ -273,8 +259,4 @@ func marketID(name string, lat, lon float64) string {
 	_, _ = io.WriteString(h, strings.ToLower(strings.TrimSpace(name)))
 	_, _ = io.WriteString(h, fmt.Sprintf("|%.4f|%.4f", lat, lon))
 	return LocationIDPrefix + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
-}
-
-func isID(locationID string) bool {
-	return strings.HasPrefix(locationID, LocationIDPrefix) && strings.TrimPrefix(locationID, LocationIDPrefix) != ""
 }
