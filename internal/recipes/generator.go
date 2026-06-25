@@ -40,9 +40,13 @@ type recipeSaver interface {
 	SaveRecipe(ctx context.Context, recipes ai.Recipe) error
 }
 
+type recipeCritiquer interface {
+	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
+}
+
 type generatorService struct {
 	aiClient     aiClient
-	critiquer    critique.Service
+	critiquer    recipeCritiquer
 	staples      staplesService
 	statusWriter statusWriter
 	saver        recipeSaver
@@ -50,7 +54,7 @@ type generatorService struct {
 
 var tracer = otel.Tracer("careme/internal/recipes")
 
-func NewGenerator(aiClient aiClient, critiquer critique.Service, staples staplesService, statuses statusWriter, recipeSaver recipeSaver) (*generatorService, error) {
+func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver) (*generatorService, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
@@ -246,7 +250,16 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 }
 
 func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
-	return g.aiClient.Regenerate(ctx, instructions, previousResponseID)
+	//get previous critique here or in server
+
+	r, err := g.aiClient.Regenerate(ctx, instructions, previousResponseID)
+	if err != nil {
+		return nil, err
+	}
+	//don't block
+	g.critiqueInBackground(ctx, *r)
+	return r, nil
+
 }
 
 // generator not prociding a lot of value here. Should sever just hold an ai client?
@@ -283,25 +296,22 @@ func regenerateInstructions(p *generatorParams) []string {
 }
 
 func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, ingMap map[string]ai.InputIngredient) (*ai.Recipe, error) {
-	if g.critiquer == nil {
-		return recipe, nil
-	}
 	ctx, span := tracer.Start(ctx, "recipes.critique.recipe")
 	defer span.End()
 
 	g.writeStatus(ctx, hash, "Getting feedback on "+recipe.Title+"\n")
 
-	result := <-g.critiquer.CritiqueRecipe(ctx, *recipe)
-	if result.Err != nil {
-		slog.ErrorContext(ctx, "failed to critique recipe", "hash", hash, "title", recipe.Title, "error", result.Err)
+	c, err := g.critiquer.CritiqueRecipe(ctx, *recipe)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to critique recipe", "hash", hash, "title", recipe.Title, "error", err)
 		return recipe, nil
 	}
-	if result.Critique == nil || result.Critique.OverallScore >= critique.MinimumRecipeScore {
+	if c.OverallScore >= critique.MinimumRecipeScore {
 		return recipe, nil
 	}
 
 	span.SetAttributes(attribute.Bool("regenaftercrique", true))
-	slog.InfoContext(ctx, "low scoring recipe", "hash", hash, "title", recipe.Title, "score", result.Critique.OverallScore)
+	slog.InfoContext(ctx, "low scoring recipe", "hash", hash, "title", recipe.Title, "score", c.OverallScore)
 	// going to overwrite other statuses
 	g.writeStatus(ctx, hash, "Adjusting "+recipe.Title+"\n")
 
@@ -309,7 +319,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	if strings.TrimSpace(recipe.ResponseID) == "" {
 		return nil, fmt.Errorf("recipe %q is missing response ID for critique retry", recipe.Title)
 	}
-	retry, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(result), recipe.ResponseID)
+	retry, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(*c), recipe.ResponseID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipe %q from critique feedback: %w", recipe.Title, err)
 	}
@@ -326,12 +336,10 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 }
 
 func (g *generatorService) critiqueInBackground(ctx context.Context, recipe ai.Recipe) {
-	results := g.critiquer.CritiqueRecipe(ctx, recipe)
 	go func() {
-		for result := range results {
-			if result.Err != nil {
-				slog.ErrorContext(ctx, "failed to critique retried recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", result.Err)
-			}
+		_, err := g.critiquer.CritiqueRecipe(ctx, recipe)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to critique retried recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", err)
 		}
 	}()
 }
