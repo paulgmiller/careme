@@ -168,7 +168,6 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []Photo) ([]ai.InputIngredient, error) {
-
 	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos))
 	ingredients, err := parallelism.Flatten(photos, func(photo Photo) ([]ai.InputIngredient, error) {
 		ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL())
