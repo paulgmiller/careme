@@ -20,12 +20,15 @@ func TestExtractFarmersMarketIngredientsUsesVisiblePrice(t *testing.T) {
 	require.Len(t, got, 2)
 	assert.Equal(t, "heirloom tomatoes", got[0].Description)
 	assert.Equal(t, "River Farm", got[0].AisleNumber)
-	assert.Empty(t, got[0].Brand)
+	assert.Equal(t, "River Farm", got[0].Brand)
 	assert.Empty(t, got[0].Size)
 	require.NotNil(t, got[0].PriceRegular)
 	assert.InDelta(t, 4.99, *got[0].PriceRegular, 0.001)
 	assert.Empty(t, got[0].Categories)
 	assert.Nil(t, got[1].PriceRegular)
+	assert.Equal(t, got[0].Description, got[1].Description)
+	assert.NotEqual(t, got[0].Brand, got[1].Brand)
+	assert.NotEqual(t, got[0].ProductID, got[1].ProductID)
 }
 
 func TestFarmersMarketIngredientSchemaUsesPriceNotSizeOrCategories(t *testing.T) {
@@ -39,6 +42,20 @@ func TestFarmersMarketIngredientSchemaUsesPriceNotSizeOrCategories(t *testing.T)
 	assert.NotContains(t, itemProperties, "size")
 	assert.NotContains(t, itemProperties, "categories")
 	assert.Contains(t, schemaRequired(t, items), "price")
+	assertSchemaAllowsNull(t, schemaObject(t, itemProperties["price"]))
+}
+
+func assertSchemaAllowsNull(t *testing.T, schema map[string]any) {
+	t.Helper()
+	oneOf, ok := schema["oneOf"].([]any)
+	require.True(t, ok, "expected oneOf schema, got %#v", schema)
+	for _, option := range oneOf {
+		optionSchema := schemaObject(t, option)
+		if optionSchema["type"] == "null" {
+			return
+		}
+	}
+	t.Fatalf("expected schema to allow null, got %#v", schema)
 }
 
 func farmersMarketResponseClient(t *testing.T) *http.Client {
@@ -69,7 +86,7 @@ func farmersMarketResponseClient(t *testing.T) *http.Client {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"ingredients\":[{\"name\":\"heirloom tomatoes\",\"brand\":\"River Farm\",\"price\":4.99},{\"name\":\"fresh basil\",\"brand\":\"Farmers market\",\"price\":null}]}",
+						"text": "{\"ingredients\":[{\"name\":\"heirloom tomatoes\",\"brand\":\"River Farm\",\"price\":4.99},{\"name\":\"heirloom tomatoes\",\"brand\":\"Hill Farm\",\"price\":null}]}",
 						"annotations": []
 					}]
 				}],
