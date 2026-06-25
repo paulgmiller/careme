@@ -53,16 +53,18 @@
         </div>
 
         <div class="p-8 space-y-8">
-          <article class="printable-recipe space-y-6 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+          <article class="printable-recipe relative space-y-6 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+            <button type="button"
+                    onclick="window.print()"
+                    class="print-hidden absolute right-4 top-4 inline-flex size-10 items-center justify-center rounded-lg bg-brand-600 text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
+                    aria-label="Print recipe"
+                    title="Print recipe">
+              {{template "icon_print" .}}
+            </button>
             <header class="space-y-2">
-              <h2 class="font-display text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
+              <h2 class="pr-12 font-display text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
               <p class="text-sm text-gray-500">{{.Recipe.Description}}</p>
               <div class="mt-4 flex flex-wrap items-center gap-3 print-hidden">
-                <button type="button"
-                        onclick="window.print()"
-                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Print recipe
-                </button>
                 {{template "recipe_save_action" .}}
               </div>
             </header>
@@ -303,12 +305,8 @@
             <p class="mt-1 text-sm text-gray-700">{{$entry.Question}}</p>
           </div>
           <span class="mt-0.5 flex size-4 items-center justify-center text-brand-700" aria-hidden="true">
-            <svg viewBox="0 0 20 20" fill="currentColor" class="size-3 group-open:hidden">
-              <path fill-rule="evenodd" d="M7.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 1 1-1.06-1.06L10.94 10 7.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-            </svg>
-            <svg viewBox="0 0 20 20" fill="currentColor" class="hidden size-3 group-open:block">
-              <path fill-rule="evenodd" d="M5.22 7.22a.75.75 0 0 1 1.06 0L10 10.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 8.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-            </svg>
+            {{template "icon_chevron_right" .}}
+            {{template "icon_chevron_down" .}}
           </span>
         </div>
       </summary>
