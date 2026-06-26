@@ -440,14 +440,14 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	}
 
 	var (
-		currentUser          *utypes.User
-		recipe               *ai.Recipe
-		thread               []RecipeThreadEntry
-		userErr              error
-		recipeErr            error
-		threadErr            error
-		critiqueInstructions []string
-		loadWG               sync.WaitGroup
+		currentUser   *utypes.User
+		recipe        *ai.Recipe
+		thread        []RecipeThreadEntry
+		userErr       error
+		recipeErr     error
+		threadErr     error
+		critiqueFixes []string
+		loadWG        sync.WaitGroup
 	)
 	loadWG.Go(func() {
 		currentUser, userErr = s.storage.FromRequest(ctx, r, s.clerk)
@@ -466,7 +466,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 			}
 			return
 		}
-		critiqueInstructions = critique.RetryInstructions(*c)
+		critiqueFixes = c.SuggestedFixes
 	})
 	loadWG.Wait()
 
@@ -504,13 +504,16 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// spin page?
+	// spin page for recipes?
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 90*time.Second)
 	defer cancel()
 	s.wg.Add(1)
 	defer s.wg.Done()
 	instructions := []string{"Rewrite the recipe to incorporate the user's question thread and your answers. Return a complete updated recipe."}
-	instructions = append(instructions, critiqueInstructions...)
+	if len(critiqueFixes) > 0 {
+		instructions = append(instructions, "also incorporate these critique fixes")
+		instructions = append(instructions, critiqueFixes...)
+	}
 	replacement, err := s.generator.RegenerateRecipe(ctx, instructions, responseID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to regenerate single recipe", "hash", hash, "error", err)
