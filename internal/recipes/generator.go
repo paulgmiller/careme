@@ -256,7 +256,7 @@ func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []
 		return nil, err
 	}
 	// don't block
-	g.critiqueInBackground(ctx, r)
+	g.critiquer.CritiqueRecipeInBackground(ctx, *r)
 	return r, nil
 }
 
@@ -328,13 +328,9 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 		return nil, err
 	}
 	// don't block
-	g.critiqueInBackground(ctx, retry)
+	g.critiquer.CritiqueRecipeInBackground(ctx, *retry)
 
 	return retry, nil
-}
-
-func (g *generatorService) critiqueInBackground(ctx context.Context, recipe *ai.Recipe) {
-	g.critiquer.CritiqueRecipeInBackground(ctx, *recipe)
 }
 
 func enrichIngredientsMetadata(ingredients []ai.Ingredient, byProductID map[string]ai.InputIngredient) {
