@@ -15,10 +15,14 @@ import (
 
 type mock struct {
 	saver     recipeSaver
-	critiquer recipeCritiquer
+	critiquer mockRecipeCritiquer
 }
 
-func NewMockGenerator(saver recipeSaver, critiquer recipeCritiquer) mock {
+type mockRecipeCritiquer interface {
+	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
+}
+
+func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer) mock {
 	return mock{saver: saver, critiquer: critiquer}
 }
 
