@@ -417,6 +417,10 @@ func (c *captureCritiqueService) CritiqueRecipe(_ context.Context, recipe ai.Rec
 	return c.critiqueFor(recipe)
 }
 
+func (c *captureCritiqueService) CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe) {
+	_, _ = c.CritiqueRecipe(ctx, recipe)
+}
+
 func (c *captureCritiqueService) critiqueRecipes() []ai.Recipe {
 	c.mu.Lock()
 	defer c.mu.Unlock()

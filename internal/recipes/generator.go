@@ -42,6 +42,7 @@ type recipeSaver interface {
 
 type recipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
+	CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe)
 }
 
 type generatorService struct {
@@ -333,12 +334,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 }
 
 func (g *generatorService) critiqueInBackground(ctx context.Context, recipe *ai.Recipe) {
-	go func() {
-		_, err := g.critiquer.CritiqueRecipe(ctx, *recipe)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to critique retried recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", err)
-		}
-	}()
+	g.critiquer.CritiqueRecipeInBackground(ctx, *recipe)
 }
 
 func enrichIngredientsMetadata(ingredients []ai.Ingredient, byProductID map[string]ai.InputIngredient) {

@@ -51,3 +51,12 @@ func (c *cachingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe)
 	}
 	return critique, nil
 }
+
+func (c *cachingCritiquer) CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe) {
+	go func() {
+		_, err := c.CritiqueRecipe(ctx, recipe)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to critique recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", err)
+		}
+	}()
+}

@@ -3,6 +3,7 @@ package critique
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -58,11 +59,20 @@ func (mc *waitingCritiquer) Ready(ctx context.Context) error {
 var tracer = otel.Tracer("careme/internal/recipes/critiques")
 
 func (mc *waitingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
-	mc.wg.Add(1)
-	defer mc.wg.Done()
 	ctx, span := tracer.Start(ctx, "critques.recipe")
 	defer span.End()
 	return mc.critiquer.CritiqueRecipe(ctx, recipe)
+}
+
+func (mc *waitingCritiquer) CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe) {
+	mc.wg.Add(1)
+	go func() {
+		defer mc.wg.Done()
+		_, err := mc.CritiqueRecipe(ctx, recipe)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to critique recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", err)
+		}
+	}()
 }
 
 func (mc *waitingCritiquer) Wait() {
