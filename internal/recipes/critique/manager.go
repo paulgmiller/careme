@@ -43,7 +43,7 @@ var _ recipeCritiquer = &waitingCritiquer{}
 
 func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) *waitingCritiquer {
 	if !cfg.Gemini.IsEnabled() {
-		panic("gemin must be enabled")
+		panic("gemini must be enabled")
 	}
 	crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel, httpClient)
 	return &waitingCritiquer{

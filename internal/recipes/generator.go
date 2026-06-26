@@ -250,14 +250,12 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 }
 
 func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
-	// get previous critique here or in server
-
 	r, err := g.aiClient.Regenerate(ctx, instructions, previousResponseID)
 	if err != nil {
 		return nil, err
 	}
 	// don't block
-	g.critiqueInBackground(ctx, *r)
+	g.critiqueInBackground(ctx, r)
 	return r, nil
 }
 
@@ -329,14 +327,14 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 		return nil, err
 	}
 	// don't block
-	g.critiqueInBackground(ctx, *retry)
+	g.critiqueInBackground(ctx, retry)
 
 	return retry, nil
 }
 
-func (g *generatorService) critiqueInBackground(ctx context.Context, recipe ai.Recipe) {
+func (g *generatorService) critiqueInBackground(ctx context.Context, recipe *ai.Recipe) {
 	go func() {
-		_, err := g.critiquer.CritiqueRecipe(ctx, recipe)
+		_, err := g.critiquer.CritiqueRecipe(ctx, *recipe)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to critique retried recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", err)
 		}
