@@ -5,10 +5,9 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/config"
 )
 
-func TestMultiCritiquerCritiquesEachRecipe(t *testing.T) {
+func TestWaitingCritiquerCritiquesEachRecipe(t *testing.T) {
 	t.Parallel()
 
 	base := &stubCritiquer{
@@ -18,7 +17,7 @@ func TestMultiCritiquerCritiquesEachRecipe(t *testing.T) {
 			Summary:       "Solid.",
 		},
 	}
-	mc := &multiCritiquer{
+	mc := &waitingCritiquer{
 		critiquer: base,
 	}
 	recipes := []ai.Recipe{
@@ -26,9 +25,12 @@ func TestMultiCritiquerCritiquesEachRecipe(t *testing.T) {
 		{Title: "Two"},
 	}
 
-	var got []Result
+	var got []*ai.RecipeCritique
 	for _, recipe := range recipes {
-		result := <-mc.CritiqueRecipe(t.Context(), recipe)
+		result, err := mc.CritiqueRecipe(t.Context(), recipe)
+		if err != nil {
+			t.Fatalf("CritiqueRecipe failed: %v", err)
+		}
 		got = append(got, result)
 	}
 	mc.Wait()
@@ -41,18 +43,16 @@ func TestMultiCritiquerCritiquesEachRecipe(t *testing.T) {
 	}
 }
 
-func TestNewServiceReturnsRubberstampWithoutGemini(t *testing.T) {
+func TestRubberStampReturnsPassingCritique(t *testing.T) {
 	t.Parallel()
 
-	svc := NewManager(&config.Config{}, cache.NewFileCache(t.TempDir()), nil)
-
-	results := svc.CritiqueRecipe(t.Context(), ai.Recipe{Title: "Weeknight Pasta"})
-	result, ok := <-results
-	if !ok {
-		t.Fatal("expected critique result")
+	svc := NewMock(cache.NewFileCache(t.TempDir()))
+	result, err := svc.CritiqueRecipe(t.Context(), ai.Recipe{Title: "Weeknight Pasta"})
+	if err != nil {
+		t.Fatalf("CritiqueRecipe failed: %v", err)
 	}
 
-	if result.Critique == nil || result.Critique.OverallScore != 10 {
-		t.Fatalf("unexpected rubberstamp critique: %#v", result.Critique)
+	if result == nil || result.OverallScore != 10 {
+		t.Fatalf("unexpected rubberstamp critique: %#v", result)
 	}
 }

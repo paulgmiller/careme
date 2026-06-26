@@ -21,17 +21,18 @@ type recipeCritiquer interface {
 	Ready(ctx context.Context) error
 }
 
-func RubberStamp() *rubberstamp { return &rubberstamp{} }
-
 type rubberstamp struct{}
 
 func (r rubberstamp) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
-
 	return &ai.RecipeCritique{OverallScore: 10}, nil
 }
 
 func (r rubberstamp) Wait()                           {}
 func (r rubberstamp) Ready(ctx context.Context) error { return nil }
+
+func NewMock(c cache.ListCache) *cachingCritiquer {
+	return newCachingCritiquer(rubberstamp{}, NewStore(c))
+}
 
 type waitingCritiquer struct {
 	critiquer recipeCritiquer
@@ -58,7 +59,7 @@ var tracer = otel.Tracer("careme/internal/recipes/critiques")
 
 func (mc *waitingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
 	mc.wg.Add(1)
-	defer mc.wg.Wait()
+	defer mc.wg.Done()
 	ctx, span := tracer.Start(ctx, "critques.recipe")
 	defer span.End()
 	return mc.critiquer.CritiqueRecipe(ctx, recipe)

@@ -250,16 +250,15 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 }
 
 func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
-	//get previous critique here or in server
+	// get previous critique here or in server
 
 	r, err := g.aiClient.Regenerate(ctx, instructions, previousResponseID)
 	if err != nil {
 		return nil, err
 	}
-	//don't block
+	// don't block
 	g.critiqueInBackground(ctx, *r)
 	return r, nil
-
 }
 
 // generator not prociding a lot of value here. Should sever just hold an ai client?

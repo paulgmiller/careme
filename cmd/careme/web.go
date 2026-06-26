@@ -73,9 +73,11 @@ func runServer(cfg *config.Config, addr string) error {
 	var marketExtractor farmersmarket.IngredientExtractor
 	var waitFns []func()
 	if cfg.Mocks.Enable {
-		generator = recipes.NewMockGenerator(recipes.IO(cache))
+		mc := critique.NewMock(cache)
+		generator = recipes.NewMockGenerator(recipes.IO(cache), mc)
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
+
 	} else {
 		mc := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(mc)
