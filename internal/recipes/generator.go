@@ -191,7 +191,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 
 	menuPlanInstructions := []string{p.Directive, p.Instructions}
 
-	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, menuPlanInstructions, p.Date, p.LastRecipes, 3)
+	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, menuPlanInstructions, p.Date, p.LastRecipes, p.recipeCount())
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
@@ -224,6 +224,13 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		Recipes: lo.FromSlicePtr(results),
 		Plan:    menuPlan,
 	}, nil
+}
+
+func (p *generatorParams) recipeCount() int {
+	if p.Count > 0 {
+		return p.Count
+	}
+	return 3
 }
 
 func (p *generatorParams) isRegeneration() bool {

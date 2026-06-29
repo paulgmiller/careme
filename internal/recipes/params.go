@@ -34,7 +34,8 @@ type generatorParams struct {
 	// per round instuctions
 	Instructions string   `json:"instructions,omitempty"`
 	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
-	LastRecipes  []string `json:"-"`                   // this doesn't get populated until after save.
+	Count        int      `json:"count,omitempty"`
+	LastRecipes  []string `json:"-"` // this doesn't get populated until after save.
 	// UserID         string      `json:"user_id,omitempty"`
 	// ideally this would be a section and we'd fetch titles and other things as needed
 	// as is this records a selectio at the time of a regeneration
@@ -72,6 +73,9 @@ func (g *generatorParams) Hash() string {
 	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
+	if g.Count > 0 {
+		lo.Must(io.WriteString(fnv, fmt.Sprintf("count:%d", g.Count)))
+	}
 	for _, saved := range g.Saved {
 		lo.Must(io.WriteString(fnv, "saved"+saved.ComputeHash()))
 	}

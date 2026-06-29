@@ -137,7 +137,7 @@ func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 	if recorder.record.ResponseID != "resp-menu-create" {
 		t.Fatalf("unexpected response id: %#v", recorder.record)
 	}
-	if recorder.record.Model != string(recipePlanModel) {
+	if recorder.record.Model != client.model {
 		t.Fatalf("unexpected model: %#v", recorder.record)
 	}
 	if recorder.record.Instructions != strings.TrimSpace(menuPlanSystemMessage) {
@@ -281,7 +281,7 @@ func menuPlanResponseClient(t *testing.T, responseID string) *http.Client {
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 2
 				}
-			}`, responseID, recipePlanModel))),
+			}`, responseID, defaultRecipeModel))),
 			Request: req,
 		}, nil
 	})}

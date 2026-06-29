@@ -17,8 +17,6 @@ import (
 	"github.com/samber/lo"
 )
 
-const recipePlanModel = defaultRecipeModel
-
 type MenuPlan struct {
 	Plans      []RecipePlan `json:"plans"`
 	ResponseID string       `json:"response_id,omitempty" jsonschema:"-"`
@@ -153,7 +151,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		return nil, fmt.Errorf("failed to build menu plan messages: %w", err)
 	}
 	params := responses.ResponseNewParams{
-		Model:        recipePlanModel,
+		Model:        c.model,
 		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
@@ -167,7 +165,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	return responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp)
+	return responseToMenuPlan(ctx, aiCategoryMenu, c.model, resp)
 }
 
 func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*MenuPlan, error) {
@@ -180,7 +178,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 	promptMessages := buildRegenerateMenuPlanMessages(instructions, count)
 
 	params := responses.ResponseNewParams{
-		Model:              recipePlanModel,
+		Model:              c.model,
 		PreviousResponseID: openai.String(previousResponseID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
@@ -196,7 +194,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp)
+	return responseToMenuPlan(ctx, aiCategoryMenu, c.model, resp)
 }
 
 func responseToMenuPlan(ctx context.Context, category, model string, resp *responses.Response) (*MenuPlan, error) {
