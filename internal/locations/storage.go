@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 	"sort"
 	"time"
 
@@ -141,14 +140,10 @@ func initializeLocationBackends(ctx context.Context, factories []locationBackend
 		slog.InfoContext(ctx, "initialized location backend", "backend", fmt.Sprintf("%T", backend), "latencyMS", time.Since(start).Milliseconds())
 		return backend, nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
-
-	return slices.DeleteFunc(results, func(r locationBackend) bool {
-		return r == nil
-	}), nil
+	return lo.Compact(results), nil
 }
 
 func (l *locationStorage) HasInventory(locationID string) bool {
