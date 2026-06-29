@@ -210,7 +210,7 @@ func TestParseUploadedPhotosRejectsTooManyPhotos(t *testing.T) {
 	_, err := parseUploadedPhotos(t.Context(), req)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "use 4 photos or fewer")
+	assert.Contains(t, err.Error(), "use 32 photos or fewer")
 }
 
 func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
