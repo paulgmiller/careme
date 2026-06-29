@@ -114,7 +114,6 @@ func TestAlignMenuPlanIngredientsAcceptsAvailableIngredientDescriptions(t *testi
 	}
 
 	err := alignMenuPlanIngredients(plan, ingredients)
-
 	if err != nil {
 		t.Fatalf("alignMenuPlanIngredients returned error: %v", err)
 	}
@@ -163,7 +162,6 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 	}
 
 	got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, ingredients, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
-
 	if err != nil {
 		t.Fatalf("CreateMenuPlan returned error: %v", err)
 	}
