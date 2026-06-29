@@ -119,11 +119,11 @@ func TestAlignMenuPlanIngredientsAcceptsAvailableIngredientDescriptions(t *testi
 		t.Fatalf("alignMenuPlanIngredients returned error: %v", err)
 	}
 	got := plan.Plans[0]
-	if got.AnchorIngredient != "Wild Caught Shrimp" {
-		t.Fatalf("expected anchor ingredient catalog description, got %q", got.AnchorIngredient)
+	if got.AnchorIngredient != "wild caught shrimp" {
+		t.Fatalf("expected anchor ingredient to be left unchanged, got %q", got.AnchorIngredient)
 	}
-	if got.SideVegetable != "Broccolini" {
-		t.Fatalf("expected side vegetable catalog description, got %q", got.SideVegetable)
+	if got.SideVegetable != " broccolini " {
+		t.Fatalf("expected side vegetable to be left unchanged, got %q", got.SideVegetable)
 	}
 }
 
@@ -206,8 +206,12 @@ func TestCreateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	client := NewClient("test-key", "ignored", menuPlanResponseClient(t, "resp-menu-create"), recorder)
+	ingredients := []InputIngredient{
+		{Description: "tofu"},
+		{Description: "Broccoli"},
+	}
 
-	_, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, nil, []string{"make it vegetarian"}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 2)
+	_, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, ingredients, []string{"make it vegetarian"}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 2)
 	if err != nil {
 		t.Fatalf("CreateMenuPlan returned error: %v", err)
 	}
@@ -336,7 +340,7 @@ func menuPlanResponseClient(t *testing.T, responseID string) *http.Client {
 		if !strings.HasSuffix(req.URL.Path, "/responses") {
 			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
 		}
-		return menuPlanHTTPResponse(req, responseID, `{"plans":[{"cuisine":"Korean","anchor_ingredient":"tofu","technique":"stir-fry","fancy":false}]}`), nil
+		return menuPlanHTTPResponse(req, responseID, `{"plans":[{"cuisine":"Korean","anchor_ingredient":"tofu","technique":"stir-fry","side_vegetable":"Broccoli","fancy":false}]}`), nil
 	})}
 }
 

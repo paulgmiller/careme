@@ -251,43 +251,31 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 }
 
 func alignMenuPlanIngredients(plan *MenuPlan, ingredients []InputIngredient) error {
-	if plan == nil || len(ingredients) == 0 {
-		return nil
-	}
-
-	byDescription := make(map[string]string, len(ingredients))
+	byDescription := make(map[string]bool, len(ingredients))
 	for _, ingredient := range ingredients {
 		description := strings.TrimSpace(ingredient.Description)
 		if description == "" {
 			continue
 		}
-		byDescription[normalizeMenuIngredientName(description)] = description
+		byDescription[normalizeMenuIngredientName(description)] = true
 	}
 
-	for i := range plan.Plans {
-		if err := alignMenuPlanIngredient(&plan.Plans[i].AnchorIngredient, byDescription, "anchor_ingredient"); err != nil {
+	for i, plan := range plan.Plans {
+		if err := alignMenuPlanIngredient(plan.AnchorIngredient, byDescription, "anchor_ingredient"); err != nil {
 			return fmt.Errorf("plan %d: %w", i+1, err)
 		}
-		if strings.TrimSpace(plan.Plans[i].SideVegetable) == "" {
-			continue
-		}
-		if err := alignMenuPlanIngredient(&plan.Plans[i].SideVegetable, byDescription, "side_vegetable"); err != nil {
+		if err := alignMenuPlanIngredient(plan.SideVegetable, byDescription, "side_vegetable"); err != nil {
 			return fmt.Errorf("plan %d: %w", i+1, err)
 		}
 	}
 	return nil
 }
 
-func alignMenuPlanIngredient(label *string, ingredients map[string]string, field string) error {
-	name := strings.TrimSpace(*label)
-	if name == "" {
-		return fmt.Errorf("%s is required when ingredient TSV is provided", field)
-	}
-	description, ok := ingredients[normalizeMenuIngredientName(name)]
+func alignMenuPlanIngredient(label string, ingredients map[string]bool, field string) error {
+	ok := ingredients[normalizeMenuIngredientName(label)]
 	if !ok {
-		return fmt.Errorf("%s %q is not an exact ingredient Description from the TSV", field, name)
+		return fmt.Errorf("%s %q is not an exact ingredient Description from the TSV", field, label)
 	}
-	*label = description
 	return nil
 }
 
