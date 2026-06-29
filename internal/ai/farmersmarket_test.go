@@ -43,19 +43,30 @@ func TestFarmersMarketIngredientSchemaUsesPriceNotSizeOrCategories(t *testing.T)
 	assert.NotContains(t, itemProperties, "categories")
 	assert.Contains(t, schemaRequired(t, items), "price")
 	assertSchemaAllowsNull(t, schemaObject(t, itemProperties["price"]))
+	assertNoOneOf(t, schema)
 }
 
 func assertSchemaAllowsNull(t *testing.T, schema map[string]any) {
 	t.Helper()
-	oneOf, ok := schema["oneOf"].([]any)
-	require.True(t, ok, "expected oneOf schema, got %#v", schema)
-	for _, option := range oneOf {
-		optionSchema := schemaObject(t, option)
-		if optionSchema["type"] == "null" {
-			return
+	types, ok := schema["type"].([]any)
+	require.True(t, ok, "expected type union schema, got %#v", schema)
+	assert.Contains(t, types, "number")
+	assert.Contains(t, types, "null")
+}
+
+func assertNoOneOf(t *testing.T, value any) {
+	t.Helper()
+	switch typed := value.(type) {
+	case map[string]any:
+		assert.NotContains(t, typed, "oneOf")
+		for _, child := range typed {
+			assertNoOneOf(t, child)
+		}
+	case []any:
+		for _, child := range typed {
+			assertNoOneOf(t, child)
 		}
 	}
-	t.Fatalf("expected schema to allow null, got %#v", schema)
 }
 
 func farmersMarketResponseClient(t *testing.T) *http.Client {

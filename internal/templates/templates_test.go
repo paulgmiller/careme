@@ -279,16 +279,25 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 }
 
 func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	if err := Init(cfg, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
+	t.Cleanup(func() {
+		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+			t.Fatalf("cleanup Init() error = %v", err)
+		}
+	})
 
 	data := struct {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
+		ServerSignedIn  bool
 	}{
-		Style: seasons.GetCurrentStyle(),
+		Style:          seasons.GetCurrentStyle(),
+		ServerSignedIn: true,
 	}
 
 	var buf bytes.Buffer
@@ -302,6 +311,9 @@ func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
 	}
 	if strings.Contains(rendered, `.Error`) {
 		t.Fatalf("farmers market page should not reference an Error field, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `const serverSignedIn =`) || !strings.Contains(rendered, `true`) {
+		t.Fatalf("farmers market page should pass server sign-in state to Clerk refresh logic, body: %s", rendered)
 	}
 }
 
@@ -404,6 +416,40 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 	}
 	if !strings.Contains(rendered, data.StatusMessage) {
 		t.Fatalf("spinner status should keep newline text, body: %s", rendered)
+	}
+}
+
+func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
+		Error           string
+	}{
+		Style: seasons.GetCurrentStyle(),
+	}
+
+	var buf bytes.Buffer
+	if err := FarmersMarket.Execute(&buf, data); err != nil {
+		t.Fatalf("FarmersMarket.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	for _, want := range []string{
+		`<script src="/static/htmx@2.0.8.js"></script>`,
+		`id="farmers-market-error"`,
+		`hx-post="/farmersmarket"`,
+		`hx-encoding="multipart/form-data"`,
+		`hx-target="#farmers-market-work"`,
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("farmers market page should include %q, body: %s", want, rendered)
+		}
 	}
 }
 
