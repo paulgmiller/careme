@@ -267,7 +267,8 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status.State == analysisStateFailed {
-		http.Error(w, status.Error, http.StatusInternalServerError)
+		renderError(ctx, w, status.Error)
+		return
 	}
 	if err := renderFarmersMarketProgress(w, status); err != nil {
 		slog.ErrorContext(ctx, "failed to render farmers market analysis progress", "error", err)

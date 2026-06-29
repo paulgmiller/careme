@@ -372,7 +372,7 @@ func TestHandleStatusRedirectsCompletedJob(t *testing.T) {
 	assert.Equal(t, "/recipes?location=farmersmarket_abc&date=2026-06-24", rr.Header().Get("HX-Redirect"))
 }
 
-func TestHandleStatusReturnsFailedJobAsHTTPError(t *testing.T) {
+func TestHandleStatusReturnsFailedJobAsErrorFragment(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
@@ -396,12 +396,14 @@ func TestHandleStatusReturnsFailedJobAsHTTPError(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)
 }
 
-func TestHandleStatusRejectsAnotherUserJob(t *testing.T) {
+func TestHandleStatusAllowsAnotherUserJob(t *testing.T) {
 	handler := newTestHandler(t, fixedAuth{userID: "user-2"}, &fakeExtractor{})
 	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
-		ID:     "job-owned",
-		UserID: "user-1",
-		State:  analysisStateRunning,
+		ID:         "job-owned",
+		UserID:     "user-1",
+		State:      analysisStateRunning,
+		PhotoCount: 3,
+		Message:    "Looking through your market photos.",
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-owned", nil)
 	req.SetPathValue("jobID", "job-owned")
@@ -409,7 +411,8 @@ func TestHandleStatusRejectsAnotherUserJob(t *testing.T) {
 
 	handler.handleStatus(rr, req)
 
-	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Looking through your market photos.")
 }
 
 func TestHandleStatusRejectsAnonymousUser(t *testing.T) {
