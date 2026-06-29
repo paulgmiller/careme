@@ -442,6 +442,7 @@ func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
 	rendered := buf.String()
 	for _, want := range []string{
 		`<script src="/static/htmx@2.0.8.js"></script>`,
+		`id="farmers-market-error"`,
 		`hx-post="/farmersmarket"`,
 		`hx-encoding="multipart/form-data"`,
 		`hx-target="#farmers-market-work"`,

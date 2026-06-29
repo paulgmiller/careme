@@ -2,8 +2,6 @@ package farmersmarket
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -44,14 +42,6 @@ type analysisStatusStore struct {
 
 func newAnalysisStatusStore(c cache.Cache) *analysisStatusStore {
 	return &analysisStatusStore{cache: c}
-}
-
-func newAnalysisJobID() (string, error) {
-	var b [18]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("create analysis job id: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }
 
 func (s *analysisStatusStore) save(ctx context.Context, status analysisStatus) error {

@@ -26,6 +26,10 @@
         </div>
 
         <div class="p-8">
+          <div id="farmers-market-error"
+            class="mb-5 hidden rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800"
+            role="alert"
+            aria-live="polite"></div>
           {{template "farmersmarket_form" ""}}
         </div>
       </div>
@@ -36,14 +40,15 @@
 </body>
 </html>
 
+{{define "farmersmarket_error"}}
+<div id="farmers-market-error"
+  class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800"
+  role="alert"
+  aria-live="polite">{{.}}</div>
+{{end}}
+
 {{define "farmersmarket_form"}}
 <div id="farmers-market-work">
-  {{if .}}
-  <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800" role="alert">
-    {{.}}
-  </div>
-  {{end}}
-
   <form method="POST" action="/farmersmarket" enctype="multipart/form-data" class="space-y-6"
     hx-post="/farmersmarket"
     hx-encoding="multipart/form-data"
@@ -86,6 +91,7 @@
   hx-swap="outerHTML"
   role="status"
   aria-live="polite">
+  <div id="farmers-market-error" class="hidden" hx-swap-oob="outerHTML"></div>
   <div class="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-brand-100 border-t-brand-600" aria-hidden="true"></div>
   <h2 class="mt-5 text-xl font-semibold text-brand-700">Looking through your market photos</h2>
   <p class="mt-2 text-sm text-ink-600">{{.Message}}</p>

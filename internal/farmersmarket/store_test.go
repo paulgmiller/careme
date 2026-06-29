@@ -252,13 +252,33 @@ func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 		staticZipFinder{zip: "98101", ok: true},
 	)
 	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+
+	handler.handlePost(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.False(t, extractor.called)
+	assert.Contains(t, rr.Body.String(), "could not read location")
+	assert.Equal(t, "#farmers-market-error", rr.Header().Get("HX-Retarget"))
+	assert.Equal(t, "outerHTML", rr.Header().Get("HX-Reswap"))
+	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)
+}
+
+func TestHandlePostRejectsNonHTMXBeforeParsingUpload(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
+		t.Fatal("parsePhotos should not be called for non-HTMX posts")
+		return nil, nil
+	}
+	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
 	rr := httptest.NewRecorder()
 
 	handler.handlePost(rr, req)
 
 	require.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.False(t, extractor.called)
-	assert.Contains(t, rr.Body.String(), "could not read location")
+	assert.Contains(t, rr.Body.String(), "htmx request required")
 }
 
 func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
@@ -352,7 +372,7 @@ func TestHandleStatusRedirectsCompletedJob(t *testing.T) {
 	assert.Equal(t, "/recipes?location=farmersmarket_abc&date=2026-06-24", rr.Header().Get("HX-Redirect"))
 }
 
-func TestHandleStatusRendersFailedJobAsRetryForm(t *testing.T) {
+func TestHandleStatusReturnsFailedJobAsHTTPError(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
@@ -362,6 +382,7 @@ func TestHandleStatusRendersFailedJobAsRetryForm(t *testing.T) {
 		Error:  "Could not spot recipe ingredients in those photos.",
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-failed", nil)
+	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("jobID", "job-failed")
 	rr := httptest.NewRecorder()
 
@@ -369,30 +390,10 @@ func TestHandleStatusRendersFailedJobAsRetryForm(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Could not spot recipe ingredients in those photos.")
-	assert.Contains(t, rr.Body.String(), `hx-post="/farmersmarket"`)
-}
-
-func TestHandleStatusRendersStaleRunningJobAsRetryForm(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
-	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
-	stale := analysisStatus{
-		ID:        "job-stale",
-		UserID:    "user-1",
-		State:     analysisStateRunning,
-		UpdatedAt: time.Now().Add(-analysisStaleAfter - time.Minute),
-	}
-	raw, err := json.Marshal(stale)
-	require.NoError(t, err)
-	require.NoError(t, handler.uploader.store.cache.Put(t.Context(), analysisJobKey(stale.ID), string(raw), cache.Unconditional()))
-	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-stale", nil)
-	req.SetPathValue("jobID", "job-stale")
-	rr := httptest.NewRecorder()
-
-	handler.handleStatus(rr, req)
-
-	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "That took too long. Try again with a few fewer photos.")
-	assert.Contains(t, rr.Body.String(), `hx-post="/farmersmarket"`)
+	assert.NotContains(t, rr.Body.String(), `hx-post="/farmersmarket"`)
+	assert.Equal(t, "#farmers-market-error", rr.Header().Get("HX-Retarget"))
+	assert.Equal(t, "outerHTML", rr.Header().Get("HX-Reswap"))
+	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)
 }
 
 func TestHandleStatusRejectsAnotherUserJob(t *testing.T) {
