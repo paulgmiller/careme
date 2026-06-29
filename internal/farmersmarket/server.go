@@ -31,8 +31,7 @@ const (
 	// pressure the 750Mi production pod limit.
 	maxUploadBytes      = 90 << 20
 	maxPhotoBytes       = 10 << 20
-	maxPhotoCount       = 4
-	photoAnalysisLimit  = 4
+	maxPhotoCount       = 32
 	storeDayStartHour   = 9
 	farmersMarketAction = "/farmersmarket"
 	analysisStaleAfter  = 5 * time.Minute
@@ -104,10 +103,12 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
+		ServerSignedIn  bool
 	}{
 		ClarityScript:   templates.ClarityScript(r.Context()),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
+		ServerSignedIn:  true,
 	}
 	if err := templates.FarmersMarket.Execute(w, data); err != nil {
 		slog.ErrorContext(r.Context(), "farmers market template execute error", "error", err)
@@ -341,15 +342,10 @@ func extractFarmersMarketIngredientsWithProgress(ctx context.Context, extractor 
 		err         error
 	}
 	results := make(chan result, len(photos))
-	sem := make(chan struct{}, photoAnalysisLimit)
 	var wg sync.WaitGroup
 	for _, photo := range photos {
 		photo := photo
 		wg.Go(func() {
-			sem <- struct{}{}
-			defer func() {
-				<-sem
-			}()
 			ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL())
 			slog.InfoContext(ctx, "finished farmers market photo analysis", "ingredient_count", len(ingredients))
 			results <- result{ingredients: ingredients, err: err}

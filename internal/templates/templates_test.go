@@ -279,16 +279,25 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 }
 
 func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	if err := Init(cfg, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
+	t.Cleanup(func() {
+		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+			t.Fatalf("cleanup Init() error = %v", err)
+		}
+	})
 
 	data := struct {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
+		ServerSignedIn  bool
 	}{
-		Style: seasons.GetCurrentStyle(),
+		Style:          seasons.GetCurrentStyle(),
+		ServerSignedIn: true,
 	}
 
 	var buf bytes.Buffer
@@ -302,6 +311,9 @@ func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
 	}
 	if strings.Contains(rendered, `.Error`) {
 		t.Fatalf("farmers market page should not reference an Error field, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `const serverSignedIn =`) || !strings.Contains(rendered, `true`) {
+		t.Fatalf("farmers market page should pass server sign-in state to Clerk refresh logic, body: %s", rendered)
 	}
 }
 
