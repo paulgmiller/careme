@@ -17,6 +17,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/auth"
+	"careme/internal/cache"
 	"careme/internal/locations/geo"
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -67,13 +68,13 @@ func (p Photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, authClient authClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
+func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
 	return &Handler{
 		uploader:    uploader,
 		auth:        authClient,
 		extractor:   extractor,
 		zipFinder:   zipFinder,
-		statusStore: newAnalysisStatusStore(uploader.store.cache),
+		statusStore: newAnalysisStatusStore(statusCache),
 		parsePhotos: parseUploadedPhotos,
 	}
 }
@@ -203,7 +204,6 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 		}
 		status.State = analysisStateFailed
 		status.Message = message
-		status.Error = message
 		update(status)
 	}
 
@@ -267,7 +267,7 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status.State == analysisStateFailed {
-		renderError(ctx, w, status.Error)
+		renderError(ctx, w, status.Message)
 		return
 	}
 	if err := renderFarmersMarketProgress(w, status); err != nil {

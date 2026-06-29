@@ -31,7 +31,6 @@ type analysisStatus struct {
 	IngredientCount int           `json:"ingredient_count"`
 	Message         string        `json:"message"`
 	RedirectURL     string        `json:"redirect_url,omitempty"`
-	Error           string        `json:"error,omitempty"`
 	CreatedAt       time.Time     `json:"created_at"`
 	UpdatedAt       time.Time     `json:"updated_at"`
 }

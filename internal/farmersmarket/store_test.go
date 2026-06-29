@@ -245,8 +245,10 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	extractor := &fakeExtractor{}
+	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
-		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		cacheStore,
 		auth.DefaultMock(),
 		extractor,
 		staticZipFinder{zip: "98101", ok: true},
@@ -376,10 +378,10 @@ func TestHandleStatusReturnsFailedJobAsErrorFragment(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
-		ID:     "job-failed",
-		UserID: "user-1",
-		State:  analysisStateFailed,
-		Error:  "Could not spot recipe ingredients in those photos.",
+		ID:      "job-failed",
+		UserID:  "user-1",
+		State:   analysisStateFailed,
+		Message: "Could not spot recipe ingredients in those photos.",
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-failed", nil)
 	req.Header.Set("HX-Request", "true")
@@ -430,8 +432,10 @@ func TestHandleStatusRejectsAnonymousUser(t *testing.T) {
 
 func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
-		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		cacheStore,
 		auth.DefaultMock(),
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
@@ -447,8 +451,10 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 }
 
 func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
-		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		cacheStore,
 		noSessionAuth{},
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
@@ -464,8 +470,10 @@ func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 
 func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExtractor) *Handler {
 	t.Helper()
+	cacheStore := cache.NewInMemoryCache()
 	return NewHandler(
-		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		cacheStore,
 		authClient,
 		extractor,
 		staticZipFinder{zip: "98101", ok: true},

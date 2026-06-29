@@ -118,12 +118,13 @@ func runServer(cfg *config.Config, addr string) error {
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
-	farmersMarketStore, err := farmersmarket.NewContainerStore()
+	farmersMarketCache, err := cachepkg.EnsureCache(farmersmarket.Container)
 	if err != nil {
-		return fmt.Errorf("failed to create farmers market store: %w", err)
+		return fmt.Errorf("failed to create farmers market cache: %w", err)
 	}
+	farmersMarketStore := farmersmarket.NewStore(farmersMarketCache)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore, centroids)
-	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, authClient, marketExtractor, centroids)
+	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, farmersMarketCache, authClient, marketExtractor, centroids)
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)
 
