@@ -332,10 +332,6 @@ func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientEx
 }
 
 func extractFarmersMarketIngredientsWithProgress(ctx context.Context, extractor IngredientExtractor, photos []Photo, progress func(int, []ai.InputIngredient)) ([]ai.InputIngredient, error) {
-	if len(photos) == 0 {
-		return nil, fmt.Errorf("at least one photo is required")
-	}
-
 	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos))
 	type result struct {
 		ingredients []ai.InputIngredient
