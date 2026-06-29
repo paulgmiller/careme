@@ -31,7 +31,7 @@ const (
 	// pressure the 750Mi production pod limit.
 	maxUploadBytes      = 90 << 20
 	maxPhotoBytes       = 10 << 20
-	maxPhotoCount       = 32
+	maxPhotoCount       = 4
 	photoAnalysisLimit  = 4
 	storeDayStartHour   = 9
 	farmersMarketAction = "/farmersmarket"
