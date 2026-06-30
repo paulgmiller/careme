@@ -3,13 +3,14 @@ package sitemap
 import (
 	"context"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"careme/internal/cache"
 	"careme/internal/campaigns"
+	"careme/internal/recipes"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
 )
@@ -95,19 +96,20 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) advertisedRecipeURLs(ctx context.Context) ([]string, error) {
-	manifest, err := campaigns.LoadAdvertisedRecipeManifest(ctx, s.cache)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
+	locs := campaigns.AdvertisedRecipeLocations()
 
 	var urls []string
-	for _, entry := range manifest.Entries {
-		if entry.ShoppingListHash != "" {
-			urls = append(urls, s.publicOrigin+"/recipes?h="+entry.ShoppingListHash)
+	for _, loc := range locs {
+		date, err := recipes.StoreToDate(ctx, time.Now(), &loc)
+		if err != nil {
+			fmt.Errorf("resolve store date: %w", err)
 		}
+
+		p := recipes.DefaultParams(&loc, date)
+
+		// this will be out of date quickly. Do we tell the search engine that and let user know
+		// make a different la
+		urls = append(urls, s.publicOrigin+"/recipes?h="+p.Hash())
 	}
 	return urls, nil
 }

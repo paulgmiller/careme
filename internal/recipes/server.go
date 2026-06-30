@@ -148,11 +148,6 @@ type server struct {
 	critiques    critiqueStore
 }
 
-type GenerationKickResult struct {
-	Hash   string `json:"hash"`
-	Kicked bool   `json:"kicked"`
-}
-
 type critiqueStore interface {
 	Load(ctx context.Context, hash string) (*ai.RecipeCritique, error)
 }
@@ -1364,20 +1359,17 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 	})
 }
 
-func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) (GenerationKickResult, error) {
-	hash := p.Hash()
-	if _, err := s.FromCache(ctx, hash); err == nil {
-		return GenerationKickResult{Hash: hash}, nil
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		return GenerationKickResult{}, err
-	}
-
-	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
-		return GenerationKickResult{}, fmt.Errorf("save params: %w", err)
+func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) error {
+	if err := s.SaveParams(ctx, p); err != nil {
+		if errors.Is(err, ErrAlreadyExists) {
+			return nil // someone already kicked most likely. \
+			// Ideally we check params date and rekick if not finished in under one hour
+		}
+		fmt.Errorf("save params: %w", err)
 	}
 
 	s.kickgeneration(ctx, p)
-	return GenerationKickResult{Hash: hash, Kicked: true}, nil
+	return nil
 }
 
 func (s *server) writeGenerationStatus(ctx context.Context, hash, status string) {

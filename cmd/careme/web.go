@@ -62,7 +62,7 @@ func runServer(cfg *config.Config, addr string) error {
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
 	authClient.Register(appRoutes)
-	campaigns.Register(appRoutes)
+	campaigns.Register(appRoutes) // could be infra routes?
 	static.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
@@ -134,7 +134,7 @@ func runServer(cfg *config.Config, addr string) error {
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
-	campaigns.RegisterAdvertisedRecipeGeneration(infraRoutes, locationStorage, recipeHandler, cache)
+	campaigns.RegisterAdvertisedRecipeGeneration(infraRoutes, recipeHandler)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
