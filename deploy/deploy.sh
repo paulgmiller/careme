@@ -4,7 +4,9 @@ set -euo pipefail
 ref="${1:-origin/master}"
 app_manifest_path="deploy/deploy.yaml"
 mail_manifest_path="deploy/cronjob-careme-mail.yaml"
+advertised_recipes_manifest_path="deploy/cronjob-careme-advertised-recipes.yaml"
 cron_manifest_paths=(
+  "${advertised_recipes_manifest_path}"
   "deploy/cronjob-aldi-scrape.yaml"
   "deploy/cronjob-albertsons-scrape.yaml"
   "deploy/cronjob-albertsons-reese84.yaml"
@@ -37,6 +39,7 @@ fi
 
 public_origin="${public_origin:-https://${ingress_host}}"
 manifest_paths=("${app_manifest_path}" "${mail_manifest_path}" "${cron_manifest_paths[@]}")
+advertised_recipes_schedule="0 9 * * *"
 aldi_scrape_schedule="45 6 * * 0"
 albertsons_scrape_schedule="0 6 * * 0"
 albertsons_reese84_schedule="0 */6 * * *"
@@ -50,6 +53,7 @@ if [[ "${namespace}" == "caremetest" ]]; then
   store_disable_env_yaml='
             - name: WEGMANS_ENABLE
               value: "false"'
+  advertised_recipes_schedule="0 9 1,15 * *"
   aldi_scrape_schedule="45 6 1,15 * *"
   albertsons_scrape_schedule="0 6 1,15 * *"
   albertsons_reese84_schedule="0 */12 * * *"
@@ -80,6 +84,7 @@ export IMAGE_TAG="${commit_hash:0:${short_len}}"
 export PUBLIC_ORIGIN="${public_origin}"
 export INGRESS_HOST="${ingress_host}"
 export STORE_DISABLE_ENV_YAML="${store_disable_env_yaml}"
+export ADVERTISED_RECIPES_SCHEDULE="${advertised_recipes_schedule}"
 export ALDI_SCRAPE_SCHEDULE="${aldi_scrape_schedule}"
 export ALBERTSONS_SCRAPE_SCHEDULE="${albertsons_scrape_schedule}"
 export ALBERTSONS_REESE84_SCHEDULE="${albertsons_reese84_schedule}"

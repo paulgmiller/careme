@@ -1,11 +1,12 @@
 package sitemap
 
 import (
+	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 
 	"careme/internal/cache"
 	"careme/internal/recipes"
@@ -59,11 +60,17 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	locationURLs := staplesWatchdogLocationURLs(s.publicOrigin)
-	entries := make([]urlEntry, 0, len(feedbackHashes)+1+len(locationURLs))
+	advertisedURLs, err := s.advertisedRecipeURLs(r.Context())
+	if err != nil {
+		http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "failed to read advertised recipe urls", "error", err)
+		return
+	}
+
+	entries := make([]urlEntry, 0, len(feedbackHashes)+1+len(advertisedURLs))
 	entries = append(entries, urlEntry{Loc: s.publicOrigin + "/about"})
-	for _, locationURL := range locationURLs {
-		entries = append(entries, urlEntry{Loc: locationURL})
+	for _, advertisedURL := range advertisedURLs {
+		entries = append(entries, urlEntry{Loc: advertisedURL})
 	}
 
 	// this is going to get too  big.  at some point we need a real db to find latest
@@ -87,14 +94,28 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func staplesWatchdogLocationURLs(publicOrigin string) []string {
-	stores := recipes.StaplesWatchdogLocations()
-	urls := make([]string, 0, len(stores))
-	for _, store := range stores {
-		values := url.Values{"location": []string{store.ID}}
-		urls = append(urls, publicOrigin+"/recipes?"+values.Encode())
+func (s *Server) advertisedRecipeURLs(ctx context.Context) ([]string, error) {
+	manifest, err := recipes.LoadAdvertisedRecipeManifest(ctx, s.cache)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return urls
+
+	var urls []string
+	for _, entry := range manifest.Entries {
+		if entry.ShoppingListHash != "" {
+			urls = append(urls, s.publicOrigin+"/recipes?h="+entry.ShoppingListHash)
+		}
+		for _, recipeHash := range entry.RecipeHashes {
+			if recipeHash == "" {
+				continue
+			}
+			urls = append(urls, s.publicOrigin+"/recipe/"+recipeHash)
+		}
+	}
+	return urls, nil
 }
 
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {

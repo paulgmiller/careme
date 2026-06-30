@@ -16,12 +16,13 @@ import (
 )
 
 func main() {
-	var serve, mailer bool
+	var serve, mailer, advertisedRecipes bool
 	var addr string
 
 	// left for back compat does noting
 	flag.BoolVar(&serve, "serve", false, "dead we always serve")
 	flag.BoolVar(&mailer, "mail", false, "Run one-shot mail sender and exit")
+	flag.BoolVar(&advertisedRecipes, "advertised-recipes", false, "Generate one-shot advertised recipe pages and exit")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.Parse()
 
@@ -55,6 +56,14 @@ func main() {
 		}
 		slog.InfoContext(ctx, "mail sender engaged (one-shot)")
 		mailer.RunOnce(ctx)
+		return
+	}
+
+	if advertisedRecipes {
+		slog.InfoContext(ctx, "advertised recipe generator engaged (one-shot)")
+		if err := runAdvertisedRecipeGeneration(ctx, cfg); err != nil {
+			log.Fatalf("failed to generate advertised recipes: %v", err)
+		}
 		return
 	}
 
