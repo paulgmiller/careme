@@ -84,7 +84,6 @@ func TestHandleSitemapIncludesAdvertisedGeneratedRecipePages(t *testing.T) {
 		Entries: []campaigns.AdvertisedRecipeEntry{
 			{
 				ShoppingListHash: "shopping-hash",
-				RecipeHashes:     []string{"recipe-hash-1", "recipe-hash-2"},
 			},
 		},
 	}
@@ -109,8 +108,6 @@ func TestHandleSitemapIncludesAdvertisedGeneratedRecipePages(t *testing.T) {
 	expectedURLs := []string{
 		testPublicOrigin + "/about",
 		testPublicOrigin + "/recipes?h=shopping-hash",
-		testPublicOrigin + "/recipe/recipe-hash-1",
-		testPublicOrigin + "/recipe/recipe-hash-2",
 	}
 	if len(parsed.URLs) != len(expectedURLs) {
 		t.Fatalf("expected %d sitemap urls, got %d: %s", len(expectedURLs), len(parsed.URLs), rr.Body.String())

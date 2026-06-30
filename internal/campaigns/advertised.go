@@ -23,7 +23,6 @@ type AdvertisedRecipeEntry struct {
 	Location         locations.Location `json:"location"`
 	Date             time.Time          `json:"date"`
 	ShoppingListHash string             `json:"shopping_list_hash"`
-	RecipeHashes     []string           `json:"recipe_hashes"`
 	GeneratedAt      time.Time          `json:"generated_at"`
 }
 

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -15,13 +14,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAdvertisedRecipeGenerationRouteGeneratesManifest(t *testing.T) {
+func TestAdvertisedRecipeGenerationRouteKicksMissingShoppingLists(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
-	rio := recipes.IO(cacheStore)
-	generator := NewAdvertisedRecipeGenerator(advertisedLocationStoreStub{}, advertisedGeneratorStub{}, rio, cacheStore)
+	kicker := &advertisedGenerationKickstarterStub{}
 
 	mux := http.NewServeMux()
-	generator.Register(mux)
+	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, kicker, cacheStore)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/campaigns/advertised-recipes/generate", nil)
+	mux.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusAccepted, response.Code)
+	require.Len(t, kicker.hashes, len(AdvertisedRecipeLocations()))
+	require.Contains(t, response.Body.String(), `"kicked"`)
+}
+
+func TestAdvertisedRecipeGenerationRouteRefreshesManifestFromCachedLists(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
+	kicker := &advertisedGenerationKickstarterStub{present: true, rio: recipes.IO(cacheStore)}
+
+	mux := http.NewServeMux()
+	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, kicker, cacheStore)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/campaigns/advertised-recipes/generate", nil)
@@ -32,17 +46,14 @@ func TestAdvertisedRecipeGenerationRouteGeneratesManifest(t *testing.T) {
 	manifest, err := LoadAdvertisedRecipeManifest(t.Context(), cacheStore)
 	require.NoError(t, err)
 	require.Len(t, manifest.Entries, len(AdvertisedRecipeLocations()))
-	require.Empty(t, manifest.Failures)
-	require.NotEmpty(t, manifest.Entries[0].ShoppingListHash)
-	require.Len(t, manifest.Entries[0].RecipeHashes, 1)
+	require.Equal(t, kicker.hashes[0], manifest.Entries[0].ShoppingListHash)
 }
 
 func TestAdvertisedRecipeGenerationRouteOnlyAcceptsPOST(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
-	generator := NewAdvertisedRecipeGenerator(advertisedLocationStoreStub{}, advertisedGeneratorStub{}, recipes.IO(cacheStore), cacheStore)
 
 	mux := http.NewServeMux()
-	generator.Register(mux)
+	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, &advertisedGenerationKickstarterStub{}, cacheStore)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/campaigns/advertised-recipes/generate", nil)
@@ -61,31 +72,33 @@ func (advertisedLocationStoreStub) GetLocationByID(_ context.Context, locationID
 	}, nil
 }
 
-type advertisedGeneratorStub struct{}
+type advertisedGenerationKickstarterStub struct {
+	hashes  []string
+	present bool
+	rio     interface {
+		SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error
+	}
+}
 
-func (advertisedGeneratorStub) GenerateRecipes(_ context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
-	return &ai.ShoppingList{
-		Recipes: []ai.Recipe{
-			{
-				Title:        "Campaign Pasta " + p.Location.ID,
-				Description:  "A simple campaign recipe.",
-				CookTime:     "30 minutes",
-				CostEstimate: "$20",
-				Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 lb"}},
-				Instructions: []string{"Boil pasta."},
+func (s *advertisedGenerationKickstarterStub) KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams) (recipes.GenerationKickResult, error) {
+	hash := p.Hash()
+	s.hashes = append(s.hashes, hash)
+	if s.present && s.rio != nil {
+		err := s.rio.SaveShoppingList(ctx, &ai.ShoppingList{
+			Recipes: []ai.Recipe{
+				{
+					Title:        "Campaign Pasta",
+					Description:  "A simple campaign recipe.",
+					CookTime:     "30 minutes",
+					CostEstimate: "$20",
+					Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 lb"}},
+					Instructions: []string{"Boil pasta."},
+				},
 			},
-		},
-	}, nil
-}
-
-func (advertisedGeneratorStub) RegenerateRecipe(context.Context, []string, string) (*ai.Recipe, error) {
-	return nil, nil
-}
-
-func (advertisedGeneratorStub) AskQuestion(context.Context, string, string) (*ai.QuestionResponse, error) {
-	return nil, nil
-}
-
-func (advertisedGeneratorStub) PickAWine(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error) {
-	return nil, nil
+		}, hash)
+		if err != nil {
+			return recipes.GenerationKickResult{}, err
+		}
+	}
+	return recipes.GenerationKickResult{Hash: hash, Kicked: !s.present}, nil
 }

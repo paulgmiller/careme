@@ -26,22 +26,15 @@ spec:
             runAsGroup: 65532
           containers:
             - name: careme-advertised-recipes
-              image: ghcr.io/paulgmiller/careme:${IMAGE_TAG}
+              image: curlimages/curl:latest
               imagePullPolicy: IfNotPresent
-              args: ["-advertised-recipes"]
-              envFrom:
-                - secretRef:
-                    name: ai
-                - secretRef:
-                    name: grafana
-                - secretRef:
-                    name: kroger
-                - secretRef:
-                    name: storage
-                - secretRef:
-                    name: walmart
-                - secretRef:
-                    name: brightdata-proxy
+              args:
+                - --fail
+                - --silent
+                - --show-error
+                - --request
+                - POST
+                - http://careme/campaigns/advertised-recipes/generate
               env:
                 - name: POD_NAME
                   valueFrom:

@@ -108,12 +108,6 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) ([]string, error) {
 		if entry.ShoppingListHash != "" {
 			urls = append(urls, s.publicOrigin+"/recipes?h="+entry.ShoppingListHash)
 		}
-		for _, recipeHash := range entry.RecipeHashes {
-			if recipeHash == "" {
-				continue
-			}
-			urls = append(urls, s.publicOrigin+"/recipe/"+recipeHash)
-		}
 	}
 	return urls, nil
 }

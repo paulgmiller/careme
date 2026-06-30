@@ -134,7 +134,7 @@ func runServer(cfg *config.Config, addr string) error {
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
-	campaigns.NewAdvertisedRecipeGenerator(locationStorage, generator, recipes.IO(cache), cache).Register(infraRoutes)
+	campaigns.RegisterAdvertisedRecipeGeneration(infraRoutes, locationStorage, recipeHandler, cache)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
