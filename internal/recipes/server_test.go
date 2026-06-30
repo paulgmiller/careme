@@ -988,7 +988,7 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	assert.Equal(t, "Something went wrong: plan exploded", got)
 }
 
-func TestKickGenerationIfNotPresent_DoesNotKickCachedShoppingList(t *testing.T) {
+func TestKickGenerationIfNotPresent_DoesNotKickExistingParams(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -997,12 +997,10 @@ func TestKickGenerationIfNotPresent_DoesNotKickCachedShoppingList(t *testing.T) 
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{}, params.Hash()))
+	require.NoError(t, s.SaveParams(t.Context(), params))
 
-	result, err := s.KickGenerationIfNotPresent(t.Context(), params)
+	err := s.KickGenerationIfNotPresent(t.Context(), params)
 	require.NoError(t, err)
-	assert.Equal(t, params.Hash(), result.Hash)
-	assert.False(t, result.Kicked)
 
 	select {
 	case <-generator.called:
@@ -1021,10 +1019,8 @@ func TestKickGenerationIfNotPresent_SavesParamsAndKicksMissingShoppingList(t *te
 	t.Cleanup(s.Wait)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	result, err := s.KickGenerationIfNotPresent(t.Context(), params)
+	err := s.KickGenerationIfNotPresent(t.Context(), params)
 	require.NoError(t, err)
-	assert.Equal(t, params.Hash(), result.Hash)
-	assert.True(t, result.Kicked)
 
 	select {
 	case <-generator.called:

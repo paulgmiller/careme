@@ -1365,7 +1365,7 @@ func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorPar
 			return nil // someone already kicked most likely. \
 			// Ideally we check params date and rekick if not finished in under one hour
 		}
-		fmt.Errorf("save params: %w", err)
+		return fmt.Errorf("save params: %w", err)
 	}
 
 	s.kickgeneration(ctx, p)

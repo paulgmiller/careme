@@ -2,58 +2,48 @@ package campaigns
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"careme/internal/ai"
-	"careme/internal/cache"
-	"careme/internal/locations"
 	"careme/internal/recipes"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestAdvertisedRecipeGenerationRouteKicksMissingShoppingLists(t *testing.T) {
-	cacheStore := cache.NewInMemoryCache()
+func TestAdvertisedRecipeGenerationRouteKicksAdvertisedLocations(t *testing.T) {
 	kicker := &advertisedGenerationKickstarterStub{}
 
 	mux := http.NewServeMux()
-	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, kicker, cacheStore)
-
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/campaigns/advertised-recipes/generate", nil)
-	mux.ServeHTTP(response, request)
-
-	require.Equal(t, http.StatusAccepted, response.Code)
-	require.Len(t, kicker.hashes, len(AdvertisedRecipeLocations()))
-	require.Contains(t, response.Body.String(), `"kicked"`)
-}
-
-func TestAdvertisedRecipeGenerationRouteRefreshesManifestFromCachedLists(t *testing.T) {
-	cacheStore := cache.NewInMemoryCache()
-	kicker := &advertisedGenerationKickstarterStub{present: true, rio: recipes.IO(cacheStore)}
-
-	mux := http.NewServeMux()
-	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, kicker, cacheStore)
+	RegisterAdvertisedRecipeGeneration(mux, kicker)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/campaigns/advertised-recipes/generate", nil)
 	mux.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusOK, response.Code)
+	require.Len(t, kicker.params, len(AdvertisedRecipeLocations()))
+	require.Equal(t, "wholefoods_10153", kicker.params[0].Location.ID)
+}
 
-	manifest, err := LoadAdvertisedRecipeManifest(t.Context(), cacheStore)
-	require.NoError(t, err)
-	require.Len(t, manifest.Entries, len(AdvertisedRecipeLocations()))
-	require.Equal(t, kicker.hashes[0], manifest.Entries[0].ShoppingListHash)
+func TestAdvertisedRecipeGenerationRouteReturnsError(t *testing.T) {
+	kicker := &advertisedGenerationKickstarterStub{err: errors.New("no soup")}
+
+	mux := http.NewServeMux()
+	RegisterAdvertisedRecipeGeneration(mux, kicker)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/campaigns/advertised-recipes/generate", nil)
+	mux.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusInternalServerError, response.Code)
+	require.Contains(t, response.Body.String(), "kick generation: no soup")
 }
 
 func TestAdvertisedRecipeGenerationRouteOnlyAcceptsPOST(t *testing.T) {
-	cacheStore := cache.NewInMemoryCache()
-
 	mux := http.NewServeMux()
-	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, &advertisedGenerationKickstarterStub{}, cacheStore)
+	RegisterAdvertisedRecipeGeneration(mux, &advertisedGenerationKickstarterStub{})
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/campaigns/advertised-recipes/generate", nil)
@@ -62,43 +52,12 @@ func TestAdvertisedRecipeGenerationRouteOnlyAcceptsPOST(t *testing.T) {
 	require.Equal(t, http.StatusMethodNotAllowed, response.Code)
 }
 
-type advertisedLocationStoreStub struct{}
-
-func (advertisedLocationStoreStub) GetLocationByID(_ context.Context, locationID string) (*locations.Location, error) {
-	return &locations.Location{
-		ID:      locationID,
-		Name:    "Campaign Store",
-		ZipCode: "98101",
-	}, nil
-}
-
 type advertisedGenerationKickstarterStub struct {
-	hashes  []string
-	present bool
-	rio     interface {
-		SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error
-	}
+	params []*recipes.GeneratorParams
+	err    error
 }
 
-func (s *advertisedGenerationKickstarterStub) KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams) (recipes.GenerationKickResult, error) {
-	hash := p.Hash()
-	s.hashes = append(s.hashes, hash)
-	if s.present && s.rio != nil {
-		err := s.rio.SaveShoppingList(ctx, &ai.ShoppingList{
-			Recipes: []ai.Recipe{
-				{
-					Title:        "Campaign Pasta",
-					Description:  "A simple campaign recipe.",
-					CookTime:     "30 minutes",
-					CostEstimate: "$20",
-					Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 lb"}},
-					Instructions: []string{"Boil pasta."},
-				},
-			},
-		}, hash)
-		if err != nil {
-			return recipes.GenerationKickResult{}, err
-		}
-	}
-	return recipes.GenerationKickResult{Hash: hash, Kicked: !s.present}, nil
+func (s *advertisedGenerationKickstarterStub) KickGenerationIfNotPresent(_ context.Context, p *recipes.GeneratorParams) error {
+	s.params = append(s.params, p)
+	return s.err
 }

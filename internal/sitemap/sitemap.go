@@ -102,7 +102,8 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) ([]string, error) {
 	for _, loc := range locs {
 		date, err := recipes.StoreToDate(ctx, time.Now(), &loc)
 		if err != nil {
-			fmt.Errorf("resolve store date: %w", err)
+			slog.ErrorContext(ctx, "failed to get date for location", "error", err, "location", loc)
+			continue
 		}
 
 		p := recipes.DefaultParams(&loc, date)

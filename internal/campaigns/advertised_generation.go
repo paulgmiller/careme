@@ -51,7 +51,7 @@ func (s advertisedGenerationServer) Generate(ctx context.Context) error {
 func (s advertisedGenerationServer) generateLocation(ctx context.Context, loc *locations.Location) error {
 	date, err := recipes.StoreToDate(ctx, time.Now(), loc)
 	if err != nil {
-		fmt.Errorf("resolve store date: %w", err)
+		return fmt.Errorf("resolve store date: %w", err)
 	}
 
 	err = s.generator.KickGenerationIfNotPresent(ctx, recipes.DefaultParams(loc, date))
