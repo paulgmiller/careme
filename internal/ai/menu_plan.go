@@ -246,7 +246,7 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 		return nil, fmt.Errorf("failed to get menu plan response ID")
 	}
 	plan.ResponseID = resp.ID
-	slog.InfoContext(ctx, "generated menu plan", "ai_category", category, "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage))
 	return &plan, nil
 }
 
