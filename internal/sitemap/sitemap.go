@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"careme/internal/cache"
+	"careme/internal/recipes"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
 )
@@ -57,8 +59,12 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries := make([]urlEntry, 0, len(feedbackHashes)+1)
+	locationURLs := staplesWatchdogLocationURLs(s.publicOrigin)
+	entries := make([]urlEntry, 0, len(feedbackHashes)+1+len(locationURLs))
 	entries = append(entries, urlEntry{Loc: s.publicOrigin + "/about"})
+	for _, locationURL := range locationURLs {
+		entries = append(entries, urlEntry{Loc: locationURL})
+	}
 
 	// this is going to get too  big.  at some point we need a real db to find latest
 	for _, hash := range feedbackHashes {
@@ -79,6 +85,16 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		slog.ErrorContext(r.Context(), "failed to encode sitemap", "error", err)
 	}
+}
+
+func staplesWatchdogLocationURLs(publicOrigin string) []string {
+	stores := recipes.StaplesWatchdogLocations()
+	urls := make([]string, 0, len(stores))
+	for _, store := range stores {
+		values := url.Values{"location": []string{store.ID}}
+		urls = append(urls, publicOrigin+"/recipes?"+values.Encode())
+	}
+	return urls
 }
 
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {

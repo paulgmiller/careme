@@ -56,7 +56,7 @@ func TestHandleSitemapReturnsXMLWithFeedbackRecipeHashes(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 
-	expectedCount := len(hashes) + 1 // recipe URLs + static about page
+	expectedCount := len(hashes) + 1 + len(recipes.StaplesWatchdogLocations()) // recipe URLs + static about page + watchdog store URLs
 	if len(parsed.URLs) != expectedCount {
 		t.Fatalf("expected %d sitemap urls, got %d", expectedCount, len(parsed.URLs))
 	}
@@ -69,6 +69,28 @@ func TestHandleSitemapReturnsXMLWithFeedbackRecipeHashes(t *testing.T) {
 		wantURL := testPublicOrigin + "/recipe/" + hash
 		if !containsSitemapURL(parsed.URLs, wantURL) {
 			t.Fatalf("missing expected URL %q in sitemap body: %s", wantURL, rr.Body.String())
+		}
+	}
+
+	for _, store := range recipes.StaplesWatchdogLocations() {
+		wantURL := testPublicOrigin + "/recipes?location=" + store.ID
+		if !containsSitemapURL(parsed.URLs, wantURL) {
+			t.Fatalf("missing expected watchdog store URL %q in sitemap body: %s", wantURL, rr.Body.String())
+		}
+	}
+}
+
+func TestStaplesWatchdogLocationURLs(t *testing.T) {
+	urls := staplesWatchdogLocationURLs(testPublicOrigin)
+	stores := recipes.StaplesWatchdogLocations()
+
+	if len(urls) != len(stores) {
+		t.Fatalf("expected %d location URLs, got %d", len(stores), len(urls))
+	}
+	for i, store := range stores {
+		want := testPublicOrigin + "/recipes?location=" + store.ID
+		if urls[i] != want {
+			t.Fatalf("URL %d = %q, want %q", i, urls[i], want)
 		}
 	}
 }
@@ -126,8 +148,9 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 
-	if len(parsed.URLs) != 2 {
-		t.Fatalf("expected two URLs (about + feedback-backed recipe), got %d", len(parsed.URLs))
+	expectedCount := 2 + len(recipes.StaplesWatchdogLocations())
+	if len(parsed.URLs) != expectedCount {
+		t.Fatalf("expected %d URLs (about + watchdog stores + feedback-backed recipe), got %d", expectedCount, len(parsed.URLs))
 	}
 	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/recipe/"+recipeHash) {
 		t.Fatalf("missing feedback-backed recipe URL in sitemap body: %s", rr.Body.String())
@@ -159,8 +182,9 @@ func TestHandleSitemapIncludesFeedbackWithoutCachedRecipe(t *testing.T) {
 	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
-	if len(parsed.URLs) != 2 {
-		t.Fatalf("expected two URLs (about + feedback-backed recipe), got %d", len(parsed.URLs))
+	expectedCount := 2 + len(recipes.StaplesWatchdogLocations())
+	if len(parsed.URLs) != expectedCount {
+		t.Fatalf("expected %d URLs (about + watchdog stores + feedback-backed recipe), got %d", expectedCount, len(parsed.URLs))
 	}
 	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/about") {
 		t.Fatalf("missing expected static URL %q in sitemap body: %s", testPublicOrigin+"/about", rr.Body.String())
@@ -194,11 +218,12 @@ func TestHandleSitemap_IgnoresNonFeedbackKeys(t *testing.T) {
 	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
-	if len(parsed.URLs) != 1 {
-		t.Fatalf("expected one URL (about) with no feedback keys, got %d", len(parsed.URLs))
+	expectedCount := 1 + len(recipes.StaplesWatchdogLocations())
+	if len(parsed.URLs) != expectedCount {
+		t.Fatalf("expected %d URLs (about + watchdog stores) with no feedback keys, got %d", expectedCount, len(parsed.URLs))
 	}
-	if parsed.URLs[0].Loc != testPublicOrigin+"/about" {
-		t.Fatalf("expected only URL %q, got %q", testPublicOrigin+"/about", parsed.URLs[0].Loc)
+	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/about") {
+		t.Fatalf("missing expected static URL %q in sitemap body: %s", testPublicOrigin+"/about", rr.Body.String())
 	}
 }
 
