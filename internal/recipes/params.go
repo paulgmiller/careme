@@ -143,7 +143,7 @@ func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time
 	}
 	storeLoc, err := time.LoadLocation(tzName)
 	if err != nil {
-		slog.ErrorContext(ctx, "invalid inferred timezone; falling back to UTC", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
+		slog.ErrorContext(ctx, "invalid inferred timezone", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
 		return nil, err
 	}
 	return storeLoc, nil

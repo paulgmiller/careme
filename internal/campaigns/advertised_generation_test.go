@@ -24,7 +24,7 @@ func TestAdvertisedRecipeGenerationRouteKicksAdvertisedLocations(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Len(t, kicker.params, len(AdvertisedRecipeLocations()))
-	require.Equal(t, "wholefoods_10153", kicker.params[0].Location.ID)
+	require.Equal(t, "70100658", kicker.params[1].Location.ID)
 }
 
 func TestAdvertisedRecipeGenerationRouteReturnsError(t *testing.T) {
