@@ -1359,6 +1359,19 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 	})
 }
 
+func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) error {
+	if err := s.SaveParams(ctx, p); err != nil {
+		if errors.Is(err, ErrAlreadyExists) {
+			return nil // someone already kicked most likely. \
+			// Ideally we check params date and rekick if not finished in under one hour
+		}
+		return fmt.Errorf("save params: %w", err)
+	}
+
+	s.kickgeneration(ctx, p)
+	return nil
+}
+
 func (s *server) writeGenerationStatus(ctx context.Context, hash, status string) {
 	if s.statusWriter == nil || strings.TrimSpace(hash) == "" {
 		return
