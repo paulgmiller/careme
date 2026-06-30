@@ -29,16 +29,23 @@ type recipeGenerationKickstarter interface {
 	KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams) error
 }
 
+type advertisedLocationStore interface {
+	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
+}
+
 type advertisedGenerationServer struct {
 	generator recipeGenerationKickstarter
+	locations advertisedLocationStore
 }
 
 func RegisterAdvertisedRecipeGeneration(
 	mux routing.Registrar,
+	locations advertisedLocationStore,
 	generator recipeGenerationKickstarter,
 ) {
 	h := advertisedGenerationServer{
 		generator: generator,
+		locations: locations,
 	}
 	mux.HandleFunc("POST /campaigns/advertised-recipes/generate", h.handleGenerate)
 }
@@ -47,7 +54,7 @@ func (s advertisedGenerationServer) handleGenerate(w http.ResponseWriter, r *htt
 	ctx := r.Context()
 	var err error
 	for _, advertised := range AdvertisedRecipeLocations() {
-		err = errors.Join(err, s.generateLocation(ctx, &advertised))
+		err = errors.Join(err, s.generateLocation(ctx, advertised.ID))
 	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to trigger advertised recipe generation", "error", err)
@@ -56,7 +63,12 @@ func (s advertisedGenerationServer) handleGenerate(w http.ResponseWriter, r *htt
 	}
 }
 
-func (s advertisedGenerationServer) generateLocation(ctx context.Context, loc *locations.Location) error {
+func (s advertisedGenerationServer) generateLocation(ctx context.Context, locationID string) error {
+	loc, err := s.locations.GetLocationByID(ctx, locationID)
+	if err != nil {
+		return fmt.Errorf("hydrate location %s: %w", locationID, err)
+	}
+
 	date, err := recipes.StoreToDate(ctx, time.Now(), loc)
 	if err != nil {
 		return fmt.Errorf("resolve store date: %w", err)

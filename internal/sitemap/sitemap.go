@@ -108,6 +108,18 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) ([]string, error) {
 
 		p := recipes.DefaultParams(&loc, date)
 
+		io := recipes.IO(s.cache)
+		// could be slow if iwe have lots of campaigns
+		exists, err := io.ParamsExist(ctx, p)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to check param", "storeid", p.Location.ID, "hash", p.Hash())
+			continue
+		}
+		if !exists {
+			// always a race or error?
+			continue
+		}
+
 		// this will be out of date quickly. Do we tell the search engine that and let user know
 		// make a different la
 		urls = append(urls, s.publicOrigin+"/recipes?h="+p.Hash())
