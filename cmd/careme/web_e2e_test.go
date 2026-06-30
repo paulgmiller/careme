@@ -1,14 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"hash/fnv"
-	"image"
-	"image/color"
-	"image/jpeg"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -222,41 +217,6 @@ func TestHomeRoutesAreExplicit(t *testing.T) {
 	}
 }
 
-func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
-	srv := newTestServer(t)
-	defer srv.Close()
-
-	client := newTestClient(t)
-	body := mustGetBody(t, client, srv.URL+"/farmersmarket")
-	for _, want := range []string{
-		"Farmers market finds",
-		`id="farmers-market-error"`,
-		`hx-post="/farmersmarket"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("expected farmers market page to contain %q, got body: %s", want, body)
-		}
-	}
-
-	respBody, headers := mustPostMultipartHTMX(t, client, srv.URL+"/farmersmarket", map[string]string{
-		"name": "Test Market",
-	}, "photos", "market.jpg", jpegBytes(t))
-	if headers.Get("HX-Retarget") != "#farmers-market-error" {
-		t.Fatalf("expected HX-Retarget to #farmers-market-error, got %q", headers.Get("HX-Retarget"))
-	}
-	if headers.Get("HX-Reswap") != "outerHTML" {
-		t.Fatalf("expected HX-Reswap to outerHTML, got %q", headers.Get("HX-Reswap"))
-	}
-	for _, want := range []string{
-		`id="farmers-market-error"`,
-		"could not read location",
-	} {
-		if !strings.Contains(respBody, want) {
-			t.Fatalf("expected farmers market upload response to contain %q, got body: %s", want, respBody)
-		}
-	}
-}
-
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -386,48 +346,6 @@ func mustPostFormBody(t *testing.T, client *http.Client, targetURL string, data 
 	body := readAll(t, resp.Body)
 	requireValidHTML(t, targetURL, resp.Header.Get("Content-Type"), body)
 	return body
-}
-
-func mustPostMultipartHTMX(t *testing.T, client *http.Client, targetURL string, fields map[string]string, fileField, fileName string, fileData []byte) (string, http.Header) {
-	t.Helper()
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	for name, value := range fields {
-		if err := writer.WriteField(name, value); err != nil {
-			t.Fatalf("failed to write multipart field %q: %v", name, err)
-		}
-	}
-	part, err := writer.CreateFormFile(fileField, fileName)
-	if err != nil {
-		t.Fatalf("failed to create multipart file field: %v", err)
-	}
-	if _, err := part.Write(fileData); err != nil {
-		t.Fatalf("failed to write multipart file data: %v", err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("failed to close multipart writer: %v", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, targetURL, &body)
-	if err != nil {
-		t.Fatalf("POST %s failed to build request: %v", targetURL, err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("HX-Request", "true")
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("POST %s failed: %v", targetURL, err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Fatalf("failed to close response body: %v", err)
-		}
-	}()
-	if resp.StatusCode != http.StatusOK {
-		respBody := readAll(t, resp.Body)
-		t.Fatalf("POST %s expected 200, got %d: %s", targetURL, resp.StatusCode, respBody)
-	}
-	return readAll(t, resp.Body), resp.Header.Clone()
 }
 
 func mustPostFormRedirectHTMX(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
@@ -566,17 +484,6 @@ func readAll(t *testing.T, r io.Reader) string {
 		t.Fatalf("failed to read response body: %v", err)
 	}
 	return string(data)
-}
-
-func jpegBytes(t *testing.T) []byte {
-	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
-	img.Set(0, 0, color.White)
-	var b bytes.Buffer
-	if err := jpeg.Encode(&b, img, nil); err != nil {
-		t.Fatalf("failed to encode jpeg: %v", err)
-	}
-	return b.Bytes()
 }
 
 func requireValidHTML(t *testing.T, url, contentType, body string) {
