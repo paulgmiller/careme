@@ -48,11 +48,8 @@ type generatorParams struct {
 type GeneratorParams = generatorParams
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
-	// normalize to midnight (shave hours, minutes, seconds, nanoseconds)
-	// rethink this can we use this to restart if we don't normalize and hash still just looks at right part?
-	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	return &generatorParams{
-		Date:     date, // shave time
+		Date:     date,
 		Location: l,
 	}
 }
@@ -162,5 +159,5 @@ func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
 	if localNow.Hour() < storeDayStartHour {
 		localNow = localNow.AddDate(0, 0, -1)
 	}
-	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
+	return localNow
 }
