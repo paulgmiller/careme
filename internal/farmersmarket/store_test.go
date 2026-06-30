@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -54,6 +55,14 @@ type noSessionAuth struct{}
 
 func (noSessionAuth) GetUserIDFromRequest(*http.Request) (string, error) {
 	return "", auth.ErrNoSession
+}
+
+type fixedAuth struct {
+	userID string
+}
+
+func (f fixedAuth) GetUserIDFromRequest(*http.Request) (string, error) {
+	return f.userID, nil
 }
 
 func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]ai.InputIngredient, error) {
@@ -201,7 +210,7 @@ func TestParseUploadedPhotosRejectsTooManyPhotos(t *testing.T) {
 	_, err := parseUploadedPhotos(t.Context(), req)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "use 4 photos or fewer")
+	assert.Contains(t, err.Error(), "use 32 photos or fewer")
 }
 
 func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
@@ -236,26 +245,197 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	extractor := &fakeExtractor{}
+	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
-		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		cacheStore,
 		auth.DefaultMock(),
 		extractor,
 		staticZipFinder{zip: "98101", ok: true},
 	)
+	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+
+	handler.handlePost(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.False(t, extractor.called)
+	assert.Contains(t, rr.Body.String(), "could not read location")
+	assert.Equal(t, "#farmers-market-error", rr.Header().Get("HX-Retarget"))
+	assert.Equal(t, "outerHTML", rr.Header().Get("HX-Reswap"))
+	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)
+}
+
+func TestHandlePostRejectsNonHTMXBeforeParsingUpload(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
+		t.Fatal("parsePhotos should not be called for non-HTMX posts")
+		return nil, nil
+	}
 	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
 	rr := httptest.NewRecorder()
 
 	handler.handlePost(rr, req)
 
 	require.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.False(t, extractor.called)
-	assert.Contains(t, rr.Body.String(), "could not read location")
+	assert.Contains(t, rr.Body.String(), "htmx request required")
+}
+
+func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	extractor := &fakeExtractor{
+		fn: func(ctx context.Context, _ string) ([]ai.InputIngredient, error) {
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			return []ai.InputIngredient{{ProductID: "A", Brand: "Test Farm", Description: "apples"}}, nil
+		},
+	}
+	t.Cleanup(func() {
+		releaseOnce.Do(func() {
+			close(release)
+		})
+	})
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, extractor)
+	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
+		return []Photo{{contentType: "image/jpeg", content: []byte("apples"), coord: &Coordinate{Lat: 47.61, Lon: -122.33}}}, nil
+	}
+	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+
+	handler.handlePost(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Contains(t, body, `id="farmers-market-work"`)
+	assert.Contains(t, body, `hx-get="/farmersmarket/status/`)
+	assert.Contains(t, body, "0 of 1")
+
+	matches := regexp.MustCompile(`/farmersmarket/status/([^"]+)`).FindStringSubmatch(body)
+	require.Len(t, matches, 2)
+	status, err := handler.statusStore.load(t.Context(), matches[1])
+	require.NoError(t, err)
+	assert.Equal(t, analysisStateRunning, status.State)
+	assert.Equal(t, "user-1", status.UserID)
+	releaseOnce.Do(func() {
+		close(release)
+	})
+	handler.Wait()
+}
+
+func TestHandleStatusRendersPhotoAndIngredientProgress(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+	status := analysisStatus{
+		ID:              "job-running",
+		UserID:          "user-1",
+		State:           analysisStateRunning,
+		PhotoCount:      5,
+		PhotosAnalyzed:  2,
+		IngredientCount: 11,
+		Message:         "Analyzed 2 of 5 market photos.",
+	}
+	require.NoError(t, handler.statusStore.save(t.Context(), status))
+	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-running", nil)
+	req.SetPathValue("jobID", "job-running")
+	rr := httptest.NewRecorder()
+
+	handler.handleStatus(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Contains(t, body, "Analyzed 2 of 5 market photos.")
+	assert.Contains(t, body, "2 of 5")
+	assert.Contains(t, body, ">11<")
+}
+
+func TestHandleStatusRedirectsCompletedJob(t *testing.T) {
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
+		ID:          "job-complete",
+		UserID:      "user-1",
+		State:       analysisStateComplete,
+		RedirectURL: "/recipes?location=farmersmarket_abc&date=2026-06-24",
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-complete", nil)
+	req.SetPathValue("jobID", "job-complete")
+	rr := httptest.NewRecorder()
+
+	handler.handleStatus(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "/recipes?location=farmersmarket_abc&date=2026-06-24", rr.Header().Get("HX-Redirect"))
+}
+
+func TestHandleStatusReturnsFailedJobAsErrorFragment(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
+		ID:      "job-failed",
+		UserID:  "user-1",
+		State:   analysisStateFailed,
+		Message: "Could not spot recipe ingredients in those photos.",
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-failed", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("jobID", "job-failed")
+	rr := httptest.NewRecorder()
+
+	handler.handleStatus(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Could not spot recipe ingredients in those photos.")
+	assert.NotContains(t, rr.Body.String(), `hx-post="/farmersmarket"`)
+	assert.Equal(t, "#farmers-market-error", rr.Header().Get("HX-Retarget"))
+	assert.Equal(t, "outerHTML", rr.Header().Get("HX-Reswap"))
+	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)
+}
+
+func TestHandleStatusAllowsAnotherUserJob(t *testing.T) {
+	handler := newTestHandler(t, fixedAuth{userID: "user-2"}, &fakeExtractor{})
+	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
+		ID:         "job-owned",
+		UserID:     "user-1",
+		State:      analysisStateRunning,
+		PhotoCount: 3,
+		Message:    "Looking through your market photos.",
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-owned", nil)
+	req.SetPathValue("jobID", "job-owned")
+	rr := httptest.NewRecorder()
+
+	handler.handleStatus(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Looking through your market photos.")
+}
+
+func TestHandleStatusRejectsAnonymousUser(t *testing.T) {
+	handler := newTestHandler(t, noSessionAuth{}, &fakeExtractor{})
+	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-owned", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("jobID", "job-owned")
+	rr := httptest.NewRecorder()
+
+	handler.handleStatus(rr, req)
+
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
+	assert.Contains(t, rr.Header().Get("HX-Redirect"), "/sign-in")
 }
 
 func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
-		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		cacheStore,
 		auth.DefaultMock(),
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
@@ -271,8 +451,10 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 }
 
 func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
-		NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		cacheStore,
 		noSessionAuth{},
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
@@ -284,6 +466,18 @@ func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	assert.Contains(t, rr.Header().Get("Location"), "/sign-in")
+}
+
+func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExtractor) *Handler {
+	t.Helper()
+	cacheStore := cache.NewInMemoryCache()
+	return NewHandler(
+		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		cacheStore,
+		authClient,
+		extractor,
+		staticZipFinder{zip: "98101", ok: true},
+	)
 }
 
 func multipartRequest(t *testing.T, fieldName, fileName string, data []byte) *http.Request {

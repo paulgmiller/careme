@@ -26,35 +26,84 @@
         </div>
 
         <div class="p-8">
-          <form method="POST" action="/farmersmarket" enctype="multipart/form-data" class="space-y-6">
-            <div>
-              <label for="name" class="block text-sm font-semibold text-ink-700">Market name</label>
-              <input id="name" name="name" type="text" required maxlength="80" autocomplete="off"
-                placeholder="University District Farmers Market"
-                class="mt-2 w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-ink-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-300" />
-            </div>
-
-            <div>
-              <label for="photos" class="block text-sm font-semibold text-ink-700">Market photos</label>
-              <input id="photos" name="photos" type="file" accept="image/*" multiple required
-                class="mt-2 block w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-ink-700 shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-brand-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-200 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-300" />
-            </div>
-
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <button type="submit"
-                class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                Cook from today's finds
-              </button>
-              <a href="/"
-                class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                Back home
-              </a>
-            </div>
-          </form>
+          <div id="farmers-market-error"
+            class="mb-5 hidden rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800"
+            role="alert"
+            aria-live="polite"></div>
+          {{template "farmersmarket_form" ""}}
         </div>
       </div>
     </section>
   </main>
   {{template "clerk_refresh.html" .}}
+  <script src="/static/htmx@2.0.8.js"></script>
 </body>
 </html>
+
+{{define "farmersmarket_error"}}
+<div id="farmers-market-error"
+  class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800"
+  role="alert"
+  aria-live="polite">{{.}}</div>
+{{end}}
+
+{{define "farmersmarket_form"}}
+<div id="farmers-market-work">
+  <form method="POST" action="/farmersmarket" enctype="multipart/form-data" class="space-y-6"
+    hx-post="/farmersmarket"
+    hx-encoding="multipart/form-data"
+    hx-target="#farmers-market-work"
+    hx-swap="outerHTML"
+    hx-disabled-elt="#farmers-market-submit">
+    <div>
+      <label for="name" class="block text-sm font-semibold text-ink-700">Market name</label>
+      <input id="name" name="name" type="text" required maxlength="80" autocomplete="off"
+        placeholder="University District Farmers Market"
+        class="mt-2 w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-ink-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-300" />
+    </div>
+
+    <div>
+      <label for="photos" class="block text-sm font-semibold text-ink-700">Market photos</label>
+      <input id="photos" name="photos" type="file" accept="image/*" multiple required
+        class="mt-2 block w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-ink-700 shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-brand-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-200 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-300" />
+    </div>
+
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <button id="farmers-market-submit" type="submit"
+        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+        Cook from today's finds
+      </button>
+      <a href="/"
+        class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+        Back home
+      </a>
+    </div>
+  </form>
+</div>
+{{end}}
+
+{{define "farmersmarket_progress"}}
+<div id="farmers-market-work"
+  class="rounded-xl border border-brand-100 bg-brand-50/70 p-6 text-center"
+  hx-get="/farmersmarket/status/{{.ID}}"
+  hx-trigger="load delay:1s"
+  hx-target="#farmers-market-work"
+  hx-swap="outerHTML"
+  role="status"
+  aria-live="polite">
+  <div id="farmers-market-error" class="hidden" hx-swap-oob="outerHTML"></div>
+  <div class="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-brand-100 border-t-brand-600" aria-hidden="true"></div>
+  <h2 class="mt-5 text-xl font-semibold text-brand-700">Looking through your market photos</h2>
+  <p class="mt-2 text-sm text-ink-600">{{.Message}}</p>
+  <div class="mt-5 grid grid-cols-2 gap-3 text-left">
+    <div class="rounded-lg border border-brand-100 bg-white px-4 py-3 shadow-sm">
+      <p class="text-xs font-semibold uppercase text-ink-500">Photos</p>
+      <p class="mt-1 text-lg font-semibold text-ink-800">{{.PhotosAnalyzed}} of {{.PhotoCount}}</p>
+    </div>
+    <div class="rounded-lg border border-brand-100 bg-white px-4 py-3 shadow-sm">
+      <p class="text-xs font-semibold uppercase text-ink-500">Ingredients</p>
+      <p class="mt-1 text-lg font-semibold text-ink-800">{{.IngredientCount}}</p>
+    </div>
+  </div>
+</div>
+{{end}}

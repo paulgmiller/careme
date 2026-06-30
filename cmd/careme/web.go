@@ -36,6 +36,10 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
+type waiter interface {
+	Wait()
+}
+
 func runServer(cfg *config.Config, addr string) error {
 	cache, err := cachepkg.MakeCache()
 	if err != nil {
@@ -58,7 +62,7 @@ func runServer(cfg *config.Config, addr string) error {
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
 	authClient.Register(appRoutes)
-	campaigns.Register(appRoutes)
+	campaigns.Register(appRoutes) // could be infra routes?
 	static.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
@@ -71,7 +75,7 @@ func runServer(cfg *config.Config, addr string) error {
 	var generator recipes.ExtGenerator
 	var imageGen recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
-	var waitFns []func()
+	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
 		generator = recipes.NewMockGenerator(recipes.IO(cache), mc)
@@ -79,8 +83,8 @@ func runServer(cfg *config.Config, addr string) error {
 		marketExtractor = farmersmarket.MockExtractor{}
 
 	} else {
-		mc := critique.NewManager(cfg, cache, aiHTTPClient)
-		ro.add(mc)
+		critiquer := critique.NewManager(cfg, cache, aiHTTPClient)
+		ro.add(critiquer)
 
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
 		imageGen = aiclient
@@ -92,11 +96,11 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		watchdogServer.Add("staples", staples, 6.*time.Hour)
 		ss := recipes.StatusStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, mc, staples, ss, recipes.IO(cache))
+		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
-		waitFns = append(waitFns, mc.Wait)
+		waiters = append(waiters, critiquer)
 	}
 	watchdogServer.Register(infraRoutes)
 
@@ -114,19 +118,23 @@ func runServer(cfg *config.Config, addr string) error {
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
-	farmersMarketStore, err := farmersmarket.NewContainerStore()
+	farmersMarketCache, err := cachepkg.EnsureCache(farmersmarket.Container)
 	if err != nil {
-		return fmt.Errorf("failed to create farmers market store: %w", err)
+		return fmt.Errorf("failed to create farmers market cache: %w", err)
 	}
+	farmersMarketStore := farmersmarket.NewStore(farmersMarketCache)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore, centroids)
-	farmersmarket.NewHandler(farmersMarketUploader, authClient, marketExtractor, centroids).Register(appRoutes)
+	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, farmersMarketCache, authClient, marketExtractor, centroids)
+	farmersMarketHandler.Register(appRoutes)
+	waiters = append(waiters, farmersMarketHandler)
 
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
 	sitemapHandler.Register(infraRoutes)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
-	waitFns = append([]func(){recipeHandler.Wait}, waitFns...)
+	waiters = append([]waiter{recipeHandler}, waiters...)
+	campaigns.RegisterAdvertisedRecipeGeneration(infraRoutes, locationStorage, recipeHandler)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
@@ -183,11 +191,11 @@ func runServer(cfg *config.Config, addr string) error {
 		return nil
 	case sig := <-shutdown:
 		slog.Info("Shutdown signal received", "signal", sig)
-		return gracefulShutdown(server, waitFns...)
+		return gracefulShutdown(server, waiters...)
 	}
 }
 
-func gracefulShutdown(svr *http.Server, waitFns ...func()) error {
+func gracefulShutdown(svr *http.Server, waiters ...waiter) error {
 	// Give outstanding requests 25 seconds to complete (kubernetes has 30 second grace period)
 	time.Sleep(5 * time.Second) // buffer to allow ingress ot update. only needed in prod
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
@@ -205,8 +213,8 @@ func gracefulShutdown(svr *http.Server, waitFns ...func()) error {
 
 	done := make(chan struct{})
 	go func() {
-		for _, wait := range waitFns {
-			wait()
+		for _, wait := range waiters {
+			wait.Wait()
 		}
 		close(done)
 	}()

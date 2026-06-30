@@ -29,8 +29,8 @@ import (
 	locationtypes "careme/internal/locations/types"
 
 	"github.com/samber/lo"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"golang.org/x/sync/errgroup"
 )
 
 type locationStorage struct {
@@ -128,29 +128,22 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 }
 
 func initializeLocationBackends(ctx context.Context, factories []locationBackendFactory) ([]locationBackend, error) {
-	g, ctx := errgroup.WithContext(ctx)
-	results := make(chan locationBackend, len(factories))
-	for i, factory := range factories {
-		g.Go(func() error {
-			start := time.Now()
-			backend, err := factory(ctx)
-			if err != nil {
-				if locationtypes.IsDisabledBackendError(err) {
-					return nil
-				}
-				return fmt.Errorf("failed to initialize location backend %d: %w", i, err)
+	results, err := parallelism.MapWithErrors(factories, func(factory locationBackendFactory) (locationBackend, error) {
+		start := time.Now()
+		backend, err := factory(ctx)
+		if err != nil {
+			if locationtypes.IsDisabledBackendError(err) {
+				return nil, nil
 			}
-			slog.InfoContext(ctx, "initialized location backend", "backend", fmt.Sprintf("%T", backend), "latencyMS", time.Since(start).Milliseconds())
-			results <- backend
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
+			return nil, fmt.Errorf("failed to initialize location backend %t: %w", backend, err)
+		}
+		slog.InfoContext(ctx, "initialized location backend", "backend", fmt.Sprintf("%T", backend), "latencyMS", time.Since(start).Milliseconds())
+		return backend, nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	close(results)
-
-	return lo.ChannelToSlice(results), nil
+	return lo.Compact(results), nil
 }
 
 func (l *locationStorage) HasInventory(locationID string) bool {
