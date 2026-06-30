@@ -61,13 +61,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	advertisedURLs, err := s.advertisedRecipeURLs(r.Context())
-	if err != nil {
-		http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
-		slog.ErrorContext(r.Context(), "failed to read advertised recipe urls", "error", err)
-		return
-	}
-
+	advertisedURLs := s.advertisedRecipeURLs(r.Context())
 	entries := make([]urlEntry, 0, len(feedbackHashes)+1+len(advertisedURLs))
 	entries = append(entries, urlEntry{Loc: s.publicOrigin + "/about"})
 	for _, advertisedURL := range advertisedURLs {
@@ -95,7 +89,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) advertisedRecipeURLs(ctx context.Context) ([]string, error) {
+func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
 	locs := campaigns.AdvertisedRecipeLocations()
 
 	var urls []string
@@ -124,7 +118,7 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) ([]string, error) {
 		// make a different la
 		urls = append(urls, s.publicOrigin+"/recipes?h="+p.Hash())
 	}
-	return urls, nil
+	return urls
 }
 
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
