@@ -1,4 +1,4 @@
-package recipes
+package campaigns
 
 import (
 	"context"
@@ -34,7 +34,7 @@ type AdvertisedRecipeFailure struct {
 
 // AdvertisedRecipeLocations returns the stores we intentionally pre-generate and promote.
 func AdvertisedRecipeLocations() []locations.Location {
-	stores := []locations.Location{
+	return []locations.Location{
 		{ID: "wholefoods_10153", ZipCode: "97209"},
 		{ID: "safeway_490", ZipCode: "86403"},
 		{ID: "70500874", ZipCode: "98101"},
@@ -44,12 +44,6 @@ func AdvertisedRecipeLocations() []locations.Location {
 		{ID: "aldi_F219", ZipCode: "40222"},
 		{ID: "heb_540", ZipCode: "77023"},
 	}
-	return stores
-}
-
-// StaplesWatchdogLocations returns the stores checked by the staples watchdog.
-func StaplesWatchdogLocations() []locations.Location {
-	return AdvertisedRecipeLocations()
 }
 
 func LoadAdvertisedRecipeManifest(ctx context.Context, c cache.Cache) (*AdvertisedRecipeManifest, error) {

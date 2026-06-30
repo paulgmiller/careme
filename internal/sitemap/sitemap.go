@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"careme/internal/cache"
-	"careme/internal/recipes"
+	"careme/internal/campaigns"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
 )
@@ -95,7 +95,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) advertisedRecipeURLs(ctx context.Context) ([]string, error) {
-	manifest, err := recipes.LoadAdvertisedRecipeManifest(ctx, s.cache)
+	manifest, err := campaigns.LoadAdvertisedRecipeManifest(ctx, s.cache)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			return nil, nil

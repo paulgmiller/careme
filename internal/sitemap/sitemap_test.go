@@ -12,6 +12,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/campaigns"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/feedback"
@@ -78,16 +79,16 @@ func TestHandleSitemapIncludesAdvertisedGeneratedRecipePages(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	cacheStore := cache.NewFileCache(".")
-	manifest := recipes.AdvertisedRecipeManifest{
+	manifest := campaigns.AdvertisedRecipeManifest{
 		GeneratedAt: time.Date(2026, 6, 30, 9, 0, 0, 0, time.UTC),
-		Entries: []recipes.AdvertisedRecipeEntry{
+		Entries: []campaigns.AdvertisedRecipeEntry{
 			{
 				ShoppingListHash: "shopping-hash",
 				RecipeHashes:     []string{"recipe-hash-1", "recipe-hash-2"},
 			},
 		},
 	}
-	if err := recipes.SaveAdvertisedRecipeManifest(context.Background(), cacheStore, manifest); err != nil {
+	if err := campaigns.SaveAdvertisedRecipeManifest(context.Background(), cacheStore, manifest); err != nil {
 		t.Fatalf("failed to save advertised recipe manifest: %v", err)
 	}
 

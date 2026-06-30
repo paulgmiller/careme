@@ -7,13 +7,13 @@ import (
 	"careme/internal/routing"
 )
 
-var locations = map[string]string{
+var campaignLocations = map[string]string{
 	"issaquah": "70100658",
 }
 
 // Register adds campaign redirect routes to mux.
 func Register(mux routing.Registrar) {
-	for campaign, location := range locations {
+	for campaign, location := range campaignLocations {
 		mux.HandleFunc("GET /c/"+campaign, redirectToLocation(location))
 	}
 }
