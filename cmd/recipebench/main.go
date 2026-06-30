@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"careme/internal/ai"
@@ -18,6 +17,7 @@ import (
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/parallelism"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/prompts"
@@ -25,61 +25,25 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-const mealCount = 10
+const (
+	mealCount                  = 10
+	defaultCritiqueModel       = "gemini-3.1-pro-preview"
+	gemini35FlashCritiqueModel = "gemini-3.5-flash"
+)
 
-type recordingCritiquer struct {
-	base interface {
-		CritiqueRecipe(context.Context, ai.Recipe) (*ai.RecipeCritique, error)
-		CritiqueRecipeInBackground(context.Context, ai.Recipe)
-	}
-	mu     sync.Mutex
-	scores map[string]int
-}
-
-func newRecordingCritiquer(base interface {
+type recipeCritiquer interface {
 	CritiqueRecipe(context.Context, ai.Recipe) (*ai.RecipeCritique, error)
+}
+
+type generationCritiquer interface {
+	recipeCritiquer
 	CritiqueRecipeInBackground(context.Context, ai.Recipe)
-}) *recordingCritiquer {
-	return &recordingCritiquer{base: base, scores: map[string]int{}}
-}
-
-func (r *recordingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
-	c, err := r.base.CritiqueRecipe(ctx, recipe)
-	if err != nil {
-		return nil, err
-	}
-	r.record(recipe, c)
-	return c, nil
-}
-
-func (r *recordingCritiquer) CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe) {
-	c, err := r.base.CritiqueRecipe(ctx, recipe)
-	if err != nil {
-		return
-	}
-	r.record(recipe, c)
-}
-
-func (r *recordingCritiquer) record(recipe ai.Recipe, c *ai.RecipeCritique) {
-	if c == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.scores[recipe.ComputeHash()] = c.OverallScore
-}
-
-func (r *recordingCritiquer) score(recipe ai.Recipe) (int, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	score, ok := r.scores[recipe.ComputeHash()]
-	return score, ok
 }
 
 type modelResult struct {
-	model   string
-	recipes []ai.Recipe
-	scores  []int
+	model          string
+	recipes        []ai.Recipe
+	critiqueScores map[string][]int
 }
 
 func main() {
@@ -89,11 +53,12 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, out io.Writer) error {
-	var storeID, modelsFlag, instructions string
+	var storeID, modelsFlag, critiqueModelsFlag, instructions string
 	fs := flag.NewFlagSet("recipebench", flag.ContinueOnError)
 	fs.SetOutput(out)
 	fs.StringVar(&storeID, "store", "", "store/location ID to generate recipes for")
 	fs.StringVar(&modelsFlag, "models", "gpt-5.5,gpt-5.4", "comma-separated recipe models to compare")
+	fs.StringVar(&critiqueModelsFlag, "critique-models", defaultCritiqueModel+","+gemini35FlashCritiqueModel, "comma-separated Gemini critique models to score each recipe with")
 	fs.StringVar(&instructions, "instructions", "", "extra cooking notes, like make it vegetarian")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -102,9 +67,13 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if storeID == "" {
 		return errors.New("must provide -store")
 	}
-	models := splitModels(modelsFlag)
-	if len(models) != 2 {
-		return fmt.Errorf("must provide exactly two models, got %d", len(models))
+	recipeModels := splitCSV(modelsFlag)
+	if len(recipeModels) != 2 {
+		return fmt.Errorf("must provide exactly two recipe models, got %d", len(recipeModels))
+	}
+	critiqueModels := splitCSV(critiqueModelsFlag)
+	if len(critiqueModels) == 0 {
+		return errors.New("must provide at least one -critique-models value")
 	}
 
 	cfg, err := config.Load()
@@ -128,25 +97,25 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return fmt.Errorf("resolve store date: %w", err)
 	}
 
-	results := make([]modelResult, 0, len(models))
-	for _, model := range models {
-		result, err := runModel(ctx, cfg, cacheStore, *store, date, model, instructions)
+	results := make([]modelResult, 0, len(recipeModels))
+	for _, model := range recipeModels {
+		result, err := runModel(ctx, cfg, cacheStore, *store, date, model, critiqueModels, instructions)
 		if err != nil {
 			return err
 		}
 		results = append(results, result)
 	}
-	return writeReport(out, store, date, results)
+	return writeReport(out, store, date, critiqueModels, results)
 }
 
-func splitModels(modelsFlag string) []string {
-	var models []string
-	for _, model := range strings.Split(modelsFlag, ",") {
-		if model = strings.TrimSpace(model); model != "" {
-			models = append(models, model)
+func splitCSV(value string) []string {
+	var values []string
+	for _, part := range strings.Split(value, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			values = append(values, part)
 		}
 	}
-	return models
+	return values
 }
 
 func newCache(cfg *config.Config) (cache.ListCache, error) {
@@ -160,23 +129,14 @@ func newCache(cfg *config.Config) (cache.ListCache, error) {
 	return cacheStore, nil
 }
 
-func runModel(ctx context.Context, cfg *config.Config, cacheStore cache.ListCache, store locations.Location, date time.Time, model, instructions string) (modelResult, error) {
+func runModel(ctx context.Context, cfg *config.Config, cacheStore cache.ListCache, store locations.Location, date time.Time, model string, critiqueModels []string, instructions string) (modelResult, error) {
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	grader := ingredientgrading.NewManager(cfg, cacheStore, httpClient)
 	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, grader)
 	if err != nil {
 		return modelResult{}, fmt.Errorf("create staples service: %w", err)
 	}
-	var baseCritiquer interface {
-		CritiqueRecipe(context.Context, ai.Recipe) (*ai.RecipeCritique, error)
-		CritiqueRecipeInBackground(context.Context, ai.Recipe)
-	}
-	baseCritiquer = critique.NewManager(cfg, cacheStore, httpClient)
-	if cfg.Mocks.Enable {
-		baseCritiquer = critique.NewMock(cacheStore)
-	}
-	recorder := newRecordingCritiquer(baseCritiquer)
-	generator, err := recipes.NewGenerator(ai.NewClient(cfg.AI.APIKey, model, httpClient, prompts.NewCacheRecorder(cacheStore)), recorder, staples, recipes.StatusStore(cacheStore), recipes.IO(cacheStore))
+	generator, err := recipes.NewGenerator(ai.NewClient(cfg.AI.APIKey, model, httpClient, prompts.NewCacheRecorder(cacheStore)), generationCritiquerForConfig(cfg, cacheStore, httpClient), staples, recipes.StatusStore(cacheStore), recipes.IO(cacheStore))
 	if err != nil {
 		return modelResult{}, err
 	}
@@ -188,29 +148,82 @@ func runModel(ctx context.Context, cfg *config.Config, cacheStore cache.ListCach
 	if err != nil {
 		return modelResult{}, fmt.Errorf("generate recipes with %s: %w", model, err)
 	}
-	result := modelResult{model: model, recipes: shoppingList.Recipes}
-	for _, recipe := range shoppingList.Recipes {
-		if score, ok := recorder.score(recipe); ok {
-			result.scores = append(result.scores, score)
-		}
+	scores, err := critiqueRecipes(ctx, cfg, httpClient, shoppingList.Recipes, critiqueModels)
+	if err != nil {
+		return modelResult{}, err
 	}
-	return result, nil
+	return modelResult{model: model, recipes: shoppingList.Recipes, critiqueScores: scores}, nil
 }
 
-func writeReport(w io.Writer, store *locations.Location, date time.Time, results []modelResult) error {
-	if _, err := fmt.Fprintf(w, "Recipe model critique benchmark for %s (%s) on %s\n\n", store.Name, store.ID, date.Format("2006-01-02")); err != nil {
+func generationCritiquerForConfig(cfg *config.Config, cacheStore cache.ListCache, httpClient *http.Client) generationCritiquer {
+	if cfg.Mocks.Enable {
+		return critique.NewMock(cacheStore)
+	}
+	return critique.NewManager(cfg, cacheStore, httpClient)
+}
+
+func critiqueRecipes(ctx context.Context, cfg *config.Config, httpClient *http.Client, recipes []ai.Recipe, critiqueModels []string) (map[string][]int, error) {
+	scores := make(map[string][]int, len(critiqueModels))
+	for _, critiqueModel := range critiqueModels {
+		critiquer := recipeCritiquerForModel(cfg, httpClient, critiqueModel)
+		modelScores, err := parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (int, error) {
+			c, err := critiquer.CritiqueRecipe(ctx, recipe)
+			if err != nil {
+				return 0, fmt.Errorf("critique %q with %s: %w", recipe.Title, critiqueModel, err)
+			}
+			return c.OverallScore, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		scores[critiqueModel] = modelScores
+	}
+	return scores, nil
+}
+
+func recipeCritiquerForModel(cfg *config.Config, httpClient *http.Client, model string) recipeCritiquer {
+	if cfg.Mocks.Enable {
+		return rubberstampCritiquer{}
+	}
+	return ai.NewCritiquer(cfg.Gemini.APIKey, model, httpClient)
+}
+
+type rubberstampCritiquer struct{}
+
+func (rubberstampCritiquer) CritiqueRecipe(context.Context, ai.Recipe) (*ai.RecipeCritique, error) {
+	return &ai.RecipeCritique{OverallScore: 10}, nil
+}
+
+func writeReport(w io.Writer, store *locations.Location, date time.Time, critiqueModels []string, results []modelResult) error {
+	if _, err := fmt.Fprintf(w, "Recipe model critique benchmark for %s (%s) on %s\n", store.Name, store.ID, date.Format("2006-01-02")); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "Critique models: %s\n\n", strings.Join(critiqueModels, ", ")); err != nil {
 		return err
 	}
 	for _, result := range results {
-		if _, err := fmt.Fprintf(w, "Model: %s\nRecipes: %d\nAverage critique score: %.2f\n", result.model, len(result.recipes), average(result.scores)); err != nil {
+		if _, err := fmt.Fprintf(w, "Recipe model: %s\nRecipes: %d\n", result.model, len(result.recipes)); err != nil {
 			return err
 		}
-		for i, recipe := range result.recipes {
-			score := "missing"
-			if i < len(result.scores) {
-				score = fmt.Sprintf("%d", result.scores[i])
+		for _, critiqueModel := range critiqueModels {
+			if _, err := fmt.Fprintf(w, "Average %s score: %.2f\n", critiqueModel, average(result.critiqueScores[critiqueModel])); err != nil {
+				return err
 			}
-			if _, err := fmt.Fprintf(w, "- %s: %s\n", recipe.Title, score); err != nil {
+		}
+		for i, recipe := range result.recipes {
+			if _, err := fmt.Fprintf(w, "- %s", recipe.Title); err != nil {
+				return err
+			}
+			for _, critiqueModel := range critiqueModels {
+				score := "missing"
+				if scores := result.critiqueScores[critiqueModel]; i < len(scores) {
+					score = fmt.Sprintf("%d", scores[i])
+				}
+				if _, err := fmt.Fprintf(w, " | %s: %s", critiqueModel, score); err != nil {
+					return err
+				}
+			}
+			if _, err := fmt.Fprintln(w); err != nil {
 				return err
 			}
 		}
