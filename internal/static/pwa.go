@@ -90,45 +90,25 @@ func registerPWAAssets(mux routing.Registrar) {
 func renderManifest(host string, w io.Writer) error {
 	name := "Careme"
 	shortName := "Careme"
+	hostname := manifestHostname(host)
 
 	switch {
-	case isTestHost(host):
+	case strings.EqualFold(hostname, "test.careme.cooking"):
 		name = "Careme Test"
 		shortName = "Careme Test"
-	case isLocalhost(host):
+	case strings.EqualFold(hostname, "localhost"), hostname == "127.0.0.1", hostname == "::1":
 		name = "Careme Local"
 		shortName = "Careme Local"
-	}
-
-	nameJSON, err := json.Marshal(name)
-	if err != nil {
-		return err
-	}
-	shortNameJSON, err := json.Marshal(shortName)
-	if err != nil {
-		return err
 	}
 
 	data := struct {
 		Name      string
 		ShortName string
 	}{
-		Name:      string(nameJSON),
-		ShortName: string(shortNameJSON),
+		Name:      name,
+		ShortName: shortName,
 	}
 	return manifestTemplate.Execute(w, data)
-}
-
-func isTestHost(host string) bool {
-	hostname := manifestHostname(host)
-	return strings.EqualFold(hostname, "test.careme.cooking")
-}
-
-func isLocalhost(host string) bool {
-	hostname := manifestHostname(host)
-	return strings.EqualFold(hostname, "localhost") ||
-		hostname == "127.0.0.1" ||
-		hostname == "::1"
 }
 
 func manifestHostname(host string) string {

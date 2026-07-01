@@ -1,6 +1,6 @@
 {
-  "name": {{.Name}},
-  "short_name": {{.ShortName}},
+  "name": "{{.Name}}",
+  "short_name": "{{.ShortName}}",
   "description": "Plan recipes around nearby stores and seasonal ingredients.",
   "start_url": "/",
   "scope": "/",
