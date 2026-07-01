@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"careme/internal/campaigns"
 	"careme/internal/googleads"
 	locationtypes "careme/internal/locations/types"
 
@@ -17,6 +18,16 @@ func TestParseStoreIDs(t *testing.T) {
 
 func TestUniqueStoreIDsSortsAndDeduplicates(t *testing.T) {
 	assert.Equal(t, []string{"11111111", "22222222"}, uniqueStoreIDs([]string{"22222222", "11111111", "22222222"}))
+}
+
+func TestAdvertisedRecipeStoreIDsDefaultsToCampaignLocations(t *testing.T) {
+	assert.Len(t, advertisedRecipeStoreIDs(), len(campaigns.AdvertisedRecipeLocations()))
+	assert.Equal(t, []string{"70100658", "70500874"}, advertisedRecipeStoreIDs())
+}
+
+func TestDefaultAdsIDs(t *testing.T) {
+	assert.Equal(t, "5812848025", normalizeCustomerID(defaultCustomerID))
+	assert.Equal(t, "23939758740", defaultCampaignID)
 }
 
 func TestHydrateTargetsRequiresCoordinates(t *testing.T) {

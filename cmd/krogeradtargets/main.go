@@ -16,10 +16,16 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/campaigns"
 	"careme/internal/config"
 	"careme/internal/googleads"
 	"careme/internal/kroger"
 	locationtypes "careme/internal/locations/types"
+)
+
+const (
+	defaultCustomerID = "581-284-8025"
+	defaultCampaignID = "23939758740"
 )
 
 func main() {
@@ -43,8 +49,8 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 
 	fs := flag.NewFlagSet("krogeradtargets", flag.ContinueOnError)
 	fs.SetOutput(stdout)
-	fs.StringVar(&customerID, "customer-id", "", "Google Ads customer ID")
-	fs.StringVar(&campaignID, "campaign-id", "", "Google Ads campaign ID")
+	fs.StringVar(&customerID, "customer-id", defaultCustomerID, "Google Ads customer ID")
+	fs.StringVar(&campaignID, "campaign-id", defaultCampaignID, "Google Ads campaign ID")
 	fs.StringVar(&storeIDsCSV, "store-ids", "", "Comma-separated Kroger location IDs")
 	fs.StringVar(&inputPath, "input", "", "Path to CSV/TXT file containing Kroger location IDs")
 	fs.StringVar(&loginCustomerID, "login-customer-id", "", "Optional Google Ads manager customer ID")
@@ -79,7 +85,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return err
 	}
 	if len(storeIDs) == 0 {
-		return fmt.Errorf("no Kroger store IDs provided; use -store-ids or -input")
+		storeIDs = advertisedRecipeStoreIDs()
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
@@ -327,6 +333,14 @@ func readStoreIDs(storeIDsCSV, inputPath string) ([]string, error) {
 		ids = append(ids, fromFile...)
 	}
 	return uniqueStoreIDs(ids), nil
+}
+
+func advertisedRecipeStoreIDs() []string {
+	ids := make([]string, 0, len(campaigns.AdvertisedRecipeLocations()))
+	for _, location := range campaigns.AdvertisedRecipeLocations() {
+		ids = append(ids, location.ID)
+	}
+	return uniqueStoreIDs(ids)
 }
 
 func readStoreIDsFromFile(path string) ([]string, error) {

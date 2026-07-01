@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"careme/internal/ai"
@@ -87,41 +88,53 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		}
 	}
 	data := struct {
-		Location        locations.Location
-		Date            string
-		MetaDescription string
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Instructions    string
-		Hash            string
-		Recipes         []shoppingRecipeView
-		ShoppingList    []shoppingListGroup
-		HasSavedRecipes bool
-		Style           seasons.Style
-		ServerSignedIn  bool
-		User            *utypes.User
-		AuthReturnTo    string
+		Location             locations.Location
+		Date                 string
+		DateDisplay          string
+		MetaDescription      string
+		ClarityScript        template.HTML
+		GoogleTagScript      template.HTML
+		Instructions         string
+		Hash                 string
+		Recipes              []shoppingRecipeView
+		ShoppingList         []shoppingListGroup
+		HasSavedRecipes      bool
+		Style                seasons.Style
+		ServerSignedIn       bool
+		User                 *utypes.User
+		AuthReturnTo         string
+		UseTodaysIngredients bool
 	}{
-		Location:        *p.Location,
-		Date:            p.Date.Format("2006-01-02"),
-		MetaDescription: shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Instructions:    p.Instructions,
-		Hash:            hash,
-		Recipes:         recipeViews,
-		ShoppingList:    shoppingListForDisplay(combinedIngredients),
-		HasSavedRecipes: hasSavedRecipes,
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  serverSignedIn,
-		User:            currentUser,
-		AuthReturnTo:    "/recipes?h=" + hash,
+		Location:             *p.Location,
+		Date:                 p.Date.Format("2006-01-02"),
+		DateDisplay:          p.Date.Format("January 2, 2006"),
+		MetaDescription:      shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
+		ClarityScript:        templates.ClarityScript(ctx),
+		GoogleTagScript:      templates.GoogleTagScript(),
+		Instructions:         p.Instructions,
+		Hash:                 hash,
+		Recipes:              recipeViews,
+		ShoppingList:         shoppingListForDisplay(combinedIngredients),
+		HasSavedRecipes:      hasSavedRecipes,
+		Style:                seasons.GetCurrentStyle(),
+		ServerSignedIn:       serverSignedIn,
+		User:                 currentUser,
+		AuthReturnTo:         "/recipes?h=" + hash,
+		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	}
 
 	setTextContent(writer)
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
+	today, err := StoreToDate(ctx, nowFn(), p.Location)
+	if err != nil {
+		return false
+	}
+	return today.Sub(p.Date) > 24*time.Hour
 }
 
 func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
@@ -215,17 +228,19 @@ func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeIma
 }
 
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
-func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseID string, writer http.ResponseWriter) {
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseID, recipeHash string, writer http.ResponseWriter) {
 	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	data := struct {
 		ResponseID     string
+		RecipeHash     string
 		Thread         []RecipeThreadEntry
 		ServerSignedIn bool
 	}{
 		ResponseID:     responseID,
+		RecipeHash:     recipeHash,
 		Thread:         thread,
 		ServerSignedIn: signedIn,
 	}

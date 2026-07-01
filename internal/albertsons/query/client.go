@@ -37,7 +37,8 @@ func StapleCategories() []string {
 const (
 	DefaultSearchBaseURL = "https://www.safeway.com"
 	defaultSearchPath    = "/abs/pub/xapi/wcax/pathway/search"
-	defaultSearchRows    = 60 // how high can we go. Shoudl we paginate just to
+	defaultSearchRows    = 60
+	maxSearchPageRows    = 60
 	defaultSearchChannel = "instore"
 	defaultSearchUser    = "G"
 )
@@ -88,7 +89,42 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 	}, nil
 }
 
-func (c *SearchClient) Search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
+func (c *SearchClient) SearchAll(ctx context.Context, storeID, category string, opts SearchOptions) ([]PathwaySearchProduct, error) {
+	if opts.Rows == 0 {
+		opts.Rows = defaultSearchRows
+	}
+
+	wantedRows := opts.Rows
+	pageRows := wantedRows
+	if pageRows > maxSearchPageRows {
+		pageRows = maxSearchPageRows
+	}
+
+	var products []PathwaySearchProduct
+	for start := opts.Start; ; start += pageRows {
+		pageOpts := opts
+		pageOpts.Start = start
+		pageOpts.Rows = pageRows
+
+		payload, err := c.search(ctx, storeID, category, pageOpts)
+		if err != nil {
+			return nil, err
+		}
+
+		products = append(products, payload.Response.Docs...)
+
+		if len(products) >= int(wantedRows) {
+			break
+		}
+		if len(payload.Response.Docs) < int(pageRows) {
+			break
+		}
+	}
+
+	return products, nil
+}
+
+func (c *SearchClient) search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 

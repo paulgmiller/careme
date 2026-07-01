@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	locationtypes "careme/internal/locations/types"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClientWithResponsesIsID(t *testing.T) {
@@ -22,24 +25,19 @@ func TestClientWithResponsesIsID(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		if got := client.IsID(tc.id); got != tc.want {
-			t.Fatalf("IsID(%q) = %v, want %v", tc.id, got, tc.want)
-		}
+		assert.Equal(t, tc.want, client.IsID(tc.id), "IsID(%q)", tc.id)
 	}
 }
 
 func TestFloat32PtrToFloat64Ptr(t *testing.T) {
 	t.Parallel()
 
-	if got := float32PtrToFloat64Ptr(nil); got != nil {
-		t.Fatalf("expected nil, got %v", got)
-	}
+	assert.Nil(t, float32PtrToFloat64Ptr(nil))
 
 	v := float32(47.5)
 	got := float32PtrToFloat64Ptr(&v)
-	if got == nil || *got != 47.5 {
-		t.Fatalf("unexpected conversion: %v", got)
-	}
+	require.NotNil(t, got)
+	assert.Equal(t, 47.5, *got)
 }
 
 func TestChainNameIsCanonicalized(t *testing.T) {
@@ -51,7 +49,5 @@ func TestChainNameIsCanonicalized(t *testing.T) {
 		Chain:   chainName,
 		Address: "10116 NE 8th St",
 	}
-	if loc.Chain != "kroger" {
-		t.Fatalf("unexpected chain: %q", loc.Chain)
-	}
+	assert.Equal(t, "kroger", loc.Chain)
 }

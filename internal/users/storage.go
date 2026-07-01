@@ -177,6 +177,33 @@ func (s *Storage) RemoveRecipe(user *utypes.User, recipeHash string) (bool, erro
 	return true, nil
 }
 
+func (s *Storage) ReplaceRecipe(user *utypes.User, oldHash string, replacement utypes.Recipe) (bool, error) {
+	oldHash = strings.TrimSpace(oldHash)
+	replacement.Hash = strings.TrimSpace(replacement.Hash)
+	if oldHash == "" || replacement.Hash == "" {
+		return false, fmt.Errorf("invalid recipe hash")
+	}
+	if user == nil {
+		return false, fmt.Errorf("user is required")
+	}
+
+	replaced := false
+	for i := range user.LastRecipes {
+		if user.LastRecipes[i].Hash == oldHash {
+			user.LastRecipes[i] = replacement
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		return false, nil
+	}
+	if err := s.Update(user); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func normalizeEmail(email string) string {
 	// remove . from before @? or +<suffix?
 	return strings.TrimSpace(strings.ToLower(email))

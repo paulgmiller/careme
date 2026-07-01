@@ -71,7 +71,7 @@ func (f *fakeLocationClient) HasInventory(locationID string) bool {
 	if hasInventory, ok := f.inv[locationID]; ok {
 		return hasInventory
 	}
-	return true
+	return false
 }
 
 type inventoryBackend struct {
@@ -121,10 +121,6 @@ func (f failingListCache) List(context.Context, string, string) ([]string, error
 
 func newTestLocationServer(client locationBackend) *locationStorage {
 	return newTestLocationServerWithBackends([]locationBackend{client})
-}
-
-func newTestLocationServerWithCentroids(client locationBackend, centroids centroidByZip) *locationStorage {
-	return newTestLocationServerWithBackendsCacheAndCentroids([]locationBackend{client}, cachepkg.NewInMemoryCache(), centroids)
 }
 
 func newTestLocationServerWithBackends(backends []locationBackend) *locationStorage {

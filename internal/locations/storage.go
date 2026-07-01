@@ -14,9 +14,11 @@ import (
 	"careme/internal/aldi"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/locations/geo"
+	"careme/internal/locations/nearby"
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
@@ -27,8 +29,8 @@ import (
 	locationtypes "careme/internal/locations/types"
 
 	"github.com/samber/lo"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"golang.org/x/sync/errgroup"
 )
 
 type locationStorage struct {
@@ -67,12 +69,12 @@ type centroidByZip interface {
 
 type locationBackendFactory func(context.Context) (locationBackend, error)
 
-// bad for rural areas if zip code is huge?
 const (
-	maxLocationDistanceMiles = 20.0
-	locationCachePrefix      = "location/"
-	storeRequestPrefix       = "location-store-requests/"
+	locationCachePrefix = "location/"
+	storeRequestPrefix  = "location-store-requests/"
 )
+
+var MaxLocationCount = 10 // far not a count so tools can muck with it?
 
 func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locationStore, error) {
 	if c == nil {
@@ -108,6 +110,9 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 		func(ctx context.Context) (locationBackend, error) {
 			return wegmans.NewLocationBackend(ctx, cfg, centroids)
 		},
+		func(context.Context) (locationBackend, error) {
+			return farmersmarket.NewContainerLocationBackend(centroids)
+		},
 	}
 
 	backends, err := initializeLocationBackends(ctx, backendfactories)
@@ -123,29 +128,22 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 }
 
 func initializeLocationBackends(ctx context.Context, factories []locationBackendFactory) ([]locationBackend, error) {
-	g, ctx := errgroup.WithContext(ctx)
-	results := make(chan locationBackend, len(factories))
-	for i, factory := range factories {
-		g.Go(func() error {
-			start := time.Now()
-			backend, err := factory(ctx)
-			if err != nil {
-				if locationtypes.IsDisabledBackendError(err) {
-					return nil
-				}
-				return fmt.Errorf("failed to initialize location backend %d: %w", i, err)
+	results, err := parallelism.MapWithErrors(factories, func(factory locationBackendFactory) (locationBackend, error) {
+		start := time.Now()
+		backend, err := factory(ctx)
+		if err != nil {
+			if locationtypes.IsDisabledBackendError(err) {
+				return nil, nil
 			}
-			slog.InfoContext(ctx, "initialized location backend", "backend", fmt.Sprintf("%T", backend), "latencyMS", time.Since(start).Milliseconds())
-			results <- backend
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
+			return nil, fmt.Errorf("failed to initialize location backend %t: %w", backend, err)
+		}
+		slog.InfoContext(ctx, "initialized location backend", "backend", fmt.Sprintf("%T", backend), "latencyMS", time.Since(start).Milliseconds())
+		return backend, nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	close(results)
-
-	return lo.ChannelToSlice(results), nil
+	return lo.Compact(results), nil
 }
 
 func (l *locationStorage) HasInventory(locationID string) bool {
@@ -189,7 +187,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 			return nil, err
 		}
 		slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
-		return locations, err
+		return lo.Take(locations, nearby.MaxLocationCount), err
 	})
 
 	for _, loc := range allLocations {
@@ -215,8 +213,8 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		}
 
 		distance := locationDistanceTo(requestedCentroid, loc, l.zipCentroids)
-		if distance > maxLocationDistanceMiles {
-			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", maxLocationDistanceMiles)
+		if distance > nearby.MaxLocationDistanceMiles {
+			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", nearby.MaxLocationDistanceMiles)
 			continue
 		}
 		filtered = append(filtered, loc)

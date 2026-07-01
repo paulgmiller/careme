@@ -14,11 +14,16 @@ import (
 )
 
 type mock struct {
-	saver recipeSaver
+	saver     recipeSaver
+	critiquer mockRecipeCritiquer
 }
 
-func NewMockGenerator(saver recipeSaver) mock {
-	return mock{saver: saver}
+type mockRecipeCritiquer interface {
+	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
+}
+
+func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer) mock {
+	return mock{saver: saver, critiquer: critiquer}
 }
 
 func NewMockImageGen() mock {
@@ -411,10 +416,27 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 			}
 		}
 	}
+	if m.critiquer != nil {
+		for _, recipe := range selectedRecipes {
+			if _, err := m.critiquer.CritiqueRecipe(ctx, recipe); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	return &ai.ShoppingList{
 		Recipes: selectedRecipes,
 	}, nil
+}
+
+func (m mock) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+	_ = ctx
+	_ = instructions
+	_ = previousResponseID
+	recipe := mockRecipes[0]
+	recipe.Title = "Fresh " + recipe.Title
+	recipe.ResponseID = uuid.NewString()
+	return &recipe, nil
 }
 
 func (m mock) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {

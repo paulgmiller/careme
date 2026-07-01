@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"os"
 
+	"careme/internal/httpretry"
+
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
@@ -81,15 +83,6 @@ func newProxyTransport(cfg ProxyConfig) (*http.Transport, error) {
 	return proxyTransport, nil
 }
 
-// this would be nice but it logs all retries as errors which sets off alerts.
-// var _ retryablehttp.LeveledLogger = slog.Default()
-type SlogPrintf struct{}
-
-func (l SlogPrintf) Printf(format string, args ...any) {
-	// missing context sadly so no operation id
-	slog.With().Info(fmt.Sprintf(format, args...), "source", "retryablehttp")
-}
-
 // retrying 5xx errors and network errors, but not context cancellations or 4xx errors.
 func retriable(ctx context.Context, resp *http.Response, err error) (bool, error) {
 	if ctx.Err() != nil {
@@ -112,7 +105,7 @@ func retriable(ctx context.Context, resp *http.Response, err error) (bool, error
 func withRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
-	retryClient.Logger = SlogPrintf{}
+	retryClient.RequestLogHook = httpretry.LogRetry("brightdata")
 
 	// Keep the library defaults for now:
 	// RetryMax=4, RetryWaitMin=1s, RetryWaitMax=30s, Backoff=DefaultBackoff.
