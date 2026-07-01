@@ -63,9 +63,9 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
-	chefNoteSuggestion := ""
-	if l.Plan != nil {
-		chefNoteSuggestion = l.Plan.ChefNoteSuggestion
+	instructions := p.Instructions
+	if instructions == "" && l.Plan != nil {
+		instructions = l.Plan.ChefNoteSuggestion
 	}
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
@@ -111,7 +111,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		MetaDescription: shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
-		Instructions:    chefNotesPlaceholder(p.Instructions, chefNoteSuggestion),
+		Instructions:    instructions,
 		Hash:            hash,
 		Recipes:         recipeViews,
 		ShoppingList:    shoppingListForDisplay(combinedIngredients),
@@ -126,16 +126,6 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
-}
-
-func chefNotesPlaceholder(instructions, suggestion string) string {
-	if trimmed := strings.TrimSpace(instructions); trimmed != "" {
-		return trimmed
-	}
-	if trimmed := strings.Trim(strings.TrimSpace(suggestion), "."); trimmed != "" {
-		return trimmed
-	}
-	return "make one cozy soup"
 }
 
 func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
