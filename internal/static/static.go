@@ -98,6 +98,8 @@ func Register(mux routing.Registrar) {
 		}
 	})
 
+	registerPWAAssets(mux)
+
 	mux.HandleFunc("/background.png", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		// Keep cache short so clients can refresh seasonally without manual cache clear.
