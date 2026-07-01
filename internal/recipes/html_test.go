@@ -147,10 +147,9 @@ func TestFormatShoppingListHTML_ChefNotesUsesDefaultPlaceholderWithoutPreviousIn
 func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.HelpMessage = "Save two dinners before building your shopping list."
 	w := httptest.NewRecorder()
 
-	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, renderTestUser(true), p.Hash(), recipeSelection{}, "Save two dinners before building your shopping list.", w)
 
 	html := assertHTTPSuccess(t, w)
 	assert.Contains(t, html, "Chef&#39;s note")

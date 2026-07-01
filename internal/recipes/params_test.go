@@ -65,7 +65,7 @@ func TestParseQueryArgs_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 	}
 }
 
-func TestParseQueryArgs_CampaignInstructionsAndHelp(t *testing.T) {
+func TestParseQueryArgs_CampaignInstructionsOnlyAffectsParams(t *testing.T) {
 	location := &locations.Location{
 		ID:      "store-1",
 		Name:    "Test Store",
@@ -81,8 +81,14 @@ func TestParseQueryArgs_CampaignInstructionsAndHelp(t *testing.T) {
 	if got, want := p.Instructions, "make it vegetarian"; got != want {
 		t.Fatalf("expected instructions %q, got %q", want, got)
 	}
-	if got, want := p.HelpMessage, "Save two meals"; got != want {
-		t.Fatalf("expected help message %q, got %q", want, got)
+
+	reqWithoutHelp := httptest.NewRequest("GET", "/recipes?location=store-1&instructions=make%20it%20vegetarian", nil)
+	pWithoutHelp, err := ParseQueryArgs(context.Background(), reqWithoutHelp, staticLocationLookup{location: location})
+	if err != nil {
+		t.Fatalf("ParseQueryArgs without help returned error: %v", err)
+	}
+	if got, want := p.Hash(), pWithoutHelp.Hash(); got != want {
+		t.Fatalf("help query should not influence params hash: got %q, want %q", got, want)
 	}
 }
 

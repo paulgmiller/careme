@@ -62,6 +62,12 @@ type shoppingListGroup struct {
 func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
 	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
 ) {
+	FormatShoppingListHTMLForHashWithHelp(ctx, p, l, wineRecommendations, currentUser, hash, selection, "", writer)
+}
+
+func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage string, writer http.ResponseWriter,
+) {
 	serverSignedIn := currentUser != nil
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
@@ -109,7 +115,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Instructions:    p.Instructions,
-		HelpMessage:     strings.TrimSpace(p.HelpMessage),
+		HelpMessage:     strings.TrimSpace(helpMessage),
 		Hash:            hash,
 		Recipes:         recipeViews,
 		ShoppingList:    shoppingListForDisplay(combinedIngredients),

@@ -1081,14 +1081,14 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 			return
 		}
-		redirectToHash(w, r, hashParam, true /*useStart*/)
+		redirectToHashWithHelp(w, r, hashParam, true /*useStart*/, shoppingListHelpFromRequest(r))
 		return
 	}
 
 	startTime, err := time.Parse(time.RFC3339Nano, startArg)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to parse start time", "time", startArg, "error", err)
-		redirectToHash(w, r, hashParam, true /*useStart*/)
+		redirectToHashWithHelp(w, r, hashParam, true /*useStart*/, shoppingListHelpFromRequest(r))
 		return
 	}
 
@@ -1118,7 +1118,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	}
 	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
 	s.kickgeneration(ctx, p)
-	redirectToHash(w, r, p.Hash(), true /*useStart*/)
+	redirectToHashWithHelp(w, r, p.Hash(), true /*useStart*/, shoppingListHelpFromRequest(r))
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1135,7 +1135,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if hashParam := r.URL.Query().Get(queryArgHash); hashParam != "" {
 		if normalizedHash, ok := legacyHashToCurrent(hashParam, legacyRecipeHashSeed); ok {
 			slog.InfoContext(ctx, "redirecting legacy hash to canonical hash", "legacy_hash", hashParam, "hash", normalizedHash)
-			redirectToHash(w, r, normalizedHash, false /*useStart*/)
+			redirectToHashWithHelp(w, r, normalizedHash, false /*useStart*/, shoppingListHelpFromRequest(r))
 			return
 		}
 		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
@@ -1149,7 +1149,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.URL.Query().Has(queryArgStart) {
-			redirectToHash(w, r, hashParam, false /*useStart*/)
+			redirectToHashWithHelp(w, r, hashParam, false /*useStart*/, shoppingListHelpFromRequest(r))
 			return
 		}
 
@@ -1231,7 +1231,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		wineWG.Wait()
 
-		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, currentUser, hashParam, selection, w)
+		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wineRecommendations, currentUser, hashParam, selection, shoppingListHelpFromRequest(r), w)
 		return
 	}
 
@@ -1251,7 +1251,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, cacheErr := s.FromCache(ctx, p.Hash()); cacheErr == nil {
-			redirectToHash(w, r, p.Hash(), false /*useStart*/)
+			redirectToHashWithHelp(w, r, p.Hash(), false /*useStart*/, shoppingListHelpFromRequest(r))
 			return
 		}
 		if guestShoppingListCount(r) >= guestShoppingListLimit {
@@ -1272,7 +1272,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
 			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
-			redirectToHash(w, r, p.Hash(), false /*useStart*/)
+			redirectToHashWithHelp(w, r, p.Hash(), false /*useStart*/, shoppingListHelpFromRequest(r))
 			return
 		}
 		slog.ErrorContext(ctx, "failed to save params", "error", err)
@@ -1284,7 +1284,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	s.kickgeneration(ctx, p)
 
-	redirectToHash(w, r, hash, true /*useStart*/)
+	redirectToHashWithHelp(w, r, hash, true /*useStart*/, shoppingListHelpFromRequest(r))
 }
 
 // best effort attempt to set favorite store if non is thre
@@ -1384,11 +1384,18 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
 }
 
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStart bool) {
+	redirectToHashWithHelp(w, r, hash, useStart, "")
+}
+
+func redirectToHashWithHelp(w http.ResponseWriter, r *http.Request, hash string, useStart bool, helpMessage string) {
 	u := url.URL{Path: "/recipes"}
 	args := url.Values{} // intentioanlly clear other args
 	args.Set(queryArgHash, hash)
 	if useStart {
 		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
+	}
+	if helpMessage = strings.TrimSpace(helpMessage); helpMessage != "" {
+		args.Set("help", helpMessage)
 	}
 	u.RawQuery = args.Encode()
 	if isHTMXRequest(r) {
@@ -1397,6 +1404,19 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStar
 		return
 	}
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
+}
+
+func shoppingListHelpFromRequest(r *http.Request) string {
+	return firstQueryValue(r, "help", "help_message", "shoppinglist_help")
+}
+
+func firstQueryValue(r *http.Request, names ...string) string {
+	for _, name := range names {
+		if value := r.URL.Query().Get(name); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func isHTMXRequest(r *http.Request) bool {

@@ -54,6 +54,22 @@ func TestRedirectToHash(t *testing.T) {
 	}
 }
 
+func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=store-1&help=Save+two+dinners", nil)
+
+	redirectToHashWithHelp(rr, req, "testhash", true, shoppingListHelpFromRequest(req))
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	location := rr.Header().Get("Location")
+	u, err := url.Parse(location)
+	require.NoError(t, err)
+	assert.Equal(t, "/recipes", u.Path)
+	assert.Equal(t, "testhash", u.Query().Get("h"))
+	assert.NotEmpty(t, u.Query().Get("start"))
+	assert.Equal(t, "Save two dinners", u.Query().Get("help"))
+}
+
 func legacyRecipeHash(hash string) (string, bool) {
 	return currentHashToLegacy(hash, legacyRecipeHashSeed)
 }
