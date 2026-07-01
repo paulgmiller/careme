@@ -1009,6 +1009,57 @@ func TestKickGenerationIfNotPresent_DoesNotKickExistingParams(t *testing.T) {
 	}
 }
 
+func TestKickGenerationIfNotPresent_RekicksStaleExistingParams(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestGenerator(generator),
+	)
+	t.Cleanup(s.Wait)
+
+	startedAt := time.Now().Add(-generationStaleAge - time.Minute)
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, startedAt)
+	require.NoError(t, s.SaveParams(t.Context(), params))
+
+	err := s.KickGenerationIfNotPresent(t.Context(), params)
+	require.NoError(t, err)
+
+	select {
+	case <-generator.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for generator call")
+	}
+
+	updated, err := s.ParamsFromCache(t.Context(), params.Hash())
+	require.NoError(t, err)
+	assert.True(t, updated.Date.After(startedAt), "expected rekick to refresh params date")
+}
+
+func TestKickGenerationIfNotPresent_DoesNotRekickExistingShoppingList(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestGenerator(generator),
+	)
+
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now().Add(-generationStaleAge-time.Minute))
+	require.NoError(t, s.SaveParams(t.Context(), params))
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes: []ai.Recipe{{Title: "Done"}},
+	}, params.Hash()))
+
+	err := s.KickGenerationIfNotPresent(t.Context(), params)
+	require.NoError(t, err)
+
+	select {
+	case <-generator.called:
+		t.Fatal("unexpected generator call")
+	default:
+	}
+}
+
 func TestKickGenerationIfNotPresent_SavesParamsAndKicksMissingShoppingList(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
@@ -1030,6 +1081,63 @@ func TestKickGenerationIfNotPresent_SavesParamsAndKicksMissingShoppingList(t *te
 
 	_, err = s.ParamsFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
+}
+
+func TestHandleRecipes_NotFoundRekicksFromStaleParamsDate(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestClerk(noSessionAuth{}),
+		withTestGenerator(generator),
+	)
+	t.Cleanup(s.Wait)
+
+	startedAt := time.Now().Add(-generationStaleAge - time.Minute)
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, startedAt)
+	require.NoError(t, s.SaveParams(t.Context(), params))
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(params.Hash())+"&start="+url.QueryEscape(time.Now().Format(time.RFC3339Nano)), nil)
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+
+	assert.Equal(t, http.StatusSeeOther, rr.Code)
+	assert.Contains(t, rr.Header().Get("Location"), "/recipes?h="+url.QueryEscape(params.Hash())+"&start=")
+	select {
+	case <-generator.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for generator call")
+	}
+
+	updated, err := s.ParamsFromCache(t.Context(), params.Hash())
+	require.NoError(t, err)
+	assert.True(t, updated.Date.After(startedAt), "expected rekick to refresh params date")
+}
+
+func TestHandleRecipes_NotFoundSpinsFromRecentParamsDate(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestGenerator(generator),
+	)
+
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
+	require.NoError(t, s.SaveParams(t.Context(), params))
+
+	oldStart := time.Now().Add(-generationStaleAge - time.Minute).Format(time.RFC3339Nano)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(params.Hash())+"&start="+url.QueryEscape(oldStart), nil)
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	select {
+	case <-generator.called:
+		t.Fatal("unexpected generator call")
+	default:
+	}
 }
 
 func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
