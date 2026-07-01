@@ -135,6 +135,24 @@ func TestRegisterServesManifestNameByHost(t *testing.T) {
 			wantName:      "Careme Test",
 			wantShortName: "Careme Test",
 		},
+		{
+			name:          "localhost",
+			host:          "localhost:8080",
+			wantName:      "Careme Local",
+			wantShortName: "Careme Local",
+		},
+		{
+			name:          "ipv4 localhost",
+			host:          "127.0.0.1:8080",
+			wantName:      "Careme Local",
+			wantShortName: "Careme Local",
+		},
+		{
+			name:          "ipv6 localhost",
+			host:          "[::1]:8080",
+			wantName:      "Careme Local",
+			wantShortName: "Careme Local",
+		},
 	}
 
 	for _, tt := range tests {
@@ -194,11 +212,12 @@ func TestBackgroundBySeason(t *testing.T) {
 
 func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
 	Init()
-	script, err := renderServiceWorker()
+	var b strings.Builder
+	err := renderServiceWorker(&b)
 	if err != nil {
 		t.Fatalf("renderServiceWorker() error = %v", err)
 	}
-	rendered := string(script)
+	rendered := b.String()
 
 	for _, path := range []string{"/sign-in", "/sign-up", "/auth/establish", "/logout"} {
 		if !strings.Contains(rendered, path) {
@@ -213,11 +232,12 @@ func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
 
 func TestServiceWorkerRefreshesSeasonalFavicon(t *testing.T) {
 	Init()
-	script, err := renderServiceWorker()
+	var b strings.Builder
+	err := renderServiceWorker(&b)
 	if err != nil {
 		t.Fatalf("renderServiceWorker() error = %v", err)
 	}
-	rendered := string(script)
+	rendered := b.String()
 
 	precacheURLs := serviceWorkerPrecacheURLs(t, rendered)
 	for _, url := range precacheURLs {
