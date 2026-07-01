@@ -20,8 +20,9 @@ import (
 const recipePlanModel = defaultRecipeModel
 
 type MenuPlan struct {
-	Plans      []RecipePlan `json:"plans"`
-	ResponseID string       `json:"response_id,omitempty" jsonschema:"-"`
+	Plans              []RecipePlan `json:"plans"`
+	ChefNoteSuggestion string       `json:"chef_note_suggestion"`
+	ResponseID         string       `json:"response_id,omitempty" jsonschema:"-"`
 }
 
 // meant for status
@@ -140,6 +141,7 @@ Try and ensure variety across cuisines, anchor ingredients, techniques, and side
 Choose anchor_ingredient and side_vegetable from the provided TSV ingredients. Use the exact ingredient Description text from the TSV. Do not choose an unavailable related ingredient; use the available ingredient's name instead.
 Prioritize seasonal ingredients, sale value, practical weeknight cooking.
 Assign user directions to recipe_instructions only for the specific recipe plans where they belong. If a user direction applies to every dish, repeat it in every recipe plan's recipe_instructions. If the user mentions having a limited ingredient without asking for it in every dish, assign it to only one fitting recipe.
+Return one chef_note_suggestion: a short, plain-language example of useful feedback the cook could type before asking for a new menu. Tailor it to the planned dishes, available ingredients, seasonality, and likely tradeoffs.
 Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
 
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,

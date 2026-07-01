@@ -316,6 +316,8 @@ func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
 		"Use the exact ingredient Description text from the TSV",
 		"Do not choose an unavailable related ingredient",
 		"Do not write recipe steps",
+		"chef_note_suggestion",
+		"Tailor it to the planned dishes",
 		"rationale, or prose notes",
 	} {
 		if !strings.Contains(menuPlanSystemMessage, phrase) {
