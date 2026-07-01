@@ -8,10 +8,12 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"careme/internal/ai"
@@ -87,41 +89,64 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		}
 	}
 	data := struct {
-		Location        locations.Location
-		Date            string
-		MetaDescription string
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Instructions    string
-		Hash            string
-		Recipes         []shoppingRecipeView
-		ShoppingList    []shoppingListGroup
-		HasSavedRecipes bool
-		Style           seasons.Style
-		ServerSignedIn  bool
-		User            *utypes.User
-		AuthReturnTo    string
+		Location                 locations.Location
+		Date                     string
+		MetaDescription          string
+		ClarityScript            template.HTML
+		GoogleTagScript          template.HTML
+		Instructions             string
+		Hash                     string
+		Recipes                  []shoppingRecipeView
+		ShoppingList             []shoppingListGroup
+		HasSavedRecipes          bool
+		Style                    seasons.Style
+		ServerSignedIn           bool
+		User                     *utypes.User
+		AuthReturnTo             string
+		ShowFreshIngredientsLink bool
+		FreshIngredientsURL      string
 	}{
-		Location:        *p.Location,
-		Date:            p.Date.Format("2006-01-02"),
-		MetaDescription: shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Instructions:    p.Instructions,
-		Hash:            hash,
-		Recipes:         recipeViews,
-		ShoppingList:    shoppingListForDisplay(combinedIngredients),
-		HasSavedRecipes: hasSavedRecipes,
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  serverSignedIn,
-		User:            currentUser,
-		AuthReturnTo:    "/recipes?h=" + hash,
+		Location:                 *p.Location,
+		Date:                     p.Date.Format("2006-01-02"),
+		MetaDescription:          shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
+		ClarityScript:            templates.ClarityScript(ctx),
+		GoogleTagScript:          templates.GoogleTagScript(),
+		Instructions:             p.Instructions,
+		Hash:                     hash,
+		Recipes:                  recipeViews,
+		ShoppingList:             shoppingListForDisplay(combinedIngredients),
+		HasSavedRecipes:          hasSavedRecipes,
+		Style:                    seasons.GetCurrentStyle(),
+		ServerSignedIn:           serverSignedIn,
+		User:                     currentUser,
+		AuthReturnTo:             "/recipes?h=" + hash,
+		ShowFreshIngredientsLink: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
+		FreshIngredientsURL:      freshIngredientsURL(p),
 	}
 
 	setTextContent(writer)
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
+	if p == nil || p.Location == nil {
+		return false
+	}
+	today, err := StoreToDate(ctx, nowFn(), p.Location)
+	if err != nil {
+		return false
+	}
+	return today.Sub(p.Date) > 48*time.Hour
+}
+
+func freshIngredientsURL(p *generatorParams) string {
+	if p == nil || p.Location == nil {
+		return "/recipes"
+	}
+	values := url.Values{"location": []string{p.Location.ID}}
+	return "/recipes?" + values.Encode()
 }
 
 func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {

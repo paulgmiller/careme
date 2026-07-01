@@ -62,6 +62,12 @@
                        name="instructions"
                        placeholder="{{if .Instructions}}{{.Instructions}}{{else}}e.g. make it vegetarian{{end}}"
                        class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                {{if .ShowFreshIngredientsLink}}
+                <a href="{{.FreshIngredientsURL}}"
+                   class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Generate recipes with today's ingredients
+                </a>
+                {{end}}
                 <button type="submit"
                         class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Try again, chef

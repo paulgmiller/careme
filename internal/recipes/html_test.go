@@ -144,6 +144,32 @@ func TestFormatShoppingListHTML_ChefNotesUsesDefaultPlaceholderWithoutPreviousIn
 	assert.Contains(t, html, `placeholder="e.g. make it vegetarian"`)
 }
 
+func TestFormatShoppingListHTML_ShowsFreshIngredientsLinkForOldList(t *testing.T) {
+	withNow(t, time.Date(2026, time.January, 15, 18, 0, 0, 0, time.UTC))
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101"}
+	p := DefaultParams(&loc, time.Date(2026, time.January, 12, 0, 0, 0, 0, time.UTC))
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, `href="/recipes?location=70000001"`)
+	assert.Contains(t, html, "Generate recipes with today's ingredients")
+	assert.Less(t, strings.Index(html, "Generate recipes with today's ingredients"), strings.Index(html, "Try again, chef"))
+}
+
+func TestFormatShoppingListHTML_HidesFreshIngredientsLinkForRecentList(t *testing.T) {
+	withNow(t, time.Date(2026, time.January, 15, 18, 0, 0, 0, time.UTC))
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101"}
+	p := DefaultParams(&loc, time.Date(2026, time.January, 14, 0, 0, 0, 0, time.UTC))
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.NotContains(t, html, "Generate recipes with today's ingredients")
+}
+
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	addedRecipe := ai.Recipe{
