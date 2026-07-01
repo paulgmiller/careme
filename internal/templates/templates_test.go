@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"html/template"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -64,6 +65,7 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	for _, name := range []string{
 		"about.html",
 		"critique.html",
+		"farmersmarket.html",
 		"home.html",
 		"locations.html",
 		"recipe.html",
@@ -99,6 +101,33 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	}
 }
 
+func TestBrowserPageTemplatesIncludeAppHead(t *testing.T) {
+	nonAppPages := map[string]bool{
+		"auth_establish.html": true,
+		"mail.html":           true,
+	}
+
+	names, err := fs.Glob(htmlFiles, "*.html")
+	if err != nil {
+		t.Fatalf("glob templates: %v", err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if !strings.Contains(rendered, "<head") || nonAppPages[name] {
+				return
+			}
+			if !strings.Contains(rendered, `{{template "app_head" .Style}}`) {
+				t.Fatalf("%s should include app_head for PWA metadata", name)
+			}
+		})
+	}
+}
+
 func firstElementClasses(node *html.Node, element string) (map[string]bool, bool) {
 	if node.Type == html.ElementNode && node.Data == element {
 		classes := make(map[string]bool)
@@ -127,6 +156,7 @@ func TestTemplatePageTitlesAreUnique(t *testing.T) {
 		"about.html",
 		"auth_establish.html",
 		"critique.html",
+		"farmersmarket.html",
 		"home.html",
 		"locations.html",
 		"mail.html",

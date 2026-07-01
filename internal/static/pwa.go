@@ -31,6 +31,7 @@ var offlineHTML []byte
 var serviceWorkerJS []byte
 
 var (
+	manifestTemplate      = texttemplate.Must(texttemplate.New("manifest").Parse(string(manifestWebmanifest)))
 	offlinePageTemplate   = template.Must(template.New("offline").Parse(string(offlineHTML)))
 	serviceWorkerTemplate = texttemplate.Must(texttemplate.New("sw").Parse(string(serviceWorkerJS)))
 )
@@ -87,22 +88,35 @@ func registerPWAAssets(mux routing.Registrar) {
 }
 
 func renderManifest(host string, w io.Writer) error {
-	var manifest map[string]any
-	if err := json.Unmarshal(manifestWebmanifest, &manifest); err != nil {
-		return err
-	}
+	name := "Careme"
+	shortName := "Careme"
 
 	switch {
 	case isTestHost(host):
-		manifest["name"] = "Careme Test"
-		manifest["short_name"] = "Careme Test"
+		name = "Careme Test"
+		shortName = "Careme Test"
 	case isLocalhost(host):
-		manifest["name"] = "Careme Local"
-		manifest["short_name"] = "Careme Local"
+		name = "Careme Local"
+		shortName = "Careme Local"
 	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(manifest)
+
+	nameJSON, err := json.Marshal(name)
+	if err != nil {
+		return err
+	}
+	shortNameJSON, err := json.Marshal(shortName)
+	if err != nil {
+		return err
+	}
+
+	data := struct {
+		Name      string
+		ShortName string
+	}{
+		Name:      string(nameJSON),
+		ShortName: string(shortNameJSON),
+	}
+	return manifestTemplate.Execute(w, data)
 }
 
 func isTestHost(host string) bool {
