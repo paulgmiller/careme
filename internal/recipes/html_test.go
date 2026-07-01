@@ -144,7 +144,7 @@ func TestFormatShoppingListHTML_ChefNotesUsesDefaultPlaceholderWithoutPreviousIn
 	assert.Contains(t, html, `placeholder="e.g. make it vegetarian"`)
 }
 
-func TestFormatShoppingListHTML_ShowsFreshIngredientsLinkForOldList(t *testing.T) {
+func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
 	withNow(t, time.Date(2026, time.January, 15, 18, 0, 0, 0, time.UTC))
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101"}
 	p := DefaultParams(&loc, time.Date(2026, time.January, 12, 0, 0, 0, 0, time.UTC))
@@ -153,21 +153,50 @@ func TestFormatShoppingListHTML_ShowsFreshIngredientsLinkForOldList(t *testing.T
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 
 	html := assertHTTPSuccess(t, w)
-	assert.Contains(t, html, `href="/recipes?location=70000001"`)
-	assert.Contains(t, html, "Generate recipes with today's ingredients")
-	assert.Less(t, strings.Index(html, "Generate recipes with today's ingredients"), strings.Index(html, "Try again, chef"))
+	assert.Contains(t, html, `method="GET"`)
+	assert.Contains(t, html, `action="/recipes"`)
+	assert.Contains(t, html, `name="location" value="70000001"`)
+	assert.Contains(t, html, `Using ingredients from <span class="font-semibold text-brand-700">January 12, 2026</span>.`)
+	assert.Contains(t, html, "Use today's ingredients")
+	assert.NotContains(t, html, `Chef notes`)
+	assert.NotContains(t, html, `name="instructions"`)
+	assert.NotContains(t, html, "Try again, chef")
+	assert.NotContains(t, html, `Older list`)
+	assert.NotContains(t, html, `/regenerate"`)
 }
 
-func TestFormatShoppingListHTML_HidesFreshIngredientsLinkForRecentList(t *testing.T) {
+func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
 	withNow(t, time.Date(2026, time.January, 15, 18, 0, 0, 0, time.UTC))
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101"}
-	p := DefaultParams(&loc, time.Date(2026, time.January, 14, 0, 0, 0, 0, time.UTC))
+	p := DefaultParams(&loc, time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC))
 	w := httptest.NewRecorder()
 
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 
 	html := assertHTTPSuccess(t, w)
-	assert.NotContains(t, html, "Generate recipes with today's ingredients")
+	assert.Contains(t, html, `method="POST"`)
+	assert.Contains(t, html, `/regenerate"`)
+	assert.Contains(t, html, "Try again, chef")
+	assert.NotContains(t, html, "Use today's ingredients")
+	assert.NotContains(t, html, `Older list`)
+	assert.NotContains(t, html, `Using ingredients from`)
+	assert.NotContains(t, html, `January 15, 2026`)
+	assert.NotContains(t, html, `name="location" value="70000001"`)
+}
+
+func TestFormatShoppingListHTML_ShowsLocationWithoutDateWhenFresh(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, `Location: <span class="font-semibold text-brand-700">Store</span>`)
+	assert.Contains(t, html, `<span class="text-sm text-ink-500">(1 Main St)</span>`)
+	assert.NotContains(t, html, `Ingredients from`)
+	assert.NotContains(t, html, `Using ingredients from`)
+	assert.NotContains(t, html, `January 25, 2026`)
 }
 
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {

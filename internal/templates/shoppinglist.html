@@ -48,6 +48,24 @@
         </div>
 
         <div class="p-8">
+          {{if .UseTodaysIngredients}}
+          <form id="regenerateForm"
+                method="GET"
+                action="/recipes">
+            <input type="hidden" name="location" value="{{.Location.ID}}" />
+            <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
+              <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-ink-600">
+                  Using ingredients from <span class="font-semibold text-brand-700">{{.DateDisplay}}</span>.
+                </p>
+                <button type="submit"
+                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Use today's ingredients
+                </button>
+              </div>
+            </div>
+          </form>
+          {{else}}
           <form id="regenerateForm"
                 method="POST"
                 action="/recipes/{{.Hash}}/regenerate"
@@ -62,12 +80,6 @@
                        name="instructions"
                        placeholder="{{if .Instructions}}{{.Instructions}}{{else}}e.g. make it vegetarian{{end}}"
                        class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-                {{if .ShowFreshIngredientsLink}}
-                <a href="{{.FreshIngredientsURL}}"
-                   class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Generate recipes with today's ingredients
-                </a>
-                {{end}}
                 <button type="submit"
                         class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Try again, chef
@@ -75,6 +87,7 @@
               </div>
             </div>
           </form>
+          {{end}}
 
           <div class="mt-8 space-y-8">
             {{range .Recipes}}
