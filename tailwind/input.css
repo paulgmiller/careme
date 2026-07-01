@@ -205,3 +205,62 @@ https://tailwindcss.com/docs/adding-custom-variants#custom-variants
   }
 }
 */
+
+@media print {
+  @page {
+    margin: 0.6in;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111827 !important;
+  }
+
+  .print-hidden,
+  script {
+    display: none !important;
+  }
+
+  .recipe-page {
+    padding: 0 !important;
+  }
+
+  .recipe-shell,
+  .printable-recipe {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  .recipe-shell > div,
+  .printable-recipe {
+    padding: 0 !important;
+  }
+
+  .printable-recipe {
+    color: #111827 !important;
+  }
+
+  .printable-recipe h2 {
+    font-size: 24pt !important;
+    line-height: 1.15 !important;
+    color: #111827 !important;
+  }
+
+  .printable-recipe h3 {
+    color: #111827 !important;
+    letter-spacing: 0.08em !important;
+  }
+
+  .printable-recipe li {
+    break-inside: avoid;
+  }
+
+  .printable-recipe ul li {
+    background: transparent !important;
+    border-bottom: 1px solid #e5e7eb;
+    border-radius: 0 !important;
+    padding: 0.12in 0 !important;
+  }
+}
