@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log/slog"
 	"math"
 	"net/http"
 	"regexp"
@@ -131,15 +130,10 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 }
 
 func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
-	if p == nil || p.Location == nil {
-		return false
-	}
 	today, err := StoreToDate(ctx, nowFn(), p.Location)
 	if err != nil {
 		return false
 	}
-	slog.InfoContext(ctx, "comparing dates", "paramsdate", p.Date, "today", today)
-
 	return today.Sub(p.Date) > 24*time.Hour
 }
 
