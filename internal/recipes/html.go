@@ -64,7 +64,10 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
-	instructions := shoppingListInstructionsPlaceholder(p.Instructions, l.Plan)
+	instructions := strings.TrimSpace(p.Instructions)
+	if instructions == "" && l.Plan != nil {
+		instructions = l.Plan.ChefNoteSuggestion
+	}
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
@@ -136,16 +139,6 @@ func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *gener
 		return false
 	}
 	return today.Sub(p.Date) > 24*time.Hour
-}
-
-func shoppingListInstructionsPlaceholder(instructions string, plan *ai.MenuPlan) string {
-	if strings.TrimSpace(instructions) != "" {
-		return instructions
-	}
-	if plan != nil && strings.TrimSpace(plan.ChefNoteSuggestion) != "" {
-		return plan.ChefNoteSuggestion
-	}
-	return "make one cozy soup"
 }
 
 func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
