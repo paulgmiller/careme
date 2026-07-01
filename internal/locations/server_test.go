@@ -14,6 +14,7 @@ import (
 	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
 	"careme/internal/config"
+	locationtypes "careme/internal/locations/types"
 	"careme/internal/templates"
 )
 
@@ -244,12 +245,12 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 			ID:      id,
 			Name:    "Store " + strconv.Itoa(i),
 			Address: strconv.Itoa(i) + " Market St",
-			ZipCode: "10001",
+			ZipCode: "99999",
 		})
 		client.setHasInventory(id, i != 0)
 		scores[id] = &ProduceScore{Score: i}
 	}
-	client.setListResponse("10001", locations)
+	client.setListResponse("99999", locations)
 
 	client2 := newFakeLocationClient()
 	locations = make([]Location, 0, 13)
@@ -264,16 +265,19 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 		client2.setHasInventory(id, true)
 		scores[id] = &ProduceScore{Score: i}
 	}
-	client2.setListResponse("10001", locations)
+	client2.setListResponse("99999", locations)
 
 	scoreLookup := &recordingProduceScoreLookup{scores: scores}
-	storage := newTestLocationServerWithBackends([]locationBackend{client, client2})
+	storage := newTestLocationServerWithBackendsCacheAndCentroids([]locationBackend{client, client2}, cachepkg.NewInMemoryCache(), zipCentroidIndex{centroids: map[string]locationtypes.ZipCentroid{
+		"99999": {Lat: 40, Lon: -73},
+		"10001": {Lat: 40, Lon: -73},
+	}})
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, scoreLookup)
 
 	mux := http.NewServeMux()
 	server.Register(mux, auth.DefaultMock())
 
-	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=99999", nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 

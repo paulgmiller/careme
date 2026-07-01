@@ -173,8 +173,10 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		// only do the first 10 rest is a waste.
 		if l.produceScores != nil && supportsStaples && scored < 10 {
 			scored++
+			scoreRow := row
+			scoreLoc := loc
 			wg.Go(func() {
-				row.ProduceScore = l.produceScores.ProduceScore(ctx, loc)
+				scoreRow.ProduceScore = l.produceScores.ProduceScore(ctx, scoreLoc)
 			})
 		}
 		rows = append(rows, row)
