@@ -1,8 +1,11 @@
 package static
 
 import (
+	"bytes"
+	"crypto/sha256"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
 	"log/slog"
@@ -153,16 +156,53 @@ func renderServiceWorker(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	cacheName, err := serviceWorkerCacheName(precachePaths, authPaths)
+	if err != nil {
+		return err
+	}
 
 	data := struct {
 		CacheName    string
 		PrecacheURLs string
 		AuthPaths    string
 	}{
-		CacheName:    `"careme-pwa-v1"`,
+		CacheName:    cacheName,
 		PrecacheURLs: string(precacheJSON),
 		AuthPaths:    string(authJSON),
 	}
 
 	return serviceWorkerTemplate.Execute(w, data)
+}
+
+func serviceWorkerCacheName(precachePaths, authPaths []string) (string, error) {
+	var offline bytes.Buffer
+	if err := renderOfflinePage(&offline); err != nil {
+		return "", err
+	}
+
+	hash := sha256.New()
+	for _, part := range [][]byte{
+		[]byte(strings.Join(precachePaths, "\x00")),
+		[]byte(strings.Join(authPaths, "\x00")),
+		manifestWebmanifest,
+		offline.Bytes(),
+		appIcon192,
+		appIcon512,
+		htmx208JS,
+		[]byte(TailwindAssetPath),
+	} {
+		if _, err := fmt.Fprintf(hash, "%d:", len(part)); err != nil {
+			return "", err
+		}
+		if _, err := hash.Write(part); err != nil {
+			return "", err
+		}
+	}
+
+	cacheName := fmt.Sprintf("careme-pwa-%x", hash.Sum(nil)[:8])
+	cacheNameJSON, err := json.Marshal(cacheName)
+	if err != nil {
+		return "", err
+	}
+	return string(cacheNameJSON), nil
 }

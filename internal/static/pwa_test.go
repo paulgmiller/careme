@@ -175,6 +175,34 @@ func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
 	}
 }
 
+func TestServiceWorkerCacheNameIsContentAddressed(t *testing.T) {
+	Init()
+	var before strings.Builder
+	if err := renderServiceWorker(&before); err != nil {
+		t.Fatalf("renderServiceWorker() error = %v", err)
+	}
+
+	cacheNameBefore := serviceWorkerCacheNameFromScript(t, before.String())
+	if cacheNameBefore == "careme-pwa-v1" {
+		t.Fatal("service worker cache name should not be the old fixed version")
+	}
+
+	originalIcon := appIcon192
+	t.Cleanup(func() {
+		appIcon192 = originalIcon
+	})
+	appIcon192 = append(append([]byte(nil), originalIcon...), 0)
+
+	var after strings.Builder
+	if err := renderServiceWorker(&after); err != nil {
+		t.Fatalf("renderServiceWorker() after icon change error = %v", err)
+	}
+	cacheNameAfter := serviceWorkerCacheNameFromScript(t, after.String())
+	if cacheNameAfter == cacheNameBefore {
+		t.Fatalf("service worker cache name should change with precached asset bytes, still %q", cacheNameAfter)
+	}
+}
+
 func TestServiceWorkerRefreshesSeasonalFavicon(t *testing.T) {
 	Init()
 	var b strings.Builder
@@ -215,4 +243,19 @@ func serviceWorkerPrecacheURLs(t *testing.T, script string) []string {
 		t.Fatalf("decode service worker precache URLs: %v", err)
 	}
 	return urls
+}
+
+func serviceWorkerCacheNameFromScript(t *testing.T, script string) string {
+	t.Helper()
+
+	matches := regexp.MustCompile(`const CACHE_NAME = ("[^"]+");`).FindStringSubmatch(script)
+	if len(matches) != 2 {
+		t.Fatalf("service worker missing CACHE_NAME declaration: %s", script)
+	}
+
+	var cacheName string
+	if err := json.Unmarshal([]byte(matches[1]), &cacheName); err != nil {
+		t.Fatalf("decode service worker cache name: %v", err)
+	}
+	return cacheName
 }
