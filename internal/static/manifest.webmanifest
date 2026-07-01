@@ -2,6 +2,9 @@
   "name": "{{.Name}}",
   "short_name": "{{.ShortName}}",
   "description": "Plan recipes around nearby stores and seasonal ingredients.",
+  "id": "/",
+  "lang": "en-US",
+  "categories": ["food", "lifestyle"],
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -11,12 +14,20 @@
     {
       "src": "/static/app-icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/static/app-icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

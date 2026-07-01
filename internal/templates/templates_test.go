@@ -571,6 +571,42 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 	}
 }
 
+func TestHomeTemplateIncludesInstallPrompt(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		User            *utypes.User
+		ServerSignedIn  bool
+	}{
+		Style: seasons.GetCurrentStyle(),
+	}
+
+	var buf bytes.Buffer
+	if err := Home.Execute(&buf, data); err != nil {
+		t.Fatalf("Home.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	for _, want := range []string{
+		`id="install-app-card"`,
+		"Keep Careme handy",
+		"Add to home screen",
+		`window.addEventListener("beforeinstallprompt"`,
+		`event.preventDefault()`,
+		`deferredInstallPrompt.prompt()`,
+		"In Chrome, open the ⋮ menu and tap Add to Home screen.",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("home page should include install prompt %q, body: %s", want, rendered)
+		}
+	}
+}
+
 func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)

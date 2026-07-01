@@ -34,6 +34,20 @@
 
         <!-- Content -->
         <div class="p-8">
+          <div id="install-app-card" class="mb-6 hidden friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
+            <h2 class="text-lg font-semibold text-brand-700">Keep Careme handy</h2>
+            <p id="install-app-message" class="mt-2 text-sm text-ink-700">Add Careme to your home screen for quick recipe planning.</p>
+            <div class="mt-4 flex flex-col gap-3">
+              <button type="button" id="install-app-btn"
+                      class="inline-flex w-full items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Add to home screen
+              </button>
+              <button type="button" id="install-app-dismiss"
+                      class="inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Maybe later
+              </button>
+            </div>
+          </div>
           {{if .User}}
           <div class="space-y-6">
             {{if .User.FavoriteStore}}
@@ -173,6 +187,55 @@
   </main>
   {{template "clerk_refresh.html" .}}
   <script>
+    (() => {
+      const card = document.getElementById("install-app-card");
+      const installButton = document.getElementById("install-app-btn");
+      const dismissButton = document.getElementById("install-app-dismiss");
+      const installMessage = document.getElementById("install-app-message");
+      let deferredInstallPrompt;
+
+      const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      const dismissed = window.localStorage.getItem("careme-install-card-dismissed") === "true";
+
+      const showInstallCard = () => {
+        if (!card || isStandalone || dismissed) {
+          return;
+        }
+
+        card.classList.remove("hidden");
+      };
+
+      if (isAndroid) {
+        showInstallCard();
+      }
+
+      window.addEventListener("beforeinstallprompt", (event) => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        showInstallCard();
+      });
+
+      installButton?.addEventListener("click", async () => {
+        if (deferredInstallPrompt) {
+          deferredInstallPrompt.prompt();
+          await deferredInstallPrompt.userChoice;
+          deferredInstallPrompt = undefined;
+          card?.classList.add("hidden");
+          return;
+        }
+
+        if (installMessage) {
+          installMessage.textContent = "In Chrome, open the ⋮ menu and tap Add to Home screen.";
+        }
+      });
+
+      dismissButton?.addEventListener("click", () => {
+        window.localStorage.setItem("careme-install-card-dismissed", "true");
+        card?.classList.add("hidden");
+      });
+    })();
+
     (() => {
       const button = document.getElementById("use-location-btn");
       const message = document.getElementById("use-location-message");

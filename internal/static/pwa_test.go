@@ -77,6 +77,65 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 	}
 }
 
+func TestRegisterServesManifestAndroidInstallMetadata(t *testing.T) {
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/manifest.webmanifest", nil)
+	req.Host = "careme.cooking"
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("manifest response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var manifest struct {
+		ID         string   `json:"id"`
+		Lang       string   `json:"lang"`
+		Categories []string `json:"categories"`
+		Icons      []struct {
+			Src     string `json:"src"`
+			Sizes   string `json:"sizes"`
+			Type    string `json:"type"`
+			Purpose string `json:"purpose"`
+		} `json:"icons"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+
+	if manifest.ID != "/" {
+		t.Fatalf("manifest id = %q, want /", manifest.ID)
+	}
+	if manifest.Lang != "en-US" {
+		t.Fatalf("manifest lang = %q, want en-US", manifest.Lang)
+	}
+	if len(manifest.Categories) != 2 || manifest.Categories[0] != "food" || manifest.Categories[1] != "lifestyle" {
+		t.Fatalf("manifest categories = %v, want [food lifestyle]", manifest.Categories)
+	}
+
+	hasAny192 := false
+	hasAny512 := false
+	hasMaskable512 := false
+	for _, icon := range manifest.Icons {
+		if icon.Src == "/static/app-icon-192.png" && icon.Sizes == "192x192" && icon.Type == "image/png" && icon.Purpose == "any" {
+			hasAny192 = true
+		}
+		if icon.Src == "/static/app-icon-512.png" && icon.Sizes == "512x512" && icon.Type == "image/png" && icon.Purpose == "any" {
+			hasAny512 = true
+		}
+		if icon.Src == "/static/app-icon-512.png" && icon.Sizes == "512x512" && icon.Type == "image/png" && icon.Purpose == "maskable" {
+			hasMaskable512 = true
+		}
+	}
+	if !hasAny192 || !hasAny512 || !hasMaskable512 {
+		t.Fatalf("manifest icons missing installable Android icon purposes: %+v", manifest.Icons)
+	}
+}
+
 func TestRegisterServesManifestNameByHost(t *testing.T) {
 	Init()
 	mux := http.NewServeMux()
