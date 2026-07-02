@@ -176,6 +176,34 @@ func TestOfflinePageThemeColorMatchesPageBackground(t *testing.T) {
 	}
 }
 
+func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
+	Init()
+	var b strings.Builder
+	err := renderOfflinePage(&b)
+	if err != nil {
+		t.Fatalf("renderOfflinePage() error = %v", err)
+	}
+	rendered := b.String()
+
+	for _, snippet := range []string{
+		`data-offline-recipes-section`,
+		`Saved recipes on this device`,
+		`const savedRecipesCacheName = "careme-saved-recipes-v1";`,
+		`const savedRecipesListURL = "/user/recipes/offline-cache";`,
+		`await cache.match(savedRecipesListURL)`,
+		`body.split(/\r?\n/).map(recipePath).filter(Boolean)`,
+		`request.url`,
+		`!url.pathname.startsWith("/recipe/")`,
+		`doc.querySelector("h1")?.textContent || doc.title`,
+		`list.replaceChildren(...rows)`,
+		`section.classList.remove("hidden")`,
+	} {
+		if !strings.Contains(rendered, snippet) {
+			t.Fatalf("offline page should include cached recipe link behavior %q, page: %s", snippet, rendered)
+		}
+	}
+}
+
 func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
 	Init()
 	var b strings.Builder
