@@ -605,6 +605,15 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 	if !strings.Contains(rendered, `navigator.serviceWorker.register("/sw.js")`) {
 		t.Fatalf("home page should register the service worker, body: %s", rendered)
 	}
+	if !strings.Contains(rendered, `CAREME_SYNC_SAVED_RECIPES`) {
+		t.Fatalf("home page should tell the service worker to sync saved recipes, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `new MessageChannel()`) || strings.Contains(rendered, `caremeSavedRecipesSynced`) {
+		t.Fatalf("home page should not use acknowledgement or session state for saved recipe sync, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `careme:saved-recipes-changed`) {
+		t.Fatalf("home page should refresh offline saved recipes after save changes, body: %s", rendered)
+	}
 }
 
 func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
