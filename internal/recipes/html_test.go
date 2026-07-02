@@ -146,7 +146,7 @@ func TestFormatShoppingListHTML_ChefNotesUsesMenuPlanSuggestionWithoutPreviousIn
 	assert.Regexp(t, `placeholder="make the quail faster\.?"`, html)
 }
 
-func TestFormatShoppingListHTML_ChefNotesUsesFallbackPlaceholderWithoutMenuPlanSuggestions(t *testing.T) {
+func TestFormatShoppingListHTML_ChefNotesUsesEmptyWithoutMenuPlanSuggestions(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
@@ -155,7 +155,7 @@ func TestFormatShoppingListHTML_ChefNotesUsesFallbackPlaceholderWithoutMenuPlanS
 
 	html := assertHTTPSuccess(t, w)
 	assert.Contains(t, html, `name="instructions"`)
-	assert.Regexp(t, `placeholder="make one cozy soup\.?"`, html)
+	assert.Regexp(t, `placeholder=""`, html)
 }
 
 func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
