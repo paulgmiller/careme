@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"careme/internal/seasons"
 )
 
 func TestRegisterServesPWAAssets(t *testing.T) {
@@ -139,8 +141,10 @@ func TestRegisterServesManifestNameByHost(t *testing.T) {
 			}
 
 			var manifest struct {
-				Name      string `json:"name"`
-				ShortName string `json:"short_name"`
+				Name            string `json:"name"`
+				ShortName       string `json:"short_name"`
+				BackgroundColor string `json:"background_color"`
+				ThemeColor      string `json:"theme_color"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &manifest); err != nil {
 				t.Fatalf("decode manifest: %v", err)
@@ -151,7 +155,24 @@ func TestRegisterServesManifestNameByHost(t *testing.T) {
 			if manifest.ShortName != tt.wantShortName {
 				t.Fatalf("manifest short_name = %q, want %q", manifest.ShortName, tt.wantShortName)
 			}
+			if manifest.ThemeColor != manifest.BackgroundColor {
+				t.Fatalf("manifest theme_color = %q, want background_color %q", manifest.ThemeColor, manifest.BackgroundColor)
+			}
 		})
+	}
+}
+
+func TestOfflinePageThemeColorMatchesPageBackground(t *testing.T) {
+	Init()
+	var b strings.Builder
+	err := renderOfflinePage(&b)
+	if err != nil {
+		t.Fatalf("renderOfflinePage() error = %v", err)
+	}
+
+	want := `<meta name="theme-color" content="` + seasons.GetCurrentColorScheme().C50 + `" />`
+	if !strings.Contains(b.String(), want) {
+		t.Fatalf("offline page should use the page background color for PWA chrome, body: %s", b.String())
 	}
 }
 

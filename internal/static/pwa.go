@@ -130,7 +130,7 @@ func renderOfflinePage(w io.Writer) error {
 		Colors            seasons.ColorScheme
 	}{
 		TailwindAssetPath: TailwindAssetPath,
-		ThemeColor:        scheme.C600,
+		ThemeColor:        scheme.C50,
 		Colors:            scheme,
 	}
 
