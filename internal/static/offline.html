@@ -41,23 +41,22 @@
       const section = document.querySelector("[data-offline-recipes-section]");
       const list = document.querySelector("[data-offline-recipes-list]");
 
-      if (!section || !list || !("caches" in window)) {
+      if (!("caches" in window)) {
         return;
+      }
+      if (!section || !list) {
+        throw new Error("offline recipe list elements are missing");
       }
 
       const titleFromResponse = async (response) => {
         if (!response) {
-          return "";
+          throw new Error("cached recipe response is missing");
         }
-        try {
-          const html = await response.clone().text();
-          const doc = new DOMParser().parseFromString(html, "text/html");
-          // TODO: Cache recipe titles separately so the offline page does not
-          // need to parse cached HTML just to label these links.
-          return doc.title.trim();
-        } catch {
-          return "";
-        }
+        const html = await response.clone().text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        // TODO: Cache recipe titles separately so the offline page does not
+        // need to parse cached HTML just to label these links.
+        return doc.title.trim();
       };
 
       const recipeURLsFromList = async (cache) => {
@@ -77,8 +76,7 @@
           return;
         }
 
-        const uniqueURLs = [...new Set(recipeURLs)];
-        const rows = await Promise.all(uniqueURLs.map(async (href) => {
+        const rows = await Promise.all(recipeURLs.map(async (href) => {
           const response = await cache.match(href);
           const title = await titleFromResponse(response);
           const item = document.createElement("li");
@@ -95,7 +93,7 @@
         section.classList.remove("hidden");
       };
 
-      renderRecipeLinks().catch(() => {});
+      renderRecipeLinks().catch((error) => console.error(error));
     })();
   </script>
 </body>

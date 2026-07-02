@@ -192,9 +192,12 @@ func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
 		`const savedRecipesListURL = "/user/recipes/offline-cache";`,
 		`await cache.match(savedRecipesListURL)`,
 		`body.split(/\r?\n/).filter(Boolean)`,
+		`throw new Error("offline recipe list elements are missing")`,
+		`throw new Error("cached recipe response is missing")`,
 		`return doc.title.trim()`,
 		`list.replaceChildren(...rows)`,
 		`section.classList.remove("hidden")`,
+		`renderRecipeLinks().catch((error) => console.error(error))`,
 	} {
 		if !strings.Contains(rendered, snippet) {
 			t.Fatalf("offline page should include cached recipe link behavior %q, page: %s", snippet, rendered)
@@ -209,6 +212,14 @@ func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
 	}
 	if strings.Contains(rendered, "cache.keys()") {
 		t.Fatalf("offline page should only use the cached saved recipe list, page: %s", rendered)
+	}
+	if strings.Contains(rendered, "new Set(recipeURLs)") {
+		t.Fatalf("offline page should not dedupe cached recipe URLs, page: %s", rendered)
+	}
+	titleFunction := rendered[strings.Index(rendered, "const titleFromResponse"):]
+	titleFunction = titleFunction[:strings.Index(titleFunction, "const recipeURLsFromList")]
+	if strings.Contains(titleFunction, "catch") {
+		t.Fatalf("titleFromResponse should not catch title parsing errors separately, function: %s", titleFunction)
 	}
 }
 
