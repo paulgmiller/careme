@@ -145,6 +145,10 @@ func TestRegisterServesManifestNameByHost(t *testing.T) {
 				ShortName       string `json:"short_name"`
 				BackgroundColor string `json:"background_color"`
 				ThemeColor      string `json:"theme_color"`
+				Icons           []struct {
+					Src     string `json:"src"`
+					Purpose string `json:"purpose"`
+				} `json:"icons"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &manifest); err != nil {
 				t.Fatalf("decode manifest: %v", err)
@@ -157,6 +161,14 @@ func TestRegisterServesManifestNameByHost(t *testing.T) {
 			}
 			if manifest.ThemeColor != manifest.BackgroundColor {
 				t.Fatalf("manifest theme_color = %q, want background_color %q", manifest.ThemeColor, manifest.BackgroundColor)
+			}
+			if len(manifest.Icons) != 2 {
+				t.Fatalf("manifest icon count = %d, want 2", len(manifest.Icons))
+			}
+			for _, icon := range manifest.Icons {
+				if icon.Purpose != "any maskable" {
+					t.Fatalf("manifest icon %s purpose = %q, want any maskable", icon.Src, icon.Purpose)
+				}
 			}
 		})
 	}
