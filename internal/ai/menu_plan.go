@@ -141,7 +141,7 @@ Try and ensure variety across cuisines, anchor ingredients, techniques, and side
 Choose anchor_ingredient and side_vegetable from the provided TSV ingredients. Use the exact ingredient Description text from the TSV. Do not choose an unavailable related ingredient; use the available ingredient's name instead.
 Prioritize seasonal ingredients, sale value, practical weeknight cooking.
 Assign user directions to recipe_instructions only for the specific recipe plans where they belong. If a user direction applies to every dish, repeat it in every recipe plan's recipe_instructions. If the user mentions having a limited ingredient without asking for it in every dish, assign it to only one fitting recipe.
-Return one chef_note_suggestion: a short, plain-language example of useful feedback the cook could type before asking for a new menu. Tailor it to the planned dishes, available ingredients, seasonality, and likely tradeoffs.
+Return one chef_note_suggestion: concise example feedback the cook could type before asking for a new menu. Tailor it to the planned dishes, available ingredients, seasonality, and likely tradeoffs. It must be 24 characters or fewer, fit in a mobile text box, and be a fragment, not a sentence. Good examples: "less spicy", "faster dinners", "more vegetables", "no seafood".
 Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
 
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
