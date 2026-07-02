@@ -41,9 +41,12 @@ function cacheSavedRecipeURLs(body) {
           credentials: "same-origin",
           cache: "reload",
         });
-                return fetch(request)
-                  .then((response) => {
-                    if (response && response.ok) {
+        // Recipe pages are refreshed on each sync so offline copies pick up
+        // later additions like questions, generated images, and wine pairings.
+        // Ideally the app would trigger this only when one of those changes.
+        return fetch(request)
+          .then((response) => {
+            if (response && response.ok) {
                       return cache.put(url, response);
                     }
                     return undefined;

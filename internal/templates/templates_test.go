@@ -608,6 +608,15 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 	if !strings.Contains(rendered, `CAREME_SYNC_SAVED_RECIPES`) {
 		t.Fatalf("home page should tell the service worker to sync saved recipes, body: %s", rendered)
 	}
+	if !strings.Contains(rendered, `caremeSavedRecipesSynced`) {
+		t.Fatalf("home page should avoid syncing saved recipes on every page load, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `syncSavedRecipesForOffline().then((synced) =>`) {
+		t.Fatalf("home page should wait for saved recipe sync before marking it complete, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `if (synced) sessionStorage.setItem("caremeSavedRecipesSynced", "1");`) {
+		t.Fatalf("home page should set saved recipe sync flag only after success, body: %s", rendered)
+	}
 	if !strings.Contains(rendered, `careme:saved-recipes-changed`) {
 		t.Fatalf("home page should refresh offline saved recipes after save changes, body: %s", rendered)
 	}

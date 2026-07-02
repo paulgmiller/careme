@@ -9,18 +9,31 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/static/app-icon-192.png">
 <script>
   if ("serviceWorker" in navigator) {
+    // The service worker owns the actual offline recipe refresh. This page
+    // helper only tells the active worker when a sync should happen.
     function syncSavedRecipesForOffline() {
       return navigator.serviceWorker.ready
         .then((registration) => {
           const worker = navigator.serviceWorker.controller || registration.active;
-          if (worker) worker.postMessage({ type: "CAREME_SYNC_SAVED_RECIPES" });
+          if (!worker) return false;
+          worker.postMessage({ type: "CAREME_SYNC_SAVED_RECIPES" });
+          return true;
         })
-        .catch(() => {});
+        .catch(() => false);
     }
 
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").then(syncSavedRecipesForOffline).catch(() => {});
+      navigator.serviceWorker.register("/sw.js").then(() => {
+        // Do one startup sync per tab/session. Saved recipe changes below still
+        // trigger immediate syncs after the page has loaded.
+        if (sessionStorage.getItem("caremeSavedRecipesSynced") === "1") return;
+        syncSavedRecipesForOffline().then((synced) => {
+          if (synced) sessionStorage.setItem("caremeSavedRecipesSynced", "1");
+        });
+      }).catch(() => {});
     });
+    // HTMX save/dismiss/remove responses fire this event after server state
+    // changes, so the worker refreshes offline recipe pages right away.
     document.addEventListener("careme:saved-recipes-changed", syncSavedRecipesForOffline);
   }
 </script>
