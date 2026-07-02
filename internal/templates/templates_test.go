@@ -576,6 +576,7 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 		t.Fatalf("Init() error = %v", err)
 	}
 
+	style := seasons.GetCurrentStyle()
 	data := struct {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
@@ -583,7 +584,7 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 		User            *utypes.User
 		ServerSignedIn  bool
 	}{
-		Style: seasons.GetCurrentStyle(),
+		Style: style,
 	}
 
 	var buf bytes.Buffer
@@ -594,6 +595,9 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 	rendered := buf.String()
 	if !strings.Contains(rendered, `<link rel="manifest" href="/manifest.webmanifest">`) {
 		t.Fatalf("home page should include manifest link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<meta name="theme-color" content="`+style.Colors.C50+`">`) {
+		t.Fatalf("home page should use the page background color for PWA chrome, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, `<link rel="apple-touch-icon" href="/static/app-icon-192.png">`) {
 		t.Fatalf("home page should include app icon link, body: %s", rendered)
