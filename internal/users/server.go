@@ -87,17 +87,8 @@ func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request
 	}
 
 	urls := make([]string, 0, 10)
-	seen := make(map[string]bool)
-	for _, recipe := range currentUser.LastRecipes {
-		hash := strings.TrimSpace(recipe.Hash)
-		if hash == "" || seen[hash] {
-			continue
-		}
-		seen[hash] = true
-		urls = append(urls, s.publicOrigin+"/recipe/"+url.PathEscape(hash))
-		if len(urls) == 10 {
-			break
-		}
+	for _, recipe := range lo.Take(currentUser.LastRecipes, 10) {
+		urls = append(urls, s.publicOrigin+"/recipe/"+url.PathEscape(recipe.Hash))
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
