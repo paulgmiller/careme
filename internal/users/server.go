@@ -169,7 +169,6 @@ func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	w.Header().Set("HX-Trigger", "careme:saved-recipes-changed")
 	w.WriteHeader(http.StatusOK)
 }
 

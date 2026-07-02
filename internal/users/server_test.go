@@ -499,8 +499,8 @@ func TestHandleRemoveUserRecipe_HTMXRemovesMatchingRecipeWithoutRedirect(t *test
 	if got := rr.Header().Get("Location"); got != "" {
 		t.Fatalf("expected no redirect location for htmx request, got %q", got)
 	}
-	if got := rr.Header().Get("HX-Trigger"); got != "careme:saved-recipes-changed" {
-		t.Fatalf("expected saved recipes sync trigger, got %q", got)
+	if got := rr.Header().Get("HX-Trigger"); got != "" {
+		t.Fatalf("expected no saved recipes sync trigger for remove, got %q", got)
 	}
 
 	updated, err := storage.GetByID("user-1")

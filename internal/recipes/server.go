@@ -816,7 +816,6 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setTextContent(w)
-	w.Header().Set("HX-Trigger", "careme:saved-recipes-changed")
 	_, err = w.Write(response.Bytes())
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
