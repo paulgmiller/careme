@@ -40,7 +40,6 @@ var adminMealPlanPageTmpl = template.Must(template.New("admin-mealplan").Parse(`
 <body>
   <nav>
     <a href="/admin/users">Users</a> |
-    <a href="/admin/critiques">Recipe Critiques</a> |
     <a href="/admin/mealplan/{{.StartHash}}">Meal Plan</a>
   </nav>
   <h1>Meal Plan Chain</h1>

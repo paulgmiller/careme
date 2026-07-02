@@ -132,6 +132,11 @@
         </div>
       </div>
 
+      {{if .AdminLinks}}
+      <p class="text-center text-[0.6875rem] text-ink-400">
+        {{range $index, $link := .AdminLinks}}{{if $index}} &middot; {{end}}<a href="{{$link.URL}}" class="hover:text-ink-500">{{$link.Label}}</a>{{end}}
+      </p>
+      {{end}}
       <p class="text-center text-sm text-ink-500">Planned by Careme.</p>
     </section>
   </main>
