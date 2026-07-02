@@ -45,18 +45,6 @@
         return;
       }
 
-      const recipePath = (rawURL) => {
-        try {
-          const url = new URL(rawURL, window.location.origin);
-          if (url.origin !== window.location.origin || !url.pathname.startsWith("/recipe/")) {
-            return "";
-          }
-          return url.pathname + url.search + url.hash;
-        } catch {
-          return "";
-        }
-      };
-
       const titleFromResponse = async (response) => {
         if (!response) {
           return "";
@@ -64,7 +52,9 @@
         try {
           const html = await response.clone().text();
           const doc = new DOMParser().parseFromString(html, "text/html");
-          return (doc.querySelector("h1")?.textContent || doc.title || "").trim();
+          // TODO: Cache recipe titles separately so the offline page does not
+          // need to parse cached HTML just to label these links.
+          return doc.title.trim();
         } catch {
           return "";
         }
@@ -76,18 +66,12 @@
           return [];
         }
         const body = await cachedList.text();
-        return body.split(/\r?\n/).map(recipePath).filter(Boolean);
-      };
-
-      const recipeURLsFromKeys = async (cache) => {
-        const keys = await cache.keys();
-        return keys.map((request) => recipePath(request.url)).filter(Boolean);
+        return body.split(/\r?\n/).filter(Boolean);
       };
 
       const renderRecipeLinks = async () => {
         const cache = await caches.open(savedRecipesCacheName);
-        const listedURLs = await recipeURLsFromList(cache);
-        const recipeURLs = listedURLs.length ? listedURLs : await recipeURLsFromKeys(cache);
+        const recipeURLs = await recipeURLsFromList(cache);
 
         if (!recipeURLs.length) {
           return;

@@ -191,16 +191,24 @@ func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
 		`const savedRecipesCacheName = "careme-saved-recipes-v1";`,
 		`const savedRecipesListURL = "/user/recipes/offline-cache";`,
 		`await cache.match(savedRecipesListURL)`,
-		`body.split(/\r?\n/).map(recipePath).filter(Boolean)`,
-		`request.url`,
-		`!url.pathname.startsWith("/recipe/")`,
-		`doc.querySelector("h1")?.textContent || doc.title`,
+		`body.split(/\r?\n/).filter(Boolean)`,
+		`return doc.title.trim()`,
 		`list.replaceChildren(...rows)`,
 		`section.classList.remove("hidden")`,
 	} {
 		if !strings.Contains(rendered, snippet) {
 			t.Fatalf("offline page should include cached recipe link behavior %q, page: %s", snippet, rendered)
 		}
+	}
+
+	if !strings.Contains(string(offlineHTML), "Cache recipe titles separately") {
+		t.Fatalf("offline page source should explain the cached HTML title parsing")
+	}
+	if strings.Contains(rendered, "recipePath") {
+		t.Fatalf("offline page should trust cached recipe URLs without a recipePath helper, page: %s", rendered)
+	}
+	if strings.Contains(rendered, "cache.keys()") {
+		t.Fatalf("offline page should only use the cached saved recipe list, page: %s", rendered)
 	}
 }
 
