@@ -155,7 +155,7 @@ func TestFormatShoppingListHTML_ChefNotesUsesEmptyWithoutMenuPlanSuggestions(t *
 
 	html := assertHTTPSuccess(t, w)
 	assert.Contains(t, html, `name="instructions"`)
-	assert.Regexp(t, `placeholder=""`, html)
+	assert.Regexp(t, `placeholder="e.g. make it vegetarian"`, html)
 }
 
 func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
