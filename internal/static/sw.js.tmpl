@@ -1,6 +1,5 @@
 const CACHE_NAME = {{.CacheName}};
 const SAVED_RECIPES_CACHE_NAME = "careme-saved-recipes-v1";
-const SAVED_RECIPES_LIMIT = 10;
 const PRECACHE_URLS = {{.PrecacheURLs}};
 const AUTH_PATHS = new Set({{.AuthPaths}});
 
@@ -33,65 +32,25 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-function savedRecipeURL(value) {
-  const url = new URL(value, self.location.origin);
-  if (url.origin !== self.location.origin) {
-    return null;
-  }
-  if (!url.pathname.startsWith("/recipe/") || url.pathname.endsWith("/image")) {
-    return null;
-  }
-  url.hash = "";
-  return url;
-}
-
-function pruneSavedRecipeCache(cache, keepURLs) {
-  return cache.keys().then((requests) =>
-    Promise.all(
-      requests.map((request) => {
-        const url = new URL(request.url);
-        if (url.origin === self.location.origin && url.pathname.startsWith("/recipe/") && !keepURLs.has(url.href)) {
-          return cache.delete(request);
-        }
-        return Promise.resolve(false);
-      }),
-    ),
-  );
-}
-
-function cacheSavedRecipeURLs(values) {
-  const urls = [];
-  const seen = new Set();
-  for (const value of values) {
-    const url = savedRecipeURL(value);
-    if (!url || seen.has(url.href)) {
-      continue;
-    }
-    seen.add(url.href);
-    urls.push(url);
-    if (urls.length >= SAVED_RECIPES_LIMIT) {
-      break;
-    }
-  }
-
-  const keepURLs = new Set(urls.map((url) => url.href));
+function cacheSavedRecipeURLs(body) {
+  const urls = body.split(/\r?\n/).filter(Boolean);
   return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
     Promise.all(
       urls.map((url) => {
-        const request = new Request(url.href, {
+        const request = new Request(url, {
           credentials: "same-origin",
           cache: "reload",
         });
-        return fetch(request)
-          .then((response) => {
-            if (response && response.ok) {
-              return cache.put(url.href, response);
-            }
-            return undefined;
-          })
+                return fetch(request)
+                  .then((response) => {
+                    if (response && response.ok) {
+                      return cache.put(url, response);
+                    }
+                    return undefined;
+                  })
           .catch(() => undefined);
       }),
-    ).then(() => pruneSavedRecipeCache(cache, keepURLs)),
+    ),
   );
 }
 
@@ -106,7 +65,7 @@ function syncSavedRecipes() {
       }
       return response.text();
     })
-    .then((body) => cacheSavedRecipeURLs(body.split(/\r?\n/)))
+    .then(cacheSavedRecipeURLs)
     .catch(() => undefined);
 }
 

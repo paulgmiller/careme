@@ -49,8 +49,9 @@ func TestHandleOfflineRecipeCacheReturnsLatestTenSavedRecipes(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
 	s := &server{
-		storage: storage,
-		clerk:   testAuthClient{},
+		storage:      storage,
+		clerk:        testAuthClient{},
+		publicOrigin: "https://careme.example",
 	}
 
 	now := time.Now()
@@ -92,11 +93,40 @@ func TestHandleOfflineRecipeCacheReturnsLatestTenSavedRecipes(t *testing.T) {
 	if len(lines) != 10 {
 		t.Fatalf("expected 10 recipes, got %#v", lines)
 	}
-	if got, want := lines[0], "/recipe/hash-11"; got != want {
+	if got, want := lines[0], "https://careme.example/recipe/hash-11"; got != want {
 		t.Fatalf("expected newest recipe URL %q, got %q", want, got)
 	}
-	if got, want := lines[9], "/recipe/hash-2"; got != want {
+	if got, want := lines[9], "https://careme.example/recipe/hash-2"; got != want {
 		t.Fatalf("expected tenth recipe URL %q, got %q", want, got)
+	}
+}
+
+func TestNewHandlerStoresConfiguredPublicOriginForOfflineRecipes(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := NewHandler(storage, failingLocationGetter{}, testAuthClient{}, nil, "https://configured.example/")
+	now := time.Now()
+	err := storage.Update(&utypes.User{
+		ID:          "user-1",
+		Email:       []string{"user@example.com"},
+		CreatedAt:   now,
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{
+			{Title: "Recipe", Hash: "hash-1", CreatedAt: now},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/user/recipes/offline-cache", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleOfflineRecipeCache(rr, req)
+
+	if got, want := strings.TrimSpace(rr.Body.String()), "https://configured.example/recipe/hash-1"; got != want {
+		t.Fatalf("expected configured origin URL %q, got %q", want, got)
 	}
 }
 

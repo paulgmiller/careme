@@ -37,6 +37,7 @@ type server struct {
 	locGetter          locationGetter
 	clerk              auth.AuthClient // make an interface
 	unsubscribeFactory UnsubscribeTokenFactory
+	publicOrigin       string
 }
 
 type pastRecipeView struct {
@@ -52,13 +53,14 @@ const (
 )
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient, unsubscribe UnsubscribeTokenFactory) *server {
+func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient, unsubscribe UnsubscribeTokenFactory, publicOrigin string) *server {
 	return &server{
 		storage:            storage,
 		userTmpl:           templates.User,
 		locGetter:          locGetter,
 		clerk:              clerkClient,
 		unsubscribeFactory: unsubscribe,
+		publicOrigin:       strings.TrimRight(publicOrigin, "/"),
 	}
 }
 
@@ -92,7 +94,7 @@ func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request
 			continue
 		}
 		seen[hash] = true
-		urls = append(urls, "/recipe/"+url.PathEscape(hash))
+		urls = append(urls, s.publicOrigin+"/recipe/"+url.PathEscape(hash))
 		if len(urls) == 10 {
 			break
 		}
