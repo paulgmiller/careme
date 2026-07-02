@@ -95,6 +95,33 @@ func TestRegisterServesFontFiles(t *testing.T) {
 	}
 }
 
+func TestRegisterServesFontsCSS(t *testing.T) {
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, FontsAssetPath, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fonts css response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/css; charset=utf-8" {
+		t.Fatalf("fonts css content type = %q, want text/css; charset=utf-8", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Fatalf("fonts css cache control = %q", got)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `font-display: optional`) {
+		t.Fatalf("fonts css should prefer optional font display, got %q", body)
+	}
+	if !strings.Contains(body, `--font-sans: "Inter"`) {
+		t.Fatalf("fonts css should override font variables, got %q", body)
+	}
+}
+
 func TestRegisterServesUserClerkBillingJS(t *testing.T) {
 	Init()
 	mux := http.NewServeMux()

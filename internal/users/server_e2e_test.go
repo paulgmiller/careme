@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
 	cfg.Clerk.Domain = "bold-salmon-53.clerk.accounts.dev"
-	if err := templates.Init(cfg, "dummyhash"); err != nil {
+	if err := templates.Init(cfg, "dummyhash", "dummyfonts"); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())

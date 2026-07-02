@@ -243,7 +243,7 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 }
 
 func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css", "dummyfonts.css"))
 	extractor := &fakeExtractor{}
 	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
@@ -268,7 +268,7 @@ func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 }
 
 func TestHandlePostRejectsNonHTMXBeforeParsingUpload(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css", "dummyfonts.css"))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
 		t.Fatal("parsePhotos should not be called for non-HTMX posts")
@@ -284,7 +284,7 @@ func TestHandlePostRejectsNonHTMXBeforeParsingUpload(t *testing.T) {
 }
 
 func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css", "dummyfonts.css"))
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	extractor := &fakeExtractor{
@@ -331,7 +331,7 @@ func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
 }
 
 func TestHandleStatusRendersPhotoAndIngredientProgress(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css", "dummyfonts.css"))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	status := analysisStatus{
 		ID:              "job-running",
@@ -375,7 +375,7 @@ func TestHandleStatusRedirectsCompletedJob(t *testing.T) {
 }
 
 func TestHandleStatusReturnsFailedJobAsErrorFragment(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css", "dummyfonts.css"))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
 		ID:      "job-failed",
@@ -431,7 +431,7 @@ func TestHandleStatusRejectsAnonymousUser(t *testing.T) {
 }
 
 func TestHandleGetRendersClerkRefreshData(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css", "dummyfonts.css"))
 	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
 		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),

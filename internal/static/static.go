@@ -14,6 +14,9 @@ import (
 //go:embed tailwind.css
 var tailwindCSS []byte
 
+//go:embed fonts.css
+var fontsCSS []byte
+
 //go:embed htmx@2.0.8.js
 var htmx208JS []byte
 
@@ -48,10 +51,13 @@ var backgroundSpring []byte
 var backgroundSummer []byte
 
 var TailwindAssetPath string
+var FontsAssetPath string
 
 func Init() {
 	tailwindHash := fmt.Sprintf("%x", sha256.Sum256(tailwindCSS))
 	TailwindAssetPath = fmt.Sprintf("/static/tailwind.%s.css", tailwindHash[:12])
+	fontsHash := fmt.Sprintf("%x", sha256.Sum256(fontsCSS))
+	FontsAssetPath = fmt.Sprintf("/static/fonts.%s.css", fontsHash[:12])
 }
 
 // Register serves static assets and wires template asset paths.
@@ -61,6 +67,14 @@ func Register(mux routing.Registrar) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		if _, err := w.Write(tailwindCSS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
+		}
+	})
+
+	mux.HandleFunc(FontsAssetPath, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		if _, err := w.Write(fontsCSS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write fonts css", "error", err)
 		}
 	})
 
