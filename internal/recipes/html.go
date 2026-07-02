@@ -133,6 +133,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 		AdminLinks: []adminLinkView{
 			{Label: "Meal plan", URL: "/admin/mealplan/" + hash},
+			{Label: "Prompt", URL: "/admin/prompt/menu/" + hash},
 			{Label: "Ingredients", URL: "/admin/ingredients/" + hash},
 		},
 	}

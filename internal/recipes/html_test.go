@@ -119,6 +119,9 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `href="/admin/mealplan/`+p.Hash()+`"`) {
 		t.Error("shopping list HTML should link to admin meal plan")
 	}
+	if !strings.Contains(html, `href="/admin/prompt/menu/`+p.Hash()+`"`) {
+		t.Error("shopping list HTML should link to admin menu prompt")
+	}
 	if !strings.Contains(html, `href="/admin/ingredients/`+p.Hash()+`"`) {
 		t.Error("shopping list HTML should link to admin ingredients")
 	}
