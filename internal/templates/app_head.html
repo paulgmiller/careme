@@ -15,21 +15,14 @@
       return navigator.serviceWorker.ready
         .then((registration) => {
           const worker = navigator.serviceWorker.controller || registration.active;
-          if (!worker) return false;
-          worker.postMessage({ type: "CAREME_SYNC_SAVED_RECIPES" });
-          return true;
+          if (worker) worker.postMessage({ type: "CAREME_SYNC_SAVED_RECIPES" });
         })
-        .catch(() => false);
+        .catch(() => {});
     }
 
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("/sw.js").then(() => {
-        // Do one startup sync per tab/session. Saved recipe changes below still
-        // trigger immediate syncs after the page has loaded.
-        if (sessionStorage.getItem("caremeSavedRecipesSynced") === "1") return;
-        syncSavedRecipesForOffline().then((synced) => {
-          if (synced) sessionStorage.setItem("caremeSavedRecipesSynced", "1");
-        });
+        syncSavedRecipesForOffline();
       }).catch(() => {});
     });
     // HTMX save/dismiss/remove responses fire this event after server state
