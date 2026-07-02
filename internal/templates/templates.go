@@ -30,7 +30,7 @@ var Home,
 	FarmersMarket,
 	Mail *template.Template
 
-func Init(config *config.Config, tailwindAssetPath string) error {
+func Init(config *config.Config, tailwindAssetPath, fontsAssetPath string) error {
 	funcs := template.FuncMap{
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
@@ -46,6 +46,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 		"PublicOrigin":      func() string { return config.ResolvedPublicOrigin() },
 		"SignInPath":        signInPath,
 		"TailwindAssetPath": func() string { return tailwindAssetPath },
+		"FontsAssetPath":    func() string { return fontsAssetPath },
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {

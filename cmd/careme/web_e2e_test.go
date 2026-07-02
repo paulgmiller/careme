@@ -221,7 +221,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	cfg := &config.Config{Mocks: config.MockConfig{Enable: true}}
-	err := templates.Init(cfg, "dummyhash") // initialize templates so they don't hit the file system during tests
+	err := templates.Init(cfg, "dummyhash", "dummyfonts") // initialize templates so they don't hit the file system during tests
 	if err != nil {
 		t.Fatalf("failed to create templates %v", err)
 	}

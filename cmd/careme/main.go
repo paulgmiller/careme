@@ -44,7 +44,7 @@ func main() {
 	defer close()
 
 	static.Init()
-	if err := templates.Init(cfg, static.TailwindAssetPath); err != nil {
+	if err := templates.Init(cfg, static.TailwindAssetPath, static.FontsAssetPath); err != nil {
 		log.Fatalf("failed to initialize templates: %s", err)
 	}
 

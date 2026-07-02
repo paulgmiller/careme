@@ -17,7 +17,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if err := templates.Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := templates.Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())

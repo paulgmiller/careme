@@ -128,6 +128,29 @@ func TestBrowserPageTemplatesIncludeAppHead(t *testing.T) {
 	}
 }
 
+func TestTailwindHeadLazyLoadsFonts(t *testing.T) {
+	if err := Init(&config.Config{}, "/static/tailwind.test.css", "/static/fonts.test.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := seasons.GetCurrentStyle()
+	var buf bytes.Buffer
+	if err := Home.ExecuteTemplate(&buf, "tailwind_head", data); err != nil {
+		t.Fatalf("tailwind_head execute error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, `<link rel="stylesheet" href="/static/tailwind.test.css">`) {
+		t.Fatalf("tailwind_head should include blocking app css, got %s", rendered)
+	}
+	if !strings.Contains(rendered, `href="/static/fonts.test.css" media="print"`) {
+		t.Fatalf("tailwind_head should load fonts css asynchronously, got %s", rendered)
+	}
+	if !strings.Contains(rendered, `<noscript><link rel="stylesheet" href="/static/fonts.test.css"></noscript>`) {
+		t.Fatalf("tailwind_head should include noscript font fallback, got %s", rendered)
+	}
+}
+
 func firstElementClasses(node *html.Node, element string) (map[string]bool, bool) {
 	if node.Type == html.ElementNode && node.Data == element {
 		classes := make(map[string]bool)
@@ -194,7 +217,7 @@ func templateTitle(body string) (string, bool) {
 }
 
 func TestAboutTemplateRendersValidHTML(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -268,11 +291,11 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
@@ -311,11 +334,11 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
@@ -373,11 +396,11 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
 	cfg.Clerk.Domain = "clerk.example.com"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
@@ -417,7 +440,7 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 }
 
 func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -450,7 +473,7 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 }
 
 func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -484,7 +507,7 @@ func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
 }
 
 func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -532,7 +555,7 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 }
 
 func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -572,7 +595,7 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 }
 
 func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -619,11 +642,11 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg, "dummyhash.css", "dummyfonts.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}, "dummyhash.css", "dummyfonts.css"); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
