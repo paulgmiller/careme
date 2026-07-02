@@ -9,9 +9,19 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/static/app-icon-192.png">
 <script>
   if ("serviceWorker" in navigator) {
+    function syncSavedRecipesForOffline() {
+      return navigator.serviceWorker.ready
+        .then((registration) => {
+          const worker = navigator.serviceWorker.controller || registration.active;
+          if (worker) worker.postMessage({ type: "CAREME_SYNC_SAVED_RECIPES" });
+        })
+        .catch(() => {});
+    }
+
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.register("/sw.js").then(syncSavedRecipesForOffline).catch(() => {});
     });
+    document.addEventListener("careme:saved-recipes-changed", syncSavedRecipesForOffline);
   }
 </script>
 {{end}}

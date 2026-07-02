@@ -1,4 +1,6 @@
 const CACHE_NAME = {{.CacheName}};
+const SAVED_RECIPES_CACHE_NAME = "careme-saved-recipes-v1";
+const SAVED_RECIPES_LIMIT = 10;
 const PRECACHE_URLS = {{.PrecacheURLs}};
 const AUTH_PATHS = new Set({{.AuthPaths}});
 
@@ -13,7 +15,8 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// Delete old named caches when a new service worker version activates.
+// Delete old app-shell caches when a new service worker version activates.
+// Saved recipes use a stable cache so they survive service worker updates.
 // self.clients.claim() lets the refreshed worker control open tabs promptly.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -21,11 +24,96 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)),
+          keys
+            .filter((key) => key !== CACHE_NAME && key !== SAVED_RECIPES_CACHE_NAME)
+            .map((key) => caches.delete(key)),
         ),
       )
       .then(() => self.clients.claim()),
   );
+});
+
+function savedRecipeURL(value) {
+  const url = new URL(value, self.location.origin);
+  if (url.origin !== self.location.origin) {
+    return null;
+  }
+  if (!url.pathname.startsWith("/recipe/") || url.pathname.endsWith("/image")) {
+    return null;
+  }
+  url.hash = "";
+  return url;
+}
+
+function pruneSavedRecipeCache(cache, keepURLs) {
+  return cache.keys().then((requests) =>
+    Promise.all(
+      requests.map((request) => {
+        const url = new URL(request.url);
+        if (url.origin === self.location.origin && url.pathname.startsWith("/recipe/") && !keepURLs.has(url.href)) {
+          return cache.delete(request);
+        }
+        return Promise.resolve(false);
+      }),
+    ),
+  );
+}
+
+function cacheSavedRecipeURLs(values) {
+  const urls = [];
+  const seen = new Set();
+  for (const value of values) {
+    const url = savedRecipeURL(value);
+    if (!url || seen.has(url.href)) {
+      continue;
+    }
+    seen.add(url.href);
+    urls.push(url);
+    if (urls.length >= SAVED_RECIPES_LIMIT) {
+      break;
+    }
+  }
+
+  const keepURLs = new Set(urls.map((url) => url.href));
+  return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
+    Promise.all(
+      urls.map((url) => {
+        const request = new Request(url.href, {
+          credentials: "same-origin",
+          cache: "reload",
+        });
+        return fetch(request)
+          .then((response) => {
+            if (response && response.ok) {
+              return cache.put(url.href, response);
+            }
+            return undefined;
+          })
+          .catch(() => undefined);
+      }),
+    ).then(() => pruneSavedRecipeCache(cache, keepURLs)),
+  );
+}
+
+function syncSavedRecipes() {
+  return fetch("/user/recipes/offline-cache", {
+    credentials: "same-origin",
+    cache: "no-store",
+  })
+    .then((response) => {
+      if (!response.ok) {
+        return "";
+      }
+      return response.text();
+    })
+    .then((body) => cacheSavedRecipeURLs(body.split(/\r?\n/)))
+    .catch(() => undefined);
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "CAREME_SYNC_SAVED_RECIPES") {
+    event.waitUntil(syncSavedRecipes());
+  }
 });
 
 function cacheSuccessfulResponse(request, response) {
@@ -76,9 +164,13 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Page navigations should show fresh server content when possible, then fall
-  // back to the rendered offline page from the install cache.
+  // back to cached saved recipes or the rendered offline page from the install cache.
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match("/offline")));
+    event.respondWith(
+      fetch(request).catch(() =>
+        caches.match(request).then((cached) => cached || caches.match("/offline")),
+      ),
+    );
     return;
   }
 

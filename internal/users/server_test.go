@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -41,6 +42,62 @@ type failingLocationGetter struct{}
 
 func (f failingLocationGetter) GetLocationByID(_ context.Context, _ string) (*locations.Location, error) {
 	return nil, errors.New("lookup failed")
+}
+
+func TestHandleOfflineRecipeCacheReturnsLatestTenSavedRecipes(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := &server{
+		storage: storage,
+		clerk:   testAuthClient{},
+	}
+
+	now := time.Now()
+	user := &utypes.User{
+		ID:          "user-1",
+		Email:       []string{"user@example.com"},
+		CreatedAt:   now,
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{
+			{Title: "Oldest", Hash: "oldest", CreatedAt: now.Add(-13 * time.Hour)},
+		},
+	}
+	for i := 0; i < 12; i++ {
+		user.LastRecipes = append(user.LastRecipes, utypes.Recipe{
+			Title:     "Recipe " + strconv.Itoa(i),
+			Hash:      "hash-" + strconv.Itoa(i),
+			CreatedAt: now.Add(time.Duration(i) * time.Hour),
+		})
+	}
+	if err := storage.Update(user); err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/user/recipes/offline-cache", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleOfflineRecipeCache(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if got := rr.Header().Get("Cache-Control"); got != "no-store, no-cache, must-revalidate" {
+		t.Fatalf("expected no-store cache header, got %q", got)
+	}
+	if got := rr.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("expected text content type, got %q", got)
+	}
+	lines := strings.Fields(rr.Body.String())
+	if len(lines) != 10 {
+		t.Fatalf("expected 10 recipes, got %#v", lines)
+	}
+	if got, want := lines[0], "/recipe/hash-11"; got != want {
+		t.Fatalf("expected newest recipe URL %q, got %q", want, got)
+	}
+	if got, want := lines[9], "/recipe/hash-2"; got != want {
+		t.Fatalf("expected tenth recipe URL %q, got %q", want, got)
+	}
 }
 
 func TestHandleUser_SavesDirective(t *testing.T) {
@@ -378,6 +435,9 @@ func TestHandleRemoveUserRecipe_HTMXRemovesMatchingRecipeWithoutRedirect(t *test
 	}
 	if got := rr.Header().Get("Location"); got != "" {
 		t.Fatalf("expected no redirect location for htmx request, got %q", got)
+	}
+	if got := rr.Header().Get("HX-Trigger"); got != "careme:saved-recipes-changed" {
+		t.Fatalf("expected saved recipes sync trigger, got %q", got)
 	}
 
 	updated, err := storage.GetByID("user-1")

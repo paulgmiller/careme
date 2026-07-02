@@ -5,9 +5,11 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -62,10 +64,48 @@ func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.Aut
 
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
+	mux.HandleFunc("GET /user/recipes/offline-cache", s.handleOfflineRecipeCache)
 	mux.HandleFunc("POST /user/recipes/remove", s.handleRemoveUserRecipe)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
 	mux.HandleFunc("GET /user/unsubscribe", s.handleUnsubscribe)
 	mux.HandleFunc("GET /user/exists", s.handleExists)
+}
+
+func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			http.Error(w, "no valid session found", http.StatusUnauthorized)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for offline recipe cache", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+
+	urls := make([]string, 0, 10)
+	seen := make(map[string]bool)
+	for _, recipe := range currentUser.LastRecipes {
+		hash := strings.TrimSpace(recipe.Hash)
+		if hash == "" || seen[hash] {
+			continue
+		}
+		seen[hash] = true
+		urls = append(urls, "/recipe/"+url.PathEscape(hash))
+		if len(urls) == 10 {
+			break
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	for _, recipeURL := range urls {
+		if _, err := fmt.Fprintln(w, recipeURL); err != nil {
+			slog.ErrorContext(ctx, "failed to write offline recipe cache list", "user_id", currentUser.ID, "error", err)
+			return
+		}
+	}
 }
 
 func (s *server) handleExists(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +177,7 @@ func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	w.Header().Set("HX-Trigger", "careme:saved-recipes-changed")
 	w.WriteHeader(http.StatusOK)
 }
 

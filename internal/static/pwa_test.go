@@ -251,6 +251,37 @@ func TestServiceWorkerRefreshesSeasonalFavicon(t *testing.T) {
 	}
 }
 
+func TestServiceWorkerCachesSavedRecipesOffline(t *testing.T) {
+	Init()
+	var b strings.Builder
+	err := renderServiceWorker(&b)
+	if err != nil {
+		t.Fatalf("renderServiceWorker() error = %v", err)
+	}
+	rendered := b.String()
+
+	for _, snippet := range []string{
+		`const SAVED_RECIPES_CACHE_NAME = "careme-saved-recipes-v1";`,
+		`const SAVED_RECIPES_LIMIT = 10;`,
+		`key !== SAVED_RECIPES_CACHE_NAME`,
+		`CAREME_SYNC_SAVED_RECIPES`,
+		`syncSavedRecipes()`,
+		`fetch("/user/recipes/offline-cache"`,
+		`body.split(/\r?\n/)`,
+		`url.pathname.startsWith("/recipe/")`,
+		`url.pathname.endsWith("/image")`,
+		`pruneSavedRecipeCache(cache, keepURLs)`,
+	} {
+		if !strings.Contains(rendered, snippet) {
+			t.Fatalf("service worker should include saved recipe cache behavior %q, script: %s", snippet, rendered)
+		}
+	}
+
+	if !strings.Contains(rendered, `caches.match(request).then((cached) => cached || caches.match("/offline"))`) {
+		t.Fatalf("service worker should fall back to cached saved recipe navigations before offline page, script: %s", rendered)
+	}
+}
+
 func serviceWorkerPrecacheURLs(t *testing.T, script string) []string {
 	t.Helper()
 
