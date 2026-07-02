@@ -1,0 +1,33 @@
+{{define "app_head"}}
+{{template "tailwind_head" .}}
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="{{.Colors.C50}}">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Careme">
+<link rel="apple-touch-icon" href="/static/app-icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/app-icon-192.png">
+<script>
+  if ("serviceWorker" in navigator) {
+    // The service worker owns the actual offline recipe refresh. This page
+    // helper only tells the active worker when a sync should happen.
+    function syncSavedRecipesForOffline() {
+      return navigator.serviceWorker.ready
+        .then((registration) => {
+          const worker = navigator.serviceWorker.controller || registration.active;
+          if (worker) worker.postMessage({ type: "CAREME_SYNC_SAVED_RECIPES" });
+        })
+        .catch(() => {});
+    }
+
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").then(() => {
+        syncSavedRecipesForOffline();
+      }).catch(() => {});
+    });
+    // HTMX save/dismiss/remove responses fire this event after server state
+    // changes, so the worker refreshes offline recipe pages right away.
+    document.addEventListener("careme:saved-recipes-changed", syncSavedRecipesForOffline);
+  }
+</script>
+{{end}}
