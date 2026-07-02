@@ -1,0 +1,51 @@
+{
+  "packageId": "cooking.careme.twa",
+  "host": "careme.cooking",
+  "name": "Careme",
+  "launcherName": "Careme",
+  "display": "standalone",
+  "themeColor": "#FFFDF8",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#FFFDF8",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://careme.cooking/static/app-icon-512.png",
+  "maskableIconUrl": "https://careme.cooking/static/app-icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "/home/pmiller/careme_admin/careme-android/android.keystore",
+    "alias": "android"
+  },
+  "appVersionName": "1.1",
+  "appVersionCode": 5,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://careme.cooking/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://careme.cooking/",
+  "minSdkVersion": 21,
+  "orientation": "default",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1.1"
+}
