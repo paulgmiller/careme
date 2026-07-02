@@ -130,6 +130,39 @@ func TestNewHandlerStoresConfiguredPublicOriginForOfflineRecipes(t *testing.T) {
 	}
 }
 
+func TestHandleOfflineRecipeCacheKeepsRecipeHashPaddingUnescaped(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	s := &server{
+		storage:      storage,
+		clerk:        testAuthClient{},
+		publicOrigin: "https://careme.example",
+	}
+	now := time.Now()
+	err := storage.Update(&utypes.User{
+		ID:          "user-1",
+		Email:       []string{"user@example.com"},
+		CreatedAt:   now,
+		ShoppingDay: "Saturday",
+		LastRecipes: []utypes.Recipe{
+			{Title: "Padded Hash", Hash: "abc123==", CreatedAt: now},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/user/recipes/offline-cache", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleOfflineRecipeCache(rr, req)
+
+	if got, want := strings.TrimSpace(rr.Body.String()), "https://careme.example/recipe/abc123=="; got != want {
+		t.Fatalf("expected raw padded hash URL %q, got %q", want, got)
+	}
+}
+
 func TestHandleUser_SavesDirective(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))

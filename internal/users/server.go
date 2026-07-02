@@ -9,7 +9,6 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -88,7 +87,7 @@ func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request
 
 	urls := make([]string, 0, 10)
 	for _, recipe := range lo.Take(currentUser.LastRecipes, 10) {
-		urls = append(urls, s.publicOrigin+"/recipe/"+url.PathEscape(recipe.Hash))
+		urls = append(urls, s.publicOrigin+"/recipe/"+recipe.Hash)
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
