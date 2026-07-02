@@ -64,6 +64,10 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
+	instructions := strings.TrimSpace(p.Instructions)
+	if instructions == "" && l.Plan != nil {
+		instructions = l.Plan.ChefNoteSuggestion
+	}
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
@@ -111,7 +115,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		MetaDescription:      shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
 		ClarityScript:        templates.ClarityScript(ctx),
 		GoogleTagScript:      templates.GoogleTagScript(),
-		Instructions:         p.Instructions,
+		Instructions:         instructions,
 		Hash:                 hash,
 		Recipes:              recipeViews,
 		ShoppingList:         shoppingListForDisplay(combinedIngredients),
