@@ -47,8 +47,8 @@ type authClient interface {
 	GetUserIDFromRequest(r *http.Request) (string, error)
 }
 
-type LocationResolver interface {
-	ZipFinder
+type locationResolver interface {
+	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
@@ -56,7 +56,7 @@ type Handler struct {
 	uploader    *uploader
 	auth        authClient
 	extractor   IngredientExtractor
-	zipFinder   LocationResolver
+	zipFinder   locationResolver
 	statusStore *analysisStatusStore
 	// exposed for tests
 	parsePhotos func(context.Context, *http.Request) ([]Photo, error)
@@ -73,7 +73,7 @@ func (p Photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor, zipFinder LocationResolver) *Handler {
+func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor, zipFinder locationResolver) *Handler {
 	return &Handler{
 		uploader:    uploader,
 		auth:        authClient,
@@ -226,7 +226,7 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	update(status)
 
 	date := farmersMarketDate(time.Now(), zip)
-	market, _, err := h.uploader.saveUpload(ctx, name, coord.Lat, coord.Lon, len(photos), date, ingredients)
+	market, err := h.uploader.saveUpload(ctx, name, coord, zip, len(photos), date, ingredients)
 	if err != nil {
 		fail("Could not save this market. Try again, chef.", err)
 		return
@@ -328,18 +328,8 @@ func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string
 	latRaw := strings.TrimSpace(r.FormValue("lat"))
 	lonRaw := strings.TrimSpace(r.FormValue("lon"))
 	if latRaw != "" || lonRaw != "" {
-		if latRaw == "" || lonRaw == "" {
-			return geo.Coordinate{}, "", fmt.Errorf("use both latitude and longitude, or add a ZIP code")
-		}
 		coord, err := geo.FromString(latRaw, lonRaw)
-		switch {
-		case errors.Is(err, geo.ErrInvalidLatitude):
-			return geo.Coordinate{}, "", fmt.Errorf("that latitude does not look right")
-		case errors.Is(err, geo.ErrInvalidLongitude):
-			return geo.Coordinate{}, "", fmt.Errorf("that longitude does not look right")
-		case errors.Is(err, geo.ErrInvalidCoordinate):
-			return geo.Coordinate{}, "", fmt.Errorf("that location does not look right")
-		case err != nil:
+		if err != nil {
 			return geo.Coordinate{}, "", fmt.Errorf("that location does not look right")
 		}
 		zip, ok := h.zipFinder.NearestZIPToCoordinates(coord.Lat, coord.Lon)
@@ -349,10 +339,7 @@ func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string
 		return coord, zip, nil
 	}
 
-	zip, ok := normalizeMarketZIP(r.FormValue("zip"))
-	if !ok {
-		return geo.Coordinate{}, "", fmt.Errorf("add a ZIP code or use your current location")
-	}
+	zip := strings.TrimSpace(r.FormValue("zip"))
 	centroid, ok := h.zipFinder.ZipCentroidByZIP(zip)
 	if !ok {
 		return geo.Coordinate{}, "", fmt.Errorf("could not find that ZIP code")
@@ -362,26 +349,6 @@ func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string
 		return geo.Coordinate{}, "", fmt.Errorf("could not find that ZIP code")
 	}
 	return coord, zip, nil
-}
-
-func normalizeMarketZIP(raw string) (string, bool) {
-	raw = strings.TrimSpace(raw)
-	if len(raw) == 5 && isAllDigits(raw) {
-		return raw, true
-	}
-	if len(raw) == 10 && raw[5] == '-' && isAllDigits(raw[:5]) && isAllDigits(raw[6:]) {
-		return raw[:5], true
-	}
-	return "", false
-}
-
-func isAllDigits(value string) bool {
-	for i := 0; i < len(value); i++ {
-		if value[i] < '0' || value[i] > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) {

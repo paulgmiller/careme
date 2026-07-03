@@ -89,17 +89,16 @@ func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, ima
 }
 
 func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
-	uploader := NewUploader(NewStore(cache.NewInMemoryCache()), staticZipFinder{zip: "98101", ok: true})
+	uploader := NewUploader(NewStore(cache.NewInMemoryCache())
 	date := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 
-	first, ingredients, err := uploader.saveUpload(t.Context(), "Saturday Market", 47.61, -122.33, 2, date, []ai.InputIngredient{
+	first, err := uploader.saveUpload(t.Context(), "Saturday Market", 47.61, -122.33,  "98101", 2, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "Strawberries", Size: "1 pint"},
 	})
 	require.NoError(t, err)
-	require.Len(t, ingredients, 1)
 	require.Equal(t, "98101", first.ZipCode)
 
-	second, ingredients, err := uploader.saveUpload(t.Context(), "River Stalls", 47.611, -122.331, 1, date, []ai.InputIngredient{
+	second, err := uploader.saveUpload(t.Context(), "River Stalls", 47.611, -122.331,  "98101", 1, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "strawberries", Size: "1 pint"},
 		{ProductID: "B", Brand: "Hill Farm", Description: "Fresh basil", Size: "1 bunch"},
 	})
@@ -108,9 +107,6 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 	require.Equal(t, first.ID, second.ID)
 	require.ElementsMatch(t, []string{"Saturday Market", "River Stalls"}, second.Names)
 	require.Equal(t, 3, second.PhotoCount)
-	require.Len(t, ingredients, 2)
-	assert.Equal(t, "River Farm", ingredients[0].Brand)
-	assert.Equal(t, "Hill Farm", ingredients[1].Brand)
 }
 
 func TestFetchStaplesReturnsCurrentStoreDateInventory(t *testing.T) {
