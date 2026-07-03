@@ -36,6 +36,12 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			wantSnippet: TailwindAssetPath,
 		},
 		{
+			name:        "Android asset links",
+			path:        "/.well-known/assetlinks.json",
+			wantType:    "application/json; charset=utf-8",
+			wantSnippet: `"package_name": "cooking.careme.twa"`,
+		},
+		{
 			name:        "offline page",
 			path:        "/offline",
 			wantType:    "text/html; charset=utf-8",
