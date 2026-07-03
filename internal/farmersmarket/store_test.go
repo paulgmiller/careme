@@ -29,12 +29,24 @@ import (
 )
 
 type staticZipFinder struct {
-	zip string
-	ok  bool
+	zip      string
+	ok       bool
+	centroid geo.Coordinate
 }
 
 func (s staticZipFinder) NearestZIPToCoordinates(float64, float64) (string, bool) {
 	return s.zip, s.ok
+}
+
+func (s staticZipFinder) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
+	if !s.ok || zip != s.zip {
+		return locationtypes.ZipCentroid{}, false
+	}
+	coord := s.centroid
+	if !coord.Valid() {
+		coord = geo.Coordinate{Lat: 47.61, Lon: -122.33}
+	}
+	return locationtypes.ZipCentroid(coord), true
 }
 
 type staticZipLookup map[string]geo.Coordinate
@@ -181,23 +193,66 @@ func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.
 	assert.Equal(t, ChainName, got[0].Chain)
 }
 
-func TestAverageCoordinate(t *testing.T) {
-	got, err := AverageCoordinate([]Coordinate{
-		{Lat: 47.0, Lon: -122.0},
-		{Lat: 49.0, Lon: -124.0},
-	})
+func TestResolveMarketLocationUsesZIPCentroid(t *testing.T) {
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+	req := multipartRequestWithFields(t, map[string]string{"zip": "98101"}, "photos", "market.jpg", jpegBytes(t))
+	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
+
+	coord, zip, err := handler.resolveMarketLocation(req)
+
 	require.NoError(t, err)
-	assert.Equal(t, 48.0, got.Lat)
-	assert.Equal(t, -123.0, got.Lon)
+	assert.Equal(t, "98101", zip)
+	assert.Equal(t, Coordinate{Lat: 47.61, Lon: -122.33}, coord)
 }
 
-func TestParseUploadedPhotosRejectsImagesWithoutGPS(t *testing.T) {
+func TestResolveMarketLocationUsesCoordinatesAndNearestZIP(t *testing.T) {
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+	req := multipartRequestWithFields(t, map[string]string{
+		"lat": "47.620000",
+		"lon": "-122.340000",
+	}, "photos", "market.jpg", jpegBytes(t))
+	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
+
+	coord, zip, err := handler.resolveMarketLocation(req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "98101", zip)
+	assert.Equal(t, Coordinate{Lat: 47.62, Lon: -122.34}, coord)
+}
+
+func TestResolveMarketLocationRejectsUnknownZIP(t *testing.T) {
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+	req := multipartRequestWithFields(t, map[string]string{"zip": "00000"}, "photos", "market.jpg", jpegBytes(t))
+	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
+
+	_, _, err := handler.resolveMarketLocation(req)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not find that ZIP code")
+}
+
+func TestResolveMarketLocationRejectsInvalidCoordinates(t *testing.T) {
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+	req := multipartRequestWithFields(t, map[string]string{
+		"lat": "95",
+		"lon": "-122.340000",
+	}, "photos", "market.jpg", jpegBytes(t))
+	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
+
+	_, _, err := handler.resolveMarketLocation(req)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "location does not look right")
+}
+
+func TestParseUploadedPhotosAcceptsImagesWithoutGPS(t *testing.T) {
 	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
-	_, err := parseUploadedPhotos(t.Context(), req)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "could not read location")
+	photos, err := parseUploadedPhotos(t.Context(), req)
+	require.NoError(t, err)
+	require.Len(t, photos, 1)
+	assert.Equal(t, "image/jpeg", photos[0].contentType)
 }
 
 func TestParseUploadedPhotosRejectsTooManyPhotos(t *testing.T) {
@@ -242,7 +297,7 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "shared basil")
 }
 
-func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
+func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	extractor := &fakeExtractor{}
 	cacheStore := cache.NewInMemoryCache()
@@ -253,7 +308,7 @@ func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 		extractor,
 		staticZipFinder{zip: "98101", ok: true},
 	)
-	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
+	req := multipartRequestWithFields(t, nil, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
 
@@ -261,7 +316,7 @@ func TestHandlePostDoesNotCallAIWhenPhotosHaveNoGPS(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.False(t, extractor.called)
-	assert.Contains(t, rr.Body.String(), "could not read location")
+	assert.Contains(t, rr.Body.String(), "add a ZIP code or use your current location")
 	assert.Equal(t, "#farmers-market-error", rr.Header().Get("HX-Retarget"))
 	assert.Equal(t, "outerHTML", rr.Header().Get("HX-Reswap"))
 	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)
@@ -304,7 +359,7 @@ func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
 	})
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, extractor)
 	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
-		return []Photo{{contentType: "image/jpeg", content: []byte("apples"), coord: &Coordinate{Lat: 47.61, Lon: -122.33}}}, nil
+		return []Photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
 	}
 	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
@@ -328,6 +383,47 @@ func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
 		close(release)
 	})
 	handler.Wait()
+}
+
+func TestHandlePostHTMXAcceptsCoordinates(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	extractor := &fakeExtractor{
+		fn: func(ctx context.Context, _ string) ([]ai.InputIngredient, error) {
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			return []ai.InputIngredient{{ProductID: "A", Brand: "Test Farm", Description: "apples"}}, nil
+		},
+	}
+	t.Cleanup(func() {
+		releaseOnce.Do(func() {
+			close(release)
+		})
+	})
+	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, extractor)
+	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
+		return []Photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
+	}
+	req := multipartRequestWithFields(t, map[string]string{
+		"lat": "47.610000",
+		"lon": "-122.330000",
+	}, "photos", "market.jpg", jpegBytes(t))
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+
+	handler.handlePost(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `hx-get="/farmersmarket/status/`)
+	releaseOnce.Do(func() {
+		close(release)
+	})
+	handler.Wait()
+	assert.True(t, extractor.called)
 }
 
 func TestHandleStatusRendersPhotoAndIngredientProgress(t *testing.T) {
@@ -482,13 +578,21 @@ func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExt
 
 func multipartRequest(t *testing.T, fieldName, fileName string, data []byte) *http.Request {
 	t.Helper()
+	return multipartRequestWithFields(t, map[string]string{"zip": "98101"}, fieldName, fileName, data)
+}
+
+func multipartRequestWithFields(t *testing.T, fields map[string]string, fieldName, fileName string, data []byte) *http.Request {
+	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("name", "Test Market"))
+	for name, value := range fields {
+		require.NoError(t, writer.WriteField(name, value))
+	}
 	part, err := writer.CreateFormFile(fieldName, fileName)
 	require.NoError(t, err)
 	_, err = part.Write(data)
 	require.NoError(t, err)
-	require.NoError(t, writer.WriteField("name", "Test Market"))
 	require.NoError(t, writer.Close())
 	req := httptest.NewRequest(http.MethodPost, "/farmersmarket", &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())

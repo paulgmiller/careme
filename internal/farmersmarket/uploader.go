@@ -40,7 +40,7 @@ func NewContainerUploader(zipFinder ZipFinder) (*uploader, error) {
 // this is a terrible signature
 func (u *uploader) saveUpload(ctx context.Context, name string, lat, lon float64, photoCount int, date time.Time, ingredients []ai.InputIngredient) (*Market, []ai.InputIngredient, error) {
 	if photoCount <= 0 {
-		return nil, nil, fmt.Errorf("at least one geotagged photo is required")
+		return nil, nil, fmt.Errorf("at least one market photo is required")
 	}
 	coor := geo.Coordinate{Lat: lat, Lon: lon}
 	if !coor.Valid() {
