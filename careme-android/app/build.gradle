@@ -57,8 +57,8 @@ android {
         applicationId "cooking.careme.twa"
         minSdkVersion 21
         targetSdkVersion 35
-        versionCode 5
-        versionName "1.1"
+        versionCode 6
+        versionName "1.2"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name

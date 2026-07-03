@@ -1,9 +1,11 @@
 package static
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -82,6 +84,22 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 				t.Fatalf("GET %s body missing offline copy", tt.path)
 			}
 		})
+	}
+}
+
+func TestAndroidAssetLinksMatchesBubblewrapFingerprint(t *testing.T) {
+	const wantFingerprint = "AE:C5:D0:C3:DE:6E:12:A5:65:FD:1B:48:53:1B:47:4B:58:FC:5D:91:F5:93:7D:F2:44:4F:D8:55:70:B9:B0:62"
+
+	if !bytes.Contains(assetLinksJSON, []byte(wantFingerprint)) {
+		t.Fatalf("assetlinks.json missing fingerprint %q", wantFingerprint)
+	}
+
+	twaManifest, err := os.ReadFile("../../careme-android/twa-manifest.json")
+	if err != nil {
+		t.Fatalf("read Bubblewrap manifest: %v", err)
+	}
+	if !bytes.Contains(twaManifest, []byte(wantFingerprint)) {
+		t.Fatalf("Bubblewrap manifest missing fingerprint %q", wantFingerprint)
 	}
 }
 

@@ -20,8 +20,8 @@
     "path": "/home/pmiller/careme_admin/careme-android/android.keystore",
     "alias": "android"
   },
-  "appVersionName": "1.1",
-  "appVersionCode": 5,
+  "appVersionName": "1.2",
+  "appVersionCode": 6,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://careme.cooking/manifest.webmanifest",
@@ -40,12 +40,16 @@
   "fullScopeUrl": "https://careme.cooking/",
   "minSdkVersion": 21,
   "orientation": "default",
-  "fingerprints": [],
+  "fingerprints": [
+    {
+      "value": "AE:C5:D0:C3:DE:6E:12:A5:65:FD:1B:48:53:1B:47:4B:58:FC:5D:91:F5:93:7D:F2:44:4F:D8:55:70:B9:B0:62"
+    }
+  ],
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
   "protocolHandlers": [],
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1.1"
+  "appVersion": "1.2"
 }
