@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "cooking.careme.twa",
+      "sha256_cert_fingerprints": [
+        "AE:C5:D0:C3:DE:6E:12:A5:65:FD:1B:48:53:1B:47:4B:58:FC:5D:91:F5:93:7D:F2:44:4F:D8:55:70:B9:B0:62"
+      ]
+    }
+  }
+]
