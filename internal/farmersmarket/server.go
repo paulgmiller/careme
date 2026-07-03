@@ -19,7 +19,6 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/locations/geo"
-	locationtypes "careme/internal/locations/types"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -49,7 +48,6 @@ type authClient interface {
 
 type locationResolver interface {
 	NearestZIPToCoordinates(lat, lon float64) (string, bool)
-	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
 type Handler struct {
@@ -327,26 +325,16 @@ func uniqueIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
 func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
 	latRaw := strings.TrimSpace(r.FormValue("lat"))
 	lonRaw := strings.TrimSpace(r.FormValue("lon"))
-	if latRaw != "" || lonRaw != "" {
-		coord, err := geo.FromString(latRaw, lonRaw)
-		if err != nil {
-			return geo.Coordinate{}, "", fmt.Errorf("that location does not look right")
-		}
-		zip, ok := h.zipFinder.NearestZIPToCoordinates(coord.Lat, coord.Lon)
-		if !ok {
-			return geo.Coordinate{}, "", fmt.Errorf("could not match that location to a ZIP code")
-		}
-		return coord, zip, nil
+	if latRaw == "" || lonRaw == "" {
+		return geo.Coordinate{}, "", fmt.Errorf("use current location before uploading")
 	}
-
-	zip := strings.TrimSpace(r.FormValue("zip"))
-	centroid, ok := h.zipFinder.ZipCentroidByZIP(zip)
+	coord, err := geo.FromString(latRaw, lonRaw)
+	if err != nil {
+		return geo.Coordinate{}, "", fmt.Errorf("that location does not look right")
+	}
+	zip, ok := h.zipFinder.NearestZIPToCoordinates(coord.Lat, coord.Lon)
 	if !ok {
-		return geo.Coordinate{}, "", fmt.Errorf("could not find that ZIP code")
-	}
-	coord := geo.Coordinate(centroid)
-	if !coord.Valid() {
-		return geo.Coordinate{}, "", fmt.Errorf("could not find that ZIP code")
+		return geo.Coordinate{}, "", fmt.Errorf("could not match that location to a ZIP code")
 	}
 	return coord, zip, nil
 }

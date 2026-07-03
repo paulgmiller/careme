@@ -31,7 +31,8 @@ func NewContainerUploader() (*uploader, error) {
 
 // create or return a market and merge its inventory into cacheresolveMarketLocation
 func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordinate, zip string,
-	photoCount int, date time.Time, ingredients []ai.InputIngredient) (*Market, error) {
+	photoCount int, date time.Time, ingredients []ai.InputIngredient,
+) (*Market, error) {
 	if photoCount <= 0 {
 		return nil, fmt.Errorf("at least one market photo is required")
 	}

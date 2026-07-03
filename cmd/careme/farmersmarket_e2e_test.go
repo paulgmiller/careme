@@ -23,8 +23,7 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 		"Farmers market finds",
 		`id="farmers-market-error"`,
 		`hx-post="/farmersmarket"`,
-		`id="zip"`,
-		`id="farmers-market-use-location"`,
+		`id="farmers-market-form"`,
 		`name="lat"`,
 		`name="lon"`,
 	} {
@@ -44,7 +43,7 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 	}
 	for _, want := range []string{
 		`id="farmers-market-error"`,
-		"could not find that ZIP code",
+		"use current location before uploading",
 	} {
 		if !strings.Contains(respBody, want) {
 			t.Fatalf("expected farmers market upload response to contain %q, got body: %s", want, respBody)
@@ -59,7 +58,8 @@ func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToRecipes(t *testing.T) {
 	client := newTestClient(t)
 	progressBody, _ := mustPostMultipartHTMX(t, client, srv.URL+"/farmersmarket", map[string]string{
 		"name": "Test Market",
-		"zip":  "98101",
+		"lat":  "47.610000",
+		"lon":  "-122.330000",
 	}, "photos", "market.jpg", jpegBytes(t))
 	for _, want := range []string{
 		`id="farmers-market-work"`,

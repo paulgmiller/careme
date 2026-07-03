@@ -189,18 +189,6 @@ func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.
 	assert.Equal(t, ChainName, got[0].Chain)
 }
 
-func TestResolveMarketLocationUsesZIPCentroid(t *testing.T) {
-	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
-	req := multipartRequestWithFields(t, map[string]string{"zip": "98101"}, "photos", "market.jpg", jpegBytes(t))
-	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
-
-	coord, zip, err := handler.resolveMarketLocation(req)
-
-	require.NoError(t, err)
-	assert.Equal(t, "98101", zip)
-	assert.Equal(t, geo.Coordinate{Lat: 47.61, Lon: -122.33}, coord)
-}
-
 func TestResolveMarketLocationUsesCoordinatesAndNearestZIP(t *testing.T) {
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	req := multipartRequestWithFields(t, map[string]string{
@@ -216,15 +204,15 @@ func TestResolveMarketLocationUsesCoordinatesAndNearestZIP(t *testing.T) {
 	assert.Equal(t, geo.Coordinate{Lat: 47.62, Lon: -122.34}, coord)
 }
 
-func TestResolveMarketLocationRejectsUnknownZIP(t *testing.T) {
+func TestResolveMarketLocationRequiresCoordinates(t *testing.T) {
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
-	req := multipartRequestWithFields(t, map[string]string{"zip": "00000"}, "photos", "market.jpg", jpegBytes(t))
+	req := multipartRequestWithFields(t, nil, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
 	_, _, err := handler.resolveMarketLocation(req)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "could not find that ZIP code")
+	assert.Contains(t, err.Error(), "use current location before uploading")
 }
 
 func TestResolveMarketLocationRejectsInvalidCoordinates(t *testing.T) {
@@ -312,7 +300,7 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.False(t, extractor.called)
-	assert.Contains(t, rr.Body.String(), "could not find that ZIP code")
+	assert.Contains(t, rr.Body.String(), "use current location before uploading")
 	assert.Equal(t, "#farmers-market-error", rr.Header().Get("HX-Retarget"))
 	assert.Equal(t, "outerHTML", rr.Header().Get("HX-Reswap"))
 	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)
@@ -574,7 +562,10 @@ func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExt
 
 func multipartRequest(t *testing.T, fieldName, fileName string, data []byte) *http.Request {
 	t.Helper()
-	return multipartRequestWithFields(t, map[string]string{"zip": "98101"}, fieldName, fileName, data)
+	return multipartRequestWithFields(t, map[string]string{
+		"lat": "47.610000",
+		"lon": "-122.330000",
+	}, fieldName, fileName, data)
 }
 
 func multipartRequestWithFields(t *testing.T, fields map[string]string, fieldName, fileName string, data []byte) *http.Request {
