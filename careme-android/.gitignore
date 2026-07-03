@@ -1,0 +1,22 @@
+# Signing secrets
+android.keystore
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+
+# Android/Bubblewrap build outputs
+build/
+app/build/
+.gradle/
+*.apk
+*.aab
+*.apks
+*.idsig
+
+# Local Android/Gradle files
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
