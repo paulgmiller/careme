@@ -53,6 +53,11 @@ type shoppingRecipeView struct {
 	WineRecommendation *ai.WineSelection
 }
 
+type adminLinkView struct {
+	Label string
+	URL   string
+}
+
 type shoppingListGroup struct {
 	Aisle string
 	Items []*ai.Ingredient
@@ -108,6 +113,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		User                 *utypes.User
 		AuthReturnTo         string
 		UseTodaysIngredients bool
+		AdminLinks           []adminLinkView
 	}{
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
@@ -125,6 +131,11 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		User:                 currentUser,
 		AuthReturnTo:         "/recipes?h=" + hash,
 		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
+		AdminLinks: []adminLinkView{
+			{Label: "Meal plan", URL: "/admin/mealplan/" + hash},
+			{Label: "Prompt", URL: "/admin/prompt/menu/" + hash},
+			{Label: "Ingredients", URL: "/admin/ingredients/" + hash},
+		},
 	}
 
 	setTextContent(writer)
@@ -192,6 +203,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore     *int
 		RecipeCritiqueNeedsCare bool
 		MinimumRecipeScore      int
+		AdminLinks              []adminLinkView
 	}{
 		Location:                *p.Location,
 		Date:                    p.Date.Format("2006-01-02"),
@@ -215,12 +227,24 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore:     critiqueScore,
 		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
 		MinimumRecipeScore:      critique.MinimumRecipeScore,
+		AdminLinks:              recipeAdminLinks(recipeHash, recipe.OriginHash),
 	}
 
 	setTextContent(writer)
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func recipeAdminLinks(recipeHash, originHash string) []adminLinkView {
+	links := []adminLinkView{{Label: "Prompt", URL: "/admin/prompt/recipe/" + recipeHash}}
+	if strings.TrimSpace(originHash) != "" {
+		links = append(links, adminLinkView{
+			Label: "Origin shopping list",
+			URL:   "/admin/mealplan/" + originHash,
+		})
+	}
+	return links
 }
 
 func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeImageView {

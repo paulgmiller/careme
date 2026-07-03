@@ -116,6 +116,15 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, "chef@example.com") {
 		t.Error("shopping list HTML should render signed-in account widget")
 	}
+	if !strings.Contains(html, `href="/admin/mealplan/`+p.Hash()+`"`) {
+		t.Error("shopping list HTML should link to admin meal plan")
+	}
+	if !strings.Contains(html, `href="/admin/prompt/menu/`+p.Hash()+`"`) {
+		t.Error("shopping list HTML should link to admin menu prompt")
+	}
+	if !strings.Contains(html, `href="/admin/ingredients/`+p.Hash()+`"`) {
+		t.Error("shopping list HTML should link to admin ingredients")
+	}
 }
 
 func TestFormatShoppingListHTML_ChefNotesUsesPreviousInstructionsAsPlaceholder(t *testing.T) {
@@ -487,6 +496,12 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	}
 	if !strings.Contains(html, "chef@example.com") {
 		t.Error("recipe HTML should render signed-in account widget")
+	}
+	if !strings.Contains(html, `href="/admin/prompt/recipe/`+recipe.ComputeHash()+`"`) {
+		t.Error("recipe HTML should link to admin recipe prompt")
+	}
+	if !strings.Contains(html, `href="/admin/mealplan/`+recipe.OriginHash+`"`) {
+		t.Error("recipe HTML should link to origin shopping list admin page")
 	}
 }
 

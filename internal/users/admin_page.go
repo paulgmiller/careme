@@ -32,8 +32,7 @@ var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doct
 </head>
 <body>
   <nav>
-    <a href="/admin/users">Users</a> |
-    <a href="/admin/critiques">Recipe Critiques</a>
+    <a href="/admin/users">Users</a>
   </nav>
   <h1>Users</h1>
   <p>Total users: {{len .Users}}</p>
