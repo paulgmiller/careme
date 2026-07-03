@@ -30,10 +30,15 @@ func FromString(latRaw, lonRaw string) (Coordinate, error) {
 
 func (c Coordinate) Valid() error {
 	if c.Lat < -90 || c.Lat > 90 {
-		return fmt.Errorf("Latitude %f must be between -90 and 90", c.Lat)
+		return fmt.Errorf("latitude %f must be between -90 and 90", c.Lat)
 	}
 	if c.Lon < -180 || c.Lon > 180 {
-		return fmt.Errorf("Longitude %f must be between -180 and 180", c.Lon)
+		return fmt.Errorf("longitude %f must be between -180 and 180", c.Lon)
 	}
+
+	if c.Lat == 0 && c.Lon == 0 {
+		return fmt.Errorf("invalid zero coordinates: %f, %f", c.Lat, c.Lon)
+	}
+
 	return nil
 }

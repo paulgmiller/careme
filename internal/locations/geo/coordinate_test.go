@@ -47,7 +47,7 @@ func TestCoordinateValid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, tt.coord.Valid())
+			assert.Equal(t, tt.want, tt.coord.Valid() == nil)
 		})
 	}
 }
