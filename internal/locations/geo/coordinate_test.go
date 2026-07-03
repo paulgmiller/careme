@@ -1,9 +1,11 @@
 package geo
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCoordinateValid(t *testing.T) {
@@ -47,6 +49,56 @@ func TestCoordinateValid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, tt.coord.Valid())
+		})
+	}
+}
+
+func TestFromString(t *testing.T) {
+	got, err := FromString(" 47.6097 ", " -122.3331 ")
+
+	require.NoError(t, err)
+	assert.Equal(t, Coordinate{Lat: 47.6097, Lon: -122.3331}, got)
+}
+
+func TestFromStringRejectsInvalidValues(t *testing.T) {
+	tests := []struct {
+		name string
+		lat  string
+		lon  string
+		want error
+	}{
+		{
+			name: "invalid latitude",
+			lat:  "north",
+			lon:  "-122.3331",
+			want: ErrInvalidLatitude,
+		},
+		{
+			name: "invalid longitude",
+			lat:  "47.6097",
+			lon:  "west",
+			want: ErrInvalidLongitude,
+		},
+		{
+			name: "out of range",
+			lat:  "95",
+			lon:  "-122.3331",
+			want: ErrInvalidCoordinate,
+		},
+		{
+			name: "zero point",
+			lat:  "0",
+			lon:  "0",
+			want: ErrInvalidCoordinate,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := FromString(tt.lat, tt.lon)
+
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, tt.want))
 		})
 	}
 }

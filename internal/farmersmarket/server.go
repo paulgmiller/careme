@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -190,7 +189,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord Coordinate, zip string) {
+func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate, zip string) {
 	update := func(next analysisStatus) {
 		if err := h.statusStore.save(ctx, next); err != nil {
 			slog.ErrorContext(ctx, "failed to save farmers market analysis status", "job_id", status.ID, "error", err)
@@ -325,43 +324,42 @@ func uniqueIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
 	})
 }
 
-func (h *Handler) resolveMarketLocation(r *http.Request) (Coordinate, string, error) {
+func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
 	latRaw := strings.TrimSpace(r.FormValue("lat"))
 	lonRaw := strings.TrimSpace(r.FormValue("lon"))
 	if latRaw != "" || lonRaw != "" {
 		if latRaw == "" || lonRaw == "" {
-			return Coordinate{}, "", fmt.Errorf("use both latitude and longitude, or add a ZIP code")
+			return geo.Coordinate{}, "", fmt.Errorf("use both latitude and longitude, or add a ZIP code")
 		}
-		lat, err := strconv.ParseFloat(latRaw, 64)
-		if err != nil {
-			return Coordinate{}, "", fmt.Errorf("that latitude does not look right")
-		}
-		lon, err := strconv.ParseFloat(lonRaw, 64)
-		if err != nil {
-			return Coordinate{}, "", fmt.Errorf("that longitude does not look right")
-		}
-		coord := Coordinate{Lat: lat, Lon: lon}
-		if !coord.Valid() {
-			return Coordinate{}, "", fmt.Errorf("that location does not look right")
+		coord, err := geo.FromString(latRaw, lonRaw)
+		switch {
+		case errors.Is(err, geo.ErrInvalidLatitude):
+			return geo.Coordinate{}, "", fmt.Errorf("that latitude does not look right")
+		case errors.Is(err, geo.ErrInvalidLongitude):
+			return geo.Coordinate{}, "", fmt.Errorf("that longitude does not look right")
+		case errors.Is(err, geo.ErrInvalidCoordinate):
+			return geo.Coordinate{}, "", fmt.Errorf("that location does not look right")
+		case err != nil:
+			return geo.Coordinate{}, "", fmt.Errorf("that location does not look right")
 		}
 		zip, ok := h.zipFinder.NearestZIPToCoordinates(coord.Lat, coord.Lon)
 		if !ok {
-			return Coordinate{}, "", fmt.Errorf("could not match that location to a ZIP code")
+			return geo.Coordinate{}, "", fmt.Errorf("could not match that location to a ZIP code")
 		}
 		return coord, zip, nil
 	}
 
 	zip, ok := normalizeMarketZIP(r.FormValue("zip"))
 	if !ok {
-		return Coordinate{}, "", fmt.Errorf("add a ZIP code or use your current location")
+		return geo.Coordinate{}, "", fmt.Errorf("add a ZIP code or use your current location")
 	}
 	centroid, ok := h.zipFinder.ZipCentroidByZIP(zip)
 	if !ok {
-		return Coordinate{}, "", fmt.Errorf("could not find that ZIP code")
+		return geo.Coordinate{}, "", fmt.Errorf("could not find that ZIP code")
 	}
-	coord := Coordinate(centroid)
+	coord := geo.Coordinate(centroid)
 	if !coord.Valid() {
-		return Coordinate{}, "", fmt.Errorf("could not find that ZIP code")
+		return geo.Coordinate{}, "", fmt.Errorf("could not find that ZIP code")
 	}
 	return coord, zip, nil
 }

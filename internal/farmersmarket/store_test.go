@@ -202,7 +202,7 @@ func TestResolveMarketLocationUsesZIPCentroid(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "98101", zip)
-	assert.Equal(t, Coordinate{Lat: 47.61, Lon: -122.33}, coord)
+	assert.Equal(t, geo.Coordinate{Lat: 47.61, Lon: -122.33}, coord)
 }
 
 func TestResolveMarketLocationUsesCoordinatesAndNearestZIP(t *testing.T) {
@@ -217,7 +217,7 @@ func TestResolveMarketLocationUsesCoordinatesAndNearestZIP(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "98101", zip)
-	assert.Equal(t, Coordinate{Lat: 47.62, Lon: -122.34}, coord)
+	assert.Equal(t, geo.Coordinate{Lat: 47.62, Lon: -122.34}, coord)
 }
 
 func TestResolveMarketLocationRejectsUnknownZIP(t *testing.T) {
