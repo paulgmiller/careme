@@ -44,7 +44,7 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 	}
 	for _, want := range []string{
 		`id="farmers-market-error"`,
-		"add a ZIP code or use your current location",
+		"could not find that ZIP code",
 	} {
 		if !strings.Contains(respBody, want) {
 			t.Fatalf("expected farmers market upload response to contain %q, got body: %s", want, respBody)

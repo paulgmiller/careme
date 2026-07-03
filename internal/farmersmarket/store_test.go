@@ -89,16 +89,16 @@ func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, ima
 }
 
 func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
-	uploader := NewUploader(NewStore(cache.NewInMemoryCache())
+	uploader := NewUploader(NewStore(cache.NewInMemoryCache()))
 	date := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 
-	first, err := uploader.saveUpload(t.Context(), "Saturday Market", 47.61, -122.33,  "98101", 2, date, []ai.InputIngredient{
+	first, err := uploader.saveUpload(t.Context(), "Saturday Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "98101", 2, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "Strawberries", Size: "1 pint"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "98101", first.ZipCode)
 
-	second, err := uploader.saveUpload(t.Context(), "River Stalls", 47.611, -122.331,  "98101", 1, date, []ai.InputIngredient{
+	second, err := uploader.saveUpload(t.Context(), "River Stalls", geo.Coordinate{Lat: 47.611, Lon: -122.331}, "98101", 1, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "strawberries", Size: "1 pint"},
 		{ProductID: "B", Brand: "Hill Farm", Description: "Fresh basil", Size: "1 bunch"},
 	})
@@ -112,15 +112,15 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 func TestFetchStaplesReturnsCurrentStoreDateInventory(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
 	provider := NewStaplesProviderFromStore(store)
-	uploader := NewUploader(store, staticZipFinder{zip: "98101", ok: true})
+	uploader := NewUploader(store)
 	currentDate := farmersMarketDate(time.Now(), "98101")
 	olderDate := currentDate.AddDate(0, 0, -1)
 
-	market, _, err := uploader.saveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, olderDate, []ai.InputIngredient{
+	market, err := uploader.saveUpload(t.Context(), "Daily Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "98101", 1, olderDate, []ai.InputIngredient{
 		{Brand: "Friday Farm", Description: "peas"},
 	})
 	require.NoError(t, err)
-	_, _, err = uploader.saveUpload(t.Context(), "Daily Market", 47.61, -122.33, 1, currentDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Daily Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "98101", 1, currentDate, []ai.InputIngredient{
 		{Brand: "Saturday Farm", Description: "carrots"},
 	})
 	require.NoError(t, err)
@@ -161,17 +161,17 @@ func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 
 func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
-	uploader := NewUploader(store, staticZipFinder{zip: "98199", ok: true})
+	uploader := NewUploader(store)
 	marketDate := farmersMarketDate(time.Now(), "98199")
-	_, _, err := uploader.saveUpload(t.Context(), "Far Market", 48.2, -122.33, 1, marketDate, []ai.InputIngredient{
+	_, err := uploader.saveUpload(t.Context(), "Far Market", geo.Coordinate{Lat: 48.2, Lon: -122.33}, "98199", 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "turnips"},
 	})
 	require.NoError(t, err)
-	_, _, err = uploader.saveUpload(t.Context(), "Near Market", 47.62, -122.33, 1, marketDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Near Market", geo.Coordinate{Lat: 47.62, Lon: -122.33}, "98199", 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "kale"},
 	})
 	require.NoError(t, err)
-	_, _, err = uploader.saveUpload(t.Context(), "Closer Market", 47.611, -122.33, 1, marketDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Closer Market", geo.Coordinate{Lat: 47.611, Lon: -122.33}, "98199", 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "chard"},
 	})
 	require.NoError(t, err)
@@ -298,7 +298,7 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 	extractor := &fakeExtractor{}
 	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
-		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore)),
 		cacheStore,
 		auth.DefaultMock(),
 		extractor,
@@ -312,7 +312,7 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.False(t, extractor.called)
-	assert.Contains(t, rr.Body.String(), "add a ZIP code or use your current location")
+	assert.Contains(t, rr.Body.String(), "could not find that ZIP code")
 	assert.Equal(t, "#farmers-market-error", rr.Header().Get("HX-Retarget"))
 	assert.Equal(t, "outerHTML", rr.Header().Get("HX-Reswap"))
 	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)
@@ -526,7 +526,7 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
 	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
-		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore)),
 		cacheStore,
 		auth.DefaultMock(),
 		&fakeExtractor{},
@@ -545,7 +545,7 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
-		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore)),
 		cacheStore,
 		noSessionAuth{},
 		&fakeExtractor{},
@@ -564,7 +564,7 @@ func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExt
 	t.Helper()
 	cacheStore := cache.NewInMemoryCache()
 	return NewHandler(
-		NewUploader(NewStore(cacheStore), staticZipFinder{zip: "98101", ok: true}),
+		NewUploader(NewStore(cacheStore)),
 		cacheStore,
 		authClient,
 		extractor,
