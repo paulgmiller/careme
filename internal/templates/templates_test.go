@@ -529,6 +529,12 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	if !strings.Contains(rendered, `/recipes?location=70500874`) {
 		t.Fatalf("home page should render direct recipe link, body: %s", rendered)
 	}
+	if !strings.Contains(rendered, `<span class="sm:hidden">Account</span>`) {
+		t.Fatalf("home page should render compact mobile account label, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<span class="hidden max-w-[14rem] truncate sm:block">chef@example.com</span>`) {
+		t.Fatalf("home page should keep full account email for larger screens, body: %s", rendered)
+	}
 }
 
 func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.T) {
