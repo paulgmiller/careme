@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -24,6 +23,9 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 		"Farmers market finds",
 		`id="farmers-market-error"`,
 		`hx-post="/farmersmarket"`,
+		`id="farmers-market-form"`,
+		`name="lat"`,
+		`name="lon"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("expected farmers market page to contain %q, got body: %s", want, body)
@@ -41,7 +43,7 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 	}
 	for _, want := range []string{
 		`id="farmers-market-error"`,
-		"could not read location",
+		"use current location before uploading",
 	} {
 		if !strings.Contains(respBody, want) {
 			t.Fatalf("expected farmers market upload response to contain %q, got body: %s", want, respBody)
@@ -56,7 +58,9 @@ func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToRecipes(t *testing.T) {
 	client := newTestClient(t)
 	progressBody, _ := mustPostMultipartHTMX(t, client, srv.URL+"/farmersmarket", map[string]string{
 		"name": "Test Market",
-	}, "photos", "market.jpg", geotaggedJPEGBytes(t))
+		"lat":  "47.610000",
+		"lon":  "-122.330000",
+	}, "photos", "market.jpg", jpegBytes(t))
 	for _, want := range []string{
 		`id="farmers-market-work"`,
 		`hx-get="/farmersmarket/status/`,
@@ -158,11 +162,6 @@ func waitForFarmersMarketRedirect(t *testing.T, client *http.Client, statusURL s
 	}
 }
 
-func geotaggedJPEGBytes(t *testing.T) []byte {
-	t.Helper()
-	return addGPSExif(t, jpegBytes(t))
-}
-
 func jpegBytes(t *testing.T) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
@@ -172,69 +171,4 @@ func jpegBytes(t *testing.T) []byte {
 		t.Fatalf("failed to encode jpeg: %v", err)
 	}
 	return b.Bytes()
-}
-
-func addGPSExif(t *testing.T, jpg []byte) []byte {
-	t.Helper()
-	if len(jpg) < 2 || jpg[0] != 0xff || jpg[1] != 0xd8 {
-		t.Fatalf("expected jpeg data to start with SOI marker")
-	}
-
-	tiff := make([]byte, 128)
-	copy(tiff[0:], []byte{'I', 'I'})
-	binary.LittleEndian.PutUint16(tiff[2:], 42)
-	binary.LittleEndian.PutUint32(tiff[4:], 8)
-
-	const (
-		ifd0Offset = 8
-		gpsOffset  = 26
-		latOffset  = 80
-		lonOffset  = 104
-	)
-	binary.LittleEndian.PutUint16(tiff[ifd0Offset:], 1)
-	putIFDEntry(tiff, ifd0Offset+2, 0x8825, 4, 1, gpsOffset)
-
-	binary.LittleEndian.PutUint16(tiff[gpsOffset:], 4)
-	putASCIIIFDEntry(tiff, gpsOffset+2, 1, "N")
-	putIFDEntry(tiff, gpsOffset+14, 2, 5, 3, latOffset)
-	putASCIIIFDEntry(tiff, gpsOffset+26, 3, "W")
-	putIFDEntry(tiff, gpsOffset+38, 4, 5, 3, lonOffset)
-
-	putDMSRationals(tiff[latOffset:], 47, 36, 36)
-	putDMSRationals(tiff[lonOffset:], 122, 19, 48)
-
-	payload := append([]byte("Exif\x00\x00"), tiff...)
-	if len(payload)+2 > 0xffff {
-		t.Fatalf("exif payload too large")
-	}
-	app1 := []byte{0xff, 0xe1, byte((len(payload) + 2) >> 8), byte(len(payload) + 2)}
-	app1 = append(app1, payload...)
-
-	out := make([]byte, 0, len(jpg)+len(app1))
-	out = append(out, jpg[:2]...)
-	out = append(out, app1...)
-	out = append(out, jpg[2:]...)
-	return out
-}
-
-func putIFDEntry(tiff []byte, offset int, tag, typ uint16, count, value uint32) {
-	binary.LittleEndian.PutUint16(tiff[offset:], tag)
-	binary.LittleEndian.PutUint16(tiff[offset+2:], typ)
-	binary.LittleEndian.PutUint32(tiff[offset+4:], count)
-	binary.LittleEndian.PutUint32(tiff[offset+8:], value)
-}
-
-func putASCIIIFDEntry(tiff []byte, offset int, tag uint16, value string) {
-	binary.LittleEndian.PutUint16(tiff[offset:], tag)
-	binary.LittleEndian.PutUint16(tiff[offset+2:], 2)
-	binary.LittleEndian.PutUint32(tiff[offset+4:], 2)
-	tiff[offset+8] = value[0]
-	tiff[offset+9] = 0
-}
-
-func putDMSRationals(dst []byte, degrees, minutes, seconds uint32) {
-	values := []uint32{degrees, 1, minutes, 1, seconds, 1}
-	for i, value := range values {
-		binary.LittleEndian.PutUint32(dst[i*4:], value)
-	}
 }

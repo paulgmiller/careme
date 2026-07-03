@@ -37,6 +37,51 @@
   </main>
   {{template "clerk_refresh.html" .}}
   <script src="/static/htmx@2.0.8.js"></script>
+  <script>
+    (() => {
+      const form = document.getElementById("farmers-market-form");
+      const submit = document.getElementById("farmers-market-submit");
+      const status = document.getElementById("farmers-market-location-status");
+      const lat = document.getElementById("lat");
+      const lon = document.getElementById("lon");
+      if (!form || !submit || !status || !lat || !lon) {
+        return;
+      }
+      if (!("geolocation" in navigator)) {
+        status.textContent = "Current location is not available in this browser.";
+        return;
+      }
+      form.addEventListener("submit", (event) => {
+        if (lat.value !== "" && lon.value !== "") {
+          return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        submit.disabled = true;
+        const originalText = submit.textContent;
+        submit.textContent = "Finding your location...";
+        status.textContent = "Finding your current location...";
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            lat.value = position.coords.latitude.toFixed(6);
+            lon.value = position.coords.longitude.toFixed(6);
+            status.textContent = "";
+            submit.disabled = false;
+            submit.textContent = originalText;
+            form.requestSubmit();
+          },
+          () => {
+            lat.value = "";
+            lon.value = "";
+            status.textContent = "Could not use current location.";
+            submit.disabled = false;
+            submit.textContent = originalText;
+          },
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+        );
+      }, true);
+    })();
+  </script>
 </body>
 </html>
 
@@ -49,7 +94,7 @@
 
 {{define "farmersmarket_form"}}
 <div id="farmers-market-work">
-  <form method="POST" action="/farmersmarket" enctype="multipart/form-data" class="space-y-6"
+  <form id="farmers-market-form" method="POST" action="/farmersmarket" enctype="multipart/form-data" class="space-y-6"
     hx-post="/farmersmarket"
     hx-encoding="multipart/form-data"
     hx-target="#farmers-market-work"
@@ -68,6 +113,9 @@
         class="mt-2 block w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-ink-700 shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-brand-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-200 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-300" />
     </div>
 
+    <input id="lat" name="lat" type="hidden" />
+    <input id="lon" name="lon" type="hidden" />
+
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
       <button id="farmers-market-submit" type="submit"
         class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -78,6 +126,7 @@
         Back home
       </a>
     </div>
+    <p id="farmers-market-location-status" class="text-sm text-ink-500" aria-live="polite"></p>
   </form>
 </div>
 {{end}}
