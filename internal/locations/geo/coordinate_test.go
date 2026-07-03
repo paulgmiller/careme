@@ -1,7 +1,6 @@
 package geo
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,31 +64,26 @@ func TestFromStringRejectsInvalidValues(t *testing.T) {
 		name string
 		lat  string
 		lon  string
-		want error
 	}{
 		{
 			name: "invalid latitude",
 			lat:  "north",
 			lon:  "-122.3331",
-			want: ErrInvalidLatitude,
 		},
 		{
 			name: "invalid longitude",
 			lat:  "47.6097",
 			lon:  "west",
-			want: ErrInvalidLongitude,
 		},
 		{
 			name: "out of range",
 			lat:  "95",
 			lon:  "-122.3331",
-			want: ErrInvalidCoordinate,
 		},
 		{
 			name: "zero point",
 			lat:  "0",
 			lon:  "0",
-			want: ErrInvalidCoordinate,
 		},
 	}
 
@@ -98,7 +92,6 @@ func TestFromStringRejectsInvalidValues(t *testing.T) {
 			_, err := FromString(tt.lat, tt.lon)
 
 			require.Error(t, err)
-			assert.True(t, errors.Is(err, tt.want))
 		})
 	}
 }

@@ -36,8 +36,8 @@ func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordin
 	if photoCount <= 0 {
 		return nil, fmt.Errorf("at least one market photo is required")
 	}
-	if !coor.Valid() {
-		return nil, fmt.Errorf("invalid market coordinates")
+	if err := coor.Valid(); err != nil {
+		return nil, fmt.Errorf("invalid market coordinates: %w", err)
 	}
 
 	market, err := u.store.findNearbyMarket(ctx, coor.Lat, coor.Lon)
