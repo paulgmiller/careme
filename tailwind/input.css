@@ -76,6 +76,12 @@
     --clerk-spacing: 1rem;
   }
 
+  html,
+  body {
+    overscroll-behavior: none;
+    touch-action: pan-x pan-y;
+  }
+
   p {
     text-wrap: pretty;
   }
