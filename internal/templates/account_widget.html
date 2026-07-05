@@ -1,11 +1,11 @@
 {{define "account_widget"}}
-<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+<div class="flex items-center justify-end">
   {{if .User}}
   <details class="relative">
-    <summary class="flex cursor-pointer list-none items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-      <span class="sm:hidden">Account</span>
+    <summary aria-label="Account menu" class="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-full border border-brand-100 bg-white text-sm font-bold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 sm:h-auto sm:w-auto sm:gap-2 sm:px-4 sm:py-2 sm:font-medium">
+      <span class="sm:hidden">{{UserInitial .User.Email}}</span>
       <span class="hidden max-w-[14rem] truncate sm:block">{{index .User.Email 0}}</span>
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="hidden h-4 w-4 shrink-0 sm:block">
         <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
       </svg>
     </summary>

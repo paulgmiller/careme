@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"careme/internal/config"
 	"careme/internal/logsetup"
@@ -46,6 +48,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 		"PublicOrigin":      func() string { return config.ResolvedPublicOrigin() },
 		"SignInPath":        signInPath,
 		"TailwindAssetPath": func() string { return tailwindAssetPath },
+		"UserInitial":       userInitial,
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {
@@ -84,6 +87,21 @@ func signInPath(returnTo string) string {
 	}
 	encoded := base64.RawURLEncoding.EncodeToString([]byte(returnTo))
 	return "/sign-in?return_to_b64=" + url.QueryEscape(encoded)
+}
+
+func userInitial(userEmail []string) string {
+	for _, email := range userEmail {
+		trimmed := strings.TrimSpace(email)
+		if trimmed == "" {
+			continue
+		}
+		r, _ := utf8.DecodeRuneInString(trimmed)
+		if r == utf8.RuneError {
+			return "?"
+		}
+		return string(unicode.ToUpper(r))
+	}
+	return "?"
 }
 
 var (
