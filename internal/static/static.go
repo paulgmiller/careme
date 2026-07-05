@@ -35,16 +35,16 @@ var faviconSpring []byte
 //go:embed favicon-summer.png
 var faviconSummer []byte
 
-//go:embed fall.png
+//go:embed fall.webp
 var backgroundFall []byte
 
-//go:embed winter.png
+//go:embed winter.webp
 var backgroundWinter []byte
 
-//go:embed spring.png
+//go:embed spring.webp
 var backgroundSpring []byte
 
-//go:embed summer.png
+//go:embed summer.webp
 var backgroundSummer []byte
 
 var TailwindAssetPath string
@@ -100,8 +100,8 @@ func Register(mux routing.Registrar) {
 
 	registerPWAAssets(mux)
 
-	mux.HandleFunc("/background.png", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png")
+	mux.HandleFunc("/background.webp", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/webp")
 		// Keep cache short so clients can refresh seasonally without manual cache clear.
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		background := backgroundBySeason(seasons.GetCurrentSeason())
