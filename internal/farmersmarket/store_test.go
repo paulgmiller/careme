@@ -43,7 +43,7 @@ func (s staticZipFinder) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid
 		return locationtypes.ZipCentroid{}, false
 	}
 	coord := s.centroid
-	if !coord.Valid() {
+	if err := coord.Valid(); err != nil {
 		coord = geo.Coordinate{Lat: 47.61, Lon: -122.33}
 	}
 	return locationtypes.ZipCentroid(coord), true
@@ -212,7 +212,7 @@ func TestResolveMarketLocationRequiresCoordinates(t *testing.T) {
 	_, _, err := handler.resolveMarketLocation(req)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "use current location before uploading")
+	assert.Contains(t, err.Error(), "invalid latitude: \"\"")
 }
 
 func TestResolveMarketLocationRejectsInvalidCoordinates(t *testing.T) {
@@ -226,7 +226,7 @@ func TestResolveMarketLocationRejectsInvalidCoordinates(t *testing.T) {
 	_, _, err := handler.resolveMarketLocation(req)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "location does not look right")
+	assert.Contains(t, err.Error(), "latitude 95.000000 must be between -90 and 90")
 }
 
 func TestParseUploadedPhotosAcceptsImagesWithoutGPS(t *testing.T) {
@@ -300,7 +300,7 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.False(t, extractor.called)
-	assert.Contains(t, rr.Body.String(), "use current location before uploading")
+	assert.Contains(t, rr.Body.String(), "invalid latitude")
 	assert.Equal(t, "#farmers-market-error", rr.Header().Get("HX-Retarget"))
 	assert.Equal(t, "outerHTML", rr.Header().Get("HX-Reswap"))
 	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)

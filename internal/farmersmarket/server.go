@@ -323,14 +323,9 @@ func uniqueIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
 }
 
 func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
-	latRaw := strings.TrimSpace(r.FormValue("lat"))
-	lonRaw := strings.TrimSpace(r.FormValue("lon"))
-	if latRaw == "" || lonRaw == "" {
-		return geo.Coordinate{}, "", fmt.Errorf("use current location before uploading")
-	}
-	coord, err := geo.FromString(latRaw, lonRaw)
+	coord, err := geo.FromString(r.FormValue("lat"), r.FormValue("lon"))
 	if err != nil {
-		return geo.Coordinate{}, "", fmt.Errorf("that location does not look right")
+		return geo.Coordinate{}, "", err
 	}
 	zip, ok := h.zipFinder.NearestZIPToCoordinates(coord.Lat, coord.Lon)
 	if !ok {
