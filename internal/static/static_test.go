@@ -124,12 +124,15 @@ func TestRegisterServesSeasonalBackgroundFromEnv(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/background.png", nil)
+	req := httptest.NewRequest(http.MethodGet, "/background.webp", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("background response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/webp" {
+		t.Fatalf("background content type = %q, want image/webp", got)
 	}
 	if rec.Body.Len() != len(backgroundSpring) {
 		t.Fatalf("background body length = %d, want spring length %d", rec.Body.Len(), len(backgroundSpring))
