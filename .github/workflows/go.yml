@@ -90,6 +90,22 @@ jobs:
       - name: Run golangci-lint
         run: ./bin/golangci-lint run ./... --timeout=5m
 
+  js-lint:
+    name: js-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Run JavaScript lint
+        run: npm exec --yes --package eslint@10.4.0 -- eslint internal/static/user-clerk-billing.js internal/static/share.js
+
   k8s-lint:
     name: k8s-lint
     runs-on: ubuntu-latest
@@ -112,7 +128,7 @@ jobs:
 
   publish:
     name: publish (${{ matrix.name }})
-    needs: [verify, vet, format, lint, k8s-lint]
+    needs: [verify, vet, format, lint, js-lint, k8s-lint]
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -136,6 +136,7 @@
     </section>
   </main>
   <script src="/static/htmx@2.0.8.js"></script>
+  <script src="/static/share.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
@@ -158,6 +159,7 @@
       Build Shopping List
     </button>
   </span>
+  {{template "shopping_list_share_button" .}}
   {{if not .HasSavedRecipes}}
   <p id="finalize-help" class="text-sm text-ink-600">
     Add at least one recipe to assemble your shopping list.
