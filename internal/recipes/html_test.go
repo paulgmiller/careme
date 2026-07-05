@@ -98,6 +98,12 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("shopping list HTML should include htmx script")
 	}
+	if !strings.Contains(html, `aria-label="Share shopping list"`) {
+		t.Error("shopping list HTML should include a share button")
+	}
+	if !strings.Contains(html, `data-share-url="/recipes?h=`) {
+		t.Error("shopping list share button should share the stable shopping list URL")
+	}
 	if strings.Contains(html, "Shopping list") {
 		t.Error("shopping list HTML should not render the shopping list section before a recipe is added")
 	}
@@ -439,6 +445,12 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	}
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("recipe HTML should include htmx script")
+	}
+	if !strings.Contains(html, `aria-label="Share recipe"`) {
+		t.Error("recipe HTML should include a share button")
+	}
+	if !strings.Contains(html, `data-share-url="/recipe/`) {
+		t.Error("recipe share button should share the stable recipe URL")
 	}
 	if !strings.Contains(html, `id="question-thread"`) {
 		t.Error("recipe HTML should contain question thread container")

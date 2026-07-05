@@ -1,0 +1,12 @@
+{{define "share_button"}}
+<button type="button"
+        class="print-hidden inline-flex size-10 items-center justify-center rounded-lg bg-brand-600 text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
+        data-share-button
+        data-share-url="{{.URL}}"
+        data-share-title="{{.Title}}"
+        data-share-label="{{.Label}}"
+        aria-label="{{.Label}}"
+        title="{{.Label}}">
+  {{template "icon_share" .}}
+</button>
+{{end}}

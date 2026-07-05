@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/base64"
+	"fmt"
 	"html/template"
 	"net/url"
 	"os"
@@ -46,6 +47,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 		"PublicOrigin":      func() string { return config.ResolvedPublicOrigin() },
 		"SignInPath":        signInPath,
 		"TailwindAssetPath": func() string { return tailwindAssetPath },
+		"dict":              dict,
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {
@@ -84,6 +86,21 @@ func signInPath(returnTo string) string {
 	}
 	encoded := base64.RawURLEncoding.EncodeToString([]byte(returnTo))
 	return "/sign-in?return_to_b64=" + url.QueryEscape(encoded)
+}
+
+func dict(values ...any) (map[string]any, error) {
+	if len(values)%2 != 0 {
+		return nil, fmt.Errorf("dict requires key/value pairs")
+	}
+	result := make(map[string]any, len(values)/2)
+	for i := 0; i < len(values); i += 2 {
+		key, ok := values[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("dict key must be a string")
+		}
+		result[key] = values[i+1]
+	}
+	return result, nil
 }
 
 var (
