@@ -226,7 +226,7 @@ func TestResolveMarketLocationRejectsInvalidCoordinates(t *testing.T) {
 	_, _, err := handler.resolveMarketLocation(req)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Latitude 95.000000 must be between -90 and 90")
+	assert.Contains(t, err.Error(), "latitude 95.000000 must be between -90 and 90")
 }
 
 func TestParseUploadedPhotosAcceptsImagesWithoutGPS(t *testing.T) {
