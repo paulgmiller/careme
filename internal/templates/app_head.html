@@ -30,36 +30,5 @@
     document.addEventListener("careme:saved-recipes-changed", syncSavedRecipesForOffline);
   }
 
-  document.addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-share-button]");
-    if (!button) return;
-
-    const shareURL = new URL(button.dataset.shareUrl || window.location.href, window.location.origin).toString();
-    const shareTitle = button.dataset.shareTitle || document.title;
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: shareTitle, url: shareURL });
-        return;
-      } catch (error) {
-        if (error && error.name === "AbortError") return;
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(shareURL);
-      const status = button.querySelector("[data-share-status]");
-      button.title = "Link copied";
-      button.setAttribute("aria-label", "Link copied");
-      if (status) status.classList.remove("hidden");
-      window.setTimeout(() => {
-        button.title = button.dataset.shareLabel || "Share";
-        button.setAttribute("aria-label", button.dataset.shareLabel || "Share");
-        if (status) status.classList.add("hidden");
-      }, 1600);
-    } catch (error) {
-      window.location.href = "mailto:?subject=" + encodeURIComponent(shareTitle) + "&body=" + encodeURIComponent(shareURL);
-    }
-  });
 </script>
 {{end}}
