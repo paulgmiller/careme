@@ -48,7 +48,7 @@
         </div>
 
         <div class="p-8">
-          <div class="print-hidden flex justify-end">
+          <div class="print-hidden mb-5 flex justify-end">
             {{template "share_button" dict "URL" (print "/recipes?h=" .Hash) "Title" "Careme shopping list" "Label" "Share shopping list"}}
           </div>
           {{if .UseTodaysIngredients}}
