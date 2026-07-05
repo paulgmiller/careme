@@ -128,6 +128,35 @@ func TestBrowserPageTemplatesIncludeAppHead(t *testing.T) {
 	}
 }
 
+func TestBrowserPageTemplatesDisablePinchZoom(t *testing.T) {
+	nonBrowserPages := map[string]bool{
+		"mail.html": true,
+	}
+
+	names, err := fs.Glob(htmlFiles, "*.html")
+	if err != nil {
+		t.Fatalf("glob templates: %v", err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			if nonBrowserPages[name] {
+				return
+			}
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if !strings.Contains(rendered, "<head") {
+				return
+			}
+			if !strings.Contains(rendered, `content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"`) {
+				t.Fatalf("%s should disable pinch zoom in the viewport metadata", name)
+			}
+		})
+	}
+}
+
 func firstElementClasses(node *html.Node, element string) (map[string]bool, bool) {
 	if node.Type == html.ElementNode && node.Data == element {
 		classes := make(map[string]bool)
@@ -528,6 +557,12 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	}
 	if !strings.Contains(rendered, `/recipes?location=70500874`) {
 		t.Fatalf("home page should render direct recipe link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<span class="sm:hidden">Account</span>`) {
+		t.Fatalf("home page should render compact mobile account label, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<span class="hidden max-w-[14rem] truncate sm:block">chef@example.com</span>`) {
+		t.Fatalf("home page should keep full account email for larger screens, body: %s", rendered)
 	}
 }
 
