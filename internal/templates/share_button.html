@@ -1,6 +1,6 @@
 {{define "share_button"}}
 <button type="button"
-        class="print-hidden inline-flex size-10 items-center justify-center rounded-lg bg-brand-600 text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
+        class="print-hidden inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
         data-share-button
         data-share-url="{{.URL}}"
         data-share-title="{{.Title}}"
@@ -8,5 +8,6 @@
         aria-label="{{.Label}}"
         title="{{.Label}}">
   {{template "icon_share" .}}
+  <span class="hidden text-sm font-semibold" data-share-status>Link copied</span>
 </button>
 {{end}}

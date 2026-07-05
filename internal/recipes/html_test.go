@@ -101,6 +101,9 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `aria-label="Share shopping list"`) {
 		t.Error("shopping list HTML should include a share button")
 	}
+	if !strings.Contains(html, `data-share-status`) {
+		t.Error("shopping list share button should include visible copy feedback")
+	}
 	if !strings.Contains(html, `data-share-url="/recipes?h=`) {
 		t.Error("shopping list share button should share the stable shopping list URL")
 	}
@@ -448,6 +451,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	}
 	if !strings.Contains(html, `aria-label="Share recipe"`) {
 		t.Error("recipe HTML should include a share button")
+	}
+	if !strings.Contains(html, `data-share-status`) {
+		t.Error("recipe share button should include visible copy feedback")
 	}
 	if !strings.Contains(html, `data-share-url="/recipe/`) {
 		t.Error("recipe share button should share the stable recipe URL")

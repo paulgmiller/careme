@@ -48,11 +48,14 @@
 
     try {
       await navigator.clipboard.writeText(shareURL);
+      const status = button.querySelector("[data-share-status]");
       button.title = "Link copied";
       button.setAttribute("aria-label", "Link copied");
+      if (status) status.classList.remove("hidden");
       window.setTimeout(() => {
         button.title = button.dataset.shareLabel || "Share";
         button.setAttribute("aria-label", button.dataset.shareLabel || "Share");
+        if (status) status.classList.add("hidden");
       }, 1600);
     } catch (error) {
       window.location.href = "mailto:?subject=" + encodeURIComponent(shareTitle) + "&body=" + encodeURIComponent(shareURL);
