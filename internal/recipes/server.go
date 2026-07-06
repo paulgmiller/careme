@@ -196,6 +196,31 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Query().Has(queryArgStart) {
+		newHash, err := s.regeneratedRecipeHash(ctx, hash)
+		if err == nil {
+			http.Redirect(w, r, "/recipe/"+url.PathEscape(newHash), http.StatusSeeOther)
+			return
+		}
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to load regenerated recipe mapping", "hash", hash, "error", err)
+			http.Error(w, "failed to load refreshed recipe", http.StatusInternalServerError)
+			return
+		}
+
+		startTime, err := time.Parse(time.RFC3339Nano, r.URL.Query().Get(queryArgStart))
+		if err != nil {
+			redirectToRecipe(w, r, hash, true /*useStart*/)
+			return
+		}
+		if time.Since(startTime) < time.Minute*10 {
+			s.spin(ctx, w, hash)
+			return
+		}
+		http.Error(w, "recipe refresh is taking longer than expected", http.StatusGatewayTimeout)
+		return
+	}
+
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
 		http.Error(w, "recipe not found", http.StatusNotFound)
@@ -504,50 +529,13 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// spin page for recipes?
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 90*time.Second)
-	defer cancel()
-	s.wg.Add(1)
-	defer s.wg.Done()
 	instructions := []string{"Rewrite the recipe to incorporate the user's question thread and your answers. Return a complete updated recipe."}
 	if len(critiqueFixes) > 0 {
 		instructions = append(instructions, "also incorporate these critique fixes")
 		instructions = append(instructions, critiqueFixes...)
 	}
-	replacement, err := s.generator.RegenerateRecipe(ctx, instructions, responseID)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to regenerate single recipe", "hash", hash, "error", err)
-		http.Error(w, "failed to refresh recipe", http.StatusInternalServerError)
-		return
-	}
-	// TODO generate a new shoppinglist? only if ingredients changed or user asked?
-	replacement.OriginHash = recipe.OriginHash
-	replacement.ParentHash = hash
-	newHash := replacement.ComputeHash()
-	if err := s.SaveRecipe(ctx, *replacement); err != nil {
-		slog.ErrorContext(ctx, "failed to save regenerated single recipe", "hash", hash, "new_hash", newHash, "error", err)
-		http.Error(w, "failed to save refreshed recipe", http.StatusInternalServerError)
-		return
-	}
-	replaced, err := s.storage.ReplaceRecipe(currentUser, hash, utypes.Recipe{
-		Title:     replacement.Title,
-		Hash:      newHash,
-		CreatedAt: time.Now(),
-	})
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to replace user saved recipe", "hash", hash, "new_hash", newHash, "error", err)
-		http.Error(w, "failed to save refreshed recipe", http.StatusInternalServerError)
-		return
-	}
-	if replaced {
-		if params, err := s.ParamsFromCache(ctx, recipe.OriginHash); err != nil {
-			slog.ErrorContext(ctx, "couldn't look up params", "hash", newHash, "origin", recipe.OriginHash)
-		} else {
-			s.startSavedRecipeBackgroundGeneration(ctx, newHash, *replacement, params.Location.ID, params.Date)
-		}
-	}
-
-	http.Redirect(w, r, "/recipe/"+url.PathEscape(newHash), http.StatusSeeOther)
+	s.kickSingleRecipeRegeneration(ctx, hash, currentUser, *recipe, instructions, responseID)
+	redirectToRecipe(w, r, hash, true /*useStart*/)
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -887,6 +875,70 @@ func (s *server) ensureSavedRecipeImage(ctx context.Context, recipeHash string, 
 	}
 }
 
+func (s *server) kickSingleRecipeRegeneration(ctx context.Context, hash string, currentUser *utypes.User, recipe ai.Recipe, instructions []string, responseID string) {
+	s.wg.Go(func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
+		defer cancel()
+
+		replacement, err := s.generator.RegenerateRecipe(ctx, instructions, responseID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to regenerate single recipe", "hash", hash, "error", err)
+			s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
+			return
+		}
+		// TODO generate a new shoppinglist? only if ingredients changed or user asked?
+		replacement.OriginHash = recipe.OriginHash
+		replacement.ParentHash = hash
+		newHash := replacement.ComputeHash()
+		if err := s.SaveRecipe(ctx, *replacement); err != nil {
+			slog.ErrorContext(ctx, "failed to save regenerated single recipe", "hash", hash, "new_hash", newHash, "error", err)
+			s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
+			return
+		}
+		replaced, err := s.storage.ReplaceRecipe(currentUser, hash, utypes.Recipe{
+			Title:     replacement.Title,
+			Hash:      newHash,
+			CreatedAt: time.Now(),
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to replace user saved recipe", "hash", hash, "new_hash", newHash, "error", err)
+			s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
+			return
+		}
+		if replaced {
+			if params, err := s.ParamsFromCache(ctx, recipe.OriginHash); err != nil {
+				slog.ErrorContext(ctx, "couldn't look up params", "hash", newHash, "origin", recipe.OriginHash)
+			} else {
+				s.startSavedRecipeBackgroundGeneration(ctx, newHash, *replacement, params.Location.ID, params.Date)
+			}
+		}
+		if err := s.saveRegeneratedRecipeHash(ctx, hash, newHash); err != nil {
+			slog.ErrorContext(ctx, "failed to save regenerated recipe mapping", "hash", hash, "new_hash", newHash, "error", err)
+		}
+	})
+}
+
+func (s *server) saveRegeneratedRecipeHash(ctx context.Context, originalHash, newHash string) error {
+	return s.recipeio.Cache.Put(ctx, regeneratedRecipeCacheKeyPrefix+originalHash, newHash, cache.Unconditional())
+}
+
+func (s *server) regeneratedRecipeHash(ctx context.Context, originalHash string) (string, error) {
+	r, err := s.recipeio.Cache.Get(ctx, regeneratedRecipeCacheKeyPrefix+originalHash)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err := r.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close regenerated recipe mapping", "hash", originalHash, "error", err)
+		}
+	}()
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(b)), nil
+}
+
 func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	hash := strings.TrimSpace(r.PathValue("hash"))
@@ -1068,9 +1120,10 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	queryArgHash        = "h"
-	queryArgStart       = "start"
-	queryArgPendingSave = "save"
+	queryArgHash                    = "h"
+	queryArgStart                   = "start"
+	queryArgPendingSave             = "save"
+	regeneratedRecipeCacheKeyPrefix = "recipe-regeneration/"
 )
 
 func (s *server) recipeFromShoppingList(list ai.ShoppingList, recipeHash string) (*ai.Recipe, error) {
@@ -1414,8 +1467,19 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
 
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStart bool) {
 	u := url.URL{Path: "/recipes"}
+	redirectToURL(w, r, u, hash, useStart)
+}
+
+func redirectToRecipe(w http.ResponseWriter, r *http.Request, hash string, useStart bool) {
+	u := url.URL{Path: "/recipe/" + url.PathEscape(hash)}
+	redirectToURL(w, r, u, "", useStart)
+}
+
+func redirectToURL(w http.ResponseWriter, r *http.Request, u url.URL, hash string, useStart bool) {
 	args := url.Values{} // intentioanlly clear other args
-	args.Set(queryArgHash, hash)
+	if hash != "" {
+		args.Set(queryArgHash, hash)
+	}
 	if useStart {
 		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
 	}

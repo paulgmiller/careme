@@ -843,9 +843,24 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	s.handleRegenerateSingleRecipe(rr, req)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
-	newLocation := rr.Header().Get("Location")
+	spinLocation := rr.Header().Get("Location")
+	require.Contains(t, spinLocation, "/recipe/"+url.PathEscape(originalHash))
+	require.Contains(t, spinLocation, "start=")
+
+	require.Eventually(t, func() bool {
+		_, err := s.regeneratedRecipeHash(t.Context(), originalHash)
+		return err == nil
+	}, time.Second, 10*time.Millisecond)
+
+	spinReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
+	spinReq.SetPathValue("hash", originalHash)
+	spinRR := httptest.NewRecorder()
+	s.handleSingle(spinRR, spinReq)
+	require.Equal(t, http.StatusSeeOther, spinRR.Code)
+	newLocation := spinRR.Header().Get("Location")
 	require.Contains(t, newLocation, "/recipe/")
-	newHash := strings.TrimPrefix(newLocation, "/recipe/")
+	newHash, err := url.PathUnescape(strings.TrimPrefix(newLocation, "/recipe/"))
+	require.NoError(t, err)
 	require.NotEqual(t, originalHash, newHash)
 
 	updatedUser, err := storage.GetByID("mock-clerk-user-id")
