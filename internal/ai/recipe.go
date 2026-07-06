@@ -174,7 +174,7 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		Store:             openai.Bool(true),
 		Text:              scheme(c.recipeSchema),
 		Tools:             tools,
-		ParallelToolCalls: openai.Bool(false),
+		ParallelToolCalls: openai.Bool(true),
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
@@ -213,7 +213,7 @@ func (c *client) continueRecipeWithIngredientSearchResults(ctx context.Context, 
 		Store:             openai.Bool(true),
 		Text:              scheme(c.recipeSchema),
 		Tools:             tools,
-		ParallelToolCalls: openai.Bool(false),
+		ParallelToolCalls: openai.Bool(true),
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
