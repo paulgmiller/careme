@@ -3,6 +3,7 @@ package campaigns
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,24 +11,44 @@ import (
 
 func TestIssaquahRedirect(t *testing.T) {
 	tests := []struct {
-		name     string
-		request  string
-		expected string
+		name          string
+		request       string
+		expectedQuery url.Values
 	}{
 		{
-			name:     "sets campaign location",
-			request:  "/c/issaquah",
-			expected: "/recipes?location=70100658",
+			name:    "sets campaign location and help",
+			request: "/c/issaquah",
+			expectedQuery: url.Values{
+				"location": {"70100658"},
+				"help":     {issaquahShoppingListHelp},
+			},
 		},
 		{
-			name:     "preserves attribution parameters",
-			request:  "/c/issaquah?utm_source=facebook&utm_campaign=carts",
-			expected: "/recipes?location=70100658&utm_campaign=carts&utm_source=facebook",
+			name:    "preserves attribution parameters",
+			request: "/c/issaquah?utm_source=facebook&utm_campaign=carts",
+			expectedQuery: url.Values{
+				"location":     {"70100658"},
+				"help":         {issaquahShoppingListHelp},
+				"utm_source":   {"facebook"},
+				"utm_campaign": {"carts"},
+			},
 		},
 		{
-			name:     "overrides incoming location",
-			request:  "/c/issaquah?location=other&utm_source=facebook",
-			expected: "/recipes?location=70100658&utm_source=facebook",
+			name:    "overrides incoming location",
+			request: "/c/issaquah?location=other&utm_source=facebook",
+			expectedQuery: url.Values{
+				"location":   {"70100658"},
+				"help":       {issaquahShoppingListHelp},
+				"utm_source": {"facebook"},
+			},
+		},
+		{
+			name:    "preserves incoming help",
+			request: "/c/issaquah?help=Custom+note",
+			expectedQuery: url.Values{
+				"location": {"70100658"},
+				"help":     {"Custom note"},
+			},
 		},
 	}
 
@@ -41,7 +62,10 @@ func TestIssaquahRedirect(t *testing.T) {
 			mux.ServeHTTP(response, request)
 
 			require.Equal(t, http.StatusFound, response.Code)
-			require.Equal(t, tt.expected, response.Header().Get("Location"))
+			location, err := url.Parse(response.Header().Get("Location"))
+			require.NoError(t, err)
+			require.Equal(t, "/recipes", location.Path)
+			require.Equal(t, tt.expectedQuery, location.Query())
 		})
 	}
 }
