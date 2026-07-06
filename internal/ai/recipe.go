@@ -15,7 +15,11 @@ import (
 	"github.com/samber/lo"
 )
 
-const defaultRecipeModel = "gpt-5.5"
+const (
+	defaultRecipeModel              = "gpt-5.5"
+	ingredientSearchToolName        = "search_ingredients"
+	maxRecipeIngredientSearchRounds = 2
+)
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
@@ -152,12 +156,13 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
 }
 
-func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*Recipe, error) {
+func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string, searchableIngredients []InputIngredient) (*Recipe, error) {
 	menuResponseID = strings.TrimSpace(menuResponseID)
 	if menuResponseID == "" {
 		return nil, fmt.Errorf("response ID is required for menu response generation")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
+	tools := recipeIngredientSearchTools(len(searchableIngredients) > 0)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
 		PreviousResponseID: openai.String(menuResponseID),
@@ -166,8 +171,10 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
 		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.recipeSchema),
+		Store:             openai.Bool(true),
+		Text:              scheme(c.recipeSchema),
+		Tools:             tools,
+		ParallelToolCalls: openai.Bool(false),
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
@@ -175,7 +182,170 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
+	searcher := newIngredientSearcher(searchableIngredients)
+	for range maxRecipeIngredientSearchRounds {
+		toolOutputs, err := recipeIngredientSearchToolOutputs(resp, searcher)
+		if err != nil {
+			return nil, err
+		}
+		if len(toolOutputs) == 0 {
+			return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+		}
+		resp, err = c.continueRecipeWithIngredientSearchResults(ctx, resp.ID, toolOutputs, tools)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if calls := recipeIngredientSearchCalls(resp); len(calls) > 0 {
+		return nil, fmt.Errorf("recipe generation exceeded ingredient search tool call limit")
+	}
 	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+}
+
+func (c *client) continueRecipeWithIngredientSearchResults(ctx context.Context, previousResponseID string, toolOutputs []responses.ResponseInputItemUnionParam, tools []responses.ToolUnionParam) (*responses.Response, error) {
+	params := responses.ResponseNewParams{
+		Model:              c.model,
+		PreviousResponseID: openai.String(previousResponseID),
+		Instructions:       openai.String(systemMessage),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: toolOutputs,
+		},
+		Store:             openai.Bool(true),
+		Text:              scheme(c.recipeSchema),
+		Tools:             tools,
+		ParallelToolCalls: openai.Bool(false),
+	}
+	resp, err := c.oai.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to continue recipe after ingredient search: %w", err)
+	}
+	c.recordRecipePrompt(ctx, resp.ID, params, []PromptMessage{userPromptMessage("Ingredient search tool results returned.")})
+	return resp, nil
+}
+
+func recipeIngredientSearchTools(enabled bool) []responses.ToolUnionParam {
+	if !enabled {
+		return nil
+	}
+	return []responses.ToolUnionParam{{
+		OfFunction: &responses.FunctionToolParam{
+			Name:        ingredientSearchToolName,
+			Description: openai.String("Search the full store ingredient catalog for supporting recipe ingredients such as dairy, spices, herbs, condiments, grains, starches, and pantry-like items. Use this when the menu plan anchor and side vegetable are set but the recipe needs compatible supporting ingredients."),
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "Case-insensitive text to search for in product descriptions, brands, categories, and aisle numbers. Use short grocery terms like yogurt, cumin, tortillas, rice, or cheddar.",
+					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "Maximum number of matching rows to return.",
+						"minimum":     1,
+						"maximum":     20,
+					},
+				},
+				"required":             []string{"query"},
+				"additionalProperties": false,
+			},
+		},
+	}}
+}
+
+type ingredientSearchArgs struct {
+	Query string `json:"query"`
+	Limit int    `json:"limit"`
+}
+
+type ingredientSearcher struct {
+	ingredients []InputIngredient
+}
+
+func newIngredientSearcher(ingredients []InputIngredient) ingredientSearcher {
+	return ingredientSearcher{ingredients: append([]InputIngredient(nil), ingredients...)}
+}
+
+func recipeIngredientSearchToolOutputs(resp *responses.Response, searcher ingredientSearcher) ([]responses.ResponseInputItemUnionParam, error) {
+	calls := recipeIngredientSearchCalls(resp)
+	outputs := make([]responses.ResponseInputItemUnionParam, 0, len(calls))
+	for _, call := range calls {
+		output, err := searcher.search(call.Arguments)
+		if err != nil {
+			output = "Ingredient search error: " + err.Error()
+		}
+		outputs = append(outputs, responses.ResponseInputItemParamOfFunctionCallOutput(call.CallID, output))
+	}
+	return outputs, nil
+}
+
+func recipeIngredientSearchCalls(resp *responses.Response) []responses.ResponseFunctionToolCall {
+	var calls []responses.ResponseFunctionToolCall
+	if resp == nil {
+		return calls
+	}
+	for _, item := range resp.Output {
+		if item.Type != "function_call" {
+			continue
+		}
+		call := item.AsFunctionCall()
+		if call.Name != ingredientSearchToolName {
+			continue
+		}
+		calls = append(calls, call)
+	}
+	return calls
+}
+
+func (s ingredientSearcher) search(arguments string) (string, error) {
+	var args ingredientSearchArgs
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return "", fmt.Errorf("invalid search arguments: %w", err)
+	}
+	query := strings.TrimSpace(strings.ToLower(args.Query))
+	if query == "" {
+		return "", fmt.Errorf("query is required")
+	}
+	limit := args.Limit
+	if limit <= 0 || limit > 20 {
+		limit = 10
+	}
+
+	matches := make([]InputIngredient, 0, limit)
+	for _, ingredient := range s.ingredients {
+		if ingredientMatchesSearch(ingredient, query) {
+			matches = append(matches, ingredient)
+			if len(matches) == limit {
+				break
+			}
+		}
+	}
+	if len(matches) == 0 {
+		return "No matching ingredients found.", nil
+	}
+
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "%d matching ingredients in TSV format with header.\n", len(matches))
+	if err := InputIngredientsToTSV(matches, &buf); err != nil {
+		return "", fmt.Errorf("format search results: %w", err)
+	}
+	return buf.String(), nil
+}
+
+func ingredientMatchesSearch(ingredient InputIngredient, query string) bool {
+	haystack := strings.ToLower(strings.Join([]string{
+		ingredient.ProductID,
+		ingredient.AisleNumber,
+		ingredient.Brand,
+		ingredient.Description,
+		ingredient.Size,
+		strings.Join(ingredient.Categories, " "),
+	}, " "))
+	for _, term := range strings.Fields(query) {
+		if !strings.Contains(haystack, term) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {

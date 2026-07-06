@@ -39,11 +39,11 @@ func (c *tracingAIClient) RegenerateMenuPlan(ctx context.Context, instructions [
 	return c.next.RegenerateMenuPlan(ctx, instructions, previousResponseID, count)
 }
 
-func (c *tracingAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+func (c *tracingAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string, searchableIngredients []ai.InputIngredient) (*ai.Recipe, error) {
 	ctx, span := tracer.Start(ctx, "recipes.ai.generate_recipe")
 	defer span.End()
 
-	return c.next.GenerateRecipe(ctx, instructions, menuResponseID)
+	return c.next.GenerateRecipe(ctx, instructions, menuResponseID, searchableIngredients)
 }
 
 func (c *tracingAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {

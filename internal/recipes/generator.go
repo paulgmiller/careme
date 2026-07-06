@@ -25,7 +25,7 @@ const IngredientGradeCutoff = 6
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
 	RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error)
-	GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error)
+	GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string, searchableIngredients []ai.InputIngredient) (*ai.Recipe, error)
 	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error)
@@ -126,15 +126,11 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		regenInstructions := regenerateInstructions(p)
 
 		// this SHOULD hit the cache and we could do it in parallel with menu planning
-		ingredients, err := g.staples.FetchStaples(ctx, p)
+		allIngredients, err := g.staples.FetchStaples(ctx, p)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get staples: %w", err)
 		}
-		ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
-			// TODO make configurable?
-			return ing.Grade == nil || ing.Grade.Score > IngredientGradeCutoff
-		})
-		ingMap := inputIngredientMap(ingredients)
+		ingMap := inputIngredientMap(allIngredients)
 		replacmentCount := max(len(p.Dismissed), 1) // if no dismissed then just regenerate one and hope for better, if dismissed then regenerate all dismissed
 		plan, err := g.replacementMenuPlan(ctx, p, regenInstructions, replacmentCount)
 		if err != nil {
@@ -147,7 +143,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
-			recipe, err := g.aiClient.GenerateRecipe(ctx, plan.Instructions(), menuResponseID)
+			recipe, err := g.aiClient.GenerateRecipe(ctx, plan.Instructions(), menuResponseID, allIngredients)
 			if err != nil {
 				return nil, err
 			}
@@ -175,23 +171,23 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	defer span.End()
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
 
-	ingredients, err := g.staples.FetchStaples(ctx, p)
+	allIngredients, err := g.staples.FetchStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
-	ogCount := len(ingredients)
-	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
+	ogCount := len(allIngredients)
+	menuIngredients := lo.Filter(allIngredients, func(ing ai.InputIngredient, _ int) bool {
 		// TODO make configurable?
 		return ing.Grade == nil || ing.Grade.Score > IngredientGradeCutoff
 	})
-	ingMap := inputIngredientMap(ingredients)
+	ingMap := inputIngredientMap(allIngredients)
 
-	g.writeStatus(ctx, hash, status.Ingredients(ingredients, ogCount))
-	mutable.Shuffle(ingredients)
+	g.writeStatus(ctx, hash, status.Ingredients(menuIngredients, ogCount))
+	mutable.Shuffle(menuIngredients)
 
 	menuPlanInstructions := []string{p.Directive, p.Instructions}
 
-	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, ingredients, menuPlanInstructions, p.Date, p.LastRecipes, 3)
+	menuPlan, err := g.aiClient.CreateMenuPlan(ctx, p.Location, menuIngredients, menuPlanInstructions, p.Date, p.LastRecipes, 3)
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
@@ -203,7 +199,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
 		recipeInstructions := append([]string{p.Directive}, plan.Instructions()...)
-		recipe, err := g.aiClient.GenerateRecipe(ctx, recipeInstructions, menuResponseID)
+		recipe, err := g.aiClient.GenerateRecipe(ctx, recipeInstructions, menuResponseID, allIngredients)
 		if err != nil {
 			return nil, err
 		}
