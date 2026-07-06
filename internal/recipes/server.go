@@ -253,9 +253,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		hasRecipeImage = exists
 	})
 	loadWG.Go(func() {
-		if s.critiques == nil {
-			return
-		}
 		result, err := s.critiques.Load(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
@@ -443,13 +440,14 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	}
 
 	var (
-		currentUser *utypes.User
-		recipe      *ai.Recipe
-		thread      []RecipeThreadEntry
-		userErr     error
-		recipeErr   error
-		threadErr   error
-		loadWG      sync.WaitGroup
+		currentUser   *utypes.User
+		recipe        *ai.Recipe
+		thread        []RecipeThreadEntry
+		userErr       error
+		recipeErr     error
+		threadErr     error
+		critiqueFixes []string
+		loadWG        sync.WaitGroup
 	)
 	loadWG.Go(func() {
 		currentUser, userErr = s.storage.FromRequest(ctx, r, s.clerk)
@@ -459,6 +457,16 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	})
 	loadWG.Go(func() {
 		thread, threadErr = s.ThreadFromCache(ctx, hash)
+	})
+	loadWG.Go(func() {
+		c, err := s.critiques.Load(ctx, hash)
+		if err != nil {
+			if !errors.Is(err, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to load recipe critique", "hash", hash, "error", err)
+			}
+			return
+		}
+		critiqueFixes = c.SuggestedFixes
 	})
 	loadWG.Wait()
 
@@ -496,10 +504,17 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// spin page?
+	// spin page for recipes?
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 90*time.Second)
 	defer cancel()
-	replacement, err := s.generator.RegenerateRecipe(ctx, []string{"Rewrite the recipe to incorporate the user's question thread and your answers. Return a complete updated recipe."}, responseID)
+	s.wg.Add(1)
+	defer s.wg.Done()
+	instructions := []string{"Rewrite the recipe to incorporate the user's question thread and your answers. Return a complete updated recipe."}
+	if len(critiqueFixes) > 0 {
+		instructions = append(instructions, "also incorporate these critique fixes")
+		instructions = append(instructions, critiqueFixes...)
+	}
+	replacement, err := s.generator.RegenerateRecipe(ctx, instructions, responseID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to regenerate single recipe", "hash", hash, "error", err)
 		http.Error(w, "failed to refresh recipe", http.StatusInternalServerError)
@@ -681,6 +696,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setTextContent(w)
+	w.Header().Set("HX-Trigger", "careme:saved-recipes-changed")
 	_, err = w.Write(response.Bytes())
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write save response", "hash", recipeHash, "error", err)
@@ -1342,6 +1358,19 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 			return
 		}
 	})
+}
+
+func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) error {
+	if err := s.SaveParams(ctx, p); err != nil {
+		if errors.Is(err, ErrAlreadyExists) {
+			return nil // someone already kicked most likely. \
+			// Ideally we check params date and rekick if not finished in under one hour
+		}
+		return fmt.Errorf("save params: %w", err)
+	}
+
+	s.kickgeneration(ctx, p)
+	return nil
 }
 
 func (s *server) writeGenerationStatus(ctx context.Context, hash, status string) {

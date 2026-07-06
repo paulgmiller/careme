@@ -12,7 +12,6 @@ import (
 	"careme/internal/cache"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
-	"careme/internal/recipes/critique"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -92,7 +91,7 @@ type captureRecipeSaver struct {
 func newTestGenerator(
 	t *testing.T,
 	aiClient aiClient,
-	critiquer critique.Service,
+	critiquer recipeCritiquer,
 	staples staplesService,
 	statuses statusWriter,
 	saver recipeSaver,
@@ -410,19 +409,22 @@ func (c *sequenceAIClient) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (c *captureCritiqueService) CritiqueRecipe(_ context.Context, recipe ai.Recipe) <-chan critique.Result {
-	results := make(chan critique.Result, 1)
+func (c *captureCritiqueService) CritiqueRecipe(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
 	c.mu.Lock()
 	c.recipes = append(c.recipes, recipe)
 	c.mu.Unlock()
 
-	crit, err := c.critiqueFor(recipe)
-	results <- critique.Result{
-		Critique: crit,
-		Err:      err,
-	}
-	close(results)
-	return results
+	return c.critiqueFor(recipe)
+}
+
+func (c *captureCritiqueService) CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe) {
+	_, _ = c.CritiqueRecipe(ctx, recipe)
+}
+
+func (c *captureCritiqueService) critiqueRecipes() []ai.Recipe {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.recipes)
 }
 
 func (c *captureCritiqueService) critiqueFor(recipe ai.Recipe) (*ai.RecipeCritique, error) {
@@ -1043,10 +1045,11 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	if got := aiStub.regenerateResponseIDs; !slices.Equal(got, []string{"resp-initial"}) {
 		t.Fatalf("unexpected critique retry response IDs: got %v", got)
 	}
-	if len(critiquer.recipes) != 2 {
-		t.Fatalf("expected two critique passes, got %d", len(critiquer.recipes))
-	}
-	if got := critiquer.recipes[1].Title; got != "Better Dinner" {
+	require.Eventually(t, func() bool {
+		return len(critiquer.critiqueRecipes()) == 2
+	}, time.Second, time.Millisecond)
+	critiquedRecipes := critiquer.critiqueRecipes()
+	if got := critiquedRecipes[1].Title; got != "Better Dinner" {
 		t.Fatalf("expected retried recipe to be critiqued again, got %q", got)
 	}
 	if got := saver.titles(); !slices.Equal(got, []string{"Weak Dinner", "Better Dinner"}) {

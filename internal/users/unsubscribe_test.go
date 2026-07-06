@@ -17,7 +17,7 @@ func TestHandleUnsubscribeDisablesMailOptInOnGet(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	tf := FakeUnsubscribeTokenFactory()
-	s := NewHandler(NewStorage(cacheStore), nil, auth.DefaultMock(), tf)
+	s := NewHandler(NewStorage(cacheStore), nil, auth.DefaultMock(), tf, "http://example.com")
 	u := &utypes.User{
 		ID:            "u-1",
 		Email:         []string{"u1@example.com"},
@@ -54,7 +54,7 @@ func TestHandleUnsubscribeDoesNotDisableMailOptInOnHead(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	tf := FakeUnsubscribeTokenFactory()
-	s := NewHandler(NewStorage(cacheStore), nil, auth.DefaultMock(), tf)
+	s := NewHandler(NewStorage(cacheStore), nil, auth.DefaultMock(), tf, "http://example.com")
 	u := &utypes.User{
 		ID:            "u-1",
 		Email:         []string{"u1@example.com"},

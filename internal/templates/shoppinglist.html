@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Recipes for {{.Location.Name}} | Careme</title>
   <meta name="description" content="{{.MetaDescription}}" />
 
@@ -21,7 +21,7 @@
   <meta name="twitter:image" content="{{PublicOrigin}}/favicon.ico" />
   {{end}}
 
-  {{template "tailwind_head" .Style}}
+  {{template "app_head" .Style}}
 
   {{.ClarityScript}}
   {{.GoogleTagScript}}
@@ -33,7 +33,7 @@
     <section class="mx-auto w-full max-w-5xl space-y-8">
       <div class="friendly-card border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 p-8">
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">
                 <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme</a>
@@ -55,6 +55,24 @@
           </aside>
           {{end}}
 
+          {{if .UseTodaysIngredients}}
+          <form id="regenerateForm"
+                method="GET"
+                action="/recipes">
+            <input type="hidden" name="location" value="{{.Location.ID}}" />
+            <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
+              <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-ink-600">
+                  Using ingredients from <span class="font-semibold text-brand-700">{{.DateDisplay}}</span>.
+                </p>
+                <button type="submit"
+                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Use today's ingredients
+                </button>
+              </div>
+            </div>
+          </form>
+          {{else}}
           <form id="regenerateForm"
                 method="POST"
                 action="/recipes/{{.Hash}}/regenerate"
@@ -76,6 +94,7 @@
               </div>
             </div>
           </form>
+          {{end}}
 
           <div class="mt-8 space-y-8">
             {{range .Recipes}}
@@ -124,6 +143,7 @@
     </section>
   </main>
   <script src="/static/htmx@2.0.8.js"></script>
+  <script src="/static/share.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
@@ -146,6 +166,7 @@
       Build Shopping List
     </button>
   </span>
+  {{template "shopping_list_share_button" .}}
   {{if not .HasSavedRecipes}}
   <p id="finalize-help" class="text-sm text-ink-600">
     Add at least one recipe to assemble your shopping list.

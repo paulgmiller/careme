@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"careme/internal/ai"
@@ -69,6 +70,10 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage string, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
+	instructions := strings.TrimSpace(p.Instructions)
+	if instructions == "" && l.Plan != nil {
+		instructions = l.Plan.ChefNoteSuggestion
+	}
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
@@ -93,43 +98,55 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		}
 	}
 	data := struct {
-		Location        locations.Location
-		Date            string
-		MetaDescription string
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Instructions    string
-		HelpMessage     string
-		Hash            string
-		Recipes         []shoppingRecipeView
-		ShoppingList    []shoppingListGroup
-		HasSavedRecipes bool
-		Style           seasons.Style
-		ServerSignedIn  bool
-		User            *utypes.User
-		AuthReturnTo    string
+		Location             locations.Location
+		Date                 string
+		DateDisplay          string
+		MetaDescription      string
+		ClarityScript        template.HTML
+		GoogleTagScript      template.HTML
+		Instructions         string
+		HelpMessage          string
+		Hash                 string
+		Recipes              []shoppingRecipeView
+		ShoppingList         []shoppingListGroup
+		HasSavedRecipes      bool
+		Style                seasons.Style
+		ServerSignedIn       bool
+		User                 *utypes.User
+		AuthReturnTo         string
+		UseTodaysIngredients bool
 	}{
-		Location:        *p.Location,
-		Date:            p.Date.Format("2006-01-02"),
-		MetaDescription: shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Instructions:    p.Instructions,
-		HelpMessage:     strings.TrimSpace(helpMessage),
-		Hash:            hash,
-		Recipes:         recipeViews,
-		ShoppingList:    shoppingListForDisplay(combinedIngredients),
-		HasSavedRecipes: hasSavedRecipes,
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  serverSignedIn,
-		User:            currentUser,
-		AuthReturnTo:    "/recipes?h=" + hash,
+		Location:             *p.Location,
+		Date:                 p.Date.Format("2006-01-02"),
+		DateDisplay:          p.Date.Format("January 2, 2006"),
+		MetaDescription:      shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
+		ClarityScript:        templates.ClarityScript(ctx),
+		GoogleTagScript:      templates.GoogleTagScript(),
+		Instructions:         instructions,
+		HelpMessage:          strings.TrimSpace(helpMessage),
+		Hash:                 hash,
+		Recipes:              recipeViews,
+		ShoppingList:         shoppingListForDisplay(combinedIngredients),
+		HasSavedRecipes:      hasSavedRecipes,
+		Style:                seasons.GetCurrentStyle(),
+		ServerSignedIn:       serverSignedIn,
+		User:                 currentUser,
+		AuthReturnTo:         "/recipes?h=" + hash,
+		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	}
 
 	setTextContent(writer)
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
+	today, err := StoreToDate(ctx, nowFn(), p.Location)
+	if err != nil {
+		return false
+	}
+	return today.Sub(p.Date) > 24*time.Hour
 }
 
 func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
