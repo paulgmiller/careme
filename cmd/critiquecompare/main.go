@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"text/tabwriter"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -26,6 +25,7 @@ import (
 const (
 	defaultCompareModel = "gemini-3.5-flash"
 	benchmarkPrefix     = "recipe_critique_comparisons/"
+	detailScoreDelta    = 1
 )
 
 type recipeCritiquer interface {
@@ -201,31 +201,95 @@ func printRows(out io.Writer, rows []comparisonRow) error {
 		return nil
 	}
 
-	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "DELTA\tCACHED\tFLASH\tTITLE\tHASH\tCACHED_MODEL\tFLASH_MODEL\tCACHED_SUMMARY\tFLASH_SUMMARY"); err != nil {
+	detailedRows := filterDetailedRows(rows)
+	if _, err := fmt.Fprintf(out, "Showing %d critiques with score difference > %d\n", len(detailedRows), detailScoreDelta); err != nil {
 		return err
 	}
-	for _, row := range rows {
-		if _, err := fmt.Fprintf(
-			tw,
-			"%+d\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			row.ScoreDelta,
-			row.Cached.OverallScore,
-			row.Flash.OverallScore,
-			truncate(row.Title, 48),
-			row.Hash,
-			emptyDash(row.Cached.Model),
-			emptyDash(row.Flash.Model),
-			truncate(row.Cached.Summary, 60),
-			truncate(row.Flash.Summary, 60),
-		); err != nil {
+
+	for _, row := range detailedRows {
+		if err := printDetailedRow(out, row); err != nil {
 			return err
 		}
 	}
-	if err := tw.Flush(); err != nil {
+
+	return printStats(out, rows)
+}
+
+func filterDetailedRows(rows []comparisonRow) []comparisonRow {
+	filtered := make([]comparisonRow, 0, len(rows))
+	for _, row := range rows {
+		if row.AbsScoreDelta > detailScoreDelta {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered
+}
+
+func printDetailedRow(out io.Writer, row comparisonRow) error {
+	if _, err := fmt.Fprintf(out, "\n%s (%s)\n", row.Title, row.Hash); err != nil {
 		return err
 	}
-	return printStats(out, rows)
+	if _, err := fmt.Fprintf(out, "Score delta: %+d (cached %d, flash %d)\n", row.ScoreDelta, row.Cached.OverallScore, row.Flash.OverallScore); err != nil {
+		return err
+	}
+	if err := printCritique(out, "Cached critique", row.Cached); err != nil {
+		return err
+	}
+	return printCritique(out, "Flash critique", row.Flash)
+}
+
+func printCritique(out io.Writer, heading string, c *ai.RecipeCritique) error {
+	if _, err := fmt.Fprintf(out, "\n%s\n", heading); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "Model: %s\n", emptyDash(c.Model)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "Score: %d\n", c.OverallScore); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "Summary: %s\n", strings.TrimSpace(c.Summary)); err != nil {
+		return err
+	}
+	if err := printStringList(out, "Strengths", c.Strengths); err != nil {
+		return err
+	}
+	if err := printIssues(out, c.Issues); err != nil {
+		return err
+	}
+	return printStringList(out, "Suggested fixes", c.SuggestedFixes)
+}
+
+func printStringList(out io.Writer, heading string, values []string) error {
+	if _, err := fmt.Fprintf(out, "%s:\n", heading); err != nil {
+		return err
+	}
+	if len(values) == 0 {
+		_, err := fmt.Fprintln(out, "- none")
+		return err
+	}
+	for _, value := range values {
+		if _, err := fmt.Fprintf(out, "- %s\n", strings.TrimSpace(value)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func printIssues(out io.Writer, issues []ai.RecipeCritiqueIssue) error {
+	if _, err := fmt.Fprintln(out, "Issues:"); err != nil {
+		return err
+	}
+	if len(issues) == 0 {
+		_, err := fmt.Fprintln(out, "- none")
+		return err
+	}
+	for _, issue := range issues {
+		if _, err := fmt.Fprintf(out, "- [%s/%s] %s\n", strings.TrimSpace(issue.Category), strings.TrimSpace(issue.Severity), strings.TrimSpace(issue.Detail)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type scoreStats struct {
@@ -289,17 +353,6 @@ func calculateStats(rows []comparisonRow) scoreStats {
 
 func squared(n float64) float64 {
 	return n * n
-}
-
-func truncate(s string, limit int) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if len(s) <= limit {
-		return s
-	}
-	if limit <= 3 {
-		return s[:limit]
-	}
-	return s[:limit-3] + "..."
 }
 
 func emptyDash(s string) string {

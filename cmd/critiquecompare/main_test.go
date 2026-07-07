@@ -102,16 +102,16 @@ func TestPrintRowsIncludesStats(t *testing.T) {
 		{
 			Hash:          "a",
 			Title:         "Alpha",
-			Cached:        cachedCritique(6, "alpha cached", "pro", time.Time{}),
-			Flash:         cachedCritique(9, "alpha flash", "flash", time.Time{}),
+			Cached:        fullCritique(6, "alpha cached", "pro"),
+			Flash:         fullCritique(9, "alpha flash", "flash"),
 			ScoreDelta:    3,
 			AbsScoreDelta: 3,
 		},
 		{
 			Hash:          "b",
 			Title:         "Beta",
-			Cached:        cachedCritique(9, "beta cached", "pro", time.Time{}),
-			Flash:         cachedCritique(7, "beta flash", "flash", time.Time{}),
+			Cached:        fullCritique(9, "beta cached", "pro"),
+			Flash:         fullCritique(7, "beta flash", "flash"),
 			ScoreDelta:    -2,
 			AbsScoreDelta: 2,
 		},
@@ -122,11 +122,16 @@ func TestPrintRowsIncludesStats(t *testing.T) {
 
 	body := out.String()
 	assert.Contains(t, body, "Compared 2 recipes")
-	assert.Contains(t, body, "DELTA")
-	assert.Contains(t, body, "CACHED")
-	assert.Contains(t, body, "FLASH")
+	assert.Contains(t, body, "Showing 1 critiques with score difference > 2")
 	assert.Contains(t, body, "Alpha")
-	assert.Contains(t, body, "Beta")
+	assert.NotContains(t, body, "Beta (b)")
+	assert.Contains(t, body, "Cached critique")
+	assert.Contains(t, body, "Flash critique")
+	assert.Contains(t, body, "Score delta: +3 (cached 6, flash 9)")
+	assert.Contains(t, body, "Summary: alpha cached")
+	assert.Contains(t, body, "Strengths:\n- clear prep")
+	assert.Contains(t, body, "Issues:\n- [timing/high] timing is off")
+	assert.Contains(t, body, "Suggested fixes:\n- fix timing")
 	assert.Contains(t, body, "STATS\tCACHED\tFLASH\tDELTA")
 	assert.Contains(t, body, "AVERAGE\t7.50\t8.00\t+0.50")
 	assert.Contains(t, body, "VARIANCE\t2.25\t1.00\t6.25")
@@ -176,4 +181,12 @@ func cachedCritique(score int, summary string, model string, critiquedAt time.Ti
 		Model:         model,
 		CritiquedAt:   critiquedAt,
 	}
+}
+
+func fullCritique(score int, summary string, model string) *ai.RecipeCritique {
+	c := cachedCritique(score, summary, model, time.Time{})
+	c.Strengths = []string{"clear prep"}
+	c.Issues = []ai.RecipeCritiqueIssue{{Severity: "high", Category: "timing", Detail: "timing is off"}}
+	c.SuggestedFixes = []string{"fix timing"}
+	return c
 }
