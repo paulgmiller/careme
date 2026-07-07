@@ -186,7 +186,7 @@ func loadAdminMealPlanPageData(ctx context.Context, rio recipeio, startHash stri
 			RecipesURL:    "/recipes?h=" + hash,
 			ParamsURL:     "/admin/params/" + hash,
 			MenuPromptURL: "/admin/prompt/menu/" + hash,
-			Date:          params.Date.Format("2006-01-02"),
+			Date:          params.FormatDate(),
 			Instructions:  strings.TrimSpace(params.Instructions),
 		}
 		if params.Location != nil {

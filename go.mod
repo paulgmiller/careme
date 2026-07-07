@@ -16,7 +16,6 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/joho/godotenv v1.5.1
 	github.com/openai/openai-go/v3 v3.41.0
-	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sendgrid/rest v2.6.9+incompatible
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	github.com/stretchr/testify v1.11.1

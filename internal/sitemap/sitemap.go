@@ -93,7 +93,8 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
 	locs := campaigns.AdvertisedRecipeLocations()
 
 	var urls []string
-	for _, loc := range locs {
+	for _, campaign := range locs {
+		loc := campaign.Location
 		date, err := recipes.StoreToDate(ctx, time.Now(), &loc)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to get date for location", "error", err, "location", loc)

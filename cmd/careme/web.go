@@ -111,7 +111,7 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
 
-	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg))
+	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
 
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage, recipes.NewCachedProduceScorer(recipes.IO(cache)))
@@ -123,7 +123,7 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create farmers market cache: %w", err)
 	}
 	farmersMarketStore := farmersmarket.NewStore(farmersMarketCache)
-	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore, centroids)
+	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
 	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, farmersMarketCache, authClient, marketExtractor, centroids)
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)

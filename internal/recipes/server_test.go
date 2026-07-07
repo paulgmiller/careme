@@ -39,7 +39,7 @@ func TestRedirectToHash(t *testing.T) {
 	req := httptest.NewRequest("GET", "/dummy", nil)
 
 	hash := "testhash"
-	redirectToHash(rr, req, hash, true)
+	redirectToHash(rr, req, hash, queryArgStart)
 
 	// Check the status code
 	if status := rr.Code; status != http.StatusSeeOther {
@@ -52,6 +52,22 @@ func TestRedirectToHash(t *testing.T) {
 	if !strings.HasPrefix(location, expectedLocation) {
 		t.Errorf("handler returned wrong location: got %v want prefix %v", location, expectedLocation)
 	}
+}
+
+func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=store-1&help=Save+two+dinners", nil)
+
+	redirectToHash(rr, req, "testhash", queryArgStart, QueryArgHelp)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	location := rr.Header().Get("Location")
+	u, err := url.Parse(location)
+	require.NoError(t, err)
+	assert.Equal(t, "/recipes", u.Path)
+	assert.Equal(t, "testhash", u.Query().Get("h"))
+	assert.NotEmpty(t, u.Query().Get("start"))
+	assert.Equal(t, "Save two dinners", u.Query().Get("help"))
 }
 
 func legacyRecipeHash(hash string) (string, bool) {
@@ -1445,6 +1461,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
+	require.Equal(t, "careme:saved-recipes-changed", rr.Header().Get("HX-Trigger"))
 	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
 	require.Contains(t, rr.Body.String(), `✓ Added`)
 	require.Contains(t, rr.Body.String(), `Hide`)
@@ -1819,6 +1836,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
+	require.Empty(t, rr.Header().Get("HX-Trigger"))
 	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
 	require.Contains(t, rr.Body.String(), `/save"`)
 	require.Contains(t, rr.Body.String(), `Restore`)
