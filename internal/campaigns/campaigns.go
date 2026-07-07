@@ -20,7 +20,7 @@ func redirectToLocation(location string, helpMessage string) http.HandlerFunc {
 		query := cloneValues(r.URL.Query())
 		query.Set("location", location)
 		if helpMessage != "" {
-			query.Set(recipes.HelpQueryParam, helpMessage)
+			query.Set(recipes.QueryArgHelp, helpMessage)
 		}
 
 		target := url.URL{
