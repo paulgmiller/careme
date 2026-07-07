@@ -20,7 +20,7 @@ func TestIssaquahRedirect(t *testing.T) {
 			request: "/c/issaquah",
 			expectedQuery: url.Values{
 				"location": {"70100658"},
-				"help":     {issaquahShoppingListHelp},
+				"help":     {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
 			},
 		},
 		{
@@ -28,7 +28,7 @@ func TestIssaquahRedirect(t *testing.T) {
 			request: "/c/issaquah?utm_source=facebook&utm_campaign=carts",
 			expectedQuery: url.Values{
 				"location":     {"70100658"},
-				"help":         {issaquahShoppingListHelp},
+				"help":         {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
 				"utm_source":   {"facebook"},
 				"utm_campaign": {"carts"},
 			},
@@ -38,7 +38,7 @@ func TestIssaquahRedirect(t *testing.T) {
 			request: "/c/issaquah?location=other&utm_source=facebook",
 			expectedQuery: url.Values{
 				"location":   {"70100658"},
-				"help":       {issaquahShoppingListHelp},
+				"help":       {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
 				"utm_source": {"facebook"},
 			},
 		},

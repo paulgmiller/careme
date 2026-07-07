@@ -13,15 +13,24 @@ import (
 	"careme/internal/routing"
 )
 
-// AdvertisedRecipeLocations returns the stores we intentionally pre-generate and promote.
+// Campaign is a promoted store plus campaign-specific page context.
+type Campaign struct {
+	Location    locations.Location
+	HelpMessage string
+}
+
+// AdvertisedRecipeLocations returns the campaigns we intentionally pre-generate and promote.
 // should probably vagule align with StaplesWatchdogLocations() as why wouldn't we monitor
 // the most importnant stores
-func AdvertisedRecipeLocations() map[string]locations.Location {
-	return map[string]locations.Location{
-		//{ID: "wholefoods_10153", ZipCode: "97209"},
-		//{ID: "safeway_490", ZipCode: "86403"},
-		"bellevue": {ID: "70500874", ZipCode: "98101"}, // bellevue
-		"issaquah": {ID: "70100658", ZipCode: "98029"},
+func AdvertisedRecipeLocations() map[string]Campaign {
+	return map[string]Campaign{
+		//{Location: locations.Location{ID: "wholefoods_10153", ZipCode: "97209"}},
+		//{Location: locations.Location{ID: "safeway_490", ZipCode: "86403"}},
+		"bellevue": {Location: locations.Location{ID: "70500874", ZipCode: "98101"}}, // bellevue
+		"issaquah": {
+			Location:    locations.Location{ID: "70100658", ZipCode: "98029"},
+			HelpMessage: "The 3 recipes below were generated with ingredients in stock at Issaquah Fred Meyer today. If you want anything else, type it in and say Try again, chef. Add the recipes you like, hide the ones you don't, and we'll build out a shopping list.",
+		},
 	}
 }
 
@@ -54,7 +63,7 @@ func (s advertisedGenerationServer) handleGenerate(w http.ResponseWriter, r *htt
 	ctx := r.Context()
 	var err error
 	for _, advertised := range AdvertisedRecipeLocations() {
-		err = errors.Join(err, s.generateLocation(ctx, advertised.ID))
+		err = errors.Join(err, s.generateLocation(ctx, advertised.Location.ID))
 	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to trigger advertised recipe generation", "error", err)
