@@ -43,11 +43,11 @@ func TestIssaquahRedirect(t *testing.T) {
 			},
 		},
 		{
-			name:    "preserves incoming help",
+			name:    "overrides incoming help",
 			request: "/c/issaquah?help=Custom+note",
 			expectedQuery: url.Values{
 				"location": {"70100658"},
-				"help":     {"Custom note"},
+				"help":     {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
 			},
 		},
 	}

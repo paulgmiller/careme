@@ -18,7 +18,7 @@ func redirectToLocation(location string, helpMessage string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := cloneValues(r.URL.Query())
 		query.Set("location", location)
-		if helpMessage != "" && query.Get("help") == "" {
+		if helpMessage != "" {
 			query.Set("help", helpMessage)
 		}
 
