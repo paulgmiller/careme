@@ -173,42 +173,6 @@ func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
 	}
 }
 
-func TestLocationsPageCarriesCampaignInstructionsAndHelpToRecipes(t *testing.T) {
-	mustInitLocationTemplates(t)
-
-	client := newFakeLocationClient()
-	client.setListResponse("10001", []Location{{
-		ID:      "12345678",
-		Name:    "Kroger Test",
-		Address: "1 Market St",
-		ZipCode: "10001",
-	}})
-	client.setHasInventory("12345678", true)
-	storage := newTestLocationServer(client)
-	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, nil)
-
-	mux := http.NewServeMux()
-	server.Register(mux, auth.DefaultMock())
-
-	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001&instructions=make%20it%20vegetarian&help=Save%20two%20dinners", nil)
-	rr := httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
-	}
-	body := rr.Body.String()
-	if !strings.Contains(body, `href="/recipes?location=12345678&amp;instructions=make&#43;it&#43;vegetarian&amp;help=Save&#43;two&#43;dinners"`) {
-		t.Fatalf("expected campaign params on recipe links, got %q", body)
-	}
-	if !strings.Contains(body, `<input type="hidden" name="help" value="Save two dinners" />`) {
-		t.Fatalf("expected hidden help field, got %q", body)
-	}
-	if !strings.Contains(body, `>make it vegetarian</textarea>`) {
-		t.Fatalf("expected instructions textarea to be prefilled, got %q", body)
-	}
-}
-
 func TestLocationsPageOmitsMissingProduceScoreBadge(t *testing.T) {
 	mustInitLocationTemplates(t)
 

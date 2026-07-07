@@ -102,7 +102,7 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 		if currentUser != nil {
 			favoriteStore = currentUser.FavoriteStore
 		}
-		if err := l.renderLocationsPage(w, ctx, zip, favoriteStore, currentUser != nil, r.URL.Query().Get("instructions"), firstLocationQueryValue(r, "help", "help_message", "shoppinglist_help")); err != nil {
+		if err := l.renderLocationsPage(w, ctx, zip, favoriteStore, currentUser != nil); err != nil {
 			slog.ErrorContext(ctx, "failed to render locations page", "zip", zip, "error", err)
 			http.Error(w, "Failed to render locations page. ", http.StatusInternalServerError)
 		}
@@ -148,16 +148,7 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 	})
 }
 
-func firstLocationQueryValue(r *http.Request, names ...string) string {
-	for _, name := range names {
-		if value := r.URL.Query().Get(name); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, zip string, favoriteStore string, serverSignedIn bool, campaignInstructions string, shoppingListHelp string) error {
+func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, zip string, favoriteStore string, serverSignedIn bool) error {
 	locs, err := l.storage.GetLocationsByZip(ctx, zip)
 	// be very forgiving of errors here.
 	if len(locs) == 0 && err != nil {
@@ -199,8 +190,6 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		GoogleTagScript template.HTML
 		Style           seasons.Style
 		ServerSignedIn  bool
-		Instructions    string
-		HelpMessage     string
 	}{
 		Locations:       lo.FromSlicePtr(rows),
 		Zip:             zip,
@@ -209,8 +198,6 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  serverSignedIn,
-		Instructions:    strings.TrimSpace(campaignInstructions),
-		HelpMessage:     strings.TrimSpace(shoppingListHelp),
 	}
 	return templates.Location.Execute(w, data)
 }
