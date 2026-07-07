@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"slices"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -37,118 +36,101 @@ func (f *fakeCritiquer) Calls() []string {
 	return slices.Clone(f.calls)
 }
 
-func TestRunComparesNewestRecipesAndPrintsLargestDeltasFirst(t *testing.T) {
+func TestCompareCritiquesComparesLimitedCachedRecipes(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
 	now := time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC)
-	seedRecipeWithCritique(t, cacheStore, "Old Hash", testRecipe("Old Stew"), cachedCritique(1, "old cached", "pro", now.Add(-3*time.Hour)))
-	seedRecipeWithCritique(t, cacheStore, "Mid Hash", testRecipe("Mid Pasta"), cachedCritique(6, "mid cached", "pro", now.Add(-2*time.Hour)))
-	seedRecipeWithCritique(t, cacheStore, "New Hash", testRecipe("New Tacos"), cachedCritique(9, "new cached", "pro", now.Add(-1*time.Hour)))
-	require.NoError(t, critique.NewStore(cacheStore).Save(t.Context(), "Missing Hash", cachedCritique(4, "missing cached", "pro", now)))
+	seedRecipeWithCritique(t, cacheStore, "a", testRecipe("Alpha"), cachedCritique(8, "alpha cached", "pro", now))
+	seedRecipeWithCritique(t, cacheStore, "b", testRecipe("Beta"), cachedCritique(6, "beta cached", "pro", now))
+	seedRecipeWithCritique(t, cacheStore, "c", testRecipe("Gamma"), cachedCritique(4, "gamma cached", "pro", now))
 
 	fake := &fakeCritiquer{responses: map[string]*ai.RecipeCritique{
-		"Mid Pasta": cachedCritique(9, "mid flash", "flash", now),
-		"New Tacos": cachedCritique(7, "new flash", "flash", now),
+		"Alpha": cachedCritique(7, "alpha flash", "flash", now),
+		"Beta":  cachedCritique(9, "beta flash", "flash", now),
 	}}
-	var out bytes.Buffer
 
-	err := runWithDeps(t.Context(), []string{"-n", "2"}, &out, compareDeps{cache: cacheStore, critiquer: fake})
+	rows, err := compareCritiques(t.Context(), cacheStore, fake, "gemini-test-flash", 2, false)
 
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"New Tacos", "Mid Pasta"}, fake.Calls())
-	body := out.String()
-	assert.Contains(t, body, "Compared 2 recipes (1 cached critiques skipped because the recipe was missing)")
-	assert.Contains(t, body, "DELTA")
-	assert.Contains(t, body, "Mid Pasta")
-	assert.Contains(t, body, "New Tacos")
-	assert.NotContains(t, body, "Old Stew")
-	assert.Less(t, strings.Index(body, "+3"), strings.Index(body, "-2"))
+	assert.ElementsMatch(t, []string{"Alpha", "Beta"}, fake.Calls())
+	require.Len(t, rows, 2)
+	assert.Equal(t, "a", rows[0].Hash)
+	assert.Equal(t, -1, rows[0].ScoreDelta)
+	assert.Equal(t, 1, rows[0].AbsScoreDelta)
+	assert.Equal(t, "b", rows[1].Hash)
+	assert.Equal(t, 3, rows[1].ScoreDelta)
+	assert.Equal(t, 3, rows[1].AbsScoreDelta)
 }
 
-func TestRunReusesSavedBenchmarkCritiquesUnlessRefreshIsSet(t *testing.T) {
+func TestCompareCritiquesReusesSavedBenchmarkCritiquesUnlessRefreshIsSet(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
 	now := time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC)
-	recipe := testRecipe("Roast Chicken")
-	hash := "Roast Hash"
-	seedRecipeWithCritique(t, cacheStore, hash, recipe, cachedCritique(8, "cached", "pro", now))
+	seedRecipeWithCritique(t, cacheStore, "roast", testRecipe("Roast Chicken"), cachedCritique(8, "cached", "pro", now))
 
 	first := &fakeCritiquer{responses: map[string]*ai.RecipeCritique{
 		"Roast Chicken": cachedCritique(5, "first flash", "flash", now),
 	}}
-	var out bytes.Buffer
-	require.NoError(t, runWithDeps(t.Context(), []string{"-n", "1", "-model", "gemini-test-flash"}, &out, compareDeps{cache: cacheStore, critiquer: first}))
+	rows, err := compareCritiques(t.Context(), cacheStore, first, "gemini-test-flash", 1, false)
+	require.NoError(t, err)
 	require.Equal(t, []string{"Roast Chicken"}, first.Calls())
+	require.Len(t, rows, 1)
+	assert.Equal(t, "first flash", rows[0].Flash.Summary)
 
 	second := &fakeCritiquer{responses: map[string]*ai.RecipeCritique{
 		"Roast Chicken": cachedCritique(10, "second flash", "flash", now),
 	}}
-	out.Reset()
-	require.NoError(t, runWithDeps(t.Context(), []string{"-n", "1", "-model", "gemini-test-flash"}, &out, compareDeps{cache: cacheStore, critiquer: second}))
+	rows, err = compareCritiques(t.Context(), cacheStore, second, "gemini-test-flash", 1, false)
+	require.NoError(t, err)
 	assert.Empty(t, second.Calls())
-	assert.Contains(t, out.String(), "first flash")
-	assert.NotContains(t, out.String(), "second flash")
+	require.Len(t, rows, 1)
+	assert.Equal(t, "first flash", rows[0].Flash.Summary)
 
-	out.Reset()
-	require.NoError(t, runWithDeps(t.Context(), []string{"-n", "1", "-model", "gemini-test-flash", "-refresh"}, &out, compareDeps{cache: cacheStore, critiquer: second}))
+	rows, err = compareCritiques(t.Context(), cacheStore, second, "gemini-test-flash", 1, true)
+	require.NoError(t, err)
 	assert.Equal(t, []string{"Roast Chicken"}, second.Calls())
-	assert.Contains(t, out.String(), "second flash")
+	require.Len(t, rows, 1)
+	assert.Equal(t, "second flash", rows[0].Flash.Summary)
 }
 
-func TestRunRejectsInvalidLimit(t *testing.T) {
+func TestPrintRowsIncludesStats(t *testing.T) {
 	t.Parallel()
 
-	var out bytes.Buffer
-	err := runWithDeps(t.Context(), []string{"-n", "0"}, &out, compareDeps{cache: cache.NewInMemoryCache(), critiquer: &fakeCritiquer{}})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "-n")
-}
-
-func TestRunRejectsInvalidParallelLimit(t *testing.T) {
-	t.Parallel()
-
-	var out bytes.Buffer
-	err := runWithDeps(t.Context(), []string{"-parallel", "0"}, &out, compareDeps{cache: cache.NewInMemoryCache(), critiquer: &fakeCritiquer{}})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "-parallel")
-}
-
-func TestRunHonorsParallelLimit(t *testing.T) {
-	t.Parallel()
-
-	cacheStore := cache.NewInMemoryCache()
-	now := time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC)
-	seedRecipeWithCritique(t, cacheStore, "One Hash", testRecipe("One"), cachedCritique(8, "one cached", "pro", now))
-	seedRecipeWithCritique(t, cacheStore, "Two Hash", testRecipe("Two"), cachedCritique(8, "two cached", "pro", now.Add(-time.Minute)))
-	seedRecipeWithCritique(t, cacheStore, "Three Hash", testRecipe("Three"), cachedCritique(8, "three cached", "pro", now.Add(-2*time.Minute)))
-
-	fake := &blockingCritiquer{
-		responses: map[string]*ai.RecipeCritique{
-			"One":   cachedCritique(7, "one flash", "flash", now),
-			"Two":   cachedCritique(6, "two flash", "flash", now),
-			"Three": cachedCritique(5, "three flash", "flash", now),
+	rows := []comparisonRow{
+		{
+			Hash:          "a",
+			Title:         "Alpha",
+			Cached:        cachedCritique(6, "alpha cached", "pro", time.Time{}),
+			Flash:         cachedCritique(9, "alpha flash", "flash", time.Time{}),
+			ScoreDelta:    3,
+			AbsScoreDelta: 3,
 		},
-		release: make(chan struct{}),
+		{
+			Hash:          "b",
+			Title:         "Beta",
+			Cached:        cachedCritique(9, "beta cached", "pro", time.Time{}),
+			Flash:         cachedCritique(7, "beta flash", "flash", time.Time{}),
+			ScoreDelta:    -2,
+			AbsScoreDelta: 2,
+		},
 	}
 	var out bytes.Buffer
-	errCh := make(chan error, 1)
 
-	go func() {
-		errCh <- runWithDeps(t.Context(), []string{"-n", "3", "-parallel", "2"}, &out, compareDeps{cache: cacheStore, critiquer: fake})
-	}()
+	require.NoError(t, printRows(&out, rows))
 
-	require.Eventually(t, func() bool {
-		return fake.MaxActive() == 2
-	}, time.Second, 10*time.Millisecond)
-	assert.Equal(t, 2, fake.MaxActive())
-
-	close(fake.release)
-	require.NoError(t, <-errCh)
-	assert.Contains(t, out.String(), "Compared 3 recipes")
+	body := out.String()
+	assert.Contains(t, body, "Compared 2 recipes")
+	assert.Contains(t, body, "DELTA")
+	assert.Contains(t, body, "CACHED")
+	assert.Contains(t, body, "FLASH")
+	assert.Contains(t, body, "Alpha")
+	assert.Contains(t, body, "Beta")
+	assert.Contains(t, body, "STATS\tCACHED\tFLASH\tDELTA")
+	assert.Contains(t, body, "AVERAGE\t7.50\t8.00\t+0.50")
+	assert.Contains(t, body, "VARIANCE\t2.25\t1.00\t6.25")
+	assert.Contains(t, body, "TOTAL_DIFFERENCE\t1\tABS 5")
 }
 
 func seedRecipeWithCritique(t *testing.T, cacheStore cache.ListCache, hash string, recipe ai.Recipe, c *ai.RecipeCritique) {
@@ -194,33 +176,4 @@ func cachedCritique(score int, summary string, model string, critiquedAt time.Ti
 		Model:         model,
 		CritiquedAt:   critiquedAt,
 	}
-}
-
-type blockingCritiquer struct {
-	mu        sync.Mutex
-	active    int
-	maxActive int
-	responses map[string]*ai.RecipeCritique
-	release   chan struct{}
-}
-
-func (b *blockingCritiquer) CritiqueRecipe(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
-	b.mu.Lock()
-	b.active++
-	b.maxActive = max(b.maxActive, b.active)
-	b.mu.Unlock()
-
-	<-b.release
-
-	b.mu.Lock()
-	b.active--
-	b.mu.Unlock()
-
-	return b.responses[recipe.Title], nil
-}
-
-func (b *blockingCritiquer) MaxActive() int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.maxActive
 }

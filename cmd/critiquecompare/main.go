@@ -32,11 +32,6 @@ type recipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
 }
 
-type compareDeps struct {
-	cache     cache.ListCache
-	critiquer recipeCritiquer
-}
-
 type comparisonRow struct {
 	Hash          string
 	Title         string
@@ -59,10 +54,6 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, out io.Writer) error {
-	return runWithDeps(ctx, args, out)
-}
-
-func runWithDeps(ctx context.Context, args []string, out io.Writer) error {
 	var limit int
 	var model string
 	var refresh bool
@@ -92,12 +83,9 @@ func runWithDeps(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("create cache: %w", err)
 	}
-	deps := compareDeps{}
-	deps.cache = cacheStore
+	critiquer := ai.NewCritiquer(cfg.Gemini.APIKey, model, http.DefaultClient)
 
-	deps.critiquer = ai.NewCritiquer(cfg.Gemini.APIKey, model, http.DefaultClient)
-
-	rows, err := compareCritiques(ctx, deps.cache, deps.critiquer, model, limit, refresh)
+	rows, err := compareCritiques(ctx, cacheStore, critiquer, model, limit, refresh)
 	if err != nil {
 		return err
 	}
@@ -234,7 +222,73 @@ func printRows(out io.Writer, rows []comparisonRow) error {
 			return err
 		}
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	return printStats(out, rows)
+}
+
+type scoreStats struct {
+	count          int
+	cachedAverage  float64
+	flashAverage   float64
+	deltaAverage   float64
+	cachedVariance float64
+	flashVariance  float64
+	deltaVariance  float64
+	totalDelta     int
+	totalAbsDelta  int
+}
+
+func printStats(out io.Writer, rows []comparisonRow) error {
+	stats := calculateStats(rows)
+	if _, err := fmt.Fprintln(out); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(out, "STATS\tCACHED\tFLASH\tDELTA"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "AVERAGE\t%.2f\t%.2f\t%+.2f\n", stats.cachedAverage, stats.flashAverage, stats.deltaAverage); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "VARIANCE\t%.2f\t%.2f\t%.2f\n", stats.cachedVariance, stats.flashVariance, stats.deltaVariance); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(out, "TOTAL_DIFFERENCE\t%d\tABS %d\n", stats.totalDelta, stats.totalAbsDelta)
+	return err
+}
+
+func calculateStats(rows []comparisonRow) scoreStats {
+	stats := scoreStats{count: len(rows)}
+	if len(rows) == 0 {
+		return stats
+	}
+
+	for _, row := range rows {
+		stats.cachedAverage += float64(row.Cached.OverallScore)
+		stats.flashAverage += float64(row.Flash.OverallScore)
+		stats.deltaAverage += float64(row.ScoreDelta)
+		stats.totalDelta += row.ScoreDelta
+		stats.totalAbsDelta += row.AbsScoreDelta
+	}
+	count := float64(len(rows))
+	stats.cachedAverage /= count
+	stats.flashAverage /= count
+	stats.deltaAverage /= count
+
+	for _, row := range rows {
+		stats.cachedVariance += squared(float64(row.Cached.OverallScore) - stats.cachedAverage)
+		stats.flashVariance += squared(float64(row.Flash.OverallScore) - stats.flashAverage)
+		stats.deltaVariance += squared(float64(row.ScoreDelta) - stats.deltaAverage)
+	}
+	stats.cachedVariance /= count
+	stats.flashVariance /= count
+	stats.deltaVariance /= count
+	return stats
+}
+
+func squared(n float64) float64 {
+	return n * n
 }
 
 func truncate(s string, limit int) string {
