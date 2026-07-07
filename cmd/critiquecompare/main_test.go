@@ -103,17 +103,17 @@ func TestPrintRowsIncludesStats(t *testing.T) {
 			Hash:          "a",
 			Title:         "Alpha",
 			Cached:        fullCritique(6, "alpha cached", "pro"),
-			Flash:         fullCritique(9, "alpha flash", "flash"),
-			ScoreDelta:    3,
-			AbsScoreDelta: 3,
+			Flash:         fullCritique(8, "alpha flash", "flash"),
+			ScoreDelta:    2,
+			AbsScoreDelta: 2,
 		},
 		{
 			Hash:          "b",
 			Title:         "Beta",
 			Cached:        fullCritique(9, "beta cached", "pro"),
-			Flash:         fullCritique(7, "beta flash", "flash"),
-			ScoreDelta:    -2,
-			AbsScoreDelta: 2,
+			Flash:         fullCritique(8, "beta flash", "flash"),
+			ScoreDelta:    -1,
+			AbsScoreDelta: 1,
 		},
 	}
 	var out bytes.Buffer
@@ -122,20 +122,20 @@ func TestPrintRowsIncludesStats(t *testing.T) {
 
 	body := out.String()
 	assert.Contains(t, body, "Compared 2 recipes")
-	assert.Contains(t, body, "Showing 1 critiques with score difference > 2")
+	assert.Contains(t, body, "Showing 1 critiques with score difference > 1")
 	assert.Contains(t, body, "Alpha")
 	assert.NotContains(t, body, "Beta (b)")
 	assert.Contains(t, body, "Cached critique")
 	assert.Contains(t, body, "Flash critique")
-	assert.Contains(t, body, "Score delta: +3 (cached 6, flash 9)")
+	assert.Contains(t, body, "Score delta: +2 (cached 6, flash 8)")
 	assert.Contains(t, body, "Summary: alpha cached")
 	assert.Contains(t, body, "Strengths:\n- clear prep")
 	assert.Contains(t, body, "Issues:\n- [timing/high] timing is off")
 	assert.Contains(t, body, "Suggested fixes:\n- fix timing")
 	assert.Contains(t, body, "STATS\tCACHED\tFLASH\tDELTA")
 	assert.Contains(t, body, "AVERAGE\t7.50\t8.00\t+0.50")
-	assert.Contains(t, body, "VARIANCE\t2.25\t1.00\t6.25")
-	assert.Contains(t, body, "TOTAL_DIFFERENCE\t1\tABS 5")
+	assert.Contains(t, body, "VARIANCE\t2.25\t0.00\t2.25")
+	assert.Contains(t, body, "TOTAL_DIFFERENCE\t1\tABS 3")
 }
 
 func seedRecipeWithCritique(t *testing.T, cacheStore cache.ListCache, hash string, recipe ai.Recipe, c *ai.RecipeCritique) {
