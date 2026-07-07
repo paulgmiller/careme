@@ -40,7 +40,9 @@
               </h1>
               {{if .Location.Name}}
               <p class="mt-2 text-gray-600">
-                Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
+                Location:
+                <a href="/recipes?location={{.Location.ID}}"
+                   class="font-semibold text-brand-700 hover:text-brand-600 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{.Location.Name}}</a>
                 {{if .Location.Address}}<span class="text-sm text-gray-500">({{.Location.Address}})</span>{{end}}
               </p>
               {{end}}

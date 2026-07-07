@@ -449,6 +449,8 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `<meta name="description" content="A simple quail recipe Recipe for Store on 2026-01-25." />`) {
 		t.Error("recipe HTML should include recipe, location, and date in the meta description")
 	}
+	assert.Contains(t, html, `<a href="/recipes?location=70000001"`)
+	assert.Contains(t, html, `>Store</a>`)
 	if strings.Contains(html, "Finalize") {
 		t.Error("recipe HTML should not contain Finalize button")
 	}
