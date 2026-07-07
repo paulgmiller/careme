@@ -13,15 +13,27 @@ import (
 	"careme/internal/routing"
 )
 
-// AdvertisedRecipeLocations returns the stores we intentionally pre-generate and promote.
+// Campaign is a promoted store plus campaign-specific page context.
+type campaign struct {
+	Location    locations.Location
+	HelpMessage string
+}
+
+// AdvertisedRecipeLocations returns the campaigns we intentionally pre-generate and promote.
 // should probably vagule align with StaplesWatchdogLocations() as why wouldn't we monitor
 // the most importnant stores
-func AdvertisedRecipeLocations() map[string]locations.Location {
-	return map[string]locations.Location{
-		//{ID: "wholefoods_10153", ZipCode: "97209"},
-		//{ID: "safeway_490", ZipCode: "86403"},
-		"bellevue": {ID: "70500874", ZipCode: "98101"}, // bellevue
-		"issaquah": {ID: "70100658", ZipCode: "98029"},
+func AdvertisedRecipeLocations() map[string]campaign {
+	return map[string]campaign{
+		//{Location: locations.Location{ID: "wholefoods_10153", ZipCode: "97209"}},
+		//{Location: locations.Location{ID: "safeway_490", ZipCode: "86403"}},
+		"bellevue": {
+			Location:    locations.Location{ID: "70100023", ZipCode: "98004"},
+			HelpMessage: "Here are 3 recipes made with ingredients in stock today at Bellevue Fred Meyer. Want something different? Add a note below and choose Try again, chef. Add the recipes you like, hide the ones you don't, and we'll build your shopping list.",
+		},
+		"issaquah": {
+			Location:    locations.Location{ID: "70100658", ZipCode: "98029"},
+			HelpMessage: "Here are 3 recipes made with ingredients in stock today at Issaquah Fred Meyer. Want something different? Add a note below and choose Try again, chef. Add the recipes you like, hide the ones you don't, and we'll build your shopping list.",
+		},
 	}
 }
 
@@ -54,7 +66,7 @@ func (s advertisedGenerationServer) handleGenerate(w http.ResponseWriter, r *htt
 	ctx := r.Context()
 	var err error
 	for _, advertised := range AdvertisedRecipeLocations() {
-		err = errors.Join(err, s.generateLocation(ctx, advertised.ID))
+		err = errors.Join(err, s.generateLocation(ctx, advertised.Location.ID))
 	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to trigger advertised recipe generation", "error", err)

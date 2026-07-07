@@ -41,7 +41,7 @@ func assertHTTPSuccess(t *testing.T, w *httptest.ResponseRecorder) string {
 }
 
 func formatShoppingListHTMLForTest(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, selection recipeSelection, w *httptest.ResponseRecorder) {
-	FormatShoppingListHTMLForHash(ctx, p, l, nil, renderTestUser(signedIn), p.Hash(), selection, w)
+	FormatShoppingListHTMLForHashWithHelp(ctx, p, l, nil, renderTestUser(signedIn), p.Hash(), selection, "", w)
 }
 
 func renderTestUser(signedIn bool) *utypes.User {
@@ -199,6 +199,7 @@ func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
 	html := assertHTTPSuccess(t, w)
 	assert.Contains(t, html, `method="POST"`)
 	assert.Contains(t, html, `/regenerate"`)
+	assert.Contains(t, html, "Note to chef")
 	assert.Contains(t, html, "Try again, chef")
 	assert.NotContains(t, html, "Use today's ingredients")
 	assert.NotContains(t, html, `Older list`)
@@ -220,6 +221,23 @@ func TestFormatShoppingListHTML_ShowsLocationWithoutDateWhenFresh(t *testing.T) 
 	assert.NotContains(t, html, `Ingredients from`)
 	assert.NotContains(t, html, `Using ingredients from`)
 	assert.NotContains(t, html, `January 25, 2026`)
+}
+
+func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+
+	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, renderTestUser(true), p.Hash(), recipeSelection{}, "Save two dinners before building your shopping list.", w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, "Welcome to Careme")
+	assert.Contains(t, html, "Save two dinners before building your shopping list.")
+	assert.Contains(t, html, `aria-label="Dismiss welcome message"`)
+	assert.Contains(t, html, `for="shopping-list-help-dismiss"`)
+	assert.Contains(t, html, `peer-checked/help:hidden`)
+	assert.NotContains(t, html, `<script src="/static/shoppinglist.js"></script>`)
+	assert.NotContains(t, html, "localStorage")
 }
 
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
@@ -793,7 +811,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	wineHash := multi.Recipes[0].ComputeHash()
 	selection := recipeSelection{SavedHashes: []string{wineHash}}
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, multi, map[string]*ai.WineSelection{
+	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, multi, map[string]*ai.WineSelection{
 		wineHash: {
 			Wines: []ai.Ingredient{
 				{Name: "Cellar Red", Quantity: "1 bottle", Price: "$15"},
@@ -801,7 +819,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 			},
 			Commentary: "Good with roasted flavors.",
 		},
-	}, renderTestUser(true), p.Hash(), selection, w)
+	}, renderTestUser(true), p.Hash(), selection, "", w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
