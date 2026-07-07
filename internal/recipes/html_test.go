@@ -199,6 +199,7 @@ func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
 	html := assertHTTPSuccess(t, w)
 	assert.Contains(t, html, `method="POST"`)
 	assert.Contains(t, html, `/regenerate"`)
+	assert.Contains(t, html, "Note to chef")
 	assert.Contains(t, html, "Try again, chef")
 	assert.NotContains(t, html, "Use today's ingredients")
 	assert.NotContains(t, html, `Older list`)
@@ -230,8 +231,13 @@ func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
 	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, renderTestUser(true), p.Hash(), recipeSelection{}, "Save two dinners before building your shopping list.", w)
 
 	html := assertHTTPSuccess(t, w)
-	assert.Contains(t, html, "Chef's note")
+	assert.Contains(t, html, "Welcome to Careme")
 	assert.Contains(t, html, "Save two dinners before building your shopping list.")
+	assert.Contains(t, html, `aria-label="Dismiss welcome message"`)
+	assert.Contains(t, html, `for="shopping-list-help-dismiss"`)
+	assert.Contains(t, html, `peer-checked/help:hidden`)
+	assert.NotContains(t, html, `<script src="/static/shoppinglist.js"></script>`)
+	assert.NotContains(t, html, "localStorage")
 }
 
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {

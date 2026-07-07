@@ -7,7 +7,7 @@ import (
 	"careme/internal/routing"
 )
 
-const issaquahShoppingListHelp = "Welcome to careme the 3 recipes below were genereated ingredients instock in issaquah fred meyers today but if you want anything else just type it in and say try again chef. Add the recipes your like, hide the ones you don't and we'll build out a shopping list"
+const issaquahShoppingListHelp = "The 3 recipes below were generated with ingredients in stock at Issaquah Fred Meyer today. If you want anything else, type it in and say Try again, chef. Add the recipes you like, hide the ones you don't, and we'll build out a shopping list."
 
 // Register adds campaign redirect routes to mux.
 func Register(mux routing.Registrar) {
