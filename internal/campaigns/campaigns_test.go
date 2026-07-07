@@ -72,6 +72,22 @@ func TestIssaquahRedirect(t *testing.T) {
 	}
 }
 
+func TestBellevueRedirectSetsCampaignHelp(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/c/bellevue", nil)
+	mux.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusFound, response.Code)
+	location, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "/recipes", location.Path)
+	require.Equal(t, "70100023", location.Query().Get("location"))
+	require.Equal(t, AdvertisedRecipeLocations()["bellevue"].HelpMessage, location.Query().Get(recipes.QueryArgHelp))
+}
+
 func TestCampaignRoutesOnlyAcceptGET(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)

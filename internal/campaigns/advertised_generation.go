@@ -26,10 +26,13 @@ func AdvertisedRecipeLocations() map[string]campaign {
 	return map[string]campaign{
 		//{Location: locations.Location{ID: "wholefoods_10153", ZipCode: "97209"}},
 		//{Location: locations.Location{ID: "safeway_490", ZipCode: "86403"}},
-		"bellevue": {Location: locations.Location{ID: "70500874", ZipCode: "98101"}}, // bellevue
+		"bellevue": {
+			Location:    locations.Location{ID: "70100023", ZipCode: "98004"},
+			HelpMessage: "Here are 3 recipes made with ingredients in stock today at Bellevue Fred Meyer. Want something different? Add a note below and choose Try again, chef. Add the recipes you like, hide the ones you don't, and we'll build your shopping list.",
+		},
 		"issaquah": {
 			Location:    locations.Location{ID: "70100658", ZipCode: "98029"},
-			HelpMessage: "The 3 recipes below were generated with ingredients in stock at Issaquah Fred Meyer today. If you want anything else, type it in and say Try again, chef. Add the recipes you like, hide the ones you don't, and we'll build out a shopping list.",
+			HelpMessage: "Here are 3 recipes made with ingredients in stock today at Issaquah Fred Meyer. Want something different? Add a note below and choose Try again, chef. Add the recipes you like, hide the ones you don't, and we'll build your shopping list.",
 		},
 	}
 }
