@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"testing"
 
+	"careme/internal/recipes"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,35 +21,35 @@ func TestIssaquahRedirect(t *testing.T) {
 			name:    "sets campaign location and help",
 			request: "/c/issaquah",
 			expectedQuery: url.Values{
-				"location": {"70100658"},
-				"help":     {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
+				"location":             {"70100658"},
+				recipes.HelpQueryParam: {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
 			},
 		},
 		{
 			name:    "preserves attribution parameters",
 			request: "/c/issaquah?utm_source=facebook&utm_campaign=carts",
 			expectedQuery: url.Values{
-				"location":     {"70100658"},
-				"help":         {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
-				"utm_source":   {"facebook"},
-				"utm_campaign": {"carts"},
+				"location":             {"70100658"},
+				recipes.HelpQueryParam: {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
+				"utm_source":           {"facebook"},
+				"utm_campaign":         {"carts"},
 			},
 		},
 		{
 			name:    "overrides incoming location",
 			request: "/c/issaquah?location=other&utm_source=facebook",
 			expectedQuery: url.Values{
-				"location":   {"70100658"},
-				"help":       {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
-				"utm_source": {"facebook"},
+				"location":             {"70100658"},
+				recipes.HelpQueryParam: {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
+				"utm_source":           {"facebook"},
 			},
 		},
 		{
 			name:    "overrides incoming help",
 			request: "/c/issaquah?help=Custom+note",
 			expectedQuery: url.Values{
-				"location": {"70100658"},
-				"help":     {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
+				"location":             {"70100658"},
+				recipes.HelpQueryParam: {AdvertisedRecipeLocations()["issaquah"].HelpMessage},
 			},
 		},
 	}

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"careme/internal/recipes"
 	"careme/internal/routing"
 )
 
@@ -19,7 +20,7 @@ func redirectToLocation(location string, helpMessage string) http.HandlerFunc {
 		query := cloneValues(r.URL.Query())
 		query.Set("location", location)
 		if helpMessage != "" {
-			query.Set("help", helpMessage)
+			query.Set(recipes.HelpQueryParam, helpMessage)
 		}
 
 		target := url.URL{

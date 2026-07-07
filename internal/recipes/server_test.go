@@ -39,7 +39,7 @@ func TestRedirectToHash(t *testing.T) {
 	req := httptest.NewRequest("GET", "/dummy", nil)
 
 	hash := "testhash"
-	redirectToHash(rr, req, hash, true)
+	redirectToHash(rr, req, hash, queryArgStart)
 
 	// Check the status code
 	if status := rr.Code; status != http.StatusSeeOther {
@@ -58,7 +58,7 @@ func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/recipes?location=store-1&help=Save+two+dinners", nil)
 
-	redirectToHashWithHelp(rr, req, "testhash", true, shoppingListHelpFromRequest(req))
+	redirectToHash(rr, req, "testhash", queryArgStart, HelpQueryParam)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	location := rr.Header().Get("Location")
