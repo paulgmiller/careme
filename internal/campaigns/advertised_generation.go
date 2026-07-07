@@ -14,7 +14,7 @@ import (
 )
 
 // Campaign is a promoted store plus campaign-specific page context.
-type Campaign struct {
+type campaign struct {
 	Location    locations.Location
 	HelpMessage string
 }
@@ -22,8 +22,8 @@ type Campaign struct {
 // AdvertisedRecipeLocations returns the campaigns we intentionally pre-generate and promote.
 // should probably vagule align with StaplesWatchdogLocations() as why wouldn't we monitor
 // the most importnant stores
-func AdvertisedRecipeLocations() map[string]Campaign {
-	return map[string]Campaign{
+func AdvertisedRecipeLocations() map[string]campaign {
+	return map[string]campaign{
 		//{Location: locations.Location{ID: "wholefoods_10153", ZipCode: "97209"}},
 		//{Location: locations.Location{ID: "safeway_490", ZipCode: "86403"}},
 		"bellevue": {Location: locations.Location{ID: "70500874", ZipCode: "98101"}}, // bellevue
