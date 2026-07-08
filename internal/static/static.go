@@ -20,6 +20,9 @@ var htmx208JS []byte
 //go:embed user-clerk-billing.js
 var userClerkBillingJS []byte
 
+//go:embed share.js
+var shareJS []byte
+
 //go:embed fonts/*.woff2
 var fontFiles embed.FS
 
@@ -35,16 +38,16 @@ var faviconSpring []byte
 //go:embed favicon-summer.png
 var faviconSummer []byte
 
-//go:embed fall.png
+//go:embed fall.webp
 var backgroundFall []byte
 
-//go:embed winter.png
+//go:embed winter.webp
 var backgroundWinter []byte
 
-//go:embed spring.png
+//go:embed spring.webp
 var backgroundSpring []byte
 
-//go:embed summer.png
+//go:embed summer.webp
 var backgroundSummer []byte
 
 var TailwindAssetPath string
@@ -81,6 +84,14 @@ func Register(mux routing.Registrar) {
 		}
 	})
 
+	mux.HandleFunc("/static/share.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		if _, err := w.Write(shareJS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write share js", "error", err)
+		}
+	})
+
 	fontServer := http.FileServer(http.FS(fontFiles))
 	mux.Handle("/static/fonts/", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "font/woff2")
@@ -98,8 +109,10 @@ func Register(mux routing.Registrar) {
 		}
 	})
 
-	mux.HandleFunc("/background.png", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png")
+	registerPWAAssets(mux)
+
+	mux.HandleFunc("/background.webp", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/webp")
 		// Keep cache short so clients can refresh seasonally without manual cache clear.
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		background := backgroundBySeason(seasons.GetCurrentSeason())

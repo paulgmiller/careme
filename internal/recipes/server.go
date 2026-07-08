@@ -696,6 +696,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setTextContent(w)
+	w.Header().Set("HX-Trigger", "careme:saved-recipes-changed")
 	_, err = w.Write(response.Bytes())
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write save response", "hash", recipeHash, "error", err)
@@ -940,7 +941,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
 	s.kickgeneration(ctx, p)
 
-	redirectToHash(w, r, newHash, true /*useStart*/)
+	redirectToHash(w, r, newHash, queryArgStart)
 }
 
 func recipesNotSaved(recipes []ai.Recipe, saved []ai.Recipe) []ai.Recipe {
@@ -1007,7 +1008,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirectToHash(w, r, newHash, false /*useStart*/)
+	redirectToHash(w, r, newHash)
 }
 
 // paramsForAction merges old params saved recipes with current saved/dismissed selection into new params.
@@ -1070,6 +1071,8 @@ const (
 	queryArgHash        = "h"
 	queryArgStart       = "start"
 	queryArgPendingSave = "save"
+	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
+	QueryArgHelp = "help"
 )
 
 func (s *server) recipeFromShoppingList(list ai.ShoppingList, recipeHash string) (*ai.Recipe, error) {
@@ -1096,14 +1099,14 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 			return
 		}
-		redirectToHash(w, r, hashParam, true /*useStart*/)
+		redirectToHash(w, r, hashParam, queryArgStart, QueryArgHelp)
 		return
 	}
 
 	startTime, err := time.Parse(time.RFC3339Nano, startArg)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to parse start time", "time", startArg, "error", err)
-		redirectToHash(w, r, hashParam, true /*useStart*/)
+		redirectToHash(w, r, hashParam, queryArgStart, QueryArgHelp)
 		return
 	}
 
@@ -1133,7 +1136,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	}
 	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
 	s.kickgeneration(ctx, p)
-	redirectToHash(w, r, p.Hash(), true /*useStart*/)
+	redirectToHash(w, r, p.Hash(), queryArgStart, QueryArgHelp)
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1150,7 +1153,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if hashParam := r.URL.Query().Get(queryArgHash); hashParam != "" {
 		if normalizedHash, ok := legacyHashToCurrent(hashParam, legacyRecipeHashSeed); ok {
 			slog.InfoContext(ctx, "redirecting legacy hash to canonical hash", "legacy_hash", hashParam, "hash", normalizedHash)
-			redirectToHash(w, r, normalizedHash, false /*useStart*/)
+			redirectToHash(w, r, normalizedHash, QueryArgHelp)
 			return
 		}
 		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
@@ -1164,7 +1167,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.URL.Query().Has(queryArgStart) {
-			redirectToHash(w, r, hashParam, false /*useStart*/)
+			redirectToHash(w, r, hashParam, QueryArgHelp)
 			return
 		}
 
@@ -1205,7 +1208,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 					http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 					return
 				}
-				redirectToHash(w, r, hashParam, false /*useStart*/)
+				redirectToHash(w, r, hashParam)
 				return
 			}
 		}
@@ -1246,7 +1249,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		wineWG.Wait()
 
-		FormatShoppingListHTMLForHash(ctx, p, *slist, wineRecommendations, currentUser, hashParam, selection, w)
+		help := r.URL.Query().Get(QueryArgHelp)
+		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wineRecommendations, currentUser,
+			hashParam, selection, help, w)
 		return
 	}
 
@@ -1266,7 +1271,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, cacheErr := s.FromCache(ctx, p.Hash()); cacheErr == nil {
-			redirectToHash(w, r, p.Hash(), false /*useStart*/)
+			redirectToHash(w, r, p.Hash(), QueryArgHelp)
 			return
 		}
 		if guestShoppingListCount(r) >= guestShoppingListLimit {
@@ -1287,7 +1292,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
 			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
-			redirectToHash(w, r, p.Hash(), false /*useStart*/)
+			redirectToHash(w, r, p.Hash(), QueryArgHelp)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to save params", "error", err)
@@ -1299,7 +1304,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	s.kickgeneration(ctx, p)
 
-	redirectToHash(w, r, hash, true /*useStart*/)
+	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
 }
 
 // best effort attempt to set favorite store if non is thre
@@ -1411,13 +1416,18 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
 	}
 }
 
-func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, useStart bool) {
+// does not send over help
+func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToKeep ...string) {
 	u := url.URL{Path: "/recipes"}
 	args := url.Values{} // intentioanlly clear other args
 	args.Set(queryArgHash, hash)
-	if useStart {
+	if slices.Contains(argsToKeep, queryArgStart) {
 		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
 	}
+	if slices.Contains(argsToKeep, QueryArgHelp) {
+		args.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
+	}
+
 	u.RawQuery = args.Encode()
 	if isHTMXRequest(r) {
 		w.Header().Set("HX-Redirect", u.String())

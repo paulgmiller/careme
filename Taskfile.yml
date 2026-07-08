@@ -76,7 +76,7 @@ tasks:
   js-lint:
     desc: Syntax-check JavaScript assets
     cmds:
-      - npm exec --yes --package eslint@10.4.0 -- eslint internal/static/user-clerk-billing.js
+      - npm exec --yes --package eslint@10.4.0 -- eslint internal/static/user-clerk-billing.js internal/static/share.js
 
   test:
     desc: Run tests with mocks enabled by default

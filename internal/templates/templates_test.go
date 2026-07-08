@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"html/template"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -64,6 +65,7 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	for _, name := range []string{
 		"about.html",
 		"critique.html",
+		"farmersmarket.html",
 		"home.html",
 		"locations.html",
 		"recipe.html",
@@ -99,6 +101,62 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	}
 }
 
+func TestBrowserPageTemplatesIncludeAppHead(t *testing.T) {
+	nonAppPages := map[string]bool{
+		"auth_establish.html": true,
+		"mail.html":           true,
+	}
+
+	names, err := fs.Glob(htmlFiles, "*.html")
+	if err != nil {
+		t.Fatalf("glob templates: %v", err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if !strings.Contains(rendered, "<head") || nonAppPages[name] {
+				return
+			}
+			if !strings.Contains(rendered, `{{template "app_head" .Style}}`) {
+				t.Fatalf("%s should include app_head for PWA metadata", name)
+			}
+		})
+	}
+}
+
+func TestBrowserPageTemplatesDisablePinchZoom(t *testing.T) {
+	nonBrowserPages := map[string]bool{
+		"mail.html": true,
+	}
+
+	names, err := fs.Glob(htmlFiles, "*.html")
+	if err != nil {
+		t.Fatalf("glob templates: %v", err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			if nonBrowserPages[name] {
+				return
+			}
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if !strings.Contains(rendered, "<head") {
+				return
+			}
+			if !strings.Contains(rendered, `content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"`) {
+				t.Fatalf("%s should disable pinch zoom in the viewport metadata", name)
+			}
+		})
+	}
+}
+
 func firstElementClasses(node *html.Node, element string) (map[string]bool, bool) {
 	if node.Type == html.ElementNode && node.Data == element {
 		classes := make(map[string]bool)
@@ -127,6 +185,7 @@ func TestTemplatePageTitlesAreUnique(t *testing.T) {
 		"about.html",
 		"auth_establish.html",
 		"critique.html",
+		"farmersmarket.html",
 		"home.html",
 		"locations.html",
 		"mail.html",
@@ -499,6 +558,15 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	if !strings.Contains(rendered, `/recipes?location=70500874`) {
 		t.Fatalf("home page should render direct recipe link, body: %s", rendered)
 	}
+	if !strings.Contains(rendered, `<span class="sm:hidden">C</span>`) {
+		t.Fatalf("home page should render compact mobile account initial, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `aria-label="Account menu"`) {
+		t.Fatalf("home page should render accessible account menu label, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<span class="hidden max-w-[14rem] truncate sm:block">chef@example.com</span>`) {
+		t.Fatalf("home page should keep full account email for larger screens, body: %s", rendered)
+	}
 }
 
 func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.T) {
@@ -538,6 +606,51 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 	}
 	if strings.Contains(rendered, `name="instructions"`) {
 		t.Fatalf("home page should not render favorite store instructions field without a favorite store, body: %s", rendered)
+	}
+}
+
+func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	style := seasons.GetCurrentStyle()
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		User            *utypes.User
+		ServerSignedIn  bool
+	}{
+		Style: style,
+	}
+
+	var buf bytes.Buffer
+	if err := Home.Execute(&buf, data); err != nil {
+		t.Fatalf("Home.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, `<link rel="manifest" href="/manifest.webmanifest">`) {
+		t.Fatalf("home page should include manifest link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<meta name="theme-color" content="`+style.Colors.C50+`">`) {
+		t.Fatalf("home page should use the page background color for PWA chrome, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<link rel="apple-touch-icon" href="/static/app-icon-192.png">`) {
+		t.Fatalf("home page should include app icon link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `navigator.serviceWorker.register("/sw.js")`) {
+		t.Fatalf("home page should register the service worker, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `CAREME_SYNC_SAVED_RECIPES`) {
+		t.Fatalf("home page should tell the service worker to sync saved recipes, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `new MessageChannel()`) || strings.Contains(rendered, `caremeSavedRecipesSynced`) {
+		t.Fatalf("home page should not use acknowledgement or session state for saved recipe sync, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `careme:saved-recipes-changed`) {
+		t.Fatalf("home page should refresh offline saved recipes after save changes, body: %s", rendered)
 	}
 }
 
