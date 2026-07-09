@@ -27,7 +27,6 @@ func TestAdvertisedRecipeStoreIDsDefaultsToCampaignLocations(t *testing.T) {
 	for _, advertised := range campaigns.AdvertisedRecipeLocations() {
 		expected = append(expected, advertised.Location.ID)
 	}
-	expected = uniqueStoreIDs(expected)
 
 	assert.Len(t, advertisedRecipeStoreIDs(), len(campaigns.AdvertisedRecipeLocations()))
 	assert.Equal(t, expected, advertisedRecipeStoreIDs())
@@ -39,15 +38,12 @@ func TestDefaultAdsIDs(t *testing.T) {
 }
 
 func TestNewAdTargetsConfigAppliesLoginCustomerIDWithoutMutatingAppConfig(t *testing.T) {
-	cfg := &config.Config{
-		GoogleAds: config.GoogleAdsConfig{
-			LoginCustomerID: "original",
-		},
-	}
+	cfg := &config.Config{}
+	adsConfig := googleads.Config{LoginCustomerID: "original"}
 
-	got := newAdTargetsConfig(cfg, "override")
+	got := newAdTargetsConfig(cfg, adsConfig, "override")
 
-	assert.Equal(t, "original", cfg.GoogleAds.LoginCustomerID)
+	assert.Equal(t, "original", adsConfig.LoginCustomerID)
 	assert.Equal(t, "override", got.GoogleAds.LoginCustomerID)
 	assert.Same(t, cfg, got.App)
 }

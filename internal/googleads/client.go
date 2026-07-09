@@ -8,12 +8,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"careme/internal/config"
 )
 
 const (
@@ -34,13 +33,13 @@ type Config struct {
 	HTTPClient      *http.Client
 }
 
-func ConfigFromApp(cfg config.GoogleAdsConfig) Config {
+func ConfigFromEnv() Config {
 	return Config{
-		DeveloperToken:  cfg.DeveloperToken,
-		ClientID:        cfg.ClientID,
-		ClientSecret:    cfg.ClientSecret,
-		RefreshToken:    cfg.RefreshToken,
-		LoginCustomerID: cfg.LoginCustomerID,
+		DeveloperToken:  os.Getenv("GOOGLE_ADS_DEVELOPER_TOKEN"),
+		ClientID:        os.Getenv("GOOGLE_ADS_CLIENT_ID"),
+		ClientSecret:    os.Getenv("GOOGLE_ADS_CLIENT_SECRET"),
+		RefreshToken:    os.Getenv("GOOGLE_ADS_REFRESH_TOKEN"),
+		LoginCustomerID: os.Getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
 	}
 }
 

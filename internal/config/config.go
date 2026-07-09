@@ -28,7 +28,6 @@ type Config struct {
 	Publix            PublixConfig            `json:"publix"`
 	HEB               HEBConfig               `json:"heb"`
 	Wegmans           WegmansConfig           `json:"wegmans"`
-	GoogleAds         GoogleAdsConfig         `json:"google_ads"`
 	BrightDataProxy   brightdata.ProxyConfig  `json:"brightdata_proxy"`
 	Mocks             MockConfig              `json:"mocks"`
 	Clerk             ClerkConfig             `json:"clerk"`
@@ -135,14 +134,6 @@ func (c *WegmansConfig) IsEnabled() bool {
 	return c.Enable
 }
 
-type GoogleAdsConfig struct {
-	DeveloperToken  string `json:"developer_token"`
-	ClientID        string `json:"client_id"`
-	ClientSecret    string `json:"client_secret"`
-	RefreshToken    string `json:"refresh_token"`
-	LoginCustomerID string `json:"login_customer_id"`
-}
-
 // Config defines the required Walmart affiliate credentials and client options.
 type WalmartConfig struct {
 	ConsumerID string
@@ -225,13 +216,6 @@ func Load() (*Config, error) {
 		},
 		Wegmans: WegmansConfig{
 			Enable: envEnabled("WEGMANS_ENABLE"),
-		},
-		GoogleAds: GoogleAdsConfig{
-			DeveloperToken:  os.Getenv("GOOGLE_ADS_DEVELOPER_TOKEN"),
-			ClientID:        os.Getenv("GOOGLE_ADS_CLIENT_ID"),
-			ClientSecret:    os.Getenv("GOOGLE_ADS_CLIENT_SECRET"),
-			RefreshToken:    os.Getenv("GOOGLE_ADS_REFRESH_TOKEN"),
-			LoginCustomerID: os.Getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
 		},
 		BrightDataProxy: brightdata.LoadConfig(),
 		Walmart: WalmartConfig{

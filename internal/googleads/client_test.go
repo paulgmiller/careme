@@ -59,6 +59,22 @@ func TestClientSearchCampaignProximitiesSendsHeadersAndParsesStringMicrodegrees(
 	assert.Equal(t, int64(-122200000), criteria[0].LonMicro)
 }
 
+func TestConfigFromEnv(t *testing.T) {
+	t.Setenv("GOOGLE_ADS_DEVELOPER_TOKEN", "dev")
+	t.Setenv("GOOGLE_ADS_CLIENT_ID", "client")
+	t.Setenv("GOOGLE_ADS_CLIENT_SECRET", "secret")
+	t.Setenv("GOOGLE_ADS_REFRESH_TOKEN", "refresh")
+	t.Setenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "login")
+
+	cfg := ConfigFromEnv()
+
+	assert.Equal(t, "dev", cfg.DeveloperToken)
+	assert.Equal(t, "client", cfg.ClientID)
+	assert.Equal(t, "secret", cfg.ClientSecret)
+	assert.Equal(t, "refresh", cfg.RefreshToken)
+	assert.Equal(t, "login", cfg.LoginCustomerID)
+}
+
 func TestClientCreateAndRemoveCampaignCriteriaRequestShapes(t *testing.T) {
 	var sawCreate bool
 	var sawRemove bool

@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/csv"
 	"flag"
 	"fmt"
 	"io"
@@ -37,13 +35,12 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	var customerID string
 	var campaignID string
 	var storeIDsCSV string
-	var inputPath string
 	var loginCustomerID string
 	var radiusMiles float64
 	var apply bool
 	var timeoutSeconds int
 	var targetOnly bool
-	var baseURL string
+	baseURL := "https://careme.cooking"
 	var adStatus string
 	var outputMode string
 
@@ -52,9 +49,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	fs.StringVar(&customerID, "customer-id", defaultCustomerID, "Google Ads customer ID")
 	fs.StringVar(&campaignID, "campaign-id", defaultCampaignID, "Google Ads campaign ID")
 	fs.StringVar(&storeIDsCSV, "store-ids", "", "Comma-separated location IDs")
-	fs.StringVar(&inputPath, "input", "", "Path to CSV/TXT file containing location IDs")
 	fs.StringVar(&loginCustomerID, "login-customer-id", "", "Optional Google Ads manager customer ID")
-	fs.StringVar(&baseURL, "base-url", "https://careme.cooking", "Public base URL for store recipe landing pages")
 	fs.StringVar(&adStatus, "ad-status", "PAUSED", "Google Ads ad status for created store ads")
 	fs.StringVar(&outputMode, "output", "api", "Output mode: api or manual")
 	fs.Float64Var(&radiusMiles, "radius-miles", 2, "Proximity target radius in miles")
@@ -85,10 +80,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		outputMode = "api"
 	}
 
-	storeIDs, err := readStoreIDs(storeIDsCSV, inputPath)
-	if err != nil {
-		return err
-	}
+	storeIDs := uniqueStoreIDs(parseStoreIDs(storeIDsCSV))
 	if len(storeIDs) == 0 {
 		storeIDs = advertisedRecipeStoreIDs()
 	}
@@ -100,16 +92,20 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return fmt.Errorf("load encrypted env: %w", err)
 	}
 
-	runtimeConfig, err := loadAdTargetsConfig(loginCustomerID)
+	cfg, err := config.Load()
 	if err != nil {
-		return err
+		return fmt.Errorf("load config: %w", err)
 	}
+
+	// depends on config load for encypted secrets
+	adsConfig := googleads.ConfigFromEnv()
+	adsConfig.LoginCustomerID = loginCustomerID
 
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("create cache: %w", err)
 	}
-	locationStorage, err := locations.New(runtimeConfig.App, cacheStore, locations.LoadCentroids())
+	locationStorage, err := locations.New(cfg, cacheStore, locations.LoadCentroids())
 	if err != nil {
 		return err
 	}
@@ -126,7 +122,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return fmt.Errorf("unsupported -output %q; use api or manual", outputMode)
 	}
 
-	adsClient, err := googleads.NewClient(runtimeConfig.GoogleAds)
+	adsClient, err := googleads.NewClient(adsConfig)
 	if err != nil {
 		return err
 	}
@@ -135,30 +131,6 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	}
 
 	return runStoreAdGroupSync(ctx, stdout, adsClient, customerID, campaignID, radiusMiles, apply, adStatus, targets)
-}
-
-type adTargetsConfig struct {
-	App       *config.Config
-	GoogleAds googleads.Config
-}
-
-func loadAdTargetsConfig(loginCustomerID string) (adTargetsConfig, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return adTargetsConfig{}, fmt.Errorf("load config: %w", err)
-	}
-	return newAdTargetsConfig(cfg, loginCustomerID), nil
-}
-
-func newAdTargetsConfig(cfg *config.Config, loginCustomerID string) adTargetsConfig {
-	adsConfig := googleads.ConfigFromApp(cfg.GoogleAds)
-	if loginCustomerID != "" {
-		adsConfig.LoginCustomerID = loginCustomerID
-	}
-	return adTargetsConfig{
-		App:       cfg,
-		GoogleAds: adsConfig,
-	}
 }
 
 func runTargetOnlySync(ctx context.Context, stdout io.Writer, adsClient *googleads.Client, customerID, campaignID string, radiusMiles float64, apply bool, targets []googleads.Target) error {
@@ -393,63 +365,12 @@ func hydrateTargets(ctx context.Context, locations locationGetter, storeIDs []st
 	return targets, nil
 }
 
-func readStoreIDs(storeIDsCSV, inputPath string) ([]string, error) {
-	ids := parseStoreIDs(storeIDsCSV)
-	if inputPath != "" {
-		fromFile, err := readStoreIDsFromFile(inputPath)
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, fromFile...)
-	}
-	return uniqueStoreIDs(ids), nil
-}
-
 func advertisedRecipeStoreIDs() []string {
 	ids := make([]string, 0, len(campaigns.AdvertisedRecipeLocations()))
-	for _, location := range campaigns.AdvertisedRecipeLocations() {
-		ids = append(ids, location.Location.ID)
+	for _, c := range campaigns.AdvertisedRecipeLocations() {
+		ids = append(ids, c.Location.ID)
 	}
-	return uniqueStoreIDs(ids)
-}
-
-func readStoreIDsFromFile(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-	reader := csv.NewReader(file)
-	reader.FieldsPerRecord = -1
-	rows, err := reader.ReadAll()
-	if err == nil {
-		var ids []string
-		for _, row := range rows {
-			if len(row) == 0 {
-				continue
-			}
-			if strings.EqualFold(strings.TrimSpace(row[0]), "store_id") || strings.EqualFold(strings.TrimSpace(row[0]), "location_id") {
-				continue
-			}
-			ids = append(ids, parseStoreIDs(row[0])...)
-		}
-		return ids, nil
-	}
-
-	if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
-		return nil, seekErr
-	}
-	var ids []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		ids = append(ids, parseStoreIDs(scanner.Text())...)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return ids, nil
+	return ids
 }
 
 func parseStoreIDs(raw string) []string {
