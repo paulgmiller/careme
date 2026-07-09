@@ -351,10 +351,12 @@ func TestServiceWorkerCachesSavedRecipesOffline(t *testing.T) {
 		`syncSavedRecipes()`,
 		`fetch(SAVED_RECIPES_LIST_URL`,
 		`body.split(/\r?\n/)`,
+		`cache.match(url).then((cached)`,
 		`const request = new Request(url`,
 		`return cache.put(url, response).then(() => true)`,
+		`return url.endsWith("/image")`,
 		`cache.put(SAVED_RECIPES_LIST_URL, new Response(body))`,
-		`savedRecipeListChanged(body)`,
+		`savedRecipeListChanged(body).then(() => cacheSavedRecipeURLs(body))`,
 		`previous !== body`,
 	} {
 		if !strings.Contains(rendered, snippet) {
