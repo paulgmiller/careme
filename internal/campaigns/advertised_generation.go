@@ -33,18 +33,20 @@ func AdvertisedRecipeLocations() map[string]campaign {
 		// https://chatgpt.com/share/6a4d4793-987c-83e8-9f0e-e12c72772df7
 		// west lake wholefoods_10216 98121
 		// bella bottega qfc 70500860 98052
+		/* soon
 		"university_village_qfc": {
 			Location:    locations.Location{ID: "70500807", ZipCode: "98105"},
 			HelpMessage: genericLocationHelp("University Village QFC"),
-		},
+		},*/
 		"redmond_wf": {
 			Location:    locations.Location{ID: "wholefoods_10260", ZipCode: "98052"},
 			HelpMessage: genericLocationHelp("Redmond Whole Foods"),
 		},
-		"bellevue_wf": {
+		/* Too close to fred meyers
+		bellevue_wf": {
 			Location:    locations.Location{ID: "wholefoods_10153", ZipCode: "98004"},
 			HelpMessage: genericLocationHelp("Bellevue Whole Foods"),
-		},
+		},*/
 		"bellevue": {
 			Location:    locations.Location{ID: "70100023", ZipCode: "98007"},
 			HelpMessage: genericLocationHelp("Bellevue Fred Meyer"),
