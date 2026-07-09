@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"careme/internal/campaigns"
+	"careme/internal/config"
 	"careme/internal/googleads"
 	locationtypes "careme/internal/locations/types"
 
@@ -35,6 +36,20 @@ func TestAdvertisedRecipeStoreIDsDefaultsToCampaignLocations(t *testing.T) {
 func TestDefaultAdsIDs(t *testing.T) {
 	assert.Equal(t, "5812848025", normalizeCustomerID(defaultCustomerID))
 	assert.Equal(t, "23939758740", defaultCampaignID)
+}
+
+func TestNewAdTargetsConfigAppliesLoginCustomerIDWithoutMutatingAppConfig(t *testing.T) {
+	cfg := &config.Config{
+		GoogleAds: config.GoogleAdsConfig{
+			LoginCustomerID: "original",
+		},
+	}
+
+	got := newAdTargetsConfig(cfg, "override")
+
+	assert.Equal(t, "original", cfg.GoogleAds.LoginCustomerID)
+	assert.Equal(t, "override", got.GoogleAds.LoginCustomerID)
+	assert.Same(t, cfg, got.App)
 }
 
 func TestHydrateTargetsRequiresCoordinates(t *testing.T) {

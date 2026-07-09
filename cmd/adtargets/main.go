@@ -100,19 +100,16 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return fmt.Errorf("load encrypted env: %w", err)
 	}
 
-	cfg, err := config.Load()
+	runtimeConfig, err := loadAdTargetsConfig(loginCustomerID)
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-	if loginCustomerID != "" {
-		cfg.GoogleAds.LoginCustomerID = loginCustomerID
+		return err
 	}
 
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("create cache: %w", err)
 	}
-	locationStorage, err := locations.New(cfg, cacheStore, locations.LoadCentroids())
+	locationStorage, err := locations.New(runtimeConfig.App, cacheStore, locations.LoadCentroids())
 	if err != nil {
 		return err
 	}
@@ -134,7 +131,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return err
 	}
 
-	adsClient, err := googleads.NewClient(googleads.ConfigFromApp(cfg.GoogleAds))
+	adsClient, err := googleads.NewClient(runtimeConfig.GoogleAds)
 	if err != nil {
 		return err
 	}
@@ -143,6 +140,30 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	}
 
 	return runStoreAdGroupSync(ctx, stdout, adsClient, cacheStore, registry, customerID, campaignID, radiusMiles, apply, adStatus, targets)
+}
+
+type adTargetsConfig struct {
+	App       *config.Config
+	GoogleAds googleads.Config
+}
+
+func loadAdTargetsConfig(loginCustomerID string) (adTargetsConfig, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return adTargetsConfig{}, fmt.Errorf("load config: %w", err)
+	}
+	return newAdTargetsConfig(cfg, loginCustomerID), nil
+}
+
+func newAdTargetsConfig(cfg *config.Config, loginCustomerID string) adTargetsConfig {
+	adsConfig := googleads.ConfigFromApp(cfg.GoogleAds)
+	if loginCustomerID != "" {
+		adsConfig.LoginCustomerID = loginCustomerID
+	}
+	return adTargetsConfig{
+		App:       cfg,
+		GoogleAds: adsConfig,
+	}
 }
 
 func runTargetOnlySync(ctx context.Context, stdout io.Writer, adsClient *googleads.Client, cacheStore cache.ListCache, registry googleads.Registry, customerID, campaignID string, radiusMiles float64, apply bool, targets []googleads.Target) error {
