@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"sort"
@@ -19,7 +18,7 @@ import (
 	"careme/internal/campaigns"
 	"careme/internal/config"
 	"careme/internal/googleads"
-	"careme/internal/kroger"
+	"careme/internal/locations"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -46,16 +45,18 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	var targetOnly bool
 	var baseURL string
 	var adStatus string
+	var outputMode string
 
-	fs := flag.NewFlagSet("krogeradtargets", flag.ContinueOnError)
+	fs := flag.NewFlagSet("adtargets", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	fs.StringVar(&customerID, "customer-id", defaultCustomerID, "Google Ads customer ID")
 	fs.StringVar(&campaignID, "campaign-id", defaultCampaignID, "Google Ads campaign ID")
-	fs.StringVar(&storeIDsCSV, "store-ids", "", "Comma-separated Kroger location IDs")
-	fs.StringVar(&inputPath, "input", "", "Path to CSV/TXT file containing Kroger location IDs")
+	fs.StringVar(&storeIDsCSV, "store-ids", "", "Comma-separated location IDs")
+	fs.StringVar(&inputPath, "input", "", "Path to CSV/TXT file containing location IDs")
 	fs.StringVar(&loginCustomerID, "login-customer-id", "", "Optional Google Ads manager customer ID")
 	fs.StringVar(&baseURL, "base-url", "https://careme.cooking", "Public base URL for store recipe landing pages")
 	fs.StringVar(&adStatus, "ad-status", "PAUSED", "Google Ads ad status for created store ads")
+	fs.StringVar(&outputMode, "output", "api", "Output mode: api or manual")
 	fs.Float64Var(&radiusMiles, "radius-miles", 2, "Proximity target radius in miles")
 	fs.BoolVar(&apply, "apply", false, "Apply changes to Google Ads")
 	fs.BoolVar(&targetOnly, "target-only", false, "Only sync campaign-level proximity targeting without creating store ad groups or ads")
@@ -79,6 +80,10 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	if adStatus == "" {
 		adStatus = "PAUSED"
 	}
+	outputMode = strings.ToLower(strings.TrimSpace(outputMode))
+	if outputMode == "" {
+		outputMode = "api"
+	}
 
 	storeIDs, err := readStoreIDs(storeIDsCSV, inputPath)
 	if err != nil {
@@ -91,6 +96,10 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
+	if err := config.LoadEncryptedEnv("secrets/envtest"); err != nil {
+		return fmt.Errorf("load encrypted env: %w", err)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -99,19 +108,27 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		cfg.GoogleAds.LoginCustomerID = loginCustomerID
 	}
 
-	krogerLocations, err := kroger.NewLocationBackendFromConfig(cfg, http.DefaultClient)
-	if err != nil {
-		return err
-	}
-	targets, err := hydrateTargets(ctx, krogerLocations, storeIDs, radiusMiles, baseURL)
-	if err != nil {
-		return err
-	}
-
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
 		return fmt.Errorf("create cache: %w", err)
 	}
+	locationStorage, err := locations.New(cfg, cacheStore, locations.LoadCentroids())
+	if err != nil {
+		return err
+	}
+	targets, err := hydrateTargets(ctx, locationStorage, storeIDs, radiusMiles, baseURL)
+	if err != nil {
+		return err
+	}
+
+	switch outputMode {
+	case "manual":
+		return printManualSteps(stdout, customerID, campaignID, adStatus, targets)
+	case "api":
+	default:
+		return fmt.Errorf("unsupported -output %q; use api or manual", outputMode)
+	}
+
 	registry, err := googleads.LoadRegistry(ctx, cacheStore, customerID, campaignID)
 	if err != nil {
 		return err
@@ -293,6 +310,75 @@ func defaultDescriptions(_ googleads.Target) []string {
 	}
 }
 
+func defaultKeywords() []string {
+	return []string{
+		`"healthy local recipes"`,
+		`"fresh local recipes"`,
+		`"fresh dinner ideas"`,
+		`"seasonal recipes"`,
+		`"seasonal produce recipes"`,
+		`"easy weeknight meals"`,
+		`"what to cook tonight"`,
+		`"vegetable recipes"`,
+		`"fresh ingredient recipes"`,
+		`"local grocery recipes"`,
+	}
+}
+
+func printManualSteps(w io.Writer, customerID, campaignID, adStatus string, targets []googleads.Target) error {
+	if _, err := fmt.Fprintf(w, "Manual Google Ads setup\ncustomer=%s campaign=%s stores=%d\n\n", customerID, campaignID, len(targets)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w, "Campaign level: keep the shared budget, bidding, campaign dates, and campaign-wide assets here."); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w, "Ad group level: create one ad group per store, with that store's 2-mile proximity target and keyword list."); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "Ad level: create one responsive search ad in each ad group with the listed final URL, headlines, and descriptions. Create ads as %s, then review and enable them in Google Ads.\n\n", adStatus); err != nil {
+		return err
+	}
+
+	for _, target := range targets {
+		if _, err := fmt.Fprintf(w, "Store %s\n", target.StoreID); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(w, "  Ad group level"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    Name: %s\n", storeAdGroupName(target)); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    Proximity: %.6f, %.6f, %.2f miles\n", float64(target.LatMicro)/1_000_000, float64(target.LonMicro)/1_000_000, target.RadiusMiles); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    Keywords: %s\n", strings.Join(defaultKeywords(), " | ")); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(w, "  Ad level"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    Final URL: %s\n", target.FinalURL); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    Headlines: %s\n", strings.Join(defaultHeadlines(target), " | ")); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    Descriptions: %s\n\n", strings.Join(defaultDescriptions(target), " | ")); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func storeAdGroupName(target googleads.Target) string {
+	name := strings.TrimSpace(target.StoreName)
+	if name == "" {
+		name = "Store"
+	}
+	return fmt.Sprintf("Careme Store %s %s", target.StoreID, name)
+}
+
 type locationGetter interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error)
 }
@@ -302,10 +388,10 @@ func hydrateTargets(ctx context.Context, locations locationGetter, storeIDs []st
 	for _, storeID := range storeIDs {
 		loc, err := locations.GetLocationByID(ctx, storeID)
 		if err != nil {
-			return nil, fmt.Errorf("fetch Kroger location %s: %w", storeID, err)
+			return nil, fmt.Errorf("fetch location %s: %w", storeID, err)
 		}
 		if loc.Lat == nil || loc.Lon == nil {
-			return nil, fmt.Errorf("kroger location %s does not include latitude/longitude", storeID)
+			return nil, fmt.Errorf("location %s does not include latitude/longitude", storeID)
 		}
 		targets = append(targets, googleads.Target{
 			StoreID:     loc.ID,
@@ -338,7 +424,7 @@ func readStoreIDs(storeIDsCSV, inputPath string) ([]string, error) {
 func advertisedRecipeStoreIDs() []string {
 	ids := make([]string, 0, len(campaigns.AdvertisedRecipeLocations()))
 	for _, location := range campaigns.AdvertisedRecipeLocations() {
-		ids = append(ids, location.ID)
+		ids = append(ids, location.Location.ID)
 	}
 	return uniqueStoreIDs(ids)
 }
@@ -436,7 +522,7 @@ func printPlan(w io.Writer, modeName, customerID, campaignID string, radiusMiles
 	if apply {
 		mode = "apply"
 	}
-	if _, err := fmt.Fprintf(w, "Google Ads Kroger %s (%s)\n", modeName, mode); err != nil {
+	if _, err := fmt.Fprintf(w, "Google Ads ad targets %s (%s)\n", modeName, mode); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(w, "customer=%s campaign=%s radius=%.2f miles stores=%d\n", customerID, campaignID, radiusMiles, len(targets)); err != nil {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -21,8 +22,14 @@ func TestUniqueStoreIDsSortsAndDeduplicates(t *testing.T) {
 }
 
 func TestAdvertisedRecipeStoreIDsDefaultsToCampaignLocations(t *testing.T) {
+	expected := make([]string, 0, len(campaigns.AdvertisedRecipeLocations()))
+	for _, advertised := range campaigns.AdvertisedRecipeLocations() {
+		expected = append(expected, advertised.Location.ID)
+	}
+	expected = uniqueStoreIDs(expected)
+
 	assert.Len(t, advertisedRecipeStoreIDs(), len(campaigns.AdvertisedRecipeLocations()))
-	assert.Equal(t, []string{"70100658", "70500874"}, advertisedRecipeStoreIDs())
+	assert.Equal(t, expected, advertisedRecipeStoreIDs())
 }
 
 func TestDefaultAdsIDs(t *testing.T) {
@@ -60,8 +67,42 @@ func TestHydrateTargetsBuildsGoogleAdsTargets(t *testing.T) {
 	}}, targets)
 }
 
+func TestHydrateTargetsSupportsNonKrogerLocationIDs(t *testing.T) {
+	lat := 47.62
+	lon := -122.34
+	targets, err := hydrateTargets(context.Background(), fakeLocations{
+		locations: map[string]*locationtypes.Location{
+			"wholefoods_10260": {ID: "wholefoods_10260", Name: "Whole Foods", Address: "2210 Westlake Ave", Lat: &lat, Lon: &lon},
+		},
+	}, []string{"wholefoods_10260"}, 2, "https://careme.cooking")
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	assert.Equal(t, "wholefoods_10260", targets[0].StoreID)
+	assert.Equal(t, "https://careme.cooking/recipes?location=wholefoods_10260", targets[0].FinalURL)
+}
+
 func TestRecipeURL(t *testing.T) {
 	assert.Equal(t, "https://careme.cooking/recipes?location=70100023", recipeURL("https://careme.cooking", "70100023"))
+}
+
+func TestPrintManualStepsIncludesStoreURLAndProximity(t *testing.T) {
+	var out bytes.Buffer
+	err := printManualSteps(&out, "5812848025", "23939758740", "PAUSED", []googleads.Target{{
+		StoreID:     "70100023",
+		StoreName:   "Bellevue Fred Meyer",
+		LatMicro:    47610000,
+		LonMicro:    -122200000,
+		RadiusMiles: 2,
+		FinalURL:    "https://careme.cooking/recipes?location=70100023",
+	}})
+	require.NoError(t, err)
+
+	assert.Contains(t, out.String(), "https://careme.cooking/recipes?location=70100023")
+	assert.Contains(t, out.String(), "47.610000, -122.200000, 2.00 miles")
+	assert.Contains(t, out.String(), "Careme Store 70100023 Bellevue Fred Meyer")
+	assert.Contains(t, out.String(), "Ad group level")
+	assert.Contains(t, out.String(), "Ad level")
+	assert.Contains(t, out.String(), `"healthy local recipes"`)
 }
 
 type fakeLocations struct {
