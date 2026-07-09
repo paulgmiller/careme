@@ -11,7 +11,7 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 )
 
-const defaultWineModel = openai.ChatModelGPT5Mini
+const defaultWineModel = gpt56Luna
 
 type WineSelection struct {
 	Wines      []Ingredient `json:"wines"`
@@ -34,6 +34,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	}
 	params := responses.ResponseNewParams{
 		Model:        c.wineModel,
+		Reasoning:    noReasoning(),
 		Instructions: openai.String(winePrompt),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},

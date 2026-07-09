@@ -1,18 +1,14 @@
 package ai
 
-import (
-	"testing"
+import "testing"
 
-	openai "github.com/openai/openai-go/v3"
-)
-
-func TestNewClientUsesGPT55ForRecipeFlow(t *testing.T) {
+func TestNewClientUsesGPT56FamilyByRole(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, &capturePromptRecorder{})
 
-	if client.model != "gpt-5.5" {
-		t.Fatalf("expected primary recipe model to be gpt-5.5, got %q", client.model)
+	if client.model != gpt56Sol {
+		t.Fatalf("expected primary recipe model to be %q, got %q", gpt56Sol, client.model)
 	}
-	if client.wineModel != openai.ChatModelGPT5Mini {
-		t.Fatalf("expected wine model to remain low-cost mini path, got %q", client.wineModel)
+	if client.wineModel != gpt56Luna {
+		t.Fatalf("expected wine model to use low-cost Luna path, got %q", client.wineModel)
 	}
 }

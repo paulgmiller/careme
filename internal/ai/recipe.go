@@ -15,7 +15,13 @@ import (
 	"github.com/samber/lo"
 )
 
-const defaultRecipeModel = "gpt-5.5"
+const (
+	gpt56Sol   = "gpt-5.6-sol"
+	gpt56Terra = "gpt-5.6-terra"
+	gpt56Luna  = "gpt-5.6-luna"
+
+	defaultRecipeModel = gpt56Sol
+)
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {

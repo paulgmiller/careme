@@ -60,9 +60,15 @@ func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, o
 }
 
 func openAITextTokenPrice(model string) (textTokenPrice, bool) {
-	// Standard paid-tier USD per 1M tokens, verified 2026-05-21:
+	// Standard paid-tier USD per 1M tokens, verified 2026-07-09:
 	// https://openai.com/api/pricing/ and https://platform.openai.com/docs/pricing/
 	switch normalizeModelName(model) {
+	case "gpt-5.6", "gpt-5.6-sol":
+		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, outputUSDPerMillion: 30}, true
+	case "gpt-5.6-terra":
+		return textTokenPrice{inputUSDPerMillion: 2.50, cachedInputUSDPerMillion: 0.25, outputUSDPerMillion: 15}, true
+	case "gpt-5.6-luna":
+		return textTokenPrice{inputUSDPerMillion: 1, cachedInputUSDPerMillion: 0.10, outputUSDPerMillion: 6}, true
 	case "gpt-5.5":
 		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, outputUSDPerMillion: 30}, true
 	case "gpt-5.4":
