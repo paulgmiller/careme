@@ -66,13 +66,16 @@ func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("GOOGLE_ADS_REFRESH_TOKEN", "refresh")
 	t.Setenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "login")
 
-	cfg := ConfigFromEnv()
+	cfg := ConfigFromEnv("")
 
 	assert.Equal(t, "dev", cfg.DeveloperToken)
 	assert.Equal(t, "client", cfg.ClientID)
 	assert.Equal(t, "secret", cfg.ClientSecret)
 	assert.Equal(t, "refresh", cfg.RefreshToken)
 	assert.Equal(t, "login", cfg.LoginCustomerID)
+
+	cfg = ConfigFromEnv("flag-login")
+	assert.Equal(t, "flag-login", cfg.LoginCustomerID)
 }
 
 func TestClientCreateAndRemoveCampaignCriteriaRequestShapes(t *testing.T) {
@@ -186,9 +189,15 @@ func TestClientCreateStoreAdGroupResourcesRequestShapes(t *testing.T) {
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
 			create := raw["operations"][0]["create"].(map[string]any)
 			assert.Equal(t, "customers/123/adGroups/77", create["adGroup"])
-			proximity := create["proximity"].(map[string]any)
-			assert.Equal(t, "MILES", proximity["radiusUnits"])
-			_, _ = w.Write([]byte(`{"results":[{"resourceName":"customers/123/adGroupCriteria/77~88"}]}`))
+			if proximity, ok := create["proximity"].(map[string]any); ok {
+				assert.Equal(t, "MILES", proximity["radiusUnits"])
+				_, _ = w.Write([]byte(`{"results":[{"resourceName":"customers/123/adGroupCriteria/77~88"}]}`))
+				return
+			}
+			keyword := create["keyword"].(map[string]any)
+			assert.Equal(t, "healthy local recipes", keyword["text"])
+			assert.Equal(t, "PHRASE", keyword["matchType"])
+			_, _ = w.Write([]byte(`{"results":[{"resourceName":"customers/123/adGroupCriteria/77~89"}]}`))
 		case "/v24/customers/123/adGroupAds:mutate":
 			var raw map[string][]map[string]any
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
@@ -218,6 +227,8 @@ func TestClientCreateStoreAdGroupResourcesRequestShapes(t *testing.T) {
 	require.NoError(t, err)
 	criteria, err := client.CreateAdGroupProximityCriteria(context.Background(), "123", targets, adGroups)
 	require.NoError(t, err)
+	keywords, err := client.CreateAdGroupKeywordCriteria(context.Background(), "123", adGroups, []string{`"healthy local recipes"`})
+	require.NoError(t, err)
 	ads, err := client.CreateResponsiveSearchAds(context.Background(), "123", []StoreAd{{
 		AdGroup:      adGroups[0],
 		FinalURL:     "https://careme.cooking/recipes?location=11111111",
@@ -229,9 +240,10 @@ func TestClientCreateStoreAdGroupResourcesRequestShapes(t *testing.T) {
 
 	assert.Equal(t, []string{"customers/123/adGroups/77"}, adGroups)
 	assert.Equal(t, []string{"customers/123/adGroupCriteria/77~88"}, criteria)
+	assert.Equal(t, []string{"customers/123/adGroupCriteria/77~89"}, keywords)
 	assert.Equal(t, []string{"customers/123/adGroupAds/77~99"}, ads)
 	assert.Equal(t, 1, paths["/v24/customers/123/adGroups:mutate"])
-	assert.Equal(t, 1, paths["/v24/customers/123/adGroupCriteria:mutate"])
+	assert.Equal(t, 2, paths["/v24/customers/123/adGroupCriteria:mutate"])
 	assert.Equal(t, 1, paths["/v24/customers/123/adGroupAds:mutate"])
 }
 

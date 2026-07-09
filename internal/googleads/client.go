@@ -33,14 +33,18 @@ type Config struct {
 	HTTPClient      *http.Client
 }
 
-func ConfigFromEnv() Config {
-	return Config{
+func ConfigFromEnv(loginCustomerID string) Config {
+	cfg := Config{
 		DeveloperToken:  os.Getenv("GOOGLE_ADS_DEVELOPER_TOKEN"),
 		ClientID:        os.Getenv("GOOGLE_ADS_CLIENT_ID"),
 		ClientSecret:    os.Getenv("GOOGLE_ADS_CLIENT_SECRET"),
 		RefreshToken:    os.Getenv("GOOGLE_ADS_REFRESH_TOKEN"),
 		LoginCustomerID: os.Getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
 	}
+	if strings.TrimSpace(loginCustomerID) != "" {
+		cfg.LoginCustomerID = loginCustomerID
+	}
+	return cfg
 }
 
 func (c Config) validate() error {
@@ -256,6 +260,39 @@ func (c *Client) CreateAdGroupProximityCriteria(ctx context.Context, customerID 
 				},
 			},
 		})
+	}
+	var response mutateResponse
+	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/customers/%s/adGroupCriteria:mutate", customerID), mutateAdGroupCriteriaRequest{Operations: operations}, &response); err != nil {
+		return nil, err
+	}
+	return mutationResourceNames(response), nil
+}
+
+func (c *Client) CreateAdGroupKeywordCriteria(ctx context.Context, customerID string, adGroups []string, keywords []string) ([]string, error) {
+	if len(adGroups) == 0 || len(keywords) == 0 {
+		return nil, nil
+	}
+	operations := make([]adGroupCriterionOperation, 0, len(adGroups)*len(keywords))
+	for _, adGroup := range adGroups {
+		for _, keyword := range keywords {
+			text, matchType := keywordTextAndMatchType(keyword)
+			if text == "" {
+				continue
+			}
+			operations = append(operations, adGroupCriterionOperation{
+				Create: &adGroupCriterion{
+					AdGroup: adGroup,
+					Status:  "ENABLED",
+					Keyword: &keywordInfo{
+						Text:      text,
+						MatchType: matchType,
+					},
+				},
+			})
+		}
+	}
+	if len(operations) == 0 {
+		return nil, nil
 	}
 	var response mutateResponse
 	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/customers/%s/adGroupCriteria:mutate", customerID), mutateAdGroupCriteriaRequest{Operations: operations}, &response); err != nil {
@@ -517,6 +554,12 @@ type adGroupCriterion struct {
 	AdGroup   string         `json:"adGroup"`
 	Status    string         `json:"status,omitempty"`
 	Proximity *proximityInfo `json:"proximity,omitempty"`
+	Keyword   *keywordInfo   `json:"keyword,omitempty"`
+}
+
+type keywordInfo struct {
+	Text      string `json:"text"`
+	MatchType string `json:"matchType"`
 }
 
 type StoreAd struct {
@@ -574,6 +617,20 @@ func mutationResourceNames(response mutateResponse) []string {
 		resourceNames = append(resourceNames, result.ResourceName)
 	}
 	return resourceNames
+}
+
+func keywordTextAndMatchType(keyword string) (string, string) {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return "", ""
+	}
+	if strings.HasPrefix(keyword, "[") && strings.HasSuffix(keyword, "]") {
+		return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(keyword, "["), "]")), "EXACT"
+	}
+	if strings.HasPrefix(keyword, `"`) && strings.HasSuffix(keyword, `"`) {
+		return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(keyword, `"`), `"`)), "PHRASE"
+	}
+	return keyword, "BROAD"
 }
 
 func AdGroupName(target Target) string {

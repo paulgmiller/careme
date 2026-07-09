@@ -97,9 +97,8 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	// depends on config load for encypted secrets
-	adsConfig := googleads.ConfigFromEnv()
-	adsConfig.LoginCustomerID = loginCustomerID
+	// depends on config load for encrypted secrets
+	adsConfig := googleads.ConfigFromEnv(loginCustomerID)
 
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
@@ -191,6 +190,10 @@ func runStoreAdGroupSync(ctx context.Context, stdout io.Writer, adsClient *googl
 	if err != nil {
 		return err
 	}
+	keywords, err := adsClient.CreateAdGroupKeywordCriteria(ctx, customerID, adGroups, defaultKeywords())
+	if err != nil {
+		return err
+	}
 	ads := make([]googleads.StoreAd, 0, len(plan.Create))
 	for i, target := range plan.Create {
 		ads = append(ads, googleads.StoreAd{
@@ -206,8 +209,9 @@ func runStoreAdGroupSync(ctx context.Context, stdout io.Writer, adsClient *googl
 		return err
 	}
 
-	if len(plan.Create) != len(criteria) || len(plan.Create) != len(adGroupAds) {
-		return fmt.Errorf("created resources mismatch: targets=%d criteria=%d ads=%d", len(plan.Create), len(criteria), len(adGroupAds))
+	expectedKeywords := len(plan.Create) * len(defaultKeywords())
+	if len(plan.Create) != len(criteria) || expectedKeywords != len(keywords) || len(plan.Create) != len(adGroupAds) {
+		return fmt.Errorf("created resources mismatch: targets=%d proximityCriteria=%d keywordCriteria=%d ads=%d", len(plan.Create), len(criteria), len(keywords), len(adGroupAds))
 	}
 	if _, err := fmt.Fprintf(stdout, "Applied %d store ad groups and skipped %d existing ad groups.\n", len(plan.Create), len(plan.Skip)); err != nil {
 		return err
