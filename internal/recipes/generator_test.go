@@ -36,6 +36,7 @@ type captureRegenerateAIClient struct {
 	menuPlan                   *ai.MenuPlan
 	createMenuPlanInstructions []string
 	createMenuPlanCount        int
+	searchableIngredients      []ai.InputIngredient
 }
 
 type captureGenerateAIClient struct {
@@ -43,6 +44,7 @@ type captureGenerateAIClient struct {
 	menuPlan                *ai.MenuPlan
 	generateMenuResponseIDs []string
 	ingredients             []ai.InputIngredient
+	searchableIngredients   []ai.InputIngredient
 	instructions            [][]string
 	generateInstructions    [][]string
 	lastRecipes             []string
@@ -58,6 +60,7 @@ type sequenceAIClient struct {
 	menuPlanCounts          []int
 	regenerateCalls         int
 	generateMenuResponseIDs []string
+	searchableIngredients   [][]ai.InputIngredient
 	regenerateInstructions  [][]string
 	regenerateResponseIDs   []string
 	generateResponses       []*ai.ShoppingList
@@ -80,6 +83,10 @@ type captureWineStaplesProvider struct {
 }
 
 type panicStaplesService struct{}
+
+type stubGeneratorStaplesService struct {
+	ingredients []ai.InputIngredient
+}
 
 type noopRecipeSaver struct{}
 
@@ -122,7 +129,7 @@ func (c *captureWineQuestionAIClient) RegenerateMenuPlan(ctx context.Context, in
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureWineQuestionAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+func (c *captureWineQuestionAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string, searchableIngredients []ai.InputIngredient) (*ai.Recipe, error) {
 	panic("unexpected call to GenerateRecipe")
 }
 
@@ -185,12 +192,13 @@ func (c *captureRegenerateAIClient) RegenerateMenuPlan(ctx context.Context, inst
 	return &ai.MenuPlan{ResponseID: "resp-menu-next"}, nil
 }
 
-func (c *captureRegenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+func (c *captureRegenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string, searchableIngredients []ai.InputIngredient) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.instructions = append([]string(nil), instructions...)
 	c.generateMenuResponseID = menuResponseID
+	c.searchableIngredients = append([]ai.InputIngredient(nil), searchableIngredients...)
 	if c.recipe != nil {
 		recipe := *c.recipe
 		return &recipe, nil
@@ -247,12 +255,13 @@ func (c *captureGenerateAIClient) RegenerateMenuPlan(ctx context.Context, instru
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string, searchableIngredients []ai.InputIngredient) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.generateMenuResponseIDs = append(c.generateMenuResponseIDs, menuResponseID)
 	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
+	c.searchableIngredients = append([]ai.InputIngredient(nil), searchableIngredients...)
 	if c.shoppingList == nil {
 		return &ai.Recipe{}, nil
 	}
@@ -323,12 +332,13 @@ func (c *sequenceAIClient) RegenerateMenuPlan(ctx context.Context, instructions 
 	return menuPlanForRecipes(resp.Recipes), nil
 }
 
-func (c *sequenceAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+func (c *sequenceAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string, searchableIngredients []ai.InputIngredient) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.generateMenuResponseIDs = append(c.generateMenuResponseIDs, menuResponseID)
 	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
+	c.searchableIngredients = append(c.searchableIngredients, append([]ai.InputIngredient(nil), searchableIngredients...))
 	for _, recipe := range c.plannedRecipes {
 		if recipeInstructionsContainAnchor(instructions, recipe.Title) {
 			return &recipe, nil
@@ -471,6 +481,14 @@ func (panicStaplesService) FetchStaples(context.Context, *GeneratorParams) ([]ai
 }
 
 func (panicStaplesService) FetchWines(context.Context, string, []string, time.Time) ([]ai.InputIngredient, error) {
+	panic("unexpected call to FetchWines")
+}
+
+func (s stubGeneratorStaplesService) FetchStaples(context.Context, *GeneratorParams) ([]ai.InputIngredient, error) {
+	return slices.Clone(s.ingredients), nil
+}
+
+func (s stubGeneratorStaplesService) FetchWines(context.Context, string, []string, time.Time) ([]ai.InputIngredient, error) {
 	panic("unexpected call to FetchWines")
 }
 
@@ -922,6 +940,51 @@ func TestGenerateRecipes_EnrichesGeneratedIngredientsFromCatalogProductID(t *tes
 	assert.Equal(t, "$6.49", saver.recipes[0].Ingredients[0].Price)
 	require.Len(t, critiquer.recipes, 1)
 	assert.Equal(t, "7", critiquer.recipes[0].Ingredients[0].AisleNumber)
+}
+
+func TestGenerateRecipes_MenuUsesFilteredIngredientsButRecipeCanSearchFullCatalog(t *testing.T) {
+	generated := []ai.Recipe{{
+		Title:       "Roast Chicken",
+		Description: "Crisp and simple",
+		Ingredients: []ai.Ingredient{
+			{ProductID: "cream-1", Name: "Heavy cream", Quantity: "1/2 cup"},
+		},
+		Instructions: []string{"Roast the chicken."},
+		ResponseID:   "resp-chicken",
+	}}
+
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	creamPrice := float32(4.49)
+	staples := stubGeneratorStaplesService{ingredients: []ai.InputIngredient{
+		{
+			ProductID:   "chicken-1",
+			Description: "Chicken thighs",
+			Grade:       &ai.IngredientGrade{Score: 9},
+		},
+		{
+			ProductID:    "cream-1",
+			Description:  "Heavy cream",
+			AisleNumber:  "Dairy",
+			PriceRegular: &creamPrice,
+			Grade:        &ai.IngredientGrade{Score: 3},
+		},
+	}}
+
+	aiStub := &captureGenerateAIClient{
+		shoppingList: &ai.ShoppingList{Recipes: generated},
+	}
+	g := newTestGenerator(t, aiStub, &captureCritiqueService{}, staples, noopstatuswriter{}, noopRecipeSaver{})
+
+	got, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, aiStub.ingredients, 1)
+	assert.Equal(t, "chicken-1", aiStub.ingredients[0].ProductID)
+	require.Len(t, aiStub.searchableIngredients, 2)
+	assert.ElementsMatch(t, []string{"chicken-1", "cream-1"}, []string{aiStub.searchableIngredients[0].ProductID, aiStub.searchableIngredients[1].ProductID})
+	require.Len(t, got.Recipes, 1)
+	require.Len(t, got.Recipes[0].Ingredients, 1)
+	assert.Equal(t, "Dairy", got.Recipes[0].Ingredients[0].AisleNumber)
+	assert.Equal(t, "$4.49", got.Recipes[0].Ingredients[0].Price)
 }
 
 type noopstatuswriter struct{}

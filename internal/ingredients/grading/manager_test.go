@@ -180,3 +180,27 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	slices.Sort(callSizes)
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
 }
+
+func TestRubberstampPreservesExistingGrades(t *testing.T) {
+	grader := rubberstamp{}
+	inputs := []ai.InputIngredient{
+		{
+			ProductID:   "dairy-1",
+			Description: "Heavy Cream",
+			Grade:       &ai.IngredientGrade{Score: 5, Reason: "supporting ingredient"},
+		},
+		{
+			ProductID:   "chicken-1",
+			Description: "Chicken",
+		},
+	}
+
+	got, err := grader.GradeIngredients(t.Context(), inputs)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.NotNil(t, got[0].Grade)
+	assert.Equal(t, 5, got[0].Grade.Score)
+	assert.Equal(t, "supporting ingredient", got[0].Grade.Reason)
+	require.NotNil(t, got[1].Grade)
+	assert.Equal(t, 10, got[1].Grade.Score)
+}

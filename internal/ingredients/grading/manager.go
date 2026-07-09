@@ -26,6 +26,10 @@ type rubberstamp struct{}
 func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	results := make([]ai.InputIngredient, 0, len(ingredients))
 	for _, ingredient := range ingredients {
+		if ingredient.Grade != nil {
+			results = append(results, ingredient)
+			continue
+		}
 		ingredient.Grade = &ai.IngredientGrade{
 			Score:  10,
 			Reason: "ingredient grading disabled",

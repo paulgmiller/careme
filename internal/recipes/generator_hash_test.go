@@ -23,15 +23,15 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 	}
 
 	// make sure we're intentional about breaking hash
-	if h1 != "wrxx3dmHzBA" {
-		t.Fatalf("expected hash to be stable and equal to JjKXkKjKKpE, got %s", h1)
+	if h1 != "HjFKtib4hrM" {
+		t.Fatalf("expected hash to be stable and equal to HjFKtib4hrM, got %s", h1)
 	}
 
 	legacyHash, ok := legacyRecipeHash(h1)
 	if !ok {
 		t.Fatal("expected current hash passhed to legacy")
 	}
-	if legacyHash != "cmVjaXBlwrxx3dmHzBA=" {
+	if legacyHash != "cmVjaXBlHjFKtib4hrM=" {
 		t.Fatalf("expected legacy hash to be base64 of recipe hash with prefix, got %s", legacyHash)
 	}
 

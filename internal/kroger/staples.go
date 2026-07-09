@@ -20,9 +20,10 @@ import (
 var defaultStaplesSignature = string(lo.Must(json.Marshal(defaultStaples())))
 
 type staplesFilter struct {
-	Term   string   `json:"term,omitempty"`
-	Brands []string `json:"brands,omitempty"`
-	Frozen bool     `json:"frozen,omitempty"`
+	Term         string              `json:"term,omitempty"`
+	Brands       []string            `json:"brands,omitempty"`
+	Frozen       bool                `json:"frozen,omitempty"`
+	DefaultGrade *ai.IngredientGrade `json:"default_grade,omitempty"`
 }
 
 type identityProvider struct{}
@@ -69,7 +70,9 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			return nil, err
 		}
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category.Term, "location", locationID)
-		return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
+		return lo.Map(ingredients, func(ingredient Ingredient, _ int) ai.InputIngredient {
+			return inputIngredientFromKrogerIngredient(ingredient, category.DefaultGrade)
+		}), nil
 	})
 }
 
@@ -79,7 +82,9 @@ func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styl
 		if err != nil {
 			return nil, err
 		}
-		return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
+		return lo.Map(ingredients, func(ingredient Ingredient, _ int) ai.InputIngredient {
+			return inputIngredientFromKrogerIngredient(ingredient, nil)
+		}), nil
 	})
 }
 
@@ -166,7 +171,7 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 	return ingredients, nil
 }
 
-func inputIngredientFromKrogerIngredient(ingredient Ingredient, _ int) ai.InputIngredient {
+func inputIngredientFromKrogerIngredient(ingredient Ingredient, defaultGrade *ai.IngredientGrade) ai.InputIngredient {
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
 		ProductID:    strings.TrimSpace(toStr(ingredient.ProductId)),
 		AisleNumber:  strings.TrimSpace(toStr(ingredient.AisleNumber)),
@@ -176,6 +181,7 @@ func inputIngredientFromKrogerIngredient(ingredient Ingredient, _ int) ai.InputI
 		PriceRegular: clonePrice(ingredient.PriceRegular),
 		PriceSale:    clonePrice(ingredient.PriceSale),
 		Categories:   categoriesFromPtr(ingredient.Categories),
+		Grade:        cloneGrade(defaultGrade),
 	})
 }
 
@@ -192,6 +198,21 @@ func clonePrice(price *float32) *float32 {
 	}
 	value := *price
 	return &value
+}
+
+func cloneGrade(grade *ai.IngredientGrade) *ai.IngredientGrade {
+	if grade == nil {
+		return nil
+	}
+	value := *grade
+	return &value
+}
+
+func supportingIngredientGrade() *ai.IngredientGrade {
+	return &ai.IngredientGrade{
+		Score:  5,
+		Reason: "supporting ingredient available for recipe search",
+	}
 }
 
 func defaultStaples() []staplesFilter {
@@ -228,7 +249,16 @@ func defaultStaples() []staplesFilter {
 			Term:   "pasta",
 			Brands: []string{"*"}, // Should we just put our thumb on the scale
 		},
-		// TODO dairy, international
+		{
+			Term:         "dairy",
+			Brands:       []string{"*"},
+			DefaultGrade: supportingIngredientGrade(),
+		},
+		{
+			Term:         "international",
+			Brands:       []string{"*"},
+			DefaultGrade: supportingIngredientGrade(),
+		},
 	}...)
 }
 

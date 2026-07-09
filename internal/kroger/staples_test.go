@@ -4,11 +4,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	"careme/internal/ai"
 	"careme/internal/kroger/products"
 
 	"github.com/stretchr/testify/assert"
@@ -127,6 +129,54 @@ func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
 	assert.ElementsMatch(t, []string{"Pinot Noir", "Sauvignon Blanc"}, terms)
 }
 
+func TestStaplesProvider_FetchStaples_IncludesSupportingCategoriesWithDefaultGrade(t *testing.T) {
+	var mu sync.Mutex
+	var terms []string
+	baseClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		term := req.URL.Query().Get("filter.term")
+		mu.Lock()
+		terms = append(terms, term)
+		mu.Unlock()
+		return jsonResponse(req, http.StatusOK, `{"data":[{
+			"productId":"`+term+`-1",
+			"brand":"Kroger",
+			"description":"`+term+` ingredient",
+			"categories":["`+term+`"],
+			"items":[{"size":"1 ct","price":{"regular":4.99}}]
+		}]}`), nil
+	})}
+
+	client, err := products.NewClientWithResponses(
+		"https://kroger.test",
+		products.WithHTTPClient(baseClient),
+	)
+	require.NoError(t, err)
+
+	provider := StaplesProvider{client: client}
+	got, err := provider.FetchStaples(t.Context(), "70500874")
+	require.NoError(t, err)
+
+	mu.Lock()
+	gotTerms := slices.Clone(terms)
+	mu.Unlock()
+	assert.Contains(t, gotTerms, "dairy")
+	assert.Contains(t, gotTerms, "international")
+
+	byID := map[string]aiInputGrade{}
+	for _, ingredient := range got {
+		if ingredient.Grade != nil {
+			byID[ingredient.ProductID] = aiInputGrade{score: ingredient.Grade.Score, reason: ingredient.Grade.Reason}
+		}
+	}
+	assert.Equal(t, aiInputGrade{score: 5, reason: "supporting ingredient available for recipe search"}, byID["dairy-1"])
+	assert.Equal(t, aiInputGrade{score: 5, reason: "supporting ingredient available for recipe search"}, byID["international-1"])
+}
+
+type aiInputGrade struct {
+	score  int
+	reason string
+}
+
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -166,7 +216,7 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 		PriceRegular: &regular,
 		PriceSale:    &sale,
 		Categories:   &categories,
-	}, 0)
+	}, &ingredientGradeForTest)
 
 	assert.Equal(t, "apple-1", ingredient.ProductID)
 	assert.Equal(t, "12", ingredient.AisleNumber)
@@ -178,4 +228,8 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	require.NotNil(t, ingredient.PriceSale)
 	assert.Equal(t, sale, *ingredient.PriceSale)
 	assert.Equal(t, categories, ingredient.Categories)
+	require.NotNil(t, ingredient.Grade)
+	assert.Equal(t, 5, ingredient.Grade.Score)
 }
+
+var ingredientGradeForTest = ai.IngredientGrade{Score: 5, Reason: "test grade"}

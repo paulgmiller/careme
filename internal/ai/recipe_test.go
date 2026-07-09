@@ -154,7 +154,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 		}, nil
 	})}, recorder)
 
-	got, err := client.GenerateRecipe(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, "resp-menu-plan")
+	got, err := client.GenerateRecipe(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, "resp-menu-plan", nil)
 	if err != nil {
 		t.Fatalf("GenerateRecipe returned error: %v", err)
 	}
@@ -172,6 +172,100 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	}
 	if recorder.record == nil || recorder.record.PreviousResponseID != "resp-menu-plan" {
 		t.Fatalf("expected prompt record parent response ID, got %#v", recorder.record)
+	}
+}
+
+func TestGenerateRecipeCanSearchIngredientsAfterMenuPlan(t *testing.T) {
+	recorder := &capturePromptRecorder{}
+	var requestBodies []string
+	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		requestBodies = append(requestBodies, string(body))
+		if len(requestBodies) == 1 {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+					"id": "resp-search",
+					"object": "response",
+					"created_at": 1778529600,
+					"status": "completed",
+					"model": %q,
+					"output": [{
+						"id": "fc-search",
+						"type": "function_call",
+						"status": "completed",
+						"call_id": "call-search-1",
+						"name": "search_ingredients",
+						"arguments": "{\"query\":\"cream\",\"limit\":5}"
+					}],
+					"usage": {
+						"input_tokens": 20,
+						"input_tokens_details": {"cached_tokens": 15},
+						"output_tokens": 5,
+						"output_tokens_details": {"reasoning_tokens": 0},
+						"total_tokens": 25
+					}
+				}`, defaultRecipeModel))),
+				Request: req,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"id": "resp-recipe",
+				"object": "response",
+				"created_at": 1778529601,
+				"status": "completed",
+				"model": %q,
+				"output": [{
+					"id": "msg-recipe",
+					"type": "message",
+					"status": "completed",
+					"role": "assistant",
+					"content": [{
+						"type": "output_text",
+						"text": "{\"title\":\"Creamy Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$15\",\"ingredients\":[{\"id\":\"cream-1\",\"name\":\"Heavy Cream\",\"quantity\":\"1/2 cup\"}],\"instructions\":[\"Prep.\"],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"annotations": []
+					}]
+				}],
+				"usage": {
+					"input_tokens": 30,
+					"input_tokens_details": {"cached_tokens": 20},
+					"output_tokens": 10,
+					"output_tokens_details": {"reasoning_tokens": 0},
+					"total_tokens": 40
+				}
+			}`, defaultRecipeModel))),
+			Request: req,
+		}, nil
+	})}, recorder)
+
+	got, err := client.GenerateRecipe(t.Context(), []string{"Anchor ingredient direction for this recipe: Chicken thighs."}, "resp-menu-plan", []InputIngredient{
+		{ProductID: "cream-1", Brand: "Dairy Best", Description: "Heavy Cream", AisleNumber: "Dairy", Grade: &IngredientGrade{Score: 3}},
+		{ProductID: "yogurt-1", Brand: "Dairy Best", Description: "Greek Yogurt", AisleNumber: "Dairy"},
+	})
+	if err != nil {
+		t.Fatalf("GenerateRecipe returned error: %v", err)
+	}
+	if got.ResponseID != "resp-recipe" || got.Ingredients[0].ProductID != "cream-1" {
+		t.Fatalf("unexpected recipe: %+v", got)
+	}
+	if len(requestBodies) != 2 {
+		t.Fatalf("expected initial request and tool-result continuation, got %d", len(requestBodies))
+	}
+	if !strings.Contains(requestBodies[0], `"tools"`) || !strings.Contains(requestBodies[0], ingredientSearchToolName) {
+		t.Fatalf("expected initial recipe request to include ingredient search tool: %s", requestBodies[0])
+	}
+	if !strings.Contains(requestBodies[1], `"previous_response_id":"resp-search"`) {
+		t.Fatalf("expected continuation from tool-call response: %s", requestBodies[1])
+	}
+	if !strings.Contains(requestBodies[1], `"type":"function_call_output"`) || !strings.Contains(requestBodies[1], "Heavy Cream") || !strings.Contains(requestBodies[1], "cream-1") {
+		t.Fatalf("expected continuation to include search TSV output: %s", requestBodies[1])
 	}
 }
 
