@@ -112,6 +112,44 @@ func TestClientCreateAndRemoveCampaignCriteriaRequestShapes(t *testing.T) {
 	assert.True(t, sawRemove)
 }
 
+func TestClientSearchAdGroups(t *testing.T) {
+	var sawSearch bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/oauth":
+			_, _ = w.Write([]byte(`{"access_token":"token-1","expires_in":3600}`))
+		case "/v24/customers/123/googleAds:search":
+			sawSearch = true
+			var req searchRequest
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			assert.Contains(t, req.Query, "campaign.id = 456")
+			assert.Contains(t, req.Query, "ad_group.status != REMOVED")
+			_, _ = w.Write([]byte(`{
+				"results": [{
+					"adGroup": {
+						"resourceName": "customers/123/adGroups/77",
+						"name": "Careme Store 11111111 Store One"
+					}
+				}]
+			}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL)
+	client.oauthURL = server.URL + "/oauth"
+
+	adGroups, err := client.SearchAdGroups(context.Background(), "123", "456")
+	require.NoError(t, err)
+	require.True(t, sawSearch)
+	assert.Equal(t, []AdGroupSummary{{
+		ResourceName: "customers/123/adGroups/77",
+		Name:         "Careme Store 11111111 Store One",
+	}}, adGroups)
+}
+
 func TestClientCreateStoreAdGroupResourcesRequestShapes(t *testing.T) {
 	paths := make(map[string]int)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +162,7 @@ func TestClientCreateStoreAdGroupResourcesRequestShapes(t *testing.T) {
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
 			create := raw["operations"][0]["create"].(map[string]any)
 			assert.Equal(t, "customers/123/campaigns/456", create["campaign"])
+			assert.Equal(t, "Careme Store 11111111 Kroger One", create["name"])
 			assert.Equal(t, "ENABLED", create["status"])
 			_, _ = w.Write([]byte(`{"results":[{"resourceName":"customers/123/adGroups/77"}]}`))
 		case "/v24/customers/123/adGroupCriteria:mutate":

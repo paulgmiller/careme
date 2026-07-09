@@ -126,20 +126,15 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return fmt.Errorf("unsupported -output %q; use api or manual", outputMode)
 	}
 
-	registry, err := googleads.LoadRegistry(ctx, cacheStore, customerID, campaignID)
-	if err != nil {
-		return err
-	}
-
 	adsClient, err := googleads.NewClient(runtimeConfig.GoogleAds)
 	if err != nil {
 		return err
 	}
 	if targetOnly {
-		return runTargetOnlySync(ctx, stdout, adsClient, cacheStore, registry, customerID, campaignID, radiusMiles, apply, targets)
+		return runTargetOnlySync(ctx, stdout, adsClient, customerID, campaignID, radiusMiles, apply, targets)
 	}
 
-	return runStoreAdGroupSync(ctx, stdout, adsClient, cacheStore, registry, customerID, campaignID, radiusMiles, apply, adStatus, targets)
+	return runStoreAdGroupSync(ctx, stdout, adsClient, customerID, campaignID, radiusMiles, apply, adStatus, targets)
 }
 
 type adTargetsConfig struct {
@@ -166,13 +161,14 @@ func newAdTargetsConfig(cfg *config.Config, loginCustomerID string) adTargetsCon
 	}
 }
 
-func runTargetOnlySync(ctx context.Context, stdout io.Writer, adsClient *googleads.Client, cacheStore cache.ListCache, registry googleads.Registry, customerID, campaignID string, radiusMiles float64, apply bool, targets []googleads.Target) error {
+func runTargetOnlySync(ctx context.Context, stdout io.Writer, adsClient *googleads.Client, customerID, campaignID string, radiusMiles float64, apply bool, targets []googleads.Target) error {
 	existing, err := adsClient.SearchCampaignProximities(ctx, customerID, campaignID)
 	if err != nil {
 		return err
 	}
 
-	plan := googleads.PlanSync(targets, registry.Entries, existing)
+	create, skip := missingProximityTargets(targets, existing)
+	plan := googleads.Plan{Create: create, Skip: skip}
 	if err := printPlan(stdout, "campaign proximity targeting", customerID, campaignID, radiusMiles, apply, targets, plan); err != nil {
 		return err
 	}
@@ -183,40 +179,24 @@ func runTargetOnlySync(ctx context.Context, stdout io.Writer, adsClient *googlea
 		return nil
 	}
 
-	removeResourceNames := make([]string, 0, len(plan.Remove))
-	for _, entry := range plan.Remove {
-		removeResourceNames = append(removeResourceNames, entry.ResourceName)
-	}
-	if err := adsClient.RemoveCampaignCriteria(ctx, customerID, removeResourceNames); err != nil {
-		return err
-	}
-	registry = googleads.RemoveEntries(registry, append(plan.Remove, plan.Forget...))
-	registry.CustomerID = customerID
-	registry.CampaignID = campaignID
-	if err := googleads.SaveRegistry(ctx, cacheStore, registry); err != nil {
+	// For now this command only ensures configured targets exist. It does not purge old targets.
+	if _, err := adsClient.CreateProximityCriteria(ctx, customerID, campaignID, plan.Create); err != nil {
 		return err
 	}
 
-	resourceNames, err := adsClient.CreateProximityCriteria(ctx, customerID, campaignID, plan.Create)
-	if err != nil {
-		return err
-	}
-	registry, err = googleads.ApplyCreatedEntries(registry, plan.Create, resourceNames)
-	if err != nil {
-		return err
-	}
-	if err := googleads.SaveRegistry(ctx, cacheStore, registry); err != nil {
-		return err
-	}
-
-	if _, err := fmt.Fprintf(stdout, "Applied %d creates, %d removals, and %d registry forgets.\n", len(plan.Create), len(plan.Remove), len(plan.Forget)); err != nil {
+	if _, err := fmt.Fprintf(stdout, "Applied %d creates and skipped %d existing targets.\n", len(plan.Create), len(plan.Skip)); err != nil {
 		return err
 	}
 	return nil
 }
 
-func runStoreAdGroupSync(ctx context.Context, stdout io.Writer, adsClient *googleads.Client, cacheStore cache.ListCache, registry googleads.Registry, customerID, campaignID string, radiusMiles float64, apply bool, adStatus string, targets []googleads.Target) error {
-	plan := googleads.PlanSync(targets, registry.Entries, nil)
+func runStoreAdGroupSync(ctx context.Context, stdout io.Writer, adsClient *googleads.Client, customerID, campaignID string, radiusMiles float64, apply bool, adStatus string, targets []googleads.Target) error {
+	existing, err := adsClient.SearchAdGroups(ctx, customerID, campaignID)
+	if err != nil {
+		return err
+	}
+	create, skip := missingAdGroupTargets(targets, existing)
+	plan := googleads.Plan{Create: create, Skip: skip}
 	if err := printPlan(stdout, "store ad groups", customerID, campaignID, radiusMiles, apply, targets, plan); err != nil {
 		return err
 	}
@@ -230,22 +210,7 @@ func runStoreAdGroupSync(ctx context.Context, stdout io.Writer, adsClient *googl
 		return nil
 	}
 
-	removeAdGroups := make([]string, 0, len(plan.Remove))
-	for _, entry := range plan.Remove {
-		if entry.AdGroup != "" {
-			removeAdGroups = append(removeAdGroups, entry.AdGroup)
-		}
-	}
-	if err := adsClient.RemoveAdGroups(ctx, customerID, removeAdGroups); err != nil {
-		return err
-	}
-	registry = googleads.RemoveEntries(registry, append(plan.Remove, plan.Forget...))
-	registry.CustomerID = customerID
-	registry.CampaignID = campaignID
-	if err := googleads.SaveRegistry(ctx, cacheStore, registry); err != nil {
-		return err
-	}
-
+	// For now this command only ensures configured ads exist. It does not purge old ads.
 	adGroups, err := adsClient.CreateAdGroups(ctx, customerID, campaignID, plan.Create)
 	if err != nil {
 		return err
@@ -269,51 +234,53 @@ func runStoreAdGroupSync(ctx context.Context, stdout io.Writer, adsClient *googl
 		return err
 	}
 
-	registry, err = applyCreatedStoreAdGroups(registry, plan.Create, adGroups, criteria, adGroupAds)
-	if err != nil {
-		return err
+	if len(plan.Create) != len(criteria) || len(plan.Create) != len(adGroupAds) {
+		return fmt.Errorf("created resources mismatch: targets=%d criteria=%d ads=%d", len(plan.Create), len(criteria), len(adGroupAds))
 	}
-	if err := googleads.SaveRegistry(ctx, cacheStore, registry); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(stdout, "Applied %d store ad groups, %d removals, and %d registry forgets.\n", len(plan.Create), len(plan.Remove), len(plan.Forget)); err != nil {
+	if _, err := fmt.Fprintf(stdout, "Applied %d store ad groups and skipped %d existing ad groups.\n", len(plan.Create), len(plan.Skip)); err != nil {
 		return err
 	}
 	return nil
 }
 
-func applyCreatedStoreAdGroups(registry googleads.Registry, targets []googleads.Target, adGroups, criteria, adGroupAds []string) (googleads.Registry, error) {
-	if len(targets) != len(adGroups) || len(targets) != len(criteria) || len(targets) != len(adGroupAds) {
-		return googleads.Registry{}, fmt.Errorf("created resources mismatch: targets=%d ad_groups=%d criteria=%d ads=%d", len(targets), len(adGroups), len(criteria), len(adGroupAds))
+func missingProximityTargets(targets []googleads.Target, existing []googleads.ProximityCriterion) ([]googleads.Target, []googleads.Target) {
+	existingShapes := make(map[string]struct{}, len(existing))
+	for _, criterion := range existing {
+		existingShapes[proximityKey(criterion.LatMicro, criterion.LonMicro, criterion.RadiusMiles)] = struct{}{}
 	}
 
-	entriesByStore := make(map[string]googleads.RegistryEntry, len(registry.Entries)+len(targets))
-	for _, entry := range registry.Entries {
-		entriesByStore[entry.StoreID] = entry
-	}
-	for i, target := range targets {
-		entriesByStore[target.StoreID] = googleads.RegistryEntry{
-			StoreID:      target.StoreID,
-			StoreName:    target.StoreName,
-			Address:      target.Address,
-			LatMicro:     target.LatMicro,
-			LonMicro:     target.LonMicro,
-			RadiusMiles:  target.RadiusMiles,
-			ResourceName: criteria[i],
-			FinalURL:     target.FinalURL,
-			AdGroup:      adGroups[i],
-			AdGroupAd:    adGroupAds[i],
+	create := make([]googleads.Target, 0, len(targets))
+	skip := make([]googleads.Target, 0, len(targets))
+	for _, target := range targets {
+		if _, ok := existingShapes[proximityKey(target.LatMicro, target.LonMicro, target.RadiusMiles)]; ok {
+			skip = append(skip, target)
+			continue
 		}
+		create = append(create, target)
+	}
+	return create, skip
+}
+
+func proximityKey(latMicro, lonMicro int64, radiusMiles float64) string {
+	return fmt.Sprintf("%d|%d|%g", latMicro, lonMicro, radiusMiles)
+}
+
+func missingAdGroupTargets(targets []googleads.Target, existing []googleads.AdGroupSummary) ([]googleads.Target, []googleads.Target) {
+	existingNames := make(map[string]struct{}, len(existing))
+	for _, adGroup := range existing {
+		existingNames[strings.TrimSpace(adGroup.Name)] = struct{}{}
 	}
 
-	registry.Entries = registry.Entries[:0]
-	for _, entry := range entriesByStore {
-		registry.Entries = append(registry.Entries, entry)
+	create := make([]googleads.Target, 0, len(targets))
+	skip := make([]googleads.Target, 0, len(targets))
+	for _, target := range targets {
+		if _, ok := existingNames[googleads.AdGroupName(target)]; ok {
+			skip = append(skip, target)
+			continue
+		}
+		create = append(create, target)
 	}
-	sort.Slice(registry.Entries, func(i, j int) bool {
-		return registry.Entries[i].StoreID < registry.Entries[j].StoreID
-	})
-	return registry, nil
+	return create, skip
 }
 
 func defaultHeadlines(_ googleads.Target) []string {
@@ -393,11 +360,7 @@ func printManualSteps(w io.Writer, customerID, campaignID, adStatus string, targ
 }
 
 func storeAdGroupName(target googleads.Target) string {
-	name := strings.TrimSpace(target.StoreName)
-	if name == "" {
-		name = "Store"
-	}
-	return fmt.Sprintf("Careme Store %s %s", target.StoreID, name)
+	return googleads.AdGroupName(target)
 }
 
 type locationGetter interface {
@@ -549,20 +512,11 @@ func printPlan(w io.Writer, modeName, customerID, campaignID string, radiusMiles
 	if _, err := fmt.Fprintf(w, "customer=%s campaign=%s radius=%.2f miles stores=%d\n", customerID, campaignID, radiusMiles, len(targets)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "create=%d remove=%d forget=%d keep=%d skip_existing=%d\n\n", len(plan.Create), len(plan.Remove), len(plan.Forget), len(plan.Keep), len(plan.Skip)); err != nil {
+	if _, err := fmt.Fprintf(w, "create=%d skip_existing=%d\n\n", len(plan.Create), len(plan.Skip)); err != nil {
 		return err
 	}
 
 	if err := printTargets(w, "Create", plan.Create); err != nil {
-		return err
-	}
-	if err := printEntries(w, "Remove managed stale targets", plan.Remove); err != nil {
-		return err
-	}
-	if err := printEntries(w, "Forget missing managed targets", plan.Forget); err != nil {
-		return err
-	}
-	if err := printEntries(w, "Keep managed targets", plan.Keep); err != nil {
 		return err
 	}
 	if err := printTargets(w, "Skip existing manual targets", plan.Skip); err != nil {
@@ -596,22 +550,6 @@ func printTargets(w io.Writer, title string, targets []googleads.Target) error {
 	}
 	for _, target := range targets {
 		if _, err := fmt.Fprintf(w, "  %s %s (%s) lat_micro=%d lon_micro=%d radius=%.2f\n", target.StoreID, target.StoreName, target.Address, target.LatMicro, target.LonMicro, target.RadiusMiles); err != nil {
-			return err
-		}
-	}
-	_, err := fmt.Fprintln(w)
-	return err
-}
-
-func printEntries(w io.Writer, title string, entries []googleads.RegistryEntry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	if _, err := fmt.Fprintf(w, "%s:\n", title); err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if _, err := fmt.Fprintf(w, "  %s %s (%s) %s\n", entry.StoreID, entry.StoreName, entry.Address, entry.ResourceName); err != nil {
 			return err
 		}
 	}

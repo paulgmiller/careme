@@ -100,6 +100,31 @@ func TestRecipeURL(t *testing.T) {
 	assert.Equal(t, "https://careme.cooking/recipes?location=70100023", recipeURL("https://careme.cooking", "70100023"))
 }
 
+func TestMissingProximityTargetsSkipsExistingShape(t *testing.T) {
+	create, skip := missingProximityTargets([]googleads.Target{
+		{StoreID: "1", LatMicro: 47610000, LonMicro: -122200000, RadiusMiles: 2},
+		{StoreID: "2", LatMicro: 48610000, LonMicro: -123200000, RadiusMiles: 2},
+	}, []googleads.ProximityCriterion{
+		{LatMicro: 47610000, LonMicro: -122200000, RadiusMiles: 2},
+	})
+
+	assert.Equal(t, []googleads.Target{{StoreID: "2", LatMicro: 48610000, LonMicro: -123200000, RadiusMiles: 2}}, create)
+	assert.Equal(t, []googleads.Target{{StoreID: "1", LatMicro: 47610000, LonMicro: -122200000, RadiusMiles: 2}}, skip)
+}
+
+func TestMissingAdGroupTargetsSkipsExistingName(t *testing.T) {
+	targets := []googleads.Target{
+		{StoreID: "1", StoreName: "Store One"},
+		{StoreID: "2", StoreName: "Store Two"},
+	}
+	create, skip := missingAdGroupTargets(targets, []googleads.AdGroupSummary{
+		{Name: googleads.AdGroupName(targets[0])},
+	})
+
+	assert.Equal(t, []googleads.Target{{StoreID: "2", StoreName: "Store Two"}}, create)
+	assert.Equal(t, []googleads.Target{{StoreID: "1", StoreName: "Store One"}}, skip)
+}
+
 func TestPrintManualStepsIncludesStoreURLAndProximity(t *testing.T) {
 	var out bytes.Buffer
 	err := printManualSteps(&out, "5812848025", "23939758740", "PAUSED", []googleads.Target{{

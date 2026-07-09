@@ -111,6 +111,11 @@ type ProximityCriterion struct {
 	RadiusMiles  float64
 }
 
+type AdGroupSummary struct {
+	ResourceName string
+	Name         string
+}
+
 func (c *Client) SearchCampaignProximities(ctx context.Context, customerID, campaignID string) ([]ProximityCriterion, error) {
 	query := fmt.Sprintf(`SELECT campaign_criterion.resource_name, campaign_criterion.proximity.geo_point.latitude_in_micro_degrees, campaign_criterion.proximity.geo_point.longitude_in_micro_degrees, campaign_criterion.proximity.radius, campaign_criterion.proximity.radius_units FROM campaign_criterion WHERE campaign.id = %s AND campaign_criterion.type = PROXIMITY AND campaign_criterion.status != REMOVED`, campaignID)
 	var response searchResponse
@@ -132,6 +137,23 @@ func (c *Client) SearchCampaignProximities(ctx context.Context, customerID, camp
 		})
 	}
 	return criteria, nil
+}
+
+func (c *Client) SearchAdGroups(ctx context.Context, customerID, campaignID string) ([]AdGroupSummary, error) {
+	query := fmt.Sprintf(`SELECT ad_group.resource_name, ad_group.name FROM ad_group WHERE campaign.id = %s AND ad_group.status != REMOVED`, campaignID)
+	var response searchResponse
+	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/customers/%s/googleAds:search", customerID), searchRequest{Query: query}, &response); err != nil {
+		return nil, err
+	}
+
+	adGroups := make([]AdGroupSummary, 0, len(response.Results))
+	for _, result := range response.Results {
+		adGroups = append(adGroups, AdGroupSummary{
+			ResourceName: result.AdGroup.ResourceName,
+			Name:         result.AdGroup.Name,
+		})
+	}
+	return adGroups, nil
 }
 
 func (c *Client) CreateProximityCriteria(ctx context.Context, customerID, campaignID string, targets []Target) ([]string, error) {
@@ -188,7 +210,7 @@ func (c *Client) CreateAdGroups(ctx context.Context, customerID, campaignID stri
 		operations = append(operations, adGroupOperation{
 			Create: &adGroup{
 				Campaign: campaign,
-				Name:     adGroupName(target),
+				Name:     AdGroupName(target),
 				Status:   "ENABLED",
 				Type:     "SEARCH_STANDARD",
 			},
@@ -386,6 +408,7 @@ type searchResponse struct {
 
 type searchResult struct {
 	CampaignCriterion campaignCriterionRow `json:"campaignCriterion"`
+	AdGroup           adGroupRow           `json:"adGroup"`
 }
 
 type campaignCriterionRow struct {
@@ -397,6 +420,11 @@ type proximityInfoRow struct {
 	GeoPoint    geoPointInfo `json:"geoPoint"`
 	Radius      float64      `json:"radius"`
 	RadiusUnits string       `json:"radiusUnits"`
+}
+
+type adGroupRow struct {
+	ResourceName string `json:"resourceName"`
+	Name         string `json:"name"`
 }
 
 type mutateCampaignCriteriaRequest struct {
@@ -549,10 +577,10 @@ func mutationResourceNames(response mutateResponse) []string {
 	return resourceNames
 }
 
-func adGroupName(target Target) string {
+func AdGroupName(target Target) string {
 	name := strings.TrimSpace(target.StoreName)
 	if name == "" {
-		name = "Kroger"
+		name = "Store"
 	}
-	return fmt.Sprintf("Careme Kroger %s %s", target.StoreID, name)
+	return fmt.Sprintf("Careme Store %s %s", target.StoreID, name)
 }
