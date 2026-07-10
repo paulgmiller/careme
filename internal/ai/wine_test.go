@@ -133,7 +133,6 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 		Instructions: []string{"Roast until golden."},
 		DrinkPairing: "Pinot Noir",
 	}, []InputIngredient{{ProductID: "pinot-noir-1", Description: "Pinot Noir"}})
-
 	if err != nil {
 		t.Fatalf("PickWine returned error: %v", err)
 	}
