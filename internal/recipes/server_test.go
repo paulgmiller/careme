@@ -1059,13 +1059,40 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&start=2026-07-10T00:00:00Z", nil)
 
-	s.spin(t.Context(), rr, hash)
+	s.spin(t.Context(), rr, req, hash)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	assert.Contains(t, rr.Body.String(), status)
+	assert.Contains(t, rr.Body.String(), `hx-get="/recipes?h=`+hash+`&amp;start=2026-07-10T00:00:00Z"`)
+	assert.NotContains(t, rr.Body.String(), `http-equiv="refresh"`)
+}
+
+func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore))
+
+	hash := "spinner-hash"
+	status := "Still chopping"
+	writer := s.statusReader.(*statusStore)
+	err := writer.SaveGenerationStatus(t.Context(), hash, status)
+	require.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&start=2026-07-10T00:00:00Z", nil)
+	req.Header.Set("HX-Request", "true")
+
+	s.spin(t.Context(), rr, req, hash)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Contains(t, body, `id="spin-page-work"`)
+	assert.Contains(t, body, status)
+	assert.Contains(t, body, `hx-trigger="load delay:10s"`)
+	assert.NotContains(t, body, "<!doctype html>")
 }
 
 type captureQuestionGenerator struct {

@@ -1111,7 +1111,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	}
 
 	if time.Since(startTime) < time.Minute*10 {
-		s.spin(ctx, w, hashParam)
+		s.spin(ctx, w, r, hashParam)
 		return
 	}
 	slog.WarnContext(ctx, "rekicking generation", "time", startArg, "hash", hashParam)
@@ -1386,7 +1386,7 @@ func (s *server) writeGenerationStatus(ctx context.Context, hash, status string)
 	}
 }
 
-func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
+func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
 	status, err := s.statusReader.GenerationStatusFromCache(ctx, hash)
@@ -1401,6 +1401,7 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
 		RefreshInterval string // seconds
 		StatusMessage   string
 		ServerSignedIn  bool
+		CurrentPath     string
 	}{
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
@@ -1408,6 +1409,15 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, hash string) {
 		RefreshInterval: "10", // seconds
 		StatusMessage:   status,
 		ServerSignedIn:  true, // clerk refresh doesn't need to reload because spin will just do it anwyays
+		CurrentPath:     r.URL.RequestURI(),
+	}
+
+	if isHTMXRequest(r) {
+		if err := templates.Spin.ExecuteTemplate(w, "spin_progress", spinnerData); err != nil {
+			slog.ErrorContext(ctx, "spin progress template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+		return
 	}
 
 	if err := templates.Spin.Execute(w, spinnerData); err != nil {
