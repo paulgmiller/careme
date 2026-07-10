@@ -48,17 +48,19 @@ type generatorParams struct {
 type GeneratorParams = generatorParams
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
-	// normalize to midnight (shave hours, minutes, seconds, nanoseconds)
-	// rethink this can we use this to restart if we don't normalize and hash still just looks at right part?
-	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	return &generatorParams{
-		Date:     date, // shave time
+		Date:     date,
 		Location: l,
 	}
 }
 
 func (g *generatorParams) String() string {
-	return fmt.Sprintf("%s on %s", g.Location.ID, g.Date.Format("2006-01-02"))
+	return fmt.Sprintf("%s on %s", g.Location.ID, g.FormatDate())
+}
+
+// will cut down today and return strign
+func (g *generatorParams) FormatDate() string {
+	return g.Date.Format("2006-01-02")
 }
 
 // Hash this is how we find shoppinglists and params
@@ -66,7 +68,7 @@ func (g *generatorParams) String() string {
 func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
-	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
+	lo.Must(io.WriteString(fnv, g.FormatDate()))
 	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
@@ -83,7 +85,7 @@ func (g *generatorParams) Hash() string {
 func (g *generatorParams) LocationHash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
-	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
+	lo.Must(io.WriteString(fnv, g.FormatDate()))
 	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
@@ -157,10 +159,11 @@ func StoreToDate(ctx context.Context, now time.Time, l *locations.Location) (tim
 	return defaultRecipeDate(now, tz), nil
 }
 
+// ugh
 func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
 	localNow := now.In(storeLoc)
 	if localNow.Hour() < storeDayStartHour {
 		localNow = localNow.AddDate(0, 0, -1)
 	}
-	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
+	return localNow
 }

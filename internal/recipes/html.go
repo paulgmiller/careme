@@ -111,9 +111,9 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		UseTodaysIngredients bool
 	}{
 		Location:             *p.Location,
-		Date:                 p.Date.Format("2006-01-02"),
-		DateDisplay:          p.Date.Format("January 2, 2006"),
-		MetaDescription:      shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
+		Date:                 p.FormatDate(),
+		DateDisplay:          p.Date.Format("January 2, 2006"), // make a helper?
+		MetaDescription:      shoppingListMetaDescription(l.Recipes, p.Location.Name, p.FormatDate()),
 		ClarityScript:        templates.ClarityScript(ctx),
 		GoogleTagScript:      templates.GoogleTagScript(),
 		Instructions:         instructions,
@@ -140,6 +140,7 @@ func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *gener
 	if err != nil {
 		return false
 	}
+	// need to cut dte.
 	return today.Sub(p.Date) > 24*time.Hour
 }
 
@@ -196,7 +197,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		MinimumRecipeScore      int
 	}{
 		Location:                *p.Location,
-		Date:                    p.Date.Format("2006-01-02"),
+		Date:                    p.FormatDate(),
 		ClarityScript:           templates.ClarityScript(ctx),
 		GoogleTagScript:         templates.GoogleTagScript(),
 		Recipe:                  recipe,
@@ -329,7 +330,7 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 		Style          seasons.Style
 	}{
 		Location:       *p.Location,
-		Date:           p.Date.Format("2006-01-02"),
+		Date:           p.FormatDate(),
 		Hash:           p.Hash(),
 		Recipes:        l.Recipes,
 		Domain:         publicOrigin,

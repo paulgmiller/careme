@@ -28,11 +28,31 @@ func TestDefaultRecipeDate_Uses9AMStoreBoundary(t *testing.T) {
 	if got, want := before.Format("2006-01-02"), "2026-01-14"; got != want {
 		t.Fatalf("expected previous day before 9AM boundary, got %s", got)
 	}
+	if got, want := before.Format("15:04:05"), "08:59:00"; got != want {
+		t.Fatalf("expected default date to preserve local time %s, got %s", want, got)
+	}
 
 	atBoundary := time.Date(2026, 1, 15, 14, 0, 0, 0, time.UTC) // 09:00 in New York
 	after := defaultRecipeDate(atBoundary, storeLoc)
 	if got, want := after.Format("2006-01-02"), "2026-01-15"; got != want {
 		t.Fatalf("expected same day at 9AM boundary, got %s", got)
+	}
+	if got, want := after.Format("15:04:05"), "09:00:00"; got != want {
+		t.Fatalf("expected default date to preserve local time %s, got %s", want, got)
+	}
+}
+
+func TestDefaultParams_PreservesDateTime(t *testing.T) {
+	loc := &locations.Location{ID: "store-1", Name: "Test Store"}
+	date := time.Date(2026, 1, 15, 10, 30, 45, 123, time.FixedZone("Test", -5*60*60))
+
+	p := DefaultParams(loc, date)
+
+	if !p.Date.Equal(date) {
+		t.Fatalf("expected default params date %s, got %s", date, p.Date)
+	}
+	if got, want := p.Date.Location().String(), "Test"; got != want {
+		t.Fatalf("expected params date location %s, got %s", want, got)
 	}
 }
 
@@ -59,6 +79,9 @@ func TestParseQueryArgs_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 
 	if got, want := p.Date.Format("2006-01-02"), "2026-01-14"; got != want {
 		t.Fatalf("expected default date %s, got %s", want, got)
+	}
+	if got, want := p.Date.Format("15:04:05"), "05:30:00"; got != want {
+		t.Fatalf("expected default date to preserve store-local time %s, got %s", want, got)
 	}
 	if got, want := p.Date.Location().String(), "America/New_York"; got != want {
 		t.Fatalf("expected date location %s, got %s", want, got)

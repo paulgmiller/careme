@@ -1071,6 +1071,7 @@ const (
 	queryArgHash        = "h"
 	queryArgStart       = "start"
 	queryArgPendingSave = "save"
+	generationStaleAge  = 10 * time.Minute
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
@@ -1085,43 +1086,22 @@ func (s *server) recipeFromShoppingList(list ai.ShoppingList, recipeHash string)
 }
 
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	startArg := r.URL.Query().Get(queryArgStart)
 	hashParam := r.URL.Query().Get(queryArgHash)
-	// okay give them a new start time.
-	if startArg == "" {
-		// don't restart clock if we don't have the params. How did we even get here though.
-		_, err := s.ParamsFromCache(ctx, hashParam)
-		if err != nil {
-			// not erroring because any rando on internet can send us things AND we seem to be missing
-			// at least http://careme.cooking/recipes?h=3i3rbrZv0mk seems permabroke but very old
-			// but a high level of these could signal a bug.
-			slog.InfoContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
-			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
-			return
-		}
-		redirectToHash(w, r, hashParam, queryArgStart, QueryArgHelp)
-		return
-	}
-
-	startTime, err := time.Parse(time.RFC3339Nano, startArg)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to parse start time", "time", startArg, "error", err)
-		redirectToHash(w, r, hashParam, queryArgStart, QueryArgHelp)
-		return
-	}
-
-	if time.Since(startTime) < time.Minute*10 {
-		s.spin(ctx, w, hashParam)
-		return
-	}
-	slog.WarnContext(ctx, "rekicking generation", "time", startArg, "hash", hashParam)
-
 	p, err := s.ParamsFromCache(ctx, hashParam)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+		// not erroring because any rando on internet can send us things AND we seem to be missing
+		// at least http://careme.cooking/recipes?h=3i3rbrZv0mk seems permabroke but very old
+		// but a high level of these could signal a bug.
+		slog.InfoContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 		http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 		return
 	}
+
+	if !generationIsStale(p, time.Now()) {
+		s.spin(ctx, w, hashParam)
+		return
+	}
+	slog.WarnContext(ctx, "rekicking stale generation", "started_at", p.Date, "hash", hashParam)
 
 	// this could fail becasuse clerk isn't refreshing?
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
@@ -1134,8 +1114,10 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		slog.WarnContext(ctx, "no valid session found from spin page.", "hash", hashParam)
 		currentUser = nil
 	}
-	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
-	s.kickgeneration(ctx, p)
+	if currentUser != nil {
+		p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
+	}
+	s.rekickGeneration(ctx, p)
 	redirectToHash(w, r, p.Hash(), queryArgStart, QueryArgHelp)
 }
 
@@ -1364,16 +1346,50 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 	})
 }
 
+func generationIsStale(p *generatorParams, now time.Time) bool {
+	return now.Sub(p.Date) >= generationStaleAge
+}
+
+func (s *server) rekickGeneration(ctx context.Context, p *generatorParams) {
+	p.Date = generationDateWithCurrentTime(p.Date, time.Now())
+	if err := s.UpdateParams(ctx, p); err != nil {
+		slog.ErrorContext(ctx, "failed to refresh params before rekicking generation", "hash", p.Hash(), "error", err)
+	}
+	s.kickgeneration(ctx, p)
+}
+
+func generationDateWithCurrentTime(date time.Time, now time.Time) time.Time {
+	loc := date.Location()
+	localNow := now.In(loc)
+	return time.Date(date.Year(), date.Month(), date.Day(), localNow.Hour(), localNow.Minute(), localNow.Second(), localNow.Nanosecond(), loc)
+}
+
 func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) error {
 	if err := s.SaveParams(ctx, p); err != nil {
-		if errors.Is(err, ErrAlreadyExists) {
-			return nil // someone already kicked most likely. \
-			// Ideally we check params date and rekick if not finished in under one hour
+		if !errors.Is(err, ErrAlreadyExists) {
+			return fmt.Errorf("save params: %w", err)
 		}
-		return fmt.Errorf("save params: %w", err)
+		return s.kickExistingGenerationIfStale(ctx, p.Hash())
 	}
 
 	s.kickgeneration(ctx, p)
+	return nil
+}
+
+func (s *server) kickExistingGenerationIfStale(ctx context.Context, hash string) error {
+	p, err := s.ParamsFromCache(ctx, hash)
+	if err != nil {
+		return err
+	}
+	if _, err := s.FromCache(ctx, hash); err == nil {
+		return nil
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		return err
+	}
+	if !generationIsStale(p, time.Now()) {
+		return nil
+	}
+	s.rekickGeneration(ctx, p)
 	return nil
 }
 
@@ -1424,8 +1440,8 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToK
 	if slices.Contains(argsToKeep, queryArgStart) {
 		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
 	}
-	if slices.Contains(argsToKeep, QueryArgHelp) {
-		args.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
+	if help := strings.TrimSpace(r.URL.Query().Get(QueryArgHelp)); slices.Contains(argsToKeep, QueryArgHelp) && help != "" {
+		args.Set(QueryArgHelp, help)
 	}
 
 	u.RawQuery = args.Encode()

@@ -151,6 +151,15 @@ func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	return nil
 }
 
+func (rio recipeio) UpdateParams(ctx context.Context, p *generatorParams) error {
+	paramsJSON := lo.Must(json.Marshal(p))
+	if err := rio.Cache.Put(ctx, paramsCachePrefix+p.Hash(), string(paramsJSON), cache.Unconditional()); err != nil {
+		slog.ErrorContext(ctx, "failed to update cached params", "location", p.String(), "error", err)
+		return err
+	}
+	return nil
+}
+
 func (rio recipeio) ParamsExist(ctx context.Context, p *generatorParams) (bool, error) {
 	return rio.Cache.Exists(ctx, paramsCachePrefix+p.Hash())
 }
