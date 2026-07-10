@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"careme/internal/recipes"
 
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,15 @@ func TestAdvertisedRecipeGenerationRouteKicksAdvertisedLocations(t *testing.T) {
 	require.Contains(t, locationsByID, "70100658")
 	require.Equal(t, "Hydrated 70100658", locationsByID["70100658"].Name)
 	require.Equal(t, "70100658 Market St", locationsByID["70100658"].Address)
+	require.Len(t, kicker.contexts, len(AdvertisedRecipeLocations()))
+	for _, ctx := range kicker.contexts {
+		sessionID, ok := logsetup.SessionIDFromContext(ctx)
+		require.True(t, ok)
+		require.Equal(t, "campaign_ads", sessionID)
+		userID, ok := logsetup.UserIDFromContext(ctx)
+		require.True(t, ok)
+		require.Equal(t, "campaign_ads", userID)
+	}
 }
 
 func TestAdvertisedRecipeGenerationRouteReturnsError(t *testing.T) {
@@ -72,11 +82,13 @@ func (advertisedLocationStoreStub) GetLocationByID(_ context.Context, locationID
 }
 
 type advertisedGenerationKickstarterStub struct {
-	params []*recipes.GeneratorParams
-	err    error
+	params   []*recipes.GeneratorParams
+	contexts []context.Context
+	err      error
 }
 
-func (s *advertisedGenerationKickstarterStub) KickGenerationIfNotPresent(_ context.Context, p *recipes.GeneratorParams) error {
+func (s *advertisedGenerationKickstarterStub) KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams) error {
 	s.params = append(s.params, p)
+	s.contexts = append(s.contexts, ctx)
 	return s.err
 }
