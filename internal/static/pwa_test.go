@@ -358,6 +358,9 @@ func TestServiceWorkerCachesSavedRecipesOffline(t *testing.T) {
 		`cache.put(SAVED_RECIPES_LIST_URL, new Response(body))`,
 		`savedRecipeListChanged(body).then(() => cacheSavedRecipeURLs(body))`,
 		`previous !== body`,
+		`function isSavedRecipeImagePath(pathname)`,
+		`/^\/recipe\/[^/]+\/image$/.test(pathname)`,
+		`event.respondWith(savedRecipeImageFromCacheWithNetworkFallback(request))`,
 	} {
 		if !strings.Contains(rendered, snippet) {
 			t.Fatalf("service worker should include saved recipe cache behavior %q, script: %s", snippet, rendered)

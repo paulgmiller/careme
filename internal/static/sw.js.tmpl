@@ -132,6 +132,16 @@ function cacheFirstWithNetworkFill(request) {
   });
 }
 
+function savedRecipeImageFromCacheWithNetworkFallback(request) {
+  return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
+    cache.match(request).then((cached) => cached || fetch(request)),
+  );
+}
+
+function isSavedRecipeImagePath(pathname) {
+  return /^\/recipe\/[^/]+\/image$/.test(pathname);
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
@@ -168,6 +178,14 @@ self.addEventListener("fetch", (event) => {
   // current icon, but keep the last successful response for offline launches.
   if (url.pathname === "/favicon.ico") {
     event.respondWith(networkFirstWithCacheFallback(request));
+    return;
+  }
+
+  // Saved recipe images are populated by the offline recipe sync, but <img>
+  // requests are not navigations or static assets. Serve those cached images
+  // before falling through to the default network behavior for dynamic routes.
+  if (isSavedRecipeImagePath(url.pathname)) {
+    event.respondWith(savedRecipeImageFromCacheWithNetworkFallback(request));
     return;
   }
 
