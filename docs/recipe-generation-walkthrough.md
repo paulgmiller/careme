@@ -7,8 +7,8 @@ This document covers the first-time generation path inside `generatorService.Gen
 ```mermaid
 flowchart TD
     subgraph Legend["Model color"]
-        MiniLegend["gpt-5-mini<br/>Grading"]
-        GPT5Legend["gpt-5.5<br/>Menu planning + recipe generation + retry"]
+        MiniLegend["gpt-5.6-luna<br/>Grading"]
+        GPT5Legend["gpt-5.6-sol<br/>Menu planning + recipe generation + retry"]
         GeminiLegend["Gemini<br/>Recipe critique"]
     end
 
@@ -81,13 +81,13 @@ Ingredient grading uses the cache in `internal/ingredients/grading/cache.go`:
 
 Back in `GenerateRecipes`, ingredients with `Grade.Score <= 6` are removed. Ungraded ingredients are still allowed through.
 
-The model boundary in this section is ingredient grading. Fetching staples is store data retrieval; grading missing ingredients uses the configured ingredient grading model, defaulting to `gpt-5-mini`.
+The model boundary in this section is ingredient grading. Fetching staples is store data retrieval; grading missing ingredients uses the configured ingredient grading model, defaulting to `gpt-5.6-luna`.
 
 ## Menu Plan And Recipe Fan-Out
 
-After grading, `GenerateRecipes` shuffles the ingredient list and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-5.5`.
+After grading, `GenerateRecipes` shuffles the ingredient list and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-5.6-sol`.
 
-The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-5.5` recipe model call:
+The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-5.6-sol` recipe model call:
 
 - append the plan instructions to the base instructions
 - call `GenerateRecipe`
@@ -98,7 +98,7 @@ The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Ea
 
 `critiqueAndMaybeRetryRecipe` asks the critique model for feedback. If critiques are disabled, the rubberstamp service returns a passing score without a model call.
 
-When a critique score is at least `critique.MinimumRecipeScore` (`8`), the recipe is kept. When the score is below `8`, the generator does one more `gpt-5.5` recipe model call using the critique feedback and original recipe response ID, then uses that retry in place of the original recipe.
+When a critique score is at least `critique.MinimumRecipeScore` (`8`), the recipe is kept. When the score is below `8`, the generator does one more `gpt-5.6-sol` recipe model call using the critique feedback and original recipe response ID, then uses that retry in place of the original recipe.
 
 Once all workers finish, `GenerateRecipes` fans the recipe results back into:
 

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultIngredientGradeModel = openai.ChatModelGPT5Mini
+	defaultIngredientGradeModel = gpt56Luna
 )
 
 // should we have category spefic grading prompts?
@@ -185,6 +185,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 
 	resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
 		Model:        g.model,
+		Reasoning:    noReasoning(),
 		Instructions: openai.String(ingredientGradeSystemInstruction),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},

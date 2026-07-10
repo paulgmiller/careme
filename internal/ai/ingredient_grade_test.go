@@ -1,6 +1,10 @@
 package ai
 
 import (
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,10 +50,10 @@ func TestInputIngredientHashStableAcrossCategoryOrder(t *testing.T) {
 }
 
 func TestIngredientGradeCacheVersionChangesWhenPromptOrModelChanges(t *testing.T) {
-	base := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion("gpt-5-mini", "prompt a")}).CacheVersion()
-	same := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion("gpt-5-mini", "prompt a")}).CacheVersion()
+	base := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion(gpt56Luna, "prompt a")}).CacheVersion()
+	same := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion(gpt56Luna, "prompt a")}).CacheVersion()
 	differentModel := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion("gpt-5-nano", "prompt a")}).CacheVersion()
-	differentPrompt := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion("gpt-5-mini", "prompt b")}).CacheVersion()
+	differentPrompt := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion(gpt56Luna, "prompt b")}).CacheVersion()
 
 	assert.Equal(t, base, same)
 	assert.NotEqual(t, base, differentModel)
@@ -68,6 +72,53 @@ func TestBuildIngredientGradePrompt(t *testing.T) {
 	assert.Contains(t, prompt, `"id": "foobar"`)
 	assert.Contains(t, prompt, "Return JSON only matching the provided schema.")
 	assert.Contains(t, prompt, `"description": "Asparagus"`)
+}
+
+func TestGradeIngredientsUsesLunaWithoutReasoning(t *testing.T) {
+	grader := NewIngredientGrader("test-key", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		assert.Contains(t, string(body), `"model":"`+gpt56Luna+`"`)
+		assert.Contains(t, string(body), `"reasoning":{"effort":"none"}`)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"id": "resp-grade",
+				"object": "response",
+				"created_at": 1778529600,
+				"status": "completed",
+				"model": %q,
+				"output": [{
+					"id": "msg-grade",
+					"type": "message",
+					"status": "completed",
+					"role": "assistant",
+					"content": [{
+						"type": "output_text",
+						"text": "{\"grades\":[{\"id\":\"ingredient-1\",\"score\":8,\"reason\":\"Fresh vegetable.\"}]}",
+						"annotations": []
+					}]
+				}],
+				"usage": {
+					"input_tokens": 1,
+					"input_tokens_details": {"cached_tokens": 0},
+					"output_tokens": 1,
+					"output_tokens_details": {"reasoning_tokens": 0},
+					"total_tokens": 2
+				}
+			}`, gpt56Luna))),
+			Request: req,
+		}, nil
+	})})
+
+	graded, err := grader.GradeIngredients(t.Context(), []InputIngredient{{ProductID: "ingredient-1", Description: "Asparagus"}})
+
+	require.NoError(t, err)
+	require.Len(t, graded, 1)
+	require.NotNil(t, graded[0].Grade)
+	assert.Equal(t, 8, graded[0].Grade.Score)
 }
 
 func TestParseIngredientGrades(t *testing.T) {
