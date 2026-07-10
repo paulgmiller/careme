@@ -69,6 +69,7 @@ func TestCompareInputsAcceptsShoppingAndRecipeHashesAndDeduplicates(t *testing.T
 
 	cacheStore := cache.NewInMemoryCache()
 	original := compareTestRecipe("Old Dinner", "child-response")
+	original.OriginHash = "origin-shopping"
 	candidate := compareTestRecipe("New Dinner", "new-response")
 	originalHash := original.ComputeHash()
 	require.NoError(t, recipes.IO(cacheStore).SaveRecipe(t.Context(), original))
@@ -99,6 +100,11 @@ func TestCompareInputsAcceptsShoppingAndRecipeHashesAndDeduplicates(t *testing.T
 	assert.Equal(t, "shopping-a", rows[0].SourceHash)
 	assert.Equal(t, ai.RecipeComparisonWinnerCandidate, rows[0].Artifact.Comparison.Winner)
 	assert.Equal(t, []string{"Old Dinner -> New Dinner"}, judge.Calls())
+	storedCandidate, err := recipes.IO(cacheStore).SingleFromCache(t.Context(), candidate.ComputeHash())
+	require.NoError(t, err)
+	assert.Equal(t, "New Dinner", storedCandidate.Title)
+	assert.Equal(t, "origin-shopping", storedCandidate.OriginHash)
+	assert.Equal(t, originalHash, storedCandidate.ParentHash)
 
 	calls := replayer.Calls()
 	require.Len(t, calls, 1)
@@ -154,6 +160,34 @@ func TestCompareInputsReusesCachedComparisonUnlessRefresh(t *testing.T) {
 	assert.Equal(t, "candidate is clearer", rows[0].Artifact.Comparison.Summary)
 }
 
+func TestCompareInputsUpdatesExistingCandidateRecipeWhenOriginHashMissing(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	original := compareTestRecipe("Old Dinner", "child-response")
+	original.OriginHash = "origin-shopping"
+	originalHash := original.ComputeHash()
+	candidate := compareTestRecipe("New Dinner", "new-response")
+	require.NoError(t, recipes.IO(cacheStore).SaveRecipe(t.Context(), original))
+	require.NoError(t, recipes.IO(cacheStore).SaveRecipe(t.Context(), candidate))
+	seedPromptRecord(t, cacheStore, ai.PromptRecord{
+		ResponseID:   "child-response",
+		Instructions: "recipe instructions",
+		Input:        []ai.PromptMessage{{Role: "user", Content: "make tacos"}},
+	})
+	replayer := &fakeReplayer{responses: map[string]*ai.Recipe{"child-response": &candidate}}
+
+	rows, err := compareInputs(t.Context(), cacheStore, replayer, &fakeJudge{}, "gpt-5.6-sol", nil, []string{originalHash}, true)
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NoError(t, rows[0].Err)
+	storedCandidate, err := recipes.IO(cacheStore).SingleFromCache(t.Context(), candidate.ComputeHash())
+	require.NoError(t, err)
+	assert.Equal(t, "origin-shopping", storedCandidate.OriginHash)
+	assert.Equal(t, originalHash, storedCandidate.ParentHash)
+}
+
 func TestCompareInputsSkipsRecipeMissingPromptRecord(t *testing.T) {
 	t.Parallel()
 
@@ -179,6 +213,7 @@ func TestPrintRowsIncludesSummaryStatsAndRows(t *testing.T) {
 			Hash:       "hash-a",
 			Original:   compareTestRecipe("Old Dinner", "old-response"),
 			Artifact: &comparisonArtifact{
+				CandidateHash:   "candidate-hash-a",
 				CandidateRecipe: compareTestRecipe("New Dinner", "new-response"),
 				Comparison: &ai.RecipeComparison{
 					Winner:  ai.RecipeComparisonWinnerCandidate,
@@ -195,8 +230,9 @@ func TestPrintRowsIncludesSummaryStatsAndRows(t *testing.T) {
 
 	body := out.String()
 	assert.Contains(t, body, "Compared 1 recipes; skipped=1 errors=1 original_wins=0 candidate_wins=1 ties=0")
-	assert.Contains(t, body, "OK\trecipe\thash-a\thash-a\tOld Dinner\tNew Dinner\tcandidate\tcandidate is clearer")
-	assert.Contains(t, body, "SKIP\trecipe\thash-b\thash-b\tmissing recipe response ID")
+	assert.Contains(t, body, "STATUS\tSOURCE\tSOURCE_HASH\tORIGINAL_HASH\tORIGINAL_TITLE\tCANDIDATE_HASH\tCANDIDATE_TITLE\tWINNER\tSUMMARY")
+	assert.Contains(t, body, "OK\trecipe\thash-a\thash-a\tOld Dinner\tcandidate-hash-a\tNew Dinner\tcandidate\tcandidate is clearer")
+	assert.Contains(t, body, "SKIP\trecipe\thash-b\thash-b\t\t-\t-\t-\tmissing recipe response ID")
 	assert.Contains(t, body, "ERROR\trecipe\thash-c\thash-c")
 }
 

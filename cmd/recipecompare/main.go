@@ -280,6 +280,12 @@ func compareCandidate(
 		row.Err = errors.New("replay recipe prompt returned no recipe")
 		return row
 	}
+	replayed.OriginHash = candidate.Recipe.OriginHash
+	replayed.ParentHash = candidate.Hash
+	if err := saveCandidateRecipe(ctx, cacheStore, *replayed); err != nil {
+		row.Err = fmt.Errorf("save candidate recipe: %w", err)
+		return row
+	}
 	comparison, err := judge.CompareRecipes(ctx, candidate.Recipe, *replayed)
 	if err != nil {
 		row.Err = fmt.Errorf("judge recipes: %w", err)
@@ -304,6 +310,27 @@ func compareCandidate(
 	}
 	row.Artifact = artifact
 	return row
+}
+
+func saveCandidateRecipe(ctx context.Context, cacheStore cache.ListCache, recipe ai.Recipe) error {
+	rio := recipes.IO(cacheStore)
+	hash := recipe.ComputeHash()
+	if err := rio.SaveRecipe(ctx, recipe); err != nil {
+		return err
+	}
+
+	cached, err := rio.SingleFromCache(ctx, hash)
+	if err != nil {
+		return fmt.Errorf("load saved candidate recipe: %w", err)
+	}
+	if strings.TrimSpace(cached.OriginHash) != "" {
+		return nil
+	}
+	body, err := json.Marshal(recipe)
+	if err != nil {
+		return fmt.Errorf("marshal candidate recipe: %w", err)
+	}
+	return cacheStore.Put(ctx, "recipe/"+hash, string(body), cache.Unconditional())
 }
 
 func promptRecordWithParentInputsFromCache(ctx context.Context, c cache.Cache, responseID string) (*ai.PromptRecord, error) {
@@ -395,32 +422,36 @@ func printRows(out io.Writer, rows []comparisonRow) error {
 	); err != nil {
 		return err
 	}
+	if _, err := fmt.Fprintln(out, "STATUS\tSOURCE\tSOURCE_HASH\tORIGINAL_HASH\tORIGINAL_TITLE\tCANDIDATE_HASH\tCANDIDATE_TITLE\tWINNER\tSUMMARY"); err != nil {
+		return err
+	}
 
 	for _, row := range rows {
 		if row.Skipped != "" {
-			if _, err := fmt.Fprintf(out, "SKIP\t%s\t%s\t%s\t%s\n", row.SourceKind, row.SourceHash, row.Hash, row.Skipped); err != nil {
+			if _, err := fmt.Fprintf(out, "SKIP\t%s\t%s\t%s\t%s\t-\t-\t-\t%s\n", row.SourceKind, row.SourceHash, row.Hash, row.Original.Title, row.Skipped); err != nil {
 				return err
 			}
 			continue
 		}
 		if row.Err != nil {
-			if _, err := fmt.Fprintf(out, "ERROR\t%s\t%s\t%s\t%v\n", row.SourceKind, row.SourceHash, row.Hash, row.Err); err != nil {
+			if _, err := fmt.Fprintf(out, "ERROR\t%s\t%s\t%s\t%s\t-\t-\t-\t%v\n", row.SourceKind, row.SourceHash, row.Hash, row.Original.Title, row.Err); err != nil {
 				return err
 			}
 			continue
 		}
 		if row.Artifact == nil || row.Artifact.Comparison == nil {
-			if _, err := fmt.Fprintf(out, "ERROR\t%s\t%s\t%s\tmissing comparison result\n", row.SourceKind, row.SourceHash, row.Hash); err != nil {
+			if _, err := fmt.Fprintf(out, "ERROR\t%s\t%s\t%s\t%s\t-\t-\t-\tmissing comparison result\n", row.SourceKind, row.SourceHash, row.Hash, row.Original.Title); err != nil {
 				return err
 			}
 			continue
 		}
 		comparison := row.Artifact.Comparison
-		if _, err := fmt.Fprintf(out, "OK\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		if _, err := fmt.Fprintf(out, "OK\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			row.SourceKind,
 			row.SourceHash,
 			row.Hash,
 			row.Original.Title,
+			row.Artifact.CandidateHash,
 			row.Artifact.CandidateRecipe.Title,
 			comparison.Winner,
 			strings.TrimSpace(comparison.Summary),
