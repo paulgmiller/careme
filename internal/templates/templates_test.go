@@ -313,11 +313,13 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 		ServerSignedIn  bool
 		RefreshInterval string
 		StatusMessage   string
+		CurrentPath     string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
 		StatusMessage:   "Ingredients are ready. Building your recipes.",
+		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
 	}
 
 	var buf bytes.Buffer
@@ -334,6 +336,14 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 	if !strings.Contains(rendered, data.StatusMessage) {
 		t.Fatalf("spinner page should render status message, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `http-equiv="refresh"`) {
+		t.Fatalf("spinner page should use htmx polling instead of meta refresh, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<script src="/static/htmx@2.0.8.js"></script>`) ||
+		!strings.Contains(rendered, `hx-get="/recipes?h=abc&amp;start=2026-07-10T00:00:00Z"`) ||
+		!strings.Contains(rendered, `hx-trigger="load delay:10s"`) {
+		t.Fatalf("spinner page should poll with htmx, body: %s", rendered)
 	}
 }
 
@@ -457,11 +467,13 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 		ServerSignedIn  bool
 		RefreshInterval string
 		StatusMessage   string
+		CurrentPath     string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
 		StatusMessage:   "Considering ingredients\nHalf Off Spinach",
+		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
 	}
 
 	var buf bytes.Buffer
