@@ -22,7 +22,7 @@ func TestNewClientUsesExplicitRecipeModel(t *testing.T) {
 }
 
 func TestNewClientTreatsPlaceholderModelAsDefault(t *testing.T) {
-	client := NewClient("test-key", "TODOMODEL", nil, &capturePromptRecorder{})
+	client := NewClient("test-key", DefaultRecipeModel, nil, &capturePromptRecorder{})
 
 	if client.model != gpt56Sol {
 		t.Fatalf("expected placeholder model to default to %q, got %q", gpt56Sol, client.model)

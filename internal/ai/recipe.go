@@ -20,7 +20,7 @@ const (
 	gpt56Terra = "gpt-5.6-terra"
 	gpt56Luna  = "gpt-5.6-luna"
 
-	defaultRecipeModel = gpt56Sol
+	DefaultRecipeModel = gpt56Sol
 )
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up

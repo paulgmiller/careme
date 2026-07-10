@@ -149,7 +149,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 25
 				}
-			}`, defaultRecipeModel))),
+			}`, DefaultRecipeModel))),
 			Request: req,
 		}, nil
 	})}, recorder)
@@ -176,7 +176,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 }
 
 func TestResponseUsageLogAttr(t *testing.T) {
-	attr := responseUsageLogAttr(defaultRecipeModel, responses.ResponseUsage{
+	attr := responseUsageLogAttr(DefaultRecipeModel, responses.ResponseUsage{
 		InputTokens:  1200,
 		OutputTokens: 350,
 		TotalTokens:  1550,

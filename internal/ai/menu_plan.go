@@ -17,7 +17,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const recipePlanModel = defaultRecipeModel
+const recipePlanModel = DefaultRecipeModel
 
 type MenuPlan struct {
 	Plans              []RecipePlan `json:"plans"`

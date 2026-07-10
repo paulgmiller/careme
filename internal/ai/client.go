@@ -29,8 +29,8 @@ func NewClient(apiKey, model string, httpClient *http.Client, promptRecorder Pro
 		promptRecorder = noopPromptRecorder{}
 	}
 	model = strings.TrimSpace(model)
-	if model == "" || model == "TODOMODEL" {
-		model = defaultRecipeModel
+	if model == "" {
+		model = DefaultRecipeModel
 	}
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref

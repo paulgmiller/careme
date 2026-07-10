@@ -118,7 +118,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return errors.New("-model is required")
 	}
 	if secretFile = strings.TrimSpace(secretFile); secretFile != "" {
-		if err := config.LoadEncryptedEnvOverride(secretFile); err != nil {
+		// should just change load to pass to that.
+		if err := config.LoadEncryptedEnv(secretFile); err != nil {
 			return fmt.Errorf("load secret file %q: %w", secretFile, err)
 		}
 	}

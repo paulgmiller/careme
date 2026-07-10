@@ -78,40 +78,6 @@ func TestLoadRuntimeEnvLoadsDotAndEncryptedWithoutOverride(t *testing.T) {
 	}
 }
 
-func TestLoadEncryptedEnvOverrideReplacesExistingValues(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-	t.Setenv("SECRET_KEY", "existing")
-
-	sshDir := filepath.Join(tmp, ".ssh")
-	if err := os.MkdirAll(sshDir, 0o700); err != nil {
-		t.Fatalf("MkdirAll(.ssh) error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(sshDir, "id_ed25519"), []byte(testSSHPrivateKey), 0o600); err != nil {
-		t.Fatalf("WriteFile(id_ed25519) error = %v", err)
-	}
-
-	ciphertext, err := encryptWithRecipient("SECRET_KEY=from-secret-file\nNEW_KEY=loaded\n", testSSHPublicKey)
-	if err != nil {
-		t.Fatalf("encryptWithRecipient() error = %v", err)
-	}
-	secretFile := filepath.Join(tmp, "prod.env.age")
-	if err := os.WriteFile(secretFile, ciphertext, 0o600); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", secretFile, err)
-	}
-
-	if err := LoadEncryptedEnvOverride(secretFile); err != nil {
-		t.Fatalf("LoadEncryptedEnvOverride() error = %v", err)
-	}
-
-	if got := os.Getenv("SECRET_KEY"); got != "from-secret-file" {
-		t.Fatalf("SECRET_KEY = %q, want %q", got, "from-secret-file")
-	}
-	if got := os.Getenv("NEW_KEY"); got != "loaded" {
-		t.Fatalf("NEW_KEY = %q, want %q", got, "loaded")
-	}
-}
-
 func encryptWithRecipient(plaintext, publicKey string) ([]byte, error) {
 	recipient, err := agessh.ParseRecipient(publicKey)
 	if err != nil {
