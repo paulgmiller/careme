@@ -13,9 +13,20 @@ import (
 	"github.com/google/uuid"
 )
 
-type mock struct{}
+type mock struct {
+	saver     recipeSaver
+	critiquer mockRecipeCritiquer
+}
 
-func NewMockGenerator() mock {
+type mockRecipeCritiquer interface {
+	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
+}
+
+func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer) mock {
+	return mock{saver: saver, critiquer: critiquer}
+}
+
+func NewMockImageGen() mock {
 	return mock{}
 }
 
@@ -364,10 +375,6 @@ var mockRecipes = []ai.Recipe{
 }
 
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
-	id := p.ResponseID
-	if id == "" {
-		id = uuid.NewString()
-	}
 	originHash := p.Hash()
 	// fake like we're taking time to call an LLM so we get the spinner.
 	time.Sleep(100 * time.Millisecond)
@@ -389,7 +396,7 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 		mr := mockRecipes[idx]
 		if _, found := seen[mr.ComputeHash()]; !found {
 			mr.OriginHash = originHash
-			mr.ResponseID = id
+			mr.ResponseID = uuid.NewString()
 
 			slog.InfoContext(ctx, "adding", "title", mr.Title)
 			selectedRecipes = append(selectedRecipes, mr)
@@ -399,14 +406,37 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	// not presisting dimissed as
 	for _, s := range p.Saved {
 		slog.InfoContext(ctx, "keeping", "title", s.Title)
-		s.Saved = true
 		selectedRecipes = append(selectedRecipes, s)
 	}
 
+	if m.saver != nil {
+		for _, recipe := range selectedRecipes {
+			if err := m.saver.SaveRecipe(ctx, recipe); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if m.critiquer != nil {
+		for _, recipe := range selectedRecipes {
+			if _, err := m.critiquer.CritiqueRecipe(ctx, recipe); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	return &ai.ShoppingList{
-		ResponseID: id,
-		Recipes:    selectedRecipes,
+		Recipes: selectedRecipes,
 	}, nil
+}
+
+func (m mock) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+	_ = ctx
+	_ = instructions
+	_ = previousResponseID
+	recipe := mockRecipes[0]
+	recipe.Title = "Fresh " + recipe.Title
+	recipe.ResponseID = uuid.NewString()
+	return &recipe, nil
 }
 
 func (m mock) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {

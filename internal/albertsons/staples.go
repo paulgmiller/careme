@@ -17,10 +17,16 @@ import (
 	"github.com/samber/lo"
 )
 
-var defaultStaplesSignature = lo.Must(json.Marshal(query.StapleCategories()))
+var defaultStaplesSignature = lo.Must(json.Marshal(struct {
+	Categories []string        `json:"categories"`
+	Rows       map[string]uint `json:"rows"`
+}{
+	Categories: query.StapleCategories(),
+	Rows:       stapleRows,
+}))
 
 type searchClient interface {
-	Search(ctx context.Context, storeID, category string, opts query.SearchOptions) (*query.PathwaySearchPayload, error)
+	SearchAll(ctx context.Context, storeID, category string, opts query.SearchOptions) ([]query.PathwaySearchProduct, error)
 }
 
 type searchClientFactory func(baseURL string) (searchClient, error)
@@ -73,11 +79,11 @@ func (p identityProvider) IsID(locationID string) bool {
 }
 
 var stapleRows = map[string]uint{
-	query.Category_Vegatables:   150, // do we need way more of this?
-	query.Category_Fruit:        100,
-	query.Category_Meat:         100,
-	query.Category_Seafood:      60,
-	query.Category_Pasta_Grains: 100, //???
+	query.Category_Vegatables:   240,
+	query.Category_Fruit:        180,
+	query.Category_Meat:         160,
+	query.Category_Seafood:      120,
+	query.Category_Pasta_Grains: 160,
 }
 
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
@@ -87,7 +93,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	}
 
 	return parallelism.Flatten(query.StapleCategories(), func(category string) ([]ai.InputIngredient, error) {
-		payload, err := client.Search(ctx, storeID, category, query.SearchOptions{
+		products, err := client.SearchAll(ctx, storeID, category, query.SearchOptions{
 			// how many rows? different per category? Should we paginate
 			Rows: stapleRows[category],
 		})
@@ -97,27 +103,27 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 			return nil, err
 		}
 
-		ingredients := lo.Map(payload.Response.Docs, productToIngredient)
+		ingredients := lo.Map(products, productToIngredient)
 		slog.InfoContext(ctx, "found albertsons staples for category", "count", len(ingredients), "category", category, "location", locationID)
 		return ingredients, nil
 	})
 }
 
-// since this is mostly used by wine it isn't actuallyt they helpful.
-func (p StaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
+func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	client, storeID, err := p.clientForLocation(locationID)
 	if err != nil {
 		return nil, err
 	}
 
-	// should we just resturn all instead of search term? how many is this?
-	payload, err := client.Search(ctx, storeID, query.Category_Wine, query.SearchOptions{
-		Query: searchTerm, Rows: 100, Start: uint(skip),
+	return parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
+		products, err := client.SearchAll(ctx, storeID, query.Category_Wine, query.SearchOptions{
+			Query: style, Rows: 100,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return lo.Map(products, productToIngredient), nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return lo.Map(payload.Response.Docs, productToIngredient), nil
 }
 
 // clientForLocation takes a prefixed store id and looks up chaing base url and returnes unprefixed id.
@@ -164,7 +170,7 @@ func productToIngredient(product query.PathwaySearchProduct, _ int) ai.InputIngr
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		Categories:   categories,
-		AisleNumber:  product.AisleID, // also an aisle name if thats better?
+		AisleNumber:  product.AisleName, // aisle id was prty wierd string 1 19 3 1, 1 23 2 10
 	})
 }
 

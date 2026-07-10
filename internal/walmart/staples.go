@@ -52,6 +52,6 @@ func (p StaplesProvider) FetchStaples(_ context.Context, locationID string) ([]a
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
-func (p StaplesProvider) GetIngredients(_ context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
-	return nil, fmt.Errorf("ingredient search is not supported for location %q and term %q", locationID, searchTerm)
+func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+	return nil, fmt.Errorf("wine lookup is not supported for location %q", locationID)
 }

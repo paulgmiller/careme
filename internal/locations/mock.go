@@ -17,15 +17,15 @@ import (
 type mock struct{}
 
 var fakes = map[string]Location{
-	"10": {
-		ID:      "10",
+	"70500010": {
+		ID:      "70500010",
 		Name:    "Big Willys",
 		Address: "1 willy ave",
 		State:   "North Dakota",
 		ZipCode: "58102",
 	},
-	"5000": {
-		ID:      "5000",
+	"70505000": {
+		ID:      "70505000",
 		Name:    "Piggly Wiggly",
 		Address: "20 somewhere st",
 		State:   "North Carolina",
@@ -73,6 +73,7 @@ func (m mock) Register(mux routing.Registrar, _ auth.AuthClient) {
 			ClarityScript   template.HTML
 			GoogleTagScript template.HTML
 			Style           seasons.Style
+			ServerSignedIn  bool
 		}{
 			Locations:       lo.Values(fakes),
 			Zip:             r.URL.Query().Get("zip"),
@@ -80,6 +81,7 @@ func (m mock) Register(mux routing.Registrar, _ auth.AuthClient) {
 			ClarityScript:   templates.ClarityScript(r.Context()),
 			GoogleTagScript: templates.GoogleTagScript(),
 			Style:           seasons.GetCurrentStyle(),
+			ServerSignedIn:  false,
 		}
 		if err := templates.Location.Execute(w, data); err != nil {
 			http.Error(w, "template error", http.StatusInternalServerError)

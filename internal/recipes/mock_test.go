@@ -1,19 +1,22 @@
 package recipes
 
 import (
-	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/recipes/critique"
 )
 
 func TestMockGenerateRecipes_Returns3Recipes(t *testing.T) {
-	m := mock{}
+	cacheStore := cache.NewFileCache(t.TempDir())
+	m := NewMockGenerator(IO(cacheStore), critique.NewMock(cacheStore))
 	loc := &locations.Location{ID: "70000002", Name: "Test Location", Address: "123 Test St", State: "TS"}
 	params := DefaultParams(loc, time.Now())
 
-	result, err := m.GenerateRecipes(context.Background(), params)
+	result, err := m.GenerateRecipes(t.Context(), params)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -45,25 +48,26 @@ func TestMockGenerateRecipes_Returns3Recipes(t *testing.T) {
 }
 
 func TestMockGenerateRecipes_ReturnsRandomRecipes(t *testing.T) {
-	m := mock{}
+	cacheStore := cache.NewFileCache(t.TempDir())
+	m := NewMockGenerator(IO(cacheStore), critique.NewMock(cacheStore))
 	loc := &locations.Location{ID: "70000002", Name: "Test Location", Address: "123 Test St", State: "TS"}
 	params := DefaultParams(loc, time.Now())
 
 	// Generate recipes multiple times and check that we get different combinations
 	// With 20 recipes choosing 3, it's very unlikely to get the same 3 in the same order multiple times
 	results := make([]string, 10)
-	for i := 0; i < 10; i++ {
-		result, err := m.GenerateRecipes(context.Background(), params)
+	for i := range 10 {
+		result, err := m.GenerateRecipes(t.Context(), params)
 		if err != nil {
 			t.Fatalf("expected no error on iteration %d, got %v", i, err)
 		}
 
 		// Create a string representation of the recipe titles
-		titles := ""
+		var titles strings.Builder
 		for _, recipe := range result.Recipes {
-			titles += recipe.Title + "|"
+			titles.WriteString(recipe.Title + "|")
 		}
-		results[i] = titles
+		results[i] = titles.String()
 	}
 
 	// Check that we got at least 2 different combinations
@@ -90,5 +94,54 @@ func TestMockGenerateRecipes_Has20UniqueRecipes(t *testing.T) {
 			t.Errorf("duplicate recipe title found: %s", recipe.Title)
 		}
 		titles[recipe.Title] = true
+	}
+}
+
+func TestMockGenerateRecipes_SavesReturnedRecipes(t *testing.T) {
+	cacheStore := cache.NewFileCache(t.TempDir())
+	rio := IO(cacheStore)
+	m := NewMockGenerator(rio, critique.NewMock(cacheStore))
+	params := DefaultParams(&locations.Location{ID: "70000002", Name: "Test Location", State: "TS"}, time.Now())
+
+	result, err := m.GenerateRecipes(t.Context(), params)
+	if err != nil {
+		t.Fatalf("GenerateRecipes returned error: %v", err)
+	}
+	if len(result.Recipes) == 0 {
+		t.Fatal("expected recipes")
+	}
+	for _, recipe := range result.Recipes {
+		got, err := rio.SingleFromCache(t.Context(), recipe.ComputeHash())
+		if err != nil {
+			t.Fatalf("expected recipe %q to be saved: %v", recipe.Title, err)
+		}
+		if got.Title != recipe.Title {
+			t.Fatalf("unexpected saved recipe: got %q want %q", got.Title, recipe.Title)
+		}
+	}
+}
+
+func TestMockGenerateRecipes_SavesRubberstampCritiques(t *testing.T) {
+	cacheStore := cache.NewFileCache(t.TempDir())
+	rio := IO(cacheStore)
+	critiqueStore := critique.NewStore(cacheStore)
+	m := NewMockGenerator(rio, critique.NewMock(cacheStore))
+	params := DefaultParams(&locations.Location{ID: "70000002", Name: "Test Location", State: "TS"}, time.Now())
+
+	result, err := m.GenerateRecipes(t.Context(), params)
+	if err != nil {
+		t.Fatalf("GenerateRecipes returned error: %v", err)
+	}
+	if len(result.Recipes) == 0 {
+		t.Fatal("expected recipes")
+	}
+	for _, recipe := range result.Recipes {
+		got, err := critiqueStore.Load(t.Context(), recipe.ComputeHash())
+		if err != nil {
+			t.Fatalf("expected critique for %q to be saved: %v", recipe.Title, err)
+		}
+		if got.OverallScore != 10 {
+			t.Fatalf("unexpected critique score for %q: got %d want 10", recipe.Title, got.OverallScore)
+		}
 	}
 }

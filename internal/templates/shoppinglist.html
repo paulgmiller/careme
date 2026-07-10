@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Careme Recipes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Recipes for {{.Location.Name}} | Careme</title>
+  <meta name="description" content="{{.MetaDescription}}" />
 
   {{if .Recipes}}
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
@@ -20,27 +21,69 @@
   <meta name="twitter:image" content="{{PublicOrigin}}/favicon.ico" />
   {{end}}
 
-  {{template "tailwind_head" .Style}}
+  {{template "app_head" .Style}}
 
   {{.ClarityScript}}
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white text-ink-700 antialiased">
-  <main class="px-4 py-10">
+  {{GoogleTagNoScript}}
+  {{template "seasonal_background" .}}
+  <main class="relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-5xl space-y-8">
       <div class="friendly-card border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 p-8">
-          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">
-            <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme Recipes</a>
-          </h1>
-          <p class="mt-2 text-ink-600">
-            Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
-            <span class="text-sm text-ink-500">({{.Location.Address}})</span>
-          </p>
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">
+                <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme</a>
+              </h1>
+              <p class="mt-2 text-ink-600">
+                Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
+                <span class="text-sm text-ink-500">({{.Location.Address}})</span>
+              </p>
+            </div>
+            {{template "account_widget" .}}
+          </div>
         </div>
 
         <div class="p-8">
-          {{if .ServerSignedIn}}
+          {{if .HelpMessage}}
+          <input id="shopping-list-help-dismiss" type="checkbox" class="peer/help sr-only" />
+          <aside id="shopping-list-help"
+                 class="mb-6 rounded-2xl border border-brand-200 bg-brand-50/80 p-4 text-sm text-ink-700 shadow-sm peer-checked/help:hidden">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="font-semibold text-brand-700">Welcome to Careme</p>
+                <p class="mt-1">{{.HelpMessage}}</p>
+              </div>
+              <label for="shopping-list-help-dismiss"
+                     class="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-brand-200 bg-white/80 text-lg leading-none text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
+                     aria-label="Dismiss welcome message">
+                &times;
+              </label>
+            </div>
+          </aside>
+          {{end}}
+
+          {{if .UseTodaysIngredients}}
+          <form id="regenerateForm"
+                method="GET"
+                action="/recipes">
+            <input type="hidden" name="location" value="{{.Location.ID}}" />
+            <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
+              <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-ink-600">
+                  Using ingredients from <span class="font-semibold text-brand-700">{{.DateDisplay}}</span>.
+                </p>
+                <button type="submit"
+                        class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Use today's ingredients
+                </button>
+              </div>
+            </div>
+          </form>
+          {{else}}
           <form id="regenerateForm"
                 method="POST"
                 action="/recipes/{{.Hash}}/regenerate"
@@ -48,13 +91,12 @@
                 hx-params="instructions"
                 hx-swap="none">
             <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
-              <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
-                <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
+              <div class="friendly-card-soft flex flex-col gap-2 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center sm:gap-3">
+                <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-32">Note to chef</label>
                 <input id="instructions"
                        type="text"
                        name="instructions"
-                       value="{{.Instructions}}"
-                       placeholder="e.g. make it vegetarian"
+                       placeholder="{{if .Instructions}}{{.Instructions}}{{else}}e.g. make it vegetarian{{end}}"
                        class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
                 <button type="submit"
                         class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -63,18 +105,6 @@
               </div>
             </div>
           </form>
-          {{else if .Instructions}}
-          <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">
-            <div class="friendly-card-soft flex flex-col gap-3 border border-brand-100 bg-brand-50/80 p-4 shadow-sm backdrop-blur-[2px] sm:flex-row sm:items-center">
-              <label for="instructions" class="text-sm font-medium text-ink-700 sm:w-40">Chef notes</label>
-              <input id="instructions"
-                     type="text"
-                     name="instructions"
-                     value="{{.Instructions}}"
-                     readonly
-                     class="w-full flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-ink-700 shadow-sm" />
-            </div>
-          </div>
           {{end}}
 
           <div class="mt-8 space-y-8">
@@ -91,20 +121,27 @@
                   Shopping list
                 </summary>
                 <div class="mt-4">
-                <ul class="space-y-2 text-ink-700">
-                  {{range .ShoppingList}}
-                  <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                    <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
-                      <span class="font-medium text-brand-700">{{.Name}}</span>
-                      {{if .Quantity}}
-                      <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
-                      {{else}}
-                      <span class="hidden sm:block" aria-hidden="true"></span>
-                      {{end}}
-                    </div>
-                  </li>
-                  {{end}}
-                </ul>
+                  <div class="space-y-5 text-ink-700">
+                    {{range .ShoppingList}}
+                    <section>
+                      <h3 class="text-xs font-semibold uppercase tracking-wide text-ink-500">{{.Aisle}}</h3>
+                      <ul class="mt-2 space-y-2">
+                        {{range .Items}}
+                        <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+                          <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
+                            <span class="font-medium text-brand-700">{{.Name}}</span>
+                            {{if .Quantity}}
+                            <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
+                            {{else}}
+                            <span class="hidden sm:block" aria-hidden="true"></span>
+                            {{end}}
+                          </div>
+                        </li>
+                        {{end}}
+                      </ul>
+                    </section>
+                    {{end}}
+                  </div>
                 </div>
               </details>
             </section>
@@ -117,15 +154,14 @@
     </section>
   </main>
   <script src="/static/htmx@2.0.8.js"></script>
+  <script src="/static/share.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
 
 {{define "shopping_finalize_controls"}}
 <div id="shopping-finalize-controls" class="mt-10 flex flex-wrap items-center gap-4">
-  {{if .ServerSignedIn}}
   {{template "shopping_finalize_controls_content" .}}
-  {{end}}
 </div>
 {{end}}
 
@@ -141,6 +177,7 @@
       Build Shopping List
     </button>
   </span>
+  {{template "shopping_list_share_button" .}}
   {{if not .HasSavedRecipes}}
   <p id="finalize-help" class="text-sm text-ink-600">
     Add at least one recipe to assemble your shopping list.
@@ -187,7 +224,7 @@
 
   <div class="space-y-2 text-sm text-ink-600">
     {{if .CookTime}}
-    <p><span class="font-semibold text-brand-700">Cook time:</span> {{.CookTime}}</p>
+    <p><span class="font-semibold text-brand-700">Total time:</span> {{.CookTime}}</p>
     {{end}}
     {{if .CostEstimate}}
     <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.CostEstimate}}</p>
@@ -245,8 +282,8 @@
 
 {{define "shopping_recipe_actions"}}
 <div class="shopping-recipe-actions flex flex-wrap items-center gap-3">
-  {{if .ServerSignedIn}}
   {{if .Dismissed}}
+  {{if .ServerSignedIn}}
   <button type="button"
           hx-post="/recipe/{{.Hash}}/save"
           hx-vals='{"h":"{{.ShoppingListHash}}"}'
@@ -256,6 +293,7 @@
           class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
     Restore
   </button>
+  {{end}}
   {{else}}
   {{if not .Saved}}
   <button type="button"
@@ -273,6 +311,7 @@
     ✓ Added
   </span>
   {{end}}
+  {{if .ServerSignedIn}}
   <button type="button"
           hx-post="/recipe/{{.Hash}}/dismiss"
           hx-vals='{"h":"{{.ShoppingListHash}}"}'

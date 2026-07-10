@@ -13,7 +13,7 @@ func TestInputIngredientsToTSV_UsesRegularPriceWhenSaleMissing(t *testing.T) {
 		Brand:        "Acme",
 		Description:  "Asparagus",
 		Size:         "1 lb",
-		PriceRegular: float32Ptr(4.99),
+		PriceRegular: new(float32(4.99)),
 	}}, &buf)
 	if err != nil {
 		t.Fatalf("inputIngredientsToTSV returned error: %v", err)

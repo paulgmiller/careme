@@ -19,20 +19,13 @@ import (
 )
 
 func main() {
-	var searchTerm string
 	var location string
 	var verbose bool
-	flag.StringVar(&searchTerm, "ingredient", "", "Search term for ingredient lookup")
-	flag.StringVar(&searchTerm, "i", "", "Search term for ingredient lookup")
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
 	flag.BoolVar(&verbose, "verbose", false, "dump all ingredients and grades")
 	flag.Parse()
 	ctx := context.Background()
-
-	if searchTerm != "" {
-		verbose = true
-	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -44,12 +37,7 @@ func main() {
 		log.Fatalf("failed to create recipe generator: %s", err)
 	}
 
-	var ings []ai.InputIngredient
-	if searchTerm == "" {
-		ings, err = sp.FetchStaples(ctx, location)
-	} else {
-		ings, err = sp.GetIngredients(ctx, location, searchTerm, 0)
-	}
+	ings, err := sp.FetchStaples(ctx, location)
 	if err != nil {
 		log.Fatalf("failed to get ingredients: %s", err)
 	}
@@ -77,7 +65,15 @@ func main() {
 			catMap[cat] += 1
 		}
 		if verbose {
-			fmt.Printf("%2d/10: %s - %s: size: %s: %s\n", result.Grade.Score, result.Brand, result.Description, result.Size, result.Grade.Reason)
+			fmt.Printf(
+				"%2d/10: %s - %s: regular: %s sale: %s: %s\n",
+				result.Grade.Score,
+				result.Brand,
+				result.Description,
+				priceString(result.PriceRegular),
+				priceString(result.PriceSale),
+				result.Grade.Reason,
+			)
 		}
 	}
 	for cat, count := range catMap {
@@ -94,4 +90,11 @@ func main() {
 	}
 	sumGrades := lo.SumBy(graded, func(ing ai.InputIngredient) int { return ing.Grade.Score })
 	fmt.Printf("Total count %d and score %d\n", len(graded), sumGrades)
+}
+
+func priceString(price *float32) string {
+	if price == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%.2f", *price)
 }

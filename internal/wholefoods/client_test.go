@@ -1,10 +1,12 @@
 package wholefoods
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,8 +15,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 func TestCategory_BuildsRequestAndDecodesFixture(t *testing.T) {
@@ -106,7 +106,7 @@ func TestCategory_RetriesTransient5xx(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	client := NewClientWithBaseURL("https://example.com", retryingHTTPClient(&http.Client{
+	client := NewClientWithBaseURL("https://example.com", &http.Client{
 		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			attempts++
 			if attempts < 3 {
@@ -126,7 +126,7 @@ func TestCategory_RetriesTransient5xx(t *testing.T) {
 				Request: r,
 			}, nil
 		}),
-	}))
+	})
 
 	resp, err := client.Category(context.Background(), "beef", "10216")
 	if err != nil {
@@ -140,6 +140,161 @@ func TestCategory_RetriesTransient5xx(t *testing.T) {
 	}
 	if got := resp[0].Name; got != "Retry Beef" {
 		t.Fatalf("unexpected product name: %q", got)
+	}
+}
+
+func TestCategory_RetriesRequestAttemptTimeoutWithinCategoryBudget(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	client := NewClientWithBaseURL("https://example.com", &http.Client{
+		Timeout: time.Millisecond,
+		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			attempts++
+			if attempts == 1 {
+				<-r.Context().Done()
+				return nil, r.Context().Err()
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Content-Type": []string{"application/json"},
+				},
+				Body:    ioNopCloserString(`{"results":[{"name":"Timeout Retry Beef","slug":"timeout-retry-beef","brand":"Whole Foods","store":10216}],"meta":{"total":{"value":1,"relation":"eq"},"state":{"refinements":[],"sort":""}}}`),
+				Request: r,
+			}, nil
+		}),
+	})
+
+	resp, err := client.Category(context.Background(), "beef", "10216")
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+	if got, want := attempts, 2; got != want {
+		t.Fatalf("unexpected attempts: got %d want %d", got, want)
+	}
+	if got, want := len(resp), 1; got != want {
+		t.Fatalf("unexpected result count: got %d want %d", got, want)
+	}
+	if got := resp[0].Name; got != "Timeout Retry Beef" {
+		t.Fatalf("unexpected product name: %q", got)
+	}
+}
+
+func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T) {
+	t.Parallel()
+
+	attemptsByOffset := map[string]int{}
+	client := NewClientWithBaseURL("https://example.com", &http.Client{
+		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			offset := r.URL.Query().Get("offset")
+			attemptsByOffset[offset]++
+			if offset == strconv.Itoa(defaultCategoryLimit*2) && attemptsByOffset[offset] == 1 {
+				return nil, wholeFoodsTimeoutError{}
+			}
+
+			pageSize := defaultCategoryLimit
+			if offset == strconv.Itoa(defaultCategoryLimit*2) {
+				pageSize = 1
+			}
+
+			results := make([]product, 0, pageSize)
+			for i := 0; i < pageSize; i++ {
+				results = append(results, product{
+					Name:  fmt.Sprintf("Product %s-%d", offset, i),
+					Slug:  fmt.Sprintf("product-%s-%d", offset, i),
+					Brand: "Whole Foods Market",
+					Store: 10216,
+				})
+			}
+
+			payload, err := json.Marshal(categoryResponse{Results: results})
+			if err != nil {
+				return nil, err
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Content-Type": []string{"application/json"},
+				},
+				Body:    io.NopCloser(strings.NewReader(string(payload))),
+				Request: r,
+			}, nil
+		}),
+	})
+
+	resp, err := client.Category(context.Background(), "fresh-vegetables", "10153")
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+	if got, want := attemptsByOffset[strconv.Itoa(defaultCategoryLimit*2)], 2; got != want {
+		t.Fatalf("unexpected late page attempts: got %d want %d", got, want)
+	}
+	if got, want := len(resp), defaultCategoryLimit*2+1; got != want {
+		t.Fatalf("unexpected result count: got %d want %d", got, want)
+	}
+}
+
+func TestCategory_LogsRetryAttemptsWithCategoryStoreAndOffset(t *testing.T) {
+	var logBuf bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() {
+		slog.SetDefault(previousLogger)
+	})
+
+	attemptsByOffset := map[string]int{}
+	client := NewClientWithBaseURL("https://example.com", &http.Client{
+		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			offset := r.URL.Query().Get("offset")
+			attemptsByOffset[offset]++
+			if offset == strconv.Itoa(defaultCategoryLimit*2) && attemptsByOffset[offset] == 1 {
+				return nil, wholeFoodsTimeoutError{}
+			}
+
+			pageSize := defaultCategoryLimit
+			if offset == strconv.Itoa(defaultCategoryLimit*2) {
+				pageSize = 1
+			}
+
+			results := make([]product, 0, pageSize)
+			for i := 0; i < pageSize; i++ {
+				results = append(results, product{
+					Name:  fmt.Sprintf("Product %s-%d", offset, i),
+					Slug:  fmt.Sprintf("product-%s-%d", offset, i),
+					Brand: "Whole Foods Market",
+					Store: 10216,
+				})
+			}
+
+			payload, err := json.Marshal(categoryResponse{Results: results})
+			if err != nil {
+				return nil, err
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(string(payload))),
+				Request:    r,
+			}, nil
+		}),
+	})
+
+	_, err := client.Category(context.Background(), "fresh-vegetables", "10153")
+	if err != nil {
+		t.Fatalf("Category returned error: %v", err)
+	}
+
+	logs := logBuf.String()
+	for _, want := range []string{
+		"Retrying HTTP request",
+		"source=wholefoods",
+		`url="https://example.com/api/products/category/fresh-vegetables?limit=60&offset=120&store=10153"`,
+		"attempt=2",
+	} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("retry log missing %q in logs:\n%s", want, logs)
+		}
 	}
 }
 
@@ -292,24 +447,16 @@ func ioNopCloserString(body string) io.ReadCloser {
 	return io.NopCloser(strings.NewReader(body))
 }
 
-func retryingHTTPClient(base *http.Client) *http.Client {
-	retryClient := retryablehttp.NewClient()
-	retryClient.Logger = nil
-	retryClient.HTTPClient = base
-	retryClient.RetryMax = 2
-	retryClient.RetryWaitMin = time.Millisecond
-	retryClient.RetryWaitMax = time.Millisecond
-	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
-		if ctx.Err() != nil {
-			return false, ctx.Err()
-		}
-		if err != nil {
-			return false, err
-		}
-		if resp == nil || resp.Request == nil {
-			return false, nil
-		}
-		return resp.Request.Method == http.MethodGet && resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
-	}
-	return retryClient.StandardClient()
+type wholeFoodsTimeoutError struct{}
+
+func (wholeFoodsTimeoutError) Error() string {
+	return "timeout awaiting headers"
+}
+
+func (wholeFoodsTimeoutError) Timeout() bool {
+	return true
+}
+
+func (wholeFoodsTimeoutError) Temporary() bool {
+	return true
 }

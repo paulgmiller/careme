@@ -1,0 +1,48 @@
+1. wholefoods - Whole Foods Bellevue
+   Store ID: wholefoods_10153
+   Address: 888 116th Ave NE, WA, 98004
+   Date: 2026-05-13
+   Plan:
+   - 1: Italian Coastal with shrimp, stove
+   - 2: Japanese Izakaya with salmon fillet, grill
+   - 3: Peruvian with Chilean sea bass, oven (fancier)
+
+2. albertsons - Safeway 1645 140th Ave NE
+   Store ID: safeway_490
+   Address: 1645 140th Ave NE, WA, 98005
+   Date: 2026-05-13
+   Plan:
+   - 1: Italian with shrimp, stove-sauté
+   - 2: Peruvian with salmon fillet, grill
+   - 3: French Bistro with chicken thighs, braise (fancier)
+
+3. kroger - Quality Food Center - Bellevue East
+   Store ID: 70500874
+   Address: 1510 145th Pl SE, WA, 98007
+   Date: 2026-05-13
+   Plan:
+   - 1: Japanese with steelhead trout, grill (fancier)
+   - 2: Mexican with tomatillos, oven-roast
+   - 3: Ethiopian with red lentils, stove-simmer
+
+4. kroger - Fred Meyer - Bellevue
+   Store ID: 70100023
+   Address: 2041 148Th Ave Ne, WA, 98007
+   Date: 2026-05-13
+   Plan:
+   - 1: Italian with steelhead trout, stove
+   - 2: Vietnamese with shrimp, grill
+   - 3: Peruvian with Dungeness crab, oven (fancier)
+
+5. albertsons - Safeway 300 Bellevue Way NE
+   Store ID: safeway_1600
+   Address: 300 Bellevue Way NE, WA, 98004
+   Date: 2026-05-13
+   Plan:
+   - 1: Japanese with salmon fillet, grill
+   - 2: Peruvian with raw shrimp, stove sauté
+   - 3: French Bistro with lobster tail, oven broil (fancier)
+
+   Kentucky
+
+   

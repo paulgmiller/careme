@@ -2,15 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <title>Signing In</title>
     {{.GoogleTagScript}}
   </head>
   <body>
+  {{GoogleTagNoScript}}
     <script
       crossorigin="anonymous"
       data-clerk-publishable-key="{{.PublishableKey}}"
-      src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"></script>
+      src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@{{ClerkJSVersion}}/dist/clerk.browser.js"></script>
     <script>
       Clerk.load().then(() => {
         // Just loading Clerk on your domain is often enough to finalize cookies in dev.
@@ -38,12 +39,11 @@
         };
 
         checkUserExists().then((payload) => {
-          if (!payload.exists &&
-              "{{.GoogleConversionTag}}" !== "" &&
-              typeof gtag === "function") {
-            gtag("event", "conversion", {
-              send_to: "{{.GoogleConversionTag}}",
-              event_callback: finishRedirect,
+          if (!payload.exists && Array.isArray(window.dataLayer)) {
+            window.dataLayer.push({
+              event: "signup_completed",
+              eventCallback: finishRedirect,
+              eventTimeout: 1500,
             });
             setTimeout(finishRedirect, 1500);
             return;

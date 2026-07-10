@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"careme/internal/config"
+	"careme/internal/httpretry"
 	"careme/internal/kroger/products"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
@@ -98,20 +98,11 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 	return m.token, nil
 }
 
-// this would be nice but it logs all retries as errors which sets off alerts.
-// var _ retryablehttp.LeveledLogger = slog.Default()
-type SlogPrintf struct{}
-
-func (l SlogPrintf) Printf(format string, args ...interface{}) {
-	// missing context sadly so no operation id
-	slog.Info(fmt.Sprintf(format, args...), "source", "retryablehttp")
-}
-
 // similiar but less customiszed that bright data.
 func withRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
-	retryClient.Logger = SlogPrintf{}
+	retryClient.RequestLogHook = httpretry.LogRetry("kroger")
 	return retryClient.StandardClient()
 }
 

@@ -52,7 +52,7 @@ func NewClient(cfg *config.Config) (*clerkClient, error) {
 
 	clientConfig := &clerk.ClientConfig{
 		BackendConfig: clerk.BackendConfig{
-			Key: clerk.String(cfg.Clerk.SecretKey),
+			Key: new(cfg.Clerk.SecretKey),
 		},
 	}
 
@@ -169,17 +169,15 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data := struct {
-			PublishableKey      string
-			GoogleTagScript     template.HTML
-			GoogleConversionTag string
-			UserExistsURL       string
-			ReturnTo            string // read from a data- attribute in the template to avoid JS-string escaping concerns
+			PublishableKey  string
+			GoogleTagScript template.HTML
+			UserExistsURL   string
+			ReturnTo        string // read from a data- attribute in the template to avoid JS-string escaping concerns
 		}{
-			PublishableKey:      c.cfg.Clerk.PublishableKey,
-			GoogleTagScript:     templates.GoogleTagScript(),
-			GoogleConversionTag: templates.GoogleConversionTag(),
-			UserExistsURL:       "/user/exists",
-			ReturnTo:            returnToFromRequest(r),
+			PublishableKey:  c.cfg.Clerk.PublishableKey,
+			GoogleTagScript: templates.GoogleTagScript(),
+			UserExistsURL:   "/user/exists",
+			ReturnTo:        returnToFromRequest(r),
 		}
 		if err := templates.AuthEstablish.Execute(w, data); err != nil {
 			slog.ErrorContext(r.Context(), "auth establish template execute error", "error", err)
@@ -193,7 +191,7 @@ func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
 	if signup {
 		base = c.cfg.Clerk.Signup()
 	}
-	redirectURL := c.authEstablishURL(returnToFromRequest(r))
+	redirectURL := c.authEstablishURL(r, returnToFromRequest(r))
 	u := lo.Must(url.Parse(base))
 	q := u.Query()
 	q.Set("redirect_url", redirectURL)
@@ -201,8 +199,8 @@ func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
 	return u.String()
 }
 
-func (c *clerkClient) authEstablishURL(returnTo string) string {
-	origin := c.cfg.ResolvedPublicOrigin() // can never be emptpy
+func (c *clerkClient) authEstablishURL(r *http.Request, returnTo string) string {
+	origin := c.publicOriginForRequest(r)
 	u := lo.Must(url.Parse(origin + "/auth/establish"))
 	q := u.Query()
 	if returnTo != "" {
@@ -212,6 +210,71 @@ func (c *clerkClient) authEstablishURL(returnTo string) string {
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+func (c *clerkClient) publicOriginForRequest(r *http.Request) string {
+	if c.cfg != nil {
+		if origin := strings.TrimRight(strings.TrimSpace(c.cfg.PublicOrigin), "/"); origin != "" {
+			return origin
+		}
+	}
+	if origin := publicOriginFromRequest(r); origin != "" {
+		return origin
+	}
+	if c.cfg != nil {
+		return c.cfg.ResolvedPublicOrigin()
+	}
+	return "http://localhost:8080"
+}
+
+func publicOriginFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+
+	scheme := firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))
+	if scheme == "" && r.URL != nil {
+		scheme = r.URL.Scheme
+	}
+	if scheme == "" && r.TLS != nil {
+		scheme = "https"
+	}
+	if scheme == "" {
+		scheme = "http"
+	}
+	scheme = strings.ToLower(strings.TrimSpace(scheme))
+	if scheme != "http" && scheme != "https" {
+		return ""
+	}
+
+	host := firstForwardedValue(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = r.Host
+	}
+	if host == "" && r.URL != nil {
+		host = r.URL.Host
+	}
+	host = strings.TrimSpace(host)
+	if host == "" || strings.ContainsAny(host, " \t\r\n/\\") || strings.Contains(host, "@") {
+		return ""
+	}
+
+	u := &url.URL{Scheme: scheme, Host: host}
+	if u.Hostname() == "" {
+		return ""
+	}
+	return strings.TrimRight(u.String(), "/")
+}
+
+func firstForwardedValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if beforeComma, _, ok := strings.Cut(value, ","); ok {
+		value = beforeComma
+	}
+	return strings.TrimSpace(value)
 }
 
 func returnToFromRequest(r *http.Request) string {

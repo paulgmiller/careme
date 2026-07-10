@@ -20,8 +20,10 @@ import (
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/prompts"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
@@ -82,8 +84,8 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
 	ss := recipes.StatusStore(cache)
-	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient)
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss)
+	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss, recipes.IO(cache))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -135,6 +137,8 @@ func (m *mailer) RunOnce(ctx context.Context) {
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	ctx, span := otel.Tracer("careme/mail").Start(ctx, "send_email")
 	defer span.End()
+	ctx = logsetup.WithSessionID(ctx, "mail")
+	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
 	if !user.MailOptIn {

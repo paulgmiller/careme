@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultIngredientGradeModel = openai.ChatModelGPT5Mini
+	defaultIngredientGradeModel = gpt56Luna
 )
 
 // should we have category spefic grading prompts?
@@ -84,6 +84,13 @@ type InputIngredient struct {
 	PriceSale    *float32         `json:"salePrice,omitempty"`
 	Categories   []string         `json:"categories,omitempty"`
 	Grade        *IngredientGrade `json:"grade,omitempty"`
+}
+
+func (ii InputIngredient) PercentOff() float32 {
+	if ii.PriceSale == nil || ii.PriceRegular == nil {
+		return 0
+	}
+	return (1.0 - (*ii.PriceSale / *ii.PriceRegular)) * 100
 }
 
 type IngredientGrade struct {
@@ -178,6 +185,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 
 	resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
 		Model:        g.model,
+		Reasoning:    noReasoning(),
 		Instructions: openai.String(ingredientGradeSystemInstruction),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
@@ -187,7 +195,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	if err != nil {
 		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
 	}
-	slog.InfoContext(ctx, "Ingredient grading usage", "model", g.model, responseUsageLogAttr(resp.Usage))
+	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage))
 
 	return parseIngredientGrades(resp.OutputText(), items)
 }

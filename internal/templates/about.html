@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="description" content="Learn how Careme helps home cooks find fresh nearby ingredients, plan practical recipes, and cook more often." />
   <title>About Careme</title>
 
-  {{template "tailwind_head" .Style}}
+  {{template "app_head" .Style}}
   <link href="https://cdnjs.cloudflare.com/ajax/libs/fotorama/4.6.4/fotorama.min.css" rel="stylesheet" />
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fotorama/4.6.4/fotorama.min.js" defer></script>
@@ -14,14 +15,16 @@
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
-  <main class="px-4 py-10">
+  {{GoogleTagNoScript}}
+  {{template "seasonal_background" .}}
+  <main class="relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-5xl">
       <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
         <header class="border-b border-brand-100 p-8">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p class="text-sm font-semibold uppercase tracking-wide text-brand-600">About Careme</p>
-              <h1 class="mt-1 text-4xl font-extrabold tracking-tight text-brand-700">Cook with what is fresh and nearby.</h1>
+              <h1 class="font-display mt-1 text-4xl font-extrabold tracking-tight text-brand-700">Cook with what is fresh and nearby.</h1>
               <p class="mt-3 max-w-3xl text-gray-600">
                 Careme helps you find nearby stores and build practical weekly recipes from in-season ingredients.
               </p>
@@ -94,23 +97,15 @@
           <div class="mt-4 flex flex-wrap gap-3">
             <a href="https://www.facebook.com/careme.cooking" target="_blank" rel="noreferrer" aria-label="Facebook"
                class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
-              <svg viewBox="0 0 24 24" aria-hidden="true" class="h-7 w-7" fill="currentColor">
-                <path d="M22 12.06C22 6.51 17.52 2 12 2S2 6.51 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.52 1.49-3.91 3.77-3.91 1.09 0 2.23.2 2.23.2v2.47h-1.26c-1.24 0-1.63.78-1.63 1.57v1.88h2.77l-.44 2.91h-2.33V22C18.34 21.24 22 17.08 22 12.06Z" />
-              </svg>
+              {{template "icon_facebook" .}}
             </a>
             <a href="#" aria-label="Instagram coming soon" aria-disabled="true"
                class="inline-flex h-14 w-14 cursor-not-allowed items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-500">
-              <svg viewBox="0 0 24 24" aria-hidden="true" class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="5" />
-                <circle cx="12" cy="12" r="4" />
-                <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-              </svg>
+              {{template "icon_instagram" .}}
             </a>
             <a href="https://bsky.app/profile/northbriton.net" target="_blank" rel="noreferrer" aria-label="Bluesky"
                class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
-              <svg viewBox="0 0 24 24" aria-hidden="true" class="h-7 w-7" fill="currentColor">
-                <path d="M6.45 4.04C8.7 5.72 11.13 9.12 12 10.95c.87-1.83 3.3-5.23 5.55-6.91 1.63-1.22 4.27-2.16 4.27.84 0 .6-.34 5.05-.54 5.77-.7 2.52-3.24 3.16-5.51 2.77 3.96.67 4.96 2.91 2.79 5.15-4.11 4.26-5.91-1.07-6.37-2.43-.08-.25-.12-.36-.19-.36s-.11.11-.19.36c-.46 1.36-2.26 6.69-6.37 2.43-2.17-2.24-1.17-4.48 2.79-5.15-2.27.39-4.81-.25-5.51-2.77-.2-.72-.54-5.17-.54-5.77 0-3 2.64-2.06 4.27-.84Z" />
-              </svg>
+              {{template "icon_bluesky" .}}
             </a>
           </div>
         </section>
@@ -162,6 +157,10 @@
               <summary class="cursor-pointer font-semibold text-brand-700">Can't I just use ChatGPT?</summary>
               <p class="mt-2 text-gray-700">That's where this started, but I found ChatGPT did much better with real ingredients, both as a constraint and as a reason to explore. The critiquing agent and recipe questions also add a lot of value. Lastly, we can focus the UI more tightly around cooking.</p>
             </details>
+            <details class="rounded-xl border border-brand-100 bg-white p-4">
+              <summary class="cursor-pointer font-semibold text-brand-700">Do I need special equipment?</summary>
+              <p class="mt-2 text-gray-700">Careme is happy to excercise your new gear if you ask it but tries to keep things to stovetop, oven and grill by default. I have an <a href="https://blog.northbriton.net/posts/2026-05-16-kitchengear/">amazon list of gear</a> for the basics.</p>
+            </details>
           </div>
         </section>
 
@@ -179,7 +178,7 @@
               <h3 class="font-semibold text-brand-700">Issues</h3>
               <p class="mt-1 text-sm text-gray-600">Bug reports and feature requests.</p>
             </a>
-            <a href="https://github.com/paulgmiller/careme/blob/master/Liscence" target="_blank" rel="noreferrer"
+            <a href="https://github.com/paulgmiller/careme/blob/master/LICENSE" target="_blank" rel="noreferrer"
                class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
               <h3 class="font-semibold text-brand-700">License</h3>
               <p class="mt-1 text-sm text-gray-600">Project licensing terms.</p>

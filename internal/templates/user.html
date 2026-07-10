@@ -2,23 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Careme · Your Kitchen</title>
 
-  {{template "tailwind_head" .Style}}
+  {{template "app_head" .Style}}
 
   {{.ClarityScript}}
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
-  <main class="px-4 py-10">
+  {{GoogleTagNoScript}}
+  {{template "seasonal_background" .}}
+  <main class="relative px-4 py-10">
     <section class="mx-auto w-full max-w-4xl">
       <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 px-8 pb-6 pt-8">
           <a href="/" class="inline-flex items-center text-sm font-medium text-brand-600 underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
             ← Back to Home
           </a>
-          <h1 class="mt-4 text-4xl font-extrabold tracking-tight text-brand-700">Your Kitchen</h1>
+          <h1 class="font-display mt-4 text-4xl font-extrabold tracking-tight text-brand-700">Your Kitchen</h1>
           <p class="mt-2 text-sm text-gray-600">Manage your account details, grocery preferences, email preferences, and saved recipes.</p>
           {{if .Success}}
           <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -124,6 +126,14 @@
               </div>
             </div>
           </section>
+
+          {{if (ClerkEnabled)}}
+          <section class="space-y-4">
+            <h2 class="text-lg font-semibold text-brand-700">Subscription</h2>
+            <div data-clerk-pricing-table data-clerk-ui-bundle-url="{{ClerkUIBundleURL}}" class="min-h-40"></div>
+            <p data-clerk-pricing-error hidden class="text-sm text-red-700">Checkout is not ready yet. Try again, chef.</p>
+          </section>
+          {{end}}
           {{end}}
 
           {{if eq .ActiveTab "past"}}
@@ -168,5 +178,8 @@
   </main>
   <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
+  {{if (ClerkEnabled)}}
+  <script src="/static/user-clerk-billing.js"></script>
+  {{end}}
 </body>
 </html>

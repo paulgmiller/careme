@@ -9,17 +9,23 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/albertsons"
+	"careme/internal/aldi"
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/farmersmarket"
+	"careme/internal/heb"
 	"careme/internal/kroger"
+	"careme/internal/locations"
 	"careme/internal/parallelism"
+	"careme/internal/publix"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 
@@ -68,15 +74,15 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	return provider.FetchStaples(ctx, locationID)
 }
 
-func (p routingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
+func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	provider, err := p.providerForLocation(locationID)
 	if err != nil {
 		return nil, err
 	}
-	ctx, span := tracer.Start(ctx, "staples.getingredients")
+	ctx, span := tracer.Start(ctx, "staples.fetchwines")
 	span.SetAttributes(attribute.String("backend", fmt.Sprintf("%T", provider)))
 	defer span.End()
-	return provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	return provider.FetchWines(ctx, locationID, styles)
 }
 
 func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
@@ -87,8 +93,8 @@ func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID st
 	return dedupeInputIngredients(ingredients)
 }
 
-func (p dedupingStaplesProvider) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error) {
-	ingredients, err := p.provider.GetIngredients(ctx, locationID, searchTerm, skip)
+func (p dedupingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+	ingredients, err := p.provider.FetchWines(ctx, locationID, styles)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +118,7 @@ type cachedStaplesService struct {
 
 type staplesProvider interface {
 	FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
-	GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int) ([]ai.InputIngredient, error)
+	FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error)
 }
 
 func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
@@ -176,11 +182,10 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
+	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded), "produce_score", sumIngredientGradesAboveCutoff(graded))
 	return graded, nil
 }
 
-// this is not actually wine specificexcept that GetIngredients only does wine requests from ui
-// command line could still call it kroger style.
 func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	normalizedStyle := strings.ToLower(strings.TrimSpace(style))
 	fnv := fnv.New64a()
@@ -190,43 +195,92 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-func (s *cachedStaplesService) GetIngredients(ctx context.Context, locationID string, searchTerm string, skip int, date time.Time) ([]ai.InputIngredient, error) {
-	cacheKey := wineIngredientsCacheKey(searchTerm, locationID, date)
-	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "style", searchTerm)
+func wineStylesCacheKey(styles []string, location string, date time.Time) string {
+	normalized := normalizedWineStyles(styles)
+	if len(normalized) == 1 {
+		return wineIngredientsCacheKey(normalized[0], location, date)
+	}
+	return wineIngredientsCacheKey(strings.Join(normalized, "\t"), location, date)
+}
+
+func normalizedWineStyles(styles []string) []string {
+	seen := map[string]bool{}
+	var normalized []string
+	for _, style := range styles {
+		style = strings.TrimSpace(style)
+		if style == "" {
+			continue
+		}
+		key := strings.ToLower(style)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		normalized = append(normalized, style)
+	}
+	slices.SortFunc(normalized, func(a, b string) int {
+		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+	})
+	return normalized
+}
+
+func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string, styles []string, date time.Time) ([]ai.InputIngredient, error) {
+	styles = normalizedWineStyles(styles)
+	if len(styles) == 0 {
+		return nil, nil
+	}
+	// TODO: Let providers normalize wine cache styles. Whole Foods ignores recipe
+	// styles and always fetches red-wine/white-wine/sparkling, so style-based keys
+	// currently create duplicate cache entries for the same candidate set.
+	cacheKey := wineStylesCacheKey(styles, locationID, date)
+	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "styles", styles)
 
 	wines, err := s.cache.IngredientsFromCache(ctx, cacheKey)
 	if err == nil {
-		logger.InfoContext(ctx, "serving cached ingredients", "count", len(wines))
+		logger.InfoContext(ctx, "serving cached wines", "count", len(wines))
 		return wines, nil
 	}
 	if !errors.Is(err, cache.ErrNotFound) {
-		logger.ErrorContext(ctx, "failed to read cached ingredients", "error", err)
+		logger.ErrorContext(ctx, "failed to read cached wines", "error", err)
 	}
 
-	wines, err = s.provider.GetIngredients(ctx, locationID, searchTerm, skip)
+	wines, err = s.provider.FetchWines(ctx, locationID, styles)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ingredients for %q: %w", searchTerm, err)
+		return nil, fmt.Errorf("failed to fetch wines for %q: %w", strings.Join(styles, ", "), err)
 	}
-	logger.InfoContext(ctx, "found ingredients", "count", len(wines))
+	logger.InfoContext(ctx, "found wines", "count", len(wines))
 
 	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {
-		logger.ErrorContext(ctx, "failed to cache ingredients", "error", err)
+		logger.ErrorContext(ctx, "failed to cache wines", "error", err)
 	}
 	return wines, nil
 }
 
 func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
-	storeIDs := []string{
-		"wholefoods_10153",
-		"safeway_490",
-		"70500874",
-		"starmarket_3566",
-		"acmemarkets_806",
-	}
-	_, err := parallelism.Flatten(storeIDs, func(storeID string) ([]ai.InputIngredient, error) {
-		return s.provider.FetchStaples(ctx, storeID)
+	stores := StaplesWatchdogLocations()
+	_, err := parallelism.Flatten(stores, func(store locations.Location) ([]ai.InputIngredient, error) {
+		date, err := StoreToDate(ctx, nowFn(), &store)
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchStaples(ctx, DefaultParams(&store, date))
 	})
 	return err
+}
+
+// StaplesWatchdogLocations returns the stores checked by the staples watchdog.
+func StaplesWatchdogLocations() []locations.Location {
+	stores := []locations.Location{
+		{ID: "wholefoods_10153", ZipCode: "97209"},
+		{ID: "safeway_490", ZipCode: "86403"},
+		{ID: "70500874", ZipCode: "98101"},
+		{ID: "starmarket_3566", ZipCode: "02108"},
+		{ID: "acmemarkets_806", ZipCode: "19711"},
+		{ID: "publix_1847", ZipCode: "35401"},
+		{ID: "aldi_F219", ZipCode: "40222"},
+		{ID: "heb_540", ZipCode: "77023"},
+	}
+	return stores
 }
 
 func staplesSignatureForLocation(locationID string) string {
@@ -267,6 +321,20 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
 	}
 
+	publixProvider, err := publix.NewStaplesProvider(cfg.Publix, brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create publix staples provider: %w", err)
+	}
+
+	hebProvider, err := heb.NewStaplesProvider(brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create heb staples provider: %w", err)
+	}
+	aldiProvider, err := aldi.NewStaplesProvider(brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create ALDI staples provider: %w", err)
+	}
+
 	// Kroger is a public API integration, not a scraper. Keep it off Bright Data;
 	// retries are added in the Kroger client.
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
@@ -275,9 +343,18 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		return nil, fmt.Errorf("create kroger staples provider: %w", err)
 	}
 
+	farmersMarketProvider, err := farmersmarket.NewStaplesProvider()
+	if err != nil {
+		return nil, fmt.Errorf("create farmers market staples provider: %w", err)
+	}
+
 	return []backendStaplesProvider{
 		albertsonsProvider,
+		hebProvider,
+		aldiProvider,
 		krogerBackend,
+		publixProvider,
+		farmersMarketProvider,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
@@ -289,6 +366,10 @@ func defaultIdentityProviders() []identityProvider {
 		kroger.NewIdentityProvider(),
 		// actowiz.NewIdentityProvider(),
 		albertsons.NewIdentityProvider(),
+		heb.NewIdentityProvider(),
+		aldi.NewIdentityProvider(),
+		publix.NewIdentityProvider(),
+		farmersmarket.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),
 	}

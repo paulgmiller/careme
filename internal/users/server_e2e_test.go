@@ -16,7 +16,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	cfg.Clerk.Domain = "bold-salmon-53.clerk.accounts.dev"
+	if err := templates.Init(cfg, "dummyhash"); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())
@@ -27,7 +30,7 @@ func TestUserPageUpdate_E2E(t *testing.T) {
 	storage := NewStorage(cacheStore)
 
 	tf := FakeUnsubscribeTokenFactory()
-	srv := NewHandler(storage, nil, auth.DefaultMock(), tf)
+	srv := NewHandler(storage, nil, auth.DefaultMock(), tf, "http://example.com")
 	mux := http.NewServeMux()
 	srv.Register(mux)
 

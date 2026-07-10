@@ -79,8 +79,8 @@ func (fc *FileCache) List(_ context.Context, prefix string, _ string) ([]string,
 		}
 
 		relativePath = filepath.ToSlash(relativePath)
-		if strings.HasPrefix(relativePath, prefix) {
-			keys = append(keys, strings.TrimPrefix(relativePath, prefix))
+		if after, ok := strings.CutPrefix(relativePath, prefix); ok {
+			keys = append(keys, after)
 		}
 		return nil
 	})

@@ -89,6 +89,18 @@ func TestGeneratorParamsHash_IgnoresPriorSavedHashes(t *testing.T) {
 	}
 }
 
+func TestGeneratorParamsHash_IgnoresPreviousMenuPlanResponseID(t *testing.T) {
+	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+
+	before := p.Hash()
+	p.PreviousMenuPlanResponseID = "resp-menu-123"
+	after := p.Hash()
+
+	if before != after {
+		t.Fatalf("expected previous menu plan response id not to affect params hash: before=%s after=%s", before, after)
+	}
+}
+
 func TestNormalizeLegacyRecipeHash(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Legacy Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 	hash := p.Hash()

@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>{{.Recipe.Title}} | Careme</title>
+  <meta name="description" content="{{.Recipe.Description}} Recipe for {{.Location.Name}} on {{.Date}}." />
 
   {{if .Recipe.Title}}
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
@@ -20,39 +21,76 @@
   <meta name="twitter:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
   {{end}}
 
-  {{template "tailwind_head" .Style}}
+  {{template "app_head" .Style}}
 
   {{.ClarityScript}}
   {{.GoogleTagScript}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
-  <main class="px-4 py-10">
+  {{GoogleTagNoScript}}
+  <div class="print-hidden">{{template "seasonal_background" .}}</div>
+  <main class="recipe-page relative z-10 px-4 py-10">
     <section class="mx-auto w-full max-w-4xl space-y-8">
-      <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
-        <div class="border-b border-brand-100 p-8">
-          <h1 class="text-4xl font-extrabold tracking-tight text-brand-700">
-            <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme</a>
-          </h1>
-          {{if .Location.Name}}
-          <p class="mt-2 text-gray-600">
-            Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
-            {{if .Location.Address}}<span class="text-sm text-gray-500">({{.Location.Address}})</span>{{end}}
-          </p>
-          {{end}}
-          {{if .OriginHash}}
-          <a href="/recipes?h={{.OriginHash}}" class="mt-2 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back to shopping list</a>
-          {{end}}
+      <div class="recipe-shell rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
+        <div class="print-hidden border-b border-brand-100 p-8">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">
+                <a href="/" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Careme</a>
+              </h1>
+              {{if .Location.Name}}
+              <p class="mt-2 text-gray-600">
+                Location:
+                <a href="/recipes?location={{.Location.ID}}"
+                   class="font-semibold text-brand-700 hover:text-brand-600 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{.Location.Name}}</a>
+                {{if .Location.Address}}<span class="text-sm text-gray-500">({{.Location.Address}})</span>{{end}}
+              </p>
+              {{end}}
+              {{if .OriginHash}}
+              <a href="/recipes?h={{.OriginHash}}" class="mt-2 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back to shopping list</a>
+              {{end}}
+            </div>
+            {{template "account_widget" .}}
+          </div>
         </div>
 
         <div class="p-8 space-y-8">
-          <article class="space-y-6 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+          <article class="printable-recipe relative space-y-6 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+            <div class="print-hidden absolute right-4 top-4 flex items-center gap-2">
+              {{template "recipe_share_button" .}}
+              <button type="button"
+                      onclick="window.print()"
+                      class="inline-flex size-10 items-center justify-center rounded-lg bg-brand-600 text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
+                      aria-label="Print recipe"
+                      title="Print recipe">
+                {{template "icon_print" .}}
+              </button>
+            </div>
             <header class="space-y-2">
-              <h2 class="text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
+              <h2 class="pr-24 font-display text-3xl font-semibold text-brand-700">{{.Recipe.Title}}</h2>
               <p class="text-sm text-gray-500">{{.Recipe.Description}}</p>
-              {{template "recipe_save_action" .}}
+              <div class="mt-4 flex flex-wrap items-center gap-3 print-hidden">
+                {{template "recipe_save_action" .}}
+              </div>
             </header>
 
-            {{template "recipe_image_panel" .}}
+            <div class="print-hidden">
+            {{if .RecipeCritiqueNeedsCare}}
+            <div class="rounded-2xl border-2 border-amber-400 bg-amber-50 p-5 text-amber-950 shadow-md" role="alert">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="space-y-1">
+                  <p class="text-base font-bold">This recipe may need another look before cooking.</p>
+                  <p class="text-sm">It scored {{.RecipeCritiqueScore}}/10, below our {{.MinimumRecipeScore}}/10 retry mark.</p>
+                </div>
+                <a href="{{.RecipeCritiqueURL}}" class="inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2">
+                  Read the critique
+                </a>
+              </div>
+            </div>
+            {{end}}
+            </div>
+
+            <div class="print-hidden">{{template "recipe_image_panel" .}}</div>
 
             <div class="grid gap-6 md:grid-cols-2">
               <div>
@@ -91,7 +129,7 @@
 
             <div class="space-y-2 text-sm text-gray-600">
               {{if .Recipe.CookTime}}
-              <p><span class="font-semibold text-brand-700">Cook time:</span> {{.Recipe.CookTime}}</p>
+              <p><span class="font-semibold text-brand-700">Total time:</span> {{.Recipe.CookTime}}</p>
               {{end}}
               {{if .Recipe.CostEstimate}}
               <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.Recipe.CostEstimate}}</p>
@@ -102,7 +140,7 @@
             </div>
           </article>
 
-          <section class="space-y-4 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+          <section class="print-hidden space-y-4 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
             <div class="space-y-1">
               <h3 class="text-lg font-semibold text-brand-700">Chef Feedback</h3>
               <p class="text-xs text-gray-500">Ask about the recipe and share how it turned out.</p>
@@ -202,6 +240,7 @@
         </div>
       </div>
 
+      <div class="print-hidden">
       {{if .RecipeCritiqueScore}}
       <p class="text-center text-xs text-gray-400">
         Recipe score:
@@ -214,6 +253,7 @@
       </p>
       {{end}}
       <p class="text-center text-sm text-gray-500">Planned by Careme.</p>
+      </div>
     </section>
   </main>
   <script>
@@ -250,6 +290,7 @@
     });
   </script>
   <script src="/static/htmx@2.0.8.js"></script>
+  <script src="/static/share.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
@@ -261,17 +302,41 @@
   {{end}}
   {{if .Thread}}
   <div class="space-y-4">
-    {{range .Thread}}
-    <div class="rounded-xl border border-brand-100 bg-brand-50/70 p-4">
-      <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">You asked</p>
-      <p class="mt-1 text-sm text-gray-700">{{.Question}}</p>
-      <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Careme</p>
-      <p class="mt-1 whitespace-pre-line text-sm text-gray-700">{{.Answer}}</p>
-    </div>
+    {{range $index, $entry := .Thread}}
+    <details class="group rounded-xl border border-brand-100 bg-brand-50/70 p-4" {{if eq $index 0}}open{{end}}>
+      <summary class="list-none cursor-pointer">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">You asked</p>
+            <p class="mt-1 text-sm text-gray-700">{{$entry.Question}}</p>
+          </div>
+          <span class="mt-0.5 flex size-4 items-center justify-center text-brand-700" aria-hidden="true">
+            {{template "icon_chevron_right" .}}
+            {{template "icon_chevron_down" .}}
+          </span>
+        </div>
+      </summary>
+      <div class="mt-3 border-t border-brand-100 pt-3">
+        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Careme</p>
+        <p class="mt-1 whitespace-pre-line text-sm text-gray-700">{{$entry.Answer}}</p>
+      </div>
+    </details>
     {{end}}
   </div>
   {{else if and .ServerSignedIn .ResponseID}}
   <p class="text-sm text-gray-500">No questions yet.</p>
+  {{end}}
+  {{if and .ServerSignedIn .Thread}}
+  <form method="POST"
+        action="/recipe/{{.RecipeHash}}/regenerate"
+        onsubmit="const button=this.querySelector('button[type=submit]'); button.textContent='Tweaking...'; button.disabled=true;"
+        class="pt-2">
+    <button type="submit"
+            class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-brand-400 disabled:text-white/90">
+      Tweak it, chef
+    </button>
+    <p class="mt-2 text-xs text-gray-500">Keeps this version linked, updates your saved recipe, and leaves the shopping list as-is.</p>
+  </form>
   {{end}}
 </div>
 {{end}}
@@ -304,9 +369,9 @@
 {{end}}
 
 {{define "recipe_save_action"}}
-{{if and .ServerSignedIn .OriginHash}}
+{{if .OriginHash}}
 <div class="recipe-save-action pt-2">
-  {{if .Recipe.Saved}}
+  {{if and .ServerSignedIn .Saved}}
   <button type="button"
           hx-post="/recipe/{{.RecipeHash}}/dismiss"
           hx-vals='{"h":"{{.OriginHash}}","source":"recipe"}'

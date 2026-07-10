@@ -8,10 +8,14 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"careme/internal/config"
 	"careme/internal/logsetup"
 )
+
+const clerkJSVersion = "5.99.0"
 
 //go:embed *.html
 var htmlFiles embed.FS
@@ -22,17 +26,29 @@ var Home,
 	User,
 	ShoppingList,
 	Recipe,
+	Critique,
 	About,
 	Location,
+	FarmersMarket,
 	Mail *template.Template
 
 func Init(config *config.Config, tailwindAssetPath string) error {
 	funcs := template.FuncMap{
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
-		"PublicOrigin":        func() string { return config.ResolvedPublicOrigin() },
-		"SignInPath":          signInPath,
-		"TailwindAssetPath":   func() string { return tailwindAssetPath },
+		"ClerkJSVersion":      func() string { return clerkJSVersion },
+		"ClerkUIBundleURL": func() string {
+			domain := strings.TrimSpace(config.Clerk.Domain)
+			if domain == "" {
+				return ""
+			}
+			return "https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js"
+		},
+		"GoogleTagNoScript": GoogleTagNoScript,
+		"PublicOrigin":      func() string { return config.ResolvedPublicOrigin() },
+		"SignInPath":        signInPath,
+		"TailwindAssetPath": func() string { return tailwindAssetPath },
+		"UserInitial":       userInitial,
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {
@@ -44,14 +60,15 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	User = ensure(tmpls, "user.html")
 	ShoppingList = ensure(tmpls, "shoppinglist.html")
 	Recipe = ensure(tmpls, "recipe.html")
+	Critique = ensure(tmpls, "critique.html")
 	About = ensure(tmpls, "about.html")
 	Location = ensure(tmpls, "locations.html")
+	FarmersMarket = ensure(tmpls, "farmersmarket.html")
 	Mail = ensure(tmpls, "mail.html")
 
 	// todo pull from config.
 	Clarityproject = os.Getenv("CLARITY_PROJECT_ID")
-	GoogleTagID = os.Getenv("GOOGLE_TAG_ID")
-	GoogleConversionLabel = os.Getenv("GOOGLE_CONVERSION_LABEL")
+	GoogleTagManagerID = os.Getenv("GOOGLE_TAG_MANAGER_ID")
 	return nil
 }
 
@@ -72,10 +89,24 @@ func signInPath(returnTo string) string {
 	return "/sign-in?return_to_b64=" + url.QueryEscape(encoded)
 }
 
+func userInitial(userEmail []string) string {
+	for _, email := range userEmail {
+		trimmed := strings.TrimSpace(email)
+		if trimmed == "" {
+			continue
+		}
+		r, _ := utf8.DecodeRuneInString(trimmed)
+		if r == utf8.RuneError {
+			return "?"
+		}
+		return string(unicode.ToUpper(r))
+	}
+	return "?"
+}
+
 var (
-	Clarityproject        string
-	GoogleTagID           string
-	GoogleConversionLabel string
+	Clarityproject     string
+	GoogleTagManagerID string
 )
 
 // ClarityScript generates the Microsoft Clarity tracking script HTML.
@@ -103,27 +134,34 @@ func ClarityScript(ctx context.Context) template.HTML {
 	return template.HTML(script)
 }
 
-// GoogleTagScript generates the Google tag snippet HTML.
+// GoogleTagScript generates the Google Tag Manager snippet HTML.
 func GoogleTagScript() template.HTML {
-	if GoogleTagID == "" {
+	if GoogleTagManagerID == "" {
 		return ""
 	}
 
-	script := `<script async src="https://www.googletagmanager.com/gtag/js?id=` + GoogleTagID + `"></script>
+	script := `<!-- Google Tag Manager -->
 <script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', '` + GoogleTagID + `');
-</script>`
+  (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','` + template.JSEscapeString(GoogleTagManagerID) + `');
+</script>
+<!-- End Google Tag Manager -->`
 
 	return template.HTML(script)
 }
 
-func GoogleConversionTag() string {
-	if GoogleTagID == "" || GoogleConversionLabel == "" {
+// GoogleTagNoScript generates the Google Tag Manager noscript fallback HTML.
+func GoogleTagNoScript() template.HTML {
+	if GoogleTagManagerID == "" {
 		return ""
 	}
-	return GoogleTagID + "/" + GoogleConversionLabel
+
+	iframe := `<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=` + template.HTMLEscapeString(GoogleTagManagerID) + `" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->`
+
+	return template.HTML(iframe)
 }

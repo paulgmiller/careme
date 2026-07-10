@@ -9,7 +9,6 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/parallelism"
 	"careme/internal/recipes/feedback"
 
 	"github.com/samber/lo"
@@ -123,22 +122,19 @@ func (rio recipeio) SaveIngredients(ctx context.Context, hash string, ingredient
 	return rio.Cache.Put(ctx, ingredientsCachePrefix+hash, string(ingredientsJSON), cache.Unconditional())
 }
 
-func (rio recipeio) saveRecipes(ctx context.Context, recipes []ai.Recipe) error {
+func (rio recipeio) SaveRecipe(ctx context.Context, r ai.Recipe) error {
 	// Save each recipe separately by its hash (could skip ones that are saved?)
-	_, err := parallelism.MapWithErrors(recipes, func(r ai.Recipe) (bool, error) {
-		hash := r.ComputeHash()
-		recipeJSON := lo.Must(json.Marshal(r))
-		if err := rio.Cache.Put(ctx, recipeCachePrefix+hash, string(recipeJSON), cache.IfNoneMatch()); err != nil {
-			if errors.Is(err, cache.ErrAlreadyExists) {
-				return false, nil
-			}
-			slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", r.Title, "error", err)
-			return false, err
+	hash := r.ComputeHash()
+	recipeJSON := lo.Must(json.Marshal(r))
+	if err := rio.Cache.Put(ctx, recipeCachePrefix+hash, string(recipeJSON), cache.IfNoneMatch()); err != nil {
+		if errors.Is(err, cache.ErrAlreadyExists) {
+			return nil
 		}
-		slog.InfoContext(ctx, "stored recipe", "title", r.Title, "hash", hash)
-		return true, nil
-	})
-	return err
+		slog.ErrorContext(ctx, "failed to cache individual recipe", "recipe", r.Title, "error", err)
+		return err
+	}
+	slog.InfoContext(ctx, "stored recipe", "title", r.Title, "hash", hash)
+	return nil
 }
 
 var ErrAlreadyExists = errors.New("already exists")
@@ -155,13 +151,12 @@ func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	return nil
 }
 
+func (rio recipeio) ParamsExist(ctx context.Context, p *generatorParams) (bool, error) {
+	return rio.Cache.Exists(ctx, paramsCachePrefix+p.Hash())
+}
+
 func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
-	// Save each recipe separately by its hash
-	if err := rio.saveRecipes(ctx, append(shoppingList.Recipes, shoppingList.Discarded...)); err != nil {
-		return err
-	}
-	// we could actually nuke out the rest of recipe and lazily load but not yet
-	shoppingList.Discarded = nil
+	// we could actually nuke out the rest of recipes and lazily load but not yet. Storage is cheap?
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
 	if err := rio.Cache.Put(ctx, ShoppingListCachePrefix+hash, string(shoppingJSON), cache.Unconditional()); err != nil {
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "hash", hash, "error", err)

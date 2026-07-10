@@ -50,7 +50,7 @@ func Configure(ctx context.Context) (func(), error) {
 		return nil, err
 	}
 
-	res, err := newResource()
+	res, err := newResource(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("build telemetry resource: %w", err)
 	}
@@ -127,9 +127,18 @@ func newLoggerProvider(ctx context.Context, res *resource.Resource) (*logsdk.Log
 	return logsdk.NewLoggerProvider(logsdk.WithResource(res), logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter))), nil
 }
 
-func newResource() (*resource.Resource, error) {
-	return resource.Merge(resource.Default(), resource.NewWithAttributes("",
-		semconv.ServiceName("careme"), semconv.ServiceVersion(serviceVersion())))
+func newResource(ctx context.Context) (*resource.Resource, error) {
+	configured, err := resource.New(ctx,
+		resource.WithFromEnv(),
+		resource.WithAttributes(
+			semconv.ServiceName("careme"),
+			semconv.ServiceVersion(serviceVersion()),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return resource.Merge(resource.Default(), configured)
 }
 
 func exportEnabled() bool {

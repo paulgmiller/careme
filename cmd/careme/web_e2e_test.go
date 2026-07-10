@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,14 +16,27 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/farmersmarket"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+	"careme/internal/recipes/critique"
 	"careme/internal/routing"
 	"careme/internal/templates"
 	"careme/internal/users"
 
 	"golang.org/x/net/html"
 )
+
+type fakeProduceScorer struct{}
+
+func (fakeProduceScorer) ProduceScore(_ context.Context, loc locations.Location) *locations.ProduceScore {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(loc.ID))
+	return &locations.ProduceScore{
+		Score: int(hash.Sum32()%99) + 1,
+		Date:  time.Now(),
+	}
+}
 
 func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	srv := newTestServer(t)
@@ -214,7 +229,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
-	generator := recipes.NewMockGenerator()
+	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore))
 	centroids := locations.LoadCentroids()
 	locationStorage, err := locations.New(cfg, cacheStore, centroids)
 	if err != nil {
@@ -228,11 +243,14 @@ func newTestServer(t *testing.T) *httptest.Server {
 		return mockAuth.WithAuthHTTP(appMiddleware(h))
 	})
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage)
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, fakeProduceScorer{})
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
-	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory).Register(appRoutes)
+	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator).Register(appRoutes)
+	farmersMarketStore := farmersmarket.NewStore(cacheStore)
+	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
+	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}, centroids).Register(appRoutes)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}

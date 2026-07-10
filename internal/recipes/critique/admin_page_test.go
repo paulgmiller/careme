@@ -3,15 +3,25 @@ package critique_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/templates"
 )
+
+func TestMain(m *testing.M) {
+	if err := templates.Init(&config.Config{}, "dummyhash.css"); err != nil {
+		panic(err)
+	}
+	os.Exit(m.Run())
+}
 
 func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 	t.Parallel()
@@ -46,6 +56,12 @@ func TestAdminCritiquesPageRendersNewestFirst(t *testing.T) {
 			DrinkPairing: "Pinot Grigio",
 		},
 	}
+	for _, r := range recipeList {
+		if err := recipesCache.SaveRecipe(t.Context(), r); err != nil {
+			t.Fatalf("save recipe: %v", err)
+		}
+	}
+
 	if err := recipesCache.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: recipeList}, "origin-hash"); err != nil {
 		t.Fatalf("save shopping list: %v", err)
 	}
@@ -131,22 +147,20 @@ func TestCritiquePageRendersSingleCritique(t *testing.T) {
 	store := critique.NewStore(fc)
 	recipesCache := recipes.IO(fc)
 
-	shoppingList := &ai.ShoppingList{Recipes: []ai.Recipe{
-		{
-			Title:        "Spring Pasta",
-			Description:  "Bright and lemony.",
-			CookTime:     "20 minutes",
-			CostEstimate: "$14-18",
-			Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 box", Price: "$2.99"}},
-			Instructions: []string{"Boil pasta.", "Finish with lemon and herbs."},
-			Health:       "Balanced.",
-			DrinkPairing: "Pinot Grigio",
-		},
-	}}
-	if err := recipesCache.SaveShoppingList(t.Context(), shoppingList, "origin-hash"); err != nil {
+	recipe := ai.Recipe{
+		Title:        "Spring Pasta",
+		Description:  "Bright and lemony.",
+		CookTime:     "20 minutes",
+		CostEstimate: "$14-18",
+		Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 box", Price: "$2.99"}},
+		Instructions: []string{"Boil pasta.", "Finish with lemon and herbs."},
+		Health:       "Balanced.",
+		DrinkPairing: "Pinot Grigio",
+	}
+	if err := recipesCache.SaveRecipe(t.Context(), recipe); err != nil {
 		t.Fatalf("save shopping list: %v", err)
 	}
-	hash := shoppingList.Recipes[0].ComputeHash()
+	hash := recipe.ComputeHash()
 
 	if err := store.Save(t.Context(), hash, &ai.RecipeCritique{
 		SchemaVersion:  "recipe-critique-v1",
@@ -180,5 +194,15 @@ func TestCritiquePageRendersSingleCritique(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("response body missing %q: %s", want, body)
 		}
+	}
+
+	fixesIndex := strings.Index(body, "Suggested fixes")
+	issuesIndex := strings.Index(body, "Issues")
+	strengthsIndex := strings.Index(body, "Strengths")
+	if fixesIndex == -1 || issuesIndex == -1 || strengthsIndex == -1 {
+		t.Fatalf("response body missing critique section heading: %s", body)
+	}
+	if fixesIndex >= issuesIndex || issuesIndex >= strengthsIndex {
+		t.Fatalf("critique sections should render fixes, issues, strengths; got indexes fixes=%d issues=%d strengths=%d", fixesIndex, issuesIndex, strengthsIndex)
 	}
 }

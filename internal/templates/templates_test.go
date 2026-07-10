@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"html/template"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -44,6 +45,183 @@ func TestClarityScriptOmitsIdentifyWhenSessionIDEmpty(t *testing.T) {
 	}
 }
 
+func TestGoogleTagNoScriptIncludesContainerID(t *testing.T) {
+	prev := GoogleTagManagerID
+	t.Cleanup(func() {
+		GoogleTagManagerID = prev
+	})
+	GoogleTagManagerID = "GTM-KP55TPW6"
+
+	script := string(GoogleTagNoScript())
+	if !strings.Contains(script, `www.googletagmanager.com/ns.html?id=GTM-KP55TPW6`) {
+		t.Fatalf("expected GTM noscript iframe URL, got %q", script)
+	}
+	if !strings.Contains(script, `<!-- Google Tag Manager (noscript) -->`) {
+		t.Fatalf("expected GTM noscript comments, got %q", script)
+	}
+}
+
+func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
+	for _, name := range []string{
+		"about.html",
+		"critique.html",
+		"farmersmarket.html",
+		"home.html",
+		"locations.html",
+		"recipe.html",
+		"shoppinglist.html",
+		"spinner.html",
+		"user.html",
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			if !strings.Contains(string(body), `{{template "seasonal_background" .}}`) {
+				t.Fatalf("%s should include seasonal background", name)
+			}
+			doc, err := html.Parse(strings.NewReader(string(body)))
+			if err != nil {
+				t.Fatalf("parse %s: %v", name, err)
+			}
+			mainClasses, ok := firstElementClasses(doc, "main")
+			if !ok {
+				t.Fatalf("%s should include a main element", name)
+			}
+			for _, class := range []string{"relative", "px-4"} {
+				if !mainClasses[class] {
+					t.Fatalf("%s should keep page content in a relative main container with class %q", name, class)
+				}
+			}
+			if name != "user.html" && !mainClasses["z-10"] {
+				t.Fatalf("%s should layer page content above the seasonal background", name)
+			}
+		})
+	}
+}
+
+func TestBrowserPageTemplatesIncludeAppHead(t *testing.T) {
+	nonAppPages := map[string]bool{
+		"auth_establish.html": true,
+		"mail.html":           true,
+	}
+
+	names, err := fs.Glob(htmlFiles, "*.html")
+	if err != nil {
+		t.Fatalf("glob templates: %v", err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if !strings.Contains(rendered, "<head") || nonAppPages[name] {
+				return
+			}
+			if !strings.Contains(rendered, `{{template "app_head" .Style}}`) {
+				t.Fatalf("%s should include app_head for PWA metadata", name)
+			}
+		})
+	}
+}
+
+func TestBrowserPageTemplatesDisablePinchZoom(t *testing.T) {
+	nonBrowserPages := map[string]bool{
+		"mail.html": true,
+	}
+
+	names, err := fs.Glob(htmlFiles, "*.html")
+	if err != nil {
+		t.Fatalf("glob templates: %v", err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			if nonBrowserPages[name] {
+				return
+			}
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if !strings.Contains(rendered, "<head") {
+				return
+			}
+			if !strings.Contains(rendered, `content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"`) {
+				t.Fatalf("%s should disable pinch zoom in the viewport metadata", name)
+			}
+		})
+	}
+}
+
+func firstElementClasses(node *html.Node, element string) (map[string]bool, bool) {
+	if node.Type == html.ElementNode && node.Data == element {
+		classes := make(map[string]bool)
+		for _, attr := range node.Attr {
+			if attr.Key != "class" {
+				continue
+			}
+			for _, class := range strings.Fields(attr.Val) {
+				classes[class] = true
+			}
+			return classes, true
+		}
+		return classes, true
+	}
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if classes, ok := firstElementClasses(child, element); ok {
+			return classes, true
+		}
+	}
+	return nil, false
+}
+
+func TestTemplatePageTitlesAreUnique(t *testing.T) {
+	titles := make(map[string]string)
+	for _, name := range []string{
+		"about.html",
+		"auth_establish.html",
+		"critique.html",
+		"farmersmarket.html",
+		"home.html",
+		"locations.html",
+		"mail.html",
+		"recipe.html",
+		"shoppinglist.html",
+		"spinner.html",
+		"user.html",
+	} {
+		body, err := htmlFiles.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		title, ok := templateTitle(string(body))
+		if !ok {
+			t.Fatalf("%s should include a title", name)
+		}
+		if previous, exists := titles[title]; exists {
+			t.Fatalf("%s and %s should not share title %q", previous, name, title)
+		}
+		titles[title] = name
+	}
+}
+
+func templateTitle(body string) (string, bool) {
+	start := strings.Index(body, "<title>")
+	if start == -1 {
+		return "", false
+	}
+	start += len("<title>")
+	end := strings.Index(body[start:], "</title>")
+	if end == -1 {
+		return "", false
+	}
+	return strings.TrimSpace(body[start : start+end]), true
+}
+
 func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -59,6 +237,9 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	rendered := buf.String()
 	if rendered == "" {
 		t.Fatal("about page rendered empty HTML")
+	}
+	if !strings.Contains(rendered, `<meta name="description" content="Learn how Careme helps home cooks find fresh nearby ingredients, plan practical recipes, and cook more often." />`) {
+		t.Fatalf("about page should include meta description, body: %s", rendered)
 	}
 	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
 		t.Fatalf("about page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
@@ -132,11 +313,13 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 		ServerSignedIn  bool
 		RefreshInterval string
 		StatusMessage   string
+		CurrentPath     string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
 		StatusMessage:   "Ingredients are ready. Building your recipes.",
+		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
 	}
 
 	var buf bytes.Buffer
@@ -153,6 +336,191 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 	if !strings.Contains(rendered, data.StatusMessage) {
 		t.Fatalf("spinner page should render status message, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `http-equiv="refresh"`) {
+		t.Fatalf("spinner page should use htmx polling instead of meta refresh, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<script src="/static/htmx@2.0.8.js"></script>`) ||
+		!strings.Contains(rendered, `hx-get="/recipes?h=abc&amp;start=2026-07-10T00:00:00Z"`) ||
+		!strings.Contains(rendered, `hx-trigger="load delay:10s"`) {
+		t.Fatalf("spinner page should poll with htmx, body: %s", rendered)
+	}
+}
+
+func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	if err := Init(cfg, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+			t.Fatalf("cleanup Init() error = %v", err)
+		}
+	})
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
+	}{
+		Style:          seasons.GetCurrentStyle(),
+		ServerSignedIn: true,
+	}
+
+	var buf bytes.Buffer
+	if err := FarmersMarket.Execute(&buf, data); err != nil {
+		t.Fatalf("FarmersMarket.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, "Farmers market finds") {
+		t.Fatalf("farmers market page should render title, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `.Error`) {
+		t.Fatalf("farmers market page should not reference an Error field, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `const serverSignedIn =`) || !strings.Contains(rendered, `true`) {
+		t.Fatalf("farmers market page should pass server sign-in state to Clerk refresh logic, body: %s", rendered)
+	}
+}
+
+func TestClerkJSScriptsUsePinnedVersion(t *testing.T) {
+	for _, name := range []string{"auth_establish.html", "clerk_refresh.html"} {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if strings.Contains(rendered, "@latest") {
+				t.Fatalf("%s should not use @latest for ClerkJS", name)
+			}
+			if !strings.Contains(rendered, "@{{ClerkJSVersion}}") {
+				t.Fatalf("%s should use pinned ClerkJS template helper", name)
+			}
+		})
+	}
+
+	if clerkJSVersion == "" {
+		t.Fatal("clerkJSVersion should be pinned")
+	}
+}
+
+func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	cfg.Clerk.Domain = "clerk.example.com"
+	if err := Init(cfg, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+			t.Fatalf("cleanup Init() error = %v", err)
+		}
+	})
+
+	data := struct {
+		ClarityScript     template.HTML
+		GoogleTagScript   template.HTML
+		Style             seasons.Style
+		User              *utypes.User
+		Success           bool
+		FavoriteStoreName string
+		ActiveTab         string
+		PastRecipes       []utypes.Recipe
+		ServerSignedIn    bool
+	}{
+		Style:          seasons.GetCurrentStyle(),
+		User:           &utypes.User{Email: []string{"chef@example.com"}},
+		ActiveTab:      "customize",
+		ServerSignedIn: true,
+	}
+
+	var buf bytes.Buffer
+	if err := User.Execute(&buf, data); err != nil {
+		t.Fatalf("User.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, `data-clerk-pricing-table data-clerk-ui-bundle-url="https://clerk.example.com/npm/@clerk/ui@1/dist/ui.browser.js"`) {
+		t.Fatalf("user page should pass Clerk UI bundle URL to billing script, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<script src="/static/user-clerk-billing.js"></script>`) {
+		t.Fatalf("user page should load Clerk billing script asset, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `mountPricingTable`) {
+		t.Fatalf("user page should not inline Clerk pricing table mount logic, body: %s", rendered)
+	}
+}
+
+func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
+		RefreshInterval string
+		StatusMessage   string
+		CurrentPath     string
+	}{
+		Style:           seasons.GetCurrentStyle(),
+		ServerSignedIn:  false,
+		RefreshInterval: "10",
+		StatusMessage:   "Considering ingredients\nHalf Off Spinach",
+		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
+	}
+
+	var buf bytes.Buffer
+	if err := Spin.Execute(&buf, data); err != nil {
+		t.Fatalf("Spin.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, "whitespace-pre-line") {
+		t.Fatalf("spinner status should render line breaks with CSS, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, data.StatusMessage) {
+		t.Fatalf("spinner status should keep newline text, body: %s", rendered)
+	}
+}
+
+func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		ServerSignedIn  bool
+		Error           string
+	}{
+		Style: seasons.GetCurrentStyle(),
+	}
+
+	var buf bytes.Buffer
+	if err := FarmersMarket.Execute(&buf, data); err != nil {
+		t.Fatalf("FarmersMarket.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	for _, want := range []string{
+		`<script src="/static/htmx@2.0.8.js"></script>`,
+		`id="farmers-market-error"`,
+		`hx-post="/farmersmarket"`,
+		`hx-encoding="multipart/form-data"`,
+		`hx-target="#farmers-market-work"`,
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("farmers market page should include %q, body: %s", want, rendered)
+		}
 	}
 }
 
@@ -184,6 +552,9 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	}
 
 	rendered := buf.String()
+	if !strings.Contains(rendered, `<meta name="description" content="Careme helps you find nearby stores and cook fresh, seasonal recipes with ingredients that are close to home." />`) {
+		t.Fatalf("home page should include meta description, body: %s", rendered)
+	}
 	if !strings.Contains(rendered, "Ballard Market") {
 		t.Fatalf("home page should render favorite store name, body: %s", rendered)
 	}
@@ -198,6 +569,15 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	}
 	if !strings.Contains(rendered, `/recipes?location=70500874`) {
 		t.Fatalf("home page should render direct recipe link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<span class="sm:hidden">C</span>`) {
+		t.Fatalf("home page should render compact mobile account initial, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `aria-label="Account menu"`) {
+		t.Fatalf("home page should render accessible account menu label, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<span class="hidden max-w-[14rem] truncate sm:block">chef@example.com</span>`) {
+		t.Fatalf("home page should keep full account email for larger screens, body: %s", rendered)
 	}
 }
 
@@ -241,6 +621,51 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 	}
 }
 
+func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	style := seasons.GetCurrentStyle()
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		User            *utypes.User
+		ServerSignedIn  bool
+	}{
+		Style: style,
+	}
+
+	var buf bytes.Buffer
+	if err := Home.Execute(&buf, data); err != nil {
+		t.Fatalf("Home.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, `<link rel="manifest" href="/manifest.webmanifest">`) {
+		t.Fatalf("home page should include manifest link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<meta name="theme-color" content="`+style.Colors.C50+`">`) {
+		t.Fatalf("home page should use the page background color for PWA chrome, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<link rel="apple-touch-icon" href="/static/app-icon-192.png">`) {
+		t.Fatalf("home page should include app icon link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `navigator.serviceWorker.register("/sw.js")`) {
+		t.Fatalf("home page should register the service worker, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `CAREME_SYNC_SAVED_RECIPES`) {
+		t.Fatalf("home page should tell the service worker to sync saved recipes, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `new MessageChannel()`) || strings.Contains(rendered, `caremeSavedRecipesSynced`) {
+		t.Fatalf("home page should not use acknowledgement or session state for saved recipe sync, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `careme:saved-recipes-changed`) {
+		t.Fatalf("home page should refresh offline saved recipes after save changes, body: %s", rendered)
+	}
+}
+
 func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
@@ -254,16 +679,14 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	})
 
 	data := struct {
-		PublishableKey      string
-		GoogleTagScript     template.HTML
-		GoogleConversionTag string
-		UserExistsURL       string
-		ReturnTo            string
+		PublishableKey  string
+		GoogleTagScript template.HTML
+		UserExistsURL   string
+		ReturnTo        string
 	}{
-		PublishableKey:      "pk_test_123",
-		GoogleConversionTag: "AW-123/abc",
-		UserExistsURL:       "/auth/user-exists",
-		ReturnTo:            "/recipe/hash",
+		PublishableKey: "pk_test_123",
+		UserExistsURL:  "/auth/user-exists",
+		ReturnTo:       "/recipe/hash",
 	}
 
 	var buf bytes.Buffer
@@ -287,11 +710,11 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	if !strings.Contains(rendered, `if (!payload.exists &&`) {
 		t.Fatalf("auth establish page should gate conversion on missing user, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `send_to: "AW-123\/abc"`) {
-		t.Fatalf("auth establish page should emit configured conversion tag, body: %s", rendered)
+	if !strings.Contains(rendered, `event: "signup_completed"`) {
+		t.Fatalf("auth establish page should push signup event to dataLayer, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `event_callback: finishRedirect`) {
-		t.Fatalf("auth establish page should redirect after gtag callback, body: %s", rendered)
+	if !strings.Contains(rendered, `eventCallback: finishRedirect`) {
+		t.Fatalf("auth establish page should redirect after GTM event callback, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, "console.warn(`auth user exists failed: ${response.status}`)") {
 		t.Fatalf("auth establish page should log when user exists endpoint returns a failure, body: %s", rendered)

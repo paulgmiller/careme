@@ -1,9 +1,13 @@
 package wholefoods
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -114,34 +118,69 @@ func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	}
 }
 
-func TestStaplesProvider_GetIngredients_UsesSearchTerm(t *testing.T) {
+func TestStaplesProvider_LogsCategoryFailureAsFinalError(t *testing.T) {
+	var logs bytes.Buffer
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(originalLogger)
+	})
+
+	client := &stubCategoryClient{
+		errs: map[string]error{
+			"fresh-fruit": errors.New("giving up after 1 attempt(s): context deadline exceeded"),
+		},
+	}
+	provider := NewStaplesProvider(client)
+
+	_, err := provider.FetchStaples(t.Context(), "wholefoods_10216")
+	if err == nil {
+		t.Fatal("expected category failure")
+	}
+
+	got := logs.String()
+	if !strings.Contains(got, `level=ERROR`) {
+		t.Fatalf("expected final category failure to be logged as error, got logs:\n%s", got)
+	}
+	if !strings.Contains(got, `msg="Failed to fetch category"`) {
+		t.Fatalf("expected category failure log, got logs:\n%s", got)
+	}
+	if !strings.Contains(got, `category=fresh-fruit`) {
+		t.Fatalf("expected failed category attribute, got logs:\n%s", got)
+	}
+}
+
+func TestStaplesProvider_FetchWines_UsesHardcodedWineCategories(t *testing.T) {
 	client := &stubCategoryClient{
 		results: map[string][]product{
-			"pinot noir": {
-				{Name: "Pinot Noir", Slug: "pinot-noir", Brand: "WFM", Store: 10216},
-				{Name: "Rose", Slug: "rose", Brand: "WFM", Store: 10216},
+			"red-wine": {
+				{Name: "Red Blend", Slug: "red-blend", Brand: "WFM", Store: 10216},
+			},
+			"white-wine": {
+				{Name: "Sauvignon Blanc", Slug: "sauvignon-blanc", Brand: "WFM", Store: 10216},
+			},
+			"sparkling": {
+				{Name: "Brut", Slug: "brut", Brand: "WFM", Store: 10216},
 			},
 		},
 	}
 	provider := NewStaplesProvider(client)
 
-	got, err := provider.GetIngredients(t.Context(), "wholefoods_10216", "pinot noir", 0)
+	got, err := provider.FetchWines(t.Context(), "wholefoods_10216", []string{"Pinot Noir"})
 	if err != nil {
-		t.Fatalf("GetIngredients returned error: %v", err)
+		t.Fatalf("FetchWines returned error: %v", err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("expected 2 ingredients, got %d", len(got))
+	if len(got) != 3 {
+		t.Fatalf("expected 3 wines, got %d", len(got))
 	}
-	if got[0].Description != "Pinot Noir" {
-		t.Fatalf("unexpected ingredient description: %+v", got[0].Description)
+	for _, category := range defaultWineCategories() {
+		if !client.hasCall("10216:" + category) {
+			t.Fatalf("missing expected wine category call %q", category)
+		}
 	}
-	if got[0].AisleNumber != "pinot noir" {
-		t.Fatalf("unexpected aisle number: %+v", got[0].AisleNumber)
-	}
-	if got := client.callCount(); got != 1 {
-		t.Fatalf("expected 1 category call, got %d", got)
-	}
-	if !client.hasCall("10216:pinot noir") {
-		t.Fatalf("missing expected category call")
+	aisles := []string{got[0].AisleNumber, got[1].AisleNumber, got[2].AisleNumber}
+	slices.Sort(aisles)
+	if !slices.Equal(aisles, []string{"red-wine", "sparkling", "white-wine"}) {
+		t.Fatalf("unexpected wine aisles: %+v", aisles)
 	}
 }

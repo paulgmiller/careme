@@ -13,7 +13,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref != 'refs/heads/master' }}
 
 jobs:
   verify:
@@ -90,6 +90,22 @@ jobs:
       - name: Run golangci-lint
         run: ./bin/golangci-lint run ./... --timeout=5m
 
+  js-lint:
+    name: js-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Run JavaScript lint
+        run: npm exec --yes --package eslint@10.4.0 -- eslint internal/static/user-clerk-billing.js internal/static/share.js
+
   k8s-lint:
     name: k8s-lint
     runs-on: ubuntu-latest
@@ -112,7 +128,7 @@ jobs:
 
   publish:
     name: publish (${{ matrix.name }})
-    needs: [verify, vet, format, lint, k8s-lint]
+    needs: [verify, vet, format, lint, js-lint, k8s-lint]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -136,9 +152,12 @@ jobs:
           - name: aldi
             cmd_path: ./cmd/aldi
             image_suffix: aldi
-          - name: albertsonsreese84
-            cmd_path: ./cmd/albertsonsreese84
-            image_suffix: albertsonsreese84
+          - name: reese84
+            cmd_path: ./cmd/reese84
+            image_suffix: reese84
+          - name: publixabck
+            cmd_path: ./cmd/publixabck
+            image_suffix: publixabck
 
     steps:
       - uses: actions/checkout@v5
@@ -176,3 +195,40 @@ jobs:
           tags: |
             ${{ steps.vars.outputs.IMAGE }}:latest
             ${{ steps.vars.outputs.IMAGE }}:${{ steps.vars.outputs.SHORT_SHA }}
+
+  deploy-caremetest:
+    name: deploy caremetest
+    needs: publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: caremetest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install deploy dependencies
+        run: sudo apt-get update && sudo apt-get install -y gettext-base
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        env:
+          CAREMETEST_KUBECONFIG: ${{ secrets.CAREMETEST_KUBECONFIG }}
+          CAREMETEST_KUBECONFIG_B64: ${{ secrets.CAREMETEST_KUBECONFIG_B64 }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          if [ -n "$CAREMETEST_KUBECONFIG_B64" ]; then
+            printf '%s' "$CAREMETEST_KUBECONFIG_B64" | base64 -d > "$HOME/.kube/config"
+          elif [ -n "$CAREMETEST_KUBECONFIG" ]; then
+            printf '%s' "$CAREMETEST_KUBECONFIG" > "$HOME/.kube/config"
+          else
+            echo "Set CAREMETEST_KUBECONFIG_B64 or CAREMETEST_KUBECONFIG in GitHub Actions secrets." >&2
+            exit 1
+          fi
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Deploy to caremetest
+        run: bash deploy/deploy.sh "$GITHUB_SHA" caremetest

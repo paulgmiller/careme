@@ -40,7 +40,7 @@ func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, multiRecipeList, nil, true, p.Hash(), nil, w)
+	formatShoppingListHTMLForTest(t.Context(), p, multiRecipeList, true, recipeSelection{}, w)
 	html := assertHTTPSuccess(t, w)
 
 	// Verify HTML is valid
@@ -119,10 +119,9 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.Saved = []ai.Recipe{listWithSavedRecipe.Recipes[0]}
-	applySavedToRecipes(listWithSavedRecipe.Recipes, p)
+	selection := recipeSelection{SavedHashes: []string{listWithSavedRecipe.Recipes[0].ComputeHash()}}
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, listWithSavedRecipe, nil, true, p.Hash(), nil, w)
+	formatShoppingListHTMLForTest(t.Context(), p, listWithSavedRecipe, true, selection, w)
 	html := assertHTTPSuccess(t, w)
 
 	if !strings.Contains(html, `hx-post="/recipes/`) || !strings.Contains(html, `/finalize"`) {
@@ -183,9 +182,9 @@ func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	p.Dismissed = []ai.Recipe{listWithDismissedRecipe.Recipes[0]}
+	selection := recipeSelection{DismissedHashes: []string{listWithDismissedRecipe.Recipes[0].ComputeHash()}}
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, listWithDismissedRecipe, nil, true, p.Hash(), nil, w)
+	formatShoppingListHTMLForTest(t.Context(), p, listWithDismissedRecipe, true, selection, w)
 	html := assertHTTPSuccess(t, w)
 
 	if !strings.Contains(html, `/save"`) {
@@ -211,7 +210,7 @@ func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
 	}
 }
 
-func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
+func TestFormatShoppingListHTML_SignedOutShowsSaveAction(t *testing.T) {
 	list := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
@@ -228,20 +227,23 @@ func TestFormatShoppingListHTML_SignedOutShowsReadOnlyActions(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, list, nil, false, p.Hash(), nil, w)
+	formatShoppingListHTMLForTest(t.Context(), p, list, false, recipeSelection{}, w)
 	html := assertHTTPSuccess(t, w)
 
 	if strings.Contains(html, `type="radio"`) {
 		t.Error("HTML should not contain save/dismiss radio inputs when signed out")
 	}
-	if strings.Contains(html, `Try again, chef`) {
-		t.Error("HTML should not contain regenerate action text when signed out")
+	if !strings.Contains(html, `Try again, chef`) {
+		t.Error("HTML should contain regenerate action text when signed out")
 	}
-	if strings.Contains(html, `Build Shopping List`) {
-		t.Error("HTML should not contain finalize action text when signed out")
+	if !strings.Contains(html, `Build Shopping List`) {
+		t.Error("HTML should contain finalize action text when signed out")
 	}
-	if strings.Contains(html, `Add`) {
-		t.Error("HTML should not contain add action text when signed out")
+	if !strings.Contains(html, `Add`) {
+		t.Error("HTML should contain add action text when signed out")
+	}
+	if !strings.Contains(html, `/save"`) {
+		t.Error("HTML should contain save endpoint when signed out")
 	}
 	if strings.Contains(html, `Hide`) {
 		t.Error("HTML should not contain hide action text when signed out")
