@@ -132,6 +132,8 @@ func pickN(xs []string, n int) []string {
 	return xs[:n]
 }
 
+// TODO: Evaluate trimming this prompt after GPT-5.6 menu-plan traces, preserving
+// ingredient availability, mobile chef-note length, and variety constraints.
 const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 

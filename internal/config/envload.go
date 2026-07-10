@@ -35,6 +35,14 @@ func loadRuntimeEnv() error {
 }
 
 func LoadEncryptedEnv(path string) error {
+	return loadEncryptedEnv(path, false)
+}
+
+func LoadEncryptedEnvOverride(path string) error {
+	return loadEncryptedEnv(path, true)
+}
+
+func loadEncryptedEnv(path string, override bool) error {
 	identities, err := loadSSHIdentities()
 	if err != nil {
 		return fmt.Errorf("load ssh identity for %q: %w", path, err)
@@ -44,10 +52,10 @@ func LoadEncryptedEnv(path string) error {
 		return nil
 	}
 
-	return decryptDotEnv(path, identities)
+	return decryptDotEnv(path, identities, override)
 }
 
-func decryptDotEnv(path string, identities []age.Identity) error {
+func decryptDotEnv(path string, identities []age.Identity, override bool) error {
 	ciphertext, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -70,6 +78,10 @@ func decryptDotEnv(path string, identities []age.Identity) error {
 		return fmt.Errorf("parse decrypted env %q: %w", path, err)
 	}
 	for key, value := range entries {
+		if override {
+			_ = os.Setenv(key, value)
+			continue
+		}
 		if _, exists := os.LookupEnv(key); !exists {
 			_ = os.Setenv(key, value)
 		}

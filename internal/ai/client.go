@@ -24,11 +24,13 @@ type client struct {
 	promptRecorder PromptRecorder
 }
 
-// ignoring model for now.
-func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
-	// ignor model for now.
+func NewClient(apiKey, model string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
 	if promptRecorder == nil {
 		promptRecorder = noopPromptRecorder{}
+	}
+	model = strings.TrimSpace(model)
+	if model == "" || model == "TODOMODEL" {
+		model = defaultRecipeModel
 	}
 	r := jsonschema.Reflector{
 		DoNotReference: true, // no $defs and no $ref
@@ -58,7 +60,7 @@ func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptR
 		recipeSchema:   recipe,
 		wineSchema:     wine,
 		menuSchema:     menu,
-		model:          defaultRecipeModel,
+		model:          model,
 		wineModel:      defaultWineModel,
 		promptRecorder: promptRecorder,
 	}
