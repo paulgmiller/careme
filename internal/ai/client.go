@@ -75,6 +75,10 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
+func noReasoning() responses.ReasoningParam {
+	return responses.ReasoningParam{Effort: responses.ReasoningEffortNone}
+}
+
 func (c *client) Ready(ctx context.Context) error {
 	// more CORRECT to do a very simple response request with allowed tokens 1 but this seems cheaper
 	// https://chatgpt.com/share/6984da16-ff88-8009-8486-4e0479ac6a01

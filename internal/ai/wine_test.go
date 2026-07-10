@@ -1,6 +1,9 @@
 package ai
 
 import (
+	"fmt"
+	"io"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -77,5 +80,63 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\npinot-noir-1\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
 		t.Fatalf("expected candidate wines TSV in prompt: %s", prompt)
+	}
+}
+
+func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
+	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		if !strings.Contains(string(body), `"model":"`+gpt56Luna+`"`) {
+			t.Fatalf("expected Luna model in request: %s", body)
+		}
+		if !strings.Contains(string(body), `"reasoning":{"effort":"none"}`) {
+			t.Fatalf("expected no-reasoning request: %s", body)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"id": "resp-wine",
+				"object": "response",
+				"created_at": 1778529600,
+				"status": "completed",
+				"model": %q,
+				"output": [{
+					"id": "msg-wine",
+					"type": "message",
+					"status": "completed",
+					"role": "assistant",
+					"content": [{
+						"type": "output_text",
+						"text": "{\"wines\":[{\"id\":\"pinot-noir-1\",\"name\":\"Pinot Noir\",\"quantity\":\"1 bottle\"}],\"commentary\":\"Bright enough for roast chicken.\"}",
+						"annotations": []
+					}]
+				}],
+				"usage": {
+					"input_tokens": 1,
+					"input_tokens_details": {"cached_tokens": 0},
+					"output_tokens": 1,
+					"output_tokens_details": {"reasoning_tokens": 0},
+					"total_tokens": 2
+				}
+			}`, gpt56Luna))),
+			Request: req,
+		}, nil
+	})}, nil)
+
+	selection, err := client.PickWine(t.Context(), Recipe{
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin.",
+		Instructions: []string{"Roast until golden."},
+		DrinkPairing: "Pinot Noir",
+	}, []InputIngredient{{ProductID: "pinot-noir-1", Description: "Pinot Noir"}})
+	if err != nil {
+		t.Fatalf("PickWine returned error: %v", err)
+	}
+	if len(selection.Wines) != 1 || selection.Wines[0].ProductID != "pinot-noir-1" {
+		t.Fatalf("unexpected wine selection: %#v", selection)
 	}
 }
