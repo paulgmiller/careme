@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/routing"
 )
@@ -97,6 +98,9 @@ func (s advertisedGenerationServer) handleGenerate(w http.ResponseWriter, r *htt
 }
 
 func (s advertisedGenerationServer) generateLocation(ctx context.Context, locationID string) error {
+	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
+	ctx = logsetup.WithUserID(ctx, "campaign_ads")
+
 	loc, err := s.locations.GetLocationByID(ctx, locationID)
 	if err != nil {
 		return fmt.Errorf("hydrate location %s: %w", locationID, err)
