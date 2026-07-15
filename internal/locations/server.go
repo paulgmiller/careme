@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"careme/internal/auth"
+	"careme/internal/guest"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -97,6 +98,9 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 			slog.InfoContext(ctx, "no zip code provided to /locations")
 			http.Error(w, "provide a zip code with ?zip=12345", http.StatusBadRequest)
 			return
+		}
+		if currentUser == nil {
+			guest.EnsureShoppingListCount(w, r)
 		}
 		var favoriteStore string
 		if currentUser != nil {

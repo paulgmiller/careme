@@ -23,6 +23,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/guest"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
@@ -83,41 +84,6 @@ func redirectToSignInForSave(w http.ResponseWriter, r *http.Request, shoppingLis
 		w.Header().Set("HX-Redirect", target)
 	}
 	http.Error(w, "must be logged in", status)
-}
-
-const (
-	guestShoppingListCookieName = "careme_guest_shopping_lists"
-	guestShoppingListLimit      = 2
-	guestShoppingListCookieAge  = 90 * 24 * time.Hour
-)
-
-func hasGuestShoppingListCookie(r *http.Request) bool {
-	cookie, err := r.Cookie(guestShoppingListCookieName)
-	return err == nil && cookie.Value != ""
-}
-
-func guestShoppingListCount(r *http.Request) int {
-	cookie, err := r.Cookie(guestShoppingListCookieName)
-	if err != nil {
-		return 0
-	}
-	count, err := strconv.Atoi(strings.TrimSpace(cookie.Value))
-	if err != nil || count < 0 {
-		return 0
-	}
-	return count
-}
-
-func setGuestShoppingListCount(w http.ResponseWriter, r *http.Request, count int) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     guestShoppingListCookieName,
-		Value:    strconv.Itoa(count),
-		Path:     "/",
-		MaxAge:   int(guestShoppingListCookieAge.Seconds()),
-		HttpOnly: true,
-		Secure:   r.TLS != nil,
-		SameSite: http.SameSiteLaxMode,
-	})
 }
 
 type locServer interface {
@@ -903,7 +869,8 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			if guestShoppingListCount(r) >= guestShoppingListLimit {
+			guestShoppingListCount, ok := guest.ShoppingListCount(r)
+			if !ok || guestShoppingListCount >= guest.ShoppingListLimit {
 				if isHTMXRequest(r) {
 					redirectToSignIn(w, r, http.StatusUnauthorized)
 					return
@@ -911,7 +878,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
 				return
 			}
-			setGuestShoppingListCount(w, r, guestShoppingListCount(r)+1)
+			guest.SetShoppingListCount(w, r, guestShoppingListCount+1)
 			currentUser = guestUser
 		} else {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -1279,16 +1246,17 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			redirectToHash(w, r, p.Hash(), QueryArgHelp)
 			return
 		}
-		if !hasGuestShoppingListCookie(r) {
+		guestShoppingListCount, ok := guest.ShoppingListCount(r)
+		if !ok {
 			slog.InfoContext(ctx, "blocking guest recipe generation without guest shopping list cookie", "user_agent", r.UserAgent())
 			http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
 			return
 		}
-		if guestShoppingListCount(r) >= guestShoppingListLimit {
+		if guestShoppingListCount >= guest.ShoppingListLimit {
 			http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
 			return
 		}
-		setGuestShoppingListCount(w, r, guestShoppingListCount(r)+1)
+		guest.SetShoppingListCount(w, r, guestShoppingListCount+1)
 		// be careful. Formalize this more?
 		currentUser = guestUser
 	}
