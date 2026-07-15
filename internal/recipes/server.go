@@ -91,6 +91,10 @@ const (
 	guestShoppingListCookieAge  = 90 * 24 * time.Hour
 )
 
+func hasAnyCookie(r *http.Request) bool {
+	return len(r.Cookies()) > 0
+}
+
 func guestShoppingListCount(r *http.Request) int {
 	cookie, err := r.Cookie(guestShoppingListCookieName)
 	if err != nil {
@@ -1272,6 +1276,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, cacheErr := s.FromCache(ctx, p.Hash()); cacheErr == nil {
 			redirectToHash(w, r, p.Hash(), QueryArgHelp)
+			return
+		}
+		if !hasAnyCookie(r) {
+			slog.InfoContext(ctx, "blocking guest recipe generation without cookies", "user_agent", r.UserAgent())
+			http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
 			return
 		}
 		if guestShoppingListCount(r) >= guestShoppingListLimit {

@@ -390,6 +390,37 @@ func TestHandleRecipes_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
 	}
 }
 
+func TestHandleRecipes_GuestRedirectsToSignInWhenNoCookiePresent(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestClerk(noSessionAuth{}),
+		withTestGenerator(generator),
+		withTestLocationServer(staticLocationLookup{location: &locations.Location{
+			ID:      "70001001",
+			Name:    "Test Store",
+			ZipCode: "94105",
+		}}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	require.Equal(t, signInPath("/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian"), rr.Header().Get("Location"))
+	select {
+	case <-generator.called:
+		t.Fatal("expected guest generation without cookies not to start")
+	default:
+	}
+	if _, err := s.ParamsFromCache(t.Context(), DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 0, 0, 0, 0, time.FixedZone("PST", -8*60*60))).Hash()); !errors.Is(err, cache.ErrNotFound) {
+		t.Fatalf("expected params not to be saved, got %v", err)
+	}
+}
+
 func TestHandleRecipes_GuestRedirectsToSignInWhenCookieLimitReached(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
