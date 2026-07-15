@@ -390,7 +390,7 @@ func TestHandleRecipes_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
 	}
 }
 
-func TestHandleRecipes_GuestRedirectsToSignInWhenNoCookiePresent(t *testing.T) {
+func TestHandleRecipes_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -405,6 +405,7 @@ func TestHandleRecipes_GuestRedirectsToSignInWhenNoCookiePresent(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	req.AddCookie(&http.Cookie{Name: "some_other_cookie", Value: "present"})
 	rr := httptest.NewRecorder()
 
 	s.handleRecipes(rr, req)
@@ -413,7 +414,7 @@ func TestHandleRecipes_GuestRedirectsToSignInWhenNoCookiePresent(t *testing.T) {
 	require.Equal(t, signInPath("/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian"), rr.Header().Get("Location"))
 	select {
 	case <-generator.called:
-		t.Fatal("expected guest generation without cookies not to start")
+		t.Fatal("expected guest generation without guest shopping list cookie not to start")
 	default:
 	}
 	if _, err := s.ParamsFromCache(t.Context(), DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 0, 0, 0, 0, time.FixedZone("PST", -8*60*60))).Hash()); !errors.Is(err, cache.ErrNotFound) {
