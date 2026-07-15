@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -198,6 +197,15 @@ func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
 	s.handleRecipes(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
+	var guestCookie *http.Cookie
+	for _, cookie := range rr.Result().Cookies() {
+		if cookie.Name == guest.ShoppingListCookieName {
+			guestCookie = cookie
+			break
+		}
+	}
+	require.NotNil(t, guestCookie)
+	require.Equal(t, "0", guestCookie.Value)
 	body := rr.Body.String()
 	require.Contains(t, body, `hx-post="/recipe/`+recipe.ComputeHash()+`/save"`)
 	require.Contains(t, body, `Add`)
@@ -466,7 +474,7 @@ func TestHandleRecipes_GuestRedirectsToSignInWhenCookieLimitReached(t *testing.T
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&instructions=make+it+vegetarian", nil)
-	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: strconv.Itoa(guest.ShoppingListLimit)})
+	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "2"})
 	rr := httptest.NewRecorder()
 
 	s.handleRecipes(rr, req)
@@ -2172,7 +2180,7 @@ func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testin
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/recipes/origin-hash/regenerate", nil)
-	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: strconv.Itoa(guest.ShoppingListLimit)})
+	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "2"})
 	req.SetPathValue("hash", "origin-hash")
 	rr := httptest.NewRecorder()
 
@@ -2195,7 +2203,7 @@ func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *te
 
 	req := httptest.NewRequest(http.MethodPost, "/recipes/origin-hash/regenerate", nil)
 	req.Header.Set("HX-Request", "true")
-	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: strconv.Itoa(guest.ShoppingListLimit)})
+	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "2"})
 	req.SetPathValue("hash", "origin-hash")
 	rr := httptest.NewRecorder()
 

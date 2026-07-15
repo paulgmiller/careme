@@ -91,6 +91,8 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
 				return
 			}
+			// give them a few free samples since they came in through locaitons
+			guest.EnsureShoppingListCount(w, r)
 		}
 
 		zip := r.URL.Query().Get("zip")
@@ -98,9 +100,6 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 			slog.InfoContext(ctx, "no zip code provided to /locations")
 			http.Error(w, "provide a zip code with ?zip=12345", http.StatusBadRequest)
 			return
-		}
-		if currentUser == nil {
-			guest.EnsureShoppingListCount(w, r)
 		}
 		var favoriteStore string
 		if currentUser != nil {

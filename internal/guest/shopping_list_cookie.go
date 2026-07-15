@@ -9,11 +9,11 @@ import (
 
 const (
 	ShoppingListCookieName = "careme_guest_shopping_lists"
-	ShoppingListLimit      = 2
+	shoppingListLimit      = 2
 	shoppingListCookieAge  = 90 * 24 * time.Hour
 )
 
-func ShoppingListCount(r *http.Request) (int, bool) {
+func shoppingListCount(r *http.Request) (int, bool) {
 	cookie, err := r.Cookie(ShoppingListCookieName)
 	if err != nil {
 		return 0, false
@@ -25,7 +25,7 @@ func ShoppingListCount(r *http.Request) (int, bool) {
 	return count, true
 }
 
-func SetShoppingListCount(w http.ResponseWriter, r *http.Request, count int) {
+func setShoppingListCount(w http.ResponseWriter, r *http.Request, count int) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     ShoppingListCookieName,
 		Value:    strconv.Itoa(count),
@@ -37,9 +37,18 @@ func SetShoppingListCount(w http.ResponseWriter, r *http.Request, count int) {
 	})
 }
 
+func UseShoppingList(w http.ResponseWriter, r *http.Request) bool {
+	count, ok := shoppingListCount(r)
+	if !ok || count >= shoppingListLimit {
+		return false
+	}
+	setShoppingListCount(w, r, count+1)
+	return true
+}
+
 func EnsureShoppingListCount(w http.ResponseWriter, r *http.Request) {
-	if _, ok := ShoppingListCount(r); ok {
+	if _, ok := shoppingListCount(r); ok {
 		return
 	}
-	SetShoppingListCount(w, r, 0)
+	setShoppingListCount(w, r, 0)
 }

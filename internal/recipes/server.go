@@ -869,8 +869,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			guestShoppingListCount, ok := guest.ShoppingListCount(r)
-			if !ok || guestShoppingListCount >= guest.ShoppingListLimit {
+			if !guest.UseShoppingList(w, r) {
 				if isHTMXRequest(r) {
 					redirectToSignIn(w, r, http.StatusUnauthorized)
 					return
@@ -878,7 +877,6 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
 				return
 			}
-			guest.SetShoppingListCount(w, r, guestShoppingListCount+1)
 			currentUser = guestUser
 		} else {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
@@ -1199,6 +1197,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		if !signedIn {
+			guest.EnsureShoppingListCount(w, r)
+		}
 		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
 		var wineWG sync.WaitGroup
 		var wineMu sync.Mutex
@@ -1246,17 +1247,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			redirectToHash(w, r, p.Hash(), QueryArgHelp)
 			return
 		}
-		guestShoppingListCount, ok := guest.ShoppingListCount(r)
-		if !ok {
-			slog.InfoContext(ctx, "blocking guest recipe generation without guest shopping list cookie", "user_agent", r.UserAgent())
+		if !guest.UseShoppingList(w, r) {
+			slog.InfoContext(ctx, "blocking guest recipe generation", "user_agent", r.UserAgent())
 			http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
 			return
 		}
-		if guestShoppingListCount >= guest.ShoppingListLimit {
-			http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
-			return
-		}
-		guest.SetShoppingListCount(w, r, guestShoppingListCount+1)
 		// be careful. Formalize this more?
 		currentUser = guestUser
 	}
