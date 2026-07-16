@@ -2,12 +2,33 @@ package brightdata
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"regexp"
 	"testing"
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
+
+func TestNewSessionID(t *testing.T) {
+	t.Parallel()
+
+	first, err := newSessionID()
+	if err != nil {
+		t.Fatalf("newSessionID returned error: %v", err)
+	}
+	second, err := newSessionID()
+	if err != nil {
+		t.Fatalf("newSessionID returned error: %v", err)
+	}
+	if first == second {
+		t.Fatalf("expected unique session IDs, got %q twice", first)
+	}
+	if !regexp.MustCompile(`^[a-f0-9]{32}$`).MatchString(first) {
+		t.Fatalf("unexpected session ID format: %q", first)
+	}
+}
 
 func TestProxyConfigValidate_AllowsDisabled(t *testing.T) {
 	t.Parallel()
@@ -61,9 +82,13 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 		t.Fatalf("expected no client timeout, got %s", client.Timeout)
 	}
 
-	retryTransport, ok := client.Transport.(*retryablehttp.RoundTripper)
+	sessionTransport, ok := client.Transport.(proxySessionRoundTripper)
 	if !ok {
-		t.Fatalf("expected *retryablehttp.RoundTripper, got %T", client.Transport)
+		t.Fatalf("expected proxySessionRoundTripper, got %T", client.Transport)
+	}
+	retryTransport, ok := sessionTransport.next.(*retryablehttp.RoundTripper)
+	if !ok {
+		t.Fatalf("expected nested *retryablehttp.RoundTripper, got %T", sessionTransport.next)
 	}
 
 	transport, ok := retryTransport.Client.HTTPClient.Transport.(*http.Transport)
@@ -75,6 +100,8 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRequest() error = %v", err)
 	}
+	session := &proxySession{id: "attempt1"}
+	req = req.WithContext(context.WithValue(req.Context(), proxySessionContextKey{}, session))
 	proxyURL, err := transport.Proxy(req)
 	if err != nil {
 		t.Fatalf("transport.Proxy() error = %v", err)
@@ -82,7 +109,7 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 	if proxyURL == nil {
 		t.Fatal("expected proxy URL")
 	}
-	if got, want := proxyURL.String(), "http://user-name:secret-pass@brd.superproxy.io:33335"; got != want {
+	if got, want := proxyURL.String(), "http://user-name-session-attempt1:secret-pass@brd.superproxy.io:33335"; got != want {
 		t.Fatalf("unexpected proxy URL: got %q want %q", got, want)
 	}
 	if transport.TLSClientConfig == nil || transport.TLSClientConfig.RootCAs == nil {
@@ -109,39 +136,73 @@ func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	}
 }
 
-func TestNewProxySessionHTTPClient_UsesFreshSessionWithoutNestedRetries(t *testing.T) {
+func TestRetriable_RotatesProxySessionAfterTimeout(t *testing.T) {
 	t.Parallel()
 
-	client, err := NewProxySessionHTTPClient(ProxyConfig{
-		Host:     "brd.superproxy.io",
-		Port:     "33335",
-		Username: "user-name",
-		Password: "secret-pass",
-	}, "attempt2")
-	if err != nil {
-		t.Fatalf("NewProxySessionHTTPClient() error = %v", err)
-	}
+	session := &proxySession{id: "beforetimeout"}
+	ctx := context.WithValue(context.Background(), proxySessionContextKey{}, session)
 
-	transport, ok := client.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("expected direct *http.Transport without nested retries, got %T", client.Transport)
+	retry, err := retriable(ctx, nil, proxyTimeoutError{})
+
+	if !retry {
+		t.Fatal("expected timeout to be retried")
 	}
-	proxyURL, err := transport.Proxy(mustRequest(t, http.MethodGet))
-	if err != nil {
-		t.Fatalf("transport.Proxy() error = %v", err)
+	if err == nil {
+		t.Fatal("expected timeout error to be preserved")
 	}
-	if got, want := proxyURL.User.Username(), "user-name-session-attempt2"; got != want {
-		t.Fatalf("unexpected proxy username: got %q want %q", got, want)
+	if got := session.ID(); got == "beforetimeout" {
+		t.Fatalf("expected timeout to rotate session, still got %q", got)
 	}
 }
 
-func TestNewProxySessionHTTPClient_RejectsInvalidSessionID(t *testing.T) {
+func TestRetriable_KeepsProxySessionAfterNonTimeoutError(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewProxySessionHTTPClient(ProxyConfig{}, "attempt-2")
-	if err == nil {
-		t.Fatal("expected invalid session ID error")
+	session := &proxySession{id: "keepme"}
+	ctx := context.WithValue(context.Background(), proxySessionContextKey{}, session)
+
+	retry, err := retriable(ctx, nil, errors.New("connection reset"))
+
+	if !retry || err == nil {
+		t.Fatalf("expected network error to be retried and preserved, got retry=%t error=%v", retry, err)
 	}
+	if got, want := session.ID(), "keepme"; got != want {
+		t.Fatalf("unexpected session rotation: got %q want %q", got, want)
+	}
+}
+
+func TestProxySessionRoundTripper_StartsEachRequestWithSession(t *testing.T) {
+	t.Parallel()
+
+	var sessionID string
+	transport := proxySessionRoundTripper{next: proxyRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		session, ok := req.Context().Value(proxySessionContextKey{}).(*proxySession)
+		if !ok {
+			t.Fatal("request context missing proxy session")
+		}
+		sessionID = session.ID()
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Request: req}, nil
+	})}
+
+	_, err := transport.RoundTrip(mustRequest(t, http.MethodGet))
+	if err != nil {
+		t.Fatalf("RoundTrip returned error: %v", err)
+	}
+	if !regexp.MustCompile(`^[a-f0-9]{32}$`).MatchString(sessionID) {
+		t.Fatalf("unexpected session ID format: %q", sessionID)
+	}
+}
+
+type proxyTimeoutError struct{}
+
+func (proxyTimeoutError) Error() string   { return "proxy timeout" }
+func (proxyTimeoutError) Timeout() bool   { return true }
+func (proxyTimeoutError) Temporary() bool { return true }
+
+type proxyRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f proxyRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
 
 func TestWithRetries_OnlyRetriesGet5xx(t *testing.T) {

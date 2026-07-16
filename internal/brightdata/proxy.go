@@ -2,15 +2,19 @@ package brightdata
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 
 	"careme/internal/httpretry"
 
@@ -25,6 +29,17 @@ type ProxyConfig struct {
 	Port     string `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+}
+
+type proxySessionContextKey struct{}
+
+type proxySession struct {
+	mu sync.RWMutex
+	id string
+}
+
+type proxySessionRoundTripper struct {
+	next http.RoundTripper
 }
 
 func LoadConfig() ProxyConfig {
@@ -58,42 +73,53 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 		}
 	}
 
-	client := &http.Client{Transport: transport}
-
-	return withRetries(client), nil
-}
-
-// NewProxySessionHTTPClient returns a fresh, non-retrying client pinned to one
-// Bright Data proxy session. Callers can create another client with a different
-// session ID when an operation needs to retry through a different proxy peer.
-func NewProxySessionHTTPClient(cfg ProxyConfig, sessionID string) (*http.Client, error) {
-	if !validSessionID(sessionID) {
-		return nil, fmt.Errorf("bright data session ID must contain only ASCII letters and digits")
-	}
-
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	client := withRetries(&http.Client{Transport: transport})
 	if cfg.Enabled() {
-		cfg.Username += "-session-" + sessionID
-		var err error
-		transport, err = newProxyTransport(cfg)
-		if err != nil {
-			return nil, err
-		}
+		client.Transport = proxySessionRoundTripper{next: client.Transport}
 	}
-	return &http.Client{Transport: transport}, nil
+	return client, nil
 }
 
-func validSessionID(sessionID string) bool {
-	if sessionID == "" {
-		return false
+func newSessionID() (string, error) {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return "", fmt.Errorf("generate bright data session ID: %w", err)
 	}
-	for _, r := range sessionID {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-			continue
-		}
-		return false
+	return hex.EncodeToString(id[:]), nil
+}
+
+func newProxySession() (*proxySession, error) {
+	id, err := newSessionID()
+	if err != nil {
+		return nil, err
 	}
-	return true
+	return &proxySession{id: id}, nil
+}
+
+func (s *proxySession) ID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.id
+}
+
+func (s *proxySession) rotate() error {
+	id, err := newSessionID()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.id = id
+	s.mu.Unlock()
+	return nil
+}
+
+func (t proxySessionRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	session, err := newProxySession()
+	if err != nil {
+		return nil, err
+	}
+	ctx := context.WithValue(req.Context(), proxySessionContextKey{}, session)
+	return t.next.RoundTrip(req.WithContext(ctx))
 }
 
 func newProxyTransport(cfg ProxyConfig) (*http.Transport, error) {
@@ -111,7 +137,16 @@ func newProxyTransport(cfg ProxyConfig) (*http.Transport, error) {
 
 	// this feels funny
 	proxyTransport := http.DefaultTransport.(*http.Transport).Clone()
-	proxyTransport.Proxy = http.ProxyURL(cfg.proxyURL())
+	proxyURL := cfg.proxyURL()
+	proxyTransport.Proxy = func(req *http.Request) (*url.URL, error) {
+		session, ok := req.Context().Value(proxySessionContextKey{}).(*proxySession)
+		if !ok {
+			return proxyURL, nil
+		}
+		requestProxyURL := *proxyURL
+		requestProxyURL.User = url.UserPassword(cfg.Username+"-session-"+session.ID(), cfg.Password)
+		return &requestProxyURL, nil
+	}
 	proxyTransport.TLSClientConfig = &tls.Config{RootCAs: rootCAs}
 	return proxyTransport, nil
 }
@@ -122,6 +157,15 @@ func retriable(ctx context.Context, resp *http.Response, err error) (bool, error
 		return false, ctx.Err()
 	}
 	if err != nil {
+		if isTimeout(err) {
+			session, ok := ctx.Value(proxySessionContextKey{}).(*proxySession)
+			if ok {
+				if rotateErr := session.rotate(); rotateErr != nil {
+					return false, rotateErr
+				}
+				slog.InfoContext(ctx, "rotated Bright Data proxy session after timeout")
+			}
+		}
 		return true, err // retry these as theya re non canceled?
 	}
 	if resp == nil || resp.Request == nil {
@@ -133,6 +177,14 @@ func retriable(ctx context.Context, resp *http.Response, err error) (bool, error
 		return false, nil
 	}
 	return resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
+}
+
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func withRetries(baseClient *http.Client) *http.Client {

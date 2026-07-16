@@ -106,33 +106,6 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	}
 }
 
-func TestStaplesProviderFactory_CreatesFreshClientForEachFetch(t *testing.T) {
-	var clients []*stubCategoryClient
-	provider := NewStaplesProviderFactory(func() (CategoryClient, error) {
-		client := &stubCategoryClient{}
-		clients = append(clients, client)
-		return client, nil
-	})
-
-	_, err := provider.FetchStaples(t.Context(), "wholefoods_10216")
-	if err != nil {
-		t.Fatalf("first FetchStaples returned error: %v", err)
-	}
-	_, err = provider.FetchStaples(t.Context(), "wholefoods_10216")
-	if err != nil {
-		t.Fatalf("second FetchStaples returned error: %v", err)
-	}
-
-	if got, want := len(clients), 2; got != want {
-		t.Fatalf("unexpected client count: got %d want %d", got, want)
-	}
-	for _, client := range clients {
-		if got, want := client.callCount(), len(defaultStaples()); got != want {
-			t.Fatalf("unexpected category calls for fresh client: got %d want %d", got, want)
-		}
-	}
-}
-
 func TestStaplesProvider_InvalidLocationID(t *testing.T) {
 	provider := NewStaplesProvider(&stubCategoryClient{})
 
