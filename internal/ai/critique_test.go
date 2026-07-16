@@ -51,6 +51,8 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"do the instructions begin with preparation before active cooking starts",
+		"does every mention of an ingredient in the instructions include the exact amount used in that step",
+		"do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list",
 		"does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
