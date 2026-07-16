@@ -123,7 +123,7 @@ func TestGradeIngredientsUsesLunaWithoutReasoning(t *testing.T) {
 	assert.Equal(t, 8, graded[0].Grade.Score)
 }
 
-func TestGradeIngredientsRejectsExtraProductIDsWithoutRetry(t *testing.T) {
+func TestGradeIngredientsSkipsExtraProductIDs(t *testing.T) {
 	var logs bytes.Buffer
 	previousLogger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
@@ -135,16 +135,18 @@ func TestGradeIngredientsRejectsExtraProductIDsWithoutRetry(t *testing.T) {
 		return ingredientGradeHTTPResponse(req, `{"grades":[{"id":"wrong-1","score":8,"reason":"Fresh vegetable."}]}`), nil
 	})})
 
-	_, err := grader.GradeIngredients(t.Context(), []InputIngredient{{ProductID: "ingredient-1", Description: "Asparagus"}})
+	graded, err := grader.GradeIngredients(t.Context(), []InputIngredient{{ProductID: "ingredient-1", Description: "Asparagus"}})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `unknown product_id "wrong-1"`)
+	require.NoError(t, err)
+	assert.Empty(t, graded)
 	assert.Equal(t, 1, calls)
 	assert.Contains(t, logs.String(), `msg="ingredient grade returned extra product"`)
 	assert.Contains(t, logs.String(), `product_id=wrong-1`)
+	assert.Contains(t, logs.String(), `msg="ingredient grading response missing products"`)
+	assert.Contains(t, logs.String(), `ingredient-1`)
 }
 
-func TestGradeIngredientsLeavesMissingProductsUngraded(t *testing.T) {
+func TestGradeIngredientsOmitsMissingProducts(t *testing.T) {
 	var logs bytes.Buffer
 	previousLogger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
@@ -163,11 +165,9 @@ func TestGradeIngredientsLeavesMissingProductsUngraded(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Len(t, graded, 2)
+	require.Len(t, graded, 1)
 	assert.Equal(t, "ingredient-1", graded[0].ProductID)
 	require.NotNil(t, graded[0].Grade)
-	assert.Equal(t, "ingredient-2", graded[1].ProductID)
-	assert.Nil(t, graded[1].Grade)
 	assert.Equal(t, 1, calls)
 	assert.Contains(t, logs.String(), `msg="ingredient grading response missing products"`)
 	assert.Contains(t, logs.String(), `ingredient-2`)
@@ -216,8 +216,7 @@ func TestParseIngredientGradesRejectsInvalidResponses(t *testing.T) {
 
 	graded, err := parseIngredientGrades(t.Context(), `{"grades":[]}`, items)
 	require.NoError(t, err)
-	require.Len(t, graded, 1)
-	assert.Nil(t, graded[0].Grade)
+	assert.Empty(t, graded)
 }
 
 func TestParseIngredientGradesMatchesByIDInsteadOfOrder(t *testing.T) {
@@ -255,6 +254,25 @@ func TestParseIngredientGradesRejectsDuplicateInputProductIDs(t *testing.T) {
 	_, err := parseIngredientGrades(t.Context(), `{"grades":[{"id":"ingredient-1","score":8,"reason":"Fresh vegetable."},{"id":"ingredient-1","score":7,"reason":"Another vegetable."}]}`, items)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicated input product_id")
+}
+
+func TestParseIngredientGradesSkipsDuplicateOutputProductIDs(t *testing.T) {
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
+	items := []InputIngredient{{Description: "Asparagus", ProductID: "ingredient-1"}}
+	body := `{"grades":[{"id":"ingredient-1","score":8,"reason":"Fresh vegetable."},{"id":"ingredient-1","score":2,"reason":"Duplicate."}]}`
+
+	graded, err := parseIngredientGrades(t.Context(), body, items)
+
+	require.NoError(t, err)
+	require.Len(t, graded, 1)
+	require.NotNil(t, graded[0].Grade)
+	assert.Equal(t, 8, graded[0].Grade.Score)
+	assert.Contains(t, logs.String(), `msg="ingredient grade duplicate product"`)
+	assert.Contains(t, logs.String(), `product_id=ingredient-1`)
 }
 
 func TestIngredientGradeSchemaOmitsOperationalFields(t *testing.T) {

@@ -20,6 +20,7 @@ type stubGradeBackend struct {
 	mu                sync.Mutex
 	calls             [][]ai.InputIngredient
 	leaveLastUngraded bool
+	omitLastOnce      bool
 }
 
 func (s *stubGradeBackend) CacheVersion() string {
@@ -29,6 +30,7 @@ func (s *stubGradeBackend) CacheVersion() string {
 func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	s.mu.Lock()
 	s.calls = append(s.calls, append([]ai.InputIngredient(nil), ingredients...))
+	callCount := len(s.calls)
 	s.mu.Unlock()
 	var out []ai.InputIngredient
 	for _, ingredient := range ingredients {
@@ -41,6 +43,9 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 	}
 	if s.leaveLastUngraded && len(out) > 0 {
 		out[len(out)-1].Grade = nil
+	}
+	if s.omitLastOnce && len(out) > 0 && callCount == 1 {
+		out = out[:len(out)-1]
 	}
 	return out, nil
 }
@@ -184,6 +189,27 @@ func TestCachingGraderPassesThroughButDoesNotCacheUngradedIngredients(t *testing
 	require.NoError(t, err)
 	_, err = cacheStore.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(inputs[1])))
 	assert.ErrorIs(t, err, cache.ErrNotFound)
+}
+
+func TestCachingGraderRetriesOmittedIngredientsOnNextCall(t *testing.T) {
+	cacheStore := NewStore(cache.NewInMemoryCache())
+	backend := &stubGradeBackend{omitLastOnce: true}
+	grader := newCachingGrader(backend, cacheStore)
+	inputs := []ai.InputIngredient{
+		{ProductID: "ingredient-00", Description: "Asparagus"},
+		{ProductID: "ingredient-01", Description: "Broccoli"},
+	}
+
+	first, err := grader.GradeIngredients(t.Context(), inputs)
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+	assert.Equal(t, "ingredient-00", first[0].ProductID)
+
+	second, err := grader.GradeIngredients(t.Context(), inputs)
+	require.NoError(t, err)
+	require.Len(t, second, 2)
+	require.Len(t, backend.calls, 2)
+	assert.Equal(t, []ai.InputIngredient{inputs[1]}, backend.calls[1])
 }
 
 func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {

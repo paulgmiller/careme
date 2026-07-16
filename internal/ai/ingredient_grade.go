@@ -245,22 +245,24 @@ func parseIngredientGrades(ctx context.Context, body string, items []InputIngred
 	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
 		return nil, fmt.Errorf("failed to parse ingredient grading response: %w", err)
 	}
-	gradesByID := make(map[string]*IngredientGrade, len(parsed.Grades))
+	var graded []InputIngredient
 	seen := make(map[string]bool, len(items))
 	for _, result := range parsed.Grades {
 		productID := strings.TrimSpace(result.ProductID)
 		if productID == "" {
 			return nil, fmt.Errorf("ingredient grade missing product_id")
 		}
-		_, ok := itemMap[productID]
+		item, ok := itemMap[productID]
 		if !ok {
 			slog.ErrorContext(ctx, "ingredient grade returned extra product", "product_id", productID)
-			return nil, fmt.Errorf("ingredient grade returned unknown product_id %q", productID)
+			continue
 		}
 		if seen[productID] {
-			return nil, fmt.Errorf("ingredient grading duplicated product_id %q", productID)
+			slog.ErrorContext(ctx, "ingredient grade duplicate product", "product_id", productID)
+			continue
 		}
 		seen[productID] = true
+		// continue on these?
 		if result.Score < 0 || result.Score > 10 {
 			return nil, fmt.Errorf("ingredient score must be between 0 and 10")
 		}
@@ -268,27 +270,25 @@ func parseIngredientGrades(ctx context.Context, body string, items []InputIngred
 			return nil, fmt.Errorf("ingredient grading reason is required")
 		}
 
-		gradesByID[productID] = &IngredientGrade{
+		item.Grade = &IngredientGrade{
 			Score:  result.Score,
 			Reason: strings.TrimSpace(result.Reason),
 		}
-	}
-
-	graded := make([]InputIngredient, 0, len(items))
-	missingProductIDs := make([]string, 0, len(items)-len(gradesByID))
-	for _, item := range items {
-		item.Grade = gradesByID[item.ProductID]
-		if item.Grade == nil {
-			missingProductIDs = append(missingProductIDs, item.ProductID)
-		}
 		graded = append(graded, item)
 	}
-	if len(missingProductIDs) > 0 {
+
+	if len(graded) < len(items) {
+		missingProductIDs := lo.Filter(items, func(ing InputIngredient, _ int) bool {
+			return !seen[ing.ProductID]
+		})
+
 		slog.ErrorContext(ctx, "ingredient grading response missing products",
-			"product_ids", missingProductIDs,
-			"graded_count", len(gradesByID),
+			"missing_product_ids", missingProductIDs,
+			"seen", lo.Keys(seen),
+			"graded_count", len(graded),
 			"input_count", len(items),
 		)
+
 	}
 	return graded, nil
 }
