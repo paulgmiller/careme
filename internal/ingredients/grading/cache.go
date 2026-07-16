@@ -93,10 +93,10 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	// might get partial results back save those.
 	var wg sync.WaitGroup
 	for _, gradedIngredient := range gradedIngredients {
-		if gradedIngredient.Grade == nil {
-			return nil, fmt.Errorf("ingredient grader returned nil grade for %q", ingredientLabel(gradedIngredient))
-		}
 		results = append(results, gradedIngredient)
+		if gradedIngredient.Grade == nil {
+			continue
+		}
 		wg.Go(func() {
 			ctx := context.WithoutCancel(ctx)
 			// could just save grade rather than whole ingredient
@@ -109,10 +109,6 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	wg.Wait()
 	if err != nil {
 		return nil, err
-	}
-
-	if len(gradedIngredients) != len(missingIngredients) {
-		slog.WarnContext(ctx, "ingredient grader omitted ungraded ingredients", "graded", len(gradedIngredients), "inputs", len(missingIngredients))
 	}
 
 	return results, nil

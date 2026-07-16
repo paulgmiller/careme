@@ -17,9 +17,9 @@ import (
 const testIngredientGradeCacheVersion = "test-cache-version"
 
 type stubGradeBackend struct {
-	mu       sync.Mutex
-	calls    [][]ai.InputIngredient
-	omitLast bool
+	mu                sync.Mutex
+	calls             [][]ai.InputIngredient
+	leaveLastUngraded bool
 }
 
 func (s *stubGradeBackend) CacheVersion() string {
@@ -39,8 +39,8 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 		// this should be closer to whats in actual grader.
 		out = append(out, ingredient)
 	}
-	if s.omitLast && len(out) > 0 {
-		out = out[:len(out)-1]
+	if s.leaveLastUngraded && len(out) > 0 {
+		out[len(out)-1].Grade = nil
 	}
 	return out, nil
 }
@@ -163,9 +163,9 @@ func TestCachingGraderOverlaysNewGradeOnCurrentIngredientMetadata(t *testing.T) 
 	require.NotNil(t, cached.Grade)
 }
 
-func TestCachingGraderAcceptsAndCachesPartialGrades(t *testing.T) {
+func TestCachingGraderPassesThroughButDoesNotCacheUngradedIngredients(t *testing.T) {
 	cacheStore := NewStore(cache.NewInMemoryCache())
-	backend := &stubGradeBackend{omitLast: true}
+	backend := &stubGradeBackend{leaveLastUngraded: true}
 	grader := newCachingGrader(backend, cacheStore)
 	inputs := []ai.InputIngredient{
 		{ProductID: "ingredient-00", Description: "Asparagus"},
@@ -175,8 +175,11 @@ func TestCachingGraderAcceptsAndCachesPartialGrades(t *testing.T) {
 	results, err := grader.GradeIngredients(t.Context(), inputs)
 
 	require.NoError(t, err)
-	require.Len(t, results, 1)
+	require.Len(t, results, 2)
 	assert.Equal(t, "ingredient-00", results[0].ProductID)
+	require.NotNil(t, results[0].Grade)
+	assert.Equal(t, "ingredient-01", results[1].ProductID)
+	assert.Nil(t, results[1].Grade)
 	_, err = cacheStore.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(inputs[0])))
 	require.NoError(t, err)
 	_, err = cacheStore.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(inputs[1])))

@@ -9,9 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strings"
-	"time"
 
 	"github.com/invopop/jsonschema"
 	openai "github.com/openai/openai-go/v3"
@@ -20,10 +18,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const (
-	defaultIngredientGradeModel = gpt56Luna
-	ingredientGradeAttempts     = 3
-)
+const defaultIngredientGradeModel = gpt56Luna
 
 // should we have category spefic grading prompts?
 const ingredientGradeSystemInstruction = `
@@ -135,7 +130,6 @@ type ingredientGrader struct {
 	cacheVersion string
 	schema       map[string]any
 	oai          openai.Client
-	retryWait    func(context.Context, time.Duration) error
 }
 
 func ingredientGradeCacheVersion(model, systemInstruction string) string {
@@ -161,7 +155,6 @@ func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredi
 		model:        model,
 		cacheVersion: ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction),
 		schema:       ingredientGradeJSONSchema(),
-		retryWait:    waitForIngredientGradeRetry,
 	}
 }
 
@@ -188,64 +181,21 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 		return nil, fmt.Errorf("failed to build ingredient grading prompt: %w", err)
 	}
 
-	var lastBody string
-	var lastErr error
-	for attempt := 1; attempt <= ingredientGradeAttempts; attempt++ {
-		resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
-			Model:        g.model,
-			Reasoning:    noReasoning(),
-			Instructions: openai.String(ingredientGradeSystemInstruction),
-			Input: responses.ResponseNewParamsInputUnion{
-				OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
-			},
-			Text: scheme(g.schema),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to grade ingredients: %w", err)
-		}
-		slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage))
-
-		lastBody = resp.OutputText()
-		graded, err := parseIngredientGrades(lastBody, items)
-		if err == nil {
-			return graded, nil
-		}
-		lastErr = err
-		slog.WarnContext(ctx, "invalid ingredient grading response", "attempt", attempt, "will_retry", attempt < ingredientGradeAttempts, "error", err)
-		if attempt == ingredientGradeAttempts {
-			break
-		}
-		if err := g.retryWait(ctx, ingredientGradeRetryDelay(attempt)); err != nil {
-			return nil, err
-		}
+	resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
+		Model:        g.model,
+		Reasoning:    noReasoning(),
+		Instructions: openai.String(ingredientGradeSystemInstruction),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
+		},
+		Text: scheme(g.schema),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
 	}
+	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage))
 
-	graded, droppedOutputIDs, missingInputIDs, err := salvageIngredientGrades(lastBody, items)
-	if err != nil || len(graded) == 0 {
-		return nil, lastErr
-	}
-	slog.WarnContext(ctx, "using partial ingredient grading response",
-		"graded_count", len(graded),
-		"input_count", len(items),
-		"dropped_output_ids", droppedOutputIDs,
-		"missing_input_ids", missingInputIDs,
-	)
-	return graded, nil
-}
-
-func ingredientGradeRetryDelay(attempt int) time.Duration {
-	return time.Duration(attempt*attempt) * 250 * time.Millisecond
-}
-
-func waitForIngredientGradeRetry(ctx context.Context, delay time.Duration) error {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
+	return parseIngredientGrades(ctx, resp.OutputText(), items)
 }
 
 func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
@@ -273,7 +223,7 @@ func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
 	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each id exactly.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
 }
 
-func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredient, error) {
+func parseIngredientGrades(ctx context.Context, body string, items []InputIngredient) ([]InputIngredient, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return nil, fmt.Errorf("empty ingredient grading response from model")
@@ -295,19 +245,16 @@ func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredi
 	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
 		return nil, fmt.Errorf("failed to parse ingredient grading response: %w", err)
 	}
-	if len(parsed.Grades) != len(items) {
-		return nil, fmt.Errorf("ingredient grading response count mismatch: got %d want %d", len(parsed.Grades), len(items))
-	}
-
-	var graded []InputIngredient
+	gradesByID := make(map[string]*IngredientGrade, len(parsed.Grades))
 	seen := make(map[string]bool, len(items))
 	for _, result := range parsed.Grades {
 		productID := strings.TrimSpace(result.ProductID)
 		if productID == "" {
 			return nil, fmt.Errorf("ingredient grade missing product_id")
 		}
-		item, ok := itemMap[productID]
+		_, ok := itemMap[productID]
 		if !ok {
+			slog.ErrorContext(ctx, "ingredient grade returned extra product", "product_id", productID)
 			return nil, fmt.Errorf("ingredient grade returned unknown product_id %q", productID)
 		}
 		if seen[productID] {
@@ -321,64 +268,29 @@ func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredi
 			return nil, fmt.Errorf("ingredient grading reason is required")
 		}
 
-		item.Grade = &IngredientGrade{
+		gradesByID[productID] = &IngredientGrade{
 			Score:  result.Score,
 			Reason: strings.TrimSpace(result.Reason),
 		}
-		graded = append(graded, item)
-	}
-
-	return graded, nil
-}
-
-func salvageIngredientGrades(body string, items []InputIngredient) ([]InputIngredient, []string, []string, error) {
-	body = strings.TrimSpace(body)
-	if body == "" {
-		return nil, nil, nil, fmt.Errorf("empty ingredient grading response from model")
-	}
-
-	itemMap := make(map[string]InputIngredient, len(items))
-	for _, item := range items {
-		productID := strings.TrimSpace(item.ProductID)
-		if productID == "" {
-			return nil, nil, nil, fmt.Errorf("ingredient product_id is required")
-		}
-		if _, ok := itemMap[productID]; ok {
-			return nil, nil, nil, fmt.Errorf("ingredient grading duplicated input product_id %q", productID)
-		}
-		itemMap[productID] = item
-	}
-
-	var parsed ingredientBatchGradeResponse
-	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to parse ingredient grading response: %w", err)
 	}
 
 	graded := make([]InputIngredient, 0, len(items))
-	seen := make(map[string]bool, len(items))
-	var droppedOutputIDs []string
-	for _, result := range parsed.Grades {
-		productID := strings.TrimSpace(result.ProductID)
-		item, known := itemMap[productID]
-		valid := productID != "" && known && !seen[productID] && result.Score >= 0 && result.Score <= 10 && strings.TrimSpace(result.Reason) != ""
-		if !valid {
-			droppedOutputIDs = append(droppedOutputIDs, productID)
-			continue
+	missingProductIDs := make([]string, 0, len(items)-len(gradesByID))
+	for _, item := range items {
+		item.Grade = gradesByID[item.ProductID]
+		if item.Grade == nil {
+			missingProductIDs = append(missingProductIDs, item.ProductID)
 		}
-		seen[productID] = true
-		item.Grade = &IngredientGrade{Score: result.Score, Reason: strings.TrimSpace(result.Reason)}
 		graded = append(graded, item)
 	}
-
-	missingInputIDs := make([]string, 0, len(items)-len(graded))
-	for productID := range itemMap {
-		if !seen[productID] {
-			missingInputIDs = append(missingInputIDs, productID)
-		}
+	if len(missingProductIDs) > 0 {
+		slog.ErrorContext(ctx, "ingredient grading response missing products",
+			"product_ids", missingProductIDs,
+			"graded_count", len(gradesByID),
+			"input_count", len(items),
+		)
 	}
-	slices.Sort(droppedOutputIDs)
-	slices.Sort(missingInputIDs)
-	return graded, droppedOutputIDs, missingInputIDs, nil
+	return graded, nil
 }
 
 func ingredientGradeJSONSchema() map[string]any {
