@@ -21,15 +21,22 @@ type CategoryClient interface {
 	Category(ctx context.Context, queryterm, store string) ([]product, error)
 }
 
+type CategoryClientFactory func() (CategoryClient, error)
+
 type identityProvider struct{}
 
 type StaplesProvider struct {
 	identityProvider
-	client CategoryClient
+	client        CategoryClient
+	clientFactory CategoryClientFactory
 }
 
 func NewStaplesProvider(client CategoryClient) StaplesProvider {
 	return StaplesProvider{client: client}
+}
+
+func NewStaplesProviderFactory(factory CategoryClientFactory) StaplesProvider {
+	return StaplesProvider{clientFactory: factory}
 }
 
 func NewIdentityProvider() identityProvider {
@@ -46,8 +53,9 @@ func (p identityProvider) IsID(locationID string) bool {
 }
 
 func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	if p.client == nil {
-		return nil, fmt.Errorf("whole foods client is required")
+	client, err := p.clientForFetch()
+	if err != nil {
+		return nil, err
 	}
 
 	// should identity provider do this?
@@ -57,7 +65,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	}
 
 	return parallelism.Flatten(defaultStaples(), func(category string) ([]ai.InputIngredient, error) {
-		resp, err := p.client.Category(ctx, category, storeID)
+		resp, err := client.Category(ctx, category, storeID)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to fetch category", "category", category, "location", locationID, "error", err)
 			return nil, err
@@ -73,8 +81,9 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 }
 
 func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
-	if p.client == nil {
-		return nil, fmt.Errorf("whole foods client is required")
+	client, err := p.clientForFetch()
+	if err != nil {
+		return nil, err
 	}
 
 	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
@@ -83,7 +92,7 @@ func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []
 	}
 
 	return parallelism.Flatten(defaultWineCategories(), func(category string) ([]ai.InputIngredient, error) {
-		resp, err := p.client.Category(ctx, category, storeID)
+		resp, err := client.Category(ctx, category, storeID)
 		if err != nil {
 			return nil, err
 		}
@@ -91,6 +100,23 @@ func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []
 			return productToIngredient(p, category)
 		}), nil
 	})
+}
+
+func (p StaplesProvider) clientForFetch() (CategoryClient, error) {
+	if p.clientFactory != nil {
+		client, err := p.clientFactory()
+		if err != nil {
+			return nil, fmt.Errorf("create whole foods category client: %w", err)
+		}
+		if client == nil {
+			return nil, fmt.Errorf("whole foods category client factory returned nil")
+		}
+		return client, nil
+	}
+	if p.client == nil {
+		return nil, fmt.Errorf("whole foods client is required")
+	}
+	return p.client, nil
 }
 
 func defaultStaples() []string {

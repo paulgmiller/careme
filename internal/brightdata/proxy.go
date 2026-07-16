@@ -63,6 +63,39 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	return withRetries(client), nil
 }
 
+// NewProxySessionHTTPClient returns a fresh, non-retrying client pinned to one
+// Bright Data proxy session. Callers can create another client with a different
+// session ID when an operation needs to retry through a different proxy peer.
+func NewProxySessionHTTPClient(cfg ProxyConfig, sessionID string) (*http.Client, error) {
+	if !validSessionID(sessionID) {
+		return nil, fmt.Errorf("bright data session ID must contain only ASCII letters and digits")
+	}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if cfg.Enabled() {
+		cfg.Username += "-session-" + sessionID
+		var err error
+		transport, err = newProxyTransport(cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &http.Client{Transport: transport}, nil
+}
+
+func validSessionID(sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	for _, r := range sessionID {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func newProxyTransport(cfg ProxyConfig) (*http.Transport, error) {
 	rootCAs, err := proxyRootCAs()
 	if err != nil {

@@ -51,7 +51,6 @@ type generatorService struct {
 	staples      staplesService
 	statusWriter statusWriter
 	saver        recipeSaver
-	staplesRetry staplesRetryPolicy
 }
 
 var tracer = otel.Tracer("careme/internal/recipes")
@@ -75,7 +74,6 @@ func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesS
 		staples:      staples,
 		statusWriter: statuses,
 		saver:        recipeSaver,
-		staplesRetry: defaultStaplesRetryPolicy(),
 	}, nil
 }
 
@@ -128,7 +126,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		regenInstructions := regenerateInstructions(p)
 
 		// this SHOULD hit the cache and we could do it in parallel with menu planning
-		ingredients, err := g.fetchStaples(ctx, hash, p)
+		ingredients, err := g.staples.FetchStaples(ctx, p)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get staples: %w", err)
 		}
@@ -177,7 +175,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	defer span.End()
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
 
-	ingredients, err := g.fetchStaples(ctx, hash, p)
+	ingredients, err := g.staples.FetchStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
 	}
@@ -367,7 +365,7 @@ func inputIngredientDisplayPrice(input ai.InputIngredient) string {
 
 // just making this best effort
 func (g *generatorService) writeStatus(ctx context.Context, hash string, status string) {
-	if g.statusWriter == nil || strings.TrimSpace(hash) == "" {
+	if strings.TrimSpace(hash) == "" {
 		return
 	}
 	if err := g.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {

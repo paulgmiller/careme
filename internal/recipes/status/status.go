@@ -42,14 +42,6 @@ func Error(err error) string {
 	return "Something went wrong: " + err.Error()
 }
 
-func StaplesRetrying() string {
-	return "We're having some difficulty checking your store's ingredients. Still trying…"
-}
-
-func StaplesUnavailable() string {
-	return "We're having some difficulty checking your store's ingredients right now. Please try again in a few minutes."
-}
-
 func Regen(instructions string, dismissed []ai.Recipe) string {
 	var sb strings.Builder
 	if len(instructions) > 0 {

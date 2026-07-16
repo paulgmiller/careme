@@ -3,6 +3,7 @@ package recipes
 import (
 	"context"
 	"errors"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,23 @@ import (
 	"careme/internal/cache"
 	"careme/internal/locations"
 )
+
+func TestNewBrightDataSessionID(t *testing.T) {
+	first, err := newBrightDataSessionID()
+	if err != nil {
+		t.Fatalf("newBrightDataSessionID returned error: %v", err)
+	}
+	second, err := newBrightDataSessionID()
+	if err != nil {
+		t.Fatalf("newBrightDataSessionID returned error: %v", err)
+	}
+	if first == second {
+		t.Fatalf("expected unique session IDs, got %q twice", first)
+	}
+	if !regexp.MustCompile(`^[a-f0-9]{32}$`).MatchString(first) {
+		t.Fatalf("unexpected session ID format: %q", first)
+	}
+}
 
 type stubStaplesProvider struct {
 	ids         map[string]bool

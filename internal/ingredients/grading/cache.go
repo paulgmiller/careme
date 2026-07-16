@@ -112,7 +112,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	}
 
 	if len(gradedIngredients) != len(missingIngredients) {
-		return nil, fmt.Errorf("ingredient grader returned %d ingredients for %d inputs", len(gradedIngredients), len(missingIngredients))
+		slog.WarnContext(ctx, "ingredient grader omitted ungraded ingredients", "graded", len(gradedIngredients), "inputs", len(missingIngredients))
 	}
 
 	return results, nil

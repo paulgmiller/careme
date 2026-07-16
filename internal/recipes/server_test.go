@@ -23,7 +23,6 @@ import (
 	"careme/internal/guest"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
-	recipestatus "careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/users"
 
@@ -1074,29 +1073,6 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	got, err := s.statusReader.GenerationStatusFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
 	assert.Equal(t, "Something went wrong: plan exploded", got)
-}
-
-func TestKickgeneration_HidesStaplesErrorsFromStatus(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	cause := errors.New(`ingredient grade returned unknown product_id "0000000004130"`)
-	generator := &captureKickgenerationGenerator{err: fmt.Errorf("failed to get staples: %w", &staplesUnavailableError{
-		attempts: 4,
-		err:      cause,
-	})}
-	s := newTestServer(t,
-		withTestCache(cacheStore),
-		withTestGenerator(generator),
-	)
-
-	params := DefaultParams(&locations.Location{ID: "wholefoods_10260", Name: "Whole Foods"}, time.Now())
-	s.kickgeneration(t.Context(), params)
-	s.Wait()
-
-	got, err := s.statusReader.GenerationStatusFromCache(t.Context(), params.Hash())
-	require.NoError(t, err)
-	assert.Equal(t, recipestatus.StaplesUnavailable(), got)
-	assert.NotContains(t, got, "product_id")
-	assert.NotContains(t, got, "0000000004130")
 }
 
 func TestKickGenerationIfNotPresent_DoesNotKickExistingParams(t *testing.T) {

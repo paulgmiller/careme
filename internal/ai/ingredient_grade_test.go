@@ -1,11 +1,13 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -119,6 +121,65 @@ func TestGradeIngredientsUsesLunaWithoutReasoning(t *testing.T) {
 	require.Len(t, graded, 1)
 	require.NotNil(t, graded[0].Grade)
 	assert.Equal(t, 8, graded[0].Grade.Score)
+}
+
+func TestGradeIngredientsRetriesInvalidProductIDs(t *testing.T) {
+	responses := []string{
+		`{"grades":[{"id":"wrong-1","score":8,"reason":"Fresh vegetable."}]}`,
+		`{"grades":[{"id":"wrong-2","score":8,"reason":"Fresh vegetable."}]}`,
+		`{"grades":[{"id":"ingredient-1","score":8,"reason":"Fresh vegetable."}]}`,
+	}
+	calls := 0
+	grader := NewIngredientGrader("test-key", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := responses[calls]
+		calls++
+		return ingredientGradeHTTPResponse(req, body), nil
+	})})
+	grader.retryWait = func(context.Context, time.Duration) error { return nil }
+
+	graded, err := grader.GradeIngredients(t.Context(), []InputIngredient{{ProductID: "ingredient-1", Description: "Asparagus"}})
+
+	require.NoError(t, err)
+	require.Len(t, graded, 1)
+	assert.Equal(t, "ingredient-1", graded[0].ProductID)
+	assert.Equal(t, 3, calls)
+}
+
+func TestGradeIngredientsSalvagesKnownProductsAfterRetries(t *testing.T) {
+	body := `{"grades":[{"id":"ingredient-1","score":8,"reason":"Fresh vegetable."},{"id":"0000000004130","score":7,"reason":"Useful ingredient."}]}`
+	calls := 0
+	grader := NewIngredientGrader("test-key", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		return ingredientGradeHTTPResponse(req, body), nil
+	})})
+	grader.retryWait = func(context.Context, time.Duration) error { return nil }
+
+	graded, err := grader.GradeIngredients(t.Context(), []InputIngredient{
+		{ProductID: "ingredient-1", Description: "Asparagus"},
+		{ProductID: "ingredient-2", Description: "Broccoli"},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, graded, 1)
+	assert.Equal(t, "ingredient-1", graded[0].ProductID)
+	assert.Equal(t, 3, calls)
+}
+
+func ingredientGradeHTTPResponse(req *http.Request, output string) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+			"id":"resp-grade",
+			"object":"response",
+			"created_at":1778529600,
+			"status":"completed",
+			"model":%q,
+			"output":[{"id":"msg-grade","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":%q,"annotations":[]}]}],
+			"usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}
+		}`, gpt56Luna, output))),
+		Request: req,
+	}
 }
 
 func TestParseIngredientGrades(t *testing.T) {

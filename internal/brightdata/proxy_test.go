@@ -109,6 +109,41 @@ func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	}
 }
 
+func TestNewProxySessionHTTPClient_UsesFreshSessionWithoutNestedRetries(t *testing.T) {
+	t.Parallel()
+
+	client, err := NewProxySessionHTTPClient(ProxyConfig{
+		Host:     "brd.superproxy.io",
+		Port:     "33335",
+		Username: "user-name",
+		Password: "secret-pass",
+	}, "attempt2")
+	if err != nil {
+		t.Fatalf("NewProxySessionHTTPClient() error = %v", err)
+	}
+
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected direct *http.Transport without nested retries, got %T", client.Transport)
+	}
+	proxyURL, err := transport.Proxy(mustRequest(t, http.MethodGet))
+	if err != nil {
+		t.Fatalf("transport.Proxy() error = %v", err)
+	}
+	if got, want := proxyURL.User.Username(), "user-name-session-attempt2"; got != want {
+		t.Fatalf("unexpected proxy username: got %q want %q", got, want)
+	}
+}
+
+func TestNewProxySessionHTTPClient_RejectsInvalidSessionID(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewProxySessionHTTPClient(ProxyConfig{}, "attempt-2")
+	if err == nil {
+		t.Fatal("expected invalid session ID error")
+	}
+}
+
 func TestWithRetries_OnlyRetriesGet5xx(t *testing.T) {
 	t.Parallel()
 

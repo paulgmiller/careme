@@ -2,7 +2,9 @@ package recipes
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -347,6 +349,18 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 	if err != nil {
 		return nil, fmt.Errorf("create farmers market staples provider: %w", err)
 	}
+	wholeFoodsProvider := wholefoods.NewStaplesProviderFactory(func() (wholefoods.CategoryClient, error) {
+		sessionID, err := newBrightDataSessionID()
+		if err != nil {
+			return nil, err
+		}
+		httpClient, err := brightdata.NewProxySessionHTTPClient(cfg.BrightDataProxy, sessionID)
+		if err != nil {
+			return nil, err
+		}
+		httpClient.Transport = otelhttp.NewTransport(httpClient.Transport)
+		return wholefoods.NewClient(httpClient), nil
+	})
 
 	return []backendStaplesProvider{
 		albertsonsProvider,
@@ -357,8 +371,16 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		farmersMarketProvider,
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
-		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
+		wholeFoodsProvider,
 	}, nil
+}
+
+func newBrightDataSessionID() (string, error) {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return "", fmt.Errorf("generate bright data session ID: %w", err)
+	}
+	return hex.EncodeToString(id[:]), nil
 }
 
 func defaultIdentityProviders() []identityProvider {
