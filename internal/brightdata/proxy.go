@@ -27,6 +27,28 @@ type ProxyConfig struct {
 	Password string `json:"password"`
 }
 
+type proxySessionIDContextKey struct{}
+
+// WithProxySessionID requests a sticky Bright Data proxy peer for the lifetime
+// of ctx. Callers should use a different alphanumeric ID when they want a
+// different peer.
+func WithProxySessionID(ctx context.Context, sessionID string) context.Context {
+	if sessionID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, proxySessionIDContextKey{}, sessionID)
+}
+
+// ProxySessionIDFromContext returns the Bright Data proxy session associated
+// with ctx.
+func ProxySessionIDFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	sessionID, ok := ctx.Value(proxySessionIDContextKey{}).(string)
+	return sessionID, ok && sessionID != ""
+}
+
 func LoadConfig() ProxyConfig {
 	return ProxyConfig{
 		Host:     os.Getenv("BRIGHTDATA_PROXY_HOST"),
@@ -78,7 +100,17 @@ func newProxyTransport(cfg ProxyConfig) (*http.Transport, error) {
 
 	// this feels funny
 	proxyTransport := http.DefaultTransport.(*http.Transport).Clone()
-	proxyTransport.Proxy = http.ProxyURL(cfg.proxyURL())
+	proxyURL := cfg.proxyURL()
+	proxyTransport.Proxy = func(req *http.Request) (*url.URL, error) {
+		sessionID, ok := ProxySessionIDFromContext(req.Context())
+		if !ok {
+			return proxyURL, nil
+		}
+
+		requestProxyURL := *proxyURL
+		requestProxyURL.User = url.UserPassword(cfg.Username+"-session-"+sessionID, cfg.Password)
+		return &requestProxyURL, nil
+	}
 	proxyTransport.TLSClientConfig = &tls.Config{RootCAs: rootCAs}
 	return proxyTransport, nil
 }
