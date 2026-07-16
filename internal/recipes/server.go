@@ -1326,7 +1326,12 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
-			s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
+			var staplesErr *staplesUnavailableError
+			if errors.As(err, &staplesErr) {
+				s.writeGenerationStatus(ctx, hash, recipestatus.StaplesUnavailable())
+			} else {
+				s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
+			}
 			return
 		}
 
