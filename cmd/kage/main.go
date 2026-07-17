@@ -67,53 +67,40 @@ func main() {
 		log.Fatalf("decrypt file  %q: %s", *path, err)
 	}
 
-	plaintext, err := io.ReadAll(reader)
-	if err != nil {
-		log.Fatalf("read decrypted file %q: %s", *path, err)
-	}
-
-	secrets, err := secrets(bytes.NewReader(plaintext))
+	secrets, err := secrets(reader)
 	if err != nil {
 		panic(err)
 	}
-	recipientsPath := filepath.Join(filepath.Dir(*path), recipientsFilename)
 
-	if *reencrypt {
+	if *reencrypt || *setSecret != "" {
+		// todo let them specify
+		recipientsPath := filepath.Join(filepath.Dir(*path), recipientsFilename)
+
 		recipients, err := loadRecipients(recipientsPath)
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := encryptFile(*path, recipients, func(writer io.Writer) error {
-			_, err := writer.Write(plaintext)
-			return err
-		}); err != nil {
-			log.Fatal(err)
+		if *setSecret != "" {
+			secretName, key, value, err := parseSetArg(*setSecret)
+			if err != nil {
+				log.Fatal(err)
+			}
+			var changed bool
+			secrets, changed = setSecretValue(secrets, secretName, key, value)
+			if !changed {
+				log.Printf("%s/%s unchanged", secretName, key)
+				return
+			}
+			log.Printf("updated %s/%s", secretName, key)
 		}
-		log.Printf("re-encrypted %s using %s", *path, recipientsPath)
-		return
-	}
 
-	if *setSecret != "" {
-		secretName, key, value, err := parseSetArg(*setSecret)
-		if err != nil {
-			log.Fatal(err)
-		}
-		newSecretsFile, changed := setSecretValue(secrets, secretName, key, value)
-		if !changed {
-			log.Printf("%s/%s unchanged", secretName, key)
-			return
-		}
-		if err := newSecretsFile.validate(); err != nil {
+		if err := secrets.validate(); err != nil {
 			log.Fatalf("updated secrets did not validate: %s", err)
 		}
-		recipients, err := loadRecipients(recipientsPath)
-		if err != nil {
+		if err := encryptFile(*path, recipients, secrets.write); err != nil {
 			log.Fatal(err)
 		}
-		if err := encryptFile(*path, recipients, newSecretsFile.write); err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("updated %s/%s in %s", secretName, key, *path)
+		log.Printf("updated %s", *path)
 		return
 	}
 
@@ -297,7 +284,7 @@ func loadRecipients(path string) ([]age.Recipient, error) {
 
 	var recipients []age.Recipient
 	scanner := bufio.NewScanner(file)
-	for lineNumber := 1; scanner.Scan(); lineNumber++ {
+	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -314,7 +301,7 @@ func loadRecipients(path string) ([]age.Recipient, error) {
 			}
 		}
 		if err != nil {
-			return nil, fmt.Errorf("parse recipient in %q at line %d: %w", path, lineNumber, err)
+			return nil, fmt.Errorf("parse recipient %q in %q : %w", line, path, err)
 		}
 		recipients = append(recipients, recipient)
 	}
