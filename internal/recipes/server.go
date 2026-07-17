@@ -824,7 +824,7 @@ func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recip
 	s.wg.Go(func() {
 		bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 		defer cancel()
-		s.ensureSavedRecipeImage(bgctx, recipeHash, recipe)
+		s.ensureRecipeImage(bgctx, recipeHash, recipe)
 	})
 }
 
@@ -848,23 +848,34 @@ func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, location
 	}
 }
 
-func (s *server) ensureSavedRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe) {
+func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe) {
 	exists, err := s.RecipeImageExists(ctx, recipeHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to check cached recipe image after save", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", recipeHash, "error", err)
 		return
 	}
 	if exists {
 		return
 	}
-	slog.InfoContext(ctx, "generating new image on save", "hash", recipeHash)
+	slog.InfoContext(ctx, "generating new recipe image", "hash", recipeHash)
 	image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to generate recipe image after save", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to generate recipe image", "hash", recipeHash, "error", err)
 		return
 	}
 	if err := s.SaveRecipeImage(ctx, recipeHash, image); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe image after save", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to save recipe image", "hash", recipeHash, "error", err)
+	}
+}
+
+func (s *server) kickRecipeImageGeneration(ctx context.Context, shoppingList *ai.ShoppingList) {
+	for _, recipe := range shoppingList.Recipes {
+		recipe := recipe
+		s.wg.Go(func() {
+			bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+			defer cancel()
+			s.ensureRecipeImage(bgctx, recipe.ComputeHash(), recipe)
+		})
 	}
 }
 
@@ -1327,6 +1338,10 @@ func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Re
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
+	s.kickgenerationAfter(ctx, p, nil)
+}
+
+func (s *server) kickgenerationAfter(ctx context.Context, p *generatorParams, after func(context.Context, *ai.ShoppingList)) {
 	hash := p.Hash()
 
 	s.wg.Go(func() {
@@ -1345,19 +1360,30 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			return
 		}
+		if after != nil {
+			after(ctx, shoppingList)
+		}
 	})
 }
 
 func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) error {
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
-			return nil // someone already kicked most likely. \
-			// Ideally we check params date and rekick if not finished in under one hour
+			shoppingList, err := s.FromCache(ctx, p.Hash())
+			if err != nil {
+				if errors.Is(err, cache.ErrNotFound) {
+					return nil // someone already kicked most likely.
+					// Ideally we check params date and rekick if not finished in under one hour
+				}
+				return fmt.Errorf("load existing shopping list: %w", err)
+			}
+			s.kickRecipeImageGeneration(ctx, shoppingList)
+			return nil
 		}
 		return fmt.Errorf("save params: %w", err)
 	}
 
-	s.kickgeneration(ctx, p)
+	s.kickgenerationAfter(ctx, p, s.kickRecipeImageGeneration)
 	return nil
 }
 

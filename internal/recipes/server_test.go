@@ -953,10 +953,11 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 }
 
 type captureKickgenerationGenerator struct {
-	mu     sync.Mutex
-	last   *generatorParams
-	err    error
-	called chan struct{}
+	mu           sync.Mutex
+	last         *generatorParams
+	err          error
+	called       chan struct{}
+	shoppingList *ai.ShoppingList
 }
 
 func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -977,6 +978,9 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	}
 	if c.err != nil {
 		return nil, c.err
+	}
+	if c.shoppingList != nil {
+		return c.shoppingList, nil
 	}
 	return &ai.ShoppingList{}, nil
 }
@@ -1117,6 +1121,55 @@ func TestKickGenerationIfNotPresent_SavesParamsAndKicksMissingShoppingList(t *te
 
 	_, err = s.ParamsFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
+}
+
+func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	recipe := ai.Recipe{Title: "Campaign Supper", Description: "A promoted dinner"}
+	generator := &captureKickgenerationGenerator{
+		shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
+	}
+	imageGenerator := &countingImageGenerator{imageBody: []byte("campaign-image")}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestGenerator(generator),
+		withImageGenerator(imageGenerator),
+	)
+
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
+	require.NoError(t, s.KickGenerationIfNotPresent(t.Context(), params))
+	s.Wait()
+
+	assert.Equal(t, 1, imageGenerator.imageCalls)
+	imageBody, err := s.RecipeImageFromCache(t.Context(), recipe.ComputeHash())
+	require.NoError(t, err)
+	require.NoError(t, imageBody.Close())
+}
+
+func TestKickGenerationIfNotPresent_KicksMissingImagesForCachedCampaignRecipes(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	recipe := ai.Recipe{Title: "Cached Campaign Supper", Description: "A promoted dinner"}
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	imageGenerator := &countingImageGenerator{imageBody: []byte("campaign-image")}
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestGenerator(generator),
+		withImageGenerator(imageGenerator),
+	)
+
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
+	require.NoError(t, s.SaveParams(t.Context(), params))
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, params.Hash()))
+
+	require.NoError(t, s.KickGenerationIfNotPresent(t.Context(), params))
+	s.Wait()
+
+	select {
+	case <-generator.called:
+		t.Fatal("unexpected recipe generation for cached campaign")
+	default:
+	}
+	assert.Equal(t, 1, imageGenerator.imageCalls)
 }
 
 func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
