@@ -2,14 +2,103 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"filippo.io/age"
+	"filippo.io/age/agessh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestLoadRecipients(t *testing.T) {
+	t.Parallel()
+
+	ageIdentity, err := age.GenerateX25519Identity()
+	require.NoError(t, err)
+	_, sshPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	sshPublicKey, err := ssh.NewPublicKey(sshPrivateKey.Public())
+	require.NoError(t, err)
+	sshIdentity, err := agessh.NewEd25519Identity(sshPrivateKey)
+	require.NoError(t, err)
+
+	directory := t.TempDir()
+	recipientsPath := filepath.Join(directory, recipientsFilename)
+	recipientsFile := strings.Join([]string{
+		"# team keys",
+		ageIdentity.Recipient().String(),
+		strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPublicKey))),
+		"",
+	}, "\n")
+	require.NoError(t, os.WriteFile(recipientsPath, []byte(recipientsFile), 0o600))
+
+	recipients, err := loadRecipients(recipientsPath)
+	require.NoError(t, err)
+	require.Len(t, recipients, 2)
+
+	const plaintext = "secret contents"
+	encryptedPath := filepath.Join(directory, "envtest")
+	require.NoError(t, encryptFile(encryptedPath, recipients, func(writer io.Writer) error {
+		_, err := io.WriteString(writer, plaintext)
+		return err
+	}))
+	assert.Equal(t, plaintext, decryptFile(t, encryptedPath, ageIdentity))
+	assert.Equal(t, plaintext, decryptFile(t, encryptedPath, sshIdentity))
+}
+
+func TestLoadRecipientsRejectsEmptyFile(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), recipientsFilename)
+	require.NoError(t, os.WriteFile(path, []byte("# no keys\n"), 0o600))
+
+	_, err := loadRecipients(path)
+	require.ErrorContains(t, err, "no recipients")
+}
+
+func TestEncryptFileDoesNotReplaceFileOnFailure(t *testing.T) {
+	t.Parallel()
+
+	identity, err := age.GenerateX25519Identity()
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "envtest")
+	require.NoError(t, os.WriteFile(path, []byte("original ciphertext"), 0o600))
+
+	err = encryptFile(path, []age.Recipient{identity.Recipient()}, func(writer io.Writer) error {
+		_, writeErr := io.WriteString(writer, "partial plaintext")
+		require.NoError(t, writeErr)
+		return errors.New("write failed")
+	})
+	require.ErrorContains(t, err, "write failed")
+	contents, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Equal(t, "original ciphertext", string(contents))
+}
+
+func decryptFile(t *testing.T, path string, identity age.Identity) string {
+	t.Helper()
+
+	file, err := os.Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, file.Close())
+	})
+	reader, err := age.Decrypt(file, identity)
+	require.NoError(t, err)
+	plaintext, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	return string(plaintext)
+}
 
 func TestSecretNeedsUpdate(t *testing.T) {
 	t.Parallel()
