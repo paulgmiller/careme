@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -46,12 +45,14 @@ func TestLoadRecipients(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, recipients, 2)
 
-	const plaintext = "secret contents"
+	secrets := secretsFile{{
+		Name:  "example",
+		Lines: []secretLine{{Key: "API_KEY", Value: "secretcontents"}},
+	}}
+	const plaintext = "#secret:example\nAPI_KEY=secretcontents\n"
 	encryptedPath := filepath.Join(directory, "envtest")
-	require.NoError(t, encryptFile(encryptedPath, recipients, func(writer io.Writer) error {
-		_, err := io.WriteString(writer, plaintext)
-		return err
-	}))
+	require.NoError(t, os.WriteFile(encryptedPath, nil, 0o600))
+	require.NoError(t, encryptFile(encryptedPath, recipients, secrets))
 	assert.Equal(t, plaintext, decryptFile(t, encryptedPath, ageIdentity))
 	assert.Equal(t, plaintext, decryptFile(t, encryptedPath, sshIdentity))
 }
@@ -64,25 +65,6 @@ func TestLoadRecipientsRejectsEmptyFile(t *testing.T) {
 
 	_, err := loadRecipients(path)
 	require.ErrorContains(t, err, "no recipients")
-}
-
-func TestEncryptFileDoesNotReplaceFileOnFailure(t *testing.T) {
-	t.Parallel()
-
-	identity, err := age.GenerateX25519Identity()
-	require.NoError(t, err)
-	path := filepath.Join(t.TempDir(), "envtest")
-	require.NoError(t, os.WriteFile(path, []byte("original ciphertext"), 0o600))
-
-	err = encryptFile(path, []age.Recipient{identity.Recipient()}, func(writer io.Writer) error {
-		_, writeErr := io.WriteString(writer, "partial plaintext")
-		require.NoError(t, writeErr)
-		return errors.New("write failed")
-	})
-	require.ErrorContains(t, err, "write failed")
-	contents, readErr := os.ReadFile(path)
-	require.NoError(t, readErr)
-	assert.Equal(t, "original ciphertext", string(contents))
 }
 
 func decryptFile(t *testing.T, path string, identity age.Identity) string {

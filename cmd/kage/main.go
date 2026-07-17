@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -42,9 +41,6 @@ func main() {
 	forreal := flag.Bool("apply", false, "actually apply secrets. Don't just print what would be done")
 	flag.Parse()
 	ctx := context.Background()
-	if *setSecret != "" && *reencrypt {
-		log.Fatal("set and reencrypt cannot be used together")
-	}
 
 	if *forreal {
 		log.Printf("THIS IS NOT A DRILL")
@@ -97,7 +93,7 @@ func main() {
 		if err := secrets.validate(); err != nil {
 			log.Fatalf("updated secrets did not validate: %s", err)
 		}
-		if err := encryptFile(*path, recipients, secrets.write); err != nil {
+		if err := encryptFile(*path, recipients, secrets); err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("updated %s", *path)
@@ -273,6 +269,7 @@ func maskedSecretValue(value string) string {
 	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
 }
 
+// parses a file that can have age or ssh keys
 func loadRecipients(path string) ([]age.Recipient, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -315,32 +312,27 @@ func loadRecipients(path string) ([]age.Recipient, error) {
 	return recipients, nil
 }
 
-func encryptFile(path string, recipients []age.Recipient, writePlaintext func(io.Writer) error) error {
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".kage-*")
+func encryptFile(path string, recipients []age.Recipient, secrets secretsFile) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("create temporary encrypted file: %w", err)
+		return fmt.Errorf("open encrypted file %q: %w", path, err)
 	}
-	temporaryPath := temporary.Name()
 	defer func() {
-		_ = temporary.Close()
-		_ = os.Remove(temporaryPath)
+		_ = file.Close()
 	}()
 
-	writer, err := age.Encrypt(temporary, recipients...)
+	writer, err := age.Encrypt(file, recipients...)
 	if err != nil {
 		return fmt.Errorf("start encryption: %w", err)
 	}
-	if err := writePlaintext(writer); err != nil {
+	if err := secrets.write(writer); err != nil {
 		return fmt.Errorf("write encrypted file: %w", err)
 	}
 	if err := writer.Close(); err != nil {
 		return fmt.Errorf("finish encryption: %w", err)
 	}
-	if err := temporary.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		return fmt.Errorf("close encrypted file: %w", err)
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return fmt.Errorf("replace encrypted file %q: %w", path, err)
 	}
 	return nil
 }
