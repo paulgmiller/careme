@@ -205,42 +205,44 @@
 </article>
 {{else}}
 <article id="shopping-recipe-{{.Hash}}" class="shopping-recipe-card space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-  <header class="space-y-4">
-    <div class="flex items-start gap-4">
-      <div class="min-w-0 flex-1">
-        <a href="/recipe/{{.Hash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-          {{.Title}}
+  <div class="space-y-5 sm:grid {{if .HasImage}}sm:grid-cols-[minmax(0,1fr)_25%]{{else}}sm:grid-cols-1{{end}} sm:items-start sm:gap-x-6 sm:gap-y-5 sm:space-y-0">
+    <header class="space-y-4 sm:contents">
+      <div class="flex items-start gap-4 sm:contents">
+        <div class="min-w-0 flex-1 sm:col-start-1 sm:row-start-1">
+          <a href="/recipe/{{.Hash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+            {{.Title}}
+          </a>
+          <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
+        </div>
+        {{if .HasImage}}
+        <a href="/recipe/{{.Hash}}" class="w-1/4 shrink-0 overflow-hidden rounded-xl border border-brand-100 bg-brand-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 sm:col-start-2 sm:row-span-3 sm:row-start-1 sm:w-full">
+          <img src="/recipe/{{.Hash}}/image"
+               alt="{{.Title}}"
+               class="h-auto w-full object-cover"
+               loading="lazy" />
         </a>
-        <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
+        {{end}}
       </div>
-      {{if .HasImage}}
-      <a href="/recipe/{{.Hash}}" style="width: 25%" class="shrink-0 overflow-hidden rounded-xl border border-brand-100 bg-brand-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-        <img src="/recipe/{{.Hash}}/image"
-             alt="{{.Title}}"
-             class="h-auto w-full object-cover"
-             loading="lazy" />
-      </a>
-      {{end}}
-    </div>
-    <div class="flex flex-wrap items-center gap-3">
-      {{template "shopping_recipe_actions" .}}
-      <button type="button"
-              onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
-              class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-        Details
-      </button>
-    </div>
-  </header>
+      <div class="flex flex-wrap items-center gap-3 sm:col-start-1 sm:row-start-2">
+        {{template "shopping_recipe_actions" .}}
+        <button type="button"
+                onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
+                class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+          Details
+        </button>
+      </div>
+    </header>
 
-  <div class="space-y-2 text-sm text-ink-600">
-    {{if .CookTime}}
-    <p><span class="font-semibold text-brand-700">Total time:</span> {{.CookTime}}</p>
-    {{end}}
-    {{if .CostEstimate}}
-    <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.CostEstimate}}</p>
-    {{end}}
-    <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
-    <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
+    <div class="space-y-2 text-sm text-ink-600 sm:col-start-1 sm:row-start-3">
+      {{if .CookTime}}
+      <p><span class="font-semibold text-brand-700">Total time:</span> {{.CookTime}}</p>
+      {{end}}
+      {{if .CostEstimate}}
+      <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.CostEstimate}}</p>
+      {{end}}
+      <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Health}}</p>
+      <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
+    </div>
   </div>
 
   <details class="space-y-4">

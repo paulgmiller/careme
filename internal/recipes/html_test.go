@@ -787,7 +787,7 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	}
 }
 
-func TestFormatShoppingListHTML_RendersRecipeImageAtQuarterWidth(t *testing.T) {
+func TestFormatShoppingListHTML_RendersRecipeImageInResponsiveQuarterWidthColumn(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
@@ -797,7 +797,9 @@ func TestFormatShoppingListHTML_RendersRecipeImageAtQuarterWidth(t *testing.T) {
 	html := assertHTTPSuccess(t, w)
 
 	assert.Contains(t, html, `src="/recipe/`+recipeHash+`/image"`)
-	assert.Contains(t, html, `style="width: 25%"`)
+	assert.Contains(t, html, `sm:grid-cols-[minmax(0,1fr)_25%]`)
+	assert.Contains(t, html, `w-1/4 shrink-0`)
+	assert.Contains(t, html, `sm:row-span-3`)
 }
 
 func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {

@@ -1211,31 +1211,31 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
 		recipeImages := make(map[string]bool, len(slist.Recipes))
-		var wineWG sync.WaitGroup
-		var wineMu sync.Mutex
-		wineWG.Add(len(slist.Recipes))
+		var recipeWG sync.WaitGroup
+		var wineMu, imageMu sync.Mutex
 		for _, recipe := range slist.Recipes {
 			recipeHash := recipe.ComputeHash()
-			go func(recipeHash string) {
-				defer wineWG.Done()
-				hasImage := s.recipeImageExistsForCard(ctx, recipeHash)
+			recipeWG.Go(func() {
 				wineRecommendation, wineErr := s.WineFromCache(ctx, recipeHash)
 				if wineErr != nil {
 					if !errors.Is(wineErr, cache.ErrNotFound) {
 						slog.ErrorContext(ctx, "failed to load cached wine recommendation for shopping list render", "recipe_hash", recipeHash, "error", wineErr)
 					}
-					wineMu.Lock()
-					recipeImages[recipeHash] = hasImage
-					wineMu.Unlock()
 					return
 				}
 				wineMu.Lock()
-				recipeImages[recipeHash] = hasImage
 				wineRecommendations[recipeHash] = wineRecommendation
 				wineMu.Unlock()
-			}(recipeHash)
+			})
+			recipeWG.Go(func() {
+				hasImage := s.recipeImageExistsForCard(ctx, recipeHash)
+				imageMu.Lock()
+				recipeImages[recipeHash] = hasImage
+				imageMu.Unlock()
+			})
+
 		}
-		wineWG.Wait()
+		recipeWG.Wait()
 
 		help := r.URL.Query().Get(QueryArgHelp)
 		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wineRecommendations, recipeImages, currentUser,
