@@ -511,6 +511,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		http.Error(w, "failed to save refreshed recipe", http.StatusInternalServerError)
 		return
 	}
+	// this is wierd. Excite to move to spin
 	if replaced {
 		if params, err := s.ParamsFromCache(ctx, recipe.OriginHash); err != nil {
 			slog.ErrorContext(ctx, "couldn't look up params", "hash", newHash, "origin", recipe.OriginHash)
@@ -822,9 +823,7 @@ func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recip
 		s.ensureSavedRecipeWine(bgctx, recipeHash, locationID, recipe, date)
 	})
 	s.wg.Go(func() {
-		bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
-		defer cancel()
-		s.ensureRecipeImage(bgctx, recipeHash, recipe)
+		s.ensureRecipeImage(ctx, recipeHash, recipe)
 	})
 }
 
@@ -849,6 +848,10 @@ func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, location
 }
 
 func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe) {
+	// 4 minutes is a magical number here. neeed to look at data.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Minute)
+	defer cancel()
+
 	exists, err := s.RecipeImageExists(ctx, recipeHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", recipeHash, "error", err)
@@ -1351,10 +1354,10 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 // 3 generate images.
 // Could try and consolidate and
 func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) {
-	// 10 minutes is magic what should it be?
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
-	defer cancel()
 	s.wg.Go(func() {
+		// 5 minutes is magic what should it be?
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		defer cancel()
 		if err := s.SaveParams(ctx, p); err != nil {
 			if errors.Is(err, ErrAlreadyExists) {
 				slog.ErrorContext(ctx, "save params for campaigns already exists")
@@ -1380,8 +1383,6 @@ func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorPar
 		// don't really need to wait on full shopping list but generator doesn't have a channel
 		for _, recipe := range shoppingList.Recipes {
 			s.wg.Go(func() {
-				ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
-				defer cancel()
 				s.ensureRecipeImage(ctx, recipe.ComputeHash(), recipe)
 			})
 		}
