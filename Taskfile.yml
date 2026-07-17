@@ -200,6 +200,25 @@ tasks:
     cmds:
       - go run ./cmd/producecheck -location {{.LOCATION}}
 
+  recipe-eval:
+    desc: Evaluate ingredient coverage and step quantities in fresh AI recipes
+    env:
+      PROMPTFOO_CONFIG_DIR: .promptfoo
+      PROMPTFOO_DISABLE_TELEMETRY: "true"
+      PROMPTFOO_DISABLE_WAL_MODE: "true"
+    cmds:
+      - npm exec --prefix evals/recipe-instructions -- promptfoo eval --config evals/recipe-instructions/promptfooconfig.yaml --no-cache --no-share --output /tmp/careme-recipe-eval.json
+      - jq -e '.results.stats.failures == 0 and .results.stats.errors == 0' /tmp/careme-recipe-eval.json
+
+  recipe-eval-view:
+    desc: Open the local Promptfoo recipe eval results viewer
+    env:
+      PROMPTFOO_CONFIG_DIR: .promptfoo
+      PROMPTFOO_DISABLE_TELEMETRY: "true"
+      PROMPTFOO_DISABLE_WAL_MODE: "true"
+    cmds:
+      - npm exec --prefix evals/recipe-instructions -- promptfoo view
+
   deploy:
     desc: Deploy the app using deploy/deploy.sh
     vars:
