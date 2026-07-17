@@ -86,7 +86,7 @@ func runServer(cfg *config.Config, addr string) error {
 		critiquer := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(critiquer)
 
-		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
+		aiclient := ai.NewClient(cfg.AI.APIKey, ai.DefaultRecipeModel, aiHTTPClient, prompts.NewCacheRecorder(cache))
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)

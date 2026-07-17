@@ -20,7 +20,7 @@ const (
 	gpt56Terra = "gpt-5.6-terra"
 	gpt56Luna  = "gpt-5.6-luna"
 
-	defaultRecipeModel = gpt56Sol
+	DefaultRecipeModel = gpt56Sol
 )
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
@@ -185,6 +185,37 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
 }
 
+func (c *client) ReplayRecipePrompt(ctx context.Context, record *PromptRecord) (*Recipe, error) {
+	if record == nil {
+		return nil, fmt.Errorf("prompt record is required")
+	}
+	promptMessages := cleanInstructionMessagesFromPrompt(record.Input)
+	if len(promptMessages) == 0 {
+		return nil, fmt.Errorf("prompt record input is required")
+	}
+	instructions := strings.TrimSpace(record.Instructions)
+	if instructions == "" {
+		instructions = systemMessage
+	}
+
+	params := responses.ResponseNewParams{
+		Model:        c.model,
+		Instructions: openai.String(instructions),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messagesToInput(promptMessages),
+		},
+		Store: openai.Bool(true),
+		Text:  scheme(c.recipeSchema),
+	}
+	resp, err := c.oai.Responses.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to replay recipe prompt: %w", err)
+	}
+	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
+
+	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+}
+
 func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
@@ -192,7 +223,8 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	}
 
 	params := responses.ResponseNewParams{
-		Model:        c.model,
+		Model: c.model,
+		// TODO: Evaluate replacing "Be concise" with outcome-focused detail guidance for GPT-5.6.
 		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(question)},
@@ -218,6 +250,22 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 		Answer:     answer,
 		ResponseID: resp.ID,
 	}, nil
+}
+
+func cleanInstructionMessagesFromPrompt(messages []PromptMessage) []PromptMessage {
+	cleaned := make([]PromptMessage, 0, len(messages))
+	for _, msg := range messages {
+		role := strings.TrimSpace(msg.Role)
+		content := strings.TrimSpace(msg.Content)
+		if role == "" || content == "" {
+			continue
+		}
+		cleaned = append(cleaned, PromptMessage{
+			Role:    role,
+			Content: content,
+		})
+	}
+	return cleaned
 }
 
 func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr {
