@@ -41,7 +41,7 @@ func assertHTTPSuccess(t *testing.T, w *httptest.ResponseRecorder) string {
 }
 
 func formatShoppingListHTMLForTest(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, selection recipeSelection, w *httptest.ResponseRecorder) {
-	FormatShoppingListHTMLForHashWithHelp(ctx, p, l, nil, renderTestUser(signedIn), p.Hash(), selection, "", w)
+	FormatShoppingListHTMLForHashWithHelp(ctx, p, l, nil, nil, renderTestUser(signedIn), p.Hash(), selection, "", w)
 }
 
 func renderTestUser(signedIn bool) *utypes.User {
@@ -228,7 +228,7 @@ func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 
-	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, renderTestUser(true), p.Hash(), recipeSelection{}, "Save two dinners before building your shopping list.", w)
+	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, nil, renderTestUser(true), p.Hash(), recipeSelection{}, "Save two dinners before building your shopping list.", w)
 
 	html := assertHTTPSuccess(t, w)
 	assert.Contains(t, html, "Welcome to Careme")
@@ -787,6 +787,19 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingListHTML_RendersRecipeImageAtQuarterWidth(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+	recipeHash := list.Recipes[0].ComputeHash()
+
+	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, map[string]bool{recipeHash: true}, renderTestUser(true), p.Hash(), recipeSelection{}, "", w)
+	html := assertHTTPSuccess(t, w)
+
+	assert.Contains(t, html, `src="/recipe/`+recipeHash+`/image"`)
+	assert.Contains(t, html, `style="width: 25%"`)
+}
+
 func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
@@ -821,7 +834,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 			},
 			Commentary: "Good with roasted flavors.",
 		},
-	}, renderTestUser(true), p.Hash(), selection, "", w)
+	}, nil, renderTestUser(true), p.Hash(), selection, "", w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
