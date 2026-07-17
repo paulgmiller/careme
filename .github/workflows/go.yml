@@ -1,9 +1,6 @@
 # .github/workflows/ghcr-publish-pr-gate.yml
 name: Build and Publish
 
-env:
-  GOLANGCI_LINT_CACHE: /tmp/golangci-lint
-
 on:
   push:
     branches: [master, main]
@@ -84,11 +81,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install golangci-lint
-        run: bash tools/install.sh golangci-lint
+      - name: Read tool versions
+        id: tool-versions
+        run: |
+          source tools/versions.sh
+          echo "golangci-lint=${GOLANGCI_LINT_VERSION}" >> "${GITHUB_OUTPUT}"
 
       - name: Run golangci-lint
-        run: ./bin/golangci-lint run ./... --timeout=5m
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ steps.tool-versions.outputs.golangci-lint }}
+          args: --timeout=5m
 
   js-lint:
     name: js-lint
