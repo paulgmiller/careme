@@ -85,9 +85,10 @@ func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	urls := make([]string, 0, 10)
+	urls := make([]string, 0, 20)
 	for _, recipe := range lo.Take(currentUser.LastRecipes, 10) {
-		urls = append(urls, s.publicOrigin+"/recipe/"+recipe.Hash)
+		recipeURL := s.publicOrigin + "/recipe/" + recipe.Hash
+		urls = append(urls, recipeURL, recipeURL+"/image")
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")

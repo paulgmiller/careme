@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -90,14 +91,20 @@ func TestHandleOfflineRecipeCacheReturnsLatestTenSavedRecipes(t *testing.T) {
 		t.Fatalf("expected text content type, got %q", got)
 	}
 	lines := strings.Fields(rr.Body.String())
-	if len(lines) != 10 {
-		t.Fatalf("expected 10 recipes, got %#v", lines)
+	if len(lines) != 20 {
+		t.Fatalf("expected 10 recipe pages and 10 images, got %#v", lines)
 	}
 	if got, want := lines[0], "https://careme.example/recipe/hash-11"; got != want {
 		t.Fatalf("expected newest recipe URL %q, got %q", want, got)
 	}
-	if got, want := lines[9], "https://careme.example/recipe/hash-2"; got != want {
+	if got, want := lines[1], "https://careme.example/recipe/hash-11/image"; got != want {
+		t.Fatalf("expected newest recipe image URL %q, got %q", want, got)
+	}
+	if got, want := lines[18], "https://careme.example/recipe/hash-2"; got != want {
 		t.Fatalf("expected tenth recipe URL %q, got %q", want, got)
+	}
+	if got, want := lines[19], "https://careme.example/recipe/hash-2/image"; got != want {
+		t.Fatalf("expected tenth recipe image URL %q, got %q", want, got)
 	}
 }
 
@@ -125,8 +132,8 @@ func TestNewHandlerStoresConfiguredPublicOriginForOfflineRecipes(t *testing.T) {
 
 	s.handleOfflineRecipeCache(rr, req)
 
-	if got, want := strings.TrimSpace(rr.Body.String()), "https://configured.example/recipe/hash-1"; got != want {
-		t.Fatalf("expected configured origin URL %q, got %q", want, got)
+	if got, want := strings.Fields(rr.Body.String()), []string{"https://configured.example/recipe/hash-1", "https://configured.example/recipe/hash-1/image"}; !slices.Equal(got, want) {
+		t.Fatalf("expected configured origin URLs %#v, got %#v", want, got)
 	}
 }
 
@@ -158,8 +165,8 @@ func TestHandleOfflineRecipeCacheKeepsRecipeHashPaddingUnescaped(t *testing.T) {
 
 	s.handleOfflineRecipeCache(rr, req)
 
-	if got, want := strings.TrimSpace(rr.Body.String()), "https://careme.example/recipe/abc123=="; got != want {
-		t.Fatalf("expected raw padded hash URL %q, got %q", want, got)
+	if got, want := strings.Fields(rr.Body.String()), []string{"https://careme.example/recipe/abc123==", "https://careme.example/recipe/abc123==/image"}; !slices.Equal(got, want) {
+		t.Fatalf("expected raw padded hash URLs %#v, got %#v", want, got)
 	}
 }
 
