@@ -1,12 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -28,6 +28,7 @@ const (
 	managedByAnnotationValue = "github.com/paulgmiller/kage"
 	secretCommentPrefix      = "secret:"
 	minSecretValueLength     = 5
+	recipientsFilename       = "recipients.txt"
 )
 
 // kage is my dumbed down vesion of https://github.com/getsops/sops
@@ -36,6 +37,7 @@ func main() {
 	namespace := flag.String("ns", "", "k8s namespace")
 	check := flag.Bool("check", false, "dump secret names")
 	setSecret := flag.String("set", "", "add or update a secret value as secret/key=value")
+	reencrypt := flag.Bool("reencrypt", false, "re-encrypt the secret file using its recipients.txt")
 	forreal := flag.Bool("apply", false, "actually apply secrets. Don't just print what would be done")
 	flag.Parse()
 	ctx := context.Background()
@@ -61,50 +63,40 @@ func main() {
 		log.Fatalf("decrypt file  %q: %s", *path, err)
 	}
 
-	plaintext, err := io.ReadAll(reader)
-	if err != nil {
-		log.Fatalf("read decrypted file %q: %s", *path, err)
-	}
-
-	secrets, err := secrets(bytes.NewReader(plaintext))
+	secrets, err := secrets(reader)
 	if err != nil {
 		panic(err)
 	}
 
-	if *setSecret != "" {
-		secretName, key, value, err := parseSetArg(*setSecret)
+	if *reencrypt || *setSecret != "" {
+		// todo let them specify
+		recipientsPath := filepath.Join(filepath.Dir(*path), recipientsFilename)
+
+		recipients, err := loadRecipients(recipientsPath)
 		if err != nil {
 			log.Fatal(err)
 		}
-		newSecretsFile, changed := setSecretValue(secrets, secretName, key, value)
-		if !changed {
-			log.Printf("%s/%s unchanged", secretName, key)
-			return
+		if *setSecret != "" {
+			secretName, key, value, err := parseSetArg(*setSecret)
+			if err != nil {
+				log.Fatal(err)
+			}
+			var changed bool
+			secrets, changed = setSecretValue(secrets, secretName, key, value)
+			if !changed {
+				log.Printf("%s/%s unchanged", secretName, key)
+				return
+			}
+			log.Printf("updated %s/%s", secretName, key)
 		}
-		if err := newSecretsFile.validate(); err != nil {
+
+		if err := secrets.validate(); err != nil {
 			log.Fatalf("updated secrets did not validate: %s", err)
 		}
-		recipients, err := loadSSHRecipients()
-		if err != nil {
+		if err := encryptFile(*path, recipients, secrets); err != nil {
 			log.Fatal(err)
 		}
-		file, err := os.OpenFile(*path, os.O_WRONLY|os.O_TRUNC, 0o600)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		writer, err := age.Encrypt(file, recipients...)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer func() {
-			_ = writer.Close()
-		}()
-
-		if err := newSecretsFile.write(writer); err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("updated %s/%s in %s", secretName, key, *path)
+		log.Printf("updated %s", *path)
 		return
 	}
 
@@ -277,24 +269,72 @@ func maskedSecretValue(value string) string {
 	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
 }
 
-func loadSSHRecipients() ([]age.Recipient, error) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return nil, fmt.Errorf("need a recipient")
-	}
-	path := filepath.Join(home, ".ssh", "id_ed25519.pub")
-
-	key, err := os.ReadFile(path)
+// parses a file that can have age or ssh keys
+func loadRecipients(path string) ([]age.Recipient, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("read ssh recipient %q: %w", path, err)
+		return nil, fmt.Errorf("open recipients file %q: %w", path, err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	var recipients []age.Recipient
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		var recipient age.Recipient
+		if strings.HasPrefix(line, "ssh-") {
+			recipient, err = agessh.ParseRecipient(line)
+		} else {
+			var parsed []age.Recipient
+			parsed, err = age.ParseRecipients(strings.NewReader(line))
+			if err == nil {
+				recipient = parsed[0]
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("parse recipient %q in %q : %w", line, path, err)
+		}
+		recipients = append(recipients, recipient)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read recipients file %q: %w", path, err)
+	}
+	if len(recipients) == 0 {
+		return nil, fmt.Errorf("no recipients in %q", path)
 	}
 
-	recipient, err := agessh.ParseRecipient(strings.TrimSpace(string(key)))
+	return recipients, nil
+}
+
+func encryptFile(path string, recipients []age.Recipient, secrets secretsFile) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("parse ssh recipient %q: %w", path, err)
+		return fmt.Errorf("open encrypted file %q: %w", path, err)
 	}
+	defer func() {
+		_ = file.Close()
+	}()
 
-	return []age.Recipient{recipient}, nil
+	writer, err := age.Encrypt(file, recipients...)
+	if err != nil {
+		return fmt.Errorf("start encryption: %w", err)
+	}
+	if err := secrets.write(writer); err != nil {
+		return fmt.Errorf("write encrypted file: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("finish encryption: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close encrypted file: %w", err)
+	}
+	return nil
 }
 
 // share with internal/config?
