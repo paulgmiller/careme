@@ -25,6 +25,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/guest"
 	"careme/internal/locations"
+	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	recipestatus "careme/internal/recipes/status"
@@ -652,7 +653,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		if err := RenderShoppingRecipeCardHTML(*recipe, saved, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+		if err := RenderShoppingRecipeCardHTML(*recipe, saved, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), s.recipeImageExistsForCard(ctx, recipeHash), &response); err != nil {
 			slog.ErrorContext(ctx, "failed to render save card response", "hash", recipeHash, "error", err)
 			http.Error(w, "failed to write response", http.StatusInternalServerError)
 			return
@@ -772,7 +773,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		if err := RenderShoppingRecipeCardHTML(*recipe, saved, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), &response); err != nil {
+		if err := RenderShoppingRecipeCardHTML(*recipe, saved, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), s.recipeImageExistsForCard(ctx, recipeHash), &response); err != nil {
 			slog.ErrorContext(ctx, "failed to render dismiss card response", "hash", recipeHash, "error", err)
 			http.Error(w, "failed to write response", http.StatusInternalServerError)
 			return
@@ -803,6 +804,15 @@ func (s *server) wineRecommendationForCard(ctx context.Context, recipeHash strin
 		return nil
 	}
 	return wineRecommendation
+}
+
+func (s *server) recipeImageExistsForCard(ctx context.Context, recipeHash string) bool {
+	exists, err := s.RecipeImageExists(ctx, recipeHash)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check cached recipe image for recipe card render", "recipe_hash", recipeHash, "error", err)
+		return false
+	}
+	return exists
 }
 
 func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, locationID string, date time.Time) {
@@ -1200,14 +1210,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		if !signedIn {
 			guest.EnsureShoppingListCount(w, r)
 		}
-		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
-		var wineWG sync.WaitGroup
-		var wineMu sync.Mutex
-		wineWG.Add(len(slist.Recipes))
+		wines := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))
+		images := parallelism.NewSafeMap[string, bool](len(slist.Recipes))
+		var recipeWG sync.WaitGroup
 		for _, recipe := range slist.Recipes {
 			recipeHash := recipe.ComputeHash()
-			go func(recipeHash string) {
-				defer wineWG.Done()
+			recipeWG.Go(func() {
 				wineRecommendation, wineErr := s.WineFromCache(ctx, recipeHash)
 				if wineErr != nil {
 					if !errors.Is(wineErr, cache.ErrNotFound) {
@@ -1215,15 +1223,18 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 					}
 					return
 				}
-				wineMu.Lock()
-				wineRecommendations[recipeHash] = wineRecommendation
-				wineMu.Unlock()
-			}(recipeHash)
+				wines.Set(recipeHash, wineRecommendation)
+			})
+			recipeWG.Go(func() {
+				hasImage := s.recipeImageExistsForCard(ctx, recipeHash)
+				images.Set(recipeHash, hasImage)
+			})
+
 		}
-		wineWG.Wait()
+		recipeWG.Wait()
 
 		help := r.URL.Query().Get(QueryArgHelp)
-		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wineRecommendations, currentUser,
+		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
 			hashParam, selection, help, w)
 		return
 	}
