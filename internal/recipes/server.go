@@ -511,6 +511,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		http.Error(w, "failed to save refreshed recipe", http.StatusInternalServerError)
 		return
 	}
+	// this is wierd. Excite to move to spin
 	if replaced {
 		if params, err := s.ParamsFromCache(ctx, recipe.OriginHash); err != nil {
 			slog.ErrorContext(ctx, "couldn't look up params", "hash", newHash, "origin", recipe.OriginHash)
@@ -822,9 +823,7 @@ func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recip
 		s.ensureSavedRecipeWine(bgctx, recipeHash, locationID, recipe, date)
 	})
 	s.wg.Go(func() {
-		bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
-		defer cancel()
-		s.ensureSavedRecipeImage(bgctx, recipeHash, recipe)
+		s.ensureRecipeImage(ctx, recipeHash, recipe)
 	})
 }
 
@@ -848,23 +847,27 @@ func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, location
 	}
 }
 
-func (s *server) ensureSavedRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe) {
+func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe) {
+	// 4 minutes is a magical number here. neeed to look at data.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Minute)
+	defer cancel()
+
 	exists, err := s.RecipeImageExists(ctx, recipeHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to check cached recipe image after save", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", recipeHash, "error", err)
 		return
 	}
 	if exists {
 		return
 	}
-	slog.InfoContext(ctx, "generating new image on save", "hash", recipeHash)
+	slog.InfoContext(ctx, "generating new recipe image", "hash", recipeHash)
 	image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to generate recipe image after save", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to generate recipe image", "hash", recipeHash, "error", err)
 		return
 	}
 	if err := s.SaveRecipeImage(ctx, recipeHash, image); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe image after save", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to save recipe image", "hash", recipeHash, "error", err)
 	}
 }
 
@@ -1328,11 +1331,8 @@ func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Re
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 	hash := p.Hash()
-
+	ctx = context.WithoutCancel(ctx)
 	s.wg.Go(func() {
-		// copy over request id to new context? can't be same context because end of http request will cancel it.
-		ctx := context.WithoutCancel(ctx)
-
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
@@ -1348,17 +1348,45 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 	})
 }
 
-func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) error {
-	if err := s.SaveParams(ctx, p); err != nil {
-		if errors.Is(err, ErrAlreadyExists) {
-			return nil // someone already kicked most likely. \
-			// Ideally we check params date and rekick if not finished in under one hour
+// Almost same as kick generation except
+// 1 doesn't bother to write status.
+// 2 saves params and skips if already there
+// 3 generate images.
+// Could try and consolidate and
+func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) {
+	s.wg.Go(func() {
+		// 5 minutes is magic what should it be?
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		defer cancel()
+		if err := s.SaveParams(ctx, p); err != nil {
+			if errors.Is(err, ErrAlreadyExists) {
+				slog.ErrorContext(ctx, "save params for campaigns already exists")
+				return
+			}
+			slog.ErrorContext(ctx, "save params for campaigns", "error", err)
+			return
 		}
-		return fmt.Errorf("save params: %w", err)
-	}
+		hash := p.Hash()
 
-	s.kickgeneration(ctx, p)
-	return nil
+		slog.InfoContext(ctx, "generating campaign recipes", "params", p.String(), "hash", hash)
+		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
+		if err != nil {
+			slog.ErrorContext(ctx, "generate error", "error", err)
+			return
+		}
+
+		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
+			slog.ErrorContext(ctx, "save error", "error", err)
+			return
+		}
+
+		// don't really need to wait on full shopping list but generator doesn't have a channel
+		for _, recipe := range shoppingList.Recipes {
+			s.wg.Go(func() {
+				s.ensureRecipeImage(ctx, recipe.ComputeHash(), recipe)
+			})
+		}
+	})
 }
 
 func (s *server) writeGenerationStatus(ctx context.Context, hash, status string) {

@@ -60,7 +60,7 @@ func AdvertisedRecipeLocations() map[string]campaign {
 }
 
 type recipeGenerationKickstarter interface {
-	KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams) error
+	KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams)
 }
 
 type advertisedLocationStore interface {
@@ -111,10 +111,6 @@ func (s advertisedGenerationServer) generateLocation(ctx context.Context, locati
 		return fmt.Errorf("resolve store date: %w", err)
 	}
 
-	err = s.generator.KickGenerationIfNotPresent(ctx, recipes.DefaultParams(loc, date))
-	if err != nil {
-		return fmt.Errorf("kick generation: %w", err)
-	}
-
+	s.generator.KickGenerationIfNotPresent(ctx, recipes.DefaultParams(loc, date))
 	return nil
 }
