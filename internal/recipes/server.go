@@ -1210,8 +1210,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		if !signedIn {
 			guest.EnsureShoppingListCount(w, r)
 		}
-		wineRecommendations := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))
-		recipeImages := parallelism.NewSafeMap[string, bool](len(slist.Recipes))
+		wines := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))
+		images := parallelism.NewSafeMap[string, bool](len(slist.Recipes))
 		var recipeWG sync.WaitGroup
 		for _, recipe := range slist.Recipes {
 			recipeHash := recipe.ComputeHash()
@@ -1223,18 +1223,18 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 					}
 					return
 				}
-				wineRecommendations.Set(recipeHash, wineRecommendation)
+				wines.Set(recipeHash, wineRecommendation)
 			})
 			recipeWG.Go(func() {
 				hasImage := s.recipeImageExistsForCard(ctx, recipeHash)
-				recipeImages.Set(recipeHash, hasImage)
+				images.Set(recipeHash, hasImage)
 			})
 
 		}
 		recipeWG.Wait()
 
 		help := r.URL.Query().Get(QueryArgHelp)
-		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wineRecommendations, recipeImages, currentUser,
+		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
 			hashParam, selection, help, w)
 		return
 	}
