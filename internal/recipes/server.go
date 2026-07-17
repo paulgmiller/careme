@@ -25,6 +25,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/guest"
 	"careme/internal/locations"
+	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	recipestatus "careme/internal/recipes/status"
@@ -1209,10 +1210,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		if !signedIn {
 			guest.EnsureShoppingListCount(w, r)
 		}
-		wineRecommendations := make(map[string]*ai.WineSelection, len(slist.Recipes))
-		recipeImages := make(map[string]bool, len(slist.Recipes))
+		wineRecommendations := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))
+		recipeImages := parallelism.NewSafeMap[string, bool](len(slist.Recipes))
 		var recipeWG sync.WaitGroup
-		var wineMu, imageMu sync.Mutex
 		for _, recipe := range slist.Recipes {
 			recipeHash := recipe.ComputeHash()
 			recipeWG.Go(func() {
@@ -1223,15 +1223,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 					}
 					return
 				}
-				wineMu.Lock()
-				wineRecommendations[recipeHash] = wineRecommendation
-				wineMu.Unlock()
+				wineRecommendations.Set(recipeHash, wineRecommendation)
 			})
 			recipeWG.Go(func() {
 				hasImage := s.recipeImageExistsForCard(ctx, recipeHash)
-				imageMu.Lock()
-				recipeImages[recipeHash] = hasImage
-				imageMu.Unlock()
+				recipeImages.Set(recipeHash, hasImage)
 			})
 
 		}
