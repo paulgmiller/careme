@@ -198,6 +198,8 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	success := false
+	var partnerMessage string
+	var partnerError string
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "invalid form submission", http.StatusBadRequest)
@@ -220,16 +222,29 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			currentUser.Directive = generationPrompt
 		}
 		currentUser.MailOptIn = r.FormValue("mail_opt_in") == "1"
+		if r.Form.Has("partner_email") {
+			partnerEmail := strings.TrimSpace(r.FormValue("partner_email"))
+			if partnerEmail != "" {
+				partner, err := s.storage.LinkPartners(currentUser, partnerEmail)
+				if err != nil {
+					partnerError = err.Error()
+				} else {
+					partnerMessage = "Kitchen joined with " + strings.Join(partner.Email, ", ")
+				}
+			}
+		}
 		if !favoriteBefore && strings.TrimSpace(currentUser.FavoriteStore) != "" {
 			currentUser.MailOptIn = true
 		}
 
-		if err := s.storage.Update(currentUser); err != nil {
-			slog.ErrorContext(ctx, "failed to update user", "error", err)
-			http.Error(w, "unable to save preferences", http.StatusInternalServerError)
-			return
+		if partnerError == "" {
+			if err := s.storage.Update(currentUser); err != nil {
+				slog.ErrorContext(ctx, "failed to update user", "error", err)
+				http.Error(w, "unable to save preferences", http.StatusInternalServerError)
+				return
+			}
 		}
-		success = true
+		success = partnerError == ""
 		activeTab = "customize"
 	}
 
@@ -256,6 +271,9 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		FavoriteStoreName string
 		ActiveTab         string
 		PastRecipes       []pastRecipeView
+		PartnerEmail      string
+		PartnerMessage    string
+		PartnerError      string
 		Style             seasons.Style
 		ServerSignedIn    bool
 	}{
@@ -266,6 +284,9 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		FavoriteStoreName: favoriteStoreName,
 		ActiveTab:         activeTab,
 		PastRecipes:       pastRecipeViews(ctx, s.storage.cache, userForTemplate.LastRecipes),
+		PartnerEmail:      s.partnerEmail(userForTemplate),
+		PartnerMessage:    partnerMessage,
+		PartnerError:      partnerError,
 		Style:             seasons.GetCurrentStyle(),
 		ServerSignedIn:    true,
 	}
@@ -426,4 +447,15 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 
 func isHTMXRequest(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
+}
+
+func (s *server) partnerEmail(user *utypes.User) string {
+	if user == nil || strings.TrimSpace(user.PartnerUserID) == "" {
+		return ""
+	}
+	partner, err := s.storage.GetByID(user.PartnerUserID)
+	if err != nil || len(partner.Email) == 0 {
+		return ""
+	}
+	return partner.Email[0]
 }
