@@ -2,6 +2,7 @@ package wholefoods
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"careme/internal/brightdata"
 	"careme/internal/httpretry"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
@@ -166,6 +168,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 func (c *client) Category(ctx context.Context, queryterm, store string) ([]product, error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultCategoryTimeout)
 	defer cancel()
+	ctx = brightdata.WithProxySessionID(ctx, rand.Text())
 
 	queryterm = strings.TrimSpace(queryterm)
 	if queryterm == "" {

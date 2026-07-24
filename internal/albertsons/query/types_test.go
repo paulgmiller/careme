@@ -4,31 +4,22 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPathwaySearchPayloadUnmarshalFixture(t *testing.T) {
 	t.Parallel()
 
 	raw, err := os.ReadFile("acmeresp.json")
-	if err != nil {
-		t.Fatalf("ReadFile(acmeresp.json) returned error: %v", err)
-	}
+	require.NoError(t, err)
 
 	var payload PathwaySearchPayload
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		t.Fatalf("Unmarshal returned error: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(raw, &payload))
 
-	if payload.Response.NumFound != 194 {
-		t.Fatalf("unexpected numFound: %d", payload.Response.NumFound)
-	}
-	if len(payload.Response.Docs) == 0 {
-		t.Fatal("expected docs to be populated")
-	}
-	if payload.Response.Docs[0].StoreID != "806" {
-		t.Fatalf("unexpected first doc storeId: %q", payload.Response.Docs[0].StoreID)
-	}
-	if payload.Response.Docs[0].ChannelEligibility.Delivery != true {
-		t.Fatalf("expected first doc delivery eligibility to be true")
-	}
+	assert.Equal(t, 194, payload.Response.NumFound)
+	require.NotEmpty(t, payload.Response.Docs)
+	assert.Equal(t, "806", payload.Response.Docs[0].StoreID)
+	assert.True(t, payload.Response.Docs[0].ChannelEligibility.Delivery)
 }

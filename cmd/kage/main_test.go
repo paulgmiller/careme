@@ -2,14 +2,85 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"filippo.io/age"
+	"filippo.io/age/agessh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestLoadRecipients(t *testing.T) {
+	t.Parallel()
+
+	ageIdentity, err := age.GenerateX25519Identity()
+	require.NoError(t, err)
+	_, sshPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	sshPublicKey, err := ssh.NewPublicKey(sshPrivateKey.Public())
+	require.NoError(t, err)
+	sshIdentity, err := agessh.NewEd25519Identity(sshPrivateKey)
+	require.NoError(t, err)
+
+	directory := t.TempDir()
+	recipientsPath := filepath.Join(directory, recipientsFilename)
+	recipientsFile := strings.Join([]string{
+		"# team keys",
+		ageIdentity.Recipient().String(),
+		strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPublicKey))),
+		"",
+	}, "\n")
+	require.NoError(t, os.WriteFile(recipientsPath, []byte(recipientsFile), 0o600))
+
+	recipients, err := loadRecipients(recipientsPath)
+	require.NoError(t, err)
+	require.Len(t, recipients, 2)
+
+	secrets := secretsFile{{
+		Name:  "example",
+		Lines: []secretLine{{Key: "API_KEY", Value: "secretcontents"}},
+	}}
+	const plaintext = "#secret:example\nAPI_KEY=secretcontents\n"
+	encryptedPath := filepath.Join(directory, "envtest")
+	require.NoError(t, os.WriteFile(encryptedPath, nil, 0o600))
+	require.NoError(t, encryptFile(encryptedPath, recipients, secrets))
+	assert.Equal(t, plaintext, decryptFile(t, encryptedPath, ageIdentity))
+	assert.Equal(t, plaintext, decryptFile(t, encryptedPath, sshIdentity))
+}
+
+func TestLoadRecipientsRejectsEmptyFile(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), recipientsFilename)
+	require.NoError(t, os.WriteFile(path, []byte("# no keys\n"), 0o600))
+
+	_, err := loadRecipients(path)
+	require.ErrorContains(t, err, "no recipients")
+}
+
+func decryptFile(t *testing.T, path string, identity age.Identity) string {
+	t.Helper()
+
+	file, err := os.Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, file.Close())
+	})
+	reader, err := age.Decrypt(file, identity)
+	require.NoError(t, err)
+	plaintext, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	return string(plaintext)
+}
 
 func TestSecretNeedsUpdate(t *testing.T) {
 	t.Parallel()

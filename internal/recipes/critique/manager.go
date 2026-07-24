@@ -3,6 +3,7 @@ package critique
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -16,22 +17,6 @@ import (
 
 const MinimumRecipeScore = 8
 
-type Result struct {
-	Critique *ai.RecipeCritique
-	Err      error
-}
-
-type Service interface {
-	CritiqueRecipe(ctx context.Context, recipes ai.Recipe) <-chan Result
-}
-
-// if we have web.go make rubbertamp directly this goes away
-type Manager interface {
-	Service
-	Wait()
-	Ready(ctx context.Context) error
-}
-
 type recipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
 	Ready(ctx context.Context) error
@@ -39,68 +24,68 @@ type recipeCritiquer interface {
 
 type rubberstamp struct{}
 
-func (r rubberstamp) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) <-chan Result {
-	result := make(chan Result, 1)
-	result <- Result{
-		Critique: &ai.RecipeCritique{OverallScore: 10},
-	}
-	close(result)
-	return result
+func (r rubberstamp) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
+	return &ai.RecipeCritique{OverallScore: 10}, nil
 }
 
 func (r rubberstamp) Wait()                           {}
 func (r rubberstamp) Ready(ctx context.Context) error { return nil }
 
-// mostly exists to wait on final criques before shutdown.
-// TODO waiting Critiquer
-type multiCritiquer struct {
+func NewMock(c cache.ListCache) *cachingCritiquer {
+	return newCachingCritiquer(rubberstamp{}, NewStore(c))
+}
+
+type waitingCritiquer struct {
 	critiquer recipeCritiquer
 	wg        sync.WaitGroup
 }
 
-func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) Manager {
+var _ recipeCritiquer = &waitingCritiquer{}
+
+func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) *waitingCritiquer {
 	if !cfg.Gemini.IsEnabled() {
-		return rubberstamp{}
+		panic("gemini must be enabled")
 	}
 	crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel, httpClient)
-	return &multiCritiquer{
+	return &waitingCritiquer{
 		critiquer: newCachingCritiquer(crit, NewStore(c)),
 	}
 }
 
-func (mc *multiCritiquer) Ready(ctx context.Context) error {
+func (mc *waitingCritiquer) Ready(ctx context.Context) error {
 	return mc.critiquer.Ready(ctx)
 }
 
 var tracer = otel.Tracer("careme/internal/recipes/critiques")
 
-func (mc *multiCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) <-chan Result {
-	result := make(chan Result)
-	mc.wg.Go(func() {
-		defer close(result)
-		ctx, span := tracer.Start(ctx, "critques.recipe")
-		defer span.End()
-		critique, err := mc.critiquer.CritiqueRecipe(ctx, recipe)
-		result <- Result{
-			Critique: critique,
-			Err:      err,
-		}
-	})
-
-	return result
+func (mc *waitingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
+	ctx, span := tracer.Start(ctx, "critques.recipe")
+	defer span.End()
+	return mc.critiquer.CritiqueRecipe(ctx, recipe)
 }
 
-func (mc *multiCritiquer) Wait() {
+func (mc *waitingCritiquer) CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe) {
+	mc.wg.Add(1)
+	go func() {
+		defer mc.wg.Done()
+		_, err := mc.CritiqueRecipe(ctx, recipe)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to critique recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", err)
+		}
+	}()
+}
+
+func (mc *waitingCritiquer) Wait() {
 	mc.wg.Wait()
 }
 
-func RetryInstructions(result Result) []string {
+func RetryInstructions(c ai.RecipeCritique) []string {
 	return []string{
 		"Revise recipe. Description should focus on selling the dish not these corrections.",
 		fmt.Sprintf("scored %d/10.\n Issues: %s\n Suggested fixes: %s",
-			result.Critique.OverallScore,
-			formatIssues(result.Critique.Issues),
-			formatSuggestedFixes(result.Critique.SuggestedFixes)),
+			c.OverallScore,
+			formatIssues(c.Issues),
+			formatSuggestedFixes(c.SuggestedFixes)),
 	}
 }
 

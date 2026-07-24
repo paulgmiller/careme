@@ -26,6 +26,8 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - is it realistic to cook as written
 - are the instructions coherent and complete
 - do the instructions begin with preparation before active cooking starts
+- does every mention of an ingredient in the instructions include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
+- do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list
 - are the applications of salt, acid, fat, and heat appropriate
 - are the timing and cost estimates plausible
 - does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking

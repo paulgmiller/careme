@@ -1,9 +1,6 @@
 # .github/workflows/ghcr-publish-pr-gate.yml
 name: Build and Publish
 
-env:
-  GOLANGCI_LINT_CACHE: /tmp/golangci-lint
-
 on:
   push:
     branches: [master, main]
@@ -84,11 +81,33 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install golangci-lint
-        run: bash tools/install.sh golangci-lint
+      - name: Read tool versions
+        id: tool-versions
+        run: |
+          source tools/versions.sh
+          echo "golangci-lint=${GOLANGCI_LINT_VERSION}" >> "${GITHUB_OUTPUT}"
 
       - name: Run golangci-lint
-        run: ./bin/golangci-lint run ./... --timeout=5m
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ steps.tool-versions.outputs.golangci-lint }}
+          args: --timeout=5m
+
+  js-lint:
+    name: js-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Run JavaScript lint
+        run: npm exec --yes --package eslint@10.4.0 -- eslint internal/static/user-clerk-billing.js internal/static/share.js
 
   k8s-lint:
     name: k8s-lint
@@ -112,7 +131,7 @@ jobs:
 
   publish:
     name: publish (${{ matrix.name }})
-    needs: [verify, vet, format, lint, k8s-lint]
+    needs: [verify, vet, format, lint, js-lint, k8s-lint]
     runs-on: ubuntu-latest
     permissions:
       contents: read

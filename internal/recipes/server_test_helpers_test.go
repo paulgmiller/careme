@@ -7,6 +7,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/recipes/critique"
 	"careme/internal/users"
 )
 
@@ -40,7 +41,7 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.storage = users.NewStorage(cfg.cache)
 	}
 	if cfg.generator == nil {
-		cfg.generator = NewMockGenerator(IO(cfg.cache))
+		cfg.generator = NewMockGenerator(IO(cfg.cache), critique.NewMock(cfg.cache))
 	}
 
 	if cfg.imagegen == nil {

@@ -65,22 +65,29 @@ func TestParseQueryArgs_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 	}
 }
 
-func TestTimezoneNameForZip(t *testing.T) {
-	cases := []struct {
-		zip      string
-		wantName string
-		wantOK   bool
-	}{
-		{zip: "10001", wantName: "America/New_York", wantOK: true},
-		{zip: "60601", wantName: "America/Chicago", wantOK: true},
-		{zip: "80202", wantName: "America/Denver", wantOK: true},
-		{zip: "94105", wantName: "America/Los_Angeles", wantOK: true},
-		{zip: "abcde", wantName: "", wantOK: false},
+func TestParseQueryArgs_CampaignInstructionsOnlyAffectsParams(t *testing.T) {
+	location := &locations.Location{
+		ID:      "loc-123",
+		Name:    "Test Store",
+		ZipCode: "10001",
 	}
-	for _, tc := range cases {
-		gotName, gotOK := timezoneNameForZip(tc.zip)
-		if gotName != tc.wantName || gotOK != tc.wantOK {
-			t.Fatalf("zip %q: got (%q,%t), want (%q,%t)", tc.zip, gotName, gotOK, tc.wantName, tc.wantOK)
-		}
+
+	req := httptest.NewRequest("GET", "/recipes?location=loc-123&instructions=make%20it%20vegetarian&help=Save%20two%20meals", nil)
+	p, err := ParseQueryArgs(context.Background(), req, staticLocationLookup{location: location})
+	if err != nil {
+		t.Fatalf("ParseQueryArgs returned error: %v", err)
+	}
+
+	if got, want := p.Instructions, "make it vegetarian"; got != want {
+		t.Fatalf("expected instructions %q, got %q", want, got)
+	}
+
+	reqWithoutHelp := httptest.NewRequest("GET", "/recipes?location=loc-123&instructions=make%20it%20vegetarian", nil)
+	pWithoutHelp, err := ParseQueryArgs(context.Background(), reqWithoutHelp, staticLocationLookup{location: location})
+	if err != nil {
+		t.Fatalf("ParseQueryArgs without help returned error: %v", err)
+	}
+	if got, want := p.Hash(), pWithoutHelp.Hash(); got != want {
+		t.Fatalf("help query should not influence params hash: got %q, want %q", got, want)
 	}
 }

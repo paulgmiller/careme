@@ -118,18 +118,44 @@ func TestRegisterServesUserClerkBillingJS(t *testing.T) {
 	}
 }
 
+func TestRegisterServesShareJS(t *testing.T) {
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/static/share.js", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("share js response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
+		t.Fatalf("share js content type = %q, want application/javascript; charset=utf-8", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=3600" {
+		t.Fatalf("share js cache control = %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), "navigator.share") {
+		t.Fatal("share js response should include Web Share logic")
+	}
+}
+
 func TestRegisterServesSeasonalBackgroundFromEnv(t *testing.T) {
 	t.Setenv(seasons.EnvSeason, "spring")
 	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/background.png", nil)
+	req := httptest.NewRequest(http.MethodGet, "/background.webp", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("background response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/webp" {
+		t.Fatalf("background content type = %q, want image/webp", got)
 	}
 	if rec.Body.Len() != len(backgroundSpring) {
 		t.Fatalf("background body length = %d, want spring length %d", rec.Body.Len(), len(backgroundSpring))

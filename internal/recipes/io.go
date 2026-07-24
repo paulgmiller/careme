@@ -151,6 +151,10 @@ func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	return nil
 }
 
+func (rio recipeio) ParamsExist(ctx context.Context, p *generatorParams) (bool, error) {
+	return rio.Cache.Exists(ctx, paramsCachePrefix+p.Hash())
+}
+
 func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
 	// we could actually nuke out the rest of recipes and lazily load but not yet. Storage is cheap?
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))

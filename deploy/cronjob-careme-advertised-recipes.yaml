@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: careme-advertised-recipes
+  labels:
+    app: careme-advertised-recipes
+spec:
+  schedule: "${ADVERTISED_RECIPES_SCHEDULE}"
+  timeZone: "America/Los_Angeles"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: careme-advertised-recipes
+            job: careme-advertised-recipes
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          containers:
+            - name: careme-advertised-recipes
+              image: curlimages/curl:latest
+              imagePullPolicy: IfNotPresent
+              args:
+                - --fail
+                - --silent
+                - --show-error
+                - --request
+                - POST
+                - http://careme/campaigns/advertised-recipes/generate
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 500Mi
+                limits:
+                  cpu: 500m
+                  memory: 750Mi

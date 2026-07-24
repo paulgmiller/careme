@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="description" content="Careme helps you find nearby stores and cook fresh, seasonal recipes with ingredients that are close to home." />
   <title>Careme</title>
 
-  {{template "tailwind_head" .Style}}
+  {{template "app_head" .Style}}
 
   {{.ClarityScript}}
   {{.GoogleTagScript}}
@@ -16,14 +16,14 @@
   {{GoogleTagNoScript}}
   {{template "seasonal_background" .}}
 
-  <main class="relative z-10 px-4 py-8 sm:py-10">
+  <main class="relative z-10 px-4 py-4 sm:py-8">
     <section class="mx-auto w-full max-w-3xl">
       <div class="friendly-card border border-brand-100 bg-white/88 shadow-2xl backdrop-blur-[2px]">
         <!-- Header -->
-        <div class="border-b border-brand-100 p-8">
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="border-b border-brand-100 p-4 sm:p-6">
+          <div class="flex items-start justify-between gap-3">
             <div>
-              <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">Careme</h1>
+              <h1 class="font-display text-3xl font-extrabold sm:text-4xl tracking-tight text-brand-700">Careme</h1>
               <p class="mt-2 text-ink-600">
                 Your personal chef and sommelier.
               </p>
@@ -33,14 +33,14 @@
         </div>
 
         <!-- Content -->
-        <div class="p-8">
+        <div class="p-4 sm:p-6">
           {{if .User}}
-          <div class="space-y-6">
+          <div class="space-y-4">
             {{if .User.FavoriteStore}}
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
+            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <h2 class="text-lg font-semibold text-brand-700">Favorite store</h2>
               <input id="favorite-store-chef-notes" type="checkbox" class="peer/favorite-store-notes hidden" />
-              <div class="mt-4 rounded-2xl border border-brand-200 bg-white/95 p-5 shadow-sm">
+              <div class="mt-3 rounded-2xl border border-brand-200 bg-white/95 p-3 shadow-sm">
                 <p class="text-base font-semibold text-brand-700 text-pretty">{{if .FavoriteStoreName}}{{.FavoriteStoreName}}{{else}}{{.User.FavoriteStore}}{{end}}</p>
               </div>
               <div class="mt-3 flex flex-wrap items-center gap-3">
@@ -69,9 +69,9 @@
             </div>
             {{end}}
 
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
+            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <h2 class="text-lg font-semibold text-brand-700">Find a store</h2>
-              <form method="GET" action="/locations" class="mt-4 space-y-2">
+              <form method="GET" action="/locations" class="mt-3 space-y-2">
                 <div class="flex flex-col gap-3">
                   <input id="zip" name="zip" type="text" inputmode="numeric" pattern="\d{5}" required
                         placeholder="Enter zip code e.g. 90210"
@@ -89,9 +89,9 @@
               </form>
             </div>
 
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
+            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <h2 class="text-lg font-semibold text-brand-700">Your kitchen</h2>
-              <div class="mt-4 flex flex-wrap gap-3">
+              <div class="mt-3 flex flex-wrap gap-3">
                 <a href="/user?tab=past"
                     class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Past recipes
@@ -103,7 +103,7 @@
               </div>
             </div>
 
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
+            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <a href="/about"
                  class="inline-flex w-full items-center justify-center rounded-lg border-2 border-brand-300 bg-white/90 px-4 py-2.5 text-sm font-semibold tracking-wide text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                 About Careme
@@ -112,7 +112,7 @@
           </div>
           {{else}}
           <div class="mx-auto max-w-xl space-y-6">
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
+            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <h2 class="text-lg font-semibold text-brand-700">Careme will:</h2>
               <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-700">
                 <li>Check your local store's inventory for fresh meat and seasonal produce.</li>
@@ -124,9 +124,9 @@
               </a>
             </div>
 
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
+            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <h2 class="text-lg font-semibold text-brand-700">Find a store</h2>
-              <form method="GET" action="/locations" class="mt-4 space-y-2">
+              <form method="GET" action="/locations" class="mt-3 space-y-2">
                 <label for="zip" class="block text-sm font-medium text-ink-700">
                   Enter ZIP code:
                 </label>
@@ -147,7 +147,7 @@
               </form>
             </div>
 
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-5">
+            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <p class="mb-3 block text-sm font-medium text-ink-700">Sign in or create an account before building recipes:</p>
               <div class="flex flex-col gap-3">
                 <a href="/sign-in"
@@ -166,7 +166,7 @@
       </div>
 
       <!-- Footer note -->
-      <p class="mt-6 text-center text-sm text-ink-500 text-pretty">
+      <p class="mt-4 text-center text-sm text-ink-500 text-pretty">
         By continuing you agree to our terms. Fresh picks, zero spam.
       </p>
     </section>

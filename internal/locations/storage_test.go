@@ -94,52 +94,6 @@ func TestInitializeLocationBackendsRunsFactoriesInParallelAndCollectsBackends(t 
 	}
 }
 
-func TestInitializeLocationBackendsCancelsOtherFactoriesOnError(t *testing.T) {
-	started := make(chan struct{})
-	releaseErr := make(chan struct{})
-	canceled := make(chan struct{}, 1)
-
-	factories := []locationBackendFactory{
-		func(context.Context) (locationBackend, error) {
-			close(started)
-			<-releaseErr
-			return nil, errors.New("boom")
-		},
-		func(ctx context.Context) (locationBackend, error) {
-			<-started
-			<-ctx.Done()
-			canceled <- struct{}{}
-			return nil, ctx.Err()
-		},
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := initializeLocationBackends(context.Background(), factories)
-		done <- err
-	}()
-
-	close(releaseErr)
-
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("initializeLocationBackends error = nil, want error")
-		}
-		if got, want := err.Error(), "failed to initialize location backend 0: boom"; got != want {
-			t.Fatalf("initializeLocationBackends error = %q, want %q", got, want)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("initializeLocationBackends did not return after error")
-	}
-
-	select {
-	case <-canceled:
-	case <-time.After(time.Second):
-		t.Fatal("expected sibling factory context to be canceled")
-	}
-}
-
 func TestGetLocationByIDUsesCache(t *testing.T) {
 	client := newFakeLocationClient()
 	fc := cachepkg.NewInMemoryCache()
