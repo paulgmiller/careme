@@ -216,6 +216,8 @@ github.com/openai/openai-go/v3 v3.41.1 h1:c7vLxUL4I1GjHcHoQvb/5qpBHEt3m7ZJIb8lFW
 github.com/openai/openai-go/v3 v3.41.1/go.mod h1:cdufnVK14cWcT9qA1rRtrXx4FTRsgbDPW7Ia7SS5cZo=
 github.com/paulgmiller/kage v0.0.0-20260726153520-3e079c4bd263 h1:MbtWFCE7cfvpMyg89r+GFznhcQK3uIZ+yNh1GtGtWI0=
 github.com/paulgmiller/kage v0.0.0-20260726153520-3e079c4bd263/go.mod h1:PYTjhN9XhXcQiouUe5wloN6kN48iPUoPgYd/qX8M7LU=
+github.com/paulgmiller/kage v0.1.0 h1:m3C/obRztlN3NwT0enm8G2LIqmz1SodJzgsjb7R9HGQ=
+github.com/paulgmiller/kage v0.1.0/go.mod h1:PYTjhN9XhXcQiouUe5wloN6kN48iPUoPgYd/qX8M7LU=
 github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=
 github.com/pb33f/ordered-map/v2 v2.3.1/go.mod h1:qxFQgd0PkVUtOMCkTapqotNgzRhMPL7VvaHKbd1HnmQ=
 github.com/perimeterx/marshmallow v1.1.5 h1:a2LALqQ1BlHM8PZblsDdidgv1mWi1DgC2UmX50IvK2s=

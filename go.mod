@@ -15,7 +15,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/invopop/jsonschema v0.14.0
 	github.com/openai/openai-go/v3 v3.41.1
-	github.com/paulgmiller/kage v0.0.0-20260726153520-3e079c4bd263
+	github.com/paulgmiller/kage v0.1.0
 	github.com/sendgrid/rest v2.6.9+incompatible
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	github.com/stretchr/testify v1.11.1
