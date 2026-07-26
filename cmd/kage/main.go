@@ -1,20 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
-	"filippo.io/age"
-	"filippo.io/age/agessh"
+	"careme/pkg/kage"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,8 +22,6 @@ import (
 const (
 	managedByAnnotationKey   = "managed-by"
 	managedByAnnotationValue = "github.com/paulgmiller/kage"
-	secretCommentPrefix      = "secret:"
-	minSecretValueLength     = 5
 	recipientsFilename       = "recipients.txt"
 )
 
@@ -46,33 +40,23 @@ func main() {
 		log.Printf("THIS IS NOT A DRILL")
 	}
 
-	identities, err := loadSSHIdentities()
+	identities, err := kage.DefaultSSHIdentities()
 	if err != nil {
 		log.Fatalf("need an identity %s", err)
 	}
-	ciphertext, err := os.Open(*path)
+	secrets, err := kage.ReadEncryptedFile(*path, identities)
 	if err != nil {
-		log.Fatalf("can't open file %q, %s", *path, err)
+		log.Fatal(err)
 	}
-	defer func() {
-		_ = ciphertext.Close()
-	}()
-
-	reader, err := age.Decrypt(ciphertext, identities...)
-	if err != nil {
-		log.Fatalf("decrypt file  %q: %s", *path, err)
-	}
-
-	secrets, err := secrets(reader)
-	if err != nil {
-		panic(err)
+	if err := validateSecretNames(secrets); err != nil {
+		log.Fatalf("validate secret names: %s", err)
 	}
 
 	if *reencrypt || *setSecret != "" {
 		// todo let them specify
 		recipientsPath := filepath.Join(filepath.Dir(*path), recipientsFilename)
 
-		recipients, err := loadRecipients(recipientsPath)
+		recipients, err := kage.LoadRecipients(recipientsPath)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -82,7 +66,7 @@ func main() {
 				log.Fatal(err)
 			}
 			var changed bool
-			secrets, changed = setSecretValue(secrets, secretName, key, value)
+			secrets, changed = secrets.Set(secretName, key, value)
 			if !changed {
 				log.Printf("%s/%s unchanged", secretName, key)
 				return
@@ -90,10 +74,13 @@ func main() {
 			log.Printf("updated %s/%s", secretName, key)
 		}
 
-		if err := secrets.validate(); err != nil {
+		if err := secrets.Validate(); err != nil {
 			log.Fatalf("updated secrets did not validate: %s", err)
 		}
-		if err := encryptFile(*path, recipients, secrets); err != nil {
+		if err := validateSecretNames(secrets); err != nil {
+			log.Fatalf("updated secret names did not validate: %s", err)
+		}
+		if err := kage.EncryptFile(*path, recipients, secrets); err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("updated %s", *path)
@@ -178,7 +165,7 @@ func secretNeedsUpdate(current, desired *corev1.Secret) bool {
 	return false
 }
 
-func toK8s(secretVals secretsFile) []*corev1.Secret {
+func toK8s(secretVals kage.File) []*corev1.Secret {
 	var secrets []*corev1.Secret
 	for _, vals := range secretVals {
 		stringData := map[string]string{}
@@ -217,146 +204,18 @@ func parseSetArg(arg string) (string, string, string, error) {
 	if secretName == "" || key == "" {
 		return "", "", "", fmt.Errorf("set value must be secret/key=value")
 	}
-	if len(value) < minSecretValueLength {
-		return "", "", "", fmt.Errorf("secret %s/%s must be at least %d characters", secretName, key, minSecretValueLength)
+	if len(value) < kage.MinSecretValueLength {
+		return "", "", "", fmt.Errorf(
+			"secret %s/%s must be at least %d characters",
+			secretName,
+			key,
+			kage.MinSecretValueLength,
+		)
 	}
 	return secretName, key, value, nil
-}
-
-func setSecretValue(input secretsFile, secretName, key, value string) (secretsFile, bool) {
-	var output secretsFile
-	var secretFound bool
-	for _, existingSecret := range input {
-		if existingSecret.Name != secretName {
-			output = append(output, existingSecret)
-			continue
-		}
-		secretFound = true
-		var lineFound bool
-		for i, line := range existingSecret.Lines {
-			if line.Key != key {
-				continue
-			}
-			if line.Value == value {
-				return secretsFile{}, false
-			}
-			line.Value = value
-			existingSecret.Lines[i] = line
-			lineFound = true
-			continue
-		}
-		if !lineFound {
-			existingSecret.Lines = append(existingSecret.Lines, secretLine{Key: key, Value: value})
-		}
-		output = append(output, existingSecret)
-	}
-	if !secretFound {
-		output = append(output, secret{Name: secretName, Lines: []secretLine{{Key: key, Value: value}}})
-	}
-
-	return output, true
-}
-
-func formatSecretValue(value string) string {
-	if value == "" || strings.ContainsAny(value, " \t\n\r#\"'") {
-		return strconv.Quote(value)
-	}
-	return value
 }
 
 func maskedSecretValue(value string) string {
 	// invariant is value must be 5 or more characters, so this is safe
 	return fmt.Sprintf("%s[%d]%s", value[:1], len(value), value[len(value)-1:])
-}
-
-// parses a file that can have age or ssh keys
-func loadRecipients(path string) ([]age.Recipient, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open recipients file %q: %w", path, err)
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	var recipients []age.Recipient
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		var recipient age.Recipient
-		if strings.HasPrefix(line, "ssh-") {
-			recipient, err = agessh.ParseRecipient(line)
-		} else {
-			var parsed []age.Recipient
-			parsed, err = age.ParseRecipients(strings.NewReader(line))
-			if err == nil {
-				recipient = parsed[0]
-			}
-		}
-		if err != nil {
-			return nil, fmt.Errorf("parse recipient %q in %q : %w", line, path, err)
-		}
-		recipients = append(recipients, recipient)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read recipients file %q: %w", path, err)
-	}
-	if len(recipients) == 0 {
-		return nil, fmt.Errorf("no recipients in %q", path)
-	}
-
-	return recipients, nil
-}
-
-func encryptFile(path string, recipients []age.Recipient, secrets secretsFile) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return fmt.Errorf("open encrypted file %q: %w", path, err)
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	writer, err := age.Encrypt(file, recipients...)
-	if err != nil {
-		return fmt.Errorf("start encryption: %w", err)
-	}
-	if err := secrets.write(writer); err != nil {
-		return fmt.Errorf("write encrypted file: %w", err)
-	}
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("finish encryption: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("close encrypted file: %w", err)
-	}
-	return nil
-}
-
-// share with internal/config?
-func loadSSHIdentities() ([]age.Identity, error) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return []age.Identity{}, nil
-	}
-	path := filepath.Join(home, ".ssh", "id_ed25519")
-
-	key, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return []age.Identity{}, nil
-		}
-		return nil, err
-	}
-
-	identity, err := agessh.ParseIdentity(key)
-	if err != nil {
-		return nil, fmt.Errorf("parse ssh identity %q: %w", path, err)
-	}
-
-	return []age.Identity{identity}, nil
 }
