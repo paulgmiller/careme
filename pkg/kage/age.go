@@ -90,7 +90,7 @@ func ReadEncryptedFile(path string, identities []age.Identity) (File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decrypt file %q: %w", path, err)
 	}
-	secrets, err := Parse(reader)
+	secrets, err := parse(reader)
 	if err != nil {
 		return nil, fmt.Errorf("parse decrypted file %q: %w", path, err)
 	}
@@ -111,7 +111,7 @@ func EncryptFile(path string, recipients []age.Recipient, secrets File) error {
 	if err != nil {
 		return fmt.Errorf("start encryption: %w", err)
 	}
-	if err := secrets.Write(writer); err != nil {
+	if err := secrets.write(writer); err != nil {
 		return fmt.Errorf("write encrypted file: %w", err)
 	}
 	if err := writer.Close(); err != nil {

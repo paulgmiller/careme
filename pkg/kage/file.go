@@ -33,8 +33,7 @@ type Secret struct {
 // File is the plaintext representation of a kage secrets file.
 type File []Secret
 
-// Parse reads the plaintext representation of a kage secrets file.
-func Parse(r io.Reader) (File, error) {
+func parse(r io.Reader) (File, error) {
 	scanner := bufio.NewScanner(r)
 	var currentSecret *Secret
 	var secrets File
@@ -116,8 +115,7 @@ func (secrets File) Validate() error {
 	return nil
 }
 
-// Write serializes a plaintext kage secrets file.
-func (secrets File) Write(w io.Writer) error {
+func (secrets File) write(w io.Writer) error {
 	var out bytes.Buffer
 	for i, secret := range secrets {
 		if i > 0 {
