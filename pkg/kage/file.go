@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	SecretCommentPrefix  = "secret:"
+	secretCommentPrefix  = "secret:"
 	MinSecretValueLength = 5
 )
 
@@ -46,7 +46,7 @@ func Parse(r io.Reader) (File, error) {
 		}
 
 		if comment, found := strings.CutPrefix(line, "#"); found {
-			if secretName, isSecret := strings.CutPrefix(comment, SecretCommentPrefix); isSecret {
+			if secretName, isSecret := strings.CutPrefix(comment, secretCommentPrefix); isSecret {
 				if currentSecret != nil {
 					secrets = append(secrets, *currentSecret)
 				}
@@ -59,7 +59,7 @@ func Parse(r io.Reader) (File, error) {
 			continue
 		}
 		if currentSecret == nil {
-			return nil, fmt.Errorf("a #%s prefix must come before non-comment lines", SecretCommentPrefix)
+			return nil, fmt.Errorf("a #%s prefix must come before non-comment lines", secretCommentPrefix)
 		}
 		entry, err := parseEnvLine(line)
 		if err != nil {
@@ -71,7 +71,7 @@ func Parse(r io.Reader) (File, error) {
 		return nil, fmt.Errorf("read secrets: %w", err)
 	}
 	if currentSecret == nil {
-		return nil, fmt.Errorf("no #%s block found", SecretCommentPrefix)
+		return nil, fmt.Errorf("no #%s block found", secretCommentPrefix)
 	}
 	secrets = append(secrets, *currentSecret)
 
@@ -124,7 +124,7 @@ func (secrets File) Write(w io.Writer) error {
 			out.WriteByte('\n')
 		}
 		out.WriteByte('#')
-		out.WriteString(SecretCommentPrefix)
+		out.WriteString(secretCommentPrefix)
 		out.WriteString(secret.Name)
 		out.WriteByte('\n')
 		for _, line := range secret.Lines {

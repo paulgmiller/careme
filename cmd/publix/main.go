@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"careme/internal/cache"
-	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/publix"
+	"careme/pkg/kage"
 )
 
 type syncConfig struct {
@@ -64,7 +64,7 @@ func main() {
 		log.Fatalf("end-id must be greater than or equal to start-id")
 	}
 
-	if err := config.LoadEncryptedEnv("secrets/envtest"); err != nil {
+	if err := kage.Load(); err != nil {
 		log.Fatalf("load config: %s", err)
 	}
 

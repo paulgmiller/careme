@@ -14,6 +14,7 @@ require (
 	github.com/gobwas/ws v1.4.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/invopop/jsonschema v0.14.0
+	github.com/joho/godotenv v1.5.1
 	github.com/openai/openai-go/v3 v3.41.1
 	github.com/sendgrid/rest v2.6.9+incompatible
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible

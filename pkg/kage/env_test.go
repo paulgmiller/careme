@@ -1,4 +1,4 @@
-package kage_test
+package kage
 
 import (
 	"bytes"
@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"careme/pkg/kage"
-
 	"filippo.io/age"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +16,7 @@ import (
 func TestParseEnv(t *testing.T) {
 	t.Parallel()
 
-	entries, err := kage.ParseEnv(strings.NewReader(`
+	entries, err := parseEnv(strings.NewReader(`
 # ignored
 export PLAIN=value
 QUOTED="value with spaces" # explanation
@@ -49,9 +47,9 @@ func TestReadEnvAndReadEncryptedEnvUseSameParser(t *testing.T) {
 	encryptedPath := filepath.Join(directory, "env.age")
 	require.NoError(t, encrypt(t, encryptedPath, plaintext, identity.Recipient()))
 
-	plainEntries, err := kage.ReadEnv(plainPath)
+	plainEntries, err := readEnv(plainPath)
 	require.NoError(t, err)
-	encryptedEntries, err := kage.ReadEncryptedEnv(encryptedPath, []age.Identity{identity})
+	encryptedEntries, err := readEncryptedEnv(encryptedPath, []age.Identity{identity})
 	require.NoError(t, err)
 	assert.Equal(t, plainEntries, encryptedEntries)
 }
@@ -59,8 +57,21 @@ func TestReadEnvAndReadEncryptedEnvUseSameParser(t *testing.T) {
 func TestParseEnvRejectsDuplicateKeys(t *testing.T) {
 	t.Parallel()
 
-	_, err := kage.ParseEnv(strings.NewReader("KEY=first\nKEY=second\n"))
+	_, err := parseEnv(strings.NewReader("KEY=first\nKEY=second\n"))
 	require.ErrorContains(t, err, "duplicate env key KEY")
+}
+
+func TestParseEnvExpandsEarlierEntries(t *testing.T) {
+	t.Parallel()
+
+	entries, err := parseEnv(strings.NewReader(`
+BASE_URL=https://example.com
+API_URL=$BASE_URL/api
+LITERAL='$BASE_URL/api'
+`))
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/api", entries["API_URL"])
+	assert.Equal(t, "$BASE_URL/api", entries["LITERAL"])
 }
 
 func encrypt(t *testing.T, path, plaintext string, recipient age.Recipient) error {
