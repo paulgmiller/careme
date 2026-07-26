@@ -48,9 +48,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := validateSecretNames(secrets); err != nil {
-		log.Fatalf("validate secret names: %s", err)
-	}
 
 	if *reencrypt || *setSecret != "" {
 		// todo let them specify
@@ -76,9 +73,6 @@ func main() {
 
 		if err := secrets.Validate(); err != nil {
 			log.Fatalf("updated secrets did not validate: %s", err)
-		}
-		if err := validateSecretNames(secrets); err != nil {
-			log.Fatalf("updated secret names did not validate: %s", err)
 		}
 		if err := kage.EncryptFile(*path, recipients, secrets); err != nil {
 			log.Fatal(err)

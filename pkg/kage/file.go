@@ -3,10 +3,13 @@ package kage
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 const (
@@ -78,14 +81,13 @@ func Parse(r io.Reader) (File, error) {
 	return secrets, nil
 }
 
-// Validate checks package-level file invariants. Consumers may impose
-// additional restrictions on secret names for their target system.
+// Validate checks all invariants required by the kage file format.
 func (secrets File) Validate() error {
 	secretNames := map[string]bool{}
 
 	for _, secret := range secrets {
-		if secret.Name == "" {
-			return fmt.Errorf("secret name must not be empty")
+		if errs := validation.IsDNS1123Subdomain(secret.Name); len(errs) != 0 {
+			return errors.New(strings.Join(errs, ";"))
 		}
 		if secretNames[secret.Name] {
 			return fmt.Errorf("duplicate secret name %s", secret.Name)
