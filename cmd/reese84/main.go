@@ -16,8 +16,8 @@ import (
 	"careme/internal/albertsons"
 	"careme/internal/brightdata"
 	"careme/internal/cache"
-	"careme/internal/config"
 	"careme/internal/logsetup"
+	"careme/pkg/kage"
 )
 
 const (
@@ -66,7 +66,7 @@ func runWithDeps(ctx context.Context, args []string) error {
 		timeoutSec int
 	)
 
-	if err := config.LoadEncryptedEnv("secrets/envtest"); err != nil {
+	if err := kage.Load(); err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 

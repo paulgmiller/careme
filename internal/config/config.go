@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"careme/internal/brightdata"
+	"careme/pkg/kage"
 )
 
 const additionalStoresEnableEnv = "EXTRA_STORES_ENABLE"
@@ -163,7 +164,7 @@ func (c *Config) ResolvedPublicOrigin() string {
 }
 
 func Load() (*Config, error) {
-	if err := loadRuntimeEnv(); err != nil {
+	if err := kage.Load(); err != nil {
 		return nil, err
 	}
 

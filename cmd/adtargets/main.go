@@ -88,10 +88,6 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	if err := config.LoadEncryptedEnv("secrets/envtest"); err != nil {
-		return fmt.Errorf("load encrypted env: %w", err)
-	}
-
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)

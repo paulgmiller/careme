@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"careme/pkg/kage"
+
 	"filippo.io/age"
 	"filippo.io/age/agessh"
 	"github.com/stretchr/testify/assert"
@@ -18,6 +20,26 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func parseSecrets(t *testing.T, input io.Reader) (kage.File, error) {
+	t.Helper()
+
+	plaintext, err := io.ReadAll(input)
+	require.NoError(t, err)
+	identity, err := age.GenerateX25519Identity()
+	require.NoError(t, err)
+
+	path := filepath.Join(t.TempDir(), "envtest")
+	var ciphertext bytes.Buffer
+	writer, err := age.Encrypt(&ciphertext, identity.Recipient())
+	require.NoError(t, err)
+	_, err = writer.Write(plaintext)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	require.NoError(t, os.WriteFile(path, ciphertext.Bytes(), 0o600))
+
+	return kage.ReadEncryptedFile(path, []age.Identity{identity})
+}
 
 func TestLoadRecipients(t *testing.T) {
 	t.Parallel()
@@ -41,18 +63,18 @@ func TestLoadRecipients(t *testing.T) {
 	}, "\n")
 	require.NoError(t, os.WriteFile(recipientsPath, []byte(recipientsFile), 0o600))
 
-	recipients, err := loadRecipients(recipientsPath)
+	recipients, err := kage.LoadRecipients(recipientsPath)
 	require.NoError(t, err)
 	require.Len(t, recipients, 2)
 
-	secrets := secretsFile{{
+	secrets := kage.File{{
 		Name:  "example",
-		Lines: []secretLine{{Key: "API_KEY", Value: "secretcontents"}},
+		Lines: []kage.Line{{Key: "API_KEY", Value: "secretcontents"}},
 	}}
 	const plaintext = "#secret:example\nAPI_KEY=secretcontents\n"
 	encryptedPath := filepath.Join(directory, "envtest")
 	require.NoError(t, os.WriteFile(encryptedPath, nil, 0o600))
-	require.NoError(t, encryptFile(encryptedPath, recipients, secrets))
+	require.NoError(t, kage.EncryptFile(encryptedPath, recipients, secrets))
 	assert.Equal(t, plaintext, decryptFile(t, encryptedPath, ageIdentity))
 	assert.Equal(t, plaintext, decryptFile(t, encryptedPath, sshIdentity))
 }
@@ -63,7 +85,7 @@ func TestLoadRecipientsRejectsEmptyFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), recipientsFilename)
 	require.NoError(t, os.WriteFile(path, []byte("# no keys\n"), 0o600))
 
-	_, err := loadRecipients(path)
+	_, err := kage.LoadRecipients(path)
 	require.ErrorContains(t, err, "no recipients")
 }
 
@@ -258,7 +280,7 @@ TOKEN=bravo
 ZIP=98101
 		`)
 
-		got, err := secrets(input)
+		got, err := parseSecrets(t, input)
 		require.NoError(t, err)
 		require.Len(t, got, 2)
 		assert.Equal(t, "first", got[0].Name)
@@ -290,7 +312,7 @@ ZIP=98101
 	t.Run("handles end of line comments", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := secrets(strings.NewReader(`
+		got, err := parseSecrets(t, strings.NewReader(`
 #secret:first
 API_KEY=alpha # primary key
 TOKEN="beta # still value" # comment
@@ -302,18 +324,18 @@ PATH=with#hash
 
 		first := got[0]
 		require.Len(t, first.Lines, 3)
-		assert.Equal(t, secretLine{Key: "API_KEY", Value: "alpha", Comment: " primary key"}, first.Lines[0])
-		assert.Equal(t, secretLine{Key: "TOKEN", Value: "beta # still value", Comment: " comment"}, first.Lines[1])
-		assert.Equal(t, secretLine{Key: "PATH", Value: "with#hash"}, first.Lines[2])
+		assert.Equal(t, kage.Line{Key: "API_KEY", Value: "alpha", Comment: " primary key"}, first.Lines[0])
+		assert.Equal(t, kage.Line{Key: "TOKEN", Value: "beta # still value", Comment: " comment"}, first.Lines[1])
+		assert.Equal(t, kage.Line{Key: "PATH", Value: "with#hash"}, first.Lines[2])
 	})
 
 	t.Run("unquotes single quoted values before converting to k8s secrets", func(t *testing.T) {
 		t.Parallel()
 
 		const endpoint = "wss://user:pass@brd.superproxy.io:9222"
-		got, err := secrets(strings.NewReader(`
+		got, err := parseSecrets(t, strings.NewReader(`
 #secret:brightdata-proxy
-BRIGHTDATA_BROWSER_WS_ENDPOINT='` + endpoint + `'
+BRIGHTDATA_BROWSER_WS_ENDPOINT='`+endpoint+`'
 		`))
 		require.NoError(t, err)
 
@@ -325,7 +347,7 @@ BRIGHTDATA_BROWSER_WS_ENDPOINT='` + endpoint + `'
 	t.Run("keeps block comments", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := secrets(strings.NewReader(`
+		got, err := parseSecrets(t, strings.NewReader(`
 # top comment
 #secret:first
 # key note
@@ -337,7 +359,7 @@ TOKEN=bravo
 		require.Len(t, got, 1)
 		assert.Equal(t, "first", got[0].Name)
 		assert.Len(t, got[0].Lines, 4)
-		assert.Equal(t, []secretLine{
+		assert.Equal(t, []kage.Line{
 			{Comment: " key note"},
 			{Key: "API_KEY", Value: "alpha"},
 			{Comment: " another note"},
@@ -348,7 +370,7 @@ TOKEN=bravo
 	t.Run("rejects short values", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := secrets(strings.NewReader(`
+		_, err := parseSecrets(t, strings.NewReader(`
 #secret:first
 EMPTY=
 NON_EMPTY=value
@@ -359,7 +381,7 @@ NON_EMPTY=value
 	t.Run("duplicate secret comment returns error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := secrets(strings.NewReader(`
+		_, err := parseSecrets(t, strings.NewReader(`
 #secret:first
 API_KEY=alpha
 #secret:first
@@ -371,7 +393,7 @@ TOKEN=beta
 	t.Run("duplicate key returns error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := secrets(strings.NewReader(`
+		_, err := parseSecrets(t, strings.NewReader(`
 #secret:first
 API_KEY=alpha
 API_KEY=bravo
@@ -382,7 +404,7 @@ API_KEY=bravo
 	t.Run("invalid entry returns error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := secrets(strings.NewReader(`
+		_, err := parseSecrets(t, strings.NewReader(`
 #secret:first
 not-an-env-line
 `))
@@ -427,13 +449,11 @@ TOKEN="beta # still value" # token note
 #secret:second
 ZIP=98101
 `)
-		ogFile, err := secrets(bytes.NewReader(input))
+		ogFile, err := parseSecrets(t, bytes.NewReader(input))
 		require.NoError(t, err)
-		got, changed := setSecretValue(ogFile, "first", "API_KEY", "bravo")
+		got, changed := ogFile.Set("first", "API_KEY", "bravo")
 		require.True(t, changed)
-		var sb strings.Builder
-		require.NoError(t, got.write(&sb))
-		assert.Equal(t, `#secret:first
+		want, err := parseSecrets(t, strings.NewReader(`#secret:first
 # key note
 API_KEY=bravo # primary key
 TOKEN="beta # still value" # token note
@@ -441,16 +461,18 @@ TOKEN="beta # still value" # token note
 
 #secret:second
 ZIP=98101
-`, sb.String())
+`))
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	})
 
 	t.Run("returns unchanged when value already matches", func(t *testing.T) {
 		t.Parallel()
 
 		input := []byte("#secret:first\nAPI_KEY=alpha # primary key\n")
-		ogFile, err := secrets(bytes.NewReader(input))
+		ogFile, err := parseSecrets(t, bytes.NewReader(input))
 		require.NoError(t, err)
-		_, changed := setSecretValue(ogFile, "first", "API_KEY", "alpha")
+		_, changed := ogFile.Set("first", "API_KEY", "alpha")
 
 		require.False(t, changed)
 	})
@@ -466,51 +488,50 @@ API_KEY=alpha
 ZIP=98101
 `)
 
-		ogFile, err := secrets(bytes.NewReader(input))
+		ogFile, err := parseSecrets(t, bytes.NewReader(input))
 		require.NoError(t, err)
-		got, changed := setSecretValue(ogFile, "first", "TOKEN", "bravo")
+		got, changed := ogFile.Set("first", "TOKEN", "bravo")
 		require.True(t, changed)
-		var sb strings.Builder
-		require.NoError(t, got.write(&sb))
-		assert.Equal(t, `#secret:first
+		want, err := parseSecrets(t, strings.NewReader(`#secret:first
 API_KEY=alpha
 # keep this with first
 TOKEN=bravo
 
 #secret:second
 ZIP=98101
-`, sb.String())
+`))
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	})
 
 	t.Run("adds new secret at end", func(t *testing.T) {
 		t.Parallel()
 
 		input := []byte("#secret:first\nAPI_KEY=alpha\n")
-		ogFile, err := secrets(bytes.NewReader(input))
+		ogFile, err := parseSecrets(t, bytes.NewReader(input))
 		require.NoError(t, err)
-		got, changed := setSecretValue(ogFile, "second", "TOKEN", "bravo")
+		got, changed := ogFile.Set("second", "TOKEN", "bravo")
 		require.True(t, changed)
-		var sb strings.Builder
-		require.NoError(t, got.write(&sb))
-		assert.Equal(t, `#secret:first
+		want, err := parseSecrets(t, strings.NewReader(`#secret:first
 API_KEY=alpha
 
 #secret:second
 TOKEN=bravo
-`, sb.String())
+`))
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	})
 
 	t.Run("quotes values with comments", func(t *testing.T) {
 		t.Parallel()
 
 		input := []byte("#secret:first\nAPI_KEY=alpha # primary key\n")
-		ogFile, err := secrets(bytes.NewReader(input))
+		ogFile, err := parseSecrets(t, bytes.NewReader(input))
 		require.NoError(t, err)
-		got, changed := setSecretValue(ogFile, "first", "API_KEY", "bravo")
+		got, changed := ogFile.Set("first", "API_KEY", "bravo")
 		require.True(t, changed)
-		var sb strings.Builder
-		require.NoError(t, got.write(&sb))
-
-		assert.Equal(t, "#secret:first\nAPI_KEY=bravo # primary key\n", sb.String())
+		want, err := parseSecrets(t, strings.NewReader("#secret:first\nAPI_KEY=bravo # primary key\n"))
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	})
 }
