@@ -14,7 +14,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/logsetup"
 	"careme/internal/publix"
-	"careme/pkg/kage"
+	"github.com/paulgmiller/kage/pkg/kage"
 )
 
 const (

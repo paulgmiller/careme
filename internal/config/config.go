@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"careme/internal/brightdata"
-	"careme/pkg/kage"
+	"github.com/paulgmiller/kage/pkg/kage"
 )
 
 const additionalStoresEnableEnv = "EXTRA_STORES_ENABLE"
