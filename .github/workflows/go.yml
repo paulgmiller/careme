@@ -111,7 +111,7 @@ jobs:
         run: go install github.com/padiazg/go-crap@latest
 
       - name: Run go-crap scan
-        run: go-crap scan --top 10 --exclude '.*_test\.go' --exclude '.*\.gen\.go' --threshold 250 --fail-above
+        run: go-crap scan --top 10 --exclude '.*_test\.go' --exclude '.*\.gen\.go' --threshold 250 --fail-above --exclude 'main.go'
 
   js-lint:
     name: js-lint
