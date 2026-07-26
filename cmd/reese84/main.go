@@ -17,7 +17,7 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/logsetup"
-	"careme/pkg/kage"
+	"github.com/paulgmiller/kage/pkg/kage"
 )
 
 const (

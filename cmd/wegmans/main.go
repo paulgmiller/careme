@@ -15,7 +15,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/wegmans"
-	"careme/pkg/kage"
+	"github.com/paulgmiller/kage/pkg/kage"
 )
 
 type storeClient interface {

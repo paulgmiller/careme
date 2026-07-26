@@ -15,7 +15,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/publix"
-	"careme/pkg/kage"
+	"github.com/paulgmiller/kage/pkg/kage"
 )
 
 type syncConfig struct {
