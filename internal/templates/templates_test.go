@@ -68,6 +68,7 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 		"farmersmarket.html",
 		"home.html",
 		"locations.html",
+		"privacy.html",
 		"recipe.html",
 		"shoppinglist.html",
 		"spinner.html",
@@ -189,6 +190,7 @@ func TestTemplatePageTitlesAreUnique(t *testing.T) {
 		"home.html",
 		"locations.html",
 		"mail.html",
+		"privacy.html",
 		"recipe.html",
 		"shoppinglist.html",
 		"spinner.html",
@@ -291,6 +293,43 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "Dungeness crab pasta") {
 		t.Fatalf("about page should render album comments from Go data, body: %s", rendered)
+	}
+}
+
+func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := Privacy.Execute(&buf, NewPrivacyPageData(seasons.GetCurrentStyle())); err != nil {
+		t.Fatalf("Privacy.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
+		t.Fatalf("privacy page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
+	}
+	for _, disclosure := range []string{
+		"North Briton LLC",
+		"does not sell or rent your personal information",
+		"recipes you save or dismiss",
+		"written feedback",
+		"OpenAI",
+		"Google Gemini",
+		"Microsoft Clarity",
+		"Google Tag Manager",
+		`id="retention"`,
+		`id="delete"`,
+		"Careme account deletion request",
+		"chef@careme.cooking",
+	} {
+		if !strings.Contains(rendered, disclosure) {
+			t.Fatalf("privacy page should include %q, body: %s", disclosure, rendered)
+		}
+	}
+	if strings.Contains(rendered, `www.clarity.ms`) || strings.Contains(rendered, `www.googletagmanager.com`) {
+		t.Fatalf("privacy page should not load analytics or tag-manager scripts, body: %s", rendered)
 	}
 }
 
