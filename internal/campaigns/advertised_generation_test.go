@@ -2,7 +2,6 @@ package campaigns
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -45,20 +44,6 @@ func TestAdvertisedRecipeGenerationRouteKicksAdvertisedLocations(t *testing.T) {
 	}
 }
 
-func TestAdvertisedRecipeGenerationRouteReturnsError(t *testing.T) {
-	kicker := &advertisedGenerationKickstarterStub{err: errors.New("no soup")}
-
-	mux := http.NewServeMux()
-	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, kicker)
-
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/campaigns/advertised-recipes/generate", nil)
-	mux.ServeHTTP(response, request)
-
-	require.Equal(t, http.StatusInternalServerError, response.Code)
-	require.Contains(t, response.Body.String(), "kick generation: no soup")
-}
-
 func TestAdvertisedRecipeGenerationRouteOnlyAcceptsPOST(t *testing.T) {
 	mux := http.NewServeMux()
 	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, &advertisedGenerationKickstarterStub{})
@@ -84,11 +69,9 @@ func (advertisedLocationStoreStub) GetLocationByID(_ context.Context, locationID
 type advertisedGenerationKickstarterStub struct {
 	params   []*recipes.GeneratorParams
 	contexts []context.Context
-	err      error
 }
 
-func (s *advertisedGenerationKickstarterStub) KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams) error {
+func (s *advertisedGenerationKickstarterStub) KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams) {
 	s.params = append(s.params, p)
 	s.contexts = append(s.contexts, ctx)
-	return s.err
 }

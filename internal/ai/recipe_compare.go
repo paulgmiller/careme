@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	recipeComparisonSchemaV1 = "recipe-comparison-v1"
+	defaultGeminiComparisonModel = "gemini-3.1-pro-preview"
+	recipeComparisonSchemaV1     = "recipe-comparison-v1"
 )
 
 const recipeComparisonSystemInstruction = `
@@ -53,7 +54,7 @@ type recipeComparisonJudge struct {
 func NewRecipeComparisonJudge(apiKey, model string, httpClient *http.Client) *recipeComparisonJudge {
 	model = strings.TrimSpace(model)
 	if model == "" {
-		model = defaultGeminiCritiqueModel
+		model = defaultGeminiComparisonModel
 	}
 	if httpClient == nil {
 		httpClient = http.DefaultClient
@@ -96,7 +97,7 @@ func (j *recipeComparisonJudge) CompareRecipes(ctx context.Context, original, ca
 		"model_version", resp.ModelVersion,
 		"response_id", resp.ResponseID,
 		"latencyMS", time.Since(start).Milliseconds(),
-		geminiUsageLogAttr(j.model, resp.UsageMetadata),
+		geminiComparisonUsageLogAttr(j.model, resp.UsageMetadata),
 	)
 
 	comparison, err := parseRecipeComparison(resp.Text())
@@ -106,6 +107,34 @@ func (j *recipeComparisonJudge) CompareRecipes(ctx context.Context, original, ca
 	comparison.Model = resp.ModelVersion
 	comparison.ComparedAt = time.Now().UTC()
 	return comparison, nil
+}
+
+func geminiComparisonUsageLogAttr(model string, usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
+	if usage == nil {
+		return slog.Group("usage", slog.Bool("available", false))
+	}
+	outputTokens := int64(usage.CandidatesTokenCount + usage.ThoughtsTokenCount)
+
+	attrs := []any{
+		slog.Bool("available", true),
+		slog.Int("cachedContentTokenCount", int(usage.CachedContentTokenCount)),
+		slog.Int("promptTokenCount", int(usage.PromptTokenCount)),
+		slog.Int("candidatesTokenCount", int(usage.CandidatesTokenCount)),
+		slog.Int("thoughtsTokenCount", int(usage.ThoughtsTokenCount)),
+		slog.Int("toolUsePromptTokenCount", int(usage.ToolUsePromptTokenCount)),
+		slog.Int("totalTokenCount", int(usage.TotalTokenCount)),
+	}
+	if usage.TrafficType != "" {
+		attrs = append(attrs, slog.String("trafficType", string(usage.TrafficType)))
+	}
+	attrs = append(attrs, estimatedSpendLogAttr(estimateGeminiSpend(
+		model,
+		int64(usage.PromptTokenCount+usage.ToolUsePromptTokenCount),
+		int64(usage.CachedContentTokenCount),
+		outputTokens,
+	)))
+
+	return slog.Group("usage", attrs...)
 }
 
 func buildRecipeComparisonPrompt(original, candidate Recipe) (string, error) {

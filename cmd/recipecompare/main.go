@@ -20,6 +20,7 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/recipes/prompts"
 
+	"github.com/paulgmiller/kage/pkg/kage"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -118,8 +119,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return errors.New("-model is required")
 	}
 	if secretFile = strings.TrimSpace(secretFile); secretFile != "" {
-		// should just change load to pass to that.
-		if err := config.LoadEncryptedEnv(secretFile); err != nil {
+		if err := loadEncryptedEnv(secretFile); err != nil {
 			return fmt.Errorf("load secret file %q: %w", secretFile, err)
 		}
 	}
@@ -134,13 +134,42 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	replayer := ai.NewClient(cfg.AI.APIKey, model, httpClient, prompts.NewCacheRecorder(cacheStore))
-	judge := ai.NewRecipeComparisonJudge(cfg.Gemini.APIKey, critiqueModel, httpClient)
+	judge := ai.NewRecipeComparisonJudge(os.Getenv("GEMINI_API_KEY"), critiqueModel, httpClient)
 
 	rows, err := compareInputs(ctx, cacheStore, replayer, judge, model, shoppingHashes, recipeHashes, refresh)
 	if err != nil {
 		return err
 	}
 	return printRows(out, rows)
+}
+
+func loadEncryptedEnv(path string) error {
+	identities, err := kage.DefaultSSHIdentities()
+	if err != nil {
+		return err
+	}
+	if len(identities) == 0 {
+		return nil
+	}
+
+	secrets, err := kage.ReadEncryptedFile(path, identities)
+	if err != nil {
+		return err
+	}
+	for _, secret := range secrets {
+		for _, line := range secret.Lines {
+			if line.Key == "" {
+				continue
+			}
+			if _, exists := os.LookupEnv(line.Key); exists {
+				continue
+			}
+			if err := os.Setenv(line.Key, line.Value); err != nil {
+				return fmt.Errorf("set %s from encrypted env: %w", line.Key, err)
+			}
+		}
+	}
+	return nil
 }
 
 func normalizeHashInputs(values []string) []string {

@@ -41,7 +41,7 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			name:        "Android asset links",
 			path:        "/.well-known/assetlinks.json",
 			wantType:    "application/json; charset=utf-8",
-			wantSnippet: `"package_name": "cooking.careme.twa"`,
+			wantSnippet: `"package_name": "cooking.careme"`,
 		},
 		{
 			name:        "offline page",

@@ -102,7 +102,11 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"5 to 8 clear steps",
 		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
 		"set id to the exact ProductId",
-		"amount used in the recipe as quantity",
+		"Set quantity to the total amount needed across the entire recipe",
+		"Every time a step mentions an ingredient, including a pantry ingredient, state the exact amount of that ingredient used in that step.",
+		"When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients.",
+		`Do not use an unquantified phrase such as "the remaining oil"`,
+		"Cross-check every ingredient mention in the instructions for an exact step-level amount",
 	} {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)

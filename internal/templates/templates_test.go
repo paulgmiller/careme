@@ -68,6 +68,7 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 		"farmersmarket.html",
 		"home.html",
 		"locations.html",
+		"privacy.html",
 		"recipe.html",
 		"shoppinglist.html",
 		"spinner.html",
@@ -189,6 +190,7 @@ func TestTemplatePageTitlesAreUnique(t *testing.T) {
 		"home.html",
 		"locations.html",
 		"mail.html",
+		"privacy.html",
 		"recipe.html",
 		"shoppinglist.html",
 		"spinner.html",
@@ -294,6 +296,43 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	}
 }
 
+func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := Privacy.Execute(&buf, NewPrivacyPageData(seasons.GetCurrentStyle())); err != nil {
+		t.Fatalf("Privacy.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
+		t.Fatalf("privacy page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
+	}
+	for _, disclosure := range []string{
+		"North Briton LLC",
+		"does not sell or rent your personal information",
+		"recipes you save or dismiss",
+		"written feedback",
+		"OpenAI",
+		"Google Gemini",
+		"Microsoft Clarity",
+		"Google Tag Manager",
+		`id="retention"`,
+		`id="delete"`,
+		"Careme account deletion request",
+		"chef@careme.cooking",
+	} {
+		if !strings.Contains(rendered, disclosure) {
+			t.Fatalf("privacy page should include %q, body: %s", disclosure, rendered)
+		}
+	}
+	if strings.Contains(rendered, `www.clarity.ms`) || strings.Contains(rendered, `www.googletagmanager.com`) {
+		t.Fatalf("privacy page should not load analytics or tag-manager scripts, body: %s", rendered)
+	}
+}
+
 func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
@@ -313,11 +352,13 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 		ServerSignedIn  bool
 		RefreshInterval string
 		StatusMessage   string
+		CurrentPath     string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
 		StatusMessage:   "Ingredients are ready. Building your recipes.",
+		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
 	}
 
 	var buf bytes.Buffer
@@ -334,6 +375,14 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 	if !strings.Contains(rendered, data.StatusMessage) {
 		t.Fatalf("spinner page should render status message, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `http-equiv="refresh"`) {
+		t.Fatalf("spinner page should use htmx polling instead of meta refresh, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<script src="/static/htmx@2.0.8.js"></script>`) ||
+		!strings.Contains(rendered, `hx-get="/recipes?h=abc&amp;start=2026-07-10T00:00:00Z"`) ||
+		!strings.Contains(rendered, `hx-trigger="load delay:10s"`) {
+		t.Fatalf("spinner page should poll with htmx, body: %s", rendered)
 	}
 }
 
@@ -457,11 +506,13 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 		ServerSignedIn  bool
 		RefreshInterval string
 		StatusMessage   string
+		CurrentPath     string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
 		StatusMessage:   "Considering ingredients\nHalf Off Spinach",
+		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
 	}
 
 	var buf bytes.Buffer
