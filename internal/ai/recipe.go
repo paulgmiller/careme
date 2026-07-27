@@ -150,7 +150,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		Store: openai.Bool(true),
 		Text:  scheme(c.recipeSchema),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
@@ -176,7 +176,7 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		Store: openai.Bool(true),
 		Text:  scheme(c.recipeSchema),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
 	}
@@ -202,7 +202,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	if previousResponseID != "" {
 		params.PreviousResponseID = openai.String(previousResponseID)
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
 	}

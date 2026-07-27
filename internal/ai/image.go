@@ -39,14 +39,15 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
 	}
 
-	resp, err := c.oai.Images.Generate(ctx, openai.ImageGenerateParams{
+	params := openai.ImageGenerateParams{
 		Prompt:       prompt,
 		Model:        recipeImageModel,
 		N:            openai.Int(1),
 		OutputFormat: recipeImageOutputFormat,
 		Quality:      recipeImageQuality,
 		Size:         recipeImageSize,
-	})
+	}
+	resp, err := c.generateImage(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
 	}
@@ -63,6 +64,18 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 	return &GeneratedImage{
 		Body: base64.NewDecoder(base64.StdEncoding, strings.NewReader(imageBody)),
 	}, nil
+}
+
+func (c *client) generateImage(ctx context.Context, params openai.ImageGenerateParams) (*openai.ImagesResponse, error) {
+	if !usesBatchProcessing(ctx) {
+		return c.oai.Images.Generate(ctx, params)
+	}
+
+	var response openai.ImagesResponse
+	if err := c.batches.submit(ctx, openai.BatchNewParamsEndpointV1ImagesGenerations, params, &response); err != nil {
+		return nil, err
+	}
+	return &response, nil
 }
 
 func imageUsageLogAttr(model string, usage openai.ImagesResponseUsage) slog.Attr {

@@ -41,7 +41,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 		},
 		Text: scheme(c.wineSchema),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pick wine: %w", err)
 	}

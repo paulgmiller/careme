@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -258,5 +260,33 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 	}
 	if userID != "user-1" {
 		t.Fatalf("expected user id user-1, got %q", userID)
+	}
+}
+
+func TestCoalescedShoppingListGeneratesSharedHashOnce(t *testing.T) {
+	m := &mailer{}
+	var generateCalls atomic.Int32
+	results := make([]*ai.ShoppingList, 2)
+	errs := make([]error, 2)
+
+	var requests sync.WaitGroup
+	for i := range results {
+		requests.Go(func() {
+			results[i], errs[i] = m.coalescedShoppingList(t.Context(), "shared-hash", func() (*ai.ShoppingList, error) {
+				generateCalls.Add(1)
+				return &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Shared Recipe"}}}, nil
+			})
+		})
+	}
+	requests.Wait()
+
+	if errs[0] != nil || errs[1] != nil {
+		t.Fatalf("coalescedShoppingList returned errors: %v, %v", errs[0], errs[1])
+	}
+	if generateCalls.Load() != 1 {
+		t.Fatalf("expected one shared generation, got %d", generateCalls.Load())
+	}
+	if results[0] != results[1] {
+		t.Fatal("expected callers to receive the same shopping list")
 	}
 }

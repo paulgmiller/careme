@@ -1355,8 +1355,8 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 // Could try and consolidate and
 func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) {
 	s.wg.Go(func() {
-		// 5 minutes is magic what should it be?
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		// OpenAI Batch currently guarantees completion within 24 hours.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 25*time.Hour)
 		defer cancel()
 		if err := s.SaveParams(ctx, p); err != nil {
 			if errors.Is(err, ErrAlreadyExists) {
@@ -1381,11 +1381,13 @@ func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorPar
 		}
 
 		// don't really need to wait on full shopping list but generator doesn't have a channel
+		var images sync.WaitGroup
 		for _, recipe := range shoppingList.Recipes {
-			s.wg.Go(func() {
+			images.Go(func() {
 				s.ensureRecipeImage(ctx, recipe.ComputeHash(), recipe)
 			})
 		}
+		images.Wait()
 	})
 }
 

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	"careme/internal/ai"
@@ -45,6 +46,12 @@ type mailSentClaim struct {
 	ParamsHash string    `json:"params_hash"`
 }
 
+type shoppingListCall struct {
+	done chan struct{}
+	list *ai.ShoppingList
+	err  error
+}
+
 type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
@@ -63,6 +70,9 @@ type mailer struct {
 	generator          generator // interface requires making params public
 	locServer          locServer
 	client             emailClient
+	clientMu           sync.Mutex
+	generationMu       sync.Mutex
+	generationCalls    map[string]*shoppingListCall
 	publicOrigin       string
 	wait               func()
 	unsubscribeFactory users.UnsubscribeTokenFactory
@@ -116,6 +126,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 }
 
 func (m *mailer) RunOnce(ctx context.Context) {
+	ctx = ai.WithBatchProcessing(ctx)
 	ctx, span := otel.Tracer("careme/mail").Start(ctx, "mail_run")
 	defer span.End()
 
@@ -127,9 +138,13 @@ func (m *mailer) RunOnce(ctx context.Context) {
 	}
 	span.SetAttributes(attribute.Int("mail.user_count", len(users)))
 
+	var sends sync.WaitGroup
 	for _, user := range users {
-		m.sendEmail(ctx, user)
+		sends.Go(func() {
+			m.sendEmail(ctx, user)
+		})
 	}
+	sends.Wait()
 	m.wait()
 	slog.InfoContext(ctx, "finished user email run")
 }
@@ -197,34 +212,11 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 			return
 		}
 
-		if err := rio.SaveParams(ctx, p); err != nil {
-			if !errors.Is(err, recipes.ErrAlreadyExists) {
-				slog.ErrorContext(ctx, "failed to save params", "user", user.ID, "params_hash", paramsHash, "error", err)
-				return
-			}
-		}
-
-		// TODO refactor with recipes/server.go
-		recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
-			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
+		shoppingList, err = m.coalescedShoppingList(ctx, paramsHash, func() (*ai.ShoppingList, error) {
+			return m.generateAndCacheShoppingList(ctx, p, user, paramsHash)
 		})
-		hashes := make([]string, 0, len(recent))
-		for _, recipe := range recent {
-			hashes = append(hashes, recipe.Hash)
-		}
-		cooked := rio.FeedbackByHash(ctx, hashes)
-		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-			return r.Title, cooked[r.Hash].Cooked
-		})
-		// can orphan recipes here with crash or shutdown. Params should have a start time
-
-		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.ID, "params_hash", paramsHash, "error", err)
-			return
-		}
-		if err := rio.SaveShoppingList(ctx, shoppingList, paramsHash); err != nil {
-			slog.ErrorContext(ctx, "failed to save shopping list", "user", user.ID, "params_hash", paramsHash, "error", err)
 			return
 		}
 	}
@@ -254,7 +246,9 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	}
 	// client.Request, _ = sendgrid.SetDataResidency(client.Request, "eu")
 	// uncomment the above line if you are sending mail using a regional EU subuser
+	m.clientMu.Lock()
 	response, err := m.client.Send(message)
+	m.clientMu.Unlock()
 	if err != nil {
 		slog.ErrorContext(ctx, "mail error", "error", err.Error(), "user", user.Email[0])
 		return
@@ -281,4 +275,76 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	if err := m.cache.Put(ctx, sentKey, string(sentClaim), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
 		slog.ErrorContext(ctx, "failed to record sent mail claim", "user", user.ID, "params_hash", paramsHash, "error", err)
 	}
+}
+
+func (m *mailer) coalescedShoppingList(ctx context.Context, paramsHash string, generate func() (*ai.ShoppingList, error)) (*ai.ShoppingList, error) {
+	m.generationMu.Lock()
+	if m.generationCalls == nil {
+		m.generationCalls = make(map[string]*shoppingListCall)
+	}
+	if call := m.generationCalls[paramsHash]; call != nil {
+		m.generationMu.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-call.done:
+			return call.list, call.err
+		}
+	}
+
+	call := &shoppingListCall{done: make(chan struct{})}
+	m.generationCalls[paramsHash] = call
+	m.generationMu.Unlock()
+
+	call.list, call.err = generate()
+	close(call.done)
+	if call.err != nil {
+		m.generationMu.Lock()
+		delete(m.generationCalls, paramsHash)
+		m.generationMu.Unlock()
+	}
+	return call.list, call.err
+}
+
+func (m *mailer) generateAndCacheShoppingList(
+	ctx context.Context,
+	p *recipes.GeneratorParams,
+	user utypes.User,
+	paramsHash string,
+) (*ai.ShoppingList, error) {
+	rio := recipes.IO(m.cache)
+	// Another worker may have populated the shared store/date list after this
+	// user observed the initial cache miss.
+	if shoppingList, err := rio.FromCache(ctx, paramsHash); err == nil {
+		return shoppingList, nil
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		return nil, fmt.Errorf("recheck shopping list cache: %w", err)
+	}
+
+	if err := rio.SaveParams(ctx, p); err != nil && !errors.Is(err, recipes.ErrAlreadyExists) {
+		return nil, fmt.Errorf("save params: %w", err)
+	}
+
+	// TODO refactor with recipes/server.go
+	recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
+		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
+	})
+	hashes := make([]string, 0, len(recent))
+	for _, recipe := range recent {
+		hashes = append(hashes, recipe.Hash)
+	}
+	cooked := rio.FeedbackByHash(ctx, hashes)
+	p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+		return r.Title, cooked[r.Hash].Cooked
+	})
+	// can orphan recipes here with crash or shutdown. Params should have a start time
+
+	shoppingList, err := m.generator.GenerateRecipes(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	if err := rio.SaveShoppingList(ctx, shoppingList, paramsHash); err != nil {
+		return nil, fmt.Errorf("save shopping list: %w", err)
+	}
+	return shoppingList, nil
 }

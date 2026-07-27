@@ -66,7 +66,7 @@ func (c *client) ExtractFarmersMarketIngredients(ctx context.Context, imageDataU
 		Text:  scheme(farmersMarketIngredientSchema()),
 	}
 
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("extract farmers market ingredients: %w", err)
 	}

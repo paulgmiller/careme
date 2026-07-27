@@ -164,7 +164,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		Store: openai.Bool(true),
 		Text:  scheme(c.menuSchema),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 		Store: openai.Bool(true),
 		Text:  scheme(c.menuSchema),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan after ingredient mismatch: %w", err)
 	}
@@ -231,7 +231,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		Store: openai.Bool(true),
 		Text:  scheme(c.menuSchema),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
 	}

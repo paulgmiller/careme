@@ -21,6 +21,7 @@ type client struct {
 	model          string
 	wineModel      string
 	oai            openai.Client
+	batches        *batchProcessor
 	promptRecorder PromptRecorder
 }
 
@@ -55,6 +56,7 @@ func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptR
 
 	return &client{
 		oai:            aiClient,
+		batches:        newBatchProcessor(aiClient),
 		recipeSchema:   recipe,
 		wineSchema:     wine,
 		menuSchema:     menu,
@@ -62,6 +64,18 @@ func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptR
 		wineModel:      defaultWineModel,
 		promptRecorder: promptRecorder,
 	}
+}
+
+func (c *client) newResponse(ctx context.Context, params responses.ResponseNewParams) (*responses.Response, error) {
+	if !usesBatchProcessing(ctx) {
+		return c.oai.Responses.New(ctx, params)
+	}
+
+	var response responses.Response
+	if err := c.batches.submit(ctx, openai.BatchNewParamsEndpointV1Responses, params, &response); err != nil {
+		return nil, err
+	}
+	return &response, nil
 }
 
 func scheme(schema map[string]any) responses.ResponseTextConfigParam {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/recipes"
@@ -98,6 +99,7 @@ func (s advertisedGenerationServer) handleGenerate(w http.ResponseWriter, r *htt
 }
 
 func (s advertisedGenerationServer) generateLocation(ctx context.Context, locationID string) error {
+	ctx = ai.WithBatchProcessing(ctx)
 	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
 	ctx = logsetup.WithUserID(ctx, "campaign_ads")
 
