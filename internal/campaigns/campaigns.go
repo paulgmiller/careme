@@ -4,24 +4,24 @@ import (
 	"net/http"
 	"net/url"
 
+	"careme/internal/recipes"
 	"careme/internal/routing"
 )
 
-var locations = map[string]string{
-	"issaquah": "70100658",
-}
-
 // Register adds campaign redirect routes to mux.
 func Register(mux routing.Registrar) {
-	for campaign, location := range locations {
-		mux.HandleFunc("GET /c/"+campaign, redirectToLocation(location))
+	for name, campaign := range AdvertisedRecipeLocations() {
+		mux.HandleFunc("GET /c/"+name, redirectToLocation(campaign.Location.ID, campaign.HelpMessage))
 	}
 }
 
-func redirectToLocation(location string) http.HandlerFunc {
+func redirectToLocation(location string, helpMessage string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := cloneValues(r.URL.Query())
 		query.Set("location", location)
+		if helpMessage != "" {
+			query.Set(recipes.QueryArgHelp, helpMessage)
+		}
 
 		target := url.URL{
 			Path:     "/recipes",

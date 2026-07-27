@@ -28,13 +28,11 @@ const (
 var nowFn = time.Now
 
 type generatorParams struct {
-	Location *locations.Location `json:"location,omitempty"`
-	Date     time.Time           `json:"date"`
-	// People       int
-	// per round instuctions
-	Instructions string   `json:"instructions,omitempty"`
-	Directive    string   `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
-	LastRecipes  []string `json:"-"`                   // this doesn't get populated until after save.
+	Location     *locations.Location `json:"location,omitempty"`
+	Date         time.Time           `json:"date"`
+	Instructions string              `json:"instructions,omitempty"`
+	Directive    string              `json:"directive,omitempty"` // this is the new one that will be used. Can remove GenerationPrompt after a while.
+	LastRecipes  []string            `json:"-"`                   // this doesn't get populated until after save.
 	// UserID         string      `json:"user_id,omitempty"`
 	// ideally this would be a section and we'd fetch titles and other things as needed
 	// as is this records a selectio at the time of a regeneration
@@ -51,11 +49,11 @@ type GeneratorParams = generatorParams
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 	// normalize to midnight (shave hours, minutes, seconds, nanoseconds)
+	// rethink this can we use this to restart if we don't normalize and hash still just looks at right part?
 	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	return &generatorParams{
 		Date:     date, // shave time
 		Location: l,
-		// People:   2,
 	}
 }
 
@@ -145,7 +143,7 @@ func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time
 	}
 	storeLoc, err := time.LoadLocation(tzName)
 	if err != nil {
-		slog.ErrorContext(ctx, "invalid inferred timezone; falling back to UTC", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
+		slog.ErrorContext(ctx, "invalid inferred timezone", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
 		return nil, err
 	}
 	return storeLoc, nil

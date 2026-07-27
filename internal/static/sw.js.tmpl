@@ -1,0 +1,185 @@
+const CACHE_NAME = {{.CacheName}};
+const SAVED_RECIPES_CACHE_NAME = "careme-saved-recipes-v1";
+const SAVED_RECIPES_LIST_URL = "/user/recipes/offline-cache";
+const PRECACHE_URLS = {{.PrecacheURLs}};
+const AUTH_PATHS = new Set({{.AuthPaths}});
+
+// Install-time precache is the tiny app shell needed to open while offline.
+// Keep season-sensitive assets out of this list so they can refresh online.
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting()),
+  );
+});
+
+// Delete old app-shell caches when a new service worker version activates.
+// Saved recipes use a stable cache so they survive service worker updates.
+// self.clients.claim() lets the refreshed worker control open tabs promptly.
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key !== CACHE_NAME && key !== SAVED_RECIPES_CACHE_NAME)
+            .map((key) => caches.delete(key)),
+        ),
+      )
+      .then(() => self.clients.claim()),
+  );
+});
+
+function cacheSavedRecipeURLs(body) {
+  const urls = body.split(/\r?\n/).filter(Boolean);
+  return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
+    Promise.all(
+      urls.map((url) => {
+        const request = new Request(url, {
+          credentials: "same-origin",
+          cache: "reload",
+        });
+        // Recipe pages are refreshed on each sync so offline copies pick up
+        // later additions like questions, generated images, and wine pairings.
+        // Ideally the app would trigger this only when one of those changes.
+        return fetch(request)
+          .then((response) => {
+            if (response && response.ok) {
+              return cache.put(url, response).then(() => true);
+            }
+            return false;
+          })
+          .catch(() => false);
+      }),
+    ).then((results) => {
+      if (!results.every(Boolean)) {
+        return false;
+      }
+      return cache.put(SAVED_RECIPES_LIST_URL, new Response(body)).then(() => true);
+    }),
+  );
+}
+
+function savedRecipeListChanged(body) {
+  return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
+    cache.match(SAVED_RECIPES_LIST_URL)
+      .then((cached) => {
+        if (!cached) {
+          return true;
+        }
+        return cached.text().then((previous) => previous !== body);
+      }),
+  );
+}
+
+function syncSavedRecipes() {
+  return fetch(SAVED_RECIPES_LIST_URL, {
+    credentials: "same-origin",
+    cache: "no-store",
+  })
+    .then((response) => {
+      if (!response.ok) {
+        return false;
+      }
+      return response.text();
+    })
+    .then((body) => {
+      if (body === false) {
+        return false;
+      }
+      return savedRecipeListChanged(body).then((changed) => {
+        if (!changed) {
+          return true;
+        }
+        return cacheSavedRecipeURLs(body);
+      });
+    })
+    .catch(() => false);
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "CAREME_SYNC_SAVED_RECIPES") {
+    event.waitUntil(syncSavedRecipes());
+  }
+});
+
+function cacheSuccessfulResponse(request, response) {
+  if (!response || !response.ok) {
+    return response;
+  }
+
+  const responseCopy = response.clone();
+  caches.open(CACHE_NAME).then((cache) => cache.put(request, responseCopy));
+  return response;
+}
+
+function networkFirstWithCacheFallback(request) {
+  return fetch(request)
+    .then((response) => cacheSuccessfulResponse(request, response))
+    .catch(() => caches.match(request));
+}
+
+function cacheFirstWithNetworkFill(request) {
+  return caches.match(request).then((cached) => {
+    if (cached) {
+      return cached;
+    }
+
+    return fetch(request).then((response) => cacheSuccessfulResponse(request, response));
+  });
+}
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+
+  // Non-GET requests may change server state; do not replay or cache them.
+  if (request.method !== "GET") {
+    return;
+  }
+
+  const url = new URL(request.url);
+
+  // This worker only owns same-origin pages and assets. CDN/API requests use
+  // the browser default behavior so we do not mask third-party failures.
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Clerk redirects and auth bootstrap should always hit the network.
+  if (AUTH_PATHS.has(url.pathname)) {
+    return;
+  }
+
+  // Page navigations should show fresh server content when possible, then fall
+  // back to cached saved recipes or the rendered offline page from the install cache.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request).catch(() =>
+        caches.match(request).then((cached) => cached || caches.match("/offline")),
+      ),
+    );
+    return;
+  }
+
+  // Favicons change with the season. Prefer the network so online users see the
+  // current icon, but keep the last successful response for offline launches.
+  if (url.pathname === "/favicon.ico") {
+    event.respondWith(networkFirstWithCacheFallback(request));
+    return;
+  }
+
+  const isStaticAsset =
+    url.pathname.startsWith("/static/") ||
+    url.pathname === "/manifest.webmanifest" ||
+    url.pathname === "/offline";
+  if (!isStaticAsset) {
+    return;
+  }
+
+  // Versioned CSS/JS and app icons are stable. Serve them from cache first and
+  // populate the cache after the first successful network response.
+  event.respondWith(cacheFirstWithNetworkFill(request));
+});

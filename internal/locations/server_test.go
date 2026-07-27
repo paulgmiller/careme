@@ -14,6 +14,7 @@ import (
 	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/guest"
 	"careme/internal/templates"
 )
 
@@ -134,6 +135,100 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestLocationsPageSetsGuestShoppingListCookieWhenMissing(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.setListResponse("10001", []Location{{
+		ID:      "12345678",
+		Name:    "Kroger Test",
+		Address: "1 Market St",
+		ZipCode: "10001",
+	}})
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	cookie := findResponseCookie(rr, guest.ShoppingListCookieName)
+	if cookie == nil {
+		t.Fatalf("expected %s cookie to be set", guest.ShoppingListCookieName)
+	}
+	if cookie.Value != "0" {
+		t.Fatalf("guest cookie value = %q, want 0", cookie.Value)
+	}
+}
+
+func TestLocationsPagePreservesValidGuestShoppingListCookie(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.setListResponse("10001", []Location{{
+		ID:      "12345678",
+		Name:    "Kroger Test",
+		Address: "1 Market St",
+		ZipCode: "10001",
+	}})
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "1"})
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if cookie := findResponseCookie(rr, guest.ShoppingListCookieName); cookie != nil {
+		t.Fatalf("expected valid guest cookie to be preserved without resetting, got %#v", cookie)
+	}
+}
+
+func TestLocationsPageResetsInvalidGuestShoppingListCookie(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.setListResponse("10001", []Location{{
+		ID:      "12345678",
+		Name:    "Kroger Test",
+		Address: "1 Market St",
+		ZipCode: "10001",
+	}})
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "wat"})
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	cookie := findResponseCookie(rr, guest.ShoppingListCookieName)
+	if cookie == nil {
+		t.Fatalf("expected invalid %s cookie to be reset", guest.ShoppingListCookieName)
+	}
+	if cookie.Value != "0" {
+		t.Fatalf("guest cookie value = %q, want 0", cookie.Value)
 	}
 }
 
@@ -305,4 +400,13 @@ func mustInitLocationTemplates(t *testing.T) {
 	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
 		t.Fatalf("failed to init templates: %v", err)
 	}
+}
+
+func findResponseCookie(rr *httptest.ResponseRecorder, name string) *http.Cookie {
+	for _, cookie := range rr.Result().Cookies() {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	return nil
 }

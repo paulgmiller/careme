@@ -41,7 +41,7 @@ func assertHTTPSuccess(t *testing.T, w *httptest.ResponseRecorder) string {
 }
 
 func formatShoppingListHTMLForTest(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, selection recipeSelection, w *httptest.ResponseRecorder) {
-	FormatShoppingListHTMLForHash(ctx, p, l, nil, renderTestUser(signedIn), p.Hash(), selection, w)
+	FormatShoppingListHTMLForHashWithHelp(ctx, p, l, nil, nil, renderTestUser(signedIn), p.Hash(), selection, "", w)
 }
 
 func renderTestUser(signedIn bool) *utypes.User {
@@ -98,6 +98,15 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("shopping list HTML should include htmx script")
 	}
+	if !strings.Contains(html, `aria-label="Share shopping list"`) {
+		t.Error("shopping list HTML should include a share button")
+	}
+	if !strings.Contains(html, `data-share-status`) {
+		t.Error("shopping list share button should include visible copy feedback")
+	}
+	if !strings.Contains(html, `data-share-url="/recipes?h=`) {
+		t.Error("shopping list share button should share the stable shopping list URL")
+	}
 	if strings.Contains(html, "Shopping list") {
 		t.Error("shopping list HTML should not render the shopping list section before a recipe is added")
 	}
@@ -132,7 +141,21 @@ func TestFormatShoppingListHTML_ChefNotesUsesPreviousInstructionsAsPlaceholder(t
 	assert.NotContains(t, html, `value="make it vegetarian"`)
 }
 
-func TestFormatShoppingListHTML_ChefNotesUsesDefaultPlaceholderWithoutPreviousInstructions(t *testing.T) {
+func TestFormatShoppingListHTML_ChefNotesUsesMenuPlanSuggestionWithoutPreviousInstructions(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	menuList := list
+	menuList.Plan = &ai.MenuPlan{ChefNoteSuggestion: "make the quail faster."}
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, menuList, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, `name="instructions"`)
+	assert.Regexp(t, `placeholder="make the quail faster\.?"`, html)
+}
+
+func TestFormatShoppingListHTML_ChefNotesUsesEmptyWithoutMenuPlanSuggestions(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
@@ -141,7 +164,80 @@ func TestFormatShoppingListHTML_ChefNotesUsesDefaultPlaceholderWithoutPreviousIn
 
 	html := assertHTTPSuccess(t, w)
 	assert.Contains(t, html, `name="instructions"`)
-	assert.Contains(t, html, `placeholder="e.g. make it vegetarian"`)
+	assert.Regexp(t, `placeholder="e.g. make it vegetarian"`, html)
+}
+
+func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
+	withNow(t, time.Date(2026, time.January, 15, 18, 0, 0, 0, time.UTC))
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101"}
+	p := DefaultParams(&loc, time.Date(2026, time.January, 12, 0, 0, 0, 0, time.UTC))
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, `method="GET"`)
+	assert.Contains(t, html, `action="/recipes"`)
+	assert.Contains(t, html, `name="location" value="70000001"`)
+	assert.Contains(t, html, `Using ingredients from <span class="font-semibold text-brand-700">January 12, 2026</span>.`)
+	assert.Contains(t, html, "Use today's ingredients")
+	assert.NotContains(t, html, `Chef notes`)
+	assert.NotContains(t, html, `name="instructions"`)
+	assert.NotContains(t, html, "Try again, chef")
+	assert.NotContains(t, html, `Older list`)
+	assert.NotContains(t, html, `/regenerate"`)
+}
+
+func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
+	withNow(t, time.Date(2026, time.January, 15, 18, 0, 0, 0, time.UTC))
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101"}
+	p := DefaultParams(&loc, time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC))
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, `method="POST"`)
+	assert.Contains(t, html, `/regenerate"`)
+	assert.Contains(t, html, "Note to chef")
+	assert.Contains(t, html, "Try again, chef")
+	assert.NotContains(t, html, "Use today's ingredients")
+	assert.NotContains(t, html, `Older list`)
+	assert.NotContains(t, html, `Using ingredients from`)
+	assert.NotContains(t, html, `January 15, 2026`)
+	assert.NotContains(t, html, `name="location" value="70000001"`)
+}
+
+func TestFormatShoppingListHTML_ShowsLocationWithoutDateWhenFresh(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
+	w := httptest.NewRecorder()
+
+	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, `Location: <span class="font-semibold text-brand-700">Store</span>`)
+	assert.Contains(t, html, `<span class="text-sm text-ink-500">(1 Main St)</span>`)
+	assert.NotContains(t, html, `Ingredients from`)
+	assert.NotContains(t, html, `Using ingredients from`)
+	assert.NotContains(t, html, `January 25, 2026`)
+}
+
+func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+
+	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, nil, renderTestUser(true), p.Hash(), recipeSelection{}, "Save two dinners before building your shopping list.", w)
+
+	html := assertHTTPSuccess(t, w)
+	assert.Contains(t, html, "Welcome to Careme")
+	assert.Contains(t, html, "Save two dinners before building your shopping list.")
+	assert.Contains(t, html, `aria-label="Dismiss welcome message"`)
+	assert.Contains(t, html, `for="shopping-list-help-dismiss"`)
+	assert.Contains(t, html, `peer-checked/help:hidden`)
+	assert.NotContains(t, html, `<script src="/static/shoppinglist.js"></script>`)
+	assert.NotContains(t, html, "localStorage")
 }
 
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
@@ -353,6 +449,8 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `<meta name="description" content="A simple quail recipe Recipe for Store on 2026-01-25." />`) {
 		t.Error("recipe HTML should include recipe, location, and date in the meta description")
 	}
+	assert.Contains(t, html, `<a href="/recipes?location=70000001"`)
+	assert.Contains(t, html, `>Store</a>`)
 	if strings.Contains(html, "Finalize") {
 		t.Error("recipe HTML should not contain Finalize button")
 	}
@@ -370,6 +468,15 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	}
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("recipe HTML should include htmx script")
+	}
+	if !strings.Contains(html, `aria-label="Share recipe"`) {
+		t.Error("recipe HTML should include a share button")
+	}
+	if !strings.Contains(html, `data-share-status`) {
+		t.Error("recipe share button should include visible copy feedback")
+	}
+	if !strings.Contains(html, `data-share-url="/recipe/`) {
+		t.Error("recipe share button should share the stable recipe URL")
 	}
 	if !strings.Contains(html, `id="question-thread"`) {
 		t.Error("recipe HTML should contain question thread container")
@@ -680,6 +787,21 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	}
 }
 
+func TestFormatShoppingListHTML_RendersRecipeImageInResponsiveQuarterWidthColumn(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	w := httptest.NewRecorder()
+	recipeHash := list.Recipes[0].ComputeHash()
+
+	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, map[string]bool{recipeHash: true}, renderTestUser(true), p.Hash(), recipeSelection{}, "", w)
+	html := assertHTTPSuccess(t, w)
+
+	assert.Contains(t, html, `src="/recipe/`+recipeHash+`/image"`)
+	assert.Contains(t, html, `sm:grid-cols-[minmax(0,1fr)_25%]`)
+	assert.Contains(t, html, `w-1/4 shrink-0`)
+	assert.Contains(t, html, `sm:row-span-3`)
+}
+
 func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
@@ -706,7 +828,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	wineHash := multi.Recipes[0].ComputeHash()
 	selection := recipeSelection{SavedHashes: []string{wineHash}}
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHash(t.Context(), p, multi, map[string]*ai.WineSelection{
+	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, multi, map[string]*ai.WineSelection{
 		wineHash: {
 			Wines: []ai.Ingredient{
 				{Name: "Cellar Red", Quantity: "1 bottle", Price: "$15"},
@@ -714,7 +836,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 			},
 			Commentary: "Good with roasted flavors.",
 		},
-	}, renderTestUser(true), p.Hash(), selection, w)
+	}, nil, renderTestUser(true), p.Hash(), selection, "", w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)

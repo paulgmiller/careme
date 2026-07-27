@@ -101,6 +101,84 @@ func TestRecipePlanInstructionsIncludesPlanSpecificUserDirections(t *testing.T) 
 	}
 }
 
+func TestAlignMenuPlanIngredientsAcceptsAvailableIngredientDescriptions(t *testing.T) {
+	plan := &MenuPlan{Plans: []RecipePlan{{
+		Cuisine:          "Italian",
+		AnchorIngredient: "wild caught shrimp",
+		Technique:        "pasta",
+		SideVegetable:    " broccolini ",
+	}}}
+	ingredients := []InputIngredient{
+		{ProductID: "shrimp-id", Description: "Wild Caught Shrimp"},
+		{ProductID: "0000000003277", Description: "Broccolini"},
+	}
+
+	err := alignMenuPlanIngredients(plan, ingredients)
+	if err != nil {
+		t.Fatalf("alignMenuPlanIngredients returned error: %v", err)
+	}
+	got := plan.Plans[0]
+	if got.AnchorIngredient != "wild caught shrimp" {
+		t.Fatalf("expected anchor ingredient to be left unchanged, got %q", got.AnchorIngredient)
+	}
+	if got.SideVegetable != " broccolini " {
+		t.Fatalf("expected side vegetable to be left unchanged, got %q", got.SideVegetable)
+	}
+}
+
+func TestAlignMenuPlanIngredientsRejectsUnavailableIngredientNames(t *testing.T) {
+	plan := &MenuPlan{Plans: []RecipePlan{{
+		AnchorIngredient: "shrimp",
+	}}}
+	ingredients := []InputIngredient{{ProductID: "shrimp-id", Description: "Wild Caught Shrimp"}}
+
+	err := alignMenuPlanIngredients(plan, ingredients)
+
+	if err == nil || !strings.Contains(err.Error(), `anchor_ingredient "shrimp" is not an exact ingredient Description from the TSV`) {
+		t.Fatalf("expected unavailable ingredient name error, got %v", err)
+	}
+}
+
+func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T) {
+	recorder := &capturePromptRecorder{}
+	var requestBodies []string
+	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		requestBodies = append(requestBodies, string(body))
+		responseID := "resp-menu-invalid"
+		sideVegetable := "broccoli rabe"
+		if len(requestBodies) == 2 {
+			responseID = "resp-menu-corrected"
+			sideVegetable = "Broccolini"
+		}
+		return menuPlanHTTPResponse(req, responseID, fmt.Sprintf(`{"plans":[{"cuisine":"Italian","anchor_ingredient":"Wild Caught Shrimp","technique":"pasta","side_vegetable":%q,"fancy":false}]}`, sideVegetable)), nil
+	})}, recorder)
+	ingredients := []InputIngredient{
+		{ProductID: "shrimp-id", Description: "Wild Caught Shrimp"},
+		{ProductID: "broccolini-id", Description: "Broccolini"},
+	}
+
+	got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, ingredients, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
+	if err != nil {
+		t.Fatalf("CreateMenuPlan returned error: %v", err)
+	}
+	if len(requestBodies) != 2 {
+		t.Fatalf("expected initial request and regeneration request, got %d", len(requestBodies))
+	}
+	if !strings.Contains(requestBodies[1], `"previous_response_id":"resp-menu-invalid"`) {
+		t.Fatalf("expected regeneration to continue from invalid response: %s", requestBodies[1])
+	}
+	if !strings.Contains(requestBodies[1], "broccoli rabe") || !strings.Contains(requestBodies[1], "Description value from the ingredient TSV") {
+		t.Fatalf("expected regeneration feedback to describe ingredient mismatch: %s", requestBodies[1])
+	}
+	if got.ResponseID != "resp-menu-corrected" || got.Plans[0].SideVegetable != "Broccolini" {
+		t.Fatalf("unexpected regenerated menu plan: %#v", got)
+	}
+}
+
 func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	location := &locationtypes.Location{State: "WA"}
@@ -126,8 +204,12 @@ func TestCreateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	client := NewClient("test-key", "ignored", menuPlanResponseClient(t, "resp-menu-create"), recorder)
+	ingredients := []InputIngredient{
+		{Description: "tofu"},
+		{Description: "Broccoli"},
+	}
 
-	_, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, nil, []string{"make it vegetarian"}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 2)
+	_, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, ingredients, []string{"make it vegetarian"}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 2)
 	if err != nil {
 		t.Fatalf("CreateMenuPlan returned error: %v", err)
 	}
@@ -231,7 +313,15 @@ func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
 	for _, phrase := range []string{
 		"Return compact planning labels, not recipes",
 		"short phrases, generally under 5 words",
+		"Use the exact ingredient Description text from the TSV",
+		"Do not choose an unavailable related ingredient",
 		"Do not write recipe steps",
+		"chef_note_suggestion",
+		"Tailor it to the planned dishes",
+		"available ingredients, seasonality",
+		"24 characters or fewer",
+		"fit in a mobile text box",
+		`Good examples: "less spicy", "faster dinners", "more vegetables", "no seafood"`,
 		"rationale, or prose notes",
 	} {
 		if !strings.Contains(menuPlanSystemMessage, phrase) {
@@ -254,10 +344,15 @@ func menuPlanResponseClient(t *testing.T, responseID string) *http.Client {
 		if !strings.HasSuffix(req.URL.Path, "/responses") {
 			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
 		}
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+		return menuPlanHTTPResponse(req, responseID, `{"plans":[{"cuisine":"Korean","anchor_ingredient":"tofu","technique":"stir-fry","side_vegetable":"Broccoli","fancy":false}]}`), nil
+	})}
+}
+
+func menuPlanHTTPResponse(req *http.Request, responseID, outputText string) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
 				"id": %q,
 				"object": "response",
 				"created_at": 1778529600,
@@ -270,7 +365,7 @@ func menuPlanResponseClient(t *testing.T, responseID string) *http.Client {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"plans\":[{\"cuisine\":\"Korean\",\"anchor_ingredient\":\"tofu\",\"technique\":\"stir-fry\",\"fancy\":false}]}",
+						"text": %q,
 						"annotations": []
 					}]
 				}],
@@ -281,8 +376,7 @@ func menuPlanResponseClient(t *testing.T, responseID string) *http.Client {
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 2
 				}
-			}`, responseID, recipePlanModel))),
-			Request: req,
-		}, nil
-	})}
+			}`, responseID, recipePlanModel, outputText))),
+		Request: req,
+	}
 }

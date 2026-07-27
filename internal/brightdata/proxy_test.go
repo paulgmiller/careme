@@ -90,6 +90,42 @@ func TestNewProxyAwareHTTPClient_UsesConfiguredProxy(t *testing.T) {
 	}
 }
 
+func TestNewProxyAwareHTTPClient_UsesRequestProxySession(t *testing.T) {
+	t.Parallel()
+
+	client, err := NewProxyAwareHTTPClient(ProxyConfig{
+		Host:     "brd.superproxy.io",
+		Port:     "33335",
+		Username: "user-name",
+		Password: "secret-pass",
+	})
+	if err != nil {
+		t.Fatalf("NewProxyAwareHTTPClient() error = %v", err)
+	}
+
+	retryTransport, ok := client.Transport.(*retryablehttp.RoundTripper)
+	if !ok {
+		t.Fatalf("expected *retryablehttp.RoundTripper, got %T", client.Transport)
+	}
+	transport, ok := retryTransport.Client.HTTPClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected proxy *http.Transport, got %T", retryTransport.Client.HTTPClient.Transport)
+	}
+
+	ctx := WithProxySessionID(context.Background(), "category123")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.example.com/products", nil)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext() error = %v", err)
+	}
+	proxyURL, err := transport.Proxy(req)
+	if err != nil {
+		t.Fatalf("transport.Proxy() error = %v", err)
+	}
+	if got, want := proxyURL.String(), "http://user-name-session-category123:secret-pass@brd.superproxy.io:33335"; got != want {
+		t.Fatalf("unexpected proxy URL: got %q want %q", got, want)
+	}
+}
+
 func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	t.Parallel()
 

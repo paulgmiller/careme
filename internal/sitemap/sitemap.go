@@ -1,12 +1,16 @@
 package sitemap
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"careme/internal/cache"
+	"careme/internal/campaigns"
+	"careme/internal/recipes"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
 )
@@ -57,8 +61,12 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries := make([]urlEntry, 0, len(feedbackHashes)+1)
+	advertisedURLs := s.advertisedRecipeURLs(r.Context())
+	entries := make([]urlEntry, 0, len(feedbackHashes)+1+len(advertisedURLs))
 	entries = append(entries, urlEntry{Loc: s.publicOrigin + "/about"})
+	for _, advertisedURL := range advertisedURLs {
+		entries = append(entries, urlEntry{Loc: advertisedURL})
+	}
 
 	// this is going to get too  big.  at some point we need a real db to find latest
 	for _, hash := range feedbackHashes {
@@ -79,6 +87,39 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		slog.ErrorContext(r.Context(), "failed to encode sitemap", "error", err)
 	}
+}
+
+func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
+	locs := campaigns.AdvertisedRecipeLocations()
+
+	var urls []string
+	for _, campaign := range locs {
+		loc := campaign.Location
+		date, err := recipes.StoreToDate(ctx, time.Now(), &loc)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to get date for location", "error", err, "location", loc)
+			continue
+		}
+
+		p := recipes.DefaultParams(&loc, date)
+
+		io := recipes.IO(s.cache)
+		// could be slow if iwe have lots of campaigns
+		exists, err := io.ParamsExist(ctx, p)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to check param", "storeid", p.Location.ID, "hash", p.Hash())
+			continue
+		}
+		if !exists {
+			// always a race or error?
+			continue
+		}
+
+		// this will be out of date quickly. Do we tell the search engine that and let user know
+		// make a different la
+		urls = append(urls, s.publicOrigin+"/recipes?h="+p.Hash())
+	}
+	return urls
 }
 
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {

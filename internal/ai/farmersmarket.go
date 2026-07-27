@@ -13,12 +13,12 @@ import (
 	"github.com/invopop/jsonschema"
 )
 
-const farmersMarketIngredientModel = "gpt-5"
+const farmersMarketIngredientModel = gpt56Terra
 
 type farmersMarketIngredientItem struct {
 	Name  string   `json:"name" jsonschema:"required"`
 	Brand string   `json:"brand" jsonschema:"required"`
-	Price *float32 `json:"price" jsonschema:"required,nullable"`
+	Price *float32 `json:"price" jsonschema:"required" jsonschema_extras:"type=number,type=null"`
 }
 
 type farmersMarketIngredientResponse struct {

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"careme/internal/ai"
@@ -49,6 +50,7 @@ type shoppingRecipeView struct {
 	DisplayIngredients []ai.Ingredient // merged food and wine
 	Saved              bool
 	Dismissed          bool
+	HasImage           bool
 	WineRecommendation *ai.WineSelection
 }
 
@@ -57,12 +59,16 @@ type shoppingListGroup struct {
 	Items []*ai.Ingredient
 }
 
-// FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
+// FormatShoppingListHTMLForHashWithHelp renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
-func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
+func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage string, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
+	instructions := strings.TrimSpace(p.Instructions)
+	if instructions == "" && l.Plan != nil {
+		instructions = l.Plan.ChefNoteSuggestion
+	}
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
@@ -79,6 +85,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			DisplayIngredients: displayIngredients,
 			Saved:              saved,
 			Dismissed:          selection.IsDismissed(recipeHash),
+			HasImage:           recipeImages[recipeHash],
 			WineRecommendation: wineRecommendation,
 		})
 		if saved {
@@ -87,41 +94,55 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		}
 	}
 	data := struct {
-		Location        locations.Location
-		Date            string
-		MetaDescription string
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Instructions    string
-		Hash            string
-		Recipes         []shoppingRecipeView
-		ShoppingList    []shoppingListGroup
-		HasSavedRecipes bool
-		Style           seasons.Style
-		ServerSignedIn  bool
-		User            *utypes.User
-		AuthReturnTo    string
+		Location             locations.Location
+		Date                 string
+		DateDisplay          string
+		MetaDescription      string
+		ClarityScript        template.HTML
+		GoogleTagScript      template.HTML
+		Instructions         string
+		HelpMessage          string
+		Hash                 string
+		Recipes              []shoppingRecipeView
+		ShoppingList         []shoppingListGroup
+		HasSavedRecipes      bool
+		Style                seasons.Style
+		ServerSignedIn       bool
+		User                 *utypes.User
+		AuthReturnTo         string
+		UseTodaysIngredients bool
 	}{
-		Location:        *p.Location,
-		Date:            p.Date.Format("2006-01-02"),
-		MetaDescription: shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Instructions:    p.Instructions,
-		Hash:            hash,
-		Recipes:         recipeViews,
-		ShoppingList:    shoppingListForDisplay(combinedIngredients),
-		HasSavedRecipes: hasSavedRecipes,
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  serverSignedIn,
-		User:            currentUser,
-		AuthReturnTo:    "/recipes?h=" + hash,
+		Location:             *p.Location,
+		Date:                 p.Date.Format("2006-01-02"),
+		DateDisplay:          p.Date.Format("January 2, 2006"),
+		MetaDescription:      shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
+		ClarityScript:        templates.ClarityScript(ctx),
+		GoogleTagScript:      templates.GoogleTagScript(),
+		Instructions:         instructions,
+		HelpMessage:          strings.TrimSpace(helpMessage),
+		Hash:                 hash,
+		Recipes:              recipeViews,
+		ShoppingList:         shoppingListForDisplay(combinedIngredients),
+		HasSavedRecipes:      hasSavedRecipes,
+		Style:                seasons.GetCurrentStyle(),
+		ServerSignedIn:       serverSignedIn,
+		User:                 currentUser,
+		AuthReturnTo:         "/recipes?h=" + hash,
+		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	}
 
 	setTextContent(writer)
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
+	today, err := StoreToDate(ctx, nowFn(), p.Location)
+	if err != nil {
+		return false
+	}
+	return today.Sub(p.Date) > 24*time.Hour
 }
 
 func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
@@ -251,7 +272,7 @@ func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 }
 
 // called from shoppping list and will either mimimize dimissed or bring back in all on undo.
-func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, hasImage bool, writer io.Writer) error {
 	data := shoppingRecipeView{
 		Recipe:             recipe,
 		Hash:               recipe.ComputeHash(),
@@ -260,6 +281,7 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		Saved:              saved,
 		Dismissed:          !saved,
+		HasImage:           hasImage,
 		WineRecommendation: wineRecommendation,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)

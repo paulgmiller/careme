@@ -16,6 +16,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/farmersmarket"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
@@ -245,8 +246,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage, fakeProduceScorer{})
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
-	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory).Register(appRoutes)
+	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator).Register(appRoutes)
+	farmersMarketStore := farmersmarket.NewStore(cacheStore)
+	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
+	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}, centroids).Register(appRoutes)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}

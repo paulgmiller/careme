@@ -10,17 +10,20 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/auth"
+	"careme/internal/cache"
 	"careme/internal/locations/geo"
-	"careme/internal/parallelism"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 )
 
@@ -43,17 +46,24 @@ type authClient interface {
 	GetUserIDFromRequest(r *http.Request) (string, error)
 }
 
+type locationResolver interface {
+	NearestZIPToCoordinates(lat, lon float64) (string, bool)
+}
+
 type Handler struct {
-	uploader  *uploader
-	auth      authClient
-	extractor IngredientExtractor
-	zipFinder ZipFinder
+	uploader    *uploader
+	auth        authClient
+	extractor   IngredientExtractor
+	zipFinder   locationResolver
+	statusStore *analysisStatusStore
+	// exposed for tests
+	parsePhotos func(context.Context, *http.Request) ([]Photo, error)
+	wg          sync.WaitGroup
 }
 
 type Photo struct {
 	contentType string
 	content     []byte
-	coord       *Coordinate
 }
 
 // who knew data: was  valid url just like http:? see comment in ai/farmersmarket.go
@@ -61,18 +71,25 @@ func (p Photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, authClient authClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
+func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor, zipFinder locationResolver) *Handler {
 	return &Handler{
-		uploader:  uploader,
-		auth:      authClient,
-		extractor: extractor,
-		zipFinder: zipFinder,
+		uploader:    uploader,
+		auth:        authClient,
+		extractor:   extractor,
+		zipFinder:   zipFinder,
+		statusStore: newAnalysisStatusStore(statusCache),
+		parsePhotos: parseUploadedPhotos,
 	}
 }
 
 func (h *Handler) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /farmersmarket", h.handleGet)
 	mux.HandleFunc("POST /farmersmarket", h.handlePost)
+	mux.HandleFunc("GET /farmersmarket/status/{jobID}", h.handleStatus)
+}
+
+func (h *Handler) Wait() {
+	h.wg.Wait()
 }
 
 func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -91,10 +108,12 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
+		ServerSignedIn  bool
 	}{
 		ClarityScript:   templates.ClarityScript(r.Context()),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
+		ServerSignedIn:  true,
 	}
 	if err := templates.FarmersMarket.Execute(w, data); err != nil {
 		slog.ErrorContext(r.Context(), "farmers market template execute error", "error", err)
@@ -104,7 +123,13 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	_, err := h.auth.GetUserIDFromRequest(r)
+
+	if !isHTMXRequest(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
+
+	userID, err := h.auth.GetUserIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			redirectToSignIn(w, r)
@@ -117,70 +142,196 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
-		http.Error(w, "Could not read those photos. Try fewer or smaller images.", http.StatusBadRequest)
+		renderError(ctx, w, "Could not read those photos. Try fewer or smaller images.")
 		return
 	}
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
-		http.Error(w, "Add a market name.", http.StatusBadRequest)
+		renderError(ctx, w, "Add a market name.")
 		return
 	}
-	photos, err := parseUploadedPhotos(ctx, r)
+	photos, err := h.parsePhotos(ctx, r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		renderError(ctx, w, err.Error())
 		return
 	}
-	coords := lo.Map(photos, func(photo Photo, _ int) Coordinate {
-		return *photo.coord
-	})
-	avg, err := AverageCoordinate(coords)
+	coord, zip, err := h.resolveMarketLocation(r)
 	if err != nil {
-		http.Error(w, "Add at least one photo with location saved.", http.StatusBadRequest)
-		return
-	}
-	zip, ok := h.zipFinder.NearestZIPToCoordinates(avg.Lat, avg.Lon)
-	if !ok {
-		http.Error(w, "Could not match those photos to a ZIP code.", http.StatusBadRequest)
+		renderError(ctx, w, err.Error())
 		return
 	}
 
-	ingredients, err := extractFarmersMarketIngredients(ctx, h.extractor, photos)
+	jobID := uuid.NewString()
+	status := analysisStatus{
+		ID:         jobID,
+		UserID:     userID,
+		State:      analysisStateRunning,
+		PhotoCount: len(photos),
+		Message:    "Looking through your market photos.",
+	}
+	if err := h.statusStore.save(ctx, status); err != nil {
+		slog.ErrorContext(ctx, "failed to save farmers market analysis status", "error", err)
+		http.Error(w, "Could not start looking through those photos. Try again, chef.", http.StatusInternalServerError)
+		return
+	}
+
+	h.wg.Go(func() {
+		jobCtx := context.WithoutCancel(ctx)
+		h.runAnalysisJob(jobCtx, status, name, photos, coord, zip)
+	})
+
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	if err := renderFarmersMarketProgress(w, status); err != nil {
+		slog.ErrorContext(ctx, "failed to render farmers market analysis progress", "error", err)
+	}
+}
+
+func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate, zip string) {
+	update := func(next analysisStatus) {
+		if err := h.statusStore.save(ctx, next); err != nil {
+			slog.ErrorContext(ctx, "failed to save farmers market analysis status", "job_id", status.ID, "error", err)
+		}
+	}
+	fail := func(message string, err error) {
+		if err != nil {
+			slog.ErrorContext(ctx, "farmers market analysis job failed", "job_id", status.ID, "error", err)
+		}
+		status.State = analysisStateFailed
+		status.Message = message
+		update(status)
+	}
+
+	ingredients, err := extractFarmersMarketIngredientsWithProgress(ctx, h.extractor, photos,
+		func(photosAnalyzed int, ingredients []ai.InputIngredient) {
+			status.PhotosAnalyzed = photosAnalyzed
+			status.IngredientCount = len(ingredients)
+			status.Message = fmt.Sprintf("Analyzed %d of %d market photos.", photosAnalyzed, len(photos))
+			update(status)
+		})
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to extract farmers market ingredients", "error", err)
-		http.Error(w, "Could not identify today's market finds. Try again, chef.", http.StatusBadGateway)
+		fail("Could not identify today's market finds.", err)
 		return
 	}
 	if len(ingredients) == 0 {
-		http.Error(w, "Could not spot recipe ingredients in those photos.", http.StatusBadRequest)
+		fail("Could not spot recipe ingredients in those photos.", nil)
 		return
 	}
+
+	status.PhotosAnalyzed = len(photos)
+	status.IngredientCount = len(ingredients)
+	status.Message = fmt.Sprintf("Found %d ingredients. Saving this market.", len(ingredients))
+	update(status)
 
 	date := farmersMarketDate(time.Now(), zip)
-	market, _, err := h.uploader.saveUpload(ctx, name, avg.Lat, avg.Lon, len(coords), date, ingredients)
+	market, err := h.uploader.saveUpload(ctx, name, coord, zip, len(photos), date, ingredients)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to save farmers market upload", "error", err)
-		http.Error(w, "Could not save this market. Try again, chef.", http.StatusInternalServerError)
+		fail("Could not save this market. Try again, chef.", err)
 		return
 	}
 
-	http.Redirect(w, r, "/recipes?location="+url.QueryEscape(market.ID)+"&date="+url.QueryEscape(date.Format("2006-01-02")), http.StatusSeeOther)
+	status.State = analysisStateComplete
+	status.RedirectURL = "/recipes?location=" + url.QueryEscape(market.ID) + "&date=" + url.QueryEscape(date.Format("2006-01-02"))
+	status.Message = fmt.Sprintf("Found %d ingredients. Building dinner ideas.", len(ingredients))
+	update(status)
+}
+
+func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	_, err := h.auth.GetUserIDFromRequest(r)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			redirectToSignIn(w, r)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for farmers market analysis status", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+
+	status, err := h.statusStore.load(ctx, r.PathValue("jobID"))
+	if err != nil {
+		http.Error(w, "analysis not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	if status.State == analysisStateComplete && status.RedirectURL != "" {
+		w.Header().Set("HX-Redirect", status.RedirectURL)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if status.State == analysisStateFailed {
+		renderError(ctx, w, status.Message)
+		return
+	}
+	if err := renderFarmersMarketProgress(w, status); err != nil {
+		slog.ErrorContext(ctx, "failed to render farmers market analysis progress", "error", err)
+	}
 }
 
 func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []Photo) ([]ai.InputIngredient, error) {
+	return extractFarmersMarketIngredientsWithProgress(ctx, extractor, photos, nil)
+}
+
+func extractFarmersMarketIngredientsWithProgress(ctx context.Context, extractor IngredientExtractor, photos []Photo, progress func(int, []ai.InputIngredient)) ([]ai.InputIngredient, error) {
 	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos))
-	ingredients, err := parallelism.Flatten(photos, func(photo Photo) ([]ai.InputIngredient, error) {
-		ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL())
-		slog.InfoContext(ctx, "finished farmers market photo analysis", "ingredient_count", len(ingredients))
-		return ingredients, err
-	})
-	if err != nil {
+	type result struct {
+		ingredients []ai.InputIngredient
+		err         error
+	}
+	results := make(chan result, len(photos))
+	var wg sync.WaitGroup
+	for _, photo := range photos {
+		photo := photo
+		wg.Go(func() {
+			ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL())
+			slog.InfoContext(ctx, "finished farmers market photo analysis", "ingredient_count", len(ingredients))
+			results <- result{ingredients: ingredients, err: err}
+		})
+	}
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	ingredients := make([]ai.InputIngredient, 0)
+	errs := make([]error, 0)
+	photosAnalyzed := 0
+	for r := range results {
+		photosAnalyzed++
+		if r.err != nil {
+			errs = append(errs, r.err)
+		} else {
+			ingredients = append(ingredients, r.ingredients...)
+		}
+		ingredients = uniqueIngredients(ingredients)
+		if progress != nil {
+			progress(photosAnalyzed, slices.Clone(ingredients))
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
+	return uniqueIngredients(ingredients), nil
+}
 
+func uniqueIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
 	return lo.UniqBy(ingredients, func(i ai.InputIngredient) string {
 		return i.ProductID
-	}), nil
+	})
+}
+
+func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
+	coord, err := geo.FromString(r.FormValue("lat"), r.FormValue("lon"))
+	if err != nil {
+		return geo.Coordinate{}, "", err
+	}
+	zip, ok := h.zipFinder.NearestZIPToCoordinates(coord.Lat, coord.Lon)
+	if !ok {
+		return geo.Coordinate{}, "", fmt.Errorf("could not match that location to a ZIP code")
+	}
+	return coord, zip, nil
 }
 
 func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) {
@@ -220,15 +371,8 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 			return nil, fmt.Errorf("upload image files only")
 		}
 
-		photo := Photo{contentType: contentType, content: data}
-		coord, err := GPSFromImage(data)
-		if err != nil {
-			return nil, fmt.Errorf("could not read location from one of those photos %w", err)
-		}
-		photo.coord = &coord
-
-		photos = append(photos, photo)
-		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", len(data), "content_type", contentType, "has_location", photo.coord != nil)
+		photos = append(photos, Photo{contentType: contentType, content: data})
+		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", len(data), "content_type", contentType)
 	}
 	return photos, nil
 }
@@ -251,5 +395,28 @@ func farmersMarketDate(now time.Time, zip string) time.Time {
 
 func redirectToSignIn(w http.ResponseWriter, r *http.Request) {
 	target := "/sign-in?return_to_b64=" + url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(r.URL.RequestURI())))
+	if isHTMXRequest(r) {
+		w.Header().Set("HX-Redirect", target)
+		http.Error(w, "must be logged in", http.StatusUnauthorized)
+		return
+	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+func isHTMXRequest(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
+}
+
+func renderError(ctx context.Context, w http.ResponseWriter, message string) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("HX-Retarget", "#farmers-market-error")
+	w.Header().Set("HX-Reswap", "outerHTML")
+	if err := templates.FarmersMarket.ExecuteTemplate(w, "farmersmarket_error", message); err != nil {
+		slog.ErrorContext(ctx, "failed to render farmers market upload error", "error", err)
+	}
+}
+
+func renderFarmersMarketProgress(w http.ResponseWriter, status analysisStatus) error {
+	return templates.FarmersMarket.ExecuteTemplate(w, "farmersmarket_progress", status)
 }
