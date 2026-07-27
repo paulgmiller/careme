@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	defaultCompareModel = "gemini-3.5-flash"
+	defaultCompareModel = "google/gemini-3.5-flash"
 	benchmarkPrefix     = "recipe_critique_comparisons/"
 	detailScoreDelta    = 1
 )
@@ -58,10 +58,10 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	var model string
 	var refresh bool
 
-	fs := flag.NewFlagSet("geminicritiquecompare", flag.ContinueOnError)
+	fs := flag.NewFlagSet("critiquecompare", flag.ContinueOnError)
 	fs.SetOutput(out)
 	fs.IntVar(&limit, "n", 10, "number of already-critiqued recipes to compare")
-	fs.StringVar(&model, "model", defaultCompareModel, "Gemini model to use for comparison critiques")
+	fs.StringVar(&model, "model", defaultCompareModel, "OpenRouter model to use for comparison critiques")
 	fs.BoolVar(&refresh, "refresh", false, "rerun comparison critiques even if benchmark results are cached")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -83,7 +83,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("create cache: %w", err)
 	}
-	critiquer := ai.NewCritiquer(cfg.Gemini.APIKey, model, http.DefaultClient)
+	critiquer := ai.NewCritiquer(cfg.OpenRouter.APIKey, model, http.DefaultClient)
 
 	rows, err := compareCritiques(ctx, cacheStore, critiquer, model, limit, refresh)
 	if err != nil {

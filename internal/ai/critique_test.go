@@ -1,12 +1,17 @@
 package ai
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"strings"
 	"testing"
 
+	openai "github.com/openai/openai-go/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/genai"
 )
 
 func TestBuildRecipeCritiquePrompt(t *testing.T) {
@@ -102,9 +107,66 @@ func TestRecipeCritiqueJSONSchemaTracksStruct(t *testing.T) {
 	assert.Equal(t, float64(10), overallScore["maximum"])
 }
 
-func TestGeminiUsageLogAttr(t *testing.T) {
+func TestCritiqueRecipeUsesOpenRouterStructuredOutput(t *testing.T) {
+	client := NewCritiquer("openrouter-key", "anthropic/claude-sonnet-4.5", &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, "https", req.URL.Scheme)
+			assert.Equal(t, "openrouter.ai", req.URL.Host)
+			assert.Equal(t, "/api/v1/chat/completions", req.URL.Path)
+			assert.Equal(t, "Bearer openrouter-key", req.Header.Get("Authorization"))
+			assert.Equal(t, openRouterApplicationURL, req.Header.Get("HTTP-Referer"))
+			assert.Equal(t, openRouterApplicationTitle, req.Header.Get("X-OpenRouter-Title"))
+
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			var payload map[string]any
+			require.NoError(t, json.Unmarshal(body, &payload))
+			assert.Equal(t, "anthropic/claude-sonnet-4.5", payload["model"])
+			provider := payload["provider"].(map[string]any)
+			assert.Equal(t, true, provider["require_parameters"])
+			responseFormat := payload["response_format"].(map[string]any)
+			assert.Equal(t, "json_schema", responseFormat["type"])
+			jsonSchema := responseFormat["json_schema"].(map[string]any)
+			assert.Equal(t, true, jsonSchema["strict"])
+
+			content := `{"schema_version":"recipe-critique-v1","overall_score":8,"summary":"Ready to cook.","strengths":[],"issues":[],"suggested_fixes":[]}`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+					"id": "generation-123",
+					"object": "chat.completion",
+					"created": 1778529600,
+					"model": "anthropic/claude-sonnet-4.5",
+					"choices": [{
+						"index": 0,
+						"finish_reason": "stop",
+						"message": {"role": "assistant", "content": %q}
+					}],
+					"usage": {
+						"prompt_tokens": 100,
+						"completion_tokens": 25,
+						"total_tokens": 125,
+						"cost": 0.00125
+					}
+				}`, content))),
+				Request: req,
+			}, nil
+		}),
+	})
+
+	got, err := client.CritiqueRecipe(t.Context(), Recipe{Title: "Roast Chicken"})
+
+	require.NoError(t, err)
+	assert.Equal(t, 8, got.OverallScore)
+	assert.Equal(t, "Ready to cook.", got.Summary)
+	assert.Equal(t, "anthropic/claude-sonnet-4.5", got.Model)
+	assert.False(t, got.CritiquedAt.IsZero())
+}
+
+func TestOpenRouterUsageLogAttr(t *testing.T) {
 	t.Run("nil usage", func(t *testing.T) {
-		attr := geminiUsageLogAttr(defaultGeminiCritiqueModel, nil)
+		attr := openRouterUsageLogAttr(nil)
 		assert.Equal(t, "usage", attr.Key)
 		assert.Equal(t, slog.KindGroup, attr.Value.Kind())
 		require.Len(t, attr.Value.Group(), 1)
@@ -112,33 +174,34 @@ func TestGeminiUsageLogAttr(t *testing.T) {
 	})
 
 	t.Run("usage becomes a slog group", func(t *testing.T) {
-		attr := geminiUsageLogAttr(defaultGeminiCritiqueModel, &genai.GenerateContentResponseUsageMetadata{
-			CachedContentTokenCount: 22,
-			PromptTokenCount:        448,
-			CandidatesTokenCount:    986,
-			ThoughtsTokenCount:      111,
-			ToolUsePromptTokenCount: 310,
-			TotalTokenCount:         1877,
-			TrafficType:             genai.TrafficTypeOnDemand,
-		})
+		var response openai.ChatCompletion
+		require.NoError(t, json.Unmarshal([]byte(`{
+			"id": "generation-123",
+			"object": "chat.completion",
+			"created": 1778529600,
+			"model": "anthropic/claude-sonnet-4.5",
+			"choices": [],
+			"usage": {
+				"prompt_tokens": 448,
+				"prompt_tokens_details": {"cached_tokens": 22},
+				"completion_tokens": 1097,
+				"completion_tokens_details": {"reasoning_tokens": 111},
+				"total_tokens": 1545,
+				"cost": 0.0146404
+			}
+		}`), &response))
+
+		attr := openRouterUsageLogAttr(&response)
 		assert.Equal(t, "usage", attr.Key)
 		assert.Equal(t, slog.KindGroup, attr.Value.Kind())
 		assert.Equal(t, []slog.Attr{
 			slog.Bool("available", true),
-			slog.Int("cachedContentTokenCount", 22),
-			slog.Int("promptTokenCount", 448),
-			slog.Int("candidatesTokenCount", 986),
-			slog.Int("thoughtsTokenCount", 111),
-			slog.Int("toolUsePromptTokenCount", 310),
-			slog.Int("totalTokenCount", 1877),
-			slog.String("trafficType", string(genai.TrafficTypeOnDemand)),
-			slog.Group("spend",
-				slog.String("currency", "USD"),
-				slog.Float64("totalUSD", 0.0146404),
-				slog.Float64("inputUSD", 0.001472),
-				slog.Float64("cachedInputUSD", 0.0000044),
-				slog.Float64("outputUSD", 0.013164),
-			),
+			slog.Int64("promptTokenCount", 448),
+			slog.Int64("cachedTokenCount", 22),
+			slog.Int64("completionTokenCount", 1097),
+			slog.Int64("reasoningTokenCount", 111),
+			slog.Int64("totalTokenCount", 1545),
+			slog.Float64("costCredits", 0.0146404),
 		}, attr.Value.Group())
 	})
 }
