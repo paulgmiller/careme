@@ -87,8 +87,10 @@ func NewCritiquer(apiKey, model string, httpClient *http.Client) *critiquer {
 }
 
 func (c *critiquer) Ready(ctx context.Context) error {
-	_, err := c.client.Models.List(ctx)
-	return err
+	if err := c.client.Get(ctx, "key", nil, nil); err != nil {
+		return fmt.Errorf("check OpenRouter API key: %w", err)
+	}
+	return nil
 }
 
 func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, error) {

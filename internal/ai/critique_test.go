@@ -164,6 +164,44 @@ func TestCritiqueRecipeUsesOpenRouterStructuredOutput(t *testing.T) {
 	assert.False(t, got.CritiquedAt.IsZero())
 }
 
+func TestCritiquerReadyChecksCurrentOpenRouterKey(t *testing.T) {
+	client := NewCritiquer("openrouter-key", "anthropic/claude-sonnet-4.5", &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, http.MethodGet, req.Method)
+			assert.Equal(t, "https", req.URL.Scheme)
+			assert.Equal(t, "openrouter.ai", req.URL.Host)
+			assert.Equal(t, "/api/v1/key", req.URL.Path)
+			assert.Equal(t, "Bearer openrouter-key", req.Header.Get("Authorization"))
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"data":{"label":"openrouter-key"}}`)),
+				Request:    req,
+			}, nil
+		}),
+	})
+
+	require.NoError(t, client.Ready(t.Context()))
+}
+
+func TestCritiquerReadyRejectsInvalidOpenRouterKey(t *testing.T) {
+	client := NewCritiquer("invalid-key", "anthropic/claude-sonnet-4.5", &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusUnauthorized,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"error":{"code":401,"message":"Invalid API key"}}`)),
+				Request:    req,
+			}, nil
+		}),
+	})
+
+	err := client.Ready(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "check OpenRouter API key")
+}
+
 func TestOpenRouterUsageLogAttr(t *testing.T) {
 	t.Run("nil usage", func(t *testing.T) {
 		attr := openRouterUsageLogAttr(nil)
