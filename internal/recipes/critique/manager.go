@@ -43,10 +43,10 @@ type waitingCritiquer struct {
 var _ recipeCritiquer = &waitingCritiquer{}
 
 func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) *waitingCritiquer {
-	if !cfg.Gemini.IsEnabled() {
-		panic("gemini must be enabled")
+	if !cfg.OpenRouter.IsEnabled() {
+		panic("OpenRouter must be enabled")
 	}
-	crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel, httpClient)
+	crit := ai.NewCritiquer(cfg.OpenRouter.APIKey, cfg.OpenRouter.CritiqueModel, httpClient)
 	return &waitingCritiquer{
 		critiquer: newCachingCritiquer(crit, NewStore(c)),
 	}
