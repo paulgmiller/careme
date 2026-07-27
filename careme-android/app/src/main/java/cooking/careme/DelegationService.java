@@ -1,4 +1,4 @@
-package cooking.careme.twa;
+package cooking.careme;
 
 
 import com.google.androidbrowserhelper.locationdelegation.LocationDelegationExtraCommandHandler;
