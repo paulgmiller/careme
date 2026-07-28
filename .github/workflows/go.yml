@@ -28,7 +28,7 @@ jobs:
           cache: true
 
       - name: Run Go tests
-        run: go test ./...
+        run: ./task.sh test
 
   vet:
     name: vet
@@ -45,7 +45,7 @@ jobs:
           cache: true
 
       - name: Run go vet
-        run: go vet ./...
+        run: ./task.sh vet
 
   format:
     name: format
@@ -65,7 +65,7 @@ jobs:
             tools/tool.sum
 
       - name: Check Go formatting
-        run: test -z "$(./tool.sh gofumpt -l .)"
+        run: ./task.sh fmt-check
 
   lint:
     name: lint
@@ -80,18 +80,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Read tool versions
-        id: tool-versions
-        run: |
-          source tools/versions.sh
-          echo "golangci-lint=${GOLANGCI_LINT_VERSION}" >> "${GITHUB_OUTPUT}"
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: ${{ steps.tool-versions.outputs.golangci-lint }}
-          args: --timeout=5m
+        run: ./task.sh lint
 
   crap:
     name: crap
@@ -111,7 +105,7 @@ jobs:
             tools/tool.sum
 
       - name: Run go-crap scan
-        run: ./tool.sh go-crap scan --top 10 --exclude '.*_test\.go' --exclude '.*\.gen\.go' --exclude 'main\.go' --threshold 250 --fail-above
+        run: ./task.sh crap
 
   js-lint:
     name: js-lint
@@ -126,8 +120,16 @@ jobs:
         with:
           node-version: 22
 
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
+
       - name: Run JavaScript lint
-        run: npm exec --yes --package eslint@10.4.0 -- eslint internal/static/user-clerk-billing.js internal/static/share.js
+        run: ./task.sh js-lint
 
   k8s-lint:
     name: k8s-lint
@@ -147,7 +149,7 @@ jobs:
             tools/tool.sum
 
       - name: Validate Kubernetes manifests
-        run: ./tool.sh kubeconform -strict -summary deploy/*.yaml
+        run: ./task.sh k8s-lint
 
   publish:
     name: publish (${{ matrix.name }})

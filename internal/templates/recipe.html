@@ -252,6 +252,11 @@
         <a href="/recipe/{{.Recipe.ParentHash}}" class="hover:text-gray-500">Previous iteration</a>
       </p>
       {{end}}
+      {{if .AdminURL}}
+      <p class="text-center text-[0.6875rem] text-gray-400">
+        <a href="{{.AdminURL}}" class="hover:text-gray-500">Admin</a>
+      </p>
+      {{end}}
       <p class="text-center text-sm text-gray-500">Planned by Careme.</p>
       </div>
     </section>
