@@ -1,4 +1,4 @@
-# Run Task with the pinned version: go tool -modfile=tools/task.mod task
+# Run Task with the pinned version: ./tool.sh task
 version: "3"
 
 env:
@@ -10,7 +10,7 @@ tasks:
   default:
     desc: List available tasks
     cmds:
-      - go tool -modfile=tools/task.mod task --list
+      - ./tool.sh task --list
     silent: true
 
   ci:
@@ -38,7 +38,7 @@ tasks:
   fmt:
     desc: Format Go code with gofumpt
     cmds:
-      - go tool -modfile=tools/gofumpt.mod gofumpt -w .
+      - ./tool.sh gofumpt -w .
 
   vet:
     desc: Run go vet
@@ -47,14 +47,16 @@ tasks:
 
   lint:
     desc: Run golangci-lint
+    deps:
+      - golangci-lint
     cmds:
-      - go tool -modfile=tools/golangci-lint.mod golangci-lint run ./... --timeout=5m
+      - ./bin/golangci-lint run ./... --timeout=5m
 
   fmt-check:
     desc: Check Go formatting with gofumpt
     cmds:
       - |
-        files="$(go tool -modfile=tools/gofumpt.mod gofumpt -l .)"
+        files="$(./tool.sh gofumpt -l .)"
         test -z "$files" || {
           printf '%s\n' "$files"
           exit 1
@@ -63,7 +65,7 @@ tasks:
   k8s-lint:
     desc: Validate Kubernetes manifests with kubeconform
     cmds:
-      - go tool -modfile=tools/kubeconform.mod kubeconform -strict -summary deploy/*.yaml
+      - ./tool.sh kubeconform -strict -summary deploy/*.yaml
 
   js-lint:
     desc: Syntax-check JavaScript assets
@@ -199,3 +201,10 @@ tasks:
       NAMESPACE: '{{default "careme" .NAMESPACE}}'
     cmds:
       - bash deploy/deploy.sh {{.REF}} {{.NAMESPACE}}
+
+  golangci-lint:
+    internal: true
+    status:
+      - test -x ./bin/golangci-lint
+    cmds:
+      - bash tools/install-golangci-lint.sh

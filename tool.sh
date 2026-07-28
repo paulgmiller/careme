@@ -3,4 +3,4 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-exec "${repo_root}/tool.sh" task "$@"
+exec go tool -C "${repo_root}" -modfile=tools/tool.mod "$@"
