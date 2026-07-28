@@ -1,4 +1,4 @@
-# Install Task: go install github.com/go-task/task/v3/cmd/task@latest
+# Run Task with the pinned version: ./tool.sh task
 version: "3"
 
 env:
@@ -10,7 +10,7 @@ tasks:
   default:
     desc: List available tasks
     cmds:
-      - task --list
+      - ./tool.sh task --list
     silent: true
 
   ci:
@@ -37,10 +37,8 @@ tasks:
 
   fmt:
     desc: Format Go code with gofumpt
-    deps:
-      - gofumpt
     cmds:
-      - ./bin/gofumpt -w .
+      - ./tool.sh gofumpt -w .
 
   vet:
     desc: Run go vet
@@ -56,11 +54,9 @@ tasks:
 
   fmt-check:
     desc: Check Go formatting with gofumpt
-    deps:
-      - gofumpt
     cmds:
       - |
-        files="$(./bin/gofumpt -l .)"
+        files="$(./tool.sh gofumpt -l .)"
         test -z "$files" || {
           printf '%s\n' "$files"
           exit 1
@@ -68,10 +64,8 @@ tasks:
 
   k8s-lint:
     desc: Validate Kubernetes manifests with kubeconform
-    deps:
-      - kubeconform
     cmds:
-      - ./bin/kubeconform -strict -summary deploy/*.yaml
+      - ./tool.sh kubeconform -strict -summary deploy/*.yaml
 
   js-lint:
     desc: Syntax-check JavaScript assets
@@ -208,28 +202,9 @@ tasks:
     cmds:
       - bash deploy/deploy.sh {{.REF}} {{.NAMESPACE}}
 
-  tools:
-    desc: Install pinned local CI tools into ./bin
-    cmds:
-      - bash tools/install.sh
-
-  gofumpt:
-    internal: true
-    status:
-      - test -x ./bin/gofumpt
-    cmds:
-      - bash tools/install.sh gofumpt
-
   golangci-lint:
     internal: true
     status:
       - test -x ./bin/golangci-lint
     cmds:
-      - bash tools/install.sh golangci-lint
-
-  kubeconform:
-    internal: true
-    status:
-      - test -x ./bin/kubeconform
-    cmds:
-      - bash tools/install.sh kubeconform
+      - bash tools/install-golangci-lint.sh
