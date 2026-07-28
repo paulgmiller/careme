@@ -12,10 +12,8 @@
 - Cache key/prefix docs live in `docs/cache-layout.md`. Keep that file updated when cache keys are added or changed.
 
 ## Build, Test, and Development Commands
-- Sandbox-safe Go cache setup (recommended before running Go commands in restricted environments):
-  - `export GOCACHE=/tmp/go-build`
-  - `export GOMODCACHE=/tmp/go-modcache`
-  - Alternative persistent path inside repo: `export GOCACHE=$PWD/.cache/go-build && export GOMODCACHE=$PWD/.cache/go-modcache`
+- Go commands use the developer's normal shared Go caches. Codex permission
+  profiles grant agents write access to those caches.
 - `./task.sh fmt` (preferred), then `go vet ./...`: Baseline formatting and static checks.
 - From the repo root, run `./task.sh lint`: Expanded Go linters using the pinned release binary.
 - `export ENABLE_MOCKS=1`: to test without kroger, openai credentials
