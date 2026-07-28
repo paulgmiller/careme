@@ -74,17 +74,23 @@ func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int) {
 	http.Error(w, "must be logged in", status)
 }
 
-func redirectToSignInForSave(w http.ResponseWriter, r *http.Request, shoppingListHash, recipeHash string, status int) {
+func redirectToAccountRequired(w http.ResponseWriter, r *http.Request, reason auth.AccountRequiredReason, returnTo string, status int) {
+	target := auth.AccountRequiredPath(reason, returnTo)
+	if isHTMXRequest(r) {
+		w.Header().Set("HX-Redirect", target)
+		http.Error(w, "account required", status)
+		return
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+func redirectToAccountRequiredForSave(w http.ResponseWriter, r *http.Request, shoppingListHash, recipeHash string, status int) {
 	returnTo := requestURIOrPath(r)
 	if shoppingListHash != "" && recipeHash != "" {
 		values := url.Values{queryArgHash: []string{shoppingListHash}, queryArgPendingSave: []string{recipeHash}}
 		returnTo = "/recipes?" + values.Encode()
 	}
-	target := signInPath(returnTo)
-	if isHTMXRequest(r) {
-		w.Header().Set("HX-Redirect", target)
-	}
-	http.Error(w, "must be logged in", status)
+	redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, returnTo, status)
 }
 
 type locServer interface {
@@ -623,7 +629,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignInForSave(w, r, shoppingListHash, recipeHash, http.StatusUnauthorized)
+			redirectToAccountRequiredForSave(w, r, shoppingListHash, recipeHash, http.StatusUnauthorized)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load user for recipe save", "error", err)
@@ -878,16 +884,23 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	instructions := strings.TrimSpace(r.FormValue("instructions"))
 
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			if !guest.UseShoppingList(w, r) {
-				if isHTMXRequest(r) {
-					redirectToSignIn(w, r, http.StatusUnauthorized)
-					return
-				}
-				http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
+				redirectToAccountRequired(
+					w,
+					r,
+					auth.AccountRequiredGenerationLimit,
+					pendingRegenerationPath(hash, instructions),
+					http.StatusUnauthorized,
+				)
 				return
 			}
 			currentUser = guestUser
@@ -896,21 +909,35 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+
+	newHash, status, err := s.startRegeneration(ctx, hash, currentUser, instructions)
+	if err != nil {
+		http.Error(w, err.Error(), status)
 		return
 	}
+	redirectToHash(w, r, newHash, queryArgStart)
+}
 
-	p, err := paramsForAction(ctx, hash, currentUser.ID, strings.TrimSpace(r.FormValue("instructions")), s.recipeio)
+func pendingRegenerationPath(hash, instructions string) string {
+	values := url.Values{
+		queryArgHash:         []string{hash},
+		queryArgPendingRetry: []string{"1"},
+	}
+	if instructions != "" {
+		values.Set("instructions", instructions)
+	}
+	return "/recipes?" + values.Encode()
+}
+
+func (s *server) startRegeneration(ctx context.Context, hash string, currentUser *utypes.User, instructions string) (string, int, error) {
+	p, err := paramsForAction(ctx, hash, currentUser.ID, instructions, s.recipeio)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return "", http.StatusBadRequest, err
 	}
 	if len(p.Dismissed) == 0 {
 		currentList, err := s.FromCache(ctx, hash)
 		if err != nil {
-			http.Error(w, "failed to load recipe list", http.StatusBadRequest)
-			return
+			return "", http.StatusBadRequest, errors.New("failed to load recipe list")
 		}
 		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
 	}
@@ -918,13 +945,11 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
 		slog.ErrorContext(ctx, "failed to save params for regenerate", "hash", newHash, "error", err)
-		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
-		return
+		return "", http.StatusInternalServerError, errors.New("failed to prepare regeneration")
 	}
 	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
 	s.kickgeneration(ctx, p)
-
-	redirectToHash(w, r, newHash, queryArgStart)
+	return newHash, http.StatusOK, nil
 }
 
 func recipesNotSaved(recipes []ai.Recipe, saved []ai.Recipe) []ai.Recipe {
@@ -1051,9 +1076,10 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	queryArgHash        = "h"
-	queryArgStart       = "start"
-	queryArgPendingSave = "save"
+	queryArgHash         = "h"
+	queryArgStart        = "start"
+	queryArgPendingSave  = "save"
+	queryArgPendingRetry = "retry"
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
@@ -1194,6 +1220,20 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				redirectToHash(w, r, hashParam)
 				return
 			}
+			if r.URL.Query().Get(queryArgPendingRetry) == "1" {
+				newHash, status, err := s.startRegeneration(
+					ctx,
+					hashParam,
+					currentUser,
+					strings.TrimSpace(r.URL.Query().Get("instructions")),
+				)
+				if err != nil {
+					http.Error(w, err.Error(), status)
+					return
+				}
+				redirectToHash(w, r, newHash, queryArgStart)
+				return
+			}
 		}
 		if r.URL.Query().Get("mail") == "true" {
 			tf := users.NewUnsubscribeTokenFactory(*s.cfg)
@@ -1263,7 +1303,13 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if !guest.UseShoppingList(w, r) {
 			slog.InfoContext(ctx, "blocking guest recipe generation", "user_agent", r.UserAgent())
-			http.Redirect(w, r, signInPath(requestURIOrPath(r)), http.StatusSeeOther)
+			redirectToAccountRequired(
+				w,
+				r,
+				auth.AccountRequiredGenerationLimit,
+				requestURIOrPath(r),
+				http.StatusUnauthorized,
+			)
 			return
 		}
 		// be careful. Formalize this more?
