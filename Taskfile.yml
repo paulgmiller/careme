@@ -1,11 +1,6 @@
 # Run Task with the pinned version: ./tool.sh task
 version: "3"
 
-env:
-  GOCACHE: '{{default "/tmp/go-build" .GOCACHE}}'
-  GOMODCACHE: '{{default "/tmp/go-modcache" .GOMODCACHE}}'
-  GOLANGCI_LINT_CACHE: '{{default "/tmp/golangci-lint" .GOLANGCI_LINT_CACHE}}'
-
 tasks:
   default:
     desc: List available tasks
