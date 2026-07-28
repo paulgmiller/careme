@@ -93,6 +93,26 @@ jobs:
           version: ${{ steps.tool-versions.outputs.golangci-lint }}
           args: --timeout=5m
 
+  crap:
+    name: crap
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
+
+      - name: Run go-crap scan
+        run: ./tool.sh go-crap scan --top 10 --exclude '.*_test\.go' --exclude '.*\.gen\.go' --exclude 'main\.go' --threshold 250 --fail-above
+
   js-lint:
     name: js-lint
     runs-on: ubuntu-latest
@@ -139,7 +159,7 @@ jobs:
 
   publish:
     name: publish (${{ matrix.name }})
-    needs: [verify, vet, format, lint, js-lint, k8s-lint]
+    needs: [verify, vet, format, lint, crap, js-lint, k8s-lint]
     runs-on: ubuntu-latest
     permissions:
       contents: read

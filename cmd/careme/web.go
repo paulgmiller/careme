@@ -172,9 +172,13 @@ func runServer(cfg *config.Config, addr string) error {
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
 
+	return serve(addr, rootMux, waiters)
+}
+
+func serve(addr string, handler http.Handler, waiters []waiter) error {
 	server := &http.Server{
 		Addr:    addr,
-		Handler: rootMux,
+		Handler: handler,
 	}
 
 	// Channel to listen for errors coming from the server
@@ -189,6 +193,7 @@ func runServer(cfg *config.Config, addr string) error {
 	// Channel to listen for interrupt or terminate signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(shutdown)
 
 	// Block until we receive a signal or server error
 	select {

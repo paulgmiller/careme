@@ -31,6 +31,7 @@ tasks:
       - vet
       - test
       - lint
+      - crap
       - js-lint
       - k8s-lint
       - tailwind-check
@@ -51,6 +52,11 @@ tasks:
       - golangci-lint
     cmds:
       - ./bin/golangci-lint run ./... --timeout=5m
+
+  crap:
+    desc: Run go-crap complexity scan
+    cmds:
+      - ./tool.sh go-crap scan --top 10 --exclude '.*_test\.go' --exclude '.*\.gen\.go' --exclude 'main\.go' --threshold 250 --fail-above
 
   fmt-check:
     desc: Check Go formatting with gofumpt
