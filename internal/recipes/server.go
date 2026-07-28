@@ -74,11 +74,10 @@ func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int) {
 	http.Error(w, "must be logged in", status)
 }
 
-func redirectToAccountRequired(w http.ResponseWriter, r *http.Request, reason auth.AccountRequiredReason, returnTo string, status int) {
+func redirectToAccountRequired(w http.ResponseWriter, r *http.Request, reason auth.AccountRequiredReason, returnTo string) {
 	target := auth.AccountRequiredPath(reason, returnTo)
 	if isHTMXRequest(r) {
 		w.Header().Set("HX-Redirect", target)
-		http.Error(w, "account required", status)
 		return
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
@@ -626,7 +625,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, auth.ErrNoSession) {
 			values := url.Values{queryArgHash: []string{shoppingListHash}, queryArgPendingSave: []string{recipeHash}}
 			returnTo := "/recipes?" + values.Encode()
-			redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, returnTo, http.StatusUnauthorized)
+			redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, returnTo)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load user for recipe save", "error", err)
@@ -892,7 +891,6 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 					r,
 					auth.AccountRequiredGenerationLimit,
 					shoppingListReturnPath(hash, instructions),
-					http.StatusUnauthorized,
 				)
 				return
 			}
@@ -1283,7 +1281,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				r,
 				auth.AccountRequiredGenerationLimit,
 				requestURIOrPath(r),
-				http.StatusUnauthorized,
 			)
 			return
 		}

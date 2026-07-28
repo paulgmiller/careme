@@ -857,9 +857,7 @@ func TestHandleQuestion_RequiresSignedInUser(t *testing.T) {
 
 	s.handleQuestion(rr, req)
 
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
-	}
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
 func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
@@ -1521,9 +1519,7 @@ func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeaderToShoppingListPendingSa
 
 	s.handleSaveRecipe(rr, req)
 
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
 	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=shopping-hash&save=hash"); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
@@ -1542,7 +1538,7 @@ func TestHandleSaveRecipe_NoSessionFromRecipePageRedirectsToShoppingListPendingS
 
 	s.handleSaveRecipe(rr, req)
 
-	require.Equal(t, http.StatusUnauthorized, rr.Code)
+	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=origin-hash&save=recipe-hash"), rr.Header().Get("HX-Redirect"))
 }
 
@@ -1949,9 +1945,7 @@ func TestHandleDismissRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 
 	s.handleDismissRecipe(rr, req)
 
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
-	}
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
 	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/dismiss"); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
@@ -2236,9 +2230,7 @@ func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *te
 
 	s.handleRegenerate(rr, req)
 
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
 	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, shoppingListReturnPath("origin-hash", "")); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
