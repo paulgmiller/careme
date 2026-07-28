@@ -18,7 +18,7 @@ tasks:
     deps:
       - verify
       - vet
-      - format-check
+      - fmt-check
       - lint
       - k8s-lint
       - tailwind-check
