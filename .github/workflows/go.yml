@@ -106,12 +106,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Install go-crap
-        run: go install github.com/padiazg/go-crap@latest
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
 
       - name: Run go-crap scan
-        run: go-crap scan --top 10 --exclude '.*_test\.go' --exclude '.*\.gen\.go' --threshold 250 --fail-above --exclude 'main.go'
+        run: ./tool.sh go-crap scan --top 10 --exclude '.*_test\.go' --exclude '.*\.gen\.go' --exclude 'main\.go' --threshold 250 --fail-above
 
   js-lint:
     name: js-lint
