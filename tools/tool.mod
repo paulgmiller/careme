@@ -1,10 +1,17 @@
 module careme/tools
 
+<<<<<<< HEAD
 go 1.26.2
 
 tool (
 	github.com/go-task/task/v3/cmd/task
 	github.com/padiazg/go-crap
+=======
+go 1.26.0
+
+tool (
+	github.com/go-task/task/v3/cmd/task
+>>>>>>> origin/master
 	github.com/paulgmiller/kage
 	github.com/yannh/kubeconform/cmd/kubeconform
 	mvdan.cc/gofumpt
@@ -94,8 +101,11 @@ require (
 	github.com/hashicorp/go-getter v1.8.6 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
+<<<<<<< HEAD
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.8.1 // indirect
+=======
+>>>>>>> origin/master
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -113,7 +123,10 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+<<<<<<< HEAD
 	github.com/padiazg/go-crap v0.4.1 // indirect
+=======
+>>>>>>> origin/master
 	github.com/paulgmiller/kage v0.1.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.27 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20250313105119-ba97887b0a25 // indirect
@@ -122,7 +135,10 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sajari/fuzzy v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
+<<<<<<< HEAD
 	github.com/spf13/cobra v1.10.2 // indirect
+=======
+>>>>>>> origin/master
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.8.1 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
