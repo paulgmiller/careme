@@ -28,6 +28,7 @@ var Home,
 	Recipe,
 	Critique,
 	About,
+	Privacy,
 	Location,
 	FarmersMarket,
 	Mail *template.Template
@@ -62,6 +63,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Recipe = ensure(tmpls, "recipe.html")
 	Critique = ensure(tmpls, "critique.html")
 	About = ensure(tmpls, "about.html")
+	Privacy = ensure(tmpls, "privacy.html")
 	Location = ensure(tmpls, "locations.html")
 	FarmersMarket = ensure(tmpls, "farmersmarket.html")
 	Mail = ensure(tmpls, "mail.html")

@@ -16,8 +16,8 @@
   - `export GOCACHE=/tmp/go-build`
   - `export GOMODCACHE=/tmp/go-modcache`
   - Alternative persistent path inside repo: `export GOCACHE=$PWD/.cache/go-build && export GOMODCACHE=$PWD/.cache/go-modcache`
-- `task fmt` (preferred) or `gofumpt -l -w .`, then `go vet ./...`: Baseline formatting and static checks.
-- From the repo root, run `golangci-lint run ./...`: Expanded Go linters.
+- `./task.sh fmt` (preferred), then `go vet ./...`: Baseline formatting and static checks.
+- From the repo root, run `./task.sh lint`: Expanded Go linters using the pinned release binary.
 - `export ENABLE_MOCKS=1`: to test without kroger, openai credentials
 - `go test ./...`: Run unit tests across all packages; add `-cover` when changing core logic.
 - `go run ./cmd/careme -serve -addr :8080`: Start the web server (requires env vars below).
@@ -26,7 +26,7 @@
 - `tailwind\generate.sh`: run when ever you change css or html
 
 ## Coding Style & Naming Conventions
-- Go 1.26; always format Go changes with `task fmt` or `gofumpt`, and keep code `gofumpt`-clean before review. Favor small, focused functions and table-driven tests.
+- Go 1.26; always format Go changes with `./task.sh fmt`, and keep code `gofumpt`-clean before review. Favor small, focused functions and table-driven tests.
 - Exported identifiers in `CamelCase`; package-private helpers in `lowerCamel`. Template names mirror file names in `internal/templates`.
 - Prefer standard library first; add dependencies sparingly and record rationale in PR description if new.
 - For tests perfer testify/assert or testify/require to limit verboseness 
@@ -37,7 +37,7 @@
 
 ## Testing Guidelines
 - Always run tests after making code changes. Default to `go test ./...`; use a narrower `go test ./... -run TestName` only when appropriate for quick iteration. If you cannot run tests, explicitly say why.
-- From the repo root, run `golangci-lint run ./...` after Go changes unless the task clearly does not affect linted code.
+- From the repo root, run `./task.sh lint` after Go changes unless the task clearly does not affect linted code.
 - Place tests alongside code in `*_test.go`; prefer table-driven cases and explicit fixtures over implicit globals.
 - Use `go test ./... -run TestName` for targeted debugging; keep deterministic by avoiding network calls and using fakes where possible.
 - Prefer explicit fakes or no-op implementations over passing nil dependencies in tests, unless nil behavior is the thing under test.
@@ -50,6 +50,6 @@
 - Keep commits scoped and reviewable; avoid mixing refactors with feature changes unless necessary.
 
 ## Security & Configuration Notes
-- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `GEMINI_API_KEY`, `GEMINI_CRITIQUE_MODEL`, `CLARITY_PROJECT_ID`, `GOOGLE_TAG_MANAGER_ID`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`. Azure Blob cache still uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`. Grafana Cloud direct OTLP uses the standard upstream OpenTelemetry endpoint and headers env vars.
+- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `OPENROUTER_API_KEY`, `OPENROUTER_CRITIQUE_MODEL`, `CLARITY_PROJECT_ID`, `GOOGLE_TAG_MANAGER_ID`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`. Azure Blob cache still uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`. Grafana Cloud direct OTLP uses the standard upstream OpenTelemetry endpoint and headers env vars.
 - Never commit secrets or generated recipe outputs. If testing against real APIs, use minimal scopes and rotate keys promptly.
 - Any handler that lets you see data from multiple users should go behind the /admin mux to secure it. 

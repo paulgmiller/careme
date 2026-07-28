@@ -60,12 +60,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Install gofumpt
-        run: bash tools/install.sh gofumpt
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
 
       - name: Check Go formatting
-        run: test -z "$(./bin/gofumpt -l .)"
+        run: test -z "$(./tool.sh gofumpt -l .)"
 
   lint:
     name: lint
@@ -142,12 +142,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Install kubeconform
-        run: bash tools/install.sh kubeconform
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
 
       - name: Validate Kubernetes manifests
-        run: ./bin/kubeconform -strict -summary deploy/*.yaml
+        run: ./tool.sh kubeconform -strict -summary deploy/*.yaml
 
   publish:
     name: publish (${{ matrix.name }})
