@@ -128,11 +128,14 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, `href="/admin/mealplan/`+p.Hash()+`"`) {
 		t.Error("shopping list HTML should link to admin meal plan")
 	}
-	if !strings.Contains(html, `href="/admin/prompt/menu/`+p.Hash()+`"`) {
-		t.Error("shopping list HTML should link to admin menu prompt")
+	if !strings.Contains(html, `>Admin</a>`) {
+		t.Error("shopping list HTML should label the meal plan link Admin")
 	}
-	if !strings.Contains(html, `href="/admin/ingredients/`+p.Hash()+`"`) {
-		t.Error("shopping list HTML should link to admin ingredients")
+	if strings.Contains(html, `href="/admin/prompt/menu/`) {
+		t.Error("shopping list HTML should not link directly to the admin menu prompt")
+	}
+	if strings.Contains(html, `href="/admin/ingredients/`) {
+		t.Error("shopping list HTML should not link directly to admin ingredients")
 	}
 }
 
@@ -538,8 +541,11 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `href="/admin/prompt/recipe/`+recipe.ComputeHash()+`"`) {
 		t.Error("recipe HTML should link to admin recipe prompt")
 	}
-	if !strings.Contains(html, `href="/admin/mealplan/`+recipe.OriginHash+`"`) {
-		t.Error("recipe HTML should link to origin shopping list admin page")
+	if !strings.Contains(html, `>Admin</a>`) {
+		t.Error("recipe HTML should label the prompt link Admin")
+	}
+	if strings.Contains(html, `href="/admin/mealplan/`) {
+		t.Error("recipe HTML should not link to the origin shopping list admin page")
 	}
 }
 

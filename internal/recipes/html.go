@@ -136,9 +136,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		AuthReturnTo:         "/recipes?h=" + hash,
 		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 		AdminLinks: []adminLinkView{
-			{Label: "Meal plan", URL: "/admin/mealplan/" + hash},
-			{Label: "Prompt", URL: "/admin/prompt/menu/" + hash},
-			{Label: "Ingredients", URL: "/admin/ingredients/" + hash},
+			{Label: "Admin", URL: "/admin/mealplan/" + hash},
 		},
 	}
 
@@ -231,24 +229,15 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore:     critiqueScore,
 		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
 		MinimumRecipeScore:      critique.MinimumRecipeScore,
-		AdminLinks:              recipeAdminLinks(recipeHash, recipe.OriginHash),
+		AdminLinks: []adminLinkView{
+			{Label: "Admin", URL: "/admin/prompt/recipe/" + recipeHash},
+		},
 	}
 
 	setTextContent(writer)
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
 	}
-}
-
-func recipeAdminLinks(recipeHash, originHash string) []adminLinkView {
-	links := []adminLinkView{{Label: "Prompt", URL: "/admin/prompt/recipe/" + recipeHash}}
-	if strings.TrimSpace(originHash) != "" {
-		links = append(links, adminLinkView{
-			Label: "Origin shopping list",
-			URL:   "/admin/mealplan/" + originHash,
-		})
-	}
-	return links
 }
 
 func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeImageView {
