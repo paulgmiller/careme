@@ -54,11 +54,6 @@ type shoppingRecipeView struct {
 	WineRecommendation *ai.WineSelection
 }
 
-type adminLinkView struct {
-	Label string
-	URL   string
-}
-
 type shoppingListGroup struct {
 	Aisle string
 	Items []*ai.Ingredient
@@ -116,7 +111,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		User                 *utypes.User
 		AuthReturnTo         string
 		UseTodaysIngredients bool
-		AdminLinks           []adminLinkView
+		AdminURL             string
 	}{
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
@@ -135,9 +130,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		User:                 currentUser,
 		AuthReturnTo:         "/recipes?h=" + hash,
 		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
-		AdminLinks: []adminLinkView{
-			{Label: "Admin", URL: "/admin/mealplan/" + hash},
-		},
+		AdminURL:             "/admin/mealplan/" + hash,
 	}
 
 	setTextContent(writer)
@@ -205,7 +198,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore     *int
 		RecipeCritiqueNeedsCare bool
 		MinimumRecipeScore      int
-		AdminLinks              []adminLinkView
+		AdminURL                string
 	}{
 		Location:                *p.Location,
 		Date:                    p.Date.Format("2006-01-02"),
@@ -229,9 +222,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore:     critiqueScore,
 		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
 		MinimumRecipeScore:      critique.MinimumRecipeScore,
-		AdminLinks: []adminLinkView{
-			{Label: "Admin", URL: "/admin/prompt/recipe/" + recipeHash},
-		},
+		AdminURL:                "/admin/prompt/recipe/" + recipeHash,
 	}
 
 	setTextContent(writer)
