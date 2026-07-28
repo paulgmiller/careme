@@ -891,7 +891,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 					w,
 					r,
 					auth.AccountRequiredGenerationLimit,
-					pendingRegenerationPath(hash, instructions),
+					shoppingListReturnPath(hash, instructions),
 					http.StatusUnauthorized,
 				)
 				return
@@ -911,11 +911,8 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, newHash, queryArgStart)
 }
 
-func pendingRegenerationPath(hash, instructions string) string {
-	values := url.Values{
-		queryArgHash:         []string{hash},
-		queryArgPendingRetry: []string{"1"},
-	}
+func shoppingListReturnPath(hash, instructions string) string {
+	values := url.Values{queryArgHash: []string{hash}}
 	if instructions != "" {
 		values.Set("instructions", instructions)
 	}
@@ -1069,10 +1066,9 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	queryArgHash         = "h"
-	queryArgStart        = "start"
-	queryArgPendingSave  = "save"
-	queryArgPendingRetry = "retry"
+	queryArgHash        = "h"
+	queryArgStart       = "start"
+	queryArgPendingSave = "save"
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
@@ -1213,20 +1209,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				redirectToHash(w, r, hashParam)
 				return
 			}
-			if r.URL.Query().Get(queryArgPendingRetry) == "1" {
-				newHash, status, err := s.startRegeneration(
-					ctx,
-					hashParam,
-					currentUser,
-					strings.TrimSpace(r.URL.Query().Get("instructions")),
-				)
-				if err != nil {
-					http.Error(w, err.Error(), status)
-					return
-				}
-				redirectToHash(w, r, newHash, queryArgStart)
-				return
-			}
 		}
 		if r.URL.Query().Get("mail") == "true" {
 			tf := users.NewUnsubscribeTokenFactory(*s.cfg)
@@ -1271,7 +1253,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 		help := r.URL.Query().Get(QueryArgHelp)
 		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
-			hashParam, selection, help, w)
+			hashParam, selection, help, strings.TrimSpace(r.URL.Query().Get("instructions")), w)
 		return
 	}
 

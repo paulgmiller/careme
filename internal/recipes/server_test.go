@@ -2192,7 +2192,7 @@ func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieMissing(t *testing.T) 
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
 	}
-	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/recipes?h=origin-hash&retry=1"); got != want {
+	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, shoppingListReturnPath("origin-hash", "")); got != want {
 		t.Fatalf("expected redirect location %q, got %q", want, got)
 	}
 }
@@ -2204,7 +2204,9 @@ func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testin
 		withTestClerk(noSessionAuth{}),
 	)
 
-	req := httptest.NewRequest(http.MethodPost, "/recipes/origin-hash/regenerate", nil)
+	form := url.Values{"instructions": {"make it vegetarian"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipes/origin-hash/regenerate", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "2"})
 	req.SetPathValue("hash", "origin-hash")
 	rr := httptest.NewRecorder()
@@ -2214,7 +2216,7 @@ func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testin
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
 	}
-	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/recipes?h=origin-hash&retry=1"); got != want {
+	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, shoppingListReturnPath("origin-hash", "make it vegetarian")); got != want {
 		t.Fatalf("expected redirect location %q, got %q", want, got)
 	}
 }
@@ -2237,12 +2239,12 @@ func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *te
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
-	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/recipes?h=origin-hash&retry=1"); got != want {
+	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, shoppingListReturnPath("origin-hash", "")); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }
 
-func TestHandleRecipes_SignedInPendingRetryPreservesChefNote(t *testing.T) {
+func TestHandleRecipes_ReturnFromSignInPreservesChefNoteWithoutRegenerating(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -2260,29 +2262,21 @@ func TestHandleRecipes_SignedInPendingRetryPreservesChefNote(t *testing.T) {
 		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},
 	}, originHash))
 
-	target := pendingRegenerationPath(originHash, "make it vegetarian")
+	target := shoppingListReturnPath(originHash, "make it vegetarian")
 	req := httptest.NewRequest(http.MethodGet, target, nil)
 	rr := httptest.NewRecorder()
 
 	s.handleRecipes(rr, req)
 
-	require.Equal(t, http.StatusSeeOther, rr.Code)
-	redirect, err := url.Parse(rr.Header().Get("Location"))
-	require.NoError(t, err)
-	require.Equal(t, "/recipes", redirect.Path)
-	require.NotEmpty(t, redirect.Query().Get(queryArgHash))
-	require.True(t, redirect.Query().Has(queryArgStart))
-	require.False(t, redirect.Query().Has(queryArgPendingRetry))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Body.String(), `name="instructions"`)
+	require.Contains(t, rr.Body.String(), `value="make it vegetarian"`)
 
 	select {
 	case <-generator.called:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for generator call")
+		t.Fatal("returning from sign-in should not regenerate recipes")
+	default:
 	}
-	captured := generator.LastParams()
-	require.NotNil(t, captured)
-	require.Equal(t, "make it vegetarian", captured.Instructions)
-	require.Equal(t, "resp-menu-original", captured.PreviousMenuPlanResponseID)
 }
 
 func TestHandleRegenerate_PassesPriorSavedHashesAndDismissesUnsavedRecipesToGenerator(t *testing.T) {
