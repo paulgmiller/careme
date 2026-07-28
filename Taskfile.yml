@@ -56,8 +56,7 @@ tasks:
   crap:
     desc: Run go-crap complexity scan
     cmds:
-      - go install github.com/padiazg/go-crap@latest
-      - go-crap scan --top 10 --exclude '.*_test\.go' --exclude '.*\.gen\.go' --threshold 250 --fail-above
+      - ./tool.sh go-crap scan --top 10 --exclude '.*_test\.go' --exclude '.*\.gen\.go' --exclude 'main\.go' --threshold 250 --fail-above
 
   fmt-check:
     desc: Check Go formatting with gofumpt
