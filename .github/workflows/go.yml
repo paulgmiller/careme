@@ -28,7 +28,7 @@ jobs:
           cache: true
 
       - name: Run Go tests
-        run: go test ./...
+        run: ./task.sh test
 
   vet:
     name: vet
@@ -45,7 +45,7 @@ jobs:
           cache: true
 
       - name: Run go vet
-        run: go vet ./...
+        run: ./task.sh vet
 
   format:
     name: format
@@ -65,7 +65,7 @@ jobs:
             tools/tool.sum
 
       - name: Check Go formatting
-        run: test -z "$(./tool.sh gofumpt -l .)"
+        run: ./task.sh fmt-check
 
   lint:
     name: lint
@@ -106,8 +106,16 @@ jobs:
         with:
           node-version: 22
 
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
+
       - name: Run JavaScript lint
-        run: npm exec --yes --package eslint@10.4.0 -- eslint internal/static/user-clerk-billing.js internal/static/share.js
+        run: ./task.sh js-lint
 
   k8s-lint:
     name: k8s-lint
@@ -127,7 +135,7 @@ jobs:
             tools/tool.sum
 
       - name: Validate Kubernetes manifests
-        run: ./tool.sh kubeconform -strict -summary deploy/*.yaml
+        run: ./task.sh k8s-lint
 
   publish:
     name: publish (${{ matrix.name }})
