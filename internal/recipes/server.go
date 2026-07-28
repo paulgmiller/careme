@@ -901,11 +901,30 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	newHash, status, err := s.startRegeneration(ctx, hash, currentUser, instructions)
+	p, err := paramsForAction(ctx, hash, currentUser.ID, instructions, s.recipeio)
 	if err != nil {
-		http.Error(w, err.Error(), status)
+		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", hash, "error", err)
+		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
+	if len(p.Dismissed) == 0 {
+		currentList, err := s.FromCache(ctx, hash)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load recipe list for regeneration", "hash", hash, "error", err)
+			http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
+			return
+		}
+		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
+	}
+	newHash := p.Hash()
+
+	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
+		slog.ErrorContext(ctx, "failed to save params for regeneration", "hash", newHash, "error", err)
+		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
+		return
+	}
+	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
+	s.kickgeneration(ctx, p)
 	redirectToHash(w, r, newHash, queryArgStart)
 }
 
@@ -915,29 +934,6 @@ func shoppingListReturnPath(hash, instructions string) string {
 		values.Set("instructions", instructions)
 	}
 	return "/recipes?" + values.Encode()
-}
-
-func (s *server) startRegeneration(ctx context.Context, hash string, currentUser *utypes.User, instructions string) (string, int, error) {
-	p, err := paramsForAction(ctx, hash, currentUser.ID, instructions, s.recipeio)
-	if err != nil {
-		return "", http.StatusBadRequest, err
-	}
-	if len(p.Dismissed) == 0 {
-		currentList, err := s.FromCache(ctx, hash)
-		if err != nil {
-			return "", http.StatusBadRequest, errors.New("failed to load recipe list")
-		}
-		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
-	}
-	newHash := p.Hash()
-
-	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
-		slog.ErrorContext(ctx, "failed to save params for regenerate", "hash", newHash, "error", err)
-		return "", http.StatusInternalServerError, errors.New("failed to prepare regeneration")
-	}
-	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
-	s.kickgeneration(ctx, p)
-	return newHash, http.StatusOK, nil
 }
 
 func recipesNotSaved(recipes []ai.Recipe, saved []ai.Recipe) []ai.Recipe {

@@ -2170,6 +2170,19 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	require.Empty(t, captured.LastRecipes)
 }
 
+func TestHandleRegenerate_PreparationFailureReturnsInternalServerError(t *testing.T) {
+	s := newTestServer(t, withTestCache(cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))))
+
+	req := httptest.NewRequest(http.MethodPost, "/recipes/missing-hash/regenerate", nil)
+	req.SetPathValue("hash", "missing-hash")
+	rr := httptest.NewRecorder()
+
+	s.handleRegenerate(rr, req)
+
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
+	require.Equal(t, "failed to prepare regeneration\n", rr.Body.String())
+}
+
 func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieMissing(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
