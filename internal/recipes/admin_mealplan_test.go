@@ -34,6 +34,7 @@ func TestAdminMealPlanPageRendersCurrentPlan(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "tofu")
 	assert.Contains(t, rr.Body.String(), "make it vegetarian")
 	assert.Contains(t, rr.Body.String(), "/admin/params/"+hash)
+	assert.Contains(t, rr.Body.String(), "/admin/ingredients/"+hash)
 	assert.Contains(t, rr.Body.String(), "Total plan entries: 1")
 }
 

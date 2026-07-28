@@ -111,6 +111,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		User                 *utypes.User
 		AuthReturnTo         string
 		UseTodaysIngredients bool
+		AdminURL             string
 	}{
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
@@ -129,6 +130,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		User:                 currentUser,
 		AuthReturnTo:         "/recipes?h=" + hash,
 		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
+		AdminURL:             "/admin/mealplan/" + hash,
 	}
 
 	setTextContent(writer)
@@ -196,6 +198,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore     *int
 		RecipeCritiqueNeedsCare bool
 		MinimumRecipeScore      int
+		AdminURL                string
 	}{
 		Location:                *p.Location,
 		Date:                    p.Date.Format("2006-01-02"),
@@ -219,6 +222,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore:     critiqueScore,
 		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
 		MinimumRecipeScore:      critique.MinimumRecipeScore,
+		AdminURL:                "/admin/prompt/recipe/" + recipeHash,
 	}
 
 	setTextContent(writer)
