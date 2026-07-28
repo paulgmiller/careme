@@ -1,4 +1,4 @@
-# Install Task: go install github.com/go-task/task/v3/cmd/task@latest
+# Run Task with the pinned version: go tool -modfile=tools/task.mod task
 version: "3"
 
 env:
@@ -10,7 +10,7 @@ tasks:
   default:
     desc: List available tasks
     cmds:
-      - task --list
+      - go tool -modfile=tools/task.mod task --list
     silent: true
 
   ci:
@@ -37,10 +37,8 @@ tasks:
 
   fmt:
     desc: Format Go code with gofumpt
-    deps:
-      - gofumpt
     cmds:
-      - ./bin/gofumpt -w .
+      - go tool -modfile=tools/gofumpt.mod gofumpt -w .
 
   vet:
     desc: Run go vet
@@ -49,18 +47,14 @@ tasks:
 
   lint:
     desc: Run golangci-lint
-    deps:
-      - golangci-lint
     cmds:
-      - ./bin/golangci-lint run ./... --timeout=5m
+      - go tool -modfile=tools/golangci-lint.mod golangci-lint run ./... --timeout=5m
 
   fmt-check:
     desc: Check Go formatting with gofumpt
-    deps:
-      - gofumpt
     cmds:
       - |
-        files="$(./bin/gofumpt -l .)"
+        files="$(go tool -modfile=tools/gofumpt.mod gofumpt -l .)"
         test -z "$files" || {
           printf '%s\n' "$files"
           exit 1
@@ -68,10 +62,8 @@ tasks:
 
   k8s-lint:
     desc: Validate Kubernetes manifests with kubeconform
-    deps:
-      - kubeconform
     cmds:
-      - ./bin/kubeconform -strict -summary deploy/*.yaml
+      - go tool -modfile=tools/kubeconform.mod kubeconform -strict -summary deploy/*.yaml
 
   js-lint:
     desc: Syntax-check JavaScript assets
@@ -207,29 +199,3 @@ tasks:
       NAMESPACE: '{{default "careme" .NAMESPACE}}'
     cmds:
       - bash deploy/deploy.sh {{.REF}} {{.NAMESPACE}}
-
-  tools:
-    desc: Install pinned local CI tools into ./bin
-    cmds:
-      - bash tools/install.sh
-
-  gofumpt:
-    internal: true
-    status:
-      - test -x ./bin/gofumpt
-    cmds:
-      - bash tools/install.sh gofumpt
-
-  golangci-lint:
-    internal: true
-    status:
-      - test -x ./bin/golangci-lint
-    cmds:
-      - bash tools/install.sh golangci-lint
-
-  kubeconform:
-    internal: true
-    status:
-      - test -x ./bin/kubeconform
-    cmds:
-      - bash tools/install.sh kubeconform

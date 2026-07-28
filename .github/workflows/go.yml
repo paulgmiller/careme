@@ -60,12 +60,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Install gofumpt
-        run: bash tools/install.sh gofumpt
+          cache-dependency-path: |
+            go.sum
+            tools/gofumpt.sum
 
       - name: Check Go formatting
-        run: test -z "$(./bin/gofumpt -l .)"
+        run: test -z "$(go tool -modfile=tools/gofumpt.mod gofumpt -l .)"
 
   lint:
     name: lint
@@ -80,18 +80,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Read tool versions
-        id: tool-versions
-        run: |
-          source tools/versions.sh
-          echo "golangci-lint=${GOLANGCI_LINT_VERSION}" >> "${GITHUB_OUTPUT}"
+          cache-dependency-path: |
+            go.sum
+            tools/golangci-lint.sum
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: ${{ steps.tool-versions.outputs.golangci-lint }}
-          args: --timeout=5m
+        run: go tool -modfile=tools/golangci-lint.mod golangci-lint run ./... --timeout=5m
 
   js-lint:
     name: js-lint
@@ -122,12 +116,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Install kubeconform
-        run: bash tools/install.sh kubeconform
+          cache-dependency-path: |
+            go.sum
+            tools/kubeconform.sum
 
       - name: Validate Kubernetes manifests
-        run: ./bin/kubeconform -strict -summary deploy/*.yaml
+        run: go tool -modfile=tools/kubeconform.mod kubeconform -strict -summary deploy/*.yaml
 
   publish:
     name: publish (${{ matrix.name }})
