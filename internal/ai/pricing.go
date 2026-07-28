@@ -60,9 +60,15 @@ func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, o
 }
 
 func openAITextTokenPrice(model string) (textTokenPrice, bool) {
-	// Standard paid-tier USD per 1M tokens, verified 2026-05-21:
+	// Standard paid-tier USD per 1M tokens, verified 2026-07-09:
 	// https://openai.com/api/pricing/ and https://platform.openai.com/docs/pricing/
 	switch normalizeModelName(model) {
+	case "gpt-5.6", "gpt-5.6-sol":
+		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, outputUSDPerMillion: 30}, true
+	case "gpt-5.6-terra":
+		return textTokenPrice{inputUSDPerMillion: 2.50, cachedInputUSDPerMillion: 0.25, outputUSDPerMillion: 15}, true
+	case "gpt-5.6-luna":
+		return textTokenPrice{inputUSDPerMillion: 1, cachedInputUSDPerMillion: 0.10, outputUSDPerMillion: 6}, true
 	case "gpt-5.5":
 		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, outputUSDPerMillion: 30}, true
 	case "gpt-5.4":
@@ -92,55 +98,6 @@ func estimateOpenAIImageSpend(model string, textInputTokens, imageInputTokens, o
 		}
 	default:
 		return estimatedSpend{reason: "price_not_configured"}
-	}
-}
-
-func estimateGeminiSpend(model string, promptTokens, cachedTokens, outputTokens int64) estimatedSpend {
-	price, ok := geminiTextTokenPrice(model, promptTokens)
-	if !ok {
-		return estimatedSpend{reason: "price_not_configured"}
-	}
-	if cachedTokens > promptTokens {
-		cachedTokens = promptTokens
-	}
-	if cachedTokens < 0 {
-		cachedTokens = 0
-	}
-	uncachedPromptTokens := promptTokens - cachedTokens
-	return estimatedSpend{
-		inputUSD:       tokensToUSD(uncachedPromptTokens, price.inputUSDPerMillion),
-		cachedInputUSD: tokensToUSD(cachedTokens, price.cachedInputUSDPerMillion),
-		outputUSD:      tokensToUSD(outputTokens, price.outputUSDPerMillion),
-	}
-}
-
-func geminiTextTokenPrice(model string, promptTokens int64) (textTokenPrice, bool) {
-	// Standard paid-tier USD per 1M tokens, verified 2026-05-21:
-	// https://ai.google.dev/gemini-api/docs/pricing
-	largePrompt := promptTokens > 200_000
-	switch normalizeModelName(model) {
-	case "gemini-3.5-flash":
-		return textTokenPrice{inputUSDPerMillion: 1.50, cachedInputUSDPerMillion: 0.15, outputUSDPerMillion: 9}, true
-	case "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools":
-		if largePrompt {
-			return textTokenPrice{inputUSDPerMillion: 4, cachedInputUSDPerMillion: 0.40, outputUSDPerMillion: 18}, true
-		}
-		return textTokenPrice{inputUSDPerMillion: 2, cachedInputUSDPerMillion: 0.20, outputUSDPerMillion: 12}, true
-	case "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview":
-		return textTokenPrice{inputUSDPerMillion: 0.25, cachedInputUSDPerMillion: 0.025, outputUSDPerMillion: 1.50}, true
-	case "gemini-3-flash-preview":
-		return textTokenPrice{inputUSDPerMillion: 0.50, cachedInputUSDPerMillion: 0.05, outputUSDPerMillion: 3}, true
-	case "gemini-2.5-pro":
-		if largePrompt {
-			return textTokenPrice{inputUSDPerMillion: 2.50, cachedInputUSDPerMillion: 0.25, outputUSDPerMillion: 15}, true
-		}
-		return textTokenPrice{inputUSDPerMillion: 1.25, cachedInputUSDPerMillion: 0.125, outputUSDPerMillion: 10}, true
-	case "gemini-2.5-flash":
-		return textTokenPrice{inputUSDPerMillion: 0.30, cachedInputUSDPerMillion: 0.03, outputUSDPerMillion: 2.50}, true
-	case "gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview-09-2025":
-		return textTokenPrice{inputUSDPerMillion: 0.10, cachedInputUSDPerMillion: 0.01, outputUSDPerMillion: 0.40}, true
-	default:
-		return textTokenPrice{}, false
 	}
 }
 

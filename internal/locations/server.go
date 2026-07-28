@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"careme/internal/auth"
+	"careme/internal/guest"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -90,6 +91,8 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
 				return
 			}
+			// give them a few free samples since they came in through locaitons
+			guest.EnsureShoppingListCount(w, r)
 		}
 
 		zip := r.URL.Query().Get("zip")

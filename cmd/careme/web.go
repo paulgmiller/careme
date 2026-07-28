@@ -123,7 +123,7 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create farmers market cache: %w", err)
 	}
 	farmersMarketStore := farmersmarket.NewStore(farmersMarketCache)
-	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore, centroids)
+	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
 	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, farmersMarketCache, authClient, marketExtractor, centroids)
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)
@@ -159,14 +159,26 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
+	appRoutes.HandleFunc("/privacy", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		data := templates.NewPrivacyPageData(seasons.GetCurrentStyle())
+		if err := templates.Privacy.Execute(w, data); err != nil {
+			slog.ErrorContext(ctx, "privacy template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
 	home{userStorage, locationStorage, authClient}.Register(appRoutes)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
 
+	return serve(addr, rootMux, waiters)
+}
+
+func serve(addr string, handler http.Handler, waiters []waiter) error {
 	server := &http.Server{
 		Addr:    addr,
-		Handler: rootMux,
+		Handler: handler,
 	}
 
 	// Channel to listen for errors coming from the server
@@ -181,6 +193,7 @@ func runServer(cfg *config.Config, addr string) error {
 	// Channel to listen for interrupt or terminate signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(shutdown)
 
 	// Block until we receive a signal or server error
 	select {

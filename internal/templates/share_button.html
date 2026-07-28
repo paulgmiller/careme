@@ -1,0 +1,27 @@
+{{define "shopping_list_share_button"}}
+<button type="button"
+        class="print-hidden inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
+        data-share-button
+        data-share-url="/recipes?h={{.Hash}}"
+        data-share-title="Careme shopping list"
+        data-share-label="Share shopping list"
+        aria-label="Share shopping list"
+        title="Share shopping list">
+  {{template "icon_share" .}}
+  <span class="hidden text-sm font-semibold" data-share-status>Link copied</span>
+</button>
+{{end}}
+
+{{define "recipe_share_button"}}
+<button type="button"
+        class="print-hidden inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
+        data-share-button
+        data-share-url="/recipe/{{.RecipeHash}}"
+        data-share-title="{{.Recipe.Title}}"
+        data-share-label="Share recipe"
+        aria-label="Share recipe"
+        title="Share recipe">
+  {{template "icon_share" .}}
+  <span class="hidden text-sm font-semibold" data-share-status>Link copied</span>
+</button>
+{{end}}

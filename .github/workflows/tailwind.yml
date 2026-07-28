@@ -14,8 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Generate Tailwind CSS
-        run: bash tailwind/generate.sh
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: tools/tool.sum
 
-      - name: Verify working tree clean
-        run: git diff --exit-code
+      - name: Check Tailwind CSS
+        run: ./task.sh tailwind-check

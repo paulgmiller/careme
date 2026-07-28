@@ -117,25 +117,25 @@ func TestLoadReadsBrightDataProxyConfig(t *testing.T) {
 	}
 }
 
-func TestLoadReadsGeminiCritiqueConfig(t *testing.T) {
+func TestLoadReadsOpenRouterCritiqueConfig(t *testing.T) {
 	resetStoreEnvs(t)
 	t.Setenv("ENABLE_MOCKS", "1")
-	t.Setenv("GEMINI_API_KEY", "gemini-key")
-	t.Setenv("GEMINI_CRITIQUE_MODEL", "gemini-2.5-pro")
+	t.Setenv("OPENROUTER_API_KEY", "openrouter-key")
+	t.Setenv("OPENROUTER_CRITIQUE_MODEL", "anthropic/claude-sonnet-4.5")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if got, want := cfg.Gemini.APIKey, "gemini-key"; got != want {
-		t.Fatalf("expected Gemini API key %q, got %q", want, got)
+	if got, want := cfg.OpenRouter.APIKey, "openrouter-key"; got != want {
+		t.Fatalf("expected OpenRouter API key %q, got %q", want, got)
 	}
-	if got, want := cfg.Gemini.CritiqueModel, "gemini-2.5-pro"; got != want {
-		t.Fatalf("expected Gemini critique model %q, got %q", want, got)
+	if got, want := cfg.OpenRouter.CritiqueModel, "anthropic/claude-sonnet-4.5"; got != want {
+		t.Fatalf("expected OpenRouter critique model %q, got %q", want, got)
 	}
-	if !cfg.Gemini.IsEnabled() {
-		t.Fatal("expected Gemini critique config to be enabled")
+	if !cfg.OpenRouter.IsEnabled() {
+		t.Fatal("expected OpenRouter critique config to be enabled")
 	}
 }
 
@@ -190,8 +190,8 @@ func resetStoreEnvs(t *testing.T) {
 		"BRIGHTDATA_PROXY_PORT",
 		"BRIGHTDATA_PROXY_USERNAME",
 		"BRIGHTDATA_PROXY_PASSWORD",
-		"GEMINI_API_KEY",
-		"GEMINI_CRITIQUE_MODEL",
+		"OPENROUTER_API_KEY",
+		"OPENROUTER_CRITIQUE_MODEL",
 		"PUBLIX_ENABLE",
 		"PUBLIX_ABCK",
 		"HEB_ENABLE",

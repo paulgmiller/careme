@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/brightdata"
 )
 
 func TestCategory_BuildsRequestAndDecodesFixture(t *testing.T) {
@@ -80,6 +82,40 @@ func TestCategory_RequiresQuerytermAndStore(t *testing.T) {
 	_, err = client.Category(context.Background(), "beef", "")
 	if err == nil || !strings.Contains(err.Error(), "store is required") {
 		t.Fatalf("unexpected store error: %v", err)
+	}
+}
+
+func TestCategory_UsesSeparateProxySessionPerCategory(t *testing.T) {
+	t.Parallel()
+
+	var sessions []string
+	client := NewClientWithBaseURL("https://example.com", &http.Client{
+		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			sessionID, ok := brightdata.ProxySessionIDFromContext(r.Context())
+			if !ok {
+				t.Fatal("expected Bright Data proxy session in request context")
+			}
+			sessions = append(sessions, sessionID)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       ioNopCloserString(`{"results":[]}`),
+				Request:    r,
+			}, nil
+		}),
+	})
+
+	if _, err := client.Category(context.Background(), "beef", "10216"); err != nil {
+		t.Fatalf("first Category() error = %v", err)
+	}
+	if _, err := client.Category(context.Background(), "rice-grains", "10216"); err != nil {
+		t.Fatalf("second Category() error = %v", err)
+	}
+	if got, want := len(sessions), 2; got != want {
+		t.Fatalf("unexpected session count: got %d want %d", got, want)
+	}
+	if sessions[0] == sessions[1] {
+		t.Fatalf("expected separate category sessions, both were %q", sessions[0])
 	}
 }
 
@@ -185,8 +221,15 @@ func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T
 	t.Parallel()
 
 	attemptsByOffset := map[string]int{}
+	var proxySessions []string
 	client := NewClientWithBaseURL("https://example.com", &http.Client{
 		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			sessionID, ok := brightdata.ProxySessionIDFromContext(r.Context())
+			if !ok {
+				t.Fatal("expected Bright Data proxy session in request context")
+			}
+			proxySessions = append(proxySessions, sessionID)
+
 			offset := r.URL.Query().Get("offset")
 			attemptsByOffset[offset]++
 			if offset == strconv.Itoa(defaultCategoryLimit*2) && attemptsByOffset[offset] == 1 {
@@ -232,6 +275,14 @@ func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T
 	}
 	if got, want := len(resp), defaultCategoryLimit*2+1; got != want {
 		t.Fatalf("unexpected result count: got %d want %d", got, want)
+	}
+	if len(proxySessions) == 0 {
+		t.Fatal("expected proxy sessions to be captured")
+	}
+	for _, sessionID := range proxySessions[1:] {
+		if sessionID != proxySessions[0] {
+			t.Fatalf("expected pagination and retries to retain session %q, got %q", proxySessions[0], sessionID)
+		}
 	}
 }
 

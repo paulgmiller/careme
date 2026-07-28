@@ -91,6 +91,31 @@ func TestWaitingCritiquerWaitsForBackgroundCritique(t *testing.T) {
 	}
 }
 
+func TestWaitingCritiquerBackgroundCritiqueOutlivesCallerContext(t *testing.T) {
+	t.Parallel()
+
+	base := &contextCapturingCritiquer{
+		contexts: make(chan context.Context, 1),
+		release:  make(chan struct{}),
+	}
+	mc := &waitingCritiquer{critiquer: base}
+	callerCtx, cancelCaller := context.WithCancel(t.Context())
+
+	mc.CritiqueRecipeInBackground(callerCtx, ai.Recipe{Title: "Patient Dinner"})
+	backgroundCtx := <-base.contexts
+	cancelCaller()
+
+	if err := backgroundCtx.Err(); err != nil {
+		t.Fatalf("background context was canceled with caller: %v", err)
+	}
+	if _, ok := backgroundCtx.Deadline(); !ok {
+		t.Fatal("background context has no deadline")
+	}
+
+	close(base.release)
+	mc.Wait()
+}
+
 type blockingCritiquer struct {
 	started chan struct{}
 	release chan struct{}
@@ -104,4 +129,23 @@ func (b *blockingCritiquer) CritiqueRecipe(context.Context, ai.Recipe) (*ai.Reci
 	close(b.started)
 	<-b.release
 	return &ai.RecipeCritique{OverallScore: 10}, nil
+}
+
+type contextCapturingCritiquer struct {
+	contexts chan context.Context
+	release  chan struct{}
+}
+
+func (c *contextCapturingCritiquer) Ready(context.Context) error {
+	return nil
+}
+
+func (c *contextCapturingCritiquer) CritiqueRecipe(ctx context.Context, _ ai.Recipe) (*ai.RecipeCritique, error) {
+	c.contexts <- ctx
+	select {
+	case <-c.release:
+		return &ai.RecipeCritique{OverallScore: 10}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }

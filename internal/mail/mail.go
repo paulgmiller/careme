@@ -20,6 +20,7 @@ import (
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/prompts"
@@ -136,6 +137,8 @@ func (m *mailer) RunOnce(ctx context.Context) {
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	ctx, span := otel.Tracer("careme/mail").Start(ctx, "send_email")
 	defer span.End()
+	ctx = logsetup.WithSessionID(ctx, "mail")
+	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
 	if !user.MailOptIn {

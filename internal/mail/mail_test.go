@@ -13,6 +13,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -31,6 +32,7 @@ func TestMain(m *testing.M) {
 
 type fakeMailCache struct {
 	shoppingListJSON string
+	missShoppingList bool
 	data             map[string]string
 }
 
@@ -52,6 +54,9 @@ func newFakeMailCache(t *testing.T) *fakeMailCache {
 
 func (c *fakeMailCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
 	if strings.HasPrefix(key, "shoppinglist/") {
+		if c.missShoppingList {
+			return nil, cache.ErrNotFound
+		}
 		return io.NopCloser(strings.NewReader(c.shoppingListJSON)), nil
 	}
 	value, ok := c.data[key]
@@ -101,6 +106,19 @@ type fakeMailClient struct {
 func (f *fakeMailClient) Send(msg *sgmail.SGMailV3) (*rest.Response, error) {
 	f.last = msg
 	return f.response, f.err
+}
+
+type capturingMailGenerator struct {
+	ctx context.Context
+}
+
+func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, _ *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+	g.ctx = ctx
+	return &ai.ShoppingList{
+		Recipes: []ai.Recipe{
+			{Title: "Generated Test Recipe"},
+		},
+	}, nil
 }
 
 func shoppingDayForStore(t *testing.T, location *locations.Location) string {
@@ -195,5 +213,50 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	}
 	if client.last == nil || !strings.Contains(client.last.Content[1].Value, "Unsubscribe") {
 		t.Fatalf("expected sent message to contain unsubscribe link %s", client.last.Content[1].Value)
+	}
+}
+
+func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
+	fc := newFakeMailCache(t)
+	fc.missShoppingList = true
+	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
+	generator := &capturingMailGenerator{}
+	m := &mailer{
+		cache: fc,
+		locServer: &fakeMailLocServer{
+			location: location,
+		},
+		generator: generator,
+		client: &fakeMailClient{
+			response: &rest.Response{StatusCode: 202, Body: "accepted"},
+		},
+		publicOrigin:       "https://careme.cooking",
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
+	}
+
+	m.sendEmail(context.Background(), utypes.User{
+		ID:            "user-1",
+		MailOptIn:     true,
+		Email:         []string{"u1@example.com"},
+		FavoriteStore: "123",
+		ShoppingDay:   shoppingDayForStore(t, location),
+	})
+
+	if generator.ctx == nil {
+		t.Fatal("expected generator to be called")
+	}
+	sessionID, ok := logsetup.SessionIDFromContext(generator.ctx)
+	if !ok {
+		t.Fatal("expected session id in generator context")
+	}
+	if sessionID != "mail" {
+		t.Fatalf("expected session id mail, got %q", sessionID)
+	}
+	userID, ok := logsetup.UserIDFromContext(generator.ctx)
+	if !ok {
+		t.Fatal("expected user id in generator context")
+	}
+	if userID != "user-1" {
+		t.Fatalf("expected user id user-1, got %q", userID)
 	}
 }

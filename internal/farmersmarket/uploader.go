@@ -9,55 +9,47 @@ import (
 	"careme/internal/locations/geo"
 )
 
-type ZipFinder interface {
-	NearestZIPToCoordinates(lat, lon float64) (string, bool)
-}
-
 type uploader struct {
-	store     *store
-	zipFinder ZipFinder
+	store *store
 }
 
 // private for tests
-func NewUploader(store *store, zipFinder ZipFinder) *uploader {
+func NewUploader(store *store) *uploader {
 	if store == nil {
 		panic("store is required")
 	}
-	if zipFinder == nil {
-		panic("zip finder is required")
-	}
-	return &uploader{store: store, zipFinder: zipFinder}
+	return &uploader{store: store}
 }
 
-func NewContainerUploader(zipFinder ZipFinder) (*uploader, error) {
+func NewContainerUploader() (*uploader, error) {
 	store, err := NewContainerStore()
 	if err != nil {
 		return nil, err
 	}
-	return NewUploader(store, zipFinder), nil
+	return NewUploader(store), nil
 }
 
-// this is a terrible signature
-func (u *uploader) saveUpload(ctx context.Context, name string, lat, lon float64, photoCount int, date time.Time, ingredients []ai.InputIngredient) (*Market, []ai.InputIngredient, error) {
+// create or return a market and merge its inventory into cacheresolveMarketLocation
+func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordinate, zip string,
+	photoCount int, date time.Time, ingredients []ai.InputIngredient,
+) (*Market, error) {
 	if photoCount <= 0 {
-		return nil, nil, fmt.Errorf("at least one geotagged photo is required")
+		return nil, fmt.Errorf("at least one market photo is required")
 	}
-	coor := geo.Coordinate{Lat: lat, Lon: lon}
-	if !coor.Valid() {
-		return nil, nil, fmt.Errorf("invalid market coordinates")
+	if err := coor.Valid(); err != nil {
+		return nil, fmt.Errorf("invalid market coordinates: %w", err)
 	}
 
-	market, err := u.store.findNearbyMarket(ctx, lat, lon)
+	market, err := u.store.findNearbyMarket(ctx, coor.Lat, coor.Lon)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	now := time.Now().UTC()
 	if market == nil {
-		zip, _ := u.zipFinder.NearestZIPToCoordinates(lat, lon)
 		market = &Market{
 			Coordinate: coor,
-			ID:         marketID(name, lat, lon),
+			ID:         marketID(name, coor.Lat, coor.Lon),
 			Names:      []string{name},
 			ZipCode:    zip,
 			PhotoCount: photoCount,
@@ -65,19 +57,18 @@ func (u *uploader) saveUpload(ctx context.Context, name string, lat, lon float64
 			UpdatedAt:  now,
 		}
 	} else {
-		market.merge(name, lat, lon, photoCount, now)
+		market.merge(name, coor.Lat, coor.Lon, photoCount, now)
 		if market.ZipCode == "" {
-			market.ZipCode, _ = u.zipFinder.NearestZIPToCoordinates(market.Lat, market.Lon)
+			market.ZipCode = zip
 		}
 	}
 
 	if err := u.store.saveMarket(ctx, *market); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	merged, err := u.store.mergeInventory(ctx, market.ID, date, ingredients)
-	if err != nil {
-		return nil, nil, err
+	if err := u.store.mergeInventory(ctx, market.ID, date, ingredients); err != nil {
+		return nil, err
 	}
-	return market, merged, nil
+	return market, nil
 }

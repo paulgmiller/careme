@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="description" content="Learn how Careme helps home cooks find fresh nearby ingredients, plan practical recipes, and cook more often." />
   <title>About Careme</title>
 
@@ -40,6 +40,7 @@
             <a href="#follow" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Follow</a>
             <a href="#faq" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">FAQ</a>
             <a href="#github" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">GitHub</a>
+            <a href="/privacy" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Privacy</a>
           </nav>
         </header>
 
@@ -119,7 +120,7 @@
                 <li>Careme checks a specific grocery store for vegetables, fruit, meat, seafood, and a few other categories.</li>
                 <li>A lightweight model ranks ingredients for cooking fresh food at home, keeping the best options.</li>
                 <li>The latest reasoning AI model then uses those ingredients to produce a varied set of recipes. <a href="https://github.com/paulgmiller/careme/blob/22d9486f6c1c4a6009bfb4a03ab88d0377e50c81/internal/ai/client.go#L139">Example prompt.</a></li>
-                <li>A different AI model, Gemini, critiques the recipes for <a href="https://github.com/paulgmiller/careme/blob/22d9486f6c1c4a6009bfb4a03ab88d0377e50c81/internal/ai/critique.go#L22">cookability</a>.</li>
+                <li>A separately configured AI model, reached through OpenRouter, critiques the recipes for <a href="https://github.com/paulgmiller/careme/blob/22d9486f6c1c4a6009bfb4a03ab88d0377e50c81/internal/ai/critique.go#L22">cookability</a>.</li>
                 <li>You add or hide recipes and build a shopping list. Don't like them? Give some guidance and tell the chef to try again.</li>
                 <li>The recipes you add are saved to your kitchen, with a generated image and wine pairing based on what is in stock at the same store.</li>
                 <li>You can keep asking questions on the recipe page, and the model will have context on the recipe and ingredients.</li>
@@ -139,7 +140,7 @@
             </details>
             <details class="rounded-xl border border-brand-100 bg-white p-4">
               <summary class="cursor-pointer font-semibold text-brand-700">Is this an evil corporation that will sell my data?</summary>
-              <p class="mt-2 text-gray-700">So far, Careme is backed by one person. I have an LLC, but we have no intention of using anything except your feedback to improve your recipes and other people's recipes.</p>
+              <p class="mt-2 text-gray-700">So far, Careme is backed by one person through North Briton LLC. We do not sell or rent your personal information. We retain your recipe choices and feedback to improve your recipes and other people's recipes. Read the full <a href="/privacy" class="text-brand-700 underline underline-offset-4">Privacy Policy</a>.</p>
             </details>
             <details class="rounded-xl border border-brand-100 bg-white p-4">
               <summary class="cursor-pointer font-semibold text-brand-700">How do I suggest improvements?</summary>

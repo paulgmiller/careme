@@ -7,9 +7,9 @@ This document covers the first-time generation path inside `generatorService.Gen
 ```mermaid
 flowchart TD
     subgraph Legend["Model color"]
-        MiniLegend["gpt-5-mini<br/>Grading"]
-        GPT5Legend["gpt-5.5<br/>Menu planning + recipe generation + retry"]
-        GeminiLegend["Gemini<br/>Recipe critique"]
+        MiniLegend["gpt-5.6-luna<br/>Grading"]
+        GPT5Legend["gpt-5.6-sol<br/>Menu planning + recipe generation + retry"]
+        OpenRouterLegend["OpenRouter<br/>Recipe critique"]
     end
 
     A["GenerateRecipes"] --> B["FetchStaples"]
@@ -60,11 +60,11 @@ flowchart TD
 
     classDef mini fill:#e0f2fe,stroke:#0284c7,color:#0f172a,stroke-width:2px
     classDef gpt5 fill:#dcfce7,stroke:#16a34a,color:#0f172a,stroke-width:2px
-    classDef gemini fill:#f3e8ff,stroke:#7e22ce,color:#0f172a,stroke-width:2px
+    classDef openrouter fill:#f3e8ff,stroke:#7e22ce,color:#0f172a,stroke-width:2px
 
     class MiniLegend,J,N mini
     class GPT5Legend,P1,P2,P3,U1,U2,U3 gpt5
-    class GeminiLegend,R1,R2,R3 gemini
+    class OpenRouterLegend,R1,R2,R3 openrouter
 ```
 
 ## Staples And Grading
@@ -81,13 +81,13 @@ Ingredient grading uses the cache in `internal/ingredients/grading/cache.go`:
 
 Back in `GenerateRecipes`, ingredients with `Grade.Score <= 6` are removed. Ungraded ingredients are still allowed through.
 
-The model boundary in this section is ingredient grading. Fetching staples is store data retrieval; grading missing ingredients uses the configured ingredient grading model, defaulting to `gpt-5-mini`.
+The model boundary in this section is ingredient grading. Fetching staples is store data retrieval; grading missing ingredients uses the configured ingredient grading model, defaulting to `gpt-5.6-luna`.
 
 ## Menu Plan And Recipe Fan-Out
 
-After grading, `GenerateRecipes` shuffles the ingredient list and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-5.5`.
+After grading, `GenerateRecipes` shuffles the ingredient list and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-5.6-sol`.
 
-The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-5.5` recipe model call:
+The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-5.6-sol` recipe model call:
 
 - append the plan instructions to the base instructions
 - call `GenerateRecipe`
@@ -96,9 +96,9 @@ The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Ea
 
 ## Critique And Fan-In
 
-`critiqueAndMaybeRetryRecipe` asks the critique model for feedback. If critiques are disabled, the rubberstamp service returns a passing score without a model call.
+`critiqueAndMaybeRetryRecipe` asks the OpenRouter critique model for feedback. The model is selected with `OPENROUTER_CRITIQUE_MODEL` and defaults to `google/gemini-3.1-pro-preview`. If critiques are disabled, the rubberstamp service returns a passing score without a model call.
 
-When a critique score is at least `critique.MinimumRecipeScore` (`8`), the recipe is kept. When the score is below `8`, the generator does one more `gpt-5.5` recipe model call using the critique feedback and original recipe response ID, then uses that retry in place of the original recipe.
+When a critique score is at least `critique.MinimumRecipeScore` (`8`), the recipe is kept. When the score is below `8`, the generator does one more `gpt-5.6-sol` recipe model call using the critique feedback and original recipe response ID, then uses that retry in place of the original recipe.
 
 Once all workers finish, `GenerateRecipes` fans the recipe results back into:
 
