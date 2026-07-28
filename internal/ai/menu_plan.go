@@ -306,8 +306,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	messages = append(messages, userPromptMessage("For extra variety, loosely draw from one of these cuisine styles if it fits the ingredients: "+strings.Join(cuisines, ", ")))
 	// messages = append(messages, userPromptMessage("but don't overlook local cuisine"))
 
-	// this fails on regen
-	messages = append(messages, userPromptMessage("If doing more than 3 plans mark one plan fancy."))
+	messages = append(messages, userPromptMessage("If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy."))
 
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
@@ -330,7 +329,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptM
 	messages = append(messages,
 		userPromptMessage(fmt.Sprintf("Build %d replacement recipe plan(s) by default. If the user's directions clearly ask for a different number of recipes, return that many plans instead. Keep the plan count between 1 and 6. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
 	)
-	messages = append(messages, userPromptMessage("If fancy plan was dismissed make one of the new ones fancy"))
+	messages = append(messages, userPromptMessage("If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy."))
 	// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 
 	return messages

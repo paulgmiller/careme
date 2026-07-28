@@ -6,10 +6,11 @@ import (
 	"io"
 )
 
+// InputIngredientsToTSV writes only the ingredient information useful in AI prompts.
 func InputIngredientsToTSV(ingredients []InputIngredient, w io.Writer) error {
 	csvw := csv.NewWriter(w)
 	csvw.Comma = '\t'
-	header := []string{"ProductId", "AisleNumber", "Brand", "Description", "Size", "PriceRegular", "PriceSale"}
+	header := []string{"ProductId", "Brand", "Description", "Size", "PriceRegular", "PriceSale"}
 	if err := csvw.Write(header); err != nil {
 		return err
 	}
@@ -20,7 +21,6 @@ func InputIngredientsToTSV(ingredients []InputIngredient, w io.Writer) error {
 		}
 		row := []string{
 			ingredient.ProductID,
-			ingredient.AisleNumber,
 			ingredient.Brand,
 			ingredient.Description,
 			ingredient.Size,
