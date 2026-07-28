@@ -624,7 +624,8 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			returnTo := requestURIOrPath(r)
+			values := url.Values{queryArgHash: []string{shoppingListHash}, queryArgPendingSave: []string{recipeHash}}
+			returnTo := "/recipes?" + values.Encode()
 			redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, returnTo, http.StatusUnauthorized)
 			return
 		}
