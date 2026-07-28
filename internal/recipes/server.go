@@ -84,15 +84,6 @@ func redirectToAccountRequired(w http.ResponseWriter, r *http.Request, reason au
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
-func redirectToAccountRequiredForSave(w http.ResponseWriter, r *http.Request, shoppingListHash, recipeHash string, status int) {
-	returnTo := requestURIOrPath(r)
-	if shoppingListHash != "" && recipeHash != "" {
-		values := url.Values{queryArgHash: []string{shoppingListHash}, queryArgPendingSave: []string{recipeHash}}
-		returnTo = "/recipes?" + values.Encode()
-	}
-	redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, returnTo, status)
-}
-
 type locServer interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 }
@@ -626,18 +617,19 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shoppingListHash := strings.TrimSpace(r.FormValue(queryArgHash))
+	if shoppingListHash == "" {
+		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
+		return
+	}
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			redirectToAccountRequiredForSave(w, r, shoppingListHash, recipeHash, http.StatusUnauthorized)
+			returnTo := requestURIOrPath(r)
+			redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, returnTo, http.StatusUnauthorized)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load user for recipe save", "error", err)
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
-	}
-	if shoppingListHash == "" {
-		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
 		return
 	}
 	recipe, err := s.saveRecipeForUser(ctx, currentUser, shoppingListHash, recipeHash)
