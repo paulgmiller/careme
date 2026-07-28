@@ -10,6 +10,9 @@ import (
 	"time"
 
 	locationtypes "careme/internal/locations/types"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildMenuPlanMessagesIncludesRecipeParentDefaults(t *testing.T) {
@@ -44,12 +47,30 @@ func TestBuildMenuPlanMessagesUsesRequestedCountAsDefault(t *testing.T) {
 	if !strings.Contains(body, "If the user's directions clearly ask for a different number of recipes, return that many plans instead") {
 		t.Fatalf("expected prompt to let user directions change the count: %s", body)
 	}
-	if strings.Contains(body, "Mark one plan fancy") {
-		t.Fatalf("did not expect fancy-plan requirement for a two-plan request: %s", body)
+	if !strings.Contains(body, "If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy.") {
+		t.Fatalf("expected conditional fancy-plan requirement: %s", body)
 	}
 	if strings.Contains(body, "Include one less-common cuisine direction") {
 		t.Fatalf("did not expect less-common cuisine requirement for a two-plan request: %s", body)
 	}
+}
+
+func TestBuildMenuPlanMessagesExcludesIngredientAisleNumbers(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil, nil)
+	location := &locationtypes.Location{State: "WA"}
+	ingredients := []InputIngredient{{
+		ProductID:   "asparagus-1",
+		AisleNumber: "SECRET-AISLE-42",
+		Description: "Asparagus",
+	}}
+
+	messages, err := client.buildMenuPlanMessages(location, ingredients, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
+	require.NoError(t, err)
+
+	body := mustJSON(t, messages)
+	assert.NotContains(t, body, "AisleNumber")
+	assert.NotContains(t, body, "SECRET-AISLE-42")
+	assert.Contains(t, body, "ProductId\\tBrand\\tDescription\\tSize\\tPriceRegular\\tPriceSale")
 }
 
 func TestBuildMenuPlanMessagesIncludesCuisineListInspiration(t *testing.T) {
@@ -188,7 +209,7 @@ func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "If doing more than 3 plans mark one plan fancy.") {
+	if !strings.Contains(body, "If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy.") {
 		t.Fatalf("expected menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
@@ -251,7 +272,7 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 func TestBuildRegenerateMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages(nil, 3)
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "make one of the new ones fancy") {
+	if !strings.Contains(body, "If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy.") {
 		t.Fatalf("expected regenerate menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
@@ -318,6 +339,10 @@ func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
 		"Do not write recipe steps",
 		"chef_note_suggestion",
 		"Tailor it to the planned dishes",
+		"available ingredients, seasonality",
+		"24 characters or fewer",
+		"fit in a mobile text box",
+		`Good examples: "less spicy", "faster dinners", "more vegetables", "no seafood"`,
 		"rationale, or prose notes",
 	} {
 		if !strings.Contains(menuPlanSystemMessage, phrase) {

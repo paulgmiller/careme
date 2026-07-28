@@ -12,6 +12,7 @@ type contextKey string
 
 const (
 	sessionIDContextKey contextKey = "session_id"
+	userIDContextKey    contextKey = "user_id"
 )
 
 func WithSessionID(ctx context.Context, sessionID string) context.Context {
@@ -30,6 +31,24 @@ func SessionIDFromContext(ctx context.Context) (string, bool) {
 		return "", false
 	}
 	return sessionID, true
+}
+
+func WithUserID(ctx context.Context, userID string) context.Context {
+	if userID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, userIDContextKey, userID)
+}
+
+func UserIDFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	userID, ok := ctx.Value(userIDContextKey).(string)
+	if !ok || userID == "" {
+		return "", false
+	}
+	return userID, true
 }
 
 // Cosider https://github.com/PumpkinSeed/slog-context instead
@@ -55,6 +74,10 @@ func (h *contextHandler) Handle(ctx context.Context, record slog.Record) error {
 			slog.String("trace_id", spanContext.TraceID().String()),
 			slog.String("span_id", spanContext.SpanID().String()),
 		)
+	}
+	if userID, ok := UserIDFromContext(ctx); ok {
+		record.AddAttrs(slog.String("user_id", userID))
+		return h.handler.Handle(ctx, record)
 	}
 	// hard dependency on clerk is bad. but plumbg an auth
 	sessionClaims, ok := clerk.SessionClaimsFromContext(ctx)

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Careme · Your Kitchen</title>
 
   {{template "app_head" .Style}}
@@ -173,7 +173,10 @@
         </div>
       </div>
 
-      <p class="mt-6 text-center text-sm text-gray-500">Need help? Reach out from the home page.</p>
+      <p class="mt-6 text-center text-sm text-gray-500">
+        Read the <a href="/privacy" class="font-medium text-brand-700 underline underline-offset-4">Privacy Policy</a>
+        or <a href="/privacy#delete" class="font-medium text-brand-700 underline underline-offset-4">request account deletion</a>.
+      </p>
     </section>
   </main>
   <script src="/static/htmx@2.0.8.js"></script>

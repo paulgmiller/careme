@@ -46,11 +46,15 @@ type authClient interface {
 	GetUserIDFromRequest(r *http.Request) (string, error)
 }
 
+type locationResolver interface {
+	NearestZIPToCoordinates(lat, lon float64) (string, bool)
+}
+
 type Handler struct {
 	uploader    *uploader
 	auth        authClient
 	extractor   IngredientExtractor
-	zipFinder   ZipFinder
+	zipFinder   locationResolver
 	statusStore *analysisStatusStore
 	// exposed for tests
 	parsePhotos func(context.Context, *http.Request) ([]Photo, error)
@@ -60,7 +64,6 @@ type Handler struct {
 type Photo struct {
 	contentType string
 	content     []byte
-	coord       *Coordinate
 }
 
 // who knew data: was  valid url just like http:? see comment in ai/farmersmarket.go
@@ -68,7 +71,7 @@ func (p Photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor, zipFinder ZipFinder) *Handler {
+func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor, zipFinder locationResolver) *Handler {
 	return &Handler{
 		uploader:    uploader,
 		auth:        authClient,
@@ -153,17 +156,9 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		renderError(ctx, w, err.Error())
 		return
 	}
-	coords := lo.Map(photos, func(photo Photo, _ int) Coordinate {
-		return *photo.coord
-	})
-	avg, err := AverageCoordinate(coords)
+	coord, zip, err := h.resolveMarketLocation(r)
 	if err != nil {
-		renderError(ctx, w, "Add at least one photo with location saved.")
-		return
-	}
-	zip, ok := h.zipFinder.NearestZIPToCoordinates(avg.Lat, avg.Lon)
-	if !ok {
-		renderError(ctx, w, "Could not match those photos to a ZIP code.")
+		renderError(ctx, w, err.Error())
 		return
 	}
 
@@ -183,7 +178,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	h.wg.Go(func() {
 		jobCtx := context.WithoutCancel(ctx)
-		h.runAnalysisJob(jobCtx, status, name, photos, coords, avg, zip)
+		h.runAnalysisJob(jobCtx, status, name, photos, coord, zip)
 	})
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -192,7 +187,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coords []Coordinate, avg Coordinate, zip string) {
+func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate, zip string) {
 	update := func(next analysisStatus) {
 		if err := h.statusStore.save(ctx, next); err != nil {
 			slog.ErrorContext(ctx, "failed to save farmers market analysis status", "job_id", status.ID, "error", err)
@@ -229,7 +224,7 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	update(status)
 
 	date := farmersMarketDate(time.Now(), zip)
-	market, _, err := h.uploader.saveUpload(ctx, name, avg.Lat, avg.Lon, len(coords), date, ingredients)
+	market, err := h.uploader.saveUpload(ctx, name, coord, zip, len(photos), date, ingredients)
 	if err != nil {
 		fail("Could not save this market. Try again, chef.", err)
 		return
@@ -327,6 +322,18 @@ func uniqueIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
 	})
 }
 
+func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
+	coord, err := geo.FromString(r.FormValue("lat"), r.FormValue("lon"))
+	if err != nil {
+		return geo.Coordinate{}, "", err
+	}
+	zip, ok := h.zipFinder.NearestZIPToCoordinates(coord.Lat, coord.Lon)
+	if !ok {
+		return geo.Coordinate{}, "", fmt.Errorf("could not match that location to a ZIP code")
+	}
+	return coord, zip, nil
+}
+
 func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) {
 	if r.MultipartForm == nil || r.MultipartForm.File == nil {
 		return nil, fmt.Errorf("add a few market photos")
@@ -364,15 +371,8 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 			return nil, fmt.Errorf("upload image files only")
 		}
 
-		photo := Photo{contentType: contentType, content: data}
-		coord, err := GPSFromImage(data)
-		if err != nil {
-			return nil, fmt.Errorf("could not read location from one of those photos %w", err)
-		}
-		photo.coord = &coord
-
-		photos = append(photos, photo)
-		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", len(data), "content_type", contentType, "has_location", photo.coord != nil)
+		photos = append(photos, Photo{contentType: contentType, content: data})
+		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", len(data), "content_type", contentType)
 	}
 	return photos, nil
 }

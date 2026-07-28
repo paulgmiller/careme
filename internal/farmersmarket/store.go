@@ -182,10 +182,10 @@ func (s *store) saveMarket(ctx context.Context, market Market) error {
 	return nil
 }
 
-func (s *store) mergeInventory(ctx context.Context, locationID string, date time.Time, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
+func (s *store) mergeInventory(ctx context.Context, locationID string, date time.Time, ingredients []ai.InputIngredient) error {
 	existing, err := s.loadInventoryByDate(ctx, locationID, date)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		return nil, fmt.Errorf("load farmers market inventory: %w", err)
+		return fmt.Errorf("load farmers market inventory: %w", err)
 	}
 
 	all := append(existing, ingredients...)
@@ -197,12 +197,12 @@ func (s *store) mergeInventory(ctx context.Context, locationID string, date time
 		Ingredients: merged,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("marshal farmers market inventory: %w", err)
+		return fmt.Errorf("marshal farmers market inventory: %w", err)
 	}
 	if err := s.cache.Put(ctx, inventoryKey(locationID, date), string(raw), cache.Unconditional()); err != nil {
-		return nil, fmt.Errorf("save farmers market inventory: %w", err)
+		return fmt.Errorf("save farmers market inventory: %w", err)
 	}
-	return merged, nil
+	return nil
 }
 
 func (s *store) loadInventoryByDate(ctx context.Context, locationID string, date time.Time) ([]ai.InputIngredient, error) {

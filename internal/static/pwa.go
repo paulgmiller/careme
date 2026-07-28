@@ -27,6 +27,9 @@ var appIcon512 []byte
 //go:embed manifest.webmanifest
 var manifestWebmanifest []byte
 
+//go:embed assetlinks.json
+var assetLinksJSON []byte
+
 //go:embed offline.html
 var offlineHTML []byte
 
@@ -64,6 +67,14 @@ func registerPWAAssets(mux routing.Registrar) {
 			slog.ErrorContext(r.Context(), "failed to render web manifest", "error", err)
 			http.Error(w, "manifest error", http.StatusInternalServerError)
 			return
+		}
+	})
+
+	mux.HandleFunc("/.well-known/assetlinks.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		if _, err := w.Write(assetLinksJSON); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write Android asset links", "error", err)
 		}
 	})
 

@@ -50,6 +50,7 @@ type shoppingRecipeView struct {
 	DisplayIngredients []ai.Ingredient // merged food and wine
 	Saved              bool
 	Dismissed          bool
+	HasImage           bool
 	WineRecommendation *ai.WineSelection
 }
 
@@ -63,10 +64,10 @@ type shoppingListGroup struct {
 	Items []*ai.Ingredient
 }
 
-// FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
+// FormatShoppingListHTMLForHashWithHelp renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
-func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
+func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage string, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
 	instructions := strings.TrimSpace(p.Instructions)
@@ -89,6 +90,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			DisplayIngredients: displayIngredients,
 			Saved:              saved,
 			Dismissed:          selection.IsDismissed(recipeHash),
+			HasImage:           recipeImages[recipeHash],
 			WineRecommendation: wineRecommendation,
 		})
 		if saved {
@@ -104,6 +106,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		ClarityScript        template.HTML
 		GoogleTagScript      template.HTML
 		Instructions         string
+		HelpMessage          string
 		Hash                 string
 		Recipes              []shoppingRecipeView
 		ShoppingList         []shoppingListGroup
@@ -122,6 +125,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		ClarityScript:        templates.ClarityScript(ctx),
 		GoogleTagScript:      templates.GoogleTagScript(),
 		Instructions:         instructions,
+		HelpMessage:          strings.TrimSpace(helpMessage),
 		Hash:                 hash,
 		Recipes:              recipeViews,
 		ShoppingList:         shoppingListForDisplay(combinedIngredients),
@@ -292,7 +296,7 @@ func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 }
 
 // called from shoppping list and will either mimimize dimissed or bring back in all on undo.
-func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, hasImage bool, writer io.Writer) error {
 	data := shoppingRecipeView{
 		Recipe:             recipe,
 		Hash:               recipe.ComputeHash(),
@@ -301,6 +305,7 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		Saved:              saved,
 		Dismissed:          !saved,
+		HasImage:           hasImage,
 		WineRecommendation: wineRecommendation,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)

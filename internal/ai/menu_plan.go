@@ -141,7 +141,7 @@ Try and ensure variety across cuisines, anchor ingredients, techniques, and side
 Choose anchor_ingredient and side_vegetable from the provided TSV ingredients. Use the exact ingredient Description text from the TSV. Do not choose an unavailable related ingredient; use the available ingredient's name instead.
 Prioritize seasonal ingredients, sale value, practical weeknight cooking.
 Assign user directions to recipe_instructions only for the specific recipe plans where they belong. If a user direction applies to every dish, repeat it in every recipe plan's recipe_instructions. If the user mentions having a limited ingredient without asking for it in every dish, assign it to only one fitting recipe.
-Return one chef_note_suggestion: a short, plain-language example of useful feedback the cook could type before asking for a new menu. Tailor it to the planned dishes, available ingredients, seasonality, and likely tradeoffs.
+Return one chef_note_suggestion: concise example feedback the cook could type before asking for a new menu. Tailor it to the planned dishes, available ingredients, seasonality, and likely tradeoffs. It must be 24 characters or fewer, fit in a mobile text box, and be a fragment, not a sentence. Good examples: "less spicy", "faster dinners", "more vegetables", "no seafood".
 Do not write recipe steps, prep instructions, shopping lists, rationale, or prose notes.`
 
 func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Location, saleIngredients []InputIngredient,
@@ -306,8 +306,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	messages = append(messages, userPromptMessage("For extra variety, loosely draw from one of these cuisine styles if it fits the ingredients: "+strings.Join(cuisines, ", ")))
 	// messages = append(messages, userPromptMessage("but don't overlook local cuisine"))
 
-	// this fails on regen
-	messages = append(messages, userPromptMessage("If doing more than 3 plans mark one plan fancy."))
+	messages = append(messages, userPromptMessage("If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy."))
 
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
@@ -330,7 +329,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptM
 	messages = append(messages,
 		userPromptMessage(fmt.Sprintf("Build %d replacement recipe plan(s) by default. If the user's directions clearly ask for a different number of recipes, return that many plans instead. Keep the plan count between 1 and 6. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
 	)
-	messages = append(messages, userPromptMessage("If fancy plan was dismissed make one of the new ones fancy"))
+	messages = append(messages, userPromptMessage("If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy."))
 	// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 
 	return messages

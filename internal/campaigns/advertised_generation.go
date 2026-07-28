@@ -9,24 +9,58 @@ import (
 	"time"
 
 	"careme/internal/locations"
+	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/routing"
 )
 
-// AdvertisedRecipeLocations returns the stores we intentionally pre-generate and promote.
+// Campaign is a promoted store plus campaign-specific page context.
+type campaign struct {
+	Location    locations.Location
+	HelpMessage string
+}
+
+func genericLocationHelp(location string) string {
+	return fmt.Sprintf(`Here are 3 recipes made with ingredients in stock today at %s.
+Want something different? Add a note below and choose Try again, chef. 
+Add the recipes you like, hide the ones you don't, and we'll build your shopping list.`, location)
+}
+
+// AdvertisedRecipeLocations returns the campaigns we intentionally pre-generate and promote.
 // should probably vagule align with StaplesWatchdogLocations() as why wouldn't we monitor
 // the most importnant stores
-func AdvertisedRecipeLocations() map[string]locations.Location {
-	return map[string]locations.Location{
-		//{ID: "wholefoods_10153", ZipCode: "97209"},
-		//{ID: "safeway_490", ZipCode: "86403"},
-		"bellevue": {ID: "70500874", ZipCode: "98101"}, // bellevue
-		"issaquah": {ID: "70100658", ZipCode: "98029"},
+func AdvertisedRecipeLocations() map[string]campaign {
+	return map[string]campaign{
+		// https://chatgpt.com/share/6a4d4793-987c-83e8-9f0e-e12c72772df7
+		// west lake wholefoods_10216 98121
+		// bella bottega qfc 70500860 98052
+		/* soon
+		"university_village_qfc": {
+			Location:    locations.Location{ID: "70500807", ZipCode: "98105"},
+			HelpMessage: genericLocationHelp("University Village QFC"),
+		},*/
+		"redmond_wf": {
+			Location:    locations.Location{ID: "wholefoods_10260", ZipCode: "98052"},
+			HelpMessage: genericLocationHelp("Redmond Whole Foods"),
+		},
+		/* Too close to fred meyers
+		bellevue_wf": {
+			Location:    locations.Location{ID: "wholefoods_10153", ZipCode: "98004"},
+			HelpMessage: genericLocationHelp("Bellevue Whole Foods"),
+		},*/
+		"bellevue": {
+			Location:    locations.Location{ID: "70100023", ZipCode: "98007"},
+			HelpMessage: genericLocationHelp("Bellevue Fred Meyer"),
+		},
+		"issaquah": {
+			Location:    locations.Location{ID: "70100658", ZipCode: "98029"},
+			HelpMessage: genericLocationHelp("Issaquah Fred Meyer"),
+		},
 	}
 }
 
 type recipeGenerationKickstarter interface {
-	KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams) error
+	KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams)
 }
 
 type advertisedLocationStore interface {
@@ -54,7 +88,7 @@ func (s advertisedGenerationServer) handleGenerate(w http.ResponseWriter, r *htt
 	ctx := r.Context()
 	var err error
 	for _, advertised := range AdvertisedRecipeLocations() {
-		err = errors.Join(err, s.generateLocation(ctx, advertised.ID))
+		err = errors.Join(err, s.generateLocation(ctx, advertised.Location.ID))
 	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to trigger advertised recipe generation", "error", err)
@@ -64,6 +98,9 @@ func (s advertisedGenerationServer) handleGenerate(w http.ResponseWriter, r *htt
 }
 
 func (s advertisedGenerationServer) generateLocation(ctx context.Context, locationID string) error {
+	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
+	ctx = logsetup.WithUserID(ctx, "campaign_ads")
+
 	loc, err := s.locations.GetLocationByID(ctx, locationID)
 	if err != nil {
 		return fmt.Errorf("hydrate location %s: %w", locationID, err)
@@ -74,10 +111,6 @@ func (s advertisedGenerationServer) generateLocation(ctx context.Context, locati
 		return fmt.Errorf("resolve store date: %w", err)
 	}
 
-	err = s.generator.KickGenerationIfNotPresent(ctx, recipes.DefaultParams(loc, date))
-	if err != nil {
-		return fmt.Errorf("kick generation: %w", err)
-	}
-
+	s.generator.KickGenerationIfNotPresent(ctx, recipes.DefaultParams(loc, date))
 	return nil
 }

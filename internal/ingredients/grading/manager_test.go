@@ -17,8 +17,10 @@ import (
 const testIngredientGradeCacheVersion = "test-cache-version"
 
 type stubGradeBackend struct {
-	mu    sync.Mutex
-	calls [][]ai.InputIngredient
+	mu                sync.Mutex
+	calls             [][]ai.InputIngredient
+	leaveLastUngraded bool
+	omitLastOnce      bool
 }
 
 func (s *stubGradeBackend) CacheVersion() string {
@@ -28,6 +30,7 @@ func (s *stubGradeBackend) CacheVersion() string {
 func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	s.mu.Lock()
 	s.calls = append(s.calls, append([]ai.InputIngredient(nil), ingredients...))
+	callCount := len(s.calls)
 	s.mu.Unlock()
 	var out []ai.InputIngredient
 	for _, ingredient := range ingredients {
@@ -37,6 +40,12 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 		}
 		// this should be closer to whats in actual grader.
 		out = append(out, ingredient)
+	}
+	if s.leaveLastUngraded && len(out) > 0 {
+		out[len(out)-1].Grade = nil
+	}
+	if s.omitLastOnce && len(out) > 0 && callCount == 1 {
+		out = out[:len(out)-1]
 	}
 	return out, nil
 }
@@ -157,6 +166,50 @@ func TestCachingGraderOverlaysNewGradeOnCurrentIngredientMetadata(t *testing.T) 
 	assert.Equal(t, "fresh-herbs", cached.AisleNumber)
 	assert.Equal(t, []string{"Produce"}, cached.Categories)
 	require.NotNil(t, cached.Grade)
+}
+
+func TestCachingGraderPassesThroughButDoesNotCacheUngradedIngredients(t *testing.T) {
+	cacheStore := NewStore(cache.NewInMemoryCache())
+	backend := &stubGradeBackend{leaveLastUngraded: true}
+	grader := newCachingGrader(backend, cacheStore)
+	inputs := []ai.InputIngredient{
+		{ProductID: "ingredient-00", Description: "Asparagus"},
+		{ProductID: "ingredient-01", Description: "Broccoli"},
+	}
+
+	results, err := grader.GradeIngredients(t.Context(), inputs)
+
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	assert.Equal(t, "ingredient-00", results[0].ProductID)
+	require.NotNil(t, results[0].Grade)
+	assert.Equal(t, "ingredient-01", results[1].ProductID)
+	assert.Nil(t, results[1].Grade)
+	_, err = cacheStore.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(inputs[0])))
+	require.NoError(t, err)
+	_, err = cacheStore.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(inputs[1])))
+	assert.ErrorIs(t, err, cache.ErrNotFound)
+}
+
+func TestCachingGraderRetriesOmittedIngredientsOnNextCall(t *testing.T) {
+	cacheStore := NewStore(cache.NewInMemoryCache())
+	backend := &stubGradeBackend{omitLastOnce: true}
+	grader := newCachingGrader(backend, cacheStore)
+	inputs := []ai.InputIngredient{
+		{ProductID: "ingredient-00", Description: "Asparagus"},
+		{ProductID: "ingredient-01", Description: "Broccoli"},
+	}
+
+	first, err := grader.GradeIngredients(t.Context(), inputs)
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+	assert.Equal(t, "ingredient-00", first[0].ProductID)
+
+	second, err := grader.GradeIngredients(t.Context(), inputs)
+	require.NoError(t, err)
+	require.Len(t, second, 2)
+	require.Len(t, backend.calls, 2)
+	assert.Equal(t, []ai.InputIngredient{inputs[1]}, backend.calls[1])
 }
 
 func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {

@@ -1,9 +1,11 @@
 package static
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -34,6 +36,12 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			path:        "/sw.js",
 			wantType:    "application/javascript; charset=utf-8",
 			wantSnippet: TailwindAssetPath,
+		},
+		{
+			name:        "Android asset links",
+			path:        "/.well-known/assetlinks.json",
+			wantType:    "application/json; charset=utf-8",
+			wantSnippet: `"package_name": "cooking.careme"`,
 		},
 		{
 			name:        "offline page",
@@ -76,6 +84,22 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 				t.Fatalf("GET %s body missing offline copy", tt.path)
 			}
 		})
+	}
+}
+
+func TestAndroidAssetLinksMatchesBubblewrapFingerprint(t *testing.T) {
+	const wantFingerprint = "AE:C5:D0:C3:DE:6E:12:A5:65:FD:1B:48:53:1B:47:4B:58:FC:5D:91:F5:93:7D:F2:44:4F:D8:55:70:B9:B0:62"
+
+	if !bytes.Contains(assetLinksJSON, []byte(wantFingerprint)) {
+		t.Fatalf("assetlinks.json missing fingerprint %q", wantFingerprint)
+	}
+
+	twaManifest, err := os.ReadFile("../../careme-android/twa-manifest.json")
+	if err != nil {
+		t.Fatalf("read Bubblewrap manifest: %v", err)
+	}
+	if !bytes.Contains(twaManifest, []byte(wantFingerprint)) {
+		t.Fatalf("Bubblewrap manifest missing fingerprint %q", wantFingerprint)
 	}
 }
 
@@ -145,6 +169,10 @@ func TestRegisterServesManifestNameByHost(t *testing.T) {
 				ShortName       string `json:"short_name"`
 				BackgroundColor string `json:"background_color"`
 				ThemeColor      string `json:"theme_color"`
+				Icons           []struct {
+					Src     string `json:"src"`
+					Purpose string `json:"purpose"`
+				} `json:"icons"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &manifest); err != nil {
 				t.Fatalf("decode manifest: %v", err)
@@ -157,6 +185,14 @@ func TestRegisterServesManifestNameByHost(t *testing.T) {
 			}
 			if manifest.ThemeColor != manifest.BackgroundColor {
 				t.Fatalf("manifest theme_color = %q, want background_color %q", manifest.ThemeColor, manifest.BackgroundColor)
+			}
+			if len(manifest.Icons) != 2 {
+				t.Fatalf("manifest icon count = %d, want 2", len(manifest.Icons))
+			}
+			for _, icon := range manifest.Icons {
+				if icon.Purpose != "any maskable" {
+					t.Fatalf("manifest icon %s purpose = %q, want any maskable", icon.Src, icon.Purpose)
+				}
 			}
 		})
 	}
@@ -173,6 +209,53 @@ func TestOfflinePageThemeColorMatchesPageBackground(t *testing.T) {
 	want := `<meta name="theme-color" content="` + seasons.GetCurrentColorScheme().C50 + `" />`
 	if !strings.Contains(b.String(), want) {
 		t.Fatalf("offline page should use the page background color for PWA chrome, body: %s", b.String())
+	}
+}
+
+func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
+	Init()
+	var b strings.Builder
+	err := renderOfflinePage(&b)
+	if err != nil {
+		t.Fatalf("renderOfflinePage() error = %v", err)
+	}
+	rendered := b.String()
+
+	for _, snippet := range []string{
+		`data-offline-recipes-section`,
+		`Saved recipes on this device`,
+		`const savedRecipesCacheName = "careme-saved-recipes-v1";`,
+		`const savedRecipesListURL = "/user/recipes/offline-cache";`,
+		`await cache.match(savedRecipesListURL)`,
+		`body.split(/\r?\n/).filter(Boolean)`,
+		`throw new Error("offline recipe list elements are missing")`,
+		`throw new Error("cached recipe response is missing")`,
+		`return doc.title.trim()`,
+		`list.replaceChildren(...rows)`,
+		`section.classList.remove("hidden")`,
+		`renderRecipeLinks().catch((error) => console.error(error))`,
+	} {
+		if !strings.Contains(rendered, snippet) {
+			t.Fatalf("offline page should include cached recipe link behavior %q, page: %s", snippet, rendered)
+		}
+	}
+
+	if !strings.Contains(string(offlineHTML), "Cache recipe titles separately") {
+		t.Fatalf("offline page source should explain the cached HTML title parsing")
+	}
+	if strings.Contains(rendered, "recipePath") {
+		t.Fatalf("offline page should trust cached recipe URLs without a recipePath helper, page: %s", rendered)
+	}
+	if strings.Contains(rendered, "cache.keys()") {
+		t.Fatalf("offline page should only use the cached saved recipe list, page: %s", rendered)
+	}
+	if strings.Contains(rendered, "new Set(recipeURLs)") {
+		t.Fatalf("offline page should not dedupe cached recipe URLs, page: %s", rendered)
+	}
+	titleFunction := rendered[strings.Index(rendered, "const titleFromResponse"):]
+	titleFunction = titleFunction[:strings.Index(titleFunction, "const recipeURLsFromList")]
+	if strings.Contains(titleFunction, "catch") {
+		t.Fatalf("titleFromResponse should not catch title parsing errors separately, function: %s", titleFunction)
 	}
 }
 
