@@ -293,7 +293,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 
 	ingredientsMessage := fmt.Sprintf("%d ingredients available in TSV format with header.\n", len(saleIngredients))
 	var buf strings.Builder
-	if err := promptInputIngredientsToTSV(saleIngredients, &buf); err != nil {
+	if err := InputIngredientsToTSV(saleIngredients, &buf); err != nil {
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
 	ingredientsMessage += buf.String()
