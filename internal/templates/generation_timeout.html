@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Recipe planning took too long</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+
+  {{template "app_head" .Style}}
+
+  {{.ClarityScript}}
+  {{.GoogleTagScript}}
+</head>
+<body class="min-h-screen overflow-hidden bg-gradient-to-b from-brand-50 to-white text-ink-700 antialiased">
+  {{GoogleTagNoScript}}
+  {{template "seasonal_background" .}}
+  <main class="relative z-10 grid min-h-screen place-items-center px-4">
+    {{template "generation_timeout" .}}
+  </main>
+  {{template "clerk_refresh.html" .}}
+</body>
+</html>
+
+{{define "generation_timeout"}}
+<section id="spin-page-work"
+  class="friendly-card w-full max-w-md border border-brand-100 bg-white/90 p-10 text-center shadow-xl">
+  <h1 class="text-2xl font-semibold text-brand-700">That took longer than expected.</h1>
+  <form method="POST" action="{{.RetryPath}}" class="mt-6">
+    <button type="submit"
+      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+      Try again, chef
+    </button>
+  </form>
+</section>
+{{end}}

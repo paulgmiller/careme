@@ -70,6 +70,56 @@ func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
 	assert.Equal(t, "Save two dinners", u.Query().Get("help"))
 }
 
+func TestNotFoundTimedOutShowsRetryButton(t *testing.T) {
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t, withTestGenerator(generator))
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
+	require.NoError(t, s.SaveParams(t.Context(), p))
+
+	start := time.Now().Add(-11 * time.Minute).Format(time.RFC3339Nano)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash()+"&start="+url.QueryEscape(start), nil)
+	rr := httptest.NewRecorder()
+
+	s.notFound(t.Context(), rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "That took longer than expected.")
+	assert.Contains(t, rr.Body.String(), "Try again, chef")
+	assert.Contains(t, rr.Body.String(), `method="POST"`)
+	assert.Contains(t, rr.Body.String(), "/recipes/"+p.Hash()+"/retry")
+	select {
+	case <-generator.called:
+		t.Fatal("GET timeout page should not restart generation")
+	default:
+	}
+}
+
+func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t, withTestGenerator(generator))
+	t.Cleanup(s.Wait)
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
+	require.NoError(t, s.SaveParams(t.Context(), p))
+
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash()+"/retry?help=Save+two+dinners", nil)
+	req.SetPathValue("hash", p.Hash())
+	rr := httptest.NewRecorder()
+
+	s.handleRetryGeneration(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	redirect, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	assert.Equal(t, p.Hash(), redirect.Query().Get(queryArgHash))
+	assert.NotEmpty(t, redirect.Query().Get(queryArgStart))
+	assert.Equal(t, "Save two dinners", redirect.Query().Get(QueryArgHelp))
+	select {
+	case <-generator.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for retried generation")
+	}
+}
+
 func legacyRecipeHash(hash string) (string, bool) {
 	return currentHashToLegacy(hash, legacyRecipeHashSeed)
 }
