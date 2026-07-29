@@ -254,3 +254,72 @@ func TestStorageRemoveRecipesByHash(t *testing.T) {
 		t.Fatalf("RemoveRecipe() LastRecipes = %#v, want only keep recipe", user.LastRecipes)
 	}
 }
+
+func TestStorageLinkPartnersSharesKitchenFieldsGoingForward(t *testing.T) {
+	fc := cache.NewFileCache(t.TempDir())
+	storage := NewStorage(fc)
+	now := time.Now().Round(0)
+
+	owner := &utypes.User{
+		ID:            "owner",
+		Email:         []string{"owner@example.com"},
+		ShoppingDay:   time.Monday.String(),
+		FavoriteStore: "70500874",
+		Directive:     "No shellfish.",
+		LastRecipes: []utypes.Recipe{{
+			Title:     "Owner Dinner",
+			Hash:      "owner-hash",
+			CreatedAt: now,
+		}},
+	}
+	partner := &utypes.User{
+		ID:          "partner",
+		Email:       []string{"partner@example.com"},
+		ShoppingDay: time.Tuesday.String(),
+		LastRecipes: []utypes.Recipe{{
+			Title:     "Partner Dinner",
+			Hash:      "partner-hash",
+			CreatedAt: now.Add(-time.Hour),
+		}},
+	}
+	requireUpdate := func(user *utypes.User) {
+		t.Helper()
+		if err := storage.Update(user); err != nil {
+			t.Fatalf("Update() error: %v", err)
+		}
+	}
+	requireUpdate(owner)
+	requireUpdate(partner)
+
+	linked, err := storage.LinkPartners(owner, "partner@example.com")
+	if err != nil {
+		t.Fatalf("LinkPartners() error: %v", err)
+	}
+	if linked.ID != partner.ID {
+		t.Fatalf("LinkPartners() partner ID = %q, want %q", linked.ID, partner.ID)
+	}
+
+	owner.Directive = "Make it vegetarian."
+	owner.FavoriteStore = "wholefoods_123"
+	owner.LastRecipes = append(owner.LastRecipes, utypes.Recipe{Title: "Shared Dinner", Hash: "shared-hash", CreatedAt: now.Add(time.Hour)})
+	if err := storage.Update(owner); err != nil {
+		t.Fatalf("Update() linked owner error: %v", err)
+	}
+
+	gotPartner, err := storage.GetByID(partner.ID)
+	if err != nil {
+		t.Fatalf("GetByID(partner) error: %v", err)
+	}
+	if gotPartner.PartnerUserID != owner.ID {
+		t.Fatalf("partner link = %q, want %q", gotPartner.PartnerUserID, owner.ID)
+	}
+	if gotPartner.Directive != owner.Directive {
+		t.Fatalf("partner directive = %q, want %q", gotPartner.Directive, owner.Directive)
+	}
+	if gotPartner.FavoriteStore != owner.FavoriteStore {
+		t.Fatalf("partner favorite = %q, want %q", gotPartner.FavoriteStore, owner.FavoriteStore)
+	}
+	if len(gotPartner.LastRecipes) != 3 {
+		t.Fatalf("partner recipes = %#v, want 3 shared recipes", gotPartner.LastRecipes)
+	}
+}

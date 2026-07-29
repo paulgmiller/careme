@@ -102,6 +102,23 @@
                 </ul>
               </div>
 
+              <div class="space-y-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4">
+                <h3 class="text-sm font-semibold text-brand-700">Kitchen partner</h3>
+                {{if .PartnerEmail}}
+                <p class="text-sm text-gray-700">Sharing this kitchen with <span class="font-semibold text-brand-700">{{.PartnerEmail}}</span>. New recipes, favorite store, and cooking preferences stay in sync.</p>
+                {{else}}
+                <label for="partner_email" class="text-sm font-medium text-gray-700">Invite one chef by email</label>
+                <input id="partner_email"
+                       name="partner_email"
+                       type="email"
+                       placeholder="chef@example.com"
+                       class="w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                <p class="text-xs text-gray-500">They need a Careme account first. Once joined, future recipes, your favorite store, and chef notes are shared.</p>
+                {{end}}
+                {{if .PartnerMessage}}<p class="text-sm text-emerald-700">{{.PartnerMessage}}</p>{{end}}
+                {{if .PartnerError}}<p class="text-sm text-red-700">{{.PartnerError}}</p>{{end}}
+              </div>
+
               <button type="submit"
                       class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                 Save Preferences
