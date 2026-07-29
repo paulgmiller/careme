@@ -77,23 +77,6 @@ func (f fixedAuth) GetUserIDFromRequest(*http.Request) (string, error) {
 	return f.userID, nil
 }
 
-type fakeRecipeGenerationStarter struct {
-	redirectURL string
-	err         error
-}
-
-func (f fakeRecipeGenerationStarter) StartRecipeGeneration(
-	context.Context,
-	string,
-	string,
-	time.Time,
-) (string, error) {
-	if f.redirectURL == "" {
-		return "/recipes?h=farmers-market-test&start=2026-06-24T12%3A00%3A00Z", f.err
-	}
-	return f.redirectURL, f.err
-}
-
 func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]ai.InputIngredient, error) {
 	f.mu.Lock()
 	f.called = true
@@ -308,7 +291,6 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 		auth.DefaultMock(),
 		extractor,
 		staticZipFinder{zip: "98101", ok: true},
-		fakeRecipeGenerationStarter{},
 	)
 	req := multipartRequestWithFields(t, nil, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
@@ -454,13 +436,13 @@ func TestHandleStatusRendersPhotoAndIngredientProgress(t *testing.T) {
 	assert.Contains(t, body, ">11<")
 }
 
-func TestHandleStatusRedirectsCompletedJobToRecipes(t *testing.T) {
+func TestHandleStatusRedirectsCompletedJobToLocations(t *testing.T) {
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
 		ID:          "job-complete",
 		UserID:      "user-1",
 		State:       analysisStateComplete,
-		RedirectURL: "/recipes?h=farmers-market-test&start=2026-06-24T12%3A00%3A00Z",
+		RedirectURL: "/locations/zip-from-coordinates?lat=47.61&lon=-122.33",
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-complete", nil)
 	req.SetPathValue("jobID", "job-complete")
@@ -469,7 +451,7 @@ func TestHandleStatusRedirectsCompletedJobToRecipes(t *testing.T) {
 	handler.handleStatus(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "/recipes?h=farmers-market-test&start=2026-06-24T12%3A00%3A00Z", rr.Header().Get("HX-Redirect"))
+	assert.Equal(t, "/locations/zip-from-coordinates?lat=47.61&lon=-122.33", rr.Header().Get("HX-Redirect"))
 	assert.Empty(t, rr.Body.String())
 }
 
@@ -538,7 +520,6 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 		auth.DefaultMock(),
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
-		fakeRecipeGenerationStarter{},
 	)
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket", nil)
 	rr := httptest.NewRecorder()
@@ -558,7 +539,6 @@ func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 		noSessionAuth{},
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
-		fakeRecipeGenerationStarter{},
 	)
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket", nil)
 	rr := httptest.NewRecorder()
@@ -578,7 +558,6 @@ func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExt
 		authClient,
 		extractor,
 		staticZipFinder{zip: "98101", ok: true},
-		fakeRecipeGenerationStarter{},
 	)
 }
 

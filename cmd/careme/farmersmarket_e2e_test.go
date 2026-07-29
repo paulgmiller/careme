@@ -51,7 +51,7 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 	}
 }
 
-func TestFarmersMarketEndToEndSuccessfulUploadStartsRecipes(t *testing.T) {
+func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToLocations(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
 
@@ -72,13 +72,13 @@ func TestFarmersMarketEndToEndSuccessfulUploadStartsRecipes(t *testing.T) {
 	}
 
 	statusPath := extractFarmersMarketStatusPath(t, progressBody)
-	initialRecipesURL := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
-	if !strings.HasPrefix(initialRecipesURL, "/recipes?h=") {
-		t.Fatalf("expected farmers market recipe redirect, got %q", initialRecipesURL)
+	locationsURL := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
+	if !strings.HasPrefix(locationsURL, "/locations/zip-from-coordinates?") {
+		t.Fatalf("expected farmers market locations redirect, got %q", locationsURL)
 	}
-	_, recipesBody := followUntilRecipes(t, client, srv.URL+initialRecipesURL, true)
-	if !strings.Contains(recipesBody, "Test Market") {
-		t.Fatalf("expected generated recipes for uploaded market, got body: %s", recipesBody)
+	locationsBody := mustGetBody(t, client, srv.URL+locationsURL)
+	if !strings.Contains(locationsBody, "Test Market") {
+		t.Fatalf("expected uploaded market on locations page, got body: %s", locationsBody)
 	}
 }
 
@@ -138,7 +138,7 @@ func waitForFarmersMarketRedirect(t *testing.T, client *http.Client, statusURL s
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for farmers market recipe redirect from %s", statusURL)
+			t.Fatalf("timed out waiting for farmers market locations redirect from %s", statusURL)
 		}
 		req, err := http.NewRequest(http.MethodGet, statusURL, nil)
 		if err != nil {

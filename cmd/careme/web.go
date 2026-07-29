@@ -135,7 +135,6 @@ func runServer(cfg *config.Config, addr string) error {
 		authClient,
 		marketExtractor,
 		centroids,
-		recipeHandler,
 	)
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)

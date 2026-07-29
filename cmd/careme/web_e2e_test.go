@@ -260,7 +260,6 @@ func newTestServer(t *testing.T) *httptest.Server {
 		mockAuth,
 		farmersmarket.MockExtractor{},
 		centroids,
-		recipeHandler,
 	).Register(appRoutes)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 

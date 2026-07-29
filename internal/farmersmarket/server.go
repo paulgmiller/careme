@@ -50,16 +50,11 @@ type locationResolver interface {
 	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
-type recipeGenerationStarter interface {
-	StartRecipeGeneration(ctx context.Context, locationID, userID string, date time.Time) (string, error)
-}
-
 type Handler struct {
 	uploader    *uploader
 	auth        authClient
 	extractor   IngredientExtractor
 	zipFinder   locationResolver
-	recipes     recipeGenerationStarter
 	statusStore *analysisStatusStore
 	// exposed for tests
 	parsePhotos func(context.Context, *http.Request) ([]Photo, error)
@@ -82,14 +77,12 @@ func NewHandler(
 	authClient authClient,
 	extractor IngredientExtractor,
 	zipFinder locationResolver,
-	recipes recipeGenerationStarter,
 ) *Handler {
 	return &Handler{
 		uploader:    uploader,
 		auth:        authClient,
 		extractor:   extractor,
 		zipFinder:   zipFinder,
-		recipes:     recipes,
 		statusStore: newAnalysisStatusStore(statusCache),
 		parsePhotos: parseUploadedPhotos,
 	}
@@ -243,15 +236,12 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 		return
 	}
 
-	redirectURL, err := h.recipes.StartRecipeGeneration(ctx, market.ID, status.UserID, date)
-	if err != nil {
-		fail("Could not build dinner ideas. Try again, chef.", err)
-		return
-	}
-
 	status.State = analysisStateComplete
-	status.RedirectURL = redirectURL
-	status.Message = fmt.Sprintf("Found %d ingredients. Building dinner ideas.", len(ingredients))
+	status.RedirectURL = "/locations/zip-from-coordinates?" + url.Values{
+		"lat": {fmt.Sprintf("%g", market.Lat)},
+		"lon": {fmt.Sprintf("%g", market.Lon)},
+	}.Encode()
+	status.Message = fmt.Sprintf("Found %d ingredients. Finding nearby stores.", len(ingredients))
 	update(status)
 }
 
