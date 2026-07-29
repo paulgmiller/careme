@@ -623,8 +623,10 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			values := url.Values{queryArgHash: []string{shoppingListHash}, queryArgPendingSave: []string{recipeHash}}
-			returnTo := "/recipes?" + values.Encode()
+			returnTo := shoppingListArgs(map[string]string{
+				queryArgHash:        shoppingListHash,
+				queryArgPendingSave: recipeHash,
+			})
 			redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, returnTo)
 			return
 		}
@@ -880,7 +882,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-	instructions := strings.TrimSpace(r.FormValue("instructions"))
+	instructions := strings.TrimSpace(r.FormValue(queryArgInstructions))
 
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
@@ -890,7 +892,10 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 					w,
 					r,
 					auth.AccountRequiredGenerationLimit,
-					shoppingListReturnPath(hash, instructions),
+					shoppingListArgs(map[string]string{
+						queryArgHash:         hash,
+						queryArgInstructions: instructions,
+					}),
 				)
 				return
 			}
@@ -928,10 +933,12 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, newHash, queryArgStart)
 }
 
-func shoppingListReturnPath(hash, instructions string) string {
-	values := url.Values{queryArgHash: []string{hash}}
-	if instructions != "" {
-		values.Set("instructions", instructions)
+func shoppingListArgs(args map[string]string) string {
+	values := url.Values{}
+	for k, v := range args {
+		if k != "" && v != "" {
+			values.Set(k, v)
+		}
 	}
 	return "/recipes?" + values.Encode()
 }
@@ -1060,9 +1067,10 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	queryArgHash        = "h"
-	queryArgStart       = "start"
-	queryArgPendingSave = "save"
+	queryArgHash         = "h"
+	queryArgStart        = "start"
+	queryArgPendingSave  = "save"
+	queryArgInstructions = "instructions"
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
@@ -1246,8 +1254,9 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		recipeWG.Wait()
 
 		help := r.URL.Query().Get(QueryArgHelp)
+		instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
 		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
-			hashParam, selection, help, strings.TrimSpace(r.URL.Query().Get("instructions")), w)
+			hashParam, selection, help, instructions, w)
 		return
 	}
 
