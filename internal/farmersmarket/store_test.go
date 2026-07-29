@@ -436,13 +436,14 @@ func TestHandleStatusRendersPhotoAndIngredientProgress(t *testing.T) {
 	assert.Contains(t, body, ">11<")
 }
 
-func TestHandleStatusRedirectsCompletedJob(t *testing.T) {
+func TestHandleStatusPostsCompletedJobToRecipeGeneration(t *testing.T) {
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
-		ID:          "job-complete",
-		UserID:      "user-1",
-		State:       analysisStateComplete,
-		RedirectURL: "/recipes?location=farmersmarket_abc&date=2026-06-24",
+		ID:             "job-complete",
+		UserID:         "user-1",
+		State:          analysisStateComplete,
+		RecipeLocation: "farmersmarket_abc",
+		RecipeDate:     "2026-06-24",
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-complete", nil)
 	req.SetPathValue("jobID", "job-complete")
@@ -451,7 +452,10 @@ func TestHandleStatusRedirectsCompletedJob(t *testing.T) {
 	handler.handleStatus(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "/recipes?location=farmersmarket_abc&date=2026-06-24", rr.Header().Get("HX-Redirect"))
+	assert.Contains(t, rr.Body.String(), `method="POST"`)
+	assert.Contains(t, rr.Body.String(), `hx-post="/recipes"`)
+	assert.Contains(t, rr.Body.String(), `name="location" value="farmersmarket_abc"`)
+	assert.Contains(t, rr.Body.String(), `name="date" value="2026-06-24"`)
 }
 
 func TestHandleStatusReturnsFailedJobAsErrorFragment(t *testing.T) {

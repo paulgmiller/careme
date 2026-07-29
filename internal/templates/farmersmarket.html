@@ -131,6 +131,25 @@
 </div>
 {{end}}
 
+{{define "farmersmarket_generate"}}
+<form id="farmers-market-work"
+  method="POST"
+  action="/recipes"
+  hx-post="/recipes"
+  hx-trigger="load"
+  hx-swap="none"
+  class="rounded-xl border border-brand-100 bg-brand-50/70 p-6 text-center">
+  <input type="hidden" name="location" value="{{.RecipeLocation}}" />
+  <input type="hidden" name="date" value="{{.RecipeDate}}" />
+  <h2 class="text-xl font-semibold text-brand-700">Your market finds are ready</h2>
+  <p class="mt-2 text-sm text-ink-600">{{.Message}}</p>
+  <button type="submit"
+    class="mt-5 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+    Build dinner ideas
+  </button>
+</form>
+{{end}}
+
 {{define "farmersmarket_progress"}}
 <div id="farmers-market-work"
   class="rounded-xl border border-brand-100 bg-brand-50/70 p-6 text-center"

@@ -100,8 +100,8 @@ func legacyHashToCurrent(hash string, seed string) (string, bool) {
 	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
 }
 
-func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*generatorParams, error) {
-	loc := r.URL.Query().Get("location")
+func ParseGenerationForm(ctx context.Context, r *http.Request, ls locServer) (*generatorParams, error) {
+	loc := r.FormValue("location")
 	if loc == "" {
 		return nil, errors.New("must provide location id")
 	}
@@ -117,7 +117,7 @@ func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*genera
 	if err != nil {
 		return nil, err
 	}
-	dateStr := r.URL.Query().Get("date")
+	dateStr := r.FormValue("date")
 	date := defaultRecipeDate(nowFn(), storeLoc)
 	if dateStr != "" {
 		parsedDate, err := time.ParseInLocation("2006-01-02", dateStr, storeLoc)
@@ -128,7 +128,7 @@ func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*genera
 	}
 
 	p := DefaultParams(l, date)
-	p.Instructions = r.URL.Query().Get("instructions")
+	p.Instructions = r.FormValue("instructions")
 
 	return p, nil
 }

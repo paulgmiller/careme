@@ -625,8 +625,9 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	if !strings.Contains(rendered, `name="instructions"`) {
 		t.Fatalf("home page should render instructions textarea, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `/recipes?location=70500874`) {
-		t.Fatalf("home page should render direct recipe link, body: %s", rendered)
+	if !strings.Contains(rendered, `method="POST" action="/recipes"`) ||
+		!strings.Contains(rendered, `name="location" value="70500874"`) {
+		t.Fatalf("home page should render recipe generation form, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, `<span class="sm:hidden">C</span>`) {
 		t.Fatalf("home page should render compact mobile account initial, body: %s", rendered)

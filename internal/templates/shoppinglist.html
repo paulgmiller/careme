@@ -68,7 +68,7 @@
 
           {{if .UseTodaysIngredients}}
           <form id="regenerateForm"
-                method="GET"
+                method="POST"
                 action="/recipes">
             <input type="hidden" name="location" value="{{.Location.ID}}" />
             <div class="sticky top-3 z-20 -mx-2 px-2 pb-4">

@@ -1,16 +1,16 @@
 # Data Object Flow
 
-This document describes the lifecycle of generation data in `internal/recipes`, from query args to regeneration.
+This document describes the lifecycle of generation data in `internal/recipes`, from the generation form to regeneration.
 
-## 1) `params` is created from query args (generation starts here)
+## 1) `params` is created from a POST form (generation starts here)
 
 Entry point:
-- `GET /recipes?location=...` without `h` query arg
-- Handler: `internal/recipes/server.go` `handleRecipes`
+- `POST /recipes`
+- Handler: `internal/recipes/server.go` `handleGenerate`
 
 Flow:
-1. `handleRecipes` calls `ParseQueryArgs(...)`.
-2. `ParseQueryArgs` (`internal/recipes/params.go`) builds `generatorParams` from URL query args:
+1. `handleGenerate` calls `ParseGenerationForm(...)`.
+2. `ParseGenerationForm` (`internal/recipes/params.go`) builds `generatorParams` from form fields:
    - `location` (required)
    - `date` (optional, defaulted by store timezone/day boundary)
    - `instructions` (optional)

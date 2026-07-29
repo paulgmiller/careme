@@ -146,6 +146,23 @@ func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
 	}
 }
 
+func TestHandleRecipes_DoesNotGenerateFromGET(t *testing.T) {
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t, withTestGenerator(generator))
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	select {
+	case <-generator.called:
+		t.Fatal("GET /recipes must not start recipe generation")
+	default:
+	}
+}
+
 func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
@@ -212,7 +229,7 @@ func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
 	require.NotContains(t, body, `Hide`)
 }
 
-func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T) {
+func TestHandleGenerate_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
@@ -227,7 +244,13 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 	)
 	t.Cleanup(s.Wait)
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	form := url.Values{
+		"location":     {"70001001"},
+		"date":         {"2026-03-06"},
+		"instructions": {"make it vegetarian"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/recipes", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	currentUser, err := storage.FromRequest(t.Context(), req, auth.DefaultMock())
 	if err != nil {
 		t.Fatalf("failed to seed user: %v", err)
@@ -237,7 +260,7 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 		t.Fatalf("failed to save user directive: %v", err)
 	}
 
-	expectedParams, err := ParseQueryArgs(t.Context(), req, staticLocationLookup{location: location})
+	expectedParams, err := ParseGenerationForm(t.Context(), req, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("failed to build expected params: %v", err)
 	}
@@ -249,7 +272,7 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 	}
 
 	rr := httptest.NewRecorder()
-	s.handleRecipes(rr, req)
+	s.handleGenerate(rr, req)
 
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
@@ -282,7 +305,7 @@ func TestHandleRecipes_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T)
 	}
 }
 
-func TestHandleRecipes_SetsEmptyFavoriteStoreFromGeneratedLocation(t *testing.T) {
+func TestHandleGenerate_SetsEmptyFavoriteStoreFromGeneratedLocation(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
@@ -297,13 +320,13 @@ func TestHandleRecipes_SetsEmptyFavoriteStoreFromGeneratedLocation(t *testing.T)
 	)
 	t.Cleanup(s.Wait)
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=wholefoods_70001002&date=2026-03-06", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipes?location=wholefoods_70001002&date=2026-03-06", nil)
 	currentUser, err := storage.FromRequest(t.Context(), req, auth.DefaultMock())
 	require.NoError(t, err)
 	require.Empty(t, currentUser.FavoriteStore)
 
 	rr := httptest.NewRecorder()
-	s.handleRecipes(rr, req)
+	s.handleGenerate(rr, req)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	updated, err := storage.GetByID(currentUser.ID)
@@ -312,7 +335,7 @@ func TestHandleRecipes_SetsEmptyFavoriteStoreFromGeneratedLocation(t *testing.T)
 	require.False(t, updated.MailOptIn)
 }
 
-func TestHandleRecipes_DoesNotOverwriteExistingFavoriteStore(t *testing.T) {
+func TestHandleGenerate_DoesNotOverwriteExistingFavoriteStore(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
@@ -327,14 +350,14 @@ func TestHandleRecipes_DoesNotOverwriteExistingFavoriteStore(t *testing.T) {
 	)
 	t.Cleanup(s.Wait)
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001003&date=2026-03-06", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipes?location=70001003&date=2026-03-06", nil)
 	currentUser, err := storage.FromRequest(t.Context(), req, auth.DefaultMock())
 	require.NoError(t, err)
 	currentUser.FavoriteStore = "70009999"
 	require.NoError(t, storage.Update(currentUser))
 
 	rr := httptest.NewRecorder()
-	s.handleRecipes(rr, req)
+	s.handleGenerate(rr, req)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	updated, err := storage.GetByID(currentUser.ID)
@@ -342,7 +365,7 @@ func TestHandleRecipes_DoesNotOverwriteExistingFavoriteStore(t *testing.T) {
 	require.Equal(t, "70009999", updated.FavoriteStore)
 }
 
-func TestHandleRecipes_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
+func TestHandleGenerate_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -357,11 +380,11 @@ func TestHandleRecipes_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
 	)
 	t.Cleanup(s.Wait)
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
 	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "1"})
 	rr := httptest.NewRecorder()
 
-	s.handleRecipes(rr, req)
+	s.handleGenerate(rr, req)
 
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
@@ -399,7 +422,7 @@ func TestHandleRecipes_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
 	}
 }
 
-func TestHandleRecipes_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing(t *testing.T) {
+func TestHandleGenerate_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -413,14 +436,14 @@ func TestHandleRecipes_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing(
 		}}),
 	)
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
 	req.AddCookie(&http.Cookie{Name: "some_other_cookie", Value: "present"})
 	rr := httptest.NewRecorder()
 
-	s.handleRecipes(rr, req)
+	s.handleGenerate(rr, req)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
-	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian"), rr.Header().Get("Location"))
+	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/"), rr.Header().Get("Location"))
 	select {
 	case <-generator.called:
 		t.Fatal("expected guest generation without guest shopping list cookie not to start")
@@ -431,7 +454,7 @@ func TestHandleRecipes_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing(
 	}
 }
 
-func TestHandleRecipes_GuestRedirectsToSignInWhenCookieInvalid(t *testing.T) {
+func TestHandleGenerate_GuestRedirectsToSignInWhenCookieInvalid(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -446,14 +469,14 @@ func TestHandleRecipes_GuestRedirectsToSignInWhenCookieInvalid(t *testing.T) {
 	)
 	t.Cleanup(s.Wait)
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&instructions=make+it+vegetarian", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipes?location=70001001&instructions=make+it+vegetarian", nil)
 	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "wat"})
 	rr := httptest.NewRecorder()
 
-	s.handleRecipes(rr, req)
+	s.handleGenerate(rr, req)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
-	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/recipes?location=70001001&instructions=make+it+vegetarian"), rr.Header().Get("Location"))
+	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/"), rr.Header().Get("Location"))
 	select {
 	case <-generator.called:
 		t.Fatal("expected invalid guest cookie not to start generation")
@@ -461,7 +484,7 @@ func TestHandleRecipes_GuestRedirectsToSignInWhenCookieInvalid(t *testing.T) {
 	}
 }
 
-func TestHandleRecipes_GuestRedirectsToSignInWhenCookieLimitReached(t *testing.T) {
+func TestHandleGenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
 		withTestCache(cacheStore),
@@ -473,21 +496,21 @@ func TestHandleRecipes_GuestRedirectsToSignInWhenCookieLimitReached(t *testing.T
 		}}),
 	)
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&instructions=make+it+vegetarian", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipes?location=70001001&instructions=make+it+vegetarian", nil)
 	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "2"})
 	rr := httptest.NewRecorder()
 
-	s.handleRecipes(rr, req)
+	s.handleGenerate(rr, req)
 
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
 	}
-	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/recipes?location=70001001&instructions=make+it+vegetarian"); got != want {
+	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/"); got != want {
 		t.Fatalf("expected redirect location %q, got %q", want, got)
 	}
 }
 
-func TestHandleRecipes_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
+func TestHandleGenerate_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
 		withTestCache(cacheStore),
@@ -508,10 +531,10 @@ func TestHandleRecipes_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
 		t.Fatalf("failed to seed shopping list: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
 	rr := httptest.NewRecorder()
 
-	s.handleRecipes(rr, req)
+	s.handleGenerate(rr, req)
 
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
@@ -529,7 +552,7 @@ func TestHandleRecipes_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
 	}
 }
 
-func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *testing.T) {
+func TestHandleGenerate_SameRequestDifferentDirectivesProduceDifferentHashes(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
@@ -544,7 +567,7 @@ func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *t
 	)
 	t.Cleanup(s.Wait)
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
+	req := httptest.NewRequest(http.MethodPost, "/recipes?location=70001001&date=2026-03-06&instructions=make+it+vegetarian", nil)
 	currentUser, err := storage.FromRequest(t.Context(), req, auth.DefaultMock())
 	if err != nil {
 		t.Fatalf("failed to seed user: %v", err)
@@ -559,7 +582,7 @@ func TestHandleRecipes_SameRequestDifferentDirectivesProduceDifferentHashes(t *t
 		}
 
 		rr := httptest.NewRecorder()
-		s.handleRecipes(rr, req.Clone(t.Context()))
+		s.handleGenerate(rr, req.Clone(t.Context()))
 
 		if rr.Code != http.StatusSeeOther {
 			t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)

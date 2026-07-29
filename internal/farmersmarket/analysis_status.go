@@ -30,7 +30,8 @@ type analysisStatus struct {
 	PhotosAnalyzed  int           `json:"photos_analyzed"`
 	IngredientCount int           `json:"ingredient_count"`
 	Message         string        `json:"message"`
-	RedirectURL     string        `json:"redirect_url,omitempty"`
+	RecipeLocation  string        `json:"recipe_location,omitempty"`
+	RecipeDate      string        `json:"recipe_date,omitempty"`
 	CreatedAt       time.Time     `json:"created_at"`
 	UpdatedAt       time.Time     `json:"updated_at"`
 }

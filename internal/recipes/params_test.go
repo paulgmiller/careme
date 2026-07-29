@@ -36,7 +36,7 @@ func TestDefaultRecipeDate_Uses9AMStoreBoundary(t *testing.T) {
 	}
 }
 
-func TestParseQueryArgs_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
+func TestParseGenerationForm_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 	oldNowFn := nowFn
 	nowFn = func() time.Time {
 		return time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC) // 05:30 in New York
@@ -52,9 +52,9 @@ func TestParseQueryArgs_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("GET", "/recipes?location=store-1", nil)
-	p, err := ParseQueryArgs(context.Background(), req, staticLocationLookup{location: location})
+	p, err := ParseGenerationForm(context.Background(), req, staticLocationLookup{location: location})
 	if err != nil {
-		t.Fatalf("ParseQueryArgs returned error: %v", err)
+		t.Fatalf("ParseGenerationForm returned error: %v", err)
 	}
 
 	if got, want := p.Date.Format("2006-01-02"), "2026-01-14"; got != want {
@@ -65,7 +65,7 @@ func TestParseQueryArgs_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 	}
 }
 
-func TestParseQueryArgs_CampaignInstructionsOnlyAffectsParams(t *testing.T) {
+func TestParseGenerationForm_CampaignInstructionsOnlyAffectsParams(t *testing.T) {
 	location := &locations.Location{
 		ID:      "loc-123",
 		Name:    "Test Store",
@@ -73,9 +73,9 @@ func TestParseQueryArgs_CampaignInstructionsOnlyAffectsParams(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("GET", "/recipes?location=loc-123&instructions=make%20it%20vegetarian&help=Save%20two%20meals", nil)
-	p, err := ParseQueryArgs(context.Background(), req, staticLocationLookup{location: location})
+	p, err := ParseGenerationForm(context.Background(), req, staticLocationLookup{location: location})
 	if err != nil {
-		t.Fatalf("ParseQueryArgs returned error: %v", err)
+		t.Fatalf("ParseGenerationForm returned error: %v", err)
 	}
 
 	if got, want := p.Instructions, "make it vegetarian"; got != want {
@@ -83,9 +83,9 @@ func TestParseQueryArgs_CampaignInstructionsOnlyAffectsParams(t *testing.T) {
 	}
 
 	reqWithoutHelp := httptest.NewRequest("GET", "/recipes?location=loc-123&instructions=make%20it%20vegetarian", nil)
-	pWithoutHelp, err := ParseQueryArgs(context.Background(), reqWithoutHelp, staticLocationLookup{location: location})
+	pWithoutHelp, err := ParseGenerationForm(context.Background(), reqWithoutHelp, staticLocationLookup{location: location})
 	if err != nil {
-		t.Fatalf("ParseQueryArgs without help returned error: %v", err)
+		t.Fatalf("ParseGenerationForm without help returned error: %v", err)
 	}
 	if got, want := p.Hash(), pWithoutHelp.Hash(); got != want {
 		t.Fatalf("help query should not influence params hash: got %q, want %q", got, want)

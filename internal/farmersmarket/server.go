@@ -231,7 +231,8 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	}
 
 	status.State = analysisStateComplete
-	status.RedirectURL = "/recipes?location=" + url.QueryEscape(market.ID) + "&date=" + url.QueryEscape(date.Format("2006-01-02"))
+	status.RecipeLocation = market.ID
+	status.RecipeDate = date.Format("2006-01-02")
 	status.Message = fmt.Sprintf("Found %d ingredients. Building dinner ideas.", len(ingredients))
 	update(status)
 }
@@ -256,9 +257,10 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	if status.State == analysisStateComplete && status.RedirectURL != "" {
-		w.Header().Set("HX-Redirect", status.RedirectURL)
-		w.WriteHeader(http.StatusOK)
+	if status.State == analysisStateComplete && status.RecipeLocation != "" {
+		if err := templates.FarmersMarket.ExecuteTemplate(w, "farmersmarket_generate", status); err != nil {
+			slog.ErrorContext(ctx, "failed to start farmers market recipe generation", "error", err)
+		}
 		return
 	}
 	if status.State == analysisStateFailed {
