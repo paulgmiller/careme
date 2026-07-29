@@ -81,9 +81,8 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 		return nil, fmt.Errorf("cache is required")
 	}
 	if cfg.Mocks.Enable {
-		return mock{
-			farmersMarket: farmersmarket.NewLocationBackend(farmersmarket.NewStore(c), centroids),
-		}, nil
+		// should probably have something else return th mock so we can just return concerete type here.
+		return mock{}, nil
 	}
 
 	ctx := context.Background()

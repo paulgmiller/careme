@@ -14,9 +14,7 @@ import (
 	"github.com/samber/lo"
 )
 
-type mock struct {
-	farmersMarket locationBackend
-}
+type mock struct{}
 
 var fakes = map[string]Location{
 	"70500010": {
@@ -37,22 +35,14 @@ var fakes = map[string]Location{
 
 func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	l, ok := fakes[locationID]
-	if ok {
-		return &l, nil
+	if !ok {
+		return nil, fmt.Errorf("no location %s", locationID)
 	}
-	if m.farmersMarket != nil && m.farmersMarket.IsID(locationID) {
-		return m.farmersMarket.GetLocationByID(ctx, locationID)
-	}
-	return nil, fmt.Errorf("no location %s", locationID)
+	return &l, nil
 }
 
 func (m mock) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
-	locations := lo.Values(fakes)
-	if m.farmersMarket == nil {
-		return locations, nil
-	}
-	markets, err := m.farmersMarket.GetLocationsByZip(ctx, zipcode)
-	return append(locations, markets...), err
+	return lo.Values(fakes), nil
 }
 
 func (m mock) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
@@ -62,10 +52,7 @@ func (m mock) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
 	return "", false
 }
 
-func (m mock) HasInventory(locationID string) bool {
-	if m.farmersMarket != nil && m.farmersMarket.IsID(locationID) {
-		return m.farmersMarket.HasInventory(locationID)
-	}
+func (mock) HasInventory(locationID string) bool {
 	return true
 }
 

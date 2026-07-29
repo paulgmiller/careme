@@ -77,8 +77,8 @@ func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToLocations(t *testing.T)
 		t.Fatalf("expected farmers market locations redirect, got %q", locationsURL)
 	}
 	locationsBody := mustGetBody(t, client, srv.URL+locationsURL)
-	if !strings.Contains(locationsBody, "Test Market") {
-		t.Fatalf("expected uploaded market on locations page, got body: %s", locationsBody)
+	if !strings.Contains(locationsBody, "Big Willys") {
+		t.Fatalf("expected store locations page after upload, got body: %s", locationsBody)
 	}
 }
 

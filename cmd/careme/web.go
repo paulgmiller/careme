@@ -124,24 +124,16 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 	farmersMarketStore := farmersmarket.NewStore(farmersMarketCache)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
-
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
-	recipeHandler.Register(appRoutes)
-	waiters = append([]waiter{recipeHandler}, waiters...)
-
-	farmersMarketHandler := farmersmarket.NewHandler(
-		farmersMarketUploader,
-		farmersMarketCache,
-		authClient,
-		marketExtractor,
-		centroids,
-	)
+	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, farmersMarketCache, authClient, marketExtractor, centroids)
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)
 
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
 	sitemapHandler.Register(infraRoutes)
 
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
+	recipeHandler.Register(appRoutes)
+	waiters = append([]waiter{recipeHandler}, waiters...)
 	campaigns.RegisterAdvertisedRecipeGeneration(infraRoutes, locationStorage, recipeHandler)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
