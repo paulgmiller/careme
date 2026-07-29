@@ -57,9 +57,10 @@ func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToRecipes(t *testing.T) {
 
 	client := newTestClient(t)
 	progressBody, _ := mustPostMultipartHTMX(t, client, srv.URL+"/farmersmarket", map[string]string{
-		"name": "Test Market",
-		"lat":  "47.610000",
-		"lon":  "-122.330000",
+		"name":     "Test Market",
+		"lat":      "47.610000",
+		"lon":      "-122.330000",
+		"timezone": "America/Los_Angeles",
 	}, "photos", "market.jpg", jpegBytes(t))
 	for _, want := range []string{
 		`id="farmers-market-work"`,

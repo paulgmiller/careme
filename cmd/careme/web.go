@@ -124,7 +124,7 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 	farmersMarketStore := farmersmarket.NewStore(farmersMarketCache)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
-	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, farmersMarketCache, authClient, marketExtractor, centroids)
+	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, farmersMarketCache, authClient, marketExtractor)
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)
 

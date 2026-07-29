@@ -3,6 +3,7 @@ package farmersmarket
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"careme/internal/ai"
@@ -29,8 +30,8 @@ func NewContainerUploader() (*uploader, error) {
 	return NewUploader(store), nil
 }
 
-// create or return a market and merge its inventory into cacheresolveMarketLocation
-func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordinate, zip string,
+// saveUpload creates or updates a market and merges its inventory into the cache.
+func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordinate, timezoneOrZIP string,
 	photoCount int, date time.Time, ingredients []ai.InputIngredient,
 ) (*Market, error) {
 	if photoCount <= 0 {
@@ -46,12 +47,19 @@ func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordin
 	}
 
 	now := time.Now().UTC()
+	timezone := timezoneOrZIP
+	zip := ""
+	if !strings.Contains(timezoneOrZIP, "/") {
+		timezone = ""
+		zip = timezoneOrZIP
+	}
 	if market == nil {
 		market = &Market{
 			Coordinate: coor,
 			ID:         marketID(name, coor.Lat, coor.Lon),
 			Names:      []string{name},
 			ZipCode:    zip,
+			Timezone:   timezone,
 			PhotoCount: photoCount,
 			CreatedAt:  now,
 			UpdatedAt:  now,
@@ -60,6 +68,9 @@ func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordin
 		market.merge(name, coor.Lat, coor.Lon, photoCount, now)
 		if market.ZipCode == "" {
 			market.ZipCode = zip
+		}
+		if market.Timezone == "" {
+			market.Timezone = timezone
 		}
 	}
 

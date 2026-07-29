@@ -7,6 +7,7 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/locations/geo"
 	"careme/internal/locations/hydrator"
 	"careme/internal/locations/nearby"
 	"careme/internal/locations/storeindex"
@@ -81,7 +82,7 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 	return &copy, nil
 }
 
-func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
-	candidates := nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, b.spatial, nearby.MaxLocationDistanceMiles)
+func (b *LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
+	candidates := nearby.FilterAndSortByCoordinates(coordinates, b.spatial, nearby.MaxLocationDistanceMiles)
 	return storeindex.HydrateLocations(ctx, candidates, b.hydrator.Hydrate)
 }

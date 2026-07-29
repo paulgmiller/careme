@@ -3,6 +3,7 @@ package farmersmarket
 import (
 	"context"
 
+	"careme/internal/locations/geo"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 
@@ -50,7 +51,7 @@ func (b *locationBackend) GetLocationByID(ctx context.Context, locationID string
 	return &loc, nil
 }
 
-func (b *locationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
+func (b *locationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
 	markets, err := b.store.listMarkets(ctx)
 	if err != nil {
 		return nil, err
@@ -59,5 +60,5 @@ func (b *locationBackend) GetLocationsByZip(ctx context.Context, zipcode string)
 	locations := lo.Map(markets, func(market Market, _ int) locationtypes.Location {
 		return market.Location()
 	})
-	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, locations, nearby.MaxLocationDistanceMiles), nil
+	return nearby.FilterAndSortByCoordinates(coordinates, locations, nearby.MaxLocationDistanceMiles), nil
 }

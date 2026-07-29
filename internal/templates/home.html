@@ -188,12 +188,12 @@
           return;
         }
 
-        showMessage("Finding your ZIP code...");
+        showMessage("Finding nearby stores...");
         navigator.geolocation.getCurrentPosition(
           (position) => {
             const lat = encodeURIComponent(position.coords.latitude.toString());
             const lon = encodeURIComponent(position.coords.longitude.toString());
-            window.location.assign(`/locations/zip-from-coordinates?lat=${lat}&lon=${lon}`);
+            window.location.assign(`/locations?lat=${lat}&lon=${lon}`);
           },
           () => {
             showMessage("Sorry, chef. Have to allow location access.");

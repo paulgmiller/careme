@@ -44,9 +44,11 @@
       const status = document.getElementById("farmers-market-location-status");
       const lat = document.getElementById("lat");
       const lon = document.getElementById("lon");
-      if (!form || !submit || !status || !lat || !lon) {
+      const timezone = document.getElementById("timezone");
+      if (!form || !submit || !status || !lat || !lon || !timezone) {
         return;
       }
+      timezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
       if (!("geolocation" in navigator)) {
         status.textContent = "Current location is not available in this browser.";
         return;
@@ -115,6 +117,7 @@
 
     <input id="lat" name="lat" type="hidden" />
     <input id="lon" name="lon" type="hidden" />
+    <input id="timezone" name="timezone" type="hidden" />
 
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
       <button id="farmers-market-submit" type="submit"

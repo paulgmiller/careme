@@ -170,6 +170,48 @@ func TestLocationsPageSetsGuestShoppingListCookieWhenMissing(t *testing.T) {
 	}
 }
 
+func TestLocationsPageSearchesWithProvidedCoordinates(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?lat=47.6097&lon=-122.3331", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if len(client.search) != 1 {
+		t.Fatalf("search count = %d, want 1", len(client.search))
+	}
+	if got := client.search[0]; got.Lat != 47.6097 || got.Lon != -122.3331 {
+		t.Fatalf("search coordinates = %+v", got)
+	}
+	if !strings.Contains(rr.Body.String(), "Showing results near your location") {
+		t.Fatalf("expected coordinate location copy, body=%q", rr.Body.String())
+	}
+}
+
+func TestLocationsPageRejectsMixedLocationInputs(t *testing.T) {
+	server := NewServer(newTestLocationServer(newFakeLocationClient()), LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001&lat=47.6&lon=-122.3", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
 func TestLocationsPagePreservesValidGuestShoppingListCookie(t *testing.T) {
 	mustInitLocationTemplates(t)
 

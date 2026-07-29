@@ -14,6 +14,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/guest"
+	"careme/internal/locations/geo"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -29,23 +30,19 @@ type userLookup interface {
 
 type locationServer struct {
 	storage       locationStore
-	zipFetcher    zipFetcher
+	zipCentroids  centroidByZip
 	userStorage   userLookup
 	produceScores produceScoreLookup
-}
-
-type zipFetcher interface {
-	NearestZIPToCoordinates(lat, lon float64) (string, bool)
 }
 
 type produceScoreLookup interface {
 	ProduceScore(ctx context.Context, loc Location) *ProduceScore
 }
 
-func NewServer(storage locationStore, zipFetcher zipFetcher, userStorage userLookup, produceScores produceScoreLookup) *locationServer {
+func NewServer(storage locationStore, zipCentroids centroidByZip, userStorage userLookup, produceScores produceScoreLookup) *locationServer {
 	return &locationServer{
 		storage:       storage,
-		zipFetcher:    zipFetcher,
+		zipCentroids:  zipCentroids,
 		userStorage:   userStorage,
 		produceScores: produceScores,
 	}
@@ -56,30 +53,26 @@ func isHTMXRequest(r *http.Request) bool {
 }
 
 func (l *locationServer) Ready(ctx context.Context) error {
-	_, err := l.storage.GetLocationsByZip(ctx, "98005") // magic number is my zip code :)
+	coordinates, ok := l.zipCentroids.ZipCentroidByZIP("98005") // magic number is my zip code :)
+	if !ok {
+		return errors.New("readiness ZIP centroid not found")
+	}
+	_, err := l.storage.GetLocationsByCoordinates(ctx, coordinates)
 	return err
 }
 
 func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthClient) {
 	mux.HandleFunc("GET /locations/zip-from-coordinates", func(w http.ResponseWriter, r *http.Request) {
-		lat, err := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
+		coordinates, err := geo.FromString(r.URL.Query().Get("lat"), r.URL.Query().Get("lon"))
 		if err != nil {
-			http.Error(w, "invalid latitude", http.StatusBadRequest)
-			return
-		}
-		lon, err := strconv.ParseFloat(r.URL.Query().Get("lon"), 64)
-		if err != nil {
-			http.Error(w, "invalid longitude", http.StatusBadRequest)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		zip, ok := l.zipFetcher.NearestZIPToCoordinates(lat, lon)
-		if !ok {
-			http.Error(w, "zip not found for coordinates", http.StatusNotFound)
-			return
-		}
-
-		http.Redirect(w, r, "/locations?zip="+url.QueryEscape(zip), http.StatusFound)
+		query := url.Values{}
+		query.Set("lat", strconv.FormatFloat(coordinates.Lat, 'g', -1, 64))
+		query.Set("lon", strconv.FormatFloat(coordinates.Lon, 'g', -1, 64))
+		http.Redirect(w, r, "/locations?"+query.Encode(), http.StatusFound)
 	})
 
 	mux.HandleFunc("GET /locations", func(w http.ResponseWriter, r *http.Request) {
@@ -95,18 +88,18 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 			guest.EnsureShoppingListCount(w, r)
 		}
 
-		zip := r.URL.Query().Get("zip")
-		if zip == "" {
-			slog.InfoContext(ctx, "no zip code provided to /locations")
-			http.Error(w, "provide a zip code with ?zip=12345", http.StatusBadRequest)
+		coordinates, zip, err := l.searchCoordinates(r)
+		if err != nil {
+			slog.InfoContext(ctx, "invalid location search", "error", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		var favoriteStore string
 		if currentUser != nil {
 			favoriteStore = currentUser.FavoriteStore
 		}
-		if err := l.renderLocationsPage(w, ctx, zip, favoriteStore, currentUser != nil); err != nil {
-			slog.ErrorContext(ctx, "failed to render locations page", "zip", zip, "error", err)
+		if err := l.renderLocationsPage(w, ctx, coordinates, zip, favoriteStore, currentUser != nil); err != nil {
+			slog.ErrorContext(ctx, "failed to render locations page", "lat", coordinates.Lat, "lon", coordinates.Lon, "error", err)
 			http.Error(w, "Failed to render locations page. ", http.StatusInternalServerError)
 		}
 	})
@@ -151,11 +144,38 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 	})
 }
 
-func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, zip string, favoriteStore string, serverSignedIn bool) error {
-	locs, err := l.storage.GetLocationsByZip(ctx, zip)
+func (l *locationServer) searchCoordinates(r *http.Request) (geo.Coordinate, string, error) {
+	query := r.URL.Query()
+	zip := strings.TrimSpace(query.Get("zip"))
+	lat := strings.TrimSpace(query.Get("lat"))
+	lon := strings.TrimSpace(query.Get("lon"))
+
+	if zip != "" {
+		if lat != "" || lon != "" {
+			return geo.Coordinate{}, "", errors.New("provide either a ZIP code or coordinates, not both")
+		}
+		coordinates, ok := l.zipCentroids.ZipCentroidByZIP(zip)
+		if !ok {
+			return geo.Coordinate{}, "", fmt.Errorf("coordinates not found for ZIP code %q", zip)
+		}
+		return coordinates, zip, nil
+	}
+
+	if lat == "" || lon == "" {
+		return geo.Coordinate{}, "", errors.New("provide a ZIP code or both latitude and longitude")
+	}
+	coordinates, err := geo.FromString(lat, lon)
+	if err != nil {
+		return geo.Coordinate{}, "", err
+	}
+	return coordinates, "", nil
+}
+
+func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, coordinates geo.Coordinate, zip string, favoriteStore string, serverSignedIn bool) error {
+	locs, err := l.storage.GetLocationsByCoordinates(ctx, coordinates)
 	// be very forgiving of errors here.
 	if len(locs) == 0 && err != nil {
-		return fmt.Errorf("failed to get locations for zip %s: %w", zip, err)
+		return fmt.Errorf("failed to get locations near %f,%f: %w", coordinates.Lat, coordinates.Lon, err)
 	}
 
 	type locationRow struct {
@@ -188,6 +208,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	data := struct {
 		Locations       []locationRow
 		Zip             string
+		UsesCoordinates bool
 		FavoriteStore   string
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
@@ -196,6 +217,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	}{
 		Locations:       lo.FromSlicePtr(rows),
 		Zip:             zip,
+		UsesCoordinates: zip == "",
 		FavoriteStore:   favoriteStore,
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),

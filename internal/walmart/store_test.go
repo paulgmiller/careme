@@ -1,6 +1,23 @@
 package walmart
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"careme/internal/locations/geo"
+)
+
+func TestCoordinateLocationSearchDoesNotFallBackToZIP(t *testing.T) {
+	t.Parallel()
+
+	locations, err := (&Client{}).GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 47.6097, Lon: -122.3331})
+	if err != nil {
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
+	}
+	if len(locations) != 0 {
+		t.Fatalf("expected no Walmart coordinate results, got %+v", locations)
+	}
+}
 
 func TestParseStore_SampleJSON(t *testing.T) {
 	t.Parallel()

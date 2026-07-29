@@ -16,6 +16,7 @@ import (
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/locations/geo"
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
 	"careme/internal/recipes"
@@ -82,7 +83,15 @@ func main() {
 		log.Fatalf("failed to create staples service: %v", err)
 	}
 
-	locs, err := locationsToScore(ctx, locationStorage, zip, useStaplesWatchdogLocations)
+	var coordinates geo.Coordinate
+	if !useStaplesWatchdogLocations {
+		var ok bool
+		coordinates, ok = centroids.ZipCentroidByZIP(zip)
+		if !ok {
+			log.Fatalf("coordinates not found for ZIP code %q", zip)
+		}
+	}
+	locs, err := locationsToScore(ctx, locationStorage, coordinates, useStaplesWatchdogLocations)
 	if err != nil {
 		if useStaplesWatchdogLocations {
 			log.Fatalf("failed to get staples watchdog locations: %v", err)
@@ -99,19 +108,19 @@ func main() {
 
 type inventoryLookup func(string) bool
 
-type zipLocationLookup interface {
-	GetLocationsByZip(ctx context.Context, zipcode string) ([]locations.Location, error)
+type coordinateLocationLookup interface {
+	GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locations.Location, error)
 }
 
 type staplesFetcher interface {
 	FetchStaples(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
 }
 
-func locationsToScore(ctx context.Context, lookup zipLocationLookup, zip string, useStaplesWatchdogLocations bool) ([]locations.Location, error) {
+func locationsToScore(ctx context.Context, lookup coordinateLocationLookup, coordinates geo.Coordinate, useStaplesWatchdogLocations bool) ([]locations.Location, error) {
 	if useStaplesWatchdogLocations {
 		return recipes.StaplesWatchdogLocations(), nil
 	}
-	return lookup.GetLocationsByZip(ctx, zip)
+	return lookup.GetLocationsByCoordinates(ctx, coordinates)
 }
 
 func scoreLocations(

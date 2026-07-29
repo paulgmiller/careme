@@ -46,15 +46,10 @@ type authClient interface {
 	GetUserIDFromRequest(r *http.Request) (string, error)
 }
 
-type locationResolver interface {
-	NearestZIPToCoordinates(lat, lon float64) (string, bool)
-}
-
 type Handler struct {
 	uploader    *uploader
 	auth        authClient
 	extractor   IngredientExtractor
-	zipFinder   locationResolver
 	statusStore *analysisStatusStore
 	// exposed for tests
 	parsePhotos func(context.Context, *http.Request) ([]Photo, error)
@@ -71,12 +66,11 @@ func (p Photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor, zipFinder locationResolver) *Handler {
+func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor) *Handler {
 	return &Handler{
 		uploader:    uploader,
 		auth:        authClient,
 		extractor:   extractor,
-		zipFinder:   zipFinder,
 		statusStore: newAnalysisStatusStore(statusCache),
 		parsePhotos: parseUploadedPhotos,
 	}
@@ -156,7 +150,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		renderError(ctx, w, err.Error())
 		return
 	}
-	coord, zip, err := h.resolveMarketLocation(r)
+	coord, timezone, err := resolveMarketLocation(r)
 	if err != nil {
 		renderError(ctx, w, err.Error())
 		return
@@ -178,7 +172,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	h.wg.Go(func() {
 		jobCtx := context.WithoutCancel(ctx)
-		h.runAnalysisJob(jobCtx, status, name, photos, coord, zip)
+		h.runAnalysisJob(jobCtx, status, name, photos, coord, timezone)
 	})
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -187,7 +181,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate, zip string) {
+func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate, timezone string) {
 	update := func(next analysisStatus) {
 		if err := h.statusStore.save(ctx, next); err != nil {
 			slog.ErrorContext(ctx, "failed to save farmers market analysis status", "job_id", status.ID, "error", err)
@@ -223,8 +217,8 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	status.Message = fmt.Sprintf("Found %d ingredients. Saving this market.", len(ingredients))
 	update(status)
 
-	date := farmersMarketDate(time.Now(), zip)
-	market, err := h.uploader.saveUpload(ctx, name, coord, zip, len(photos), date, ingredients)
+	date := farmersMarketDate(time.Now(), timezone)
+	market, err := h.uploader.saveUpload(ctx, name, coord, timezone, len(photos), date, ingredients)
 	if err != nil {
 		fail("Could not save this market. Try again, chef.", err)
 		return
@@ -322,16 +316,19 @@ func uniqueIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
 	})
 }
 
-func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
+func resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
 	coord, err := geo.FromString(r.FormValue("lat"), r.FormValue("lon"))
 	if err != nil {
 		return geo.Coordinate{}, "", err
 	}
-	zip, ok := h.zipFinder.NearestZIPToCoordinates(coord.Lat, coord.Lon)
-	if !ok {
-		return geo.Coordinate{}, "", fmt.Errorf("could not match that location to a ZIP code")
+	timezone := strings.TrimSpace(r.FormValue("timezone"))
+	if timezone == "" {
+		return geo.Coordinate{}, "", errors.New("could not determine the local timezone")
 	}
-	return coord, zip, nil
+	if _, err := time.LoadLocation(timezone); err != nil {
+		return geo.Coordinate{}, "", errors.New("invalid local timezone")
+	}
+	return coord, timezone, nil
 }
 
 func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) {
@@ -377,10 +374,14 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 	return photos, nil
 }
 
-func farmersMarketDate(now time.Time, zip string) time.Time {
-	tzName, ok := geo.TimezoneNameForZip(zip)
-	if !ok {
-		tzName = "UTC"
+func farmersMarketDate(now time.Time, timezoneOrZIP string) time.Time {
+	tzName := timezoneOrZIP
+	if !strings.Contains(tzName, "/") {
+		var ok bool
+		tzName, ok = geo.TimezoneNameForZip(timezoneOrZIP)
+		if !ok {
+			tzName = "UTC"
+		}
 	}
 	storeLoc, err := time.LoadLocation(tzName)
 	if err != nil {

@@ -28,27 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type staticZipFinder struct {
-	zip      string
-	ok       bool
-	centroid geo.Coordinate
-}
-
-func (s staticZipFinder) NearestZIPToCoordinates(float64, float64) (string, bool) {
-	return s.zip, s.ok
-}
-
-func (s staticZipFinder) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
-	if !s.ok || zip != s.zip {
-		return locationtypes.ZipCentroid{}, false
-	}
-	coord := s.centroid
-	if err := coord.Valid(); err != nil {
-		coord = geo.Coordinate{Lat: 47.61, Lon: -122.33}
-	}
-	return locationtypes.ZipCentroid(coord), true
-}
-
 type staticZipLookup map[string]geo.Coordinate
 
 func (s staticZipLookup) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
@@ -159,7 +138,7 @@ func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 	assert.False(t, NewLocationBackend(store, staticZipLookup{}).HasInventory(locationID))
 }
 
-func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.T) {
+func TestLocationBackendGetLocationsByCoordinatesReturnsNearbyFarmersMarkets(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
 	uploader := NewUploader(store)
 	marketDate := farmersMarketDate(time.Now(), "98199")
@@ -180,7 +159,7 @@ func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.
 		"98101": {Lat: 47.61, Lon: -122.33},
 	})
 
-	got, err := backend.GetLocationsByZip(t.Context(), "98101")
+	got, err := backend.GetLocationsByCoordinates(t.Context(), geo.Coordinate{Lat: 47.61, Lon: -122.33})
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 	assert.True(t, backend.HasInventory(got[0].ID))
@@ -189,41 +168,39 @@ func TestLocationBackendGetLocationsByZipReturnsNearbyFarmersMarkets(t *testing.
 	assert.Equal(t, ChainName, got[0].Chain)
 }
 
-func TestResolveMarketLocationUsesCoordinatesAndNearestZIP(t *testing.T) {
-	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
+func TestResolveMarketLocationUsesCoordinatesAndTimezone(t *testing.T) {
 	req := multipartRequestWithFields(t, map[string]string{
-		"lat": "47.620000",
-		"lon": "-122.340000",
+		"lat":      "47.620000",
+		"lon":      "-122.340000",
+		"timezone": "America/Los_Angeles",
 	}, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
-	coord, zip, err := handler.resolveMarketLocation(req)
+	coord, timezone, err := resolveMarketLocation(req)
 
 	require.NoError(t, err)
-	assert.Equal(t, "98101", zip)
+	assert.Equal(t, "America/Los_Angeles", timezone)
 	assert.Equal(t, geo.Coordinate{Lat: 47.62, Lon: -122.34}, coord)
 }
 
 func TestResolveMarketLocationRequiresCoordinates(t *testing.T) {
-	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	req := multipartRequestWithFields(t, nil, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
-	_, _, err := handler.resolveMarketLocation(req)
+	_, _, err := resolveMarketLocation(req)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid latitude: \"\"")
 }
 
 func TestResolveMarketLocationRejectsInvalidCoordinates(t *testing.T) {
-	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	req := multipartRequestWithFields(t, map[string]string{
 		"lat": "95",
 		"lon": "-122.340000",
 	}, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
-	_, _, err := handler.resolveMarketLocation(req)
+	_, _, err := resolveMarketLocation(req)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "latitude 95.000000 must be between -90 and 90")
@@ -290,7 +267,6 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 		cacheStore,
 		auth.DefaultMock(),
 		extractor,
-		staticZipFinder{zip: "98101", ok: true},
 	)
 	req := multipartRequestWithFields(t, nil, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
@@ -393,8 +369,9 @@ func TestHandlePostHTMXAcceptsCoordinates(t *testing.T) {
 		return []Photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
 	}
 	req := multipartRequestWithFields(t, map[string]string{
-		"lat": "47.610000",
-		"lon": "-122.330000",
+		"lat":      "47.610000",
+		"lon":      "-122.330000",
+		"timezone": "America/Los_Angeles",
 	}, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
@@ -518,7 +495,6 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 		cacheStore,
 		auth.DefaultMock(),
 		&fakeExtractor{},
-		staticZipFinder{zip: "98101", ok: true},
 	)
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket", nil)
 	rr := httptest.NewRecorder()
@@ -537,7 +513,6 @@ func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 		cacheStore,
 		noSessionAuth{},
 		&fakeExtractor{},
-		staticZipFinder{zip: "98101", ok: true},
 	)
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket", nil)
 	rr := httptest.NewRecorder()
@@ -556,15 +531,15 @@ func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExt
 		cacheStore,
 		authClient,
 		extractor,
-		staticZipFinder{zip: "98101", ok: true},
 	)
 }
 
 func multipartRequest(t *testing.T, fieldName, fileName string, data []byte) *http.Request {
 	t.Helper()
 	return multipartRequestWithFields(t, map[string]string{
-		"lat": "47.610000",
-		"lon": "-122.330000",
+		"lat":      "47.610000",
+		"lon":      "-122.330000",
+		"timezone": "America/Los_Angeles",
 	}, fieldName, fileName, data)
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"careme/internal/auth"
+	"careme/internal/locations/geo"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -41,15 +42,8 @@ func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location
 	return &l, nil
 }
 
-func (m mock) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
+func (m mock) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]Location, error) {
 	return lo.Values(fakes), nil
-}
-
-func (m mock) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
-	for _, location := range fakes {
-		return location.ZipCode, true
-	}
-	return "", false
 }
 
 func (mock) HasInventory(locationID string) bool {

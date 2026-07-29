@@ -41,7 +41,7 @@ type locationStorage struct {
 
 type locationGetter interface {
 	GetLocationByID(ctx context.Context, locationID string) (*Location, error)
-	GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error)
+	GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]Location, error)
 	HasInventory(locationID string) bool
 }
 
@@ -178,15 +178,19 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 	return nil, fmt.Errorf("location ID %s not supported by any backend", locationID)
 }
 
-func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
+func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]Location, error) {
+	if err := coordinates.Valid(); err != nil {
+		return nil, err
+	}
+
 	allLocations, fetcherrors := parallelism.Flatten(l.clients, func(backend locationBackend) ([]Location, error) {
 		start := time.Now()
-		locations, err := backend.GetLocationsByZip(ctx, zipcode)
+		locations, err := backend.GetLocationsByCoordinates(ctx, coordinates)
 		if err != nil {
-			slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "zip", zipcode)
+			slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "lat", coordinates.Lat, "lon", coordinates.Lon)
 			return nil, err
 		}
-		slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "zip", zipcode, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
+		slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "lat", coordinates.Lat, "lon", coordinates.Lon, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
 		return lo.Take(locations, nearby.MaxLocationCount), err
 	})
 
@@ -198,21 +202,15 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		}(loc)
 	}
 
-	requestedCentroid, hasRequestedCentroid := l.zipCentroids.ZipCentroidByZIP(zipcode)
-	if !hasRequestedCentroid {
-		// were missign zip codes. Make this an error later?
-		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode, "count", len(allLocations))
-		return allLocations, fetcherrors
-	}
-
 	filtered := make([]Location, 0, len(allLocations))
 	for _, loc := range allLocations {
-		if _, hasZipCentroid := l.zipCentroids.ZipCentroidByZIP(loc.ZipCode); !hasZipCentroid {
-			slog.WarnContext(ctx, "location has no zip centroid; skipping distance filter and sort", "location_id", loc.ID, "zip", loc.ZipCode)
+		lat, lon, ok := locationCoordinates(loc, l.zipCentroids)
+		if !ok {
+			slog.WarnContext(ctx, "location has no coordinates; skipping distance filter and sort", "location_id", loc.ID, "zip", loc.ZipCode)
 			continue
 		}
 
-		distance := locationDistanceTo(requestedCentroid, loc, l.zipCentroids)
+		distance := geo.HaversineMiles(coordinates.Lat, coordinates.Lon, lat, lon)
 		if distance > nearby.MaxLocationDistanceMiles {
 			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", nearby.MaxLocationDistanceMiles)
 			continue
@@ -220,7 +218,7 @@ func (l *locationStorage) GetLocationsByZip(ctx context.Context, zipcode string)
 		filtered = append(filtered, loc)
 	}
 	allLocations = filtered
-	sortLocationsByDistanceFromCentroid(allLocations, requestedCentroid, l.zipCentroids)
+	sortLocationsByDistanceFromCoordinates(allLocations, coordinates, l.zipCentroids)
 
 	return allLocations, fetcherrors
 }
@@ -313,25 +311,24 @@ func (l *locationStorage) RequestedStoreIDs(ctx context.Context) ([]string, erro
 	return storeIDs, nil
 }
 
-func sortLocationsByDistanceFromCentroid(locations []Location, requestedCentroid locationtypes.ZipCentroid, zipCentroids centroidByZip) {
+func sortLocationsByDistanceFromCoordinates(locations []Location, coordinates geo.Coordinate, zipCentroids centroidByZip) {
 	sort.SliceStable(locations, func(i, j int) bool {
-		leftDistance := locationDistanceTo(requestedCentroid, locations[i], zipCentroids)
-		rightDistance := locationDistanceTo(requestedCentroid, locations[j], zipCentroids)
+		leftDistance := locationDistanceTo(coordinates, locations[i], zipCentroids)
+		rightDistance := locationDistanceTo(coordinates, locations[j], zipCentroids)
 		return leftDistance < rightDistance
 	})
 }
 
-func locationDistanceTo(target locationtypes.ZipCentroid, loc Location, zipCentroids centroidByZip) float64 {
-	lat, lon := locationCoordinates(loc, zipCentroids)
+func locationDistanceTo(target geo.Coordinate, loc Location, zipCentroids centroidByZip) float64 {
+	lat, lon, _ := locationCoordinates(loc, zipCentroids)
 	return geo.HaversineMiles(target.Lat, target.Lon, lat, lon)
 }
 
-func locationCoordinates(loc Location, zipCentroids centroidByZip) (float64, float64) {
+func locationCoordinates(loc Location, zipCentroids centroidByZip) (float64, float64, bool) {
 	if loc.Lat != nil && loc.Lon != nil {
-		return *loc.Lat, *loc.Lon
+		return *loc.Lat, *loc.Lon, true
 	}
 
-	// do we actualyl want to fall back?
-	centroid, _ := zipCentroids.ZipCentroidByZIP(loc.ZipCode)
-	return centroid.Lat, centroid.Lon
+	centroid, ok := zipCentroids.ZipCentroidByZIP(loc.ZipCode)
+	return centroid.Lat, centroid.Lon, ok
 }

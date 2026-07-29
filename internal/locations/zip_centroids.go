@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -96,24 +95,6 @@ func (z zipCentroidIndex) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroi
 
 	centroid, ok := z.centroids[zip5]
 	return centroid, ok
-}
-
-func (z zipCentroidIndex) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
-	if len(z.centroids) == 0 {
-		return "", false
-	}
-
-	nearestZip := ""
-	nearestDistance := 0.0
-	for zip, centroid := range z.centroids {
-		distance := geo.HaversineMiles(lat, lon, centroid.Lat, centroid.Lon)
-		if nearestZip == "" || distance < nearestDistance {
-			nearestZip = zip
-			nearestDistance = distance
-		}
-	}
-
-	return nearestZip, nearestZip != ""
 }
 
 func normalizeZIP(raw string) (string, bool) {

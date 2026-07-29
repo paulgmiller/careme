@@ -20,6 +20,7 @@ import (
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/locations/geo"
 	"careme/internal/parallelism"
 	"careme/internal/recipes"
 	"careme/internal/recipes/prompts"
@@ -29,7 +30,7 @@ import (
 )
 
 type locationStore interface {
-	GetLocationsByZip(ctx context.Context, zipcode string) ([]locations.Location, error)
+	GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locations.Location, error)
 	HasInventory(locationID string) bool
 }
 
@@ -87,7 +88,12 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	locationStore, err := locations.New(cfg, cacheStore, locations.LoadCentroids())
+	centroids := locations.LoadCentroids()
+	coordinates, ok := centroids.ZipCentroidByZIP(zip)
+	if !ok {
+		return fmt.Errorf("coordinates not found for ZIP code %q", zip)
+	}
+	locationStore, err := locations.New(cfg, cacheStore, centroids)
 	if err != nil {
 		return fmt.Errorf("create location store: %w", err)
 	}
@@ -96,7 +102,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 
-	stores, err := firstInventoryStores(ctx, locationStore, zip, limit)
+	stores, err := firstInventoryStores(ctx, locationStore, coordinates, zip, limit)
 	if err != nil {
 		return err
 	}
@@ -228,8 +234,8 @@ func (mockMenuPlanner) CreateMenuPlan(context.Context, *locations.Location, []ai
 	}}, nil
 }
 
-func firstInventoryStores(ctx context.Context, store locationStore, zip string, limit int) ([]locations.Location, error) {
-	found, err := store.GetLocationsByZip(ctx, zip)
+func firstInventoryStores(ctx context.Context, store locationStore, coordinates geo.Coordinate, zip string, limit int) ([]locations.Location, error) {
+	found, err := store.GetLocationsByCoordinates(ctx, coordinates)
 	if err != nil {
 		return nil, fmt.Errorf("find stores for zip %s: %w", zip, err)
 	}

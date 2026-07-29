@@ -42,6 +42,7 @@ type Market struct {
 	Names []string `json:"names"`
 	geo.Coordinate
 	ZipCode    string    `json:"zip_code"`
+	Timezone   string    `json:"timezone,omitempty"`
 	PhotoCount int       `json:"photo_count"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
@@ -72,7 +73,11 @@ func (s *store) freshInventory(ctx context.Context, locationID string) ([]ai.Inp
 	if err != nil {
 		return nil, err
 	}
-	date := farmersMarketDate(time.Now(), market.ZipCode)
+	timezoneOrZIP := market.Timezone
+	if timezoneOrZIP == "" {
+		timezoneOrZIP = market.ZipCode
+	}
+	date := farmersMarketDate(time.Now(), timezoneOrZIP)
 	return s.loadInventoryByDate(ctx, locationID, date)
 }
 

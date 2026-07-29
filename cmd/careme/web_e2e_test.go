@@ -160,8 +160,8 @@ func TestZipFromCoordinatesRedirect(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("expected status %d, got %d", http.StatusFound, resp.StatusCode)
 	}
-	if got := resp.Header.Get("Location"); got != "/locations?zip=98101" {
-		t.Fatalf("expected Location %q, got %q", "/locations?zip=98101", got)
+	if got := resp.Header.Get("Location"); got != "/locations?lat=47.6097&lon=-122.3331" {
+		t.Fatalf("expected Location %q, got %q", "/locations?lat=47.6097&lon=-122.3331", got)
 	}
 }
 
@@ -250,7 +250,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator).Register(appRoutes)
 	farmersMarketStore := farmersmarket.NewStore(cacheStore)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
-	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}, centroids).Register(appRoutes)
+	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}).Register(appRoutes)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}
