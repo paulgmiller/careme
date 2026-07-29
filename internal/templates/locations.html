@@ -23,9 +23,6 @@
           {{else}}
           <p class="mt-2 text-gray-600">Showing results near ZIP <span class="font-semibold text-brand-700">{{.Zip}}</span>.</p>
           {{end}}
-          {{if not .ServerSignedIn}}
-          <p class="mt-2 text-sm text-gray-500">You can browse stores now, but building recipes requires signing in.</p>
-          {{end}}
         </div>
 
         <ul id="locations-list" class="divide-y divide-brand-100">

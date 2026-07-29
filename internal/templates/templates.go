@@ -23,6 +23,7 @@ var htmlFiles embed.FS
 var Home,
 	Spin,
 	AuthEstablish,
+	AccountRequired,
 	User,
 	ShoppingList,
 	Recipe,
@@ -58,6 +59,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Home = ensure(tmpls, "home.html")
 	Spin = ensure(tmpls, "spinner.html")
 	AuthEstablish = ensure(tmpls, "auth_establish.html")
+	AccountRequired = ensure(tmpls, "account_required.html")
 	User = ensure(tmpls, "user.html")
 	ShoppingList = ensure(tmpls, "shoppinglist.html")
 	Recipe = ensure(tmpls, "recipe.html")

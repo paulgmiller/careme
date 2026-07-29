@@ -61,8 +61,27 @@ func TestGoogleTagNoScriptIncludesContainerID(t *testing.T) {
 	}
 }
 
+func TestGuestGenerationCopyMatchesFreeBuildBehavior(t *testing.T) {
+	locationsBody, err := htmlFiles.ReadFile("locations.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(locationsBody), "building recipes requires signing in") {
+		t.Fatal("locations page should not claim that all recipe building requires sign-in")
+	}
+
+	homeBody, err := htmlFiles.ReadFile("home.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(homeBody), "Build two recipe lists free") {
+		t.Fatal("home page should explain the two free recipe builds")
+	}
+}
+
 func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	for _, name := range []string{
+		"account_required.html",
 		"about.html",
 		"critique.html",
 		"farmersmarket.html",

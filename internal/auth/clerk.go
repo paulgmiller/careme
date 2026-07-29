@@ -14,6 +14,7 @@ import (
 
 	"careme/internal/config"
 	"careme/internal/routing"
+	"careme/internal/seasons"
 	"careme/internal/templates"
 
 	"github.com/clerk/clerk-sdk-go/v2"
@@ -25,6 +26,21 @@ import (
 )
 
 var ErrNoSession = errors.New("no valid session found")
+
+type AccountRequiredReason string
+
+const (
+	AccountRequiredGenerationLimit AccountRequiredReason = "generation-limit"
+	AccountRequiredAddRecipe       AccountRequiredReason = "add-recipe"
+)
+
+func AccountRequiredPath(reason AccountRequiredReason, returnTo string) string {
+	values := url.Values{
+		"reason":        []string{string(reason)},
+		"return_to_b64": []string{base64.RawURLEncoding.EncodeToString([]byte(returnTo))},
+	}
+	return "/account-required?" + values.Encode()
+}
 
 type AuthClient interface {
 	GetUserEmail(ctx context.Context, clerkUserID string) (string, error)
@@ -156,6 +172,49 @@ func clearCookie(w http.ResponseWriter, name string) {
 
 func (c *clerkClient) Register(mux routing.Registrar) {
 	mux.HandleFunc("/logout", c.logout)
+	mux.HandleFunc("/account-required", func(w http.ResponseWriter, r *http.Request) {
+		returnTo := returnToFromRequest(r)
+		if returnTo == "" {
+			http.Error(w, "invalid return destination", http.StatusBadRequest)
+			return
+		}
+
+		var title, message string
+		switch AccountRequiredReason(strings.TrimSpace(r.URL.Query().Get("reason"))) {
+		case AccountRequiredGenerationLimit:
+			title = "Ready for more recipes?"
+			message = "You've used your two free recipe builds. Sign in or create an account to keep building recipes and trying new chef notes."
+		case AccountRequiredAddRecipe:
+			title = "Save this recipe to your kitchen"
+			message = "Sign in or create an account to add recipes to your kitchen and keep them for later."
+		default:
+			http.Error(w, "invalid account requirement", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		data := struct {
+			Title           string
+			Message         string
+			SignInPath      string
+			SignUpPath      string
+			ClarityScript   template.HTML
+			GoogleTagScript template.HTML
+			Style           seasons.Style
+		}{
+			Title:           title,
+			Message:         message,
+			SignInPath:      authPath("/sign-in", returnTo),
+			SignUpPath:      authPath("/sign-up", returnTo),
+			ClarityScript:   templates.ClarityScript(r.Context()),
+			GoogleTagScript: templates.GoogleTagScript(),
+			Style:           seasons.GetCurrentStyle(),
+		}
+		if err := templates.AccountRequired.Execute(w, data); err != nil {
+			slog.ErrorContext(r.Context(), "account required template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
 	mux.HandleFunc("/sign-in", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, c.signInURL(r, false), http.StatusSeeOther)
 	})
@@ -184,6 +243,13 @@ func (c *clerkClient) Register(mux routing.Registrar) {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
+}
+
+func authPath(path, returnTo string) string {
+	values := url.Values{
+		"return_to_b64": []string{base64.RawURLEncoding.EncodeToString([]byte(returnTo))},
+	}
+	return path + "?" + values.Encode()
 }
 
 func (c *clerkClient) signInURL(r *http.Request, signup bool) string {
