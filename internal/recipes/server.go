@@ -1124,7 +1124,21 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	hashParam := strings.TrimSpace(r.URL.Query().Get(queryArgHash))
 	if hashParam == "" {
-		http.Error(w, "missing recipe hash", http.StatusBadRequest)
+		p, err := ParseGenerationForm(ctx, r, s.locServer)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
+			return
+		}
+		currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+		if err != nil && !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to get user for recipe redirect", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+		if currentUser != nil {
+			p.Directive = currentUser.Directive
+		}
+		redirectToHash(w, r, p.Hash(), QueryArgHelp)
 		return
 	}
 	// TODO(pm): Revisit route shape for hash-based recipe lists. `h` is a derived key from

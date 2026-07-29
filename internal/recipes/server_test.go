@@ -120,6 +120,48 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	}
 }
 
+func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
+	location := &locations.Location{
+		ID:      "70100023",
+		Name:    "Test Store",
+		ZipCode: "94105",
+	}
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t,
+		withTestGenerator(generator),
+		withTestLocationServer(staticLocationLookup{location: location}),
+	)
+	p := DefaultParams(location, time.Date(2026, 7, 29, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, s.SaveParams(t.Context(), p))
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70100023&date=2026-07-29&help=Save+two+dinners", nil)
+	rr := httptest.NewRecorder()
+	s.handleRecipes(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	canonical, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	assert.Equal(t, "/recipes", canonical.Path)
+	assert.Equal(t, p.Hash(), canonical.Query().Get(queryArgHash))
+	assert.Equal(t, "Save two dinners", canonical.Query().Get(QueryArgHelp))
+	assert.Empty(t, canonical.Query().Get(queryArgStart))
+
+	followReq := httptest.NewRequest(http.MethodGet, canonical.String(), nil)
+	followRR := httptest.NewRecorder()
+	s.handleRecipes(followRR, followReq)
+
+	require.Equal(t, http.StatusSeeOther, followRR.Code)
+	spinURL, err := url.Parse(followRR.Header().Get("Location"))
+	require.NoError(t, err)
+	assert.Equal(t, p.Hash(), spinURL.Query().Get(queryArgHash))
+	assert.NotEmpty(t, spinURL.Query().Get(queryArgStart))
+	select {
+	case <-generator.called:
+		t.Fatal("GET location redirect should not start generation")
+	default:
+	}
+}
+
 func legacyRecipeHash(hash string) (string, bool) {
 	return currentHashToLegacy(hash, legacyRecipeHashSeed)
 }
