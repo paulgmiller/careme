@@ -1111,7 +1111,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 	slog.WarnContext(ctx, "recipe generation timed out", "time", startArg, "hash", hashParam)
-	s.generationTimedOut(ctx, w, r, hashParam)
+	generationTimedOut(ctx, w, r, hashParam)
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1502,7 +1502,7 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (s *server) generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
+func generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
 	retryURL := url.URL{Path: "/recipes/" + hash + "/retry"}
 	retryQuery := url.Values{}
 	retryQuery.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
