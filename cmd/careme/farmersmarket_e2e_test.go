@@ -7,7 +7,6 @@ import (
 	"image/jpeg"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -52,7 +51,7 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 	}
 }
 
-func TestFarmersMarketEndToEndSuccessfulUploadPostsToRecipes(t *testing.T) {
+func TestFarmersMarketEndToEndSuccessfulUploadStartsRecipes(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
 
@@ -73,17 +72,11 @@ func TestFarmersMarketEndToEndSuccessfulUploadPostsToRecipes(t *testing.T) {
 	}
 
 	statusPath := extractFarmersMarketStatusPath(t, progressBody)
-	generationForm := waitForFarmersMarketGenerationForm(t, client, srv.URL+statusPath)
-	location := extractHiddenValue(t, generationForm, "location")
-	date := extractHiddenValue(t, generationForm, "date")
-	if !strings.HasPrefix(location, "farmersmarket_") {
-		t.Fatalf("expected farmers market location, got %q", location)
+	initialRecipesURL := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
+	if !strings.HasPrefix(initialRecipesURL, "/recipes?h=") {
+		t.Fatalf("expected farmers market recipe redirect, got %q", initialRecipesURL)
 	}
-	initialRecipesURL := mustStartRecipeGeneration(t, client, srv.URL+"/recipes", url.Values{
-		"location": {location},
-		"date":     {date},
-	})
-	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL, true)
+	_, recipesBody := followUntilRecipes(t, client, srv.URL+initialRecipesURL, true)
 	if !strings.Contains(recipesBody, "Test Market") {
 		t.Fatalf("expected generated recipes for uploaded market, got body: %s", recipesBody)
 	}
@@ -140,12 +133,12 @@ func extractFarmersMarketStatusPath(t *testing.T, body string) string {
 	return matches[1]
 }
 
-func waitForFarmersMarketGenerationForm(t *testing.T, client *http.Client, statusURL string) string {
+func waitForFarmersMarketRedirect(t *testing.T, client *http.Client, statusURL string) string {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for farmers market recipe form from %s", statusURL)
+			t.Fatalf("timed out waiting for farmers market recipe redirect from %s", statusURL)
 		}
 		req, err := http.NewRequest(http.MethodGet, statusURL, nil)
 		if err != nil {
@@ -163,8 +156,8 @@ func waitForFarmersMarketGenerationForm(t *testing.T, client *http.Client, statu
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("GET %s expected 200, got %d: %s", statusURL, resp.StatusCode, body)
 		}
-		if strings.Contains(body, `hx-post="/recipes"`) {
-			return body
+		if redirect := resp.Header.Get("HX-Redirect"); redirect != "" {
+			return redirect
 		}
 		time.Sleep(25 * time.Millisecond)
 	}

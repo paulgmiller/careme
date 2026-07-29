@@ -2,7 +2,7 @@
 
 This document describes the lifecycle of generation data in `internal/recipes`, from the generation form to regeneration.
 
-## 1) `params` is created from a POST form (generation starts here)
+## 1) `params` is created when generation starts
 
 Entry point:
 - `POST /recipes`
@@ -15,8 +15,15 @@ Flow:
    - `date` (optional, defaulted by store timezone/day boundary)
    - `instructions` (optional)
    - `response_id` (optional)
-3. `handleRecipes` persists that object with `SaveParams(...)` under `params/<params_hash>`.
+3. `handleGenerate` persists that object with `SaveParams(...)` under `params/<params_hash>`.
 4. This saved `params` object is the start signal for generation. `kickgeneration(...)` is launched immediately after.
+
+Farmers market uploads use a server-side entry point instead of posting another form:
+
+1. The upload analysis saves the market and its inventory.
+2. `StartRecipeGeneration(...)` builds and saves the same `generatorParams` object.
+3. The analysis job stores the returned `/recipes?h=...&start=...` polling URL.
+4. The next farmers market status poll redirects the browser to that URL.
 
 ## 2) `shoppingList` + `recipes` are generated from `params`
 

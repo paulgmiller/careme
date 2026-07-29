@@ -77,6 +77,23 @@ func (f fixedAuth) GetUserIDFromRequest(*http.Request) (string, error) {
 	return f.userID, nil
 }
 
+type fakeRecipeGenerationStarter struct {
+	redirectURL string
+	err         error
+}
+
+func (f fakeRecipeGenerationStarter) StartRecipeGeneration(
+	context.Context,
+	string,
+	string,
+	time.Time,
+) (string, error) {
+	if f.redirectURL == "" {
+		return "/recipes?h=farmers-market-test&start=2026-06-24T12%3A00%3A00Z", f.err
+	}
+	return f.redirectURL, f.err
+}
+
 func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]ai.InputIngredient, error) {
 	f.mu.Lock()
 	f.called = true
@@ -291,6 +308,7 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 		auth.DefaultMock(),
 		extractor,
 		staticZipFinder{zip: "98101", ok: true},
+		fakeRecipeGenerationStarter{},
 	)
 	req := multipartRequestWithFields(t, nil, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
@@ -436,14 +454,13 @@ func TestHandleStatusRendersPhotoAndIngredientProgress(t *testing.T) {
 	assert.Contains(t, body, ">11<")
 }
 
-func TestHandleStatusPostsCompletedJobToRecipeGeneration(t *testing.T) {
+func TestHandleStatusRedirectsCompletedJobToRecipes(t *testing.T) {
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
-		ID:             "job-complete",
-		UserID:         "user-1",
-		State:          analysisStateComplete,
-		RecipeLocation: "farmersmarket_abc",
-		RecipeDate:     "2026-06-24",
+		ID:          "job-complete",
+		UserID:      "user-1",
+		State:       analysisStateComplete,
+		RedirectURL: "/recipes?h=farmers-market-test&start=2026-06-24T12%3A00%3A00Z",
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket/status/job-complete", nil)
 	req.SetPathValue("jobID", "job-complete")
@@ -452,10 +469,8 @@ func TestHandleStatusPostsCompletedJobToRecipeGeneration(t *testing.T) {
 	handler.handleStatus(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), `method="POST"`)
-	assert.Contains(t, rr.Body.String(), `hx-post="/recipes"`)
-	assert.Contains(t, rr.Body.String(), `name="location" value="farmersmarket_abc"`)
-	assert.Contains(t, rr.Body.String(), `name="date" value="2026-06-24"`)
+	assert.Equal(t, "/recipes?h=farmers-market-test&start=2026-06-24T12%3A00%3A00Z", rr.Header().Get("HX-Redirect"))
+	assert.Empty(t, rr.Body.String())
 }
 
 func TestHandleStatusReturnsFailedJobAsErrorFragment(t *testing.T) {
@@ -523,6 +538,7 @@ func TestHandleGetRendersClerkRefreshData(t *testing.T) {
 		auth.DefaultMock(),
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
+		fakeRecipeGenerationStarter{},
 	)
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket", nil)
 	rr := httptest.NewRecorder()
@@ -542,6 +558,7 @@ func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 		noSessionAuth{},
 		&fakeExtractor{},
 		staticZipFinder{zip: "98101", ok: true},
+		fakeRecipeGenerationStarter{},
 	)
 	req := httptest.NewRequest(http.MethodGet, "/farmersmarket", nil)
 	rr := httptest.NewRecorder()
@@ -561,6 +578,7 @@ func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExt
 		authClient,
 		extractor,
 		staticZipFinder{zip: "98101", ok: true},
+		fakeRecipeGenerationStarter{},
 	)
 }
 

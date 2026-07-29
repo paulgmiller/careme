@@ -1111,6 +1111,10 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 	slog.WarnContext(ctx, "recipe generation timed out", "time", startArg, "hash", hashParam)
+	if !isHTMXRequest(r) {
+		s.spin(ctx, w, r, hashParam)
+		return
+	}
 	generationTimedOut(ctx, w, r, hashParam)
 }
 
@@ -1316,6 +1320,52 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
 }
 
+// StartRecipeGeneration starts recipe generation for a known user and returns
+// the polling URL for the generated shopping list.
+func (s *server) StartRecipeGeneration(
+	ctx context.Context,
+	locationID, userID string,
+	date time.Time,
+) (string, error) {
+	location, err := s.locServer.GetLocationByID(ctx, locationID)
+	if err != nil {
+		return "", fmt.Errorf("load recipe generation location: %w", err)
+	}
+	p := DefaultParams(location, date)
+
+	currentUser, err := s.storage.GetByID(userID)
+	if err == nil {
+		p.Directive = currentUser.Directive
+		p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
+		s.setFavoriteStore(ctx, currentUser, location)
+	} else if !errors.Is(err, users.ErrNotFound) {
+		return "", fmt.Errorf("load recipe generation user: %w", err)
+	}
+
+	hash := p.Hash()
+	if err := s.SaveParams(ctx, p); err != nil {
+		if !errors.Is(err, ErrAlreadyExists) {
+			return "", fmt.Errorf("save recipe generation params: %w", err)
+		}
+		if _, cacheErr := s.FromCache(ctx, hash); cacheErr == nil {
+			return recipeGenerationURL(hash), nil
+		} else if !errors.Is(cacheErr, cache.ErrNotFound) {
+			return "", fmt.Errorf("check generated shopping list: %w", cacheErr)
+		}
+	}
+
+	s.kickgeneration(ctx, p)
+	return recipeGenerationURL(hash), nil
+}
+
+func recipeGenerationURL(hash string) string {
+	query := url.Values{
+		queryArgHash:  {hash},
+		queryArgStart: {time.Now().Format(time.RFC3339Nano)},
+	}
+	return "/recipes?" + query.Encode()
+}
+
 func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	hash := strings.TrimSpace(r.PathValue("hash"))
@@ -1509,27 +1559,12 @@ func generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	retryURL.RawQuery = retryQuery.Encode()
 
 	data := struct {
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Style           seasons.Style
-		ServerSignedIn  bool
-		RetryPath       string
+		RetryPath string
 	}{
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  true,
-		RetryPath:       retryURL.String(),
+		RetryPath: retryURL.String(),
 	}
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	if isHTMXRequest(r) {
-		if err := templates.GenerationTimeout.ExecuteTemplate(w, "generation_timeout", data); err != nil {
-			slog.ErrorContext(ctx, "generation timeout template execute error", "error", err)
-			http.Error(w, "template error", http.StatusInternalServerError)
-		}
-		return
-	}
 	if err := templates.GenerationTimeout.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "generation timeout template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)

@@ -78,6 +78,7 @@ func TestNotFoundTimedOutShowsRetryButton(t *testing.T) {
 
 	start := time.Now().Add(-11 * time.Minute).Format(time.RFC3339Nano)
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash()+"&start="+url.QueryEscape(start), nil)
+	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
 
 	s.notFound(t.Context(), rr, req)
