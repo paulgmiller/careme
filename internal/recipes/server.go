@@ -1126,19 +1126,24 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// latest server-rendered state instead of restoring a stale DOM snapshot.
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ctx := r.Context()
+
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil && !errors.Is(err, auth.ErrNoSession) {
+		slog.ErrorContext(ctx, "failed to get user for recipe redirect", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+
 	hashParam := strings.TrimSpace(r.URL.Query().Get(queryArgHash))
 	if hashParam == "" {
+		// FormValue also reads URL query parameters, so links such as
+		// /recipes?location=<id> can be redirected to their canonical hash URL.
 		p, err := ParseGenerationForm(ctx, r, s.locServer)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
 			return
 		}
-		currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
-		if err != nil && !errors.Is(err, auth.ErrNoSession) {
-			slog.ErrorContext(ctx, "failed to get user for recipe redirect", "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}
+
 		if currentUser != nil {
 			p.Directive = currentUser.Directive
 		}
@@ -1174,12 +1179,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
 		return
 	}
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
-	if err != nil && !errors.Is(err, auth.ErrNoSession) {
-		slog.ErrorContext(ctx, "failed to get user from request", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
-	}
+
 	signedIn := currentUser != nil
 	selection := selectionFromSaved(p.Saved)
 	if signedIn {
@@ -1191,6 +1191,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		selection = selection.override(userSelection)
 
+		// don't like mutating on a get. Find a better way to do this
 		if pendingSave := strings.TrimSpace(r.URL.Query().Get(queryArgPendingSave)); pendingSave != "" {
 			if _, err := s.recipeFromShoppingList(*slist, pendingSave); err != nil {
 				http.Error(w, "recipe not found", http.StatusNotFound)
@@ -1519,7 +1520,7 @@ func generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	if err := templates.GenerationTimeout.Execute(w, data); err != nil {
+	if err := templates.Spin.ExecuteTemplate(w, "generation_timeout", data); err != nil {
 		slog.ErrorContext(ctx, "generation timeout template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
