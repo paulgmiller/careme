@@ -2199,7 +2199,8 @@ func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieMissing(t *testing.T) 
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
 	}
-	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, shoppingListReturnPath("origin-hash", "")); got != want {
+	returnTo := shoppingListArgs(map[string]string{queryArgHash: "origin-hash"})
+	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, returnTo); got != want {
 		t.Fatalf("expected redirect location %q, got %q", want, got)
 	}
 }
@@ -2223,7 +2224,11 @@ func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testin
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
 	}
-	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, shoppingListReturnPath("origin-hash", "make it vegetarian")); got != want {
+	returnTo := shoppingListArgs(map[string]string{
+		queryArgHash:         "origin-hash",
+		queryArgInstructions: "make it vegetarian",
+	})
+	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, returnTo); got != want {
 		t.Fatalf("expected redirect location %q, got %q", want, got)
 	}
 }
@@ -2244,7 +2249,8 @@ func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *te
 	s.handleRegenerate(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, shoppingListReturnPath("origin-hash", "")); got != want {
+	returnTo := shoppingListArgs(map[string]string{queryArgHash: "origin-hash"})
+	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, returnTo); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }
@@ -2267,7 +2273,10 @@ func TestHandleRecipes_ReturnFromSignInPreservesChefNoteWithoutRegenerating(t *t
 		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},
 	}, originHash))
 
-	target := shoppingListReturnPath(originHash, "make it vegetarian")
+	target := shoppingListArgs(map[string]string{
+		queryArgHash:         originHash,
+		queryArgInstructions: "make it vegetarian",
+	})
 	req := httptest.NewRequest(http.MethodGet, target, nil)
 	rr := httptest.NewRecorder()
 
