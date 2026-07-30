@@ -93,10 +93,7 @@ func main() {
 	}
 	locs, err := locationsToScore(ctx, locationStorage, coordinates, useStaplesWatchdogLocations)
 	if err != nil {
-		if useStaplesWatchdogLocations {
-			log.Fatalf("failed to get staples watchdog locations: %v", err)
-		}
-		log.Fatalf("failed to get locations for zip %s: %v", zip, err)
+		log.Fatalf("failed to get locations %v", err)
 	}
 
 	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, recipes.NewCachedProduceScorer(recipes.IO(cacheStore)))
@@ -109,6 +106,7 @@ func main() {
 type inventoryLookup func(string) bool
 
 type coordinateLocationLookup interface {
+	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 	GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locations.Location, error)
 }
 
@@ -118,7 +116,7 @@ type staplesFetcher interface {
 
 func locationsToScore(ctx context.Context, lookup coordinateLocationLookup, coordinates geo.Coordinate, useStaplesWatchdogLocations bool) ([]locations.Location, error) {
 	if useStaplesWatchdogLocations {
-		return recipes.StaplesWatchdogLocations(), nil
+		return recipes.StaplesWatchdogLocations(ctx, lookup)
 	}
 	return lookup.GetLocationsByCoordinates(ctx, coordinates)
 }

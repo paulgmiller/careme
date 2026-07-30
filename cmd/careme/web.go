@@ -72,6 +72,12 @@ func runServer(cfg *config.Config, addr string) error {
 	// TODO  make the mock more transparent?
 	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 
+	centroids := locations.LoadCentroids()
+	locationStorage, err := locations.New(cfg, cache, centroids)
+	if err != nil {
+		return fmt.Errorf("failed to create location server: %w", err)
+	}
+
 	var generator recipes.ExtGenerator
 	var imageGen recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
@@ -94,7 +100,7 @@ func runServer(cfg *config.Config, addr string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}
-		watchdogServer.Add("staples", staples, 6.*time.Hour)
+		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := recipes.StatusStore(cache)
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
 		if err != nil {
@@ -103,13 +109,6 @@ func runServer(cfg *config.Config, addr string) error {
 		waiters = append(waiters, critiquer)
 	}
 	watchdogServer.Register(infraRoutes)
-
-	centroids := locations.LoadCentroids()
-
-	locationStorage, err := locations.New(cfg, cache, centroids)
-	if err != nil {
-		return fmt.Errorf("failed to create location server: %w", err)
-	}
 
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
