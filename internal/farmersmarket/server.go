@@ -71,7 +71,13 @@ func (p Photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor, zipFinder locationResolver) *Handler {
+func NewHandler(
+	uploader *uploader,
+	statusCache cache.Cache,
+	authClient authClient,
+	extractor IngredientExtractor,
+	zipFinder locationResolver,
+) *Handler {
 	return &Handler{
 		uploader:    uploader,
 		auth:        authClient,
@@ -231,8 +237,11 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	}
 
 	status.State = analysisStateComplete
-	status.RedirectURL = "/recipes?location=" + url.QueryEscape(market.ID) + "&date=" + url.QueryEscape(date.Format("2006-01-02"))
-	status.Message = fmt.Sprintf("Found %d ingredients. Building dinner ideas.", len(ingredients))
+	status.RedirectURL = "/locations/zip-from-coordinates?" + url.Values{
+		"lat": {fmt.Sprintf("%g", market.Lat)},
+		"lon": {fmt.Sprintf("%g", market.Lon)},
+	}.Encode()
+	status.Message = fmt.Sprintf("Found %d ingredients. Finding nearby stores.", len(ingredients))
 	update(status)
 }
 

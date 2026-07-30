@@ -48,12 +48,14 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		t.Fatalf("expected /ready to return 200 OK, got %d", resp.StatusCode)
 	}
 
-	// Step 1: query locations for 90005 and ensure it returns a /recipes?location link.
+	// Step 1: query locations for 90005 and find a recipe-generation form.
 	locationsBody := mustGetBody(t, client, srv.URL+"/locations?zip=90005")
 	locationID := extractLocationID(t, locationsBody)
 
-	// Step 2: go to /recipes?location=<id> and follow redirects until recipes render.
-	initialRecipesURL := srv.URL + "/recipes?location=" + url.QueryEscape(locationID)
+	// Step 2: start generation with POST and follow its GET status page until recipes render.
+	initialRecipesURL := mustStartRecipeGeneration(t, client, srv.URL+"/recipes", url.Values{
+		"location": {locationID},
+	})
 	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL, true /*expectSpinner*/)
 
 	// Step 3: select one recipe to save and two to dismiss.
@@ -178,8 +180,9 @@ func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
 	if !strings.Contains(body, "Favorite store") {
 		t.Fatalf("expected favorite store card on home page, got body: %s", body)
 	}
-	if !strings.Contains(body, `/recipes?location=70500874`) {
-		t.Fatalf("expected home page recipe link to favorite store, got body: %s", body)
+	if !strings.Contains(body, `method="POST" action="/recipes"`) ||
+		!strings.Contains(body, `name="location" value="70500874"`) {
+		t.Fatalf("expected home page recipe form for favorite store, got body: %s", body)
 	}
 	if !strings.Contains(body, "Chef notes") {
 		t.Fatalf("expected chef notes toggle on home page, got body: %s", body)
@@ -348,6 +351,38 @@ func mustPostFormBody(t *testing.T, client *http.Client, targetURL string, data 
 	return body
 }
 
+func mustStartRecipeGeneration(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		t.Fatalf("POST %s failed to build request: %v", targetURL, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	noRedirectClient := *client
+	noRedirectClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := noRedirectClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s failed: %v", targetURL, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusSeeOther {
+		body := readAll(t, resp.Body)
+		t.Fatalf("POST %s expected %d, got %d: %s", targetURL, http.StatusSeeOther, resp.StatusCode, body)
+	}
+	location, err := resp.Location()
+	if err != nil {
+		t.Fatalf("POST %s returned an invalid redirect: %v", targetURL, err)
+	}
+	return location.String()
+}
+
 func mustPostFormRedirectHTMX(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
@@ -417,10 +452,10 @@ func isSpinner(body string) bool {
 
 func extractLocationID(t *testing.T, body string) string {
 	t.Helper()
-	re := regexp.MustCompile(`href="/recipes\?location=([^"]+)"`)
+	re := regexp.MustCompile(`name="location" value="([^"]+)"`)
 	match := re.FindStringSubmatch(body)
 	if len(match) < 2 {
-		t.Fatalf("expected locations page to include /recipes?location link")
+		t.Fatalf("expected locations page to include a recipe generation form")
 	}
 	return match[1]
 }
