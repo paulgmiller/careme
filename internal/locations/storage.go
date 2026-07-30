@@ -74,8 +74,6 @@ const (
 	storeRequestPrefix  = "location-store-requests/"
 )
 
-var MaxLocationCount = 10 // far not a count so tools can muck with it?
-
 func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locationStore, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")

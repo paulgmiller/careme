@@ -46,7 +46,7 @@ func TestFirstInventoryStoresFiltersAndLimits(t *testing.T) {
 		},
 	}
 
-	got, err := firstInventoryStores(t.Context(), store, geo.Coordinate{Lat: 47, Lon: -122}, "98101", 2)
+	got, err := firstInventoryStores(t.Context(), store, geo.Coordinate{Lat: 47, Lon: -122}, 2)
 
 	require.NoError(t, err)
 	require.Len(t, got, 2)
@@ -59,7 +59,7 @@ func TestFirstInventoryStoresRequiresInventoryBackedStore(t *testing.T) {
 		locations: []locations.Location{{ID: "aldi_1", Name: "Aldi"}},
 	}
 
-	_, err := firstInventoryStores(t.Context(), store, geo.Coordinate{Lat: 47, Lon: -122}, "98101", 5)
+	_, err := firstInventoryStores(t.Context(), store, geo.Coordinate{Lat: 47, Lon: -122}, 5)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no inventory-backed grocery stores")
@@ -69,7 +69,7 @@ func TestFirstInventoryStoresWrapsLookupError(t *testing.T) {
 	want := errors.New("zip lookup failed")
 	store := fakeLocationStore{err: want}
 
-	_, err := firstInventoryStores(t.Context(), store, geo.Coordinate{Lat: 47, Lon: -122}, "98101", 5)
+	_, err := firstInventoryStores(t.Context(), store, geo.Coordinate{Lat: 47, Lon: -122}, 5)
 
 	require.ErrorIs(t, err, want)
 }

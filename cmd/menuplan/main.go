@@ -102,9 +102,9 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 
-	stores, err := firstInventoryStores(ctx, locationStore, coordinates, zip, limit)
+	stores, err := firstInventoryStores(ctx, locationStore, coordinates, limit)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w for zip %s", err, zip)
 	}
 
 	results := makeStoreMenuPlans(ctx, service, stores, instructions, time.Now())
@@ -234,10 +234,10 @@ func (mockMenuPlanner) CreateMenuPlan(context.Context, *locations.Location, []ai
 	}}, nil
 }
 
-func firstInventoryStores(ctx context.Context, store locationStore, coordinates geo.Coordinate, zip string, limit int) ([]locations.Location, error) {
+func firstInventoryStores(ctx context.Context, store locationStore, coordinates geo.Coordinate, limit int) ([]locations.Location, error) {
 	found, err := store.GetLocationsByCoordinates(ctx, coordinates)
 	if err != nil {
-		return nil, fmt.Errorf("find stores for zip %s: %w", zip, err)
+		return nil, fmt.Errorf("find stores %w", err)
 	}
 
 	stores := make([]locations.Location, 0, limit)
@@ -252,7 +252,7 @@ func firstInventoryStores(ctx context.Context, store locationStore, coordinates 
 		}
 	}
 	if len(stores) == 0 {
-		return nil, fmt.Errorf("no inventory-backed grocery stores found for zip %s", zip)
+		return nil, fmt.Errorf("no inventory-backed grocery stores found")
 	}
 	return stores, nil
 }
