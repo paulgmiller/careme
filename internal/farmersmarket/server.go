@@ -151,7 +151,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		renderError(ctx, w, err.Error())
 		return
 	}
-	coord, timezone, err := resolveMarketLocation(r)
+	coord, err := resolveMarketLocation(r)
 	if err != nil {
 		renderError(ctx, w, err.Error())
 		return
@@ -173,7 +173,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	h.wg.Go(func() {
 		jobCtx := context.WithoutCancel(ctx)
-		h.runAnalysisJob(jobCtx, status, name, photos, coord, timezone)
+		h.runAnalysisJob(jobCtx, status, name, photos, coord)
 	})
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -182,7 +182,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate, timezone string) {
+func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate) {
 	update := func(next analysisStatus) {
 		if err := h.statusStore.save(ctx, next); err != nil {
 			slog.ErrorContext(ctx, "failed to save farmers market analysis status", "job_id", status.ID, "error", err)
@@ -218,12 +218,12 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	status.Message = fmt.Sprintf("Found %d ingredients. Saving this market.", len(ingredients))
 	update(status)
 
-	date, err := farmersMarketDate(time.Now(), timezone)
+	date, err := farmersMarketDate(time.Now(), coord)
 	if err != nil {
 		fail("Could not determine the market's local date.", err)
 		return
 	}
-	market, err := h.uploader.saveUpload(ctx, name, coord, timezone, len(photos), date, ingredients)
+	market, err := h.uploader.saveUpload(ctx, name, coord, len(photos), date, ingredients)
 	if err != nil {
 		fail("Could not save this market. Try again, chef.", err)
 		return
@@ -324,19 +324,12 @@ func uniqueIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
 	})
 }
 
-func resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
+func resolveMarketLocation(r *http.Request) (geo.Coordinate, error) {
 	coord, err := geo.FromString(r.FormValue("lat"), r.FormValue("lon"))
 	if err != nil {
-		return geo.Coordinate{}, "", err
+		return geo.Coordinate{}, err
 	}
-	timezone := strings.TrimSpace(r.FormValue("timezone"))
-	if timezone == "" {
-		return geo.Coordinate{}, "", errors.New("could not determine the local timezone")
-	}
-	if _, err := loadMarketTimezone(timezone); err != nil {
-		return geo.Coordinate{}, "", errors.New("invalid local timezone")
-	}
-	return coord, timezone, nil
+	return coord, nil
 }
 
 func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) {
@@ -382,21 +375,14 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 	return photos, nil
 }
 
-func loadMarketTimezone(timezone string) (*time.Location, error) {
-	if strings.TrimSpace(timezone) == "" {
-		return nil, errors.New("farmers market timezone is required")
+func farmersMarketDate(now time.Time, coordinates geo.Coordinate) (time.Time, error) {
+	timezone, ok := geo.TimezoneNameForCoordinates(coordinates)
+	if !ok {
+		return time.Time{}, fmt.Errorf("could not estimate timezone for coordinates %f,%f", coordinates.Lat, coordinates.Lon)
 	}
-	location, err := time.LoadLocation(timezone)
+	storeLoc, err := time.LoadLocation(timezone)
 	if err != nil {
-		return nil, fmt.Errorf("invalid farmers market timezone %q: %w", timezone, err)
-	}
-	return location, nil
-}
-
-func farmersMarketDate(now time.Time, timezone string) (time.Time, error) {
-	storeLoc, err := loadMarketTimezone(timezone)
-	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, fmt.Errorf("load estimated timezone %q: %w", timezone, err)
 	}
 	localNow := now.In(storeLoc)
 	if localNow.Hour() < storeDayStartHour {

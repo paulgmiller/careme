@@ -63,13 +63,12 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 	uploader := NewUploader(NewStore(cache.NewInMemoryCache()))
 	date := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 
-	first, err := uploader.saveUpload(t.Context(), "Saturday Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "America/Los_Angeles", 2, date, []ai.InputIngredient{
+	first, err := uploader.saveUpload(t.Context(), "Saturday Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, 2, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "Strawberries", Size: "1 pint"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "America/Los_Angeles", first.Timezone)
 
-	second, err := uploader.saveUpload(t.Context(), "River Stalls", geo.Coordinate{Lat: 47.611, Lon: -122.331}, "America/Los_Angeles", 1, date, []ai.InputIngredient{
+	second, err := uploader.saveUpload(t.Context(), "River Stalls", geo.Coordinate{Lat: 47.611, Lon: -122.331}, 1, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "strawberries", Size: "1 pint"},
 		{ProductID: "B", Brand: "Hill Farm", Description: "Fresh basil", Size: "1 bunch"},
 	})
@@ -80,36 +79,20 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 	require.Equal(t, 3, second.PhotoCount)
 }
 
-func TestSaveUploadRequiresTimezone(t *testing.T) {
-	uploader := NewUploader(NewStore(cache.NewInMemoryCache()))
-
-	_, err := uploader.saveUpload(
-		t.Context(),
-		"Saturday Market",
-		geo.Coordinate{Lat: 47.61, Lon: -122.33},
-		"98101",
-		1,
-		time.Now(),
-		[]ai.InputIngredient{{Description: "Strawberries"}},
-	)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid farmers market timezone")
-}
-
 func TestFetchStaplesReturnsCurrentStoreDateInventory(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
 	provider := NewStaplesProviderFromStore(store)
 	uploader := NewUploader(store)
-	currentDate, err := farmersMarketDate(time.Now(), "America/Los_Angeles")
+	coordinates := geo.Coordinate{Lat: 47.61, Lon: -122.33}
+	currentDate, err := farmersMarketDate(time.Now(), coordinates)
 	require.NoError(t, err)
 	olderDate := currentDate.AddDate(0, 0, -1)
 
-	market, err := uploader.saveUpload(t.Context(), "Daily Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "America/Los_Angeles", 1, olderDate, []ai.InputIngredient{
+	market, err := uploader.saveUpload(t.Context(), "Daily Market", coordinates, 1, olderDate, []ai.InputIngredient{
 		{Brand: "Friday Farm", Description: "peas"},
 	})
 	require.NoError(t, err)
-	_, err = uploader.saveUpload(t.Context(), "Daily Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "America/Los_Angeles", 1, currentDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Daily Market", coordinates, 1, currentDate, []ai.InputIngredient{
 		{Brand: "Saturday Farm", Description: "carrots"},
 	})
 	require.NoError(t, err)
@@ -125,14 +108,14 @@ func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 	store := NewStore(cacheStore)
 	provider := NewStaplesProviderFromStore(store)
 	locationID := LocationIDPrefix + "stale"
-	currentDate, err := farmersMarketDate(time.Now(), "America/Los_Angeles")
+	coordinates := geo.Coordinate{Lat: 47.61, Lon: -122.33}
+	currentDate, err := farmersMarketDate(time.Now(), coordinates)
 	require.NoError(t, err)
 	olderDate := currentDate.AddDate(0, 0, -1)
 	require.NoError(t, store.saveMarket(t.Context(), Market{
 		ID:         locationID,
 		Names:      []string{"Stale Market"},
-		Coordinate: geo.Coordinate{Lat: 47.61, Lon: -122.33},
-		Timezone:   "America/Los_Angeles",
+		Coordinate: coordinates,
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
 	}))
@@ -152,17 +135,17 @@ func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 func TestLocationBackendGetLocationsByCoordinatesReturnsNearbyFarmersMarkets(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
 	uploader := NewUploader(store)
-	marketDate, err := farmersMarketDate(time.Now(), "America/Los_Angeles")
+	marketDate, err := farmersMarketDate(time.Now(), geo.Coordinate{Lat: 47.61, Lon: -122.33})
 	require.NoError(t, err)
-	_, err = uploader.saveUpload(t.Context(), "Far Market", geo.Coordinate{Lat: 48.2, Lon: -122.33}, "America/Los_Angeles", 1, marketDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Far Market", geo.Coordinate{Lat: 48.2, Lon: -122.33}, 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "turnips"},
 	})
 	require.NoError(t, err)
-	_, err = uploader.saveUpload(t.Context(), "Near Market", geo.Coordinate{Lat: 47.62, Lon: -122.33}, "America/Los_Angeles", 1, marketDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Near Market", geo.Coordinate{Lat: 47.62, Lon: -122.33}, 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "kale"},
 	})
 	require.NoError(t, err)
-	_, err = uploader.saveUpload(t.Context(), "Closer Market", geo.Coordinate{Lat: 47.611, Lon: -122.33}, "America/Los_Angeles", 1, marketDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Closer Market", geo.Coordinate{Lat: 47.611, Lon: -122.33}, 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "chard"},
 	})
 	require.NoError(t, err)
@@ -178,25 +161,24 @@ func TestLocationBackendGetLocationsByCoordinatesReturnsNearbyFarmersMarkets(t *
 	assert.Equal(t, ChainName, got[0].Chain)
 }
 
-func TestLocationBackendDropsMarketWithoutTimezone(t *testing.T) {
+func TestLocationBackendDropsMarketWithoutCoordinates(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
-	missingTimezone := Market{
-		ID:         LocationIDPrefix + "missing-timezone",
-		Names:      []string{"Old Market"},
-		Coordinate: geo.Coordinate{Lat: 47.61, Lon: -122.33},
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+	missingCoordinates := Market{
+		ID:        LocationIDPrefix + "missing-coordinates",
+		Names:     []string{"Old Market"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
-	require.NoError(t, store.saveMarket(t.Context(), missingTimezone))
+	require.NoError(t, store.saveMarket(t.Context(), missingCoordinates))
 
 	backend := NewLocationBackend(store)
 	got, err := backend.GetLocationsByCoordinates(t.Context(), geo.Coordinate{Lat: 47.61, Lon: -122.33})
 
 	require.NoError(t, err)
 	assert.Empty(t, got)
-	_, err = backend.GetLocationByID(t.Context(), missingTimezone.ID)
+	_, err = backend.GetLocationByID(t.Context(), missingCoordinates.ID)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "timezone is required")
+	assert.Contains(t, err.Error(), "invalid coordinates")
 }
 
 func TestMarketIDDistinguishesCoordinates(t *testing.T) {
@@ -207,18 +189,16 @@ func TestMarketIDDistinguishesCoordinates(t *testing.T) {
 	)
 }
 
-func TestResolveMarketLocationUsesCoordinatesAndTimezone(t *testing.T) {
+func TestResolveMarketLocationUsesCoordinates(t *testing.T) {
 	req := multipartRequestWithFields(t, map[string]string{
-		"lat":      "47.620000",
-		"lon":      "-122.340000",
-		"timezone": "America/Los_Angeles",
+		"lat": "47.620000",
+		"lon": "-122.340000",
 	}, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
-	coord, timezone, err := resolveMarketLocation(req)
+	coord, err := resolveMarketLocation(req)
 
 	require.NoError(t, err)
-	assert.Equal(t, "America/Los_Angeles", timezone)
 	assert.Equal(t, geo.Coordinate{Lat: 47.62, Lon: -122.34}, coord)
 }
 
@@ -226,7 +206,7 @@ func TestResolveMarketLocationRequiresCoordinates(t *testing.T) {
 	req := multipartRequestWithFields(t, nil, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
-	_, _, err := resolveMarketLocation(req)
+	_, err := resolveMarketLocation(req)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid latitude: \"\"")
@@ -239,7 +219,7 @@ func TestResolveMarketLocationRejectsInvalidCoordinates(t *testing.T) {
 	}, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
-	_, _, err := resolveMarketLocation(req)
+	_, err := resolveMarketLocation(req)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "latitude 95.000000 must be between -90 and 90")
@@ -408,9 +388,8 @@ func TestHandlePostHTMXAcceptsCoordinates(t *testing.T) {
 		return []Photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
 	}
 	req := multipartRequestWithFields(t, map[string]string{
-		"lat":      "47.610000",
-		"lon":      "-122.330000",
-		"timezone": "America/Los_Angeles",
+		"lat": "47.610000",
+		"lon": "-122.330000",
 	}, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
@@ -577,9 +556,8 @@ func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExt
 func multipartRequest(t *testing.T, fieldName, fileName string, data []byte) *http.Request {
 	t.Helper()
 	return multipartRequestWithFields(t, map[string]string{
-		"lat":      "47.610000",
-		"lon":      "-122.330000",
-		"timezone": "America/Los_Angeles",
+		"lat": "47.610000",
+		"lon": "-122.330000",
 	}, fieldName, fileName, data)
 }
 

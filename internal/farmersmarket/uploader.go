@@ -30,7 +30,7 @@ func NewContainerUploader() (*uploader, error) {
 }
 
 // saveUpload creates or updates a market and merges its inventory into the cache.
-func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordinate, timezone string,
+func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordinate,
 	photoCount int, date time.Time, ingredients []ai.InputIngredient,
 ) (*Market, error) {
 	if photoCount <= 0 {
@@ -39,10 +39,6 @@ func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordin
 	if err := coor.Valid(); err != nil {
 		return nil, fmt.Errorf("invalid market coordinates: %w", err)
 	}
-	if _, err := loadMarketTimezone(timezone); err != nil {
-		return nil, err
-	}
-
 	market, err := u.store.findNearbyMarket(ctx, coor)
 	if err != nil {
 		return nil, err
@@ -54,14 +50,12 @@ func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordin
 			Coordinate: coor,
 			ID:         marketID(coor),
 			Names:      []string{name},
-			Timezone:   timezone,
 			PhotoCount: photoCount,
 			CreatedAt:  now,
 			UpdatedAt:  now,
 		}
 	} else {
 		market.merge(name, coor, photoCount, now)
-		market.Timezone = timezone
 	}
 
 	if err := u.store.saveMarket(ctx, *market); err != nil {

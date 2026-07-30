@@ -65,6 +65,37 @@ func TestParseGenerationForm_DefaultDateUsesStoreZipHeuristic(t *testing.T) {
 	}
 }
 
+func TestParseGenerationForm_DefaultDateUsesStoreCoordinates(t *testing.T) {
+	oldNowFn := nowFn
+	nowFn = func() time.Time {
+		return time.Date(2026, 1, 15, 14, 0, 0, 0, time.UTC) // 06:00 in Los Angeles, before the store-day boundary.
+	}
+	defer func() {
+		nowFn = oldNowFn
+	}()
+
+	lat := 47.61
+	lon := -122.33
+	location := &locations.Location{
+		ID:   "farmersmarket_1",
+		Name: "Test Market",
+		Lat:  &lat,
+		Lon:  &lon,
+	}
+
+	req := httptest.NewRequest("GET", "/recipes?location=farmersmarket_1", nil)
+	p, err := ParseGenerationForm(context.Background(), req, staticLocationLookup{location: location})
+	if err != nil {
+		t.Fatalf("ParseGenerationForm returned error: %v", err)
+	}
+	if got, want := p.Date.Format("2006-01-02"), "2026-01-14"; got != want {
+		t.Fatalf("expected default date %s, got %s", want, got)
+	}
+	if got, want := p.Date.Location().String(), "America/Los_Angeles"; got != want {
+		t.Fatalf("expected date location %s, got %s", want, got)
+	}
+}
+
 func TestParseGenerationForm_CampaignInstructionsOnlyAffectsParams(t *testing.T) {
 	location := &locations.Location{
 		ID:      "loc-123",

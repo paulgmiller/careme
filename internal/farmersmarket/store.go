@@ -41,7 +41,6 @@ type Market struct {
 	ID    string   `json:"id"`
 	Names []string `json:"names"`
 	geo.Coordinate
-	Timezone   string    `json:"timezone"`
 	PhotoCount int       `json:"photo_count"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
@@ -72,7 +71,7 @@ func (s *store) freshInventory(ctx context.Context, locationID string) ([]ai.Inp
 	if err != nil {
 		return nil, err
 	}
-	date, err := farmersMarketDate(time.Now(), market.Timezone)
+	date, err := farmersMarketDate(time.Now(), market.Coordinate)
 	if err != nil {
 		return nil, err
 	}
@@ -166,8 +165,8 @@ func (s *store) loadMarketByKey(ctx context.Context, key string) (Market, error)
 	if err := json.NewDecoder(reader).Decode(&market); err != nil {
 		return Market{}, fmt.Errorf("decode farmers market: %w", err)
 	}
-	if _, err := loadMarketTimezone(market.Timezone); err != nil {
-		return Market{}, fmt.Errorf("load farmers market %q: %w", market.ID, err)
+	if err := market.Valid(); err != nil {
+		return Market{}, fmt.Errorf("load farmers market %q: invalid coordinates: %w", market.ID, err)
 	}
 	return market, nil
 }
