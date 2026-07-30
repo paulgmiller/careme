@@ -289,13 +289,7 @@ func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
 func StaplesWatchdogLocations(ctx context.Context, lookup locationByID) ([]locations.Location, error) {
 	return parallelism.MapWithErrors(staplesWatchdogLocationIDs(), func(locationID string) (locations.Location, error) {
 		location, err := lookup.GetLocationByID(ctx, locationID)
-		if err != nil {
-			return locations.Location{}, fmt.Errorf("load watchdog location %q: %w", locationID, err)
-		}
-		if location == nil {
-			return locations.Location{}, fmt.Errorf("load watchdog location %q: empty location", locationID)
-		}
-		return *location, nil
+		return *location, err
 	})
 }
 

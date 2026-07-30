@@ -16,6 +16,8 @@ import (
 	"careme/internal/config"
 	"careme/internal/guest"
 	"careme/internal/templates"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type fakeProduceScoreLookup struct {
@@ -196,6 +198,21 @@ func TestLocationsPageSearchesWithProvidedCoordinates(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "Showing results near your location") {
 		t.Fatalf("expected coordinate location copy, body=%q", rr.Body.String())
 	}
+}
+
+func TestLocationsPageRejectsNonFiniteCoordinatesBeforeSearching(t *testing.T) {
+	client := newFakeLocationClient()
+	server := NewServer(newTestLocationServer(client), LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?lat=NaN&lon=NaN", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Empty(t, client.search)
+	assert.Contains(t, rr.Body.String(), "latitude must be finite")
 }
 
 func TestLocationsPageRejectsMixedLocationInputs(t *testing.T) {

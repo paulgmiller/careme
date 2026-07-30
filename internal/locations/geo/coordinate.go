@@ -2,6 +2,7 @@ package geo
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -29,6 +30,12 @@ func FromString(latRaw, lonRaw string) (Coordinate, error) {
 }
 
 func (c Coordinate) Valid() error {
+	if math.IsNaN(c.Lat) || math.IsInf(c.Lat, 0) {
+		return fmt.Errorf("latitude must be finite")
+	}
+	if math.IsNaN(c.Lon) || math.IsInf(c.Lon, 0) {
+		return fmt.Errorf("longitude must be finite")
+	}
 	if c.Lat < -90 || c.Lat > 90 {
 		return fmt.Errorf("latitude %f must be between -90 and 90", c.Lat)
 	}
