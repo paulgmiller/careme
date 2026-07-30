@@ -447,7 +447,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 }
 
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
-	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101"}
 	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
@@ -461,9 +461,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `<meta name="description" content="A simple quail recipe Recipe for Store on 2026-01-25." />`) {
 		t.Error("recipe HTML should include recipe, location, and date in the meta description")
 	}
-	assert.Contains(t, html, `<form method="POST" action="/recipes" class="inline">`)
-	assert.Contains(t, html, `name="location" value="70000001"`)
-	assert.Contains(t, html, `>Store</button>`)
+	assert.Contains(t, html, `<a href="/locations?zip=98101"`)
+	assert.Contains(t, html, `>Store</a>`)
+	assert.NotContains(t, html, `<form method="POST" action="/recipes" class="inline">`)
 	if strings.Contains(html, "Finalize") {
 		t.Error("recipe HTML should not contain Finalize button")
 	}
