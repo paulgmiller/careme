@@ -139,6 +139,7 @@ func runServer(cfg *config.Config, addr string) error {
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
+	adminMux.Handle("/{$}", admin.Page())
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
