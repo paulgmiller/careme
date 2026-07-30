@@ -21,19 +21,11 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations/geo"
-	locationtypes "careme/internal/locations/types"
 	"careme/internal/templates"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type staticZipLookup map[string]geo.Coordinate
-
-func (s staticZipLookup) ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool) {
-	coord, ok := s[zip]
-	return coord, ok
-}
 
 type fakeExtractor struct {
 	called bool
@@ -71,13 +63,13 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 	uploader := NewUploader(NewStore(cache.NewInMemoryCache()))
 	date := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 
-	first, err := uploader.saveUpload(t.Context(), "Saturday Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "98101", 2, date, []ai.InputIngredient{
+	first, err := uploader.saveUpload(t.Context(), "Saturday Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "America/Los_Angeles", 2, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "Strawberries", Size: "1 pint"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "98101", first.ZipCode)
+	require.Equal(t, "America/Los_Angeles", first.Timezone)
 
-	second, err := uploader.saveUpload(t.Context(), "River Stalls", geo.Coordinate{Lat: 47.611, Lon: -122.331}, "98101", 1, date, []ai.InputIngredient{
+	second, err := uploader.saveUpload(t.Context(), "River Stalls", geo.Coordinate{Lat: 47.611, Lon: -122.331}, "America/Los_Angeles", 1, date, []ai.InputIngredient{
 		{ProductID: "A", Brand: "River Farm", Description: "strawberries", Size: "1 pint"},
 		{ProductID: "B", Brand: "Hill Farm", Description: "Fresh basil", Size: "1 bunch"},
 	})
@@ -88,18 +80,36 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 	require.Equal(t, 3, second.PhotoCount)
 }
 
+func TestSaveUploadRequiresTimezone(t *testing.T) {
+	uploader := NewUploader(NewStore(cache.NewInMemoryCache()))
+
+	_, err := uploader.saveUpload(
+		t.Context(),
+		"Saturday Market",
+		geo.Coordinate{Lat: 47.61, Lon: -122.33},
+		"98101",
+		1,
+		time.Now(),
+		[]ai.InputIngredient{{Description: "Strawberries"}},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid farmers market timezone")
+}
+
 func TestFetchStaplesReturnsCurrentStoreDateInventory(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
 	provider := NewStaplesProviderFromStore(store)
 	uploader := NewUploader(store)
-	currentDate := farmersMarketDate(time.Now(), "98101")
+	currentDate, err := farmersMarketDate(time.Now(), "America/Los_Angeles")
+	require.NoError(t, err)
 	olderDate := currentDate.AddDate(0, 0, -1)
 
-	market, err := uploader.saveUpload(t.Context(), "Daily Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "98101", 1, olderDate, []ai.InputIngredient{
+	market, err := uploader.saveUpload(t.Context(), "Daily Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "America/Los_Angeles", 1, olderDate, []ai.InputIngredient{
 		{Brand: "Friday Farm", Description: "peas"},
 	})
 	require.NoError(t, err)
-	_, err = uploader.saveUpload(t.Context(), "Daily Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "98101", 1, currentDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Daily Market", geo.Coordinate{Lat: 47.61, Lon: -122.33}, "America/Los_Angeles", 1, currentDate, []ai.InputIngredient{
 		{Brand: "Saturday Farm", Description: "carrots"},
 	})
 	require.NoError(t, err)
@@ -115,13 +125,14 @@ func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 	store := NewStore(cacheStore)
 	provider := NewStaplesProviderFromStore(store)
 	locationID := LocationIDPrefix + "stale"
-	currentDate := farmersMarketDate(time.Now(), "98101")
+	currentDate, err := farmersMarketDate(time.Now(), "America/Los_Angeles")
+	require.NoError(t, err)
 	olderDate := currentDate.AddDate(0, 0, -1)
 	require.NoError(t, store.saveMarket(t.Context(), Market{
 		ID:         locationID,
 		Names:      []string{"Stale Market"},
 		Coordinate: geo.Coordinate{Lat: 47.61, Lon: -122.33},
-		ZipCode:    "98101",
+		Timezone:   "America/Los_Angeles",
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
 	}))
@@ -135,29 +146,28 @@ func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 
 	_, err = provider.FetchStaples(t.Context(), locationID)
 	require.ErrorIs(t, err, cache.ErrNotFound)
-	assert.False(t, NewLocationBackend(store, staticZipLookup{}).HasInventory(locationID))
+	assert.False(t, NewLocationBackend(store).HasInventory(locationID))
 }
 
 func TestLocationBackendGetLocationsByCoordinatesReturnsNearbyFarmersMarkets(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
 	uploader := NewUploader(store)
-	marketDate := farmersMarketDate(time.Now(), "98199")
-	_, err := uploader.saveUpload(t.Context(), "Far Market", geo.Coordinate{Lat: 48.2, Lon: -122.33}, "98199", 1, marketDate, []ai.InputIngredient{
+	marketDate, err := farmersMarketDate(time.Now(), "America/Los_Angeles")
+	require.NoError(t, err)
+	_, err = uploader.saveUpload(t.Context(), "Far Market", geo.Coordinate{Lat: 48.2, Lon: -122.33}, "America/Los_Angeles", 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "turnips"},
 	})
 	require.NoError(t, err)
-	_, err = uploader.saveUpload(t.Context(), "Near Market", geo.Coordinate{Lat: 47.62, Lon: -122.33}, "98199", 1, marketDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Near Market", geo.Coordinate{Lat: 47.62, Lon: -122.33}, "America/Los_Angeles", 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "kale"},
 	})
 	require.NoError(t, err)
-	_, err = uploader.saveUpload(t.Context(), "Closer Market", geo.Coordinate{Lat: 47.611, Lon: -122.33}, "98199", 1, marketDate, []ai.InputIngredient{
+	_, err = uploader.saveUpload(t.Context(), "Closer Market", geo.Coordinate{Lat: 47.611, Lon: -122.33}, "America/Los_Angeles", 1, marketDate, []ai.InputIngredient{
 		{Brand: "Farmers market", Description: "chard"},
 	})
 	require.NoError(t, err)
 
-	backend := NewLocationBackend(store, staticZipLookup{
-		"98101": {Lat: 47.61, Lon: -122.33},
-	})
+	backend := NewLocationBackend(store)
 
 	got, err := backend.GetLocationsByCoordinates(t.Context(), geo.Coordinate{Lat: 47.61, Lon: -122.33})
 	require.NoError(t, err)
@@ -166,6 +176,35 @@ func TestLocationBackendGetLocationsByCoordinatesReturnsNearbyFarmersMarkets(t *
 	assert.Equal(t, "Closer Market", got[0].Name)
 	assert.Equal(t, "Near Market", got[1].Name)
 	assert.Equal(t, ChainName, got[0].Chain)
+}
+
+func TestLocationBackendDropsMarketWithoutTimezone(t *testing.T) {
+	store := NewStore(cache.NewInMemoryCache())
+	missingTimezone := Market{
+		ID:         LocationIDPrefix + "missing-timezone",
+		Names:      []string{"Old Market"},
+		Coordinate: geo.Coordinate{Lat: 47.61, Lon: -122.33},
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	require.NoError(t, store.saveMarket(t.Context(), missingTimezone))
+
+	backend := NewLocationBackend(store)
+	got, err := backend.GetLocationsByCoordinates(t.Context(), geo.Coordinate{Lat: 47.61, Lon: -122.33})
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	_, err = backend.GetLocationByID(t.Context(), missingTimezone.ID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "timezone is required")
+}
+
+func TestMarketIDDistinguishesCoordinates(t *testing.T) {
+	assert.NotEqual(
+		t,
+		marketID(geo.Coordinate{Lat: 47.61, Lon: -122.33}),
+		marketID(geo.Coordinate{Lat: 47.62, Lon: -122.33}),
+	)
 }
 
 func TestResolveMarketLocationUsesCoordinatesAndTimezone(t *testing.T) {

@@ -3,7 +3,6 @@ package farmersmarket
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"careme/internal/ai"
@@ -31,7 +30,7 @@ func NewContainerUploader() (*uploader, error) {
 }
 
 // saveUpload creates or updates a market and merges its inventory into the cache.
-func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordinate, timezoneOrZIP string,
+func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordinate, timezone string,
 	photoCount int, date time.Time, ingredients []ai.InputIngredient,
 ) (*Market, error) {
 	if photoCount <= 0 {
@@ -40,38 +39,29 @@ func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordin
 	if err := coor.Valid(); err != nil {
 		return nil, fmt.Errorf("invalid market coordinates: %w", err)
 	}
+	if _, err := loadMarketTimezone(timezone); err != nil {
+		return nil, err
+	}
 
-	market, err := u.store.findNearbyMarket(ctx, coor.Lat, coor.Lon)
+	market, err := u.store.findNearbyMarket(ctx, coor)
 	if err != nil {
 		return nil, err
 	}
 
 	now := time.Now().UTC()
-	timezone := timezoneOrZIP
-	zip := ""
-	if !strings.Contains(timezoneOrZIP, "/") {
-		timezone = ""
-		zip = timezoneOrZIP
-	}
 	if market == nil {
 		market = &Market{
 			Coordinate: coor,
-			ID:         marketID(name, coor.Lat, coor.Lon),
+			ID:         marketID(coor),
 			Names:      []string{name},
-			ZipCode:    zip,
 			Timezone:   timezone,
 			PhotoCount: photoCount,
 			CreatedAt:  now,
 			UpdatedAt:  now,
 		}
 	} else {
-		market.merge(name, coor.Lat, coor.Lon, photoCount, now)
-		if market.ZipCode == "" {
-			market.ZipCode = zip
-		}
-		if market.Timezone == "" {
-			market.Timezone = timezone
-		}
+		market.merge(name, coor, photoCount, now)
+		market.Timezone = timezone
 	}
 
 	if err := u.store.saveMarket(ctx, *market); err != nil {

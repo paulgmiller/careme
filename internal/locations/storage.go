@@ -109,7 +109,7 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 			return wegmans.NewLocationBackend(ctx, cfg, centroids)
 		},
 		func(context.Context) (locationBackend, error) {
-			return farmersmarket.NewContainerLocationBackend(centroids)
+			return farmersmarket.NewContainerLocationBackend()
 		},
 	}
 

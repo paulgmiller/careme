@@ -218,7 +218,11 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	status.Message = fmt.Sprintf("Found %d ingredients. Saving this market.", len(ingredients))
 	update(status)
 
-	date := farmersMarketDate(time.Now(), timezone)
+	date, err := farmersMarketDate(time.Now(), timezone)
+	if err != nil {
+		fail("Could not determine the market's local date.", err)
+		return
+	}
 	market, err := h.uploader.saveUpload(ctx, name, coord, timezone, len(photos), date, ingredients)
 	if err != nil {
 		fail("Could not save this market. Try again, chef.", err)
@@ -329,7 +333,7 @@ func resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
 	if timezone == "" {
 		return geo.Coordinate{}, "", errors.New("could not determine the local timezone")
 	}
-	if _, err := time.LoadLocation(timezone); err != nil {
+	if _, err := loadMarketTimezone(timezone); err != nil {
 		return geo.Coordinate{}, "", errors.New("invalid local timezone")
 	}
 	return coord, timezone, nil
@@ -378,24 +382,27 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 	return photos, nil
 }
 
-func farmersMarketDate(now time.Time, timezoneOrZIP string) time.Time {
-	tzName := timezoneOrZIP
-	if !strings.Contains(tzName, "/") {
-		var ok bool
-		tzName, ok = geo.TimezoneNameForZip(timezoneOrZIP)
-		if !ok {
-			tzName = "UTC"
-		}
+func loadMarketTimezone(timezone string) (*time.Location, error) {
+	if strings.TrimSpace(timezone) == "" {
+		return nil, errors.New("farmers market timezone is required")
 	}
-	storeLoc, err := time.LoadLocation(tzName)
+	location, err := time.LoadLocation(timezone)
 	if err != nil {
-		storeLoc = time.UTC
+		return nil, fmt.Errorf("invalid farmers market timezone %q: %w", timezone, err)
+	}
+	return location, nil
+}
+
+func farmersMarketDate(now time.Time, timezone string) (time.Time, error) {
+	storeLoc, err := loadMarketTimezone(timezone)
+	if err != nil {
+		return time.Time{}, err
 	}
 	localNow := now.In(storeLoc)
 	if localNow.Hour() < storeDayStartHour {
 		localNow = localNow.AddDate(0, 0, -1)
 	}
-	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
+	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc), nil
 }
 
 func redirectToSignIn(w http.ResponseWriter, r *http.Request) {
