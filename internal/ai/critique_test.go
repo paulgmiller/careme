@@ -64,6 +64,22 @@ func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing
 	}
 }
 
+func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T) {
+	for _, want := range []string{
+		"1.25% salt by weight for boneless meat",
+		"1.5% for bone-in meat including roast chicken",
+		"1% for vegetables and grains",
+		"2% salinity for pasta or vegetable-blanching water",
+		"do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water",
+		"evaluate salt by weight when available rather than assuming equal volume measures across salt types",
+		"if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 8 so the recipe is revised",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
+	}
+	assert.NotContains(t, recipeCritiqueSystemInstruction, "flour")
+	assert.NotContains(t, recipeCritiqueSystemInstruction, "dough")
+}
+
 func TestParseRecipeCritique(t *testing.T) {
 	critique, err := parseRecipeCritique(`{
 		"schema_version": "recipe-critique-v1",
