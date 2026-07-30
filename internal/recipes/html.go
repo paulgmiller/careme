@@ -164,20 +164,28 @@ func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string)
 	return fmt.Sprintf("Recipes for %s on %s: %s.", locationName, date, strings.Join(titles, ", "))
 }
 
-// FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, saved bool,
-	currentUser *utypes.User, critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry,
-	fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter,
-) {
-	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+type recipePage struct {
+	Params             *generatorParams
+	Recipe             ai.Recipe
+	Saved              bool
+	User               *utypes.User
+	CritiqueScore      *int
+	HasImage           bool
+	Thread             []RecipeThreadEntry
+	Feedback           feedback.Feedback
+	WineRecommendation *ai.WineSelection
+}
+
+func renderRecipeHTML(ctx context.Context, page recipePage, writer http.ResponseWriter) {
+	slices.SortFunc(page.Thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
-	recipeHash := recipe.ComputeHash()
-	activeResponseID := recipe.ResponseID
-	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
+	recipeHash := page.Recipe.ComputeHash()
+	activeResponseID := page.Recipe.ResponseID
+	if threadResponseID := latestThreadResponseID(page.Thread); threadResponseID != "" {
 		activeResponseID = threadResponseID
 	}
-	serverSignedIn := currentUser != nil
+	serverSignedIn := page.User != nil
 	data := struct {
 		Location                locations.Location
 		Date                    string
@@ -203,27 +211,27 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		MinimumRecipeScore      int
 		AdminURL                string
 	}{
-		Location:                *p.Location,
-		Date:                    p.Date.Format("2006-01-02"),
+		Location:                *page.Params.Location,
+		Date:                    page.Params.Date.Format("2006-01-02"),
 		ClarityScript:           templates.ClarityScript(ctx),
 		GoogleTagScript:         templates.GoogleTagScript(),
-		Recipe:                  recipe,
-		Saved:                   saved,
-		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
-		OriginHash:              recipe.OriginHash,
+		Recipe:                  page.Recipe,
+		Saved:                   page.Saved,
+		DisplayIngredients:      ingredientsForDisplay(page.Recipe.Ingredients, page.WineRecommendation),
+		OriginHash:              page.Recipe.OriginHash,
 		ResponseID:              activeResponseID,
-		WineRecommendation:      wineRecommendation,
-		Thread:                  thread,
-		Feedback:                fb,
+		WineRecommendation:      page.WineRecommendation,
+		Thread:                  page.Thread,
+		Feedback:                page.Feedback,
 		RecipeHash:              recipeHash,
-		RecipeImage:             recipeImageData(recipeHash, hasRecipeImage, false),
+		RecipeImage:             recipeImageData(recipeHash, page.HasImage, false),
 		Style:                   seasons.GetCurrentStyle(),
 		ServerSignedIn:          serverSignedIn,
-		User:                    currentUser,
+		User:                    page.User,
 		AuthReturnTo:            "/recipe/" + recipeHash,
 		RecipeCritiqueURL:       "/critiques/" + recipeHash,
-		RecipeCritiqueScore:     critiqueScore,
-		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
+		RecipeCritiqueScore:     page.CritiqueScore,
+		RecipeCritiqueNeedsCare: page.CritiqueScore != nil && *page.CritiqueScore < critique.MinimumRecipeScore,
 		MinimumRecipeScore:      critique.MinimumRecipeScore,
 		AdminURL:                "/admin/prompt/recipe/" + recipeHash,
 	}

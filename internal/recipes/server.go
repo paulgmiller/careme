@@ -228,7 +228,16 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				ID:   "",
 				Name: "Unknown Location",
 			}, time.Now())
-			FormatRecipeHTML(ctx, p, *recipe, false, currentUser, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
+			renderRecipeHTML(ctx, recipePage{
+				Params:             p,
+				Recipe:             *recipe,
+				User:               currentUser,
+				CritiqueScore:      critiqueScore,
+				HasImage:           hasRecipeImage,
+				Thread:             thread,
+				Feedback:           feedback,
+				WineRecommendation: wineRecommendation,
+			}, w)
 			return
 		}
 		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
@@ -256,7 +265,17 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(ctx, p, *recipe, saved, currentUser, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
+	renderRecipeHTML(ctx, recipePage{
+		Params:             p,
+		Recipe:             *recipe,
+		Saved:              saved,
+		User:               currentUser,
+		CritiqueScore:      critiqueScore,
+		HasImage:           hasRecipeImage,
+		Thread:             thread,
+		Feedback:           feedback,
+		WineRecommendation: wineRecommendation,
+	}, w)
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
