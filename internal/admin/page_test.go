@@ -14,14 +14,13 @@ func TestPageShowsBuildMetadata(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/admin/", nil)
 	rr := httptest.NewRecorder()
 
-	page(pageData{
-		GitHash:   "0123456789abcdef",
-		BuildTime: "2026-07-29T18:30:00Z",
-	}).ServeHTTP(rr, req)
+	Page().ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "<code>0123456789abcdef</code>")
-	assert.Contains(t, rr.Body.String(), "<time>2026-07-29T18:30:00Z</time>")
+	assert.Contains(t, rr.Body.String(), "<dt>Git hash</dt>")
+	assert.Contains(t, rr.Body.String(), "<dt>Commit time</dt>")
+	assert.Contains(t, rr.Body.String(), "<dt>Go version</dt>")
+	assert.Contains(t, rr.Body.String(), "<dt>Dirty tree</dt>")
 	assert.Contains(t, rr.Body.String(), `href="/admin/users"`)
 }
 
@@ -31,7 +30,7 @@ func TestPageRejectsUnsupportedMethods(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/admin/", nil)
 	rr := httptest.NewRecorder()
 
-	page(pageData{}).ServeHTTP(rr, req)
+	Page().ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)
 }

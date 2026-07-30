@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"embed"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -8,42 +9,21 @@ import (
 	"strings"
 )
 
-// buildTime is populated by the production build's linker flags.
-var buildTime = "unknown"
-
 type pageData struct {
-	GitHash   string
-	BuildTime string
+	GitHash    string
+	CommitTime string
+	GoVersion  string
+	DirtyTree  string
 }
 
-var pageTemplate = template.Must(template.New("admin").Parse(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin</title>
-</head>
-<body>
-  <nav>
-    <a href="/admin/">Admin</a> |
-    <a href="/admin/users">Users</a>
-  </nav>
-  <h1>Admin</h1>
-  <dl>
-    <dt>Git hash</dt>
-    <dd><code>{{.GitHash}}</code></dd>
-    <dt>Build time</dt>
-    <dd><time>{{.BuildTime}}</time></dd>
-  </dl>
-</body>
-</html>`))
+//go:embed page.html
+var pageTemplates embed.FS
+
+var pageTemplate = template.Must(template.ParseFS(pageTemplates, "page.html"))
 
 // Page returns the landing page for the admin area.
 func Page() http.Handler {
-	return page(pageMetadata())
-}
-
-func page(data pageData) http.Handler {
+	data := pageMetadata()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -58,21 +38,39 @@ func page(data pageData) http.Handler {
 
 func pageMetadata() pageData {
 	data := pageData{
-		GitHash:   "unknown",
-		BuildTime: strings.TrimSpace(buildTime),
-	}
-	if data.BuildTime == "" {
-		data.BuildTime = "unknown"
+		GitHash:    "unknown",
+		CommitTime: "unknown",
+		GoVersion:  "unknown",
+		DirtyTree:  "unknown",
 	}
 
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return data
 	}
+	if strings.TrimSpace(info.GoVersion) != "" {
+		data.GoVersion = strings.TrimSpace(info.GoVersion)
+	}
 	for _, setting := range info.Settings {
-		if setting.Key == "vcs.revision" && strings.TrimSpace(setting.Value) != "" {
+		value := strings.TrimSpace(setting.Value)
+		switch setting.Key {
+		case "vcs.revision":
+			if value == "" {
+				continue
+			}
 			data.GitHash = strings.TrimSpace(setting.Value)
-			break
+		case "vcs.time":
+			if value == "" {
+				continue
+			}
+			data.CommitTime = value
+		case "vcs.modified":
+			switch value {
+			case "true":
+				data.DirtyTree = "yes"
+			case "false":
+				data.DirtyTree = "no"
+			}
 		}
 	}
 	return data
