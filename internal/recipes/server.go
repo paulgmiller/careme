@@ -1333,6 +1333,9 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	hash := strings.TrimSpace(r.PathValue("hash"))
 
+	// Retry intentionally does not require a current session: it can only reuse
+	// cached parameters from a generation request that already passed the
+	// signed-in or guest-generation allowance check.
 	if _, err := s.FromCache(ctx, hash); err == nil {
 		redirectToHash(w, r, hash, QueryArgHelp)
 		return
@@ -1357,6 +1360,8 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
 }
 
+// generationReturnPath returns the local referring page for the post-sign-in
+// redirect, falling back to the home page when the Referer is missing or unsafe.
 func generationReturnPath(r *http.Request) string {
 	referrer, err := url.Parse(strings.TrimSpace(r.Referer()))
 	if err != nil || referrer == nil {
