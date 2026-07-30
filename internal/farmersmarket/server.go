@@ -18,6 +18,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/httpx"
 	"careme/internal/locations/geo"
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -118,7 +119,7 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -225,8 +226,11 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	}
 
 	status.State = analysisStateComplete
-	status.RedirectURL = "/recipes?location=" + url.QueryEscape(market.ID) + "&date=" + url.QueryEscape(date.Format("2006-01-02"))
-	status.Message = fmt.Sprintf("Found %d ingredients. Building dinner ideas.", len(ingredients))
+	status.RedirectURL = "/locations?" + url.Values{
+		"lat": {fmt.Sprintf("%g", market.Lat)},
+		"lon": {fmt.Sprintf("%g", market.Lon)},
+	}.Encode()
+	status.Message = fmt.Sprintf("Found %d ingredients. Finding nearby stores.", len(ingredients))
 	update(status)
 }
 
@@ -396,16 +400,12 @@ func farmersMarketDate(now time.Time, timezoneOrZIP string) time.Time {
 
 func redirectToSignIn(w http.ResponseWriter, r *http.Request) {
 	target := "/sign-in?return_to_b64=" + url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(r.URL.RequestURI())))
-	if isHTMXRequest(r) {
+	if httpx.IsHTMX(r) {
 		w.Header().Set("HX-Redirect", target)
 		http.Error(w, "must be logged in", http.StatusUnauthorized)
 		return
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
-}
-
-func isHTMXRequest(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
 
 func renderError(ctx context.Context, w http.ResponseWriter, message string) {

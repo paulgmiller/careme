@@ -215,8 +215,11 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name == 'push' }}
+          # BuildKit removes .git from Git contexts by default. Go needs it
+          # during the builder stage to populate its standard vcs.* settings.
           build-args: |
             CMD_PATH=${{ matrix.cmd_path }}
+            BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
           tags: |
             ${{ steps.vars.outputs.IMAGE }}:latest
             ${{ steps.vars.outputs.IMAGE }}:${{ steps.vars.outputs.SHORT_SHA }}

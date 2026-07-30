@@ -24,6 +24,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/guest"
+	"careme/internal/httpx"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
@@ -39,23 +40,6 @@ import (
 	"github.com/samber/lo"
 )
 
-func setTextContent(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-}
-
-func requestURIOrPath(r *http.Request) string {
-	if r == nil {
-		return "/"
-	}
-	if uri := strings.TrimSpace(r.URL.RequestURI()); uri != "" {
-		return uri
-	}
-	if path := strings.TrimSpace(r.URL.Path); path != "" {
-		return path
-	}
-	return "/"
-}
-
 func signInPath(returnTo string) string {
 	returnTo = strings.TrimSpace(returnTo)
 	if returnTo == "" {
@@ -67,8 +51,8 @@ func signInPath(returnTo string) string {
 }
 
 func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int) {
-	target := signInPath(requestURIOrPath(r))
-	if isHTMXRequest(r) {
+	target := signInPath(httpx.RequestPath(r))
+	if httpx.IsHTMX(r) {
 		w.Header().Set("HX-Redirect", target)
 	}
 	http.Error(w, "must be logged in", status)
@@ -76,7 +60,7 @@ func redirectToSignIn(w http.ResponseWriter, r *http.Request, status int) {
 
 func redirectToAccountRequired(w http.ResponseWriter, r *http.Request, reason auth.AccountRequiredReason, returnTo string) {
 	target := auth.AccountRequiredPath(reason, returnTo)
-	if isHTMXRequest(r) {
+	if httpx.IsHTMX(r) {
 		w.Header().Set("HX-Redirect", target)
 		return
 	}
@@ -141,6 +125,8 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
+	mux.HandleFunc("POST /recipes", s.handleGenerate)
+	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
@@ -318,7 +304,7 @@ func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -521,7 +507,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -590,7 +576,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setTextContent(w)
+	httpx.SetHTMLContentType(w)
 	_, err = fmt.Fprint(w, `<span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><span aria-hidden="true">✓</span>Saved</span>`)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write feedback response", "hash", hash, "error", err)
@@ -600,7 +586,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -645,34 +631,8 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	saved := true
-	var response bytes.Buffer
-	if isSingleRecipeAction(r) {
-		if err := RenderRecipeSaveActionHTML(*recipe, shoppingListHash, saved, &response); err != nil {
-			slog.ErrorContext(ctx, "failed to render save action response", "hash", recipeHash, "error", err)
-			http.Error(w, "failed to write response", http.StatusInternalServerError)
-			return
-		}
-	} else {
-		if err := RenderShoppingRecipeCardHTML(*recipe, saved, shoppingListHash, s.wineRecommendationForCard(ctx, recipeHash), s.recipeImageExistsForCard(ctx, recipeHash), &response); err != nil {
-			slog.ErrorContext(ctx, "failed to render save card response", "hash", recipeHash, "error", err)
-			http.Error(w, "failed to write response", http.StatusInternalServerError)
-			return
-		}
-
-		// want to kill this and make it dynmic for now on any save or dmiss we allow build
-		if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
-			slog.ErrorContext(ctx, "failed to render finalize controls after save", "shoppingListHash", shoppingListHash, "error", err)
-			http.Error(w, "failed to write response", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	setTextContent(w)
-	w.Header().Set("HX-Trigger", "careme:saved-recipes-changed")
-	_, err = w.Write(response.Bytes())
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to write save response", "hash", recipeHash, "error", err)
+	if err := s.writeRecipeSelectionResponse(ctx, w, r, recipeHash, *recipe, shoppingListHash, true); err != nil {
+		slog.ErrorContext(ctx, "failed to render save response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
 }
@@ -706,7 +666,7 @@ func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User
 
 func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -765,35 +725,42 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
-	saved := false
-	var response bytes.Buffer
-	if isSingleRecipeAction(r) {
-		if err := RenderRecipeSaveActionHTML(*recipe, selectionHash, saved, &response); err != nil {
-			slog.ErrorContext(ctx, "failed to render dismiss action response", "hash", recipeHash, "error", err)
-			http.Error(w, "failed to write response", http.StatusInternalServerError)
-			return
-		}
-	} else {
-		if err := RenderShoppingRecipeCardHTML(*recipe, saved, selectionHash, s.wineRecommendationForCard(ctx, recipeHash), s.recipeImageExistsForCard(ctx, recipeHash), &response); err != nil {
-			slog.ErrorContext(ctx, "failed to render dismiss card response", "hash", recipeHash, "error", err)
-			http.Error(w, "failed to write response", http.StatusInternalServerError)
-			return
-		}
-
-		// want to kill this and make it dynmic for now on any save or dmiss we allow build
-		if err := RenderShoppingFinalizeControlsHTML(selectionHash, &response); err != nil {
-			slog.ErrorContext(ctx, "failed to render finalize controls after dismiss", "selection_hash", selectionHash, "error", err)
-			http.Error(w, "failed to write response", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	setTextContent(w)
-	_, err = w.Write(response.Bytes())
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to write dismiss response", "hash", recipeHash, "error", err)
+	if err := s.writeRecipeSelectionResponse(ctx, w, r, recipeHash, *recipe, selectionHash, false); err != nil {
+		slog.ErrorContext(ctx, "failed to render dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
+}
+
+func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, recipeHash string, recipe ai.Recipe, shoppingListHash string, saved bool) error {
+	var response bytes.Buffer
+	if isSingleRecipeAction(r) {
+		if err := RenderRecipeSaveActionHTML(recipe, shoppingListHash, saved, &response); err != nil {
+			return fmt.Errorf("render recipe save action: %w", err)
+		}
+	} else {
+		if err := RenderShoppingRecipeCardHTML(
+			recipe,
+			saved,
+			shoppingListHash,
+			s.wineRecommendationForCard(ctx, recipeHash),
+			s.recipeImageExistsForCard(ctx, recipeHash),
+			&response,
+		); err != nil {
+			return fmt.Errorf("render shopping recipe card: %w", err)
+		}
+		if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
+			return fmt.Errorf("render shopping finalize controls: %w", err)
+		}
+	}
+
+	httpx.SetHTMLContentType(w)
+	if saved {
+		w.Header().Set("HX-Trigger", "careme:saved-recipes-changed")
+	}
+	if _, err := w.Write(response.Bytes()); err != nil {
+		return fmt.Errorf("write recipe selection response: %w", err)
+	}
+	return nil
 }
 
 func (s *server) wineRecommendationForCard(ctx context.Context, recipeHash string) *ai.WineSelection {
@@ -1084,6 +1051,8 @@ func (s *server) recipeFromShoppingList(list ai.ShoppingList, recipeHash string)
 	return nil, cache.ErrNotFound
 }
 
+// notFound handles a missing generated shopping list by showing the generation
+// spinner while work is in progress and the retry page after generation times out.
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	startArg := r.URL.Query().Get(queryArgStart)
 	hashParam := r.URL.Query().Get(queryArgHash)
@@ -1114,29 +1083,12 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		s.spin(ctx, w, r, hashParam)
 		return
 	}
-	slog.WarnContext(ctx, "rekicking generation", "time", startArg, "hash", hashParam)
-
-	p, err := s.ParamsFromCache(ctx, hashParam)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
-		http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
+	slog.WarnContext(ctx, "recipe generation timed out", "time", startArg, "hash", hashParam)
+	if !httpx.IsHTMX(r) {
+		s.spin(ctx, w, r, hashParam)
 		return
 	}
-
-	// this could fail becasuse clerk isn't refreshing?
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk) // just for logging purposes in kickgeneration. We could do this in the generateion function instead to avoid the extra call on every not found.
-	if err != nil {
-		if !errors.Is(err, auth.ErrNoSession) {
-			slog.ErrorContext(ctx, "failed to get clerk user ID", "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}
-		slog.WarnContext(ctx, "no valid session found from spin page.", "hash", hashParam)
-		currentUser = nil
-	}
-	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
-	s.kickgeneration(ctx, p)
-	redirectToHash(w, r, p.Hash(), queryArgStart, QueryArgHelp)
+	generationTimedOut(ctx, w, r, hashParam)
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1147,122 +1099,147 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// latest server-rendered state instead of restoring a stale DOM snapshot.
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ctx := r.Context()
-	// TODO(pm): Revisit route shape for hash-based recipe lists. `h` is a derived key from
-	// query params, so `/recipes?h=...` is defensible; decide later if we also want a
-	// canonical path form like `/recipes/{h}` or just a redirect alias.
-	if hashParam := r.URL.Query().Get(queryArgHash); hashParam != "" {
-		if normalizedHash, ok := legacyHashToCurrent(hashParam, legacyRecipeHashSeed); ok {
-			slog.InfoContext(ctx, "redirecting legacy hash to canonical hash", "legacy_hash", hashParam, "hash", normalizedHash)
-			redirectToHash(w, r, normalizedHash, QueryArgHelp)
-			return
-		}
-		slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
-		if err != nil {
-			if errors.Is(err, cache.ErrNotFound) {
-				s.notFound(ctx, w, r)
-				return
-			}
-			slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
-			http.Error(w, "invalid recipe", http.StatusInternalServerError)
-			return
-		}
-		if r.URL.Query().Has(queryArgStart) {
-			redirectToHash(w, r, hashParam, QueryArgHelp)
-			return
-		}
 
-		p, err := s.ParamsFromCache(ctx, hashParam)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
-			http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
-			return
-		}
-		currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
-		if err != nil && !errors.Is(err, auth.ErrNoSession) {
-			slog.ErrorContext(ctx, "failed to get user from request", "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}
-		signedIn := currentUser != nil
-		selection := selectionFromSaved(p.Saved)
-		if signedIn {
-			userSelection, err := s.loadRecipeSelection(ctx, currentUser.ID, hashParam)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to load recipe selection for render", "hash", hashParam, "error", err)
-				http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
-				return
-			}
-			selection = selection.override(userSelection)
-
-			if pendingSave := strings.TrimSpace(r.URL.Query().Get(queryArgPendingSave)); pendingSave != "" {
-				if _, err := s.recipeFromShoppingList(*slist, pendingSave); err != nil {
-					http.Error(w, "recipe not found", http.StatusNotFound)
-					return
-				}
-				if _, err := s.saveRecipeForUser(ctx, currentUser, hashParam, pendingSave); err != nil {
-					if errors.Is(err, cache.ErrNotFound) {
-						http.Error(w, "recipe not found", http.StatusNotFound)
-						return
-					}
-					slog.ErrorContext(ctx, "failed to save pending recipe", "hash", hashParam, "recipe_hash", pendingSave, "error", err)
-					http.Error(w, "failed to save recipe", http.StatusInternalServerError)
-					return
-				}
-				redirectToHash(w, r, hashParam)
-				return
-			}
-		}
-		if r.URL.Query().Get("mail") == "true" {
-			tf := users.NewUnsubscribeTokenFactory(*s.cfg)
-			var unsubscribeURL string
-			if signedIn {
-				unsubscribeURL = s.cfg.ResolvedPublicOrigin() + "/user/unsubscribe?" + url.Values{
-					"user":  []string{currentUser.ID},
-					"token": []string{tf.UnsubscribeToken(currentUser.ID)},
-				}.Encode()
-			}
-			if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), unsubscribeURL, w); err != nil {
-				slog.ErrorContext(ctx, "failed to render mail template", "error", err)
-				http.Error(w, "failed to render mail template", http.StatusInternalServerError)
-			}
-			return
-		}
-		if !signedIn {
-			guest.EnsureShoppingListCount(w, r)
-		}
-		wines := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))
-		images := parallelism.NewSafeMap[string, bool](len(slist.Recipes))
-		var recipeWG sync.WaitGroup
-		for _, recipe := range slist.Recipes {
-			recipeHash := recipe.ComputeHash()
-			recipeWG.Go(func() {
-				wineRecommendation, wineErr := s.WineFromCache(ctx, recipeHash)
-				if wineErr != nil {
-					if !errors.Is(wineErr, cache.ErrNotFound) {
-						slog.ErrorContext(ctx, "failed to load cached wine recommendation for shopping list render", "recipe_hash", recipeHash, "error", wineErr)
-					}
-					return
-				}
-				wines.Set(recipeHash, wineRecommendation)
-			})
-			recipeWG.Go(func() {
-				hasImage := s.recipeImageExistsForCard(ctx, recipeHash)
-				images.Set(recipeHash, hasImage)
-			})
-
-		}
-		recipeWG.Wait()
-
-		help := r.URL.Query().Get(QueryArgHelp)
-		instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
-		FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
-			hashParam, selection, help, instructions, w)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil && !errors.Is(err, auth.ErrNoSession) {
+		slog.ErrorContext(ctx, "failed to get user for recipe redirect", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
 
-	p, err := ParseQueryArgs(ctx, r, s.locServer)
+	hashParam := strings.TrimSpace(r.URL.Query().Get(queryArgHash))
+	if hashParam == "" {
+		// FormValue also reads URL query parameters, so links such as
+		// /recipes?location=<id> can be redirected to their canonical hash URL.
+		p, err := ParseGenerationForm(ctx, r, s.locServer)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		if currentUser != nil {
+			p.Directive = currentUser.Directive
+		}
+		redirectToHash(w, r, p.Hash(), QueryArgHelp)
+		return
+	}
+	// TODO(pm): Revisit route shape for hash-based recipe lists. `h` is a derived key from
+	// query params, so `/recipes?h=...` is defensible; decide later if we also want a
+	// canonical path form like `/recipes/{h}` or just a redirect alias.
+	if normalizedHash, ok := legacyHashToCurrent(hashParam, legacyRecipeHashSeed); ok {
+		slog.InfoContext(ctx, "redirecting legacy hash to canonical hash", "legacy_hash", hashParam, "hash", normalizedHash)
+		redirectToHash(w, r, normalizedHash, QueryArgHelp)
+		return
+	}
+	slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 	if err != nil {
-		http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
+		if errors.Is(err, cache.ErrNotFound) {
+			s.notFound(ctx, w, r)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
+		http.Error(w, "invalid recipe", http.StatusInternalServerError)
+		return
+	}
+	if r.URL.Query().Has(queryArgStart) {
+		redirectToHash(w, r, hashParam, QueryArgHelp)
+		return
+	}
+
+	p, err := s.ParamsFromCache(ctx, hashParam)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+		http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
+		return
+	}
+
+	signedIn := currentUser != nil
+	selection := selectionFromSaved(p.Saved)
+	if signedIn {
+		userSelection, err := s.loadRecipeSelection(ctx, currentUser.ID, hashParam)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load recipe selection for render", "hash", hashParam, "error", err)
+			http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
+			return
+		}
+		selection = selection.override(userSelection)
+
+		// don't like mutating on a get. Find a better way to do this
+		if pendingSave := strings.TrimSpace(r.URL.Query().Get(queryArgPendingSave)); pendingSave != "" {
+			if _, err := s.recipeFromShoppingList(*slist, pendingSave); err != nil {
+				http.Error(w, "recipe not found", http.StatusNotFound)
+				return
+			}
+			if _, err := s.saveRecipeForUser(ctx, currentUser, hashParam, pendingSave); err != nil {
+				if errors.Is(err, cache.ErrNotFound) {
+					http.Error(w, "recipe not found", http.StatusNotFound)
+					return
+				}
+				slog.ErrorContext(ctx, "failed to save pending recipe", "hash", hashParam, "recipe_hash", pendingSave, "error", err)
+				http.Error(w, "failed to save recipe", http.StatusInternalServerError)
+				return
+			}
+			redirectToHash(w, r, hashParam)
+			return
+		}
+	}
+	if r.URL.Query().Get("mail") == "true" {
+		tf := users.NewUnsubscribeTokenFactory(*s.cfg)
+		var unsubscribeURL string
+		if signedIn {
+			unsubscribeURL = s.cfg.ResolvedPublicOrigin() + "/user/unsubscribe?" + url.Values{
+				"user":  []string{currentUser.ID},
+				"token": []string{tf.UnsubscribeToken(currentUser.ID)},
+			}.Encode()
+		}
+		if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), unsubscribeURL, w); err != nil {
+			slog.ErrorContext(ctx, "failed to render mail template", "error", err)
+			http.Error(w, "failed to render mail template", http.StatusInternalServerError)
+		}
+		return
+	}
+	if !signedIn {
+		guest.EnsureShoppingListCount(w, r)
+	}
+	wines := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))
+	images := parallelism.NewSafeMap[string, bool](len(slist.Recipes))
+	var recipeWG sync.WaitGroup
+	for _, recipe := range slist.Recipes {
+		recipeHash := recipe.ComputeHash()
+		recipeWG.Go(func() {
+			wineRecommendation, wineErr := s.WineFromCache(ctx, recipeHash)
+			if wineErr != nil {
+				if !errors.Is(wineErr, cache.ErrNotFound) {
+					slog.ErrorContext(ctx, "failed to load cached wine recommendation for shopping list render", "recipe_hash", recipeHash, "error", wineErr)
+				}
+				return
+			}
+			wines.Set(recipeHash, wineRecommendation)
+		})
+		recipeWG.Go(func() {
+			hasImage := s.recipeImageExistsForCard(ctx, recipeHash)
+			images.Set(recipeHash, hasImage)
+		})
+
+	}
+	recipeWG.Wait()
+
+	help := r.URL.Query().Get(QueryArgHelp)
+	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
+	FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
+		hashParam, selection, help, instructions, w)
+}
+
+func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+
+	p, err := ParseGenerationForm(ctx, r, s.locServer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid form parameters: %v", err), http.StatusBadRequest)
 		return
 	}
 	// what do we do with this?
@@ -1285,7 +1262,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				w,
 				r,
 				auth.AccountRequiredGenerationLimit,
-				requestURIOrPath(r),
+				httpx.LocalReferrerPath(r),
 			)
 			return
 		}
@@ -1314,6 +1291,37 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	s.kickgeneration(ctx, p)
 
+	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
+}
+
+func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hash := strings.TrimSpace(r.PathValue("hash"))
+
+	// Retry intentionally does not require a current session: it can only reuse
+	// cached parameters from a generation request that already passed the
+	// signed-in or guest-generation allowance check.
+	if _, err := s.FromCache(ctx, hash); err == nil {
+		redirectToHash(w, r, hash, QueryArgHelp)
+		return
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to check recipe list before retry", "hash", hash, "error", err)
+		http.Error(w, "failed to retry recipe generation", http.StatusInternalServerError)
+		return
+	}
+
+	p, err := s.ParamsFromCache(ctx, hash)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load params for recipe retry", "hash", hash, "error", err)
+		http.Error(w, "failed to retry recipe generation", http.StatusInternalServerError)
+		return
+	}
+
+	s.kickgeneration(ctx, p)
 	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
 }
 
@@ -1447,7 +1455,7 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Reques
 		CurrentPath:     r.URL.RequestURI(),
 	}
 
-	if isHTMXRequest(r) {
+	if httpx.IsHTMX(r) {
 		if err := templates.Spin.ExecuteTemplate(w, "spin_progress", spinnerData); err != nil {
 			slog.ErrorContext(ctx, "spin progress template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
@@ -1457,6 +1465,25 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Reques
 
 	if err := templates.Spin.Execute(w, spinnerData); err != nil {
 		slog.ErrorContext(ctx, "home template execute error", "error", err)
+		http.Error(w, "template error", http.StatusInternalServerError)
+	}
+}
+
+func generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
+	retryURL := url.URL{Path: "/recipes/" + hash + "/retry"}
+	retryQuery := url.Values{}
+	retryQuery.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
+	retryURL.RawQuery = retryQuery.Encode()
+
+	data := struct {
+		RetryPath string
+	}{
+		RetryPath: retryURL.String(),
+	}
+
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	if err := templates.Spin.ExecuteTemplate(w, "generation_timeout", data); err != nil {
+		slog.ErrorContext(ctx, "generation timeout template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
 }
@@ -1474,16 +1501,12 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToK
 	}
 
 	u.RawQuery = args.Encode()
-	if isHTMXRequest(r) {
+	if httpx.IsHTMX(r) {
 		w.Header().Set("HX-Redirect", u.String())
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
-}
-
-func isHTMXRequest(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
 
 func isSingleRecipeAction(r *http.Request) bool {

@@ -14,6 +14,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/guest"
+	"careme/internal/httpx"
 	"careme/internal/locations/geo"
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -46,10 +47,6 @@ func NewServer(storage locationStore, zipCentroids centroidByZip, userStorage us
 		userStorage:   userStorage,
 		produceScores: produceScores,
 	}
-}
-
-func isHTMXRequest(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
 
 func (l *locationServer) Ready(ctx context.Context) error {
@@ -105,7 +102,7 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 	})
 
 	mux.HandleFunc("POST /locations/request-store", func(w http.ResponseWriter, r *http.Request) {
-		if !isHTMXRequest(r) {
+		if !httpx.IsHTMX(r) {
 			http.Error(w, "store requests must be made via HTMX", http.StatusBadRequest)
 			return
 		}

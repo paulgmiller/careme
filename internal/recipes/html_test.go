@@ -188,7 +188,7 @@ func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 
 	html := assertHTTPSuccess(t, w)
-	assert.Contains(t, html, `method="GET"`)
+	assert.Contains(t, html, `method="POST"`)
 	assert.Contains(t, html, `action="/recipes"`)
 	assert.Contains(t, html, `name="location" value="70000001"`)
 	assert.Contains(t, html, `Using ingredients from <span class="font-semibold text-brand-700">January 12, 2026</span>.`)
@@ -447,7 +447,12 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 }
 
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
-	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	lat := 47.6097
+	lon := -122.3331
+	loc := locations.Location{
+		ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101",
+		Lat: &lat, Lon: &lon,
+	}
 	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
@@ -461,8 +466,10 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `<meta name="description" content="A simple quail recipe Recipe for Store on 2026-01-25." />`) {
 		t.Error("recipe HTML should include recipe, location, and date in the meta description")
 	}
-	assert.Contains(t, html, `<a href="/recipes?location=70000001"`)
+	assert.Contains(t, html, `<a href="/locations?lat=47.6097&amp;lon=-122.3331"`)
+	assert.NotContains(t, html, `/locations?zip=`)
 	assert.Contains(t, html, `>Store</a>`)
+	assert.NotContains(t, html, `<form method="POST" action="/recipes" class="inline">`)
 	if strings.Contains(html, "Finalize") {
 		t.Error("recipe HTML should not contain Finalize button")
 	}

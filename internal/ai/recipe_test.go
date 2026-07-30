@@ -107,6 +107,8 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients.",
 		`Do not use an unquantified phrase such as "the remaining oil"`,
 		"Cross-check every ingredient mention in the instructions for an exact step-level amount",
+		"Presalting meat and salting pasta or blanching water season food during cooking.",
+		"Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead.",
 	} {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)

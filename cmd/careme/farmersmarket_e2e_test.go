@@ -51,7 +51,7 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 	}
 }
 
-func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToRecipes(t *testing.T) {
+func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToLocations(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
 
@@ -73,12 +73,13 @@ func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToRecipes(t *testing.T) {
 	}
 
 	statusPath := extractFarmersMarketStatusPath(t, progressBody)
-	redirect := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
-	if !strings.HasPrefix(redirect, "/recipes?") {
-		t.Fatalf("expected farmers market upload to redirect to recipes, got %q", redirect)
+	locationsURL := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
+	if !strings.HasPrefix(locationsURL, "/locations?") {
+		t.Fatalf("expected farmers market locations redirect, got %q", locationsURL)
 	}
-	if !strings.Contains(redirect, "location=farmersmarket_") {
-		t.Fatalf("expected farmers market location redirect, got %q", redirect)
+	locationsBody := mustGetBody(t, client, srv.URL+locationsURL)
+	if !strings.Contains(locationsBody, "Big Willys") {
+		t.Fatalf("expected store locations page after upload, got body: %s", locationsBody)
 	}
 }
 
@@ -138,7 +139,7 @@ func waitForFarmersMarketRedirect(t *testing.T, client *http.Client, statusURL s
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for farmers market redirect from %s", statusURL)
+			t.Fatalf("timed out waiting for farmers market locations redirect from %s", statusURL)
 		}
 		req, err := http.NewRequest(http.MethodGet, statusURL, nil)
 		if err != nil {
