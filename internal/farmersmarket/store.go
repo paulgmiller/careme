@@ -126,7 +126,10 @@ func (s *store) findNearbyMarket(ctx context.Context, lat, lon float64) (*Market
 	nearestDistance := math.MaxFloat64
 	for i := range markets {
 		market := markets[i]
-		distance := geo.HaversineMiles(lat, lon, market.Lat, market.Lon)
+		distance := geo.HaversineMiles(
+			geo.Coordinate{Lat: lat, Lon: lon},
+			market.Coordinate,
+		)
 		if distance > mergeRadiusMI || distance >= nearestDistance {
 			continue
 		}
