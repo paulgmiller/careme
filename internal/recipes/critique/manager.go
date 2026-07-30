@@ -18,7 +18,7 @@ import (
 
 const (
 	MinimumRecipeScore        = 8
-	backgroundCritiqueTimeout = 2 * time.Minute
+	backgroundCritiqueTimeout = 5 * time.Minute
 )
 
 type recipeCritiquer interface {

@@ -7,8 +7,10 @@ ARG CMD_PATH=./cmd/careme
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-# Build static binary (no CGO)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /out/app ${CMD_PATH}
+# Build static binary (no CGO), recording when this binary was compiled.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-s -w -X careme/internal/admin.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -o /out/app ${CMD_PATH}
 
 # Stage 2: minimal runtime image
 FROM gcr.io/distroless/static:nonroot
