@@ -72,8 +72,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create cache: %v", err)
 	}
-	centroids := locations.LoadCentroids()
-	locationStorage, err := locations.New(cfg, cacheStore, centroids)
+
+	locationStorage, err := locations.New(cfg, cacheStore, locations.LoadCentroids())
 	if err != nil {
 		log.Fatalf("failed to create location storage: %v", err)
 	}
@@ -83,15 +83,7 @@ func main() {
 		log.Fatalf("failed to create staples service: %v", err)
 	}
 
-	var coordinates geo.Coordinate
-	if !useStaplesWatchdogLocations {
-		var ok bool
-		coordinates, ok = centroids.ZipCentroidByZIP(zip)
-		if !ok {
-			log.Fatalf("coordinates not found for ZIP code %q", zip)
-		}
-	}
-	locs, err := locationsToScore(ctx, locationStorage, coordinates, useStaplesWatchdogLocations)
+	locs, err := locationsToScore(ctx, locationStorage, zip, useStaplesWatchdogLocations)
 	if err != nil {
 		log.Fatalf("failed to get locations %v", err)
 	}
@@ -114,10 +106,16 @@ type staplesFetcher interface {
 	FetchStaples(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
 }
 
-func locationsToScore(ctx context.Context, lookup coordinateLocationLookup, coordinates geo.Coordinate, useStaplesWatchdogLocations bool) ([]locations.Location, error) {
+func locationsToScore(ctx context.Context, lookup coordinateLocationLookup, zip string, useStaplesWatchdogLocations bool) ([]locations.Location, error) {
 	if useStaplesWatchdogLocations {
 		return recipes.StaplesWatchdogLocations(ctx, lookup)
 	}
+	centroids := locations.LoadCentroids()
+	coordinates, ok := centroids.ZipCentroidByZIP(zip)
+	if !ok {
+		log.Fatalf("coordinates not found for ZIP code %q", zip)
+	}
+
 	return lookup.GetLocationsByCoordinates(ctx, coordinates)
 }
 
