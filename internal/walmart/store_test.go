@@ -2,20 +2,42 @@ package walmart
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"careme/internal/config"
 	"careme/internal/locations/geo"
 )
 
-func TestCoordinateLocationSearchDoesNotFallBackToZIP(t *testing.T) {
+func TestGetLocationsByCoordinatesSearchesWalmart(t *testing.T) {
 	t.Parallel()
 
-	locations, err := (&Client{}).GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 47.6097, Lon: -122.3331})
+	_, encodedKey := newBase64RSAPrivateKey(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"results":[{"no":3098,"name":"Bellevue Neighborhood Market","coordinates":[-122.139487,47.609036],"streetAddress":"15063 MAIN ST","stateProvCode":"WA","zip":"98007"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	locations, err := client.GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 47.6097, Lon: -122.3331})
 	if err != nil {
 		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
-	if len(locations) != 0 {
-		t.Fatalf("expected no Walmart coordinate results, got %+v", locations)
+	if len(locations) != 1 {
+		t.Fatalf("expected one Walmart coordinate result, got %+v", locations)
+	}
+	if locations[0].ID != "walmart_3098" {
+		t.Fatalf("unexpected location: %+v", locations[0])
 	}
 }
 

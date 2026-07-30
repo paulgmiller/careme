@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"careme/internal/config"
+	"careme/internal/locations/geo"
 )
 
 func TestCanonicalize_SortsAndFormatsLikeJavaExample(t *testing.T) {
@@ -35,7 +36,7 @@ func TestCanonicalize_SortsAndFormatsLikeJavaExample(t *testing.T) {
 	}
 }
 
-func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
+func TestSearchStoresSetsHeadersAndCoordinateQuery(t *testing.T) {
 	t.Parallel()
 
 	privateKey, encodedKey := newBase64RSAPrivateKey(t)
@@ -58,9 +59,9 @@ func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	stores, err := client.SearchStoresByZIP(context.Background(), "98005")
+	stores, err := client.SearchStores(context.Background(), geo.Coordinate{Lat: 47.6097, Lon: -122.3331})
 	if err != nil {
-		t.Fatalf("search stores by zip: %v", err)
+		t.Fatalf("search stores: %v", err)
 	}
 
 	if stores == nil || len(stores) != 1 {
@@ -76,7 +77,13 @@ func TestSearchStoresByZIP_SetsHeadersAndQuery(t *testing.T) {
 	if capturedReq.URL.Path != "/stores" {
 		t.Fatalf("unexpected path: %s", capturedReq.URL.Path)
 	}
-	if got := capturedReq.URL.Query().Get("zip"); got != "98005" {
+	if got := capturedReq.URL.Query().Get("lat"); got != "47.6097" {
+		t.Fatalf("unexpected lat query value: %q", got)
+	}
+	if got := capturedReq.URL.Query().Get("lon"); got != "-122.3331" {
+		t.Fatalf("unexpected lon query value: %q", got)
+	}
+	if got := capturedReq.URL.Query().Get("zip"); got != "" {
 		t.Fatalf("unexpected zip query value: %q", got)
 	}
 
@@ -126,7 +133,7 @@ func TestParseOpenSSHKeyFromEnv_FromBase64PEM(t *testing.T) {
 	}
 }
 
-func TestSearchStoresByZIP_StatusError(t *testing.T) {
+func TestSearchStoresStatusError(t *testing.T) {
 	t.Parallel()
 
 	_, encodedKey := newBase64RSAPrivateKey(t)
@@ -147,11 +154,24 @@ func TestSearchStoresByZIP_StatusError(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	_, err = client.SearchStoresByZIP(context.Background(), "98005")
+	_, err = client.SearchStores(context.Background(), geo.Coordinate{Lat: 47.6097, Lon: -122.3331})
 	if err == nil {
 		t.Fatal("expected error")
 	}
 	if !strings.Contains(err.Error(), "status 401") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSearchStoresRejectsInvalidCoordinates(t *testing.T) {
+	t.Parallel()
+
+	_, err := (&Client{}).SearchStores(t.Context(), geo.Coordinate{Lat: 95, Lon: -122.3331})
+
+	if err == nil {
+		t.Fatal("expected invalid coordinate error")
+	}
+	if !strings.Contains(err.Error(), "latitude 95.000000 must be between -90 and 90") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
