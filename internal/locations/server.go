@@ -204,8 +204,6 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 
 	data := struct {
 		Locations       []locationRow
-		Zip             string
-		UsesCoordinates bool
 		FavoriteStore   string
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
@@ -213,8 +211,6 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		ServerSignedIn  bool
 	}{
 		Locations:       lo.FromSlicePtr(rows),
-		Zip:             zip,
-		UsesCoordinates: zip == "",
 		FavoriteStore:   favoriteStore,
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
