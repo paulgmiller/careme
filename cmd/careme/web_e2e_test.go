@@ -240,14 +240,6 @@ func newTestClient(t *testing.T) *http.Client {
 	return &http.Client{}
 }
 
-func newNoRedirectClient() *http.Client {
-	return &http.Client{
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-}
-
 func mustGet(t *testing.T, client *http.Client, url string) *http.Response {
 	t.Helper()
 	resp, err := client.Get(url)

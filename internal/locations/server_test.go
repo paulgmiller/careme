@@ -34,6 +34,12 @@ type recordingProduceScoreLookup struct {
 	scores map[string]*ProduceScore
 }
 
+func testRequestedLocation() Location {
+	lat := 40.7128
+	lon := -74.006
+	return Location{ID: "publix_123", Name: "Publix 123", Lat: &lat, Lon: &lon}
+}
+
 func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
 	r.mu.Lock()
 	r.calls = append(r.calls, loc.ID)
@@ -53,7 +59,7 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	client := newFakeLocationClient()
-	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
@@ -95,7 +101,7 @@ func TestRequestStoreIsIdempotent(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	client := newFakeLocationClient()
-	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
@@ -121,7 +127,7 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	client := newFakeLocationClient()
-	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", true)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
