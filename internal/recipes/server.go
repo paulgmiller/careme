@@ -1226,8 +1226,17 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
-	FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
-		hashParam, selection, help, instructions, w)
+	renderShoppingListHTML(ctx, shoppingListPage{
+		Params:              p,
+		ShoppingList:        *slist,
+		WineRecommendations: wines.Clone(),
+		RecipeImages:        images.Clone(),
+		User:                currentUser,
+		Hash:                hashParam,
+		Selection:           selection,
+		HelpMessage:         help,
+		PendingInstructions: instructions,
+	}, w)
 }
 
 func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {

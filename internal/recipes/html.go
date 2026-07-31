@@ -60,33 +60,41 @@ type shoppingListGroup struct {
 	Items []*ai.Ingredient
 }
 
-// FormatShoppingListHTMLForHashWithHelp renders the multi-recipe shopping list view for a specific hash.
-// should shove wine recs into recipe instead of having them seperate.
-func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, writer http.ResponseWriter,
-) {
-	serverSignedIn := currentUser != nil
-	instructions := strings.TrimSpace(p.Instructions)
-	if instructions == "" && l.Plan != nil {
-		instructions = l.Plan.ChefNoteSuggestion
+type shoppingListPage struct {
+	Params              *generatorParams
+	ShoppingList        ai.ShoppingList
+	WineRecommendations map[string]*ai.WineSelection
+	RecipeImages        map[string]bool
+	User                *utypes.User
+	Hash                string
+	Selection           recipeSelection
+	HelpMessage         string
+	PendingInstructions string
+}
+
+func renderShoppingListHTML(ctx context.Context, page shoppingListPage, writer http.ResponseWriter) {
+	serverSignedIn := page.User != nil
+	instructions := strings.TrimSpace(page.Params.Instructions)
+	if instructions == "" && page.ShoppingList.Plan != nil {
+		instructions = page.ShoppingList.Plan.ChefNoteSuggestion
 	}
-	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
+	recipeViews := make([]shoppingRecipeView, 0, len(page.ShoppingList.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
-	for _, recipe := range l.Recipes {
+	for _, recipe := range page.ShoppingList.Recipes {
 		recipeHash := recipe.ComputeHash()
-		wineRecommendation := wineRecommendations[recipeHash]
+		wineRecommendation := page.WineRecommendations[recipeHash]
 		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
-		saved := selection.IsSaved(recipeHash)
+		saved := page.Selection.IsSaved(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
 			Hash:               recipeHash,
-			ShoppingListHash:   hash,
+			ShoppingListHash:   page.Hash,
 			ServerSignedIn:     serverSignedIn,
 			DisplayIngredients: displayIngredients,
 			Saved:              saved,
-			Dismissed:          selection.IsDismissed(recipeHash),
-			HasImage:           recipeImages[recipeHash],
+			Dismissed:          page.Selection.IsDismissed(recipeHash),
+			HasImage:           page.RecipeImages[recipeHash],
 			WineRecommendation: wineRecommendation,
 		})
 		if saved {
@@ -115,25 +123,25 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		UseTodaysIngredients bool
 		AdminURL             string
 	}{
-		Location:             *p.Location,
-		Date:                 p.Date.Format("2006-01-02"),
-		DateDisplay:          p.Date.Format("January 2, 2006"),
-		MetaDescription:      shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
+		Location:             *page.Params.Location,
+		Date:                 page.Params.Date.Format("2006-01-02"),
+		DateDisplay:          page.Params.Date.Format("January 2, 2006"),
+		MetaDescription:      shoppingListMetaDescription(page.ShoppingList.Recipes, page.Params.Location.Name, page.Params.Date.Format("2006-01-02")),
 		ClarityScript:        templates.ClarityScript(ctx),
 		GoogleTagScript:      templates.GoogleTagScript(),
 		Instructions:         instructions,
-		PendingInstructions:  pendingInstructions,
-		HelpMessage:          strings.TrimSpace(helpMessage),
-		Hash:                 hash,
+		PendingInstructions:  page.PendingInstructions,
+		HelpMessage:          strings.TrimSpace(page.HelpMessage),
+		Hash:                 page.Hash,
 		Recipes:              recipeViews,
 		ShoppingList:         shoppingListForDisplay(combinedIngredients),
 		HasSavedRecipes:      hasSavedRecipes,
 		Style:                seasons.GetCurrentStyle(),
 		ServerSignedIn:       serverSignedIn,
-		User:                 currentUser,
-		AuthReturnTo:         "/recipes?h=" + hash,
-		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
-		AdminURL:             "/admin/mealplan/" + hash,
+		User:                 page.User,
+		AuthReturnTo:         "/recipes?h=" + page.Hash,
+		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, page.Params),
+		AdminURL:             "/admin/mealplan/" + page.Hash,
 	}
 
 	httpx.SetHTMLContentType(writer)
