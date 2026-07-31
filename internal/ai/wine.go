@@ -18,6 +18,8 @@ type WineSelection struct {
 	Commentary string       `json:"commentary"`
 }
 
+// TODO: Evaluate tightening this for GPT-5.6 with explicit ProductId preservation
+// and a clearer success criterion before changing runtime behavior.
 const winePrompt = `
 Act as a sommelier for the recipe provided below
 Select 1 to 2 wines from the provided TSV that best match the dish

@@ -101,6 +101,55 @@ func estimateOpenAIImageSpend(model string, textInputTokens, imageInputTokens, o
 	}
 }
 
+func estimateGeminiSpend(model string, promptTokens, cachedTokens, outputTokens int64) estimatedSpend {
+	price, ok := geminiTextTokenPrice(model, promptTokens)
+	if !ok {
+		return estimatedSpend{reason: "price_not_configured"}
+	}
+	if cachedTokens > promptTokens {
+		cachedTokens = promptTokens
+	}
+	if cachedTokens < 0 {
+		cachedTokens = 0
+	}
+	uncachedPromptTokens := promptTokens - cachedTokens
+	return estimatedSpend{
+		inputUSD:       tokensToUSD(uncachedPromptTokens, price.inputUSDPerMillion),
+		cachedInputUSD: tokensToUSD(cachedTokens, price.cachedInputUSDPerMillion),
+		outputUSD:      tokensToUSD(outputTokens, price.outputUSDPerMillion),
+	}
+}
+
+func geminiTextTokenPrice(model string, promptTokens int64) (textTokenPrice, bool) {
+	// Standard paid-tier USD per 1M tokens, verified 2026-05-21:
+	// https://ai.google.dev/gemini-api/docs/pricing
+	largePrompt := promptTokens > 200_000
+	switch normalizeModelName(model) {
+	case "gemini-3.5-flash":
+		return textTokenPrice{inputUSDPerMillion: 1.50, cachedInputUSDPerMillion: 0.15, outputUSDPerMillion: 9}, true
+	case "gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools":
+		if largePrompt {
+			return textTokenPrice{inputUSDPerMillion: 4, cachedInputUSDPerMillion: 0.40, outputUSDPerMillion: 18}, true
+		}
+		return textTokenPrice{inputUSDPerMillion: 2, cachedInputUSDPerMillion: 0.20, outputUSDPerMillion: 12}, true
+	case "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview":
+		return textTokenPrice{inputUSDPerMillion: 0.25, cachedInputUSDPerMillion: 0.025, outputUSDPerMillion: 1.50}, true
+	case "gemini-3-flash-preview":
+		return textTokenPrice{inputUSDPerMillion: 0.50, cachedInputUSDPerMillion: 0.05, outputUSDPerMillion: 3}, true
+	case "gemini-2.5-pro":
+		if largePrompt {
+			return textTokenPrice{inputUSDPerMillion: 2.50, cachedInputUSDPerMillion: 0.25, outputUSDPerMillion: 15}, true
+		}
+		return textTokenPrice{inputUSDPerMillion: 1.25, cachedInputUSDPerMillion: 0.125, outputUSDPerMillion: 10}, true
+	case "gemini-2.5-flash":
+		return textTokenPrice{inputUSDPerMillion: 0.30, cachedInputUSDPerMillion: 0.03, outputUSDPerMillion: 2.50}, true
+	case "gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview-09-2025":
+		return textTokenPrice{inputUSDPerMillion: 0.10, cachedInputUSDPerMillion: 0.01, outputUSDPerMillion: 0.40}, true
+	default:
+		return textTokenPrice{}, false
+	}
+}
+
 func tokensToUSD(tokens int64, usdPerMillion float64) float64 {
 	if tokens <= 0 || usdPerMillion <= 0 {
 		return 0
