@@ -118,6 +118,9 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 	if got.ZipCode != "10001" {
 		t.Fatalf("unexpected zip code: %q", got.ZipCode)
 	}
+	if got.Lat == nil || got.Lon == nil {
+		t.Fatalf("expected coordinates to be backfilled: %+v", got)
+	}
 	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
 	// Remove backend value to prove the second read comes from persistent cache.
 	delete(client.details, "12345")
@@ -230,6 +233,9 @@ func TestGetLocationsByCoordinatesSortsUsingLocationZipCentroidFallback(t *testi
 	}
 	if got, want := []string{locs[0].ID}, []string{"near-by-zip"}; got[0] != want[0] {
 		t.Fatalf("unexpected sorted order: got %v want %v", got, want)
+	}
+	if locs[0].Lat == nil || locs[0].Lon == nil {
+		t.Fatalf("expected ZIP centroid coordinates to be included: %+v", locs[0])
 	}
 }
 

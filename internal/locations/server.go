@@ -7,8 +7,6 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -59,19 +57,6 @@ func (l *locationServer) Ready(ctx context.Context) error {
 }
 
 func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthClient) {
-	mux.HandleFunc("GET /locations/zip-from-coordinates", func(w http.ResponseWriter, r *http.Request) {
-		coordinates, err := geo.FromString(r.URL.Query().Get("lat"), r.URL.Query().Get("lon"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		query := url.Values{}
-		query.Set("lat", strconv.FormatFloat(coordinates.Lat, 'g', -1, 64))
-		query.Set("lon", strconv.FormatFloat(coordinates.Lon, 'g', -1, 64))
-		http.Redirect(w, r, "/locations?"+query.Encode(), http.StatusFound)
-	})
-
 	mux.HandleFunc("GET /locations", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		currentUser, err := l.userStorage.FromRequest(ctx, r, authClient)

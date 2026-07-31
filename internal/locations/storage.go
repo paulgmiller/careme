@@ -153,6 +153,7 @@ func (l *locationStorage) HasInventory(locationID string) bool {
 
 func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
+		backfillLocationCoordinates(&cachedLoc, l.zipCentroids)
 		return &cachedLoc, nil
 	}
 
@@ -165,6 +166,7 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 		if err != nil {
 			return nil, err
 		}
+		backfillLocationCoordinates(loc, l.zipCentroids)
 
 		go func() {
 			if err := l.storeLocationIfMissing(*loc); err != nil {
@@ -192,23 +194,24 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 		return lo.Take(locations, nearby.MaxLocationCount), err
 	})
 
-	for _, loc := range allLocations {
+	for i := range allLocations {
+		backfillLocationCoordinates(&allLocations[i], l.zipCentroids)
 		go func(loc Location) {
 			if err := l.storeLocationIfMissing(loc); err != nil {
 				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
 			}
-		}(loc)
+		}(allLocations[i])
 	}
 
 	filtered := make([]Location, 0, len(allLocations))
 	for _, loc := range allLocations {
-		lat, lon, ok := locationCoordinates(loc, l.zipCentroids)
+		locationCoordinates, ok := backfillLocationCoordinates(&loc, l.zipCentroids)
 		if !ok {
 			slog.WarnContext(ctx, "location has no coordinates; skipping distance filter and sort", "location_id", loc.ID, "zip", loc.ZipCode)
 			continue
 		}
 
-		distance := geo.HaversineMiles(coordinates, geo.Coordinate{Lat: lat, Lon: lon})
+		distance := geo.HaversineMiles(coordinates, locationCoordinates)
 		if distance > nearby.MaxLocationDistanceMiles {
 			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", nearby.MaxLocationDistanceMiles)
 			continue
@@ -329,4 +332,17 @@ func locationCoordinates(loc Location, zipCentroids centroidByZip) (float64, flo
 
 	centroid, ok := zipCentroids.ZipCentroidByZIP(loc.ZipCode)
 	return centroid.Lat, centroid.Lon, ok
+}
+
+func backfillLocationCoordinates(loc *Location, zipCentroids centroidByZip) (geo.Coordinate, bool) {
+	if loc.Lat != nil && loc.Lon != nil {
+		return geo.Coordinate{Lat: *loc.Lat, Lon: *loc.Lon}, true
+	}
+	centroid, ok := zipCentroids.ZipCentroidByZIP(loc.ZipCode)
+	if !ok {
+		return geo.Coordinate{}, false
+	}
+	loc.Lat = &centroid.Lat
+	loc.Lon = &centroid.Lon
+	return centroid, true
 }

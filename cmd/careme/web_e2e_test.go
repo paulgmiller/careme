@@ -139,34 +139,6 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	// TODO step 6 make sure recipes are saved to user page?
 }
 
-func TestZipFromCoordinatesRedirect(t *testing.T) {
-	srv := newTestServer(t)
-	defer srv.Close()
-
-	client := newNoRedirectClient()
-	req, err := http.NewRequest(http.MethodGet, srv.URL+"/locations/zip-from-coordinates?lat=47.6097&lon=-122.3331", nil)
-	if err != nil {
-		t.Fatalf("failed to build request: %v", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Fatalf("failed to close response body: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("expected status %d, got %d", http.StatusFound, resp.StatusCode)
-	}
-	if got := resp.Header.Get("Location"); got != "/locations?lat=47.6097&lon=-122.3331" {
-		t.Fatalf("expected Location %q, got %q", "/locations?lat=47.6097&lon=-122.3331", got)
-	}
-}
-
 func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()

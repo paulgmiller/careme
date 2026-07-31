@@ -127,7 +127,7 @@ func runServer(cfg *config.Config, addr string) error {
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)
 
-	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
+	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)

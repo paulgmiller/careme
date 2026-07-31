@@ -59,10 +59,14 @@ func (s *stubWatchdogLocationLookup) GetLocationByID(_ context.Context, location
 	s.calls = append(s.calls, locationID)
 	s.mu.Unlock()
 
+	lat := 45.5231
+	lon := -122.6765
 	return &locations.Location{
 		ID:      locationID,
 		Name:    "Hydrated " + locationID,
 		ZipCode: "97209",
+		Lat:     &lat,
+		Lon:     &lon,
 	}, nil
 }
 

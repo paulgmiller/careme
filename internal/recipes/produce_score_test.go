@@ -69,10 +69,14 @@ func TestSumIngredientGradesAboveCutoff(t *testing.T) {
 }
 
 func testProduceScoreLocation() *locations.Location {
+	lat := 40.7128
+	lon := -74.006
 	return &locations.Location{
 		ID:      "23456789",
 		Name:    "Test Store",
 		ZipCode: "10001",
+		Lat:     &lat,
+		Lon:     &lon,
 	}
 }
 

@@ -58,11 +58,15 @@ func TestAdvertisedRecipeGenerationRouteOnlyAcceptsPOST(t *testing.T) {
 type advertisedLocationStoreStub struct{}
 
 func (advertisedLocationStoreStub) GetLocationByID(_ context.Context, locationID string) (*locations.Location, error) {
+	lat := 47.61
+	lon := -122.33
 	return &locations.Location{
 		ID:      locationID,
 		Name:    "Hydrated " + locationID,
 		Address: locationID + " Market St",
 		ZipCode: "98101",
+		Lat:     &lat,
+		Lon:     &lon,
 	}, nil
 }
 
