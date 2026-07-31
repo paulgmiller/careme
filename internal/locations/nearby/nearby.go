@@ -24,7 +24,7 @@ func FilterAndSortByCoordinates(origin geo.Coordinate, candidates []locationtype
 			continue
 		}
 
-		distance := geo.HaversineMiles(origin, geo.Coordinate{Lat: *loc.Lat, Lon: *loc.Lon})
+		distance := geo.HaversineMiles(origin, loc.Coordinate())
 		if distance > maxDistanceMiles {
 			continue
 		}
