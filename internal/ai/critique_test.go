@@ -124,6 +124,28 @@ func TestRecipeCritiqueSystemInstructionKeepsTemperatureGuidanceConcise(t *testi
 	}
 }
 
+func TestRecipeCritiqueSystemInstructionChecksBrowningTechnique(t *testing.T) {
+	for _, want := range []string{
+		"check that its instructions remove excess surface moisture when appropriate",
+		"avoid crowding, covering, or tight packing that would trap steam",
+		"when browning mushrooms, check that salt is added after the mushrooms have browned",
+		"if the main advertised texture cannot be achieved, keep the overall score below 8 so the recipe is revised",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
+	}
+}
+
+func TestRecipeCritiqueSystemInstructionChecksAcidTiming(t *testing.T) {
+	for _, want := range []string{
+		"check that onions and other firm vegetables soften before acidic ingredients",
+		"allow acid earlier when the recipe intentionally preserves firmness, pickles or marinates the ingredient",
+		"consider whether a rich dish needs a fresh finishing source of acid for balance",
+		"if the promised texture is unlikely to be achieved, keep the overall score below 8 so the recipe is revised",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
+	}
+}
+
 func TestParseRecipeCritique(t *testing.T) {
 	critique, err := parseRecipeCritique(`{
 		"schema_version": "recipe-critique-v1",

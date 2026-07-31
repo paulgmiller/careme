@@ -258,6 +258,8 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"recommend the doneness that best suits the dish and give one concise target or pull temperature",
 		"Do not name the FDA, USDA, or other government agencies; quote official food-safety guidance; compare the recommended doneness with alternate regulatory temperatures; or add a temperature disclaimer.",
 		"Careme provides a separate temperature guide beside the recipe.",
+		"When browning or crisping food, remove excess surface moisture when appropriate",
+		"When tenderness is desired, cook onions and other firm vegetables until appropriately tender before adding acidic ingredients",
 	} {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)
