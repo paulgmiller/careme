@@ -35,7 +35,7 @@ type locationServer struct {
 }
 
 type produceScoreLookup interface {
-	ProduceScore(ctx context.Context, loc Location) *ProduceScore
+	ProduceScore(ctx context.Context, loc Location) *int
 }
 
 func NewServer(storage locationStore, zipCentroids centroidByZip, userStorage userLookup, produceScores produceScoreLookup) *locationServer {
@@ -163,7 +163,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	type locationRow struct {
 		Location
 		SupportsStaples bool
-		ProduceScore    *ProduceScore
+		ProduceScore    *int
 	}
 
 	var wg sync.WaitGroup

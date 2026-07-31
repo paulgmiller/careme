@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
@@ -21,17 +20,17 @@ import (
 )
 
 type fakeProduceScoreLookup struct {
-	scores map[string]*ProduceScore
+	scores map[string]*int
 }
 
-func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
+func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *int {
 	return f.scores[loc.ID]
 }
 
 type recordingProduceScoreLookup struct {
 	mu     sync.Mutex
 	calls  []string
-	scores map[string]*ProduceScore
+	scores map[string]*int
 }
 
 func testRequestedLocation() Location {
@@ -40,7 +39,7 @@ func testRequestedLocation() Location {
 	return Location{ID: "publix_123", Name: "Publix 123", Lat: &lat, Lon: &lon}
 }
 
-func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
+func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *int {
 	r.mu.Lock()
 	r.calls = append(r.calls, loc.ID)
 	r.mu.Unlock()
@@ -310,11 +309,8 @@ func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
 	client.setHasInventory("12345678", true)
 	storage := newTestLocationServer(client)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
-		scores: map[string]*ProduceScore{
-			"12345678": {
-				Score: 27,
-				Date:  time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC),
-			},
+		scores: map[string]*int{
+			"12345678": new(27),
 		},
 	})
 
@@ -345,7 +341,7 @@ func TestLocationsPageOmitsMissingProduceScoreBadge(t *testing.T) {
 	}})
 	storage := newTestLocationServer(client)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
-		scores: map[string]*ProduceScore{},
+		scores: map[string]*int{},
 	})
 
 	mux := http.NewServeMux()
@@ -396,7 +392,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 
 	client := newFakeLocationClient()
 	locations := make([]Location, 0, 13)
-	scores := make(map[string]*ProduceScore)
+	scores := make(map[string]*int)
 	// 10 will get cut off
 	for i := range 11 {
 		id := "store-" + strconv.Itoa(i)
@@ -407,7 +403,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 			ZipCode: "10001",
 		})
 		client.setHasInventory(id, i != 0)
-		scores[id] = &ProduceScore{Score: i}
+		scores[id] = &i
 	}
 	client.setListResponse("10001", locations)
 
@@ -422,7 +418,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 			ZipCode: "10001",
 		})
 		client2.setHasInventory(id, true)
-		scores[id] = &ProduceScore{Score: i}
+		scores[id] = &i
 	}
 	client2.setListResponse("10001", locations)
 
