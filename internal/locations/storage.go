@@ -153,7 +153,7 @@ func (l *locationStorage) HasInventory(locationID string) bool {
 
 func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
-		//could relook up on error here.
+		// could relook up on error here.
 		return backfillLocationCoordinates(cachedLoc, l.zipCentroids)
 	}
 
@@ -205,7 +205,6 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 			hydrated = append(hydrated, backfilled)
 		}
 		return hydrated, nil
-
 	})
 
 	for _, loc := range allLocations {
@@ -321,7 +320,6 @@ func (l *locationStorage) RequestedStoreIDs(ctx context.Context) ([]string, erro
 
 func sortLocationsByDistanceFromCoordinates(locations []Location, coordinates geo.Coordinate) {
 	sort.SliceStable(locations, func(i, j int) bool {
-
 		leftDistance := geo.HaversineMiles(coordinates, geo.Coordinate{Lat: *locations[i].Lat, Lon: *locations[i].Lon})
 		rightDistance := geo.HaversineMiles(coordinates, geo.Coordinate{Lat: *locations[j].Lat, Lon: *locations[j].Lon})
 		return leftDistance < rightDistance
