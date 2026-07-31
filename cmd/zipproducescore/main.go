@@ -108,7 +108,13 @@ type staplesFetcher interface {
 
 func locationsToScore(ctx context.Context, lookup coordinateLocationLookup, zip string, useStaplesWatchdogLocations bool) ([]locations.Location, error) {
 	if useStaplesWatchdogLocations {
-		return recipes.StaplesWatchdogLocations(ctx, lookup)
+		return parallelism.MapWithErrors(recipes.StaplesWatchdogLocationIDs(), func(locationID string) (locations.Location, error) {
+			l, err := lookup.GetLocationByID(ctx, locationID)
+			if err != nil {
+				return locations.Location{}, err
+			}
+			return *l, nil
+		})
 	}
 	centroids := locations.LoadCentroids()
 	coordinates, ok := centroids.ZipCentroidByZIP(zip)

@@ -274,26 +274,22 @@ func NewStaplesWatchdog(locations locationByID, staples staplesFetcher) *Staples
 }
 
 func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
-	stores, locationErr := StaplesWatchdogLocations(ctx, w.locations)
-	_, staplesErr := parallelism.Flatten(stores, func(store locations.Location) ([]ai.InputIngredient, error) {
-		date, err := StoreToDate(ctx, nowFn(), &store)
+	_, err := parallelism.MapWithErrors(StaplesWatchdogLocationIDs(), func(locationID string) (int, error) {
+		store, err := w.locations.GetLocationByID(ctx, locationID)
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
-		return w.staples.FetchStaples(ctx, DefaultParams(&store, date))
+		date, err := StoreToDate(ctx, nowFn(), store)
+		if err != nil {
+			return 0, err
+		}
+		_, err = w.staples.FetchStaples(ctx, DefaultParams(store, date))
+		return 0, err
 	})
-	return errors.Join(locationErr, staplesErr)
+	return err
 }
 
-// StaplesWatchdogLocations loads the stores checked by the staples watchdog.
-func StaplesWatchdogLocations(ctx context.Context, lookup locationByID) ([]locations.Location, error) {
-	return parallelism.MapWithErrors(staplesWatchdogLocationIDs(), func(locationID string) (locations.Location, error) {
-		location, err := lookup.GetLocationByID(ctx, locationID)
-		return *location, err
-	})
-}
-
-func staplesWatchdogLocationIDs() []string {
+func StaplesWatchdogLocationIDs() []string {
 	return []string{
 		"wholefoods_10153",
 		"safeway_490",
