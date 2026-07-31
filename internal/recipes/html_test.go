@@ -40,7 +40,13 @@ func assertHTTPSuccess(t *testing.T, w *httptest.ResponseRecorder) string {
 }
 
 func formatShoppingListHTMLForTest(ctx context.Context, p *generatorParams, l ai.ShoppingList, signedIn bool, selection recipeSelection, w *httptest.ResponseRecorder) {
-	FormatShoppingListHTMLForHashWithHelp(ctx, p, l, nil, nil, renderTestUser(signedIn), p.Hash(), selection, "", "", w)
+	renderShoppingListHTML(ctx, shoppingListPage{
+		Params:       p,
+		ShoppingList: l,
+		User:         renderTestUser(signedIn),
+		Hash:         p.Hash(),
+		Selection:    selection,
+	}, w)
 }
 
 func renderTestUser(signedIn bool) *utypes.User {
@@ -239,7 +245,13 @@ func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 
-	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, nil, renderTestUser(true), p.Hash(), recipeSelection{}, "Save two dinners before building your shopping list.", "", w)
+	renderShoppingListHTML(t.Context(), shoppingListPage{
+		Params:       p,
+		ShoppingList: list,
+		User:         renderTestUser(true),
+		Hash:         p.Hash(),
+		HelpMessage:  "Save two dinners before building your shopping list.",
+	}, w)
 
 	html := assertHTTPSuccess(t, w)
 	assert.Contains(t, html, "Welcome to Careme")
@@ -845,7 +857,13 @@ func TestFormatShoppingListHTML_RendersRecipeImageInResponsiveQuarterWidthColumn
 	w := httptest.NewRecorder()
 	recipeHash := list.Recipes[0].ComputeHash()
 
-	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, list, nil, map[string]bool{recipeHash: true}, renderTestUser(true), p.Hash(), recipeSelection{}, "", "", w)
+	renderShoppingListHTML(t.Context(), shoppingListPage{
+		Params:       p,
+		ShoppingList: list,
+		RecipeImages: map[string]bool{recipeHash: true},
+		User:         renderTestUser(true),
+		Hash:         p.Hash(),
+	}, w)
 	html := assertHTTPSuccess(t, w)
 
 	assert.Contains(t, html, `src="/recipe/`+recipeHash+`/image"`)
@@ -880,15 +898,22 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	wineHash := multi.Recipes[0].ComputeHash()
 	selection := recipeSelection{SavedHashes: []string{wineHash}}
 	w := httptest.NewRecorder()
-	FormatShoppingListHTMLForHashWithHelp(t.Context(), p, multi, map[string]*ai.WineSelection{
-		wineHash: {
-			Wines: []ai.Ingredient{
-				{Name: "Cellar Red", Quantity: "1 bottle", Price: "$15"},
-				{Name: "Second Bottle", Quantity: "1 bottle", Price: "$18"},
+	renderShoppingListHTML(t.Context(), shoppingListPage{
+		Params:       p,
+		ShoppingList: multi,
+		WineRecommendations: map[string]*ai.WineSelection{
+			wineHash: {
+				Wines: []ai.Ingredient{
+					{Name: "Cellar Red", Quantity: "1 bottle", Price: "$15"},
+					{Name: "Second Bottle", Quantity: "1 bottle", Price: "$18"},
+				},
+				Commentary: "Good with roasted flavors.",
 			},
-			Commentary: "Good with roasted flavors.",
 		},
-	}, nil, renderTestUser(true), p.Hash(), selection, "", "", w)
+		User:      renderTestUser(true),
+		Hash:      p.Hash(),
+		Selection: selection,
+	}, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
