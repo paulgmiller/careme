@@ -19,7 +19,7 @@ type Location struct {
 }
 
 // Coordinate Helper will panic nil coordiantes so backfill first.
-func (l *Location) Coordiante() geo.Coordinate {
+func (l *Location) Coordinate() geo.Coordinate {
 	return geo.Coordinate{Lat: *l.Lat, Lon: *l.Lon}
 }
 
