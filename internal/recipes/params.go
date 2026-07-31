@@ -137,14 +137,8 @@ func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time
 	if l == nil {
 		return nil, fmt.Errorf("nil location")
 	}
-	var tzName string
-	var ok bool
-	if l.Lat != nil && l.Lon != nil {
-		tzName, ok = geo.TimezoneNameForCoordinates(geo.Coordinate{Lat: *l.Lat, Lon: *l.Lon})
-	}
-	if !ok {
-		tzName, ok = geo.TimezoneNameForZip(l.ZipCode)
-	}
+	tzName, ok := geo.TimezoneNameForCoordinates(geo.Coordinate{Lat: *l.Lat, Lon: *l.Lon})
+
 	if !ok {
 		return nil, fmt.Errorf("unable to estimate timezone for location %s", l.ID)
 	}
