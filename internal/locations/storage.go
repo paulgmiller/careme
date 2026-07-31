@@ -153,6 +153,7 @@ func (l *locationStorage) HasInventory(locationID string) bool {
 
 func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
+		//could relook up on error here.
 		return backfillLocationCoordinates(cachedLoc, l.zipCentroids)
 	}
 
@@ -217,11 +218,6 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 
 	filtered := make([]Location, 0, len(allLocations))
 	for _, loc := range allLocations {
-		if loc.Lat == nil || loc.Lon == nil {
-			slog.WarnContext(ctx, "location has no coordinates; skipping distance filter and sort", "location_id", loc.ID, "zip", loc.ZipCode)
-			continue
-		}
-
 		distance := geo.HaversineMiles(coordinates, geo.Coordinate{Lat: *loc.Lat, Lon: *loc.Lon})
 		if distance > nearby.MaxLocationDistanceMiles {
 			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", nearby.MaxLocationDistanceMiles)
@@ -230,7 +226,7 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 		filtered = append(filtered, *loc)
 	}
 
-	sortLocationsByDistanceFromCoordinates(filtered, coordinates, l.zipCentroids)
+	sortLocationsByDistanceFromCoordinates(filtered, coordinates)
 
 	return filtered, fetcherrors
 }
@@ -323,26 +319,13 @@ func (l *locationStorage) RequestedStoreIDs(ctx context.Context) ([]string, erro
 	return storeIDs, nil
 }
 
-func sortLocationsByDistanceFromCoordinates(locations []Location, coordinates geo.Coordinate, zipCentroids centroidByZip) {
+func sortLocationsByDistanceFromCoordinates(locations []Location, coordinates geo.Coordinate) {
 	sort.SliceStable(locations, func(i, j int) bool {
-		leftDistance := locationDistanceTo(coordinates, locations[i], zipCentroids)
-		rightDistance := locationDistanceTo(coordinates, locations[j], zipCentroids)
+
+		leftDistance := geo.HaversineMiles(coordinates, geo.Coordinate{Lat: *locations[i].Lat, Lon: *locations[i].Lon})
+		rightDistance := geo.HaversineMiles(coordinates, geo.Coordinate{Lat: *locations[j].Lat, Lon: *locations[j].Lon})
 		return leftDistance < rightDistance
 	})
-}
-
-func locationDistanceTo(target geo.Coordinate, loc Location, zipCentroids centroidByZip) float64 {
-	lat, lon, _ := locationCoordinates(loc, zipCentroids)
-	return geo.HaversineMiles(target, geo.Coordinate{Lat: lat, Lon: lon})
-}
-
-func locationCoordinates(loc Location, zipCentroids centroidByZip) (float64, float64, bool) {
-	if loc.Lat != nil && loc.Lon != nil {
-		return *loc.Lat, *loc.Lon, true
-	}
-
-	centroid, ok := zipCentroids.ZipCentroidByZIP(loc.ZipCode)
-	return centroid.Lat, centroid.Lon, ok
 }
 
 func backfillLocationCoordinates(loc Location, zipCentroids centroidByZip) (*Location, error) {
