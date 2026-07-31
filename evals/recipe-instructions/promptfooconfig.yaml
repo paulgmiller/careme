@@ -1,0 +1,155 @@
+description: Recipe instruction ingredient coverage and quantities
+
+prompts:
+  - "{{scenario}}"
+
+providers:
+  - id: "exec: go run ./cmd/recipeevalprovider"
+    label: Careme recipe generation
+
+evaluateOptions:
+  maxConcurrency: 1
+
+defaultTest:
+  options:
+    provider:
+      id: google:gemini-3.5-flash
+      config:
+        apiKey: "{{ env.GEMINI_API_KEY }}"
+        temperature: 0
+  assert:
+    - type: llm-rubric
+      threshold: 1
+      value: |
+        The output is a recipe JSON object. Give a score of 1 and pass only if every entry in
+        ingredients is identifiable in at least one string in instructions. Accept an unambiguous
+        cooking form or common alias, such as lemon appearing as lemon zest or lemon juice, but do
+        not accept a generic mixture, sauce, batter, marinade, or pronoun as the ingredient's only
+        appearance. An ingredient marked optional must still be used. List every missing ingredient
+        in the reason. Otherwise give a score of 0 and fail.
+    - type: llm-rubric
+      threshold: 1
+      value: |
+        The output is a recipe JSON object. Give a score of 1 and pass only if every explicit mention
+        of an ingredient in every instruction string states the exact amount involved at that mention.
+        This includes pantry ingredients and repeated references in later steps. A count is an amount,
+        and an amount may refer clearly to a prepared form, such as "the 2 cups cooked rice." Fail
+        phrases such as "season with salt to taste," "add the remaining oil," "cook the chicken," or
+        "garnish with parsley" when that ingredient mention has no amount. List each offending step and
+        phrase in the reason. Otherwise give a score of 0 and fail.
+    - type: llm-rubric
+      threshold: 1
+      value: |
+        The output is a recipe JSON object. Give a score of 1 and pass only if the amounts actually
+        allocated for use across instruction steps reconcile with each ingredient's total quantity in
+        ingredients. Convert compatible units when needed. Do not double-count later references that
+        repeat an amount only to identify food already added, but do count every new allocation from
+        the ingredient supply. For example, 3 tablespoons oil split into 1 tablespoon and 2 tablespoons
+        passes; using 1 tablespoon and then an unquantified remainder fails. List every mismatch in the
+        reason. Otherwise give a score of 0 and fail.
+
+tests:
+  - description: Whole quantities in a sheet-pan dinner
+    vars:
+      scenario: |
+        {
+          "name": "whole quantities",
+          "location": {"state": "WA"},
+          "date": "2026-07-16",
+          "ingredients": [
+            {"id": "chicken-thighs", "description": "Bone-In Chicken Thighs"},
+            {"id": "broccoli", "description": "Broccoli Crowns"},
+            {"id": "potatoes", "description": "Yukon Gold Potatoes"},
+            {"id": "lemon", "description": "Fresh Lemon"}
+          ],
+          "directive": "Create a practical sheet-pan chicken dinner. Use every listed recipe ingredient and state an exact amount every time any ingredient is mentioned in the instructions.",
+          "instructions": "Keep each ingredient whole or use its entire recipe quantity in one step rather than dividing it."
+        }
+
+  - description: Oil divided between marinade and roasting
+    vars:
+      scenario: |
+        {
+          "name": "split marinade",
+          "location": {"state": "CA"},
+          "date": "2026-07-16",
+          "ingredients": [
+            {"id": "chicken-breasts", "description": "Boneless Skinless Chicken Breasts"},
+            {"id": "olive-oil", "description": "Extra Virgin Olive Oil"},
+            {"id": "zucchini", "description": "Fresh Zucchini"},
+            {"id": "lime", "description": "Fresh Lime"}
+          ],
+          "directive": "Create a chicken dinner that divides a measured total of olive oil between a marinade and roasting vegetables. Use every listed recipe ingredient and state an exact amount every time any ingredient is mentioned in the instructions.",
+          "instructions": "The oil amounts assigned to the separate steps must add up to the total oil in the ingredient list."
+        }
+
+  - description: Reserved sauce used in separate stages
+    vars:
+      scenario: |
+        {
+          "name": "reserved sauce",
+          "location": {"state": "NY"},
+          "date": "2026-07-16",
+          "ingredients": [
+            {"id": "salmon", "description": "Atlantic Salmon Fillets"},
+            {"id": "soy-sauce", "description": "Soy Sauce"},
+            {"id": "honey", "description": "Honey"},
+            {"id": "green-beans", "description": "Fresh Green Beans"},
+            {"id": "ginger", "description": "Fresh Ginger Root"}
+          ],
+          "directive": "Create a salmon dinner with a measured sauce divided between glazing during cooking and finishing at the table. Use every listed recipe ingredient and state an exact amount every time any ingredient is mentioned in the instructions.",
+          "instructions": "Make every newly allocated portion explicit instead of saying only reserved or remaining sauce."
+        }
+
+  - description: Breading station with several components
+    vars:
+      scenario: |
+        {
+          "name": "breading station",
+          "location": {"state": "IL"},
+          "date": "2026-07-16",
+          "ingredients": [
+            {"id": "pork-cutlets", "description": "Thin Pork Cutlets"},
+            {"id": "eggs", "description": "Large Eggs"},
+            {"id": "breadcrumbs", "description": "Panko Breadcrumbs"},
+            {"id": "flour", "description": "All-Purpose Flour"},
+            {"id": "cabbage", "description": "Green Cabbage"}
+          ],
+          "directive": "Create crisp breaded pork cutlets with a cabbage side. Use every listed recipe ingredient and state an exact amount every time any ingredient is mentioned in the instructions.",
+          "instructions": "Make the amounts in each breading station and any later repeated ingredient references explicit."
+        }
+
+  - description: Finishing garnish and acid
+    vars:
+      scenario: |
+        {
+          "name": "finishing ingredients",
+          "location": {"state": "TX"},
+          "date": "2026-07-16",
+          "ingredients": [
+            {"id": "shrimp", "description": "Raw Peeled Shrimp"},
+            {"id": "rice", "description": "Long Grain Rice"},
+            {"id": "cilantro", "description": "Fresh Cilantro"},
+            {"id": "limes", "description": "Fresh Limes"},
+            {"id": "avocado", "description": "Ripe Avocado"}
+          ],
+          "directive": "Create a shrimp and rice dinner finished with cilantro, lime, and avocado. Use every listed recipe ingredient and state an exact amount every time any ingredient is mentioned in the instructions.",
+          "instructions": "Quantify garnishes and finishing acid rather than treating them as optional or using them to taste."
+        }
+
+  - description: Pantry seasonings repeated across steps
+    vars:
+      scenario: |
+        {
+          "name": "pantry seasonings",
+          "location": {"state": "MA"},
+          "date": "2026-07-16",
+          "ingredients": [
+            {"id": "ground-turkey", "description": "Ground Turkey"},
+            {"id": "white-beans", "description": "Canned Cannellini Beans"},
+            {"id": "kale", "description": "Fresh Kale"},
+            {"id": "tomatoes", "description": "Canned Diced Tomatoes"}
+          ],
+          "directive": "Create a turkey, white bean, kale, and tomato stew that uses common pantry seasonings in more than one step. Use every listed and pantry ingredient and state an exact amount every time any ingredient is mentioned in the instructions.",
+          "instructions": "List total pantry seasoning quantities with the ingredients, divide them deliberately, and make every step-level amount explicit."
+        }

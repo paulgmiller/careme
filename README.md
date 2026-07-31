@@ -49,6 +49,18 @@ For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry en
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
 
+## Recipe generation eval
+
+The Promptfoo suite in `evals/recipe-instructions` generates fresh recipes and checks that every ingredient is used, every ingredient mention has a step-level amount, and step amounts reconcile with ingredient-list totals.
+
+Install the pinned Node dependency with `npm install --prefix evals/recipe-instructions`, set `AI_API_KEY` and `GEMINI_API_KEY`, then run:
+
+```sh
+task recipe-eval
+```
+
+The command disables generation caching and fails if any strict Gemini rubric fails. Run `task recipe-eval-view` to inspect results locally. The eval does not share results with Promptfoo Cloud.
+
 
 ## Cache Key Layout
 See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key/prefix layout and backend notes.

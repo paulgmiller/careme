@@ -35,6 +35,7 @@ secrets/**/*.env
 
 tailwind/node_modules/
 node_modules/
+.promptfoo/
 
 # Cache directory and compiled binary
 cache/
