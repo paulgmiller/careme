@@ -392,8 +392,8 @@ func TestWatchdogUsesStoreLocalDateForCacheKey(t *testing.T) {
 	if err := watchdog.Watchdog(t.Context()); err != nil {
 		t.Fatalf("Watchdog returned error: %v", err)
 	}
-	if len(locationLookup.calls) != len(staplesWatchdogLocationIDs()) {
-		t.Fatalf("location lookup calls = %d, want %d", len(locationLookup.calls), len(staplesWatchdogLocationIDs()))
+	if len(locationLookup.calls) != len(StaplesWatchdogLocationIDs()) {
+		t.Fatalf("location lookup calls = %d, want %d", len(locationLookup.calls), len(StaplesWatchdogLocationIDs()))
 	}
 
 	previousPacificDay := time.Date(2026, time.January, 14, 0, 0, 0, 0, time.UTC)
