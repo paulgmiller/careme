@@ -70,7 +70,7 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 			guest.EnsureShoppingListCount(w, r)
 		}
 
-		coordinates, zip, err := l.searchCoordinates(r)
+		coordinates, err := l.searchCoordinates(r)
 		if err != nil {
 			slog.InfoContext(ctx, "invalid location search", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -80,7 +80,7 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 		if currentUser != nil {
 			favoriteStore = currentUser.FavoriteStore
 		}
-		if err := l.renderLocationsPage(w, ctx, coordinates, zip, favoriteStore, currentUser != nil); err != nil {
+		if err := l.renderLocationsPage(w, ctx, coordinates, favoriteStore, currentUser != nil); err != nil {
 			slog.ErrorContext(ctx, "failed to render locations page", "lat", coordinates.Lat, "lon", coordinates.Lon, "error", err)
 			http.Error(w, "Failed to render locations page. ", http.StatusInternalServerError)
 		}
@@ -126,7 +126,7 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 	})
 }
 
-func (l *locationServer) searchCoordinates(r *http.Request) (geo.Coordinate, string, error) {
+func (l *locationServer) searchCoordinates(r *http.Request) (geo.Coordinate, error) {
 	query := r.URL.Query()
 	zip := strings.TrimSpace(query.Get("zip"))
 	lat := strings.TrimSpace(query.Get("lat"))
@@ -134,26 +134,26 @@ func (l *locationServer) searchCoordinates(r *http.Request) (geo.Coordinate, str
 
 	if zip != "" {
 		if lat != "" || lon != "" {
-			return geo.Coordinate{}, "", errors.New("provide either a ZIP code or coordinates, not both")
+			return geo.Coordinate{}, errors.New("provide either a ZIP code or coordinates, not both")
 		}
 		coordinates, ok := l.zipCentroids.ZipCentroidByZIP(zip)
 		if !ok {
-			return geo.Coordinate{}, "", fmt.Errorf("coordinates not found for ZIP code %q", zip)
+			return geo.Coordinate{}, fmt.Errorf("coordinates not found for ZIP code %q", zip)
 		}
-		return coordinates, zip, nil
+		return coordinates, nil
 	}
 
 	if lat == "" || lon == "" {
-		return geo.Coordinate{}, "", errors.New("provide a ZIP code or both latitude and longitude")
+		return geo.Coordinate{}, errors.New("provide a ZIP code or both latitude and longitude")
 	}
 	coordinates, err := geo.FromString(lat, lon)
 	if err != nil {
-		return geo.Coordinate{}, "", err
+		return geo.Coordinate{}, err
 	}
-	return coordinates, "", nil
+	return coordinates, nil
 }
 
-func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, coordinates geo.Coordinate, zip string, favoriteStore string, serverSignedIn bool) error {
+func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, coordinates geo.Coordinate, favoriteStore string, serverSignedIn bool) error {
 	locs, err := l.storage.GetLocationsByCoordinates(ctx, coordinates)
 	// be very forgiving of errors here.
 	if len(locs) == 0 && err != nil {
