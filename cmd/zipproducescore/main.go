@@ -30,7 +30,7 @@ type scoreRow struct {
 	Location        locations.Location
 	SupportsStaples bool
 	IngredientCount int
-	ProduceScore    *locations.ProduceScore
+	ProduceScore    *int
 	Error           error
 }
 
@@ -174,7 +174,6 @@ func printRows(out *os.File, rows []scoreRow) {
 	_, _ = fmt.Fprintln(writer, "ID\tCHAIN\tNAME\tZIP\tINGREDIENTS\tPRODUCE_SCORE\tDATE\tSTATUS")
 	for _, row := range rows {
 		score := ""
-		scoreDate := ""
 		status := "ok"
 		switch {
 		case !row.SupportsStaples:
@@ -182,20 +181,18 @@ func printRows(out *os.File, rows []scoreRow) {
 		case row.ProduceScore == nil:
 			status = "score unavailable"
 		default:
-			score = fmt.Sprintf("%d", row.ProduceScore.Score)
-			scoreDate = row.ProduceScore.Date.Format("2006-01-02")
+			score = fmt.Sprintf("%d", row.ProduceScore)
 		}
 
 		_, _ = fmt.Fprintf(
 			writer,
-			"%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			row.Location.ID,
 			row.Location.Chain,
 			row.Location.Name,
 			row.Location.ZipCode,
 			row.IngredientCount,
 			score,
-			scoreDate,
 			status,
 		)
 	}

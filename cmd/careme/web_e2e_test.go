@@ -29,13 +29,11 @@ import (
 
 type fakeProduceScorer struct{}
 
-func (fakeProduceScorer) ProduceScore(_ context.Context, loc locations.Location) *locations.ProduceScore {
+func (fakeProduceScorer) ProduceScore(_ context.Context, loc locations.Location) *int {
 	hash := fnv.New32a()
 	_, _ = hash.Write([]byte(loc.ID))
-	return &locations.ProduceScore{
-		Score: int(hash.Sum32()%99) + 1,
-		Date:  time.Now(),
-	}
+	score := int(hash.Sum32()%99) + 1
+	return &score
 }
 
 func TestWebEndToEndFlowWithMocks(t *testing.T) {

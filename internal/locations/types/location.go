@@ -24,9 +24,3 @@ func (l *Location) Coordinate() geo.Coordinate {
 }
 
 type ZipCentroid = geo.Coordinate
-
-// Why is this here?
-type ProduceScore struct {
-	Score int       `json:"score"`
-	Date  time.Time `json:"date"`
-}
