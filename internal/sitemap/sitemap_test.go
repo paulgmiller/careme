@@ -22,6 +22,14 @@ import (
 
 const testPublicOrigin = "https://example.careme.test"
 
+type sitemapLocationLookup struct{}
+
+func (sitemapLocationLookup) GetLocationByID(_ context.Context, locationID string) (*locations.Location, error) {
+	lat := 47.61
+	lon := -122.33
+	return &locations.Location{ID: locationID, Lat: &lat, Lon: &lon}, nil
+}
+
 func TestHandleSitemapReturnsXMLWithFeedbackRecipeHashes(t *testing.T) {
 	t.Chdir(t.TempDir())
 
@@ -42,7 +50,7 @@ func TestHandleSitemapReturnsXMLWithFeedbackRecipeHashes(t *testing.T) {
 		hashes = append(hashes, hash)
 	}
 
-	server := New(cacheStore, testPublicOrigin)
+	server := New(cacheStore, testPublicOrigin, sitemapLocationLookup{})
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -81,7 +89,7 @@ func TestHandleSitemapIncludesAdvertisedGeneratedRecipePages(t *testing.T) {
 
 	cacheStore := cache.NewFileCache(".")
 	expectedAdvertisedURLs := saveAdvertisedParams(t, cacheStore)
-	server := New(cacheStore, testPublicOrigin)
+	server := New(cacheStore, testPublicOrigin, sitemapLocationLookup{})
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -113,10 +121,11 @@ func saveAdvertisedParams(t *testing.T, c cache.Cache) []string {
 	ctx := context.Background()
 	rio := recipes.IO(c)
 	for _, campaign := range campaigns.AdvertisedRecipeLocations() {
-		loc := campaign.Location
-		date, err := recipes.StoreToDate(ctx, time.Now(), &loc)
+		loc, err := (sitemapLocationLookup{}).GetLocationByID(ctx, campaign.Location.ID)
 		require.NoError(t, err)
-		params := recipes.DefaultParams(&loc, date)
+		date, err := recipes.StoreToDate(ctx, time.Now(), loc)
+		require.NoError(t, err)
+		params := recipes.DefaultParams(loc, date)
 		require.NoError(t, rio.SaveParams(ctx, params))
 		urls = append(urls, testPublicOrigin+"/recipes?h="+params.Hash())
 	}
@@ -162,7 +171,7 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 		t.Fatalf("failed to save feedback: %v", err)
 	}
 
-	server := New(cacheStore, testPublicOrigin)
+	server := New(cacheStore, testPublicOrigin, sitemapLocationLookup{})
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -197,7 +206,7 @@ func TestHandleSitemapIncludesFeedbackWithoutCachedRecipe(t *testing.T) {
 		t.Fatalf("failed to save feedback: %v", err)
 	}
 
-	server := New(cacheStore, testPublicOrigin)
+	server := New(cacheStore, testPublicOrigin, sitemapLocationLookup{})
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -233,7 +242,7 @@ func TestHandleSitemap_IgnoresNonFeedbackKeys(t *testing.T) {
 		t.Fatalf("failed to save recipe key: %v", err)
 	}
 
-	server := New(cacheStore, testPublicOrigin)
+	server := New(cacheStore, testPublicOrigin, sitemapLocationLookup{})
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
 	server.handleSitemap(rr, req)
@@ -256,7 +265,7 @@ func TestHandleSitemap_IgnoresNonFeedbackKeys(t *testing.T) {
 }
 
 func TestHandleRobotsReturnsExpectedContent(t *testing.T) {
-	server := New(nil, testPublicOrigin)
+	server := New(nil, testPublicOrigin, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
 

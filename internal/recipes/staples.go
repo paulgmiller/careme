@@ -110,6 +110,14 @@ type grader interface {
 	GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error)
 }
 
+type locationByID interface {
+	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
+}
+
+type staplesFetcher interface {
+	FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error)
+}
+
 type cachedStaplesService struct {
 	provider staplesProvider
 	cache    ingredientio
@@ -256,31 +264,42 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 	return wines, nil
 }
 
-func (s *cachedStaplesService) Watchdog(ctx context.Context) error {
-	stores := StaplesWatchdogLocations()
-	_, err := parallelism.Flatten(stores, func(store locations.Location) ([]ai.InputIngredient, error) {
-		date, err := StoreToDate(ctx, nowFn(), &store)
+type StaplesWatchdog struct {
+	locations locationByID
+	staples   staplesFetcher
+}
+
+func NewStaplesWatchdog(locations locationByID, staples staplesFetcher) *StaplesWatchdog {
+	return &StaplesWatchdog{locations: locations, staples: staples}
+}
+
+func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
+	_, err := parallelism.MapWithErrors(StaplesWatchdogLocationIDs(), func(locationID string) (int, error) {
+		store, err := w.locations.GetLocationByID(ctx, locationID)
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
-		return s.FetchStaples(ctx, DefaultParams(&store, date))
+		date, err := StoreToDate(ctx, nowFn(), store)
+		if err != nil {
+			return 0, err
+		}
+		_, err = w.staples.FetchStaples(ctx, DefaultParams(store, date))
+		return 0, err
 	})
 	return err
 }
 
-// StaplesWatchdogLocations returns the stores checked by the staples watchdog.
-func StaplesWatchdogLocations() []locations.Location {
-	stores := []locations.Location{
-		{ID: "wholefoods_10153", ZipCode: "97209"},
-		{ID: "safeway_490", ZipCode: "86403"},
-		{ID: "70500874", ZipCode: "98101"},
-		{ID: "starmarket_3566", ZipCode: "02108"},
-		{ID: "acmemarkets_806", ZipCode: "19711"},
-		{ID: "publix_1847", ZipCode: "35401"},
-		{ID: "aldi_F219", ZipCode: "40222"},
-		{ID: "heb_540", ZipCode: "77023"},
+func StaplesWatchdogLocationIDs() []string {
+	return []string{
+		"wholefoods_10153",
+		"safeway_490",
+		"70500874",
+		"starmarket_3566",
+		"acmemarkets_806",
+		"publix_1847",
+		"aldi_F219",
+		"heb_540",
 	}
-	return stores
 }
 
 func staplesSignatureForLocation(locationID string) string {
