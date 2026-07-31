@@ -217,7 +217,7 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 
 	filtered := make([]Location, 0, len(allLocations))
 	for _, loc := range allLocations {
-		distance := geo.HaversineMiles(coordinates, geo.Coordinate{Lat: *loc.Lat, Lon: *loc.Lon})
+		distance := geo.HaversineMiles(coordinates, loc.Coordinate())
 		if distance > nearby.MaxLocationDistanceMiles {
 			slog.DebugContext(ctx, "dropping location beyond max distance", "location_id", loc.ID, "zip", loc.ZipCode, "distance_miles", distance, "max_distance_miles", nearby.MaxLocationDistanceMiles)
 			continue
@@ -320,8 +320,8 @@ func (l *locationStorage) RequestedStoreIDs(ctx context.Context) ([]string, erro
 
 func sortLocationsByDistanceFromCoordinates(locations []Location, coordinates geo.Coordinate) {
 	sort.SliceStable(locations, func(i, j int) bool {
-		leftDistance := geo.HaversineMiles(coordinates, geo.Coordinate{Lat: *locations[i].Lat, Lon: *locations[i].Lon})
-		rightDistance := geo.HaversineMiles(coordinates, geo.Coordinate{Lat: *locations[j].Lat, Lon: *locations[j].Lon})
+		leftDistance := geo.HaversineMiles(coordinates, locations[i].Coordinate())
+		rightDistance := geo.HaversineMiles(coordinates, locations[j].Coordinate())
 		return leftDistance < rightDistance
 	})
 }
