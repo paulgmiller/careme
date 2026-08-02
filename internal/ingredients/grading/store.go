@@ -11,6 +11,10 @@ import (
 
 const cachePrefix = "ingredient_grades/"
 
+func CachePrefix() string {
+	return cachePrefix
+}
+
 func cacheKey(ingredientHash string) string {
 	return cachePrefix + ingredientHash
 }
