@@ -726,10 +726,9 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 	if !strings.Contains(rendered, `careme:recipe-saved`) || !strings.Contains(rendered, `publishCaremeConversion("recipe_save")`) {
 		t.Fatalf("home page should publish successful recipe saves to the data layer, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `.getAll("conversion")`) ||
-		!strings.Contains(rendered, `const eventNames = [...new Set(url.searchParams.getAll("conversion"))]`) ||
+	if !strings.Contains(rendered, `.get("conversion")`) ||
 		!strings.Contains(rendered, `url.searchParams.delete("conversion")`) ||
-		!strings.Contains(rendered, `eventNames.forEach(publishCaremeConversion)`) ||
+		!strings.Contains(rendered, `publishCaremeConversion(eventName)`) ||
 		!strings.Contains(rendered, `window.dataLayer.push({ event: eventName })`) {
 		t.Fatalf("home page should consume conversion query events into the data layer, body: %s", rendered)
 	}

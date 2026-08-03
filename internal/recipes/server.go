@@ -23,7 +23,6 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/conversions"
 	"careme/internal/guest"
 	"careme/internal/httpx"
 	"careme/internal/locations"
@@ -611,8 +610,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			returnTo := shoppingListArgs(map[string]string{
-				queryArgHash:        shoppingListHash,
-				queryArgPendingSave: recipeHash,
+				queryArgHash: shoppingListHash,
 			})
 			redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, returnTo)
 			return
@@ -1037,21 +1035,11 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 const (
 	queryArgHash         = "h"
 	queryArgStart        = "start"
-	queryArgPendingSave  = "save"
 	queryArgConversion   = "conversion"
 	queryArgInstructions = "instructions"
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
-
-func (s *server) recipeFromShoppingList(list ai.ShoppingList, recipeHash string) (*ai.Recipe, error) {
-	for i := range list.Recipes {
-		if list.Recipes[i].ComputeHash() == recipeHash {
-			return &list.Recipes[i], nil
-		}
-	}
-	return nil, cache.ErrNotFound
-}
 
 // notFound handles a missing generated shopping list by showing the generation
 // spinner while work is in progress and the retry page after generation times out.
@@ -1144,7 +1132,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Has(queryArgStart) {
-		redirectToHashWithConversion(w, r, hashParam, conversions.RecipeGeneration)
+		redirectToHashWithConversion(w, r, hashParam, templates.RecipeGenerationConversion)
 		return
 	}
 
@@ -1165,25 +1153,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		selection = selection.override(userSelection)
-
-		// don't like mutating on a get. Find a better way to do this
-		if pendingSave := strings.TrimSpace(r.URL.Query().Get(queryArgPendingSave)); pendingSave != "" {
-			if _, err := s.recipeFromShoppingList(*slist, pendingSave); err != nil {
-				http.Error(w, "recipe not found", http.StatusNotFound)
-				return
-			}
-			if _, err := s.saveRecipeForUser(ctx, currentUser, hashParam, pendingSave); err != nil {
-				if errors.Is(err, cache.ErrNotFound) {
-					http.Error(w, "recipe not found", http.StatusNotFound)
-					return
-				}
-				slog.ErrorContext(ctx, "failed to save pending recipe", "hash", hashParam, "recipe_hash", pendingSave, "error", err)
-				http.Error(w, "failed to save recipe", http.StatusInternalServerError)
-				return
-			}
-			redirectToHashWithConversion(w, r, hashParam, conversions.RecipeSave)
-			return
-		}
 	}
 	if r.URL.Query().Get("mail") == "true" {
 		tf := users.NewUnsubscribeTokenFactory(*s.cfg)
@@ -1502,14 +1471,8 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToK
 	redirectToHashWithArgs(w, r, hash, args)
 }
 
-func redirectToHashWithConversion(w http.ResponseWriter, r *http.Request, hash string, event conversions.Event) {
+func redirectToHashWithConversion(w http.ResponseWriter, r *http.Request, hash string, event templates.ConversionEvent) {
 	args := url.Values{}
-	for _, existing := range r.URL.Query()[queryArgConversion] {
-		conversion := conversions.Event(existing)
-		if conversions.IsBrowserEvent(conversion) && conversion != event {
-			args.Add(queryArgConversion, string(conversion))
-		}
-	}
 	args.Add(queryArgConversion, string(event))
 	if help := r.URL.Query().Get(QueryArgHelp); help != "" {
 		args.Set(QueryArgHelp, help)

@@ -14,9 +14,9 @@ Careme publishes neutral custom events to `window.dataLayer` only after the corr
 | --- | --- |
 | `signup_completed` | A first-time user finishes signing up. |
 | `recipe_generation` | A newly generated recipe list finishes and is shown to the cook. |
-| `recipe_save` | A recipe is saved, including a save completed after signing in. |
+| `recipe_save` | An authenticated recipe save succeeds. |
 
-The destination page removes its one-time conversion query parameter with `history.replaceState` before publishing the event. This prevents a refresh from counting the same signup, generation, or post-sign-in save again. The argument is repeatable when one request completes multiple conversions, such as a new signup that immediately saves a recipe.
+The destination page removes its one-time conversion query parameter with `history.replaceState` before publishing the event. This prevents a refresh from counting the same signup or generation again.
 
 ### Signup
 

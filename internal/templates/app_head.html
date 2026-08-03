@@ -16,12 +16,12 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     const url = new URL(window.location.href);
-    const eventNames = [...new Set(url.searchParams.getAll("conversion"))];
-    if (eventNames.length === 0) return;
+    const eventName = url.searchParams.get("conversion");
+    if (!eventName) return;
 
     url.searchParams.delete("conversion");
     window.history.replaceState({}, "", url);
-    eventNames.forEach(publishCaremeConversion);
+    publishCaremeConversion(eventName);
   });
 
   if ("serviceWorker" in navigator) {

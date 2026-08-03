@@ -12,11 +12,19 @@ import (
 	"unicode/utf8"
 
 	"careme/internal/config"
-	"careme/internal/conversions"
 	"careme/internal/logsetup"
 )
 
 const clerkJSVersion = "5.99.0"
+
+// ConversionEvent identifies a neutral browser conversion published through Google Tag Manager.
+type ConversionEvent string
+
+const (
+	SignupCompletedConversion  ConversionEvent = "signup_completed"
+	RecipeGenerationConversion ConversionEvent = "recipe_generation"
+	RecipeSaveConversion       ConversionEvent = "recipe_save"
+)
 
 //go:embed *.html
 var htmlFiles embed.FS
@@ -49,9 +57,9 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 		},
 		"GoogleTagNoScript":         GoogleTagNoScript,
 		"PublicOrigin":              func() string { return config.ResolvedPublicOrigin() },
-		"RecipeSaveConversion":      func() conversions.Event { return conversions.RecipeSave },
+		"RecipeSaveConversion":      func() ConversionEvent { return RecipeSaveConversion },
 		"SignInPath":                signInPath,
-		"SignupCompletedConversion": func() conversions.Event { return conversions.SignupCompleted },
+		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
 		"TailwindAssetPath":         func() string { return tailwindAssetPath },
 		"UserInitial":               userInitial,
 	}
