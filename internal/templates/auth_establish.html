@@ -21,7 +21,13 @@
 
         const returnTo = "{{.ReturnTo}}" || "/";
         const userExistsURL = "{{.UserExistsURL}}";
-        const finishRedirect = () => location.replace(returnTo);
+        const finishRedirect = (conversionEvent = "") => {
+          const destination = new URL(returnTo, location.origin);
+          if (conversionEvent) {
+            destination.searchParams.set("conversion", conversionEvent);
+          }
+          location.replace(destination);
+        };
 
         const checkUserExists = async () => {
           const response = await fetch(userExistsURL, {
@@ -39,13 +45,8 @@
         };
 
         checkUserExists().then((payload) => {
-          if (!payload.exists && Array.isArray(window.dataLayer)) {
-            window.dataLayer.push({
-              event: "signup_completed",
-              eventCallback: finishRedirect,
-              eventTimeout: 1500,
-            });
-            setTimeout(finishRedirect, 1500);
+          if (!payload.exists) {
+            finishRedirect("signup_completed");
             return;
           }
           finishRedirect();

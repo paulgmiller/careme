@@ -287,7 +287,6 @@ func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T
 	require.Contains(t, body, `Restore`)
 	require.Contains(t, body, `/recipes/`+originHash+`/finalize`)
 	require.NotContains(t, body, `Add at least one recipe`)
-	require.NotContains(t, body, `const eventName =`)
 }
 
 func TestHandleRecipes_TracksCompletedGeneration(t *testing.T) {
@@ -318,8 +317,8 @@ func TestHandleRecipes_TracksCompletedGeneration(t *testing.T) {
 	followRR := httptest.NewRecorder()
 	s.handleRecipes(followRR, followReq)
 	require.Equal(t, http.StatusOK, followRR.Code)
-	require.Contains(t, followRR.Body.String(), `const eventName = "recipe_generation";`)
-	require.Contains(t, followRR.Body.String(), `url.searchParams.delete(queryParameter);`)
+	require.Contains(t, followRR.Body.String(), `"recipe_generation"`)
+	require.Contains(t, followRR.Body.String(), `url.searchParams.delete("conversion");`)
 }
 
 func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
@@ -1711,7 +1710,7 @@ func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T
 	saveRecipesForOrigin(t, s, hash, recipe)
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, hash))
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&save="+recipeHash, nil)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&save="+recipeHash+"&conversion=signup_completed", nil)
 	rr := httptest.NewRecorder()
 
 	s.handleRecipes(rr, req)
@@ -1722,7 +1721,7 @@ func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, "/recipes", redirect.Path)
 	require.Equal(t, hash, redirect.Query().Get(queryArgHash))
-	require.Equal(t, string(recipeSaveConversion), redirect.Query().Get(queryArgConversion))
+	require.Equal(t, []string{string(signupCompletedConversion), string(recipeSaveConversion)}, redirect.Query()[queryArgConversion])
 	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
 	require.NoError(t, err)
 	require.Equal(t, []string{recipeHash}, selection.SavedHashes)
@@ -1735,7 +1734,7 @@ func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T
 	followRR := httptest.NewRecorder()
 	s.handleRecipes(followRR, followReq)
 	require.Equal(t, http.StatusOK, followRR.Code)
-	require.Contains(t, followRR.Body.String(), `const eventName = "recipe_save";`)
+	require.Contains(t, followRR.Body.String(), `"recipe_save"`)
 }
 
 func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {

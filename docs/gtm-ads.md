@@ -16,21 +16,18 @@ Careme publishes neutral custom events to `window.dataLayer` only after the corr
 | `recipe_generation` | A newly generated recipe list finishes and is shown to the cook. |
 | `recipe_save` | A recipe is saved, including a save completed after signing in. |
 
-The recipe-list page removes its one-time conversion query parameter with `history.replaceState` before publishing the event. This prevents a refresh from counting the same generation or post-sign-in save again.
+The destination page removes its one-time conversion query parameter with `history.replaceState` before publishing the event. This prevents a refresh from counting the same signup, generation, or post-sign-in save again. The argument is repeatable when one request completes multiple conversions, such as a new signup that immediately saves a recipe.
 
 ### Signup
 
-When `/auth/establish` detects a first-time user, the page pushes this event:
+When `/auth/establish` detects a first-time user, it adds the conversion to the local return destination:
 
 ```js
-window.dataLayer.push({
-  event: "signup_completed",
-  eventCallback: finishRedirect,
-  eventTimeout: 1500,
-});
+destination.searchParams.set("conversion", "signup_completed");
+location.replace(destination);
 ```
 
-The app renders both the GTM head script and the GTM `noscript` iframe fallback immediately after the opening `<body>` tag when this environment variable is set.
+The shared application head consumes the query argument on the destination, publishes `signup_completed` to `window.dataLayer`, and removes the argument from the visible URL. The app renders both the GTM head script and the GTM `noscript` iframe fallback immediately after the opening `<body>` tag when this environment variable is set.
 
 ### Recipe generation and saves
 

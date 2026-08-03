@@ -1043,6 +1043,14 @@ const (
 	QueryArgHelp = "help"
 )
 
+type browserConversionEvent string
+
+const (
+	signupCompletedConversion  browserConversionEvent = "signup_completed"
+	recipeGenerationConversion browserConversionEvent = "recipe_generation"
+	recipeSaveConversion       browserConversionEvent = "recipe_save"
+)
+
 func (s *server) recipeFromShoppingList(list ai.ShoppingList, recipeHash string) (*ai.Recipe, error) {
 	for i := range list.Recipes {
 		if list.Recipes[i].ComputeHash() == recipeHash {
@@ -1227,15 +1235,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
-	conversionEvent := browserConversionEvent("")
-	switch browserConversionEvent(r.URL.Query().Get(queryArgConversion)) {
-	case recipeGenerationConversion:
-		conversionEvent = recipeGenerationConversion
-	case recipeSaveConversion:
-		conversionEvent = recipeSaveConversion
-	}
 	FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
-		hashParam, selection, help, instructions, conversionEvent, w)
+		hashParam, selection, help, instructions, w)
 }
 
 func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
@@ -1510,11 +1511,26 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToK
 
 func redirectToHashWithConversion(w http.ResponseWriter, r *http.Request, hash string, event browserConversionEvent) {
 	args := url.Values{}
-	args.Set(queryArgConversion, string(event))
+	for _, existing := range r.URL.Query()[queryArgConversion] {
+		conversion := browserConversionEvent(existing)
+		if validBrowserConversionEvent(conversion) && conversion != event {
+			args.Add(queryArgConversion, string(conversion))
+		}
+	}
+	args.Add(queryArgConversion, string(event))
 	if help := r.URL.Query().Get(QueryArgHelp); help != "" {
 		args.Set(QueryArgHelp, help)
 	}
 	redirectToHashWithArgs(w, r, hash, args)
+}
+
+func validBrowserConversionEvent(event browserConversionEvent) bool {
+	switch event {
+	case signupCompletedConversion, recipeGenerationConversion, recipeSaveConversion:
+		return true
+	default:
+		return false
+	}
 }
 
 func redirectToHashWithArgs(w http.ResponseWriter, r *http.Request, hash string, args url.Values) {

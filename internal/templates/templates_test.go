@@ -723,8 +723,20 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 	if !strings.Contains(rendered, `careme:saved-recipes-changed`) {
 		t.Fatalf("home page should refresh offline saved recipes after save changes, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `careme:recipe-saved`) || !strings.Contains(rendered, `event: "recipe_save"`) {
+	if !strings.Contains(rendered, `careme:recipe-saved`) || !strings.Contains(rendered, `publishCaremeConversion("recipe_save")`) {
 		t.Fatalf("home page should publish successful recipe saves to the data layer, body: %s", rendered)
+	}
+	for _, event := range []string{"signup_completed", "recipe_generation", "recipe_save"} {
+		if !strings.Contains(rendered, `"`+event+`"`) {
+			t.Fatalf("home page should allow conversion event %q, body: %s", event, rendered)
+		}
+	}
+	if !strings.Contains(rendered, `.getAll("conversion")`) ||
+		!strings.Contains(rendered, `const eventNames = [...new Set(`) ||
+		!strings.Contains(rendered, `url.searchParams.delete("conversion")`) ||
+		!strings.Contains(rendered, `eventNames.forEach(publishCaremeConversion)`) ||
+		!strings.Contains(rendered, `window.dataLayer.push({ event: eventName })`) {
+		t.Fatalf("home page should consume conversion query events into the data layer, body: %s", rendered)
 	}
 }
 
@@ -769,14 +781,17 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	if strings.Contains(rendered, `for (let attempt = 0; attempt < 5; attempt++)`) {
 		t.Fatalf("auth establish page should not retry user exists check, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `if (!payload.exists &&`) {
+	if !strings.Contains(rendered, `if (!payload.exists) {`) {
 		t.Fatalf("auth establish page should gate conversion on missing user, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `event: "signup_completed"`) {
-		t.Fatalf("auth establish page should push signup event to dataLayer, body: %s", rendered)
+	if !strings.Contains(rendered, `finishRedirect("signup_completed")`) {
+		t.Fatalf("auth establish page should redirect new users with the signup conversion, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `eventCallback: finishRedirect`) {
-		t.Fatalf("auth establish page should redirect after GTM event callback, body: %s", rendered)
+	if !strings.Contains(rendered, `destination.searchParams.set("conversion", conversionEvent)`) {
+		t.Fatalf("auth establish page should add the conversion query argument, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `eventCallback`) || strings.Contains(rendered, `eventTimeout`) {
+		t.Fatalf("auth establish page should defer conversion publishing to the destination, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, "console.warn(`auth user exists failed: ${response.status}`)") {
 		t.Fatalf("auth establish page should log when user exists endpoint returns a failure, body: %s", rendered)
