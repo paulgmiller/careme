@@ -8,25 +8,15 @@
 <link rel="apple-touch-icon" href="/static/app-icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/app-icon-192.png">
 <script>
-  const caremeConversionEvents = new Set([
-    "signup_completed",
-    "recipe_generation",
-    "recipe_save",
-  ]);
-
   function publishCaremeConversion(eventName) {
-    if (caremeConversionEvents.has(eventName) && Array.isArray(window.dataLayer)) {
+    if (eventName && Array.isArray(window.dataLayer)) {
       window.dataLayer.push({ event: eventName });
     }
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     const url = new URL(window.location.href);
-    const eventNames = [...new Set(
-      url.searchParams
-        .getAll("conversion")
-        .filter((eventName) => caremeConversionEvents.has(eventName)),
-    )];
+    const eventNames = [...new Set(url.searchParams.getAll("conversion"))];
     if (eventNames.length === 0) return;
 
     url.searchParams.delete("conversion");
@@ -57,7 +47,7 @@
   }
 
   document.addEventListener("careme:recipe-saved", () => {
-    publishCaremeConversion("recipe_save");
+    publishCaremeConversion("{{RecipeSaveConversion}}");
   });
 
 </script>

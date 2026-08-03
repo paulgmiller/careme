@@ -23,6 +23,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/conversions"
 	"careme/internal/guest"
 	"careme/internal/httpx"
 	"careme/internal/locations"
@@ -1043,14 +1044,6 @@ const (
 	QueryArgHelp = "help"
 )
 
-type browserConversionEvent string
-
-const (
-	signupCompletedConversion  browserConversionEvent = "signup_completed"
-	recipeGenerationConversion browserConversionEvent = "recipe_generation"
-	recipeSaveConversion       browserConversionEvent = "recipe_save"
-)
-
 func (s *server) recipeFromShoppingList(list ai.ShoppingList, recipeHash string) (*ai.Recipe, error) {
 	for i := range list.Recipes {
 		if list.Recipes[i].ComputeHash() == recipeHash {
@@ -1151,7 +1144,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Has(queryArgStart) {
-		redirectToHashWithConversion(w, r, hashParam, recipeGenerationConversion)
+		redirectToHashWithConversion(w, r, hashParam, conversions.RecipeGeneration)
 		return
 	}
 
@@ -1188,7 +1181,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "failed to save recipe", http.StatusInternalServerError)
 				return
 			}
-			redirectToHashWithConversion(w, r, hashParam, recipeSaveConversion)
+			redirectToHashWithConversion(w, r, hashParam, conversions.RecipeSave)
 			return
 		}
 	}
@@ -1509,11 +1502,11 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToK
 	redirectToHashWithArgs(w, r, hash, args)
 }
 
-func redirectToHashWithConversion(w http.ResponseWriter, r *http.Request, hash string, event browserConversionEvent) {
+func redirectToHashWithConversion(w http.ResponseWriter, r *http.Request, hash string, event conversions.Event) {
 	args := url.Values{}
 	for _, existing := range r.URL.Query()[queryArgConversion] {
-		conversion := browserConversionEvent(existing)
-		if validBrowserConversionEvent(conversion) && conversion != event {
+		conversion := conversions.Event(existing)
+		if conversions.IsBrowserEvent(conversion) && conversion != event {
 			args.Add(queryArgConversion, string(conversion))
 		}
 	}
@@ -1522,15 +1515,6 @@ func redirectToHashWithConversion(w http.ResponseWriter, r *http.Request, hash s
 		args.Set(QueryArgHelp, help)
 	}
 	redirectToHashWithArgs(w, r, hash, args)
-}
-
-func validBrowserConversionEvent(event browserConversionEvent) bool {
-	switch event {
-	case signupCompletedConversion, recipeGenerationConversion, recipeSaveConversion:
-		return true
-	default:
-		return false
-	}
 }
 
 func redirectToHashWithArgs(w http.ResponseWriter, r *http.Request, hash string, args url.Values) {

@@ -46,7 +46,7 @@
 
         checkUserExists().then((payload) => {
           if (!payload.exists) {
-            finishRedirect("signup_completed");
+            finishRedirect("{{SignupCompletedConversion}}");
             return;
           }
           finishRedirect();

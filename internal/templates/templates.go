@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"careme/internal/config"
+	"careme/internal/conversions"
 	"careme/internal/logsetup"
 )
 
@@ -46,11 +47,13 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 			}
 			return "https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js"
 		},
-		"GoogleTagNoScript": GoogleTagNoScript,
-		"PublicOrigin":      func() string { return config.ResolvedPublicOrigin() },
-		"SignInPath":        signInPath,
-		"TailwindAssetPath": func() string { return tailwindAssetPath },
-		"UserInitial":       userInitial,
+		"GoogleTagNoScript":         GoogleTagNoScript,
+		"PublicOrigin":              func() string { return config.ResolvedPublicOrigin() },
+		"RecipeSaveConversion":      func() conversions.Event { return conversions.RecipeSave },
+		"SignInPath":                signInPath,
+		"SignupCompletedConversion": func() conversions.Event { return conversions.SignupCompleted },
+		"TailwindAssetPath":         func() string { return tailwindAssetPath },
+		"UserInitial":               userInitial,
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {
