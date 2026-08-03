@@ -161,6 +161,22 @@
   </main>
   <script src="/static/htmx@2.0.8.js"></script>
   <script src="/static/share.js"></script>
+  {{if .ConversionEvent}}
+  <script>
+    (() => {
+      const eventName = "{{.ConversionEvent}}";
+      const queryParameter = "conversion";
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has(queryParameter)) return;
+
+      url.searchParams.delete(queryParameter);
+      window.history.replaceState({}, "", url);
+      if (Array.isArray(window.dataLayer)) {
+        window.dataLayer.push({ event: eventName });
+      }
+    })();
+  </script>
+  {{end}}
   {{template "clerk_refresh.html" .}}
 </body>
 </html>

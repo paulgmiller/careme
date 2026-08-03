@@ -60,10 +60,17 @@ type shoppingListGroup struct {
 	Items []*ai.Ingredient
 }
 
+type browserConversionEvent string
+
+const (
+	recipeGenerationConversion browserConversionEvent = "recipe_generation"
+	recipeSaveConversion       browserConversionEvent = "recipe_save"
+)
+
 // FormatShoppingListHTMLForHashWithHelp renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
 func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, writer http.ResponseWriter,
+	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, conversionEvent browserConversionEvent, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
 	instructions := strings.TrimSpace(p.Instructions)
@@ -114,6 +121,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		AuthReturnTo         string
 		UseTodaysIngredients bool
 		AdminURL             string
+		ConversionEvent      browserConversionEvent
 	}{
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
@@ -134,6 +142,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		AuthReturnTo:         "/recipes?h=" + hash,
 		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 		AdminURL:             "/admin/mealplan/" + hash,
+		ConversionEvent:      conversionEvent,
 	}
 
 	httpx.SetHTMLContentType(writer)

@@ -30,5 +30,11 @@
     document.addEventListener("careme:saved-recipes-changed", syncSavedRecipesForOffline);
   }
 
+  document.addEventListener("careme:recipe-saved", () => {
+    if (Array.isArray(window.dataLayer)) {
+      window.dataLayer.push({ event: "recipe_save" });
+    }
+  });
+
 </script>
 {{end}}

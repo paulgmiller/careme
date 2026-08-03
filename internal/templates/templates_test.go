@@ -723,6 +723,9 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 	if !strings.Contains(rendered, `careme:saved-recipes-changed`) {
 		t.Fatalf("home page should refresh offline saved recipes after save changes, body: %s", rendered)
 	}
+	if !strings.Contains(rendered, `careme:recipe-saved`) || !strings.Contains(rendered, `event: "recipe_save"`) {
+		t.Fatalf("home page should publish successful recipe saves to the data layer, body: %s", rendered)
+	}
 }
 
 func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
