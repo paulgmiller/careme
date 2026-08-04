@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"careme/internal/ai"
@@ -41,16 +40,16 @@ type generatorParams struct {
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 
 	// regeneration-only context from the origin params; not hashed
-	PriorSavedHashes           []string        `json:"-"`
-	PreviousMenuPlanResponse   *ai.ResponseRef `json:"previous_menu_plan_response,omitempty"`
-	PreviousMenuPlanResponseID string          `json:"previous_menu_plan_response_id,omitempty"` // legacy cache records
+	PriorSavedHashes               []string `json:"-"`
+	PreviousMenuPlanResponseID     string   `json:"previous_menu_plan_response_id,omitempty"`
+	PreviousMenuPlanPromptCacheKey string   `json:"previous_menu_plan_prompt_cache_key,omitempty"`
 }
 
 func (g *generatorParams) previousMenuPlanResponse() ai.ResponseRef {
-	if g.PreviousMenuPlanResponse != nil && strings.TrimSpace(g.PreviousMenuPlanResponse.ID) != "" {
-		return *g.PreviousMenuPlanResponse
+	return ai.ResponseRef{
+		ID:             g.PreviousMenuPlanResponseID,
+		PromptCacheKey: g.PreviousMenuPlanPromptCacheKey,
 	}
-	return ai.ResponseRef{ID: g.PreviousMenuPlanResponseID}
 }
 
 // exist for mail's interface be careful please.

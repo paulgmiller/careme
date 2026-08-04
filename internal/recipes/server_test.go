@@ -1079,11 +1079,6 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	clone := *p
 	clone.LastRecipes = append([]string(nil), p.LastRecipes...)
 	clone.PriorSavedHashes = append([]string(nil), p.PriorSavedHashes...)
-	clone.PreviousMenuPlanResponseID = p.previousMenuPlanResponse().ID
-	if p.PreviousMenuPlanResponse != nil {
-		previous := *p.PreviousMenuPlanResponse
-		clone.PreviousMenuPlanResponse = &previous
-	}
 	clone.Saved = append([]ai.Recipe(nil), p.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), p.Dismissed...)
 	c.last = &clone
@@ -2242,7 +2237,10 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	recipe := ai.Recipe{Title: "Guest Recipe", Description: "Guest", ResponseID: "resp-guest"}
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes: []ai.Recipe{recipe},
-		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},
+		Plan: &ai.MenuPlan{
+			ResponseID:     "resp-menu-original",
+			PromptCacheKey: "careme:store-day:v1:test",
+		},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -2291,6 +2289,7 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	require.NotNil(t, captured)
 	require.Equal(t, "make it vegetarian", captured.Instructions)
 	require.Equal(t, "resp-menu-original", captured.PreviousMenuPlanResponseID)
+	require.Equal(t, "careme:store-day:v1:test", captured.PreviousMenuPlanPromptCacheKey)
 	require.Empty(t, captured.Saved)
 	require.Len(t, captured.Dismissed, 1)
 	require.Equal(t, recipe.ComputeHash(), captured.Dismissed[0].ComputeHash())

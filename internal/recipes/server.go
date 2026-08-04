@@ -491,7 +491,8 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		instructions = append(instructions, "also incorporate these critique fixes")
 		instructions = append(instructions, critiqueFixes...)
 	}
-	replacement, err := s.generator.RegenerateRecipe(ctx, instructions, ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey})
+	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
+	replacement, err := s.generator.RegenerateRecipe(ctx, instructions, previous)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to regenerate single recipe", "hash", hash, "error", err)
 		http.Error(w, "failed to refresh recipe", http.StatusInternalServerError)
@@ -1041,8 +1042,8 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 	params.Instructions = instructions
 	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
 	if currentList.Plan != nil {
-		previousMenu := currentList.Plan.ResponseRef()
-		params.PreviousMenuPlanResponse = &previousMenu
+		params.PreviousMenuPlanResponseID = currentList.Plan.ResponseID
+		params.PreviousMenuPlanPromptCacheKey = currentList.Plan.PromptCacheKey
 	}
 	originalSelection := selectionFromSaved(baseParams.Saved)
 	selection = originalSelection.override(selection)
