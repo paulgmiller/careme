@@ -260,9 +260,10 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		slog.Int64("totalTokens", 1550),
 		slog.Group("spend",
 			slog.String("currency", "USD"),
-			slog.Float64("totalUSD", 0.01245),
-			slog.Float64("inputUSD", 0.0015),
+			slog.Float64("totalUSD", 0.0127),
+			slog.Float64("inputUSD", 0.0005),
 			slog.Float64("cachedInputUSD", 0.00045),
+			slog.Float64("cacheWriteInputUSD", 0.00125),
 			slog.Float64("outputUSD", 0.0105),
 		),
 	}) {

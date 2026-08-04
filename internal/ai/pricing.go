@@ -11,6 +11,7 @@ const tokensPerMillion = 1_000_000
 type textTokenPrice struct {
 	inputUSDPerMillion       float64
 	cachedInputUSDPerMillion float64
+	cacheWriteUSDPerMillion  float64
 	outputUSDPerMillion      float64
 }
 
@@ -18,11 +19,12 @@ type estimatedSpend struct {
 	reason         string
 	inputUSD       float64
 	cachedInputUSD float64
+	cacheWriteUSD  float64
 	outputUSD      float64
 }
 
 func (s estimatedSpend) totalUSD() float64 {
-	return s.inputUSD + s.cachedInputUSD + s.outputUSD
+	return s.inputUSD + s.cachedInputUSD + s.cacheWriteUSD + s.outputUSD
 }
 
 func estimatedSpendLogAttr(spend estimatedSpend) slog.Attr {
@@ -36,11 +38,12 @@ func estimatedSpendLogAttr(spend estimatedSpend) slog.Attr {
 		slog.Float64("totalUSD", roundUSD(spend.totalUSD())),
 		slog.Float64("inputUSD", roundUSD(spend.inputUSD)),
 		slog.Float64("cachedInputUSD", roundUSD(spend.cachedInputUSD)),
+		slog.Float64("cacheWriteInputUSD", roundUSD(spend.cacheWriteUSD)),
 		slog.Float64("outputUSD", roundUSD(spend.outputUSD)),
 	)
 }
 
-func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, outputTokens int64) estimatedSpend {
+func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, cacheWriteTokens, outputTokens int64) estimatedSpend {
 	price, ok := openAITextTokenPrice(model)
 	if !ok {
 		return estimatedSpend{reason: "price_not_configured"}
@@ -51,10 +54,22 @@ func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, o
 	if cachedInputTokens < 0 {
 		cachedInputTokens = 0
 	}
-	uncachedInputTokens := inputTokens - cachedInputTokens
+	if cacheWriteTokens < 0 {
+		cacheWriteTokens = 0
+	}
+	if cacheWriteTokens > inputTokens-cachedInputTokens {
+		cacheWriteTokens = inputTokens - cachedInputTokens
+	}
+	uncachedInputTokens := inputTokens - cachedInputTokens - cacheWriteTokens
+	cacheWriteRate := price.cacheWriteUSDPerMillion
+	if cacheWriteRate == 0 {
+		// Before GPT-5.6, cache writes have no premium and remain ordinary input.
+		cacheWriteRate = price.inputUSDPerMillion
+	}
 	return estimatedSpend{
 		inputUSD:       tokensToUSD(uncachedInputTokens, price.inputUSDPerMillion),
 		cachedInputUSD: tokensToUSD(cachedInputTokens, price.cachedInputUSDPerMillion),
+		cacheWriteUSD:  tokensToUSD(cacheWriteTokens, cacheWriteRate),
 		outputUSD:      tokensToUSD(outputTokens, price.outputUSDPerMillion),
 	}
 }
@@ -64,11 +79,11 @@ func openAITextTokenPrice(model string) (textTokenPrice, bool) {
 	// https://openai.com/api/pricing/ and https://platform.openai.com/docs/pricing/
 	switch normalizeModelName(model) {
 	case "gpt-5.6", "gpt-5.6-sol":
-		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, outputUSDPerMillion: 30}, true
+		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, cacheWriteUSDPerMillion: 6.25, outputUSDPerMillion: 30}, true
 	case "gpt-5.6-terra":
-		return textTokenPrice{inputUSDPerMillion: 2.50, cachedInputUSDPerMillion: 0.25, outputUSDPerMillion: 15}, true
+		return textTokenPrice{inputUSDPerMillion: 2.50, cachedInputUSDPerMillion: 0.25, cacheWriteUSDPerMillion: 3.125, outputUSDPerMillion: 15}, true
 	case "gpt-5.6-luna":
-		return textTokenPrice{inputUSDPerMillion: 1, cachedInputUSDPerMillion: 0.10, outputUSDPerMillion: 6}, true
+		return textTokenPrice{inputUSDPerMillion: 1, cachedInputUSDPerMillion: 0.10, cacheWriteUSDPerMillion: 1.25, outputUSDPerMillion: 6}, true
 	case "gpt-5.5":
 		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, outputUSDPerMillion: 30}, true
 	case "gpt-5.4":
