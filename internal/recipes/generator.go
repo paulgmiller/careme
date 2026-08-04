@@ -181,7 +181,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	ogCount := len(ingredients)
 	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 		// TODO make configurable?
-		return ing.Grade == nil || ing.Grade.Score > IngredientGradeCutoff
+		return ing.Grade.GetScore() > IngredientGradeCutoff
 	})
 	ingMap := inputIngredientMap(ingredients)
 
@@ -189,6 +189,11 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	// Prompt caching requires byte-for-byte identical prefixes. Keep the ingredient
 	// TSV deterministic while the menu planner supplies variety itself.
 	slices.SortStableFunc(ingredients, func(a, b ai.InputIngredient) int {
+		gradeDiff := a.Grade.GetScore() - b.Grade.Score
+		if gradeDiff != 0 {
+			return gradeDiff
+		}
+
 		if result := strings.Compare(a.ProductID, b.ProductID); result != 0 {
 			return result
 		}

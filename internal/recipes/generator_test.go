@@ -81,6 +81,18 @@ type captureWineStaplesProvider struct {
 
 type panicStaplesService struct{}
 
+type fixedStaplesService struct {
+	ingredients []ai.InputIngredient
+}
+
+func (s fixedStaplesService) FetchStaples(context.Context, *GeneratorParams) ([]ai.InputIngredient, error) {
+	return slices.Clone(s.ingredients), nil
+}
+
+func (fixedStaplesService) FetchWines(context.Context, string, []string, time.Time) ([]ai.InputIngredient, error) {
+	panic("unexpected call to FetchWines")
+}
+
 type noopRecipeSaver struct{}
 
 type captureRecipeSaver struct {
@@ -811,6 +823,30 @@ func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirec
 	plainInstructions := instructionsForAnchor(t, aiStub.generateInstructions, plainRecipe.Title)
 	assert.Contains(t, aniseInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
 	assert.NotContains(t, plainInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
+}
+
+func TestGenerateRecipes_SortsMenuPlanIngredientsByGradeThenProductID(t *testing.T) {
+	grade := func(score int) *ai.IngredientGrade {
+		return &ai.IngredientGrade{Score: score}
+	}
+	staples := fixedStaplesService{ingredients: []ai.InputIngredient{
+		{ProductID: "product-c", Description: "C", Grade: grade(9)},
+		{ProductID: "product-b", Description: "B", Grade: grade(7)},
+		{ProductID: "product-a", Description: "A", Grade: grade(7)},
+		{ProductID: "product-d", Description: "D", Grade: grade(8)},
+	}}
+	aiStub := &captureGenerateAIClient{}
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	g := newTestGenerator(t, aiStub, nil, staples, noopstatuswriter{}, nil)
+
+	_, err := g.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Equal(t, []ai.InputIngredient{
+		{ProductID: "product-a", Description: "A", Grade: grade(7)},
+		{ProductID: "product-b", Description: "B", Grade: grade(7)},
+		{ProductID: "product-d", Description: "D", Grade: grade(8)},
+		{ProductID: "product-c", Description: "C", Grade: grade(9)},
+	}, aiStub.ingredients)
 }
 
 func instructionsForAnchor(t *testing.T, calls [][]string, title string) []string {

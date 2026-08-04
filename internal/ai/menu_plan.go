@@ -251,7 +251,6 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 	return responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp, previous.PromptCacheKey)
-
 }
 
 func responseToMenuPlan(ctx context.Context, category, model string, resp *responses.Response, cacheKey string) (*MenuPlan, error) {
