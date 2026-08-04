@@ -17,6 +17,15 @@ import (
 
 const clerkJSVersion = "5.99.0"
 
+// ConversionEvent identifies a neutral browser conversion published through Google Tag Manager.
+type ConversionEvent string
+
+const (
+	SignupCompletedConversion  ConversionEvent = "signup_completed"
+	RecipeGenerationConversion ConversionEvent = "recipe_generation"
+	RecipeSaveConversion       ConversionEvent = "recipe_save"
+)
+
 //go:embed *.html
 var htmlFiles embed.FS
 
@@ -46,11 +55,13 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 			}
 			return "https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js"
 		},
-		"GoogleTagNoScript": GoogleTagNoScript,
-		"PublicOrigin":      func() string { return config.ResolvedPublicOrigin() },
-		"SignInPath":        signInPath,
-		"TailwindAssetPath": func() string { return tailwindAssetPath },
-		"UserInitial":       userInitial,
+		"GoogleTagNoScript":         GoogleTagNoScript,
+		"PublicOrigin":              func() string { return config.ResolvedPublicOrigin() },
+		"RecipeSaveConversion":      func() ConversionEvent { return RecipeSaveConversion },
+		"SignInPath":                signInPath,
+		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
+		"TailwindAssetPath":         func() string { return tailwindAssetPath },
+		"UserInitial":               userInitial,
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"careme/internal/ai"
+	"careme/internal/httpx"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
@@ -135,7 +136,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		AdminURL:             "/admin/mealplan/" + hash,
 	}
 
-	setTextContent(writer)
+	httpx.SetHTMLContentType(writer)
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -229,7 +230,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		AdminURL:                "/admin/prompt/recipe/" + recipeHash,
 	}
 
-	setTextContent(writer)
+	httpx.SetHTMLContentType(writer)
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -263,7 +264,7 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, response 
 		ServerSignedIn: signedIn,
 	}
 
-	setTextContent(writer)
+	httpx.SetHTMLContentType(writer)
 	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
 		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
 	}

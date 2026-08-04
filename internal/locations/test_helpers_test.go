@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
+	"careme/internal/locations/geo"
 
 	utypes "careme/internal/users/types"
 )
@@ -19,6 +20,7 @@ type fakeLocationClient struct {
 	details map[string]Location
 	lists   map[string][]Location
 	inv     map[string]bool
+	search  []geo.Coordinate
 	err     error
 }
 
@@ -42,11 +44,12 @@ func (f *fakeLocationClient) setHasInventory(locationID string, hasInventory boo
 	f.inv[locationID] = hasInventory
 }
 
-func (f *fakeLocationClient) GetLocationsByZip(_ context.Context, zipcode string) ([]Location, error) {
+func (f *fakeLocationClient) GetLocationsByCoordinates(_ context.Context, coordinates geo.Coordinate) ([]Location, error) {
+	f.search = append(f.search, coordinates)
 	if f.err != nil {
 		return nil, f.err
 	}
-	if locations, ok := f.lists[zipcode]; ok {
+	for _, locations := range f.lists {
 		return locations, nil
 	}
 	return nil, nil
@@ -82,7 +85,7 @@ func (b inventoryBackend) GetLocationByID(context.Context, string) (*Location, e
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (b inventoryBackend) GetLocationsByZip(context.Context, string) ([]Location, error) {
+func (b inventoryBackend) GetLocationsByCoordinates(context.Context, geo.Coordinate) ([]Location, error) {
 	return nil, nil
 }
 

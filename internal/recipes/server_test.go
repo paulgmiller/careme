@@ -24,6 +24,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
+	"careme/internal/templates"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
@@ -287,6 +288,38 @@ func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T
 	require.Contains(t, body, `Restore`)
 	require.Contains(t, body, `/recipes/`+originHash+`/finalize`)
 	require.NotContains(t, body, `Add at least one recipe`)
+}
+
+func TestHandleRecipes_TracksCompletedGeneration(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore))
+
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	hash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes: []ai.Recipe{{Title: "Fresh Recipe", Description: "Just generated"}},
+	}, hash))
+
+	start := time.Now().Format(time.RFC3339Nano)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(hash)+"&start="+url.QueryEscape(start)+"&help=Save+two+dinners", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	redirect, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, hash, redirect.Query().Get(queryArgHash))
+	require.Equal(t, string(templates.RecipeGenerationConversion), redirect.Query().Get(queryArgConversion))
+	require.Equal(t, "Save two dinners", redirect.Query().Get(QueryArgHelp))
+
+	followReq := httptest.NewRequest(http.MethodGet, redirect.String(), nil)
+	followRR := httptest.NewRecorder()
+	s.handleRecipes(followRR, followReq)
+	require.Equal(t, http.StatusOK, followRR.Code)
+	require.Contains(t, followRR.Body.String(), `.get("conversion")`)
+	require.Contains(t, followRR.Body.String(), `url.searchParams.delete("conversion")`)
 }
 
 func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
@@ -1603,7 +1636,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	require.Equal(t, "careme:saved-recipes-changed", rr.Header().Get("HX-Trigger"))
+	require.JSONEq(t, `{"careme:saved-recipes-changed":{},"careme:recipe-saved":{}}`, rr.Header().Get("HX-Trigger"))
 	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
 	require.Contains(t, rr.Body.String(), `✓ Added`)
 	require.Contains(t, rr.Body.String(), `Hide`)
@@ -1635,7 +1668,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	}
 }
 
-func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeaderToShoppingListPendingSave(t *testing.T) {
+func TestHandleSaveRecipe_NoSessionReturnsToShoppingList(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -1649,12 +1682,12 @@ func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeaderToShoppingListPendingSa
 	s.handleSaveRecipe(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=shopping-hash&save=hash"); got != want {
+	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=shopping-hash"); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }
 
-func TestHandleSaveRecipe_NoSessionFromRecipePageRedirectsToShoppingListPendingSave(t *testing.T) {
+func TestHandleSaveRecipe_NoSessionFromRecipePageReturnsToShoppingList(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -1668,10 +1701,10 @@ func TestHandleSaveRecipe_NoSessionFromRecipePageRedirectsToShoppingListPendingS
 	s.handleSaveRecipe(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=origin-hash&save=recipe-hash"), rr.Header().Get("HX-Redirect"))
+	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=origin-hash"), rr.Header().Get("HX-Redirect"))
 }
 
-func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T) {
+func TestHandleRecipes_ReturnAfterSignInDoesNotSaveRecipe(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -1682,7 +1715,7 @@ func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T
 	recipe := ai.Recipe{
 		Title:       "Save After Login",
 		Description: "Recipe to save after login",
-		ResponseID:  "resp-pending-save",
+		ResponseID:  "resp-save-after-login",
 	}
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	hash := params.Hash()
@@ -1691,21 +1724,22 @@ func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T
 	saveRecipesForOrigin(t, s, hash, recipe)
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, hash))
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&save="+recipeHash, nil)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&conversion="+string(templates.SignupCompletedConversion), nil)
 	rr := httptest.NewRecorder()
 
 	s.handleRecipes(rr, req)
-	s.Wait()
 
-	require.Equal(t, http.StatusSeeOther, rr.Code)
-	require.Equal(t, "/recipes?h="+hash, rr.Header().Get("Location"))
+	require.Equal(t, http.StatusOK, rr.Code)
 	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
 	require.NoError(t, err)
-	require.Equal(t, []string{recipeHash}, selection.SavedHashes)
+	require.Empty(t, selection.SavedHashes)
 	user, err := storage.GetByID("mock-clerk-user-id")
 	require.NoError(t, err)
-	require.Len(t, user.LastRecipes, 1)
-	require.Equal(t, recipeHash, user.LastRecipes[0].Hash)
+	require.Empty(t, user.LastRecipes)
+	body := rr.Body.String()
+	require.Contains(t, body, `hx-post="/recipe/`+recipeHash+`/save"`)
+	require.Contains(t, body, "\n    Add\n")
+	require.Contains(t, body, `.get("conversion")`)
 }
 
 func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {

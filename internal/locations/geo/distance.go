@@ -2,17 +2,16 @@ package geo
 
 import "math"
 
-// HaversineMiles returns great-circle distance between two latitude/longitude
-// points in statute miles. Inputs are decimal degrees.
-// TOOD take coordinate
-func HaversineMiles(lat1, lon1, lat2, lon2 float64) float64 {
+// HaversineMiles returns the great-circle distance between two coordinates in
+// statute miles.
+func HaversineMiles(from, to Coordinate) float64 {
 	const earthRadiusMiles = 3958.7613
 	toRadians := math.Pi / 180.0
 
-	dLat := (lat2 - lat1) * toRadians
-	dLon := (lon2 - lon1) * toRadians
-	lat1Rad := lat1 * toRadians
-	lat2Rad := lat2 * toRadians
+	dLat := (to.Lat - from.Lat) * toRadians
+	dLon := (to.Lon - from.Lon) * toRadians
+	lat1Rad := from.Lat * toRadians
+	lat2Rad := to.Lat * toRadians
 
 	sinHalfDLat := math.Sin(dLat / 2.0)
 	sinHalfDLon := math.Sin(dLon / 2.0)

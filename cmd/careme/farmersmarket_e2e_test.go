@@ -7,6 +7,7 @@ import (
 	"image/jpeg"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -57,9 +58,10 @@ func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToLocations(t *testing.T)
 
 	client := newTestClient(t)
 	progressBody, _ := mustPostMultipartHTMX(t, client, srv.URL+"/farmersmarket", map[string]string{
-		"name": "Test Market",
-		"lat":  "47.610000",
-		"lon":  "-122.330000",
+		"name":     "Test Market",
+		"lat":      "47.610000",
+		"lon":      "-122.330000",
+		"timezone": "America/Los_Angeles",
 	}, "photos", "market.jpg", jpegBytes(t))
 	for _, want := range []string{
 		`id="farmers-market-work"`,
@@ -73,8 +75,22 @@ func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToLocations(t *testing.T)
 
 	statusPath := extractFarmersMarketStatusPath(t, progressBody)
 	locationsURL := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
-	if !strings.HasPrefix(locationsURL, "/locations/zip-from-coordinates?") {
-		t.Fatalf("expected farmers market locations redirect, got %q", locationsURL)
+	parsedLocationsURL, err := url.Parse(locationsURL)
+	if err != nil {
+		t.Fatalf("parse farmers market locations redirect %q: %v", locationsURL, err)
+	}
+	if parsedLocationsURL.Path != "/locations" {
+		t.Fatalf("expected farmers market locations path, got %q", parsedLocationsURL.Path)
+	}
+	query := parsedLocationsURL.Query()
+	if got, want := query.Get("lat"), "47.61"; got != want {
+		t.Fatalf("expected latitude %q, got %q", want, got)
+	}
+	if got, want := query.Get("lon"), "-122.33"; got != want {
+		t.Fatalf("expected longitude %q, got %q", want, got)
+	}
+	if query.Has("zip") {
+		t.Fatalf("coordinate redirect should not contain ZIP: %q", locationsURL)
 	}
 	locationsBody := mustGetBody(t, client, srv.URL+locationsURL)
 	if !strings.Contains(locationsBody, "Big Willys") {

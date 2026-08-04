@@ -73,8 +73,15 @@ func main() {
 		wg.Add(1)
 		go func(mzc metroZipCode) {
 			defer wg.Done()
+			coordinates, ok := centroids.ZipCentroidByZIP(mzc.Zip)
+			if !ok {
+				resultsChan <- zipQueryResult{
+					err: fmt.Errorf("coordinates not found for ZIP code %q", mzc.Zip),
+				}
+				return
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
-			stores, err := client.GetLocationsByZip(ctx, mzc.Zip)
+			stores, err := client.GetLocationsByCoordinates(ctx, coordinates)
 			cancel()
 			if err != nil {
 				resultsChan <- zipQueryResult{

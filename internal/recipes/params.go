@@ -145,13 +145,17 @@ func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time
 	if l == nil {
 		return nil, fmt.Errorf("nil location")
 	}
-	tzName, ok := geo.TimezoneNameForZip(l.ZipCode)
+	if l.Lat == nil || l.Lon == nil {
+		return nil, fmt.Errorf("location %s has no coordinates", l.ID)
+	}
+	tzName, ok := geo.TimezoneNameForCoordinates(geo.Coordinate{Lat: *l.Lat, Lon: *l.Lon})
+
 	if !ok {
-		return nil, fmt.Errorf("unable to infer timezone from zipcode %s", l.ZipCode)
+		return nil, fmt.Errorf("unable to estimate timezone for location %s", l.ID)
 	}
 	storeLoc, err := time.LoadLocation(tzName)
 	if err != nil {
-		slog.ErrorContext(ctx, "invalid inferred timezone", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
+		slog.ErrorContext(ctx, "invalid estimated timezone", "location_id", l.ID, "timezone", tzName, "error", err)
 		return nil, err
 	}
 	return storeLoc, nil

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"careme/internal/config"
+	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 
 	"golang.org/x/crypto/ssh"
@@ -38,15 +39,6 @@ type Client struct {
 	privateKey *rsa.PrivateKey
 	baseURL    string
 	httpClient *http.Client
-}
-
-// StoresQuery controls store locator query parameters.
-// Current implementation intentionally supports ZIP search only.
-type StoresQuery struct {
-	Lat  string
-	Lon  string
-	Zip  string
-	City string
 }
 
 // NewClient creates a Walmart affiliates client.
@@ -127,18 +119,15 @@ func (c *Client) Taxonomy(ctx context.Context) (json.RawMessage, error) {
 }
 
 // docs https://walmart.io/docs/affiliates/v1/stores
-// example https://developer.api.walmart.com/api-proxy/service/affil/v2/stores?zip=98007
-// example https://developer.api.walmart.com/api-proxy/service/affil/v2/stores?zip=77063
-// SearchStoresByZIPData returns typed store locations for the provided ZIP code.
-func (c *Client) SearchStoresByZIP(ctx context.Context, zip string) ([]Store, error) {
-	zip = strings.TrimSpace(zip)
-	if zip == "" {
-		return nil, errors.New("zip code is required")
+// SearchStores returns stores near the provided coordinates.
+func (c *Client) SearchStores(ctx context.Context, coordinates geo.Coordinate) ([]Store, error) {
+	if err := coordinates.Valid(); err != nil {
+		return nil, fmt.Errorf("invalid Walmart store coordinates: %w", err)
 	}
 
-	// Match Walmart ZIP sample path: /api-proxy/service/affil/v2/stores?zip=...
 	params := url.Values{}
-	params.Set("zip", zip)
+	params.Set("lat", fmt.Sprintf("%g", coordinates.Lat))
+	params.Set("lon", fmt.Sprintf("%g", coordinates.Lon))
 	raw, err := c.searchStoresWithParams(ctx, params)
 	if err != nil {
 		return nil, err

@@ -130,9 +130,22 @@ func shoppingDayForStore(t *testing.T, location *locations.Location) string {
 	return date.Weekday().String()
 }
 
+func testMailLocation() *locations.Location {
+	lat := 47.61
+	lon := -122.33
+	return &locations.Location{
+		ID:      "123",
+		Name:    "Test Store",
+		Address: "123 Test St",
+		ZipCode: "98005",
+		Lat:     &lat,
+		Lon:     &lon,
+	}
+}
+
 func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T) {
 	fc := newFakeMailCache(t)
-	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
+	location := testMailLocation()
 	m := &mailer{
 		cache: fc,
 		locServer: &fakeMailLocServer{
@@ -161,7 +174,7 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 
 func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	fc := newFakeMailCache(t)
-	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
+	location := testMailLocation()
 	client := &fakeMailClient{
 		response: &rest.Response{StatusCode: 202, Body: "accepted"},
 	}
@@ -219,7 +232,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 	fc := newFakeMailCache(t)
 	fc.missShoppingList = true
-	location := &locations.Location{ID: "123", Name: "Test Store", Address: "123 Test St", ZipCode: "98005"}
+	location := testMailLocation()
 	generator := &capturingMailGenerator{}
 	m := &mailer{
 		cache: fc,

@@ -19,7 +19,7 @@ func NewCachedProduceScorer(c ingredientio) *CachedProduceScorer {
 	return &CachedProduceScorer{cache: c}
 }
 
-func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locations.Location) *locations.ProduceScore {
+func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locations.Location) *int {
 	date, err := StoreToDate(ctx, nowFn(), &loc)
 	if err != nil {
 		slog.WarnContext(ctx, "bad store date", "zip", loc.ZipCode)
@@ -30,10 +30,8 @@ func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locations.Lo
 		params := DefaultParams(&loc, candidate)
 		ingredients, err := s.cache.IngredientsFromCache(ctx, params.LocationHash())
 		if err == nil {
-			return &locations.ProduceScore{
-				Score: sumIngredientGradesAboveCutoff(ingredients),
-				Date:  candidate,
-			}
+			score := sumIngredientGradesAboveCutoff(ingredients)
+			return &score
 		}
 		if !errors.Is(err, cache.ErrNotFound) {
 			slog.WarnContext(ctx, "failed to read cached produce score ingredients", "location_id", loc.ID, "date", candidate.Format("2006-01-02"), "error", err)

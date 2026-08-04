@@ -9,30 +9,37 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/guest"
 	"careme/internal/templates"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type fakeProduceScoreLookup struct {
-	scores map[string]*ProduceScore
+	scores map[string]*int
 }
 
-func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
+func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *int {
 	return f.scores[loc.ID]
 }
 
 type recordingProduceScoreLookup struct {
 	mu     sync.Mutex
 	calls  []string
-	scores map[string]*ProduceScore
+	scores map[string]*int
 }
 
-func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
+func testRequestedLocation() Location {
+	lat := 40.7128
+	lon := -74.006
+	return Location{ID: "publix_123", Name: "Publix 123", Lat: &lat, Lon: &lon}
+}
+
+func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *int {
 	r.mu.Lock()
 	r.calls = append(r.calls, loc.ID)
 	r.mu.Unlock()
@@ -51,7 +58,7 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	client := newFakeLocationClient()
-	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
@@ -93,7 +100,7 @@ func TestRequestStoreIsIdempotent(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	client := newFakeLocationClient()
-	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
@@ -119,7 +126,7 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	client := newFakeLocationClient()
-	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", true)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
@@ -167,6 +174,63 @@ func TestLocationsPageSetsGuestShoppingListCookieWhenMissing(t *testing.T) {
 	}
 	if cookie.Value != "0" {
 		t.Fatalf("guest cookie value = %q, want 0", cookie.Value)
+	}
+}
+
+func TestLocationsPageSearchesWithProvidedCoordinates(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?lat=47.6097&lon=-122.3331", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if len(client.search) != 1 {
+		t.Fatalf("search count = %d, want 1", len(client.search))
+	}
+	if got := client.search[0]; got.Lat != 47.6097 || got.Lon != -122.3331 {
+		t.Fatalf("search coordinates = %+v", got)
+	}
+	if !strings.Contains(rr.Body.String(), "Showing results near your location") {
+		t.Fatalf("expected coordinate location copy, body=%q", rr.Body.String())
+	}
+}
+
+func TestLocationsPageRejectsNonFiniteCoordinatesBeforeSearching(t *testing.T) {
+	client := newFakeLocationClient()
+	server := NewServer(newTestLocationServer(client), LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?lat=NaN&lon=NaN", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Empty(t, client.search)
+	assert.Contains(t, rr.Body.String(), "latitude must be finite")
+}
+
+func TestLocationsPageRejectsMixedLocationInputs(t *testing.T) {
+	server := NewServer(newTestLocationServer(newFakeLocationClient()), LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001&lat=47.6&lon=-122.3", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusBadRequest, rr.Body.String())
 	}
 }
 
@@ -245,11 +309,8 @@ func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
 	client.setHasInventory("12345678", true)
 	storage := newTestLocationServer(client)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
-		scores: map[string]*ProduceScore{
-			"12345678": {
-				Score: 27,
-				Date:  time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC),
-			},
+		scores: map[string]*int{
+			"12345678": new(27),
 		},
 	})
 
@@ -280,7 +341,7 @@ func TestLocationsPageOmitsMissingProduceScoreBadge(t *testing.T) {
 	}})
 	storage := newTestLocationServer(client)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
-		scores: map[string]*ProduceScore{},
+		scores: map[string]*int{},
 	})
 
 	mux := http.NewServeMux()
@@ -331,7 +392,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 
 	client := newFakeLocationClient()
 	locations := make([]Location, 0, 13)
-	scores := make(map[string]*ProduceScore)
+	scores := make(map[string]*int)
 	// 10 will get cut off
 	for i := range 11 {
 		id := "store-" + strconv.Itoa(i)
@@ -342,7 +403,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 			ZipCode: "10001",
 		})
 		client.setHasInventory(id, i != 0)
-		scores[id] = &ProduceScore{Score: i}
+		scores[id] = &i
 	}
 	client.setListResponse("10001", locations)
 
@@ -357,7 +418,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 			ZipCode: "10001",
 		})
 		client2.setHasInventory(id, true)
-		scores[id] = &ProduceScore{Score: i}
+		scores[id] = &i
 	}
 	client2.setListResponse("10001", locations)
 

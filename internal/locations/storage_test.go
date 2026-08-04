@@ -10,6 +10,7 @@ import (
 	"time"
 
 	cachepkg "careme/internal/cache"
+	"careme/internal/locations/geo"
 )
 
 type namedBackend struct {
@@ -20,7 +21,7 @@ func (b namedBackend) GetLocationByID(context.Context, string) (*Location, error
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (b namedBackend) GetLocationsByZip(context.Context, string) ([]Location, error) {
+func (b namedBackend) GetLocationsByCoordinates(context.Context, geo.Coordinate) ([]Location, error) {
 	return nil, nil
 }
 
@@ -117,6 +118,9 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 	if got.ZipCode != "10001" {
 		t.Fatalf("unexpected zip code: %q", got.ZipCode)
 	}
+	if got.Lat == nil || got.Lon == nil {
+		t.Fatalf("expected coordinates to be backfilled: %+v", got)
+	}
 	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
 	// Remove backend value to prove the second read comes from persistent cache.
 	delete(client.details, "12345")
@@ -127,7 +131,7 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
 }
 
-func TestGetLocationsByZipCachesLocations(t *testing.T) {
+func TestGetLocationsByCoordinatesCachesLocations(t *testing.T) {
 	client := newFakeLocationClient()
 	fc := cachepkg.NewInMemoryCache()
 	lat1 := 18.18060
@@ -158,9 +162,9 @@ func TestGetLocationsByZipCachesLocations(t *testing.T) {
 	server := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 
 	ctx := context.Background()
-	locs, err := server.GetLocationsByZip(ctx, "00601")
+	locs, err := server.GetLocationsByCoordinates(ctx, coordinatesForZIP(t, "00601"))
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
 	if len(locs) != 2 {
 		t.Fatalf("expected 2 locations, got %d", len(locs))
@@ -182,7 +186,7 @@ func TestGetLocationsByZipCachesLocations(t *testing.T) {
 	requireEventuallyCached(t, fc, locationCachePrefix+"222")
 }
 
-func TestGetLocationsByZipSortsByCentroidDistance(t *testing.T) {
+func TestGetLocationsByCoordinatesSortsByDistance(t *testing.T) {
 	client := newFakeLocationClient()
 	nearLat := 18.18060
 	nearLon := -66.74990
@@ -197,9 +201,9 @@ func TestGetLocationsByZipSortsByCentroidDistance(t *testing.T) {
 	})
 
 	server := newTestLocationServer(client)
-	locs, err := server.GetLocationsByZip(context.Background(), "00601")
+	locs, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "00601"))
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
 	if len(locs) != 2 {
 		t.Fatalf("expected 2 locations after distance filter, got %d", len(locs))
@@ -209,7 +213,7 @@ func TestGetLocationsByZipSortsByCentroidDistance(t *testing.T) {
 	}
 }
 
-func TestGetLocationsByZipSortsUsingLocationZipCentroidFallback(t *testing.T) {
+func TestGetLocationsByCoordinatesSortsUsingLocationZipCentroidFallback(t *testing.T) {
 	client := newFakeLocationClient()
 	farLat := 47.60970
 	farLon := -122.33310
@@ -220,9 +224,9 @@ func TestGetLocationsByZipSortsUsingLocationZipCentroidFallback(t *testing.T) {
 	})
 
 	server := newTestLocationServer(client)
-	locs, err := server.GetLocationsByZip(context.Background(), "00601")
+	locs, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "00601"))
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
 	if len(locs) != 1 {
 		t.Fatalf("expected 1 location after filtering, got %d", len(locs))
@@ -230,26 +234,12 @@ func TestGetLocationsByZipSortsUsingLocationZipCentroidFallback(t *testing.T) {
 	if got, want := []string{locs[0].ID}, []string{"near-by-zip"}; got[0] != want[0] {
 		t.Fatalf("unexpected sorted order: got %v want %v", got, want)
 	}
-}
-
-func TestGetLocationsByZipLeavesOrderWhenQueryZipCentroidUnknown(t *testing.T) {
-	client := newFakeLocationClient()
-	client.setListResponse("not-a-zip", []Location{
-		{ID: "first", Name: "First", ZipCode: "00602"},
-		{ID: "second", Name: "Second", ZipCode: "00601"},
-	})
-
-	server := newTestLocationServer(client)
-	locs, err := server.GetLocationsByZip(context.Background(), "not-a-zip")
-	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
-	}
-	if got, want := []string{locs[0].ID, locs[1].ID}, []string{"first", "second"}; got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("unexpected order: got %v want %v", got, want)
+	if locs[0].Lat == nil || locs[0].Lon == nil {
+		t.Fatalf("expected ZIP centroid coordinates to be included: %+v", locs[0])
 	}
 }
 
-func TestGetLocationsByZipResolvesMissingRequestedZipCentroid(t *testing.T) {
+func TestGetLocationsByCoordinatesUsesFormerlyMissingZIPCentroid(t *testing.T) {
 	client := newFakeLocationClient()
 	nearLat := 37.331714
 	nearLon := -122.341466
@@ -264,9 +254,9 @@ func TestGetLocationsByZipResolvesMissingRequestedZipCentroid(t *testing.T) {
 	})
 
 	server := newTestLocationServer(client)
-	locs, err := server.GetLocationsByZip(context.Background(), "94012")
+	locs, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "94012"))
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
 	if len(locs) != 2 {
 		t.Fatalf("expected 2 nearby locations after centroid backfill, got %d", len(locs))
@@ -310,7 +300,7 @@ func TestGetLocationByIDLoadsFromPersistentCache(t *testing.T) {
 	}
 }
 
-func TestGetLocationsByZipStoresToPersistentCacheIfMissing(t *testing.T) {
+func TestGetLocationsByCoordinatesStoresToPersistentCacheIfMissing(t *testing.T) {
 	client := newFakeLocationClient()
 	lat := 18.18060
 	lon := -66.74990
@@ -320,9 +310,9 @@ func TestGetLocationsByZipStoresToPersistentCacheIfMissing(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	server := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
-	locs, err := server.GetLocationsByZip(context.Background(), "00601")
+	locs, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "00601"))
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
 	if len(locs) != 1 {
 		t.Fatalf("expected 1 location, got %d", len(locs))
@@ -338,32 +328,20 @@ func TestGetLocationsByZipStoresToPersistentCacheIfMissing(t *testing.T) {
 	}
 }
 
-func TestGetLocationsByZipReturnsErrorWhenAllBackendsFail(t *testing.T) {
+func TestGetLocationsByCoordinatesReturnsErrorWhenAllBackendsFail(t *testing.T) {
 	failA := newFakeLocationClient()
 	failA.err = fmt.Errorf("backend A down")
 	failB := newFakeLocationClient()
 	failB.err = fmt.Errorf("backend B down")
 
 	server := newTestLocationServerWithBackends([]locationBackend{failA, failB})
-	_, err := server.GetLocationsByZip(context.Background(), "00601")
+	_, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "00601"))
 	if err == nil {
 		t.Fatalf("expected error when all backends fail")
 	}
 }
 
-func TestLocationStorageNearestZIPToCoordinates(t *testing.T) {
-	centroids := LoadCentroids()
-
-	zip, ok := centroids.NearestZIPToCoordinates(47.6097, -122.3331)
-	if !ok {
-		t.Fatal("expected nearest zip for valid coordinates")
-	}
-	if zip != "98101" {
-		t.Fatalf("unexpected nearest zip: got %q want %q", zip, "98101")
-	}
-}
-
-func TestGetLocationsByZipWhenAtLeastOneBackendSucceeds(t *testing.T) {
+func TestGetLocationsByCoordinatesWhenAtLeastOneBackendSucceeds(t *testing.T) {
 	fail := newFakeLocationClient()
 	fail.err = fmt.Errorf("backend down")
 
@@ -375,13 +353,22 @@ func TestGetLocationsByZipWhenAtLeastOneBackendSucceeds(t *testing.T) {
 	})
 
 	server := newTestLocationServerWithBackends([]locationBackend{fail, success})
-	locs, err := server.GetLocationsByZip(context.Background(), "00601")
+	locs, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "00601"))
 	if err == nil {
 		t.Fatalf("expected an error: %v", err)
 	}
 	if len(locs) != 1 || locs[0].ID != "ok" {
 		t.Fatalf("unexpected locations: %+v", locs)
 	}
+}
+
+func coordinatesForZIP(t *testing.T, zip string) geo.Coordinate {
+	t.Helper()
+	coordinates, ok := LoadCentroids().ZipCentroidByZIP(zip)
+	if !ok {
+		t.Fatalf("coordinates not found for ZIP %q", zip)
+	}
+	return coordinates
 }
 
 func TestHasInventory(t *testing.T) {

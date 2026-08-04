@@ -29,13 +29,11 @@ import (
 
 type fakeProduceScorer struct{}
 
-func (fakeProduceScorer) ProduceScore(_ context.Context, loc locations.Location) *locations.ProduceScore {
+func (fakeProduceScorer) ProduceScore(_ context.Context, loc locations.Location) *int {
 	hash := fnv.New32a()
 	_, _ = hash.Write([]byte(loc.ID))
-	return &locations.ProduceScore{
-		Score: int(hash.Sum32()%99) + 1,
-		Date:  time.Now(),
-	}
+	score := int(hash.Sum32()%99) + 1
+	return &score
 }
 
 func TestWebEndToEndFlowWithMocks(t *testing.T) {
@@ -139,34 +137,6 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	// TODO step 6 make sure recipes are saved to user page?
 }
 
-func TestZipFromCoordinatesRedirect(t *testing.T) {
-	srv := newTestServer(t)
-	defer srv.Close()
-
-	client := newNoRedirectClient()
-	req, err := http.NewRequest(http.MethodGet, srv.URL+"/locations/zip-from-coordinates?lat=47.6097&lon=-122.3331", nil)
-	if err != nil {
-		t.Fatalf("failed to build request: %v", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Fatalf("failed to close response body: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("expected status %d, got %d", http.StatusFound, resp.StatusCode)
-	}
-	if got := resp.Header.Get("Location"); got != "/locations?zip=98101" {
-		t.Fatalf("expected Location %q, got %q", "/locations?zip=98101", got)
-	}
-}
-
 func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
@@ -253,7 +223,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator).Register(appRoutes)
 	farmersMarketStore := farmersmarket.NewStore(cacheStore)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
-	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}, centroids).Register(appRoutes)
+	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}).Register(appRoutes)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}
@@ -266,14 +236,6 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 func newTestClient(t *testing.T) *http.Client {
 	return &http.Client{}
-}
-
-func newNoRedirectClient() *http.Client {
-	return &http.Client{
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
 }
 
 func mustGet(t *testing.T, client *http.Client, url string) *http.Response {

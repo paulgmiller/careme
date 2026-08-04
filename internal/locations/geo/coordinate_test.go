@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,6 +42,36 @@ func TestCoordinateValid(t *testing.T) {
 		{
 			name:  "longitude too high",
 			coord: Coordinate{Lat: 47.6097, Lon: 180.1},
+			want:  false,
+		},
+		{
+			name:  "NaN latitude",
+			coord: Coordinate{Lat: math.NaN(), Lon: -122.3331},
+			want:  false,
+		},
+		{
+			name:  "positive infinite latitude",
+			coord: Coordinate{Lat: math.Inf(1), Lon: -122.3331},
+			want:  false,
+		},
+		{
+			name:  "negative infinite latitude",
+			coord: Coordinate{Lat: math.Inf(-1), Lon: -122.3331},
+			want:  false,
+		},
+		{
+			name:  "NaN longitude",
+			coord: Coordinate{Lat: 47.6097, Lon: math.NaN()},
+			want:  false,
+		},
+		{
+			name:  "positive infinite longitude",
+			coord: Coordinate{Lat: 47.6097, Lon: math.Inf(1)},
+			want:  false,
+		},
+		{
+			name:  "negative infinite longitude",
+			coord: Coordinate{Lat: 47.6097, Lon: math.Inf(-1)},
 			want:  false,
 		},
 	}
@@ -84,6 +115,21 @@ func TestFromStringRejectsInvalidValues(t *testing.T) {
 			name: "zero point",
 			lat:  "0",
 			lon:  "0",
+		},
+		{
+			name: "NaN",
+			lat:  "NaN",
+			lon:  "NaN",
+		},
+		{
+			name: "positive infinity",
+			lat:  "+Inf",
+			lon:  "-122.3331",
+		},
+		{
+			name: "negative infinity",
+			lat:  "47.6097",
+			lon:  "-Inf",
 		},
 	}
 
