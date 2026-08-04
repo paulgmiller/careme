@@ -179,11 +179,10 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	plan, err := responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp)
+	plan, err := responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp, cacheKey)
 	if err != nil {
 		return nil, err
 	}
-	plan.PromptCacheKey = cacheKey
 	if err := alignMenuPlanIngredients(plan, saleIngredients); err != nil {
 		slog.ErrorContext(ctx, "generated menu plan used unavailable ingredient", "error", err, "response_id", plan.ResponseID)
 		return c.regenerateMenuPlanForIngredientMismatch(ctx, plan.ResponseRef(), saleIngredients, err, count)
@@ -213,11 +212,10 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	plan, err := responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp)
+	plan, err := responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp, previous.PromptCacheKey)
 	if err != nil {
 		return nil, err
 	}
-	plan.PromptCacheKey = previous.PromptCacheKey
 	if err := alignMenuPlanIngredients(plan, saleIngredients); err != nil {
 		return nil, fmt.Errorf("regenerated menu plan still used unavailable ingredient: %w", err)
 	}
@@ -252,15 +250,11 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	plan, err := responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp)
-	if err != nil {
-		return nil, err
-	}
-	plan.PromptCacheKey = previous.PromptCacheKey
-	return plan, nil
+	return responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp, previous.PromptCacheKey)
+
 }
 
-func responseToMenuPlan(ctx context.Context, category, model string, resp *responses.Response) (*MenuPlan, error) {
+func responseToMenuPlan(ctx context.Context, category, model string, resp *responses.Response, cacheKey string) (*MenuPlan, error) {
 	var plan MenuPlan
 	if err := json.Unmarshal([]byte(resp.OutputText()), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse variety plan: %w", err)
@@ -269,6 +263,7 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 		return nil, fmt.Errorf("failed to get menu plan response ID")
 	}
 	plan.ResponseID = resp.ID
+	plan.PromptCacheKey = cacheKey
 	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage))
 	return &plan, nil
 }
