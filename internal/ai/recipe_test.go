@@ -189,6 +189,44 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	}
 }
 
+func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
+	var requestBody string
+	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		requestBody = string(body)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"id":"resp-question","object":"response","created_at":1778529600,
+				"status":"completed","model":%q,
+				"output":[{"id":"msg-question","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Use half as much salt.","annotations":[]}]}],
+				"usage":{"input_tokens":20,"input_tokens_details":{"cached_tokens":15},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":25}
+			}`, defaultRecipeModel))),
+			Request: req,
+		}, nil
+	})}, nil)
+
+	answer, err := client.AskQuestion(t.Context(), "Can I reduce the salt?", ResponseRef{
+		ID:             "resp-recipe",
+		PromptCacheKey: "careme:store-day:v1:test",
+	})
+	if err != nil {
+		t.Fatalf("AskQuestion returned error: %v", err)
+	}
+	if answer.ResponseID != "resp-question" || answer.Answer != "Use half as much salt." {
+		t.Fatalf("unexpected answer: %+v", answer)
+	}
+	if !strings.Contains(requestBody, `"previous_response_id":"resp-recipe"`) ||
+		!strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) ||
+		!strings.Contains(requestBody, `"prompt_cache_breakpoint":{"mode":"explicit"}`) {
+		t.Fatalf("expected explicit question cache breakpoint: %s", requestBody)
+	}
+}
+
 func TestResponseUsageLogAttr(t *testing.T) {
 	attr := responseUsageLogAttr(defaultRecipeModel, responses.ResponseUsage{
 		InputTokens:  1200,
