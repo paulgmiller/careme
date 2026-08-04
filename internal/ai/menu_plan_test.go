@@ -197,8 +197,11 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 			t.Fatalf("expected explicit prompt cache mode: %s", requestBody)
 		}
 	}
-	if !strings.Contains(requestBodies[0], `"prompt_cache_breakpoint":{"mode":"explicit"}`) {
-		t.Fatalf("expected ingredient TSV cache breakpoint: %s", requestBodies[0])
+	if got := strings.Count(requestBodies[0], `"prompt_cache_breakpoint":{"mode":"explicit"}`); got != 2 {
+		t.Fatalf("expected ingredient and complete menu prompt cache breakpoints, got %d: %s", got, requestBodies[0])
+	}
+	if strings.Contains(requestBodies[1], `"prompt_cache_breakpoint":{"mode":"explicit"}`) {
+		t.Fatalf("did not expect a new cache breakpoint on menu regeneration: %s", requestBodies[1])
 	}
 	if !strings.Contains(requestBodies[1], `"previous_response_id":"resp-menu-invalid"`) {
 		t.Fatalf("expected regeneration to continue from invalid response: %s", requestBodies[1])
@@ -261,10 +264,24 @@ func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 	if !strings.Contains(body, "Build 2 distinct recipe plans by default") || !strings.Contains(body, "make it vegetarian") {
 		t.Fatalf("unexpected recorded menu prompt: %s", body)
 	}
+	var breakpoints int
+	for _, message := range recorder.record.Input {
+		if message.PromptCacheBreakpoint {
+			breakpoints++
+		}
+	}
+	if breakpoints != 2 || !recorder.record.Input[1].PromptCacheBreakpoint || !recorder.record.Input[len(recorder.record.Input)-1].PromptCacheBreakpoint {
+		t.Fatalf("expected breakpoints after ingredients and the complete initial prompt: %#v", recorder.record.Input)
+	}
 }
 
 func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
+	for _, message := range messages {
+		if message.PromptCacheBreakpoint {
+			t.Fatalf("did not expect regeneration message cache breakpoint: %#v", messages)
+		}
+	}
 	body := mustJSON(t, messages)
 	for _, want := range []string{
 		"Build 1 replacement recipe plan(s) by default",

@@ -120,6 +120,10 @@ func userWithCacheBreakpoint(msg string) responses.ResponseInputItemUnionParam {
 }
 
 func recipePromptCacheKey(ctx context.Context) string {
+	// Combine user and session identity so web requests remain stable within a
+	// session while shared background session names such as "mail" or campaign jobs
+	// do not route unrelated users through one cache key.
+	// https://developers.openai.com/api/docs/guides/prompt-caching#improve-cache-hit-rates-with-a-prompt-cache-key
 	userID, _ := logsetup.UserIDFromContext(ctx)
 	sessionID, _ := logsetup.SessionIDFromContext(ctx)
 	identity := userID + "\x00" + sessionID
@@ -131,6 +135,11 @@ func recipePromptCacheKey(ctx context.Context) string {
 }
 
 func configureRecipePromptCache(ctx context.Context, params *responses.ResponseNewParams) {
+	// These controls are specific to GPT-5.6 and later OpenAI models. Stable prompt
+	// ordering is portable, but OpenRouter and other providers use different cache
+	// controls (for example session_id and model-dependent cache_control blocks).
+	// Introduce a provider/model-specific cache policy before routing recipe requests
+	// anywhere other than the direct OpenAI GPT-5.6 client.
 	params.PromptCacheKey = openai.String(recipePromptCacheKey(ctx))
 	params.PromptCacheOptions = responses.ResponseNewParamsPromptCacheOptions{
 		Mode: "explicit",
@@ -142,6 +151,10 @@ func messagesToInput(messages []PromptMessage) []responses.ResponseInputItemUnio
 	input := make([]responses.ResponseInputItemUnionParam, 0, len(messages))
 	for _, msg := range messages {
 		if msg.Role != "user" {
+			continue
+		}
+		if msg.PromptCacheBreakpoint {
+			input = append(input, userWithCacheBreakpoint(msg.Content))
 			continue
 		}
 		input = append(input, user(msg.Content))

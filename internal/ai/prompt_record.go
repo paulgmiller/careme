@@ -6,8 +6,9 @@ import (
 )
 
 type PromptMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role                  string `json:"role"`
+	Content               string `json:"content"`
+	PromptCacheBreakpoint bool   `json:"prompt_cache_breakpoint,omitempty"`
 }
 
 type PromptRecord struct {

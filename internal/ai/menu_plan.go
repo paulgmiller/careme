@@ -164,9 +164,6 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		Store: openai.Bool(true),
 		Text:  scheme(c.menuSchema),
 	}
-	// The ingredient TSV is the stable, expensive prefix shared by every menu and
-	// recipe continuation. Mark its final content block explicitly for GPT-5.6.
-	params.Input.OfInputItemList[1] = userWithCacheBreakpoint(promptMessages[1].Content)
 	configureRecipePromptCache(ctx, &params)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
@@ -303,7 +300,9 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 		return nil, fmt.Errorf("failed to convert ingredients to TSV: %w", err)
 	}
 	ingredientsMessage += buf.String()
-	messages = append(messages, userPromptMessage(ingredientsMessage))
+	ingredientsPrompt := userPromptMessage(ingredientsMessage)
+	ingredientsPrompt.PromptCacheBreakpoint = true
+	messages = append(messages, ingredientsPrompt)
 
 	messages = append(messages,
 		userPromptMessage(fmt.Sprintf("Build %d distinct recipe plans by default. If the user's directions clearly ask for a different number of recipes, return that many plans instead. Keep the plan count between 1 and 6. Fit the available ingredients, seasonality, and price.", count)),
@@ -327,6 +326,10 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
 	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
 	messages = append(messages, cleanInstructionMessages(instructions)...)
+	// Cache both the reusable ingredient prefix and the complete initial menu-plan
+	// prompt. Descendant recipe and menu continuations can read these breakpoints;
+	// regeneration prompts intentionally do not add new ones.
+	messages[len(messages)-1].PromptCacheBreakpoint = true
 	return messages, nil
 }
 
