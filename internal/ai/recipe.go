@@ -150,6 +150,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		Store: openai.Bool(true),
 		Text:  scheme(c.recipeSchema),
 	}
+	configureRecipePromptCache(ctx, &params)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
@@ -176,6 +177,7 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		Store: openai.Bool(true),
 		Text:  scheme(c.recipeSchema),
 	}
+	configureRecipePromptCache(ctx, &params)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
@@ -202,6 +204,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 	if previousResponseID != "" {
 		params.PreviousResponseID = openai.String(previousResponseID)
 	}
+	configureRecipePromptCache(ctx, &params)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
@@ -225,6 +228,7 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 		slog.Int64("inputTokens", usage.InputTokens),
 		slog.Group("inputTokensDetails",
 			slog.Int64("cachedTokens", usage.InputTokensDetails.CachedTokens),
+			slog.Int64("cacheWriteTokens", usage.InputTokensDetails.CacheWriteTokens),
 		),
 		slog.Int64("outputTokens", usage.OutputTokens),
 		slog.Group("outputTokensDetails",

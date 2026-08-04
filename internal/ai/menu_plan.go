@@ -164,6 +164,10 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		Store: openai.Bool(true),
 		Text:  scheme(c.menuSchema),
 	}
+	// The ingredient TSV is the stable, expensive prefix shared by every menu and
+	// recipe continuation. Mark its final content block explicitly for GPT-5.6.
+	params.Input.OfInputItemList[1] = userWithCacheBreakpoint(promptMessages[1].Content)
+	configureRecipePromptCache(ctx, &params)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, err
@@ -194,6 +198,7 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 		Store: openai.Bool(true),
 		Text:  scheme(c.menuSchema),
 	}
+	configureRecipePromptCache(ctx, &params)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan after ingredient mismatch: %w", err)
@@ -231,6 +236,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		Store: openai.Bool(true),
 		Text:  scheme(c.menuSchema),
 	}
+	configureRecipePromptCache(ctx, &params)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)

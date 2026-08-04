@@ -15,7 +15,6 @@ import (
 	"careme/internal/recipes/status"
 
 	"github.com/samber/lo"
-	"github.com/samber/lo/mutable"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -187,7 +186,14 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	ingMap := inputIngredientMap(ingredients)
 
 	g.writeStatus(ctx, hash, status.Ingredients(ingredients, ogCount))
-	mutable.Shuffle(ingredients)
+	// Prompt caching requires byte-for-byte identical prefixes. Keep the ingredient
+	// TSV deterministic while the menu planner supplies variety itself.
+	slices.SortStableFunc(ingredients, func(a, b ai.InputIngredient) int {
+		if result := strings.Compare(a.ProductID, b.ProductID); result != 0 {
+			return result
+		}
+		return strings.Compare(a.Description, b.Description)
+	})
 
 	menuPlanInstructions := []string{p.Directive, p.Instructions}
 

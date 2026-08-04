@@ -189,6 +189,17 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 	if len(requestBodies) != 2 {
 		t.Fatalf("expected initial request and regeneration request, got %d", len(requestBodies))
 	}
+	for _, requestBody := range requestBodies {
+		if !strings.Contains(requestBody, `"prompt_cache_key":"careme:recipe:v1:`) {
+			t.Fatalf("expected stable recipe prompt cache key: %s", requestBody)
+		}
+		if !strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
+			t.Fatalf("expected explicit prompt cache mode: %s", requestBody)
+		}
+	}
+	if !strings.Contains(requestBodies[0], `"prompt_cache_breakpoint":{"mode":"explicit"}`) {
+		t.Fatalf("expected ingredient TSV cache breakpoint: %s", requestBodies[0])
+	}
 	if !strings.Contains(requestBodies[1], `"previous_response_id":"resp-menu-invalid"`) {
 		t.Fatalf("expected regeneration to continue from invalid response: %s", requestBodies[1])
 	}

@@ -171,6 +171,10 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	if !strings.Contains(requestBody, `"previous_response_id":"resp-menu-plan"`) {
 		t.Fatalf("expected previous response id in request: %s", requestBody)
 	}
+	if !strings.Contains(requestBody, `"prompt_cache_key":"careme:recipe:v1:`) ||
+		!strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
+		t.Fatalf("expected explicit prompt cache configuration: %s", requestBody)
+	}
 	if !strings.Contains(requestBody, "Cuisine direction for this recipe: Korean.") || !strings.Contains(requestBody, "professional chef and recipe developer") {
 		t.Fatalf("expected recipe instructions and system prompt in request: %s", requestBody)
 	}
@@ -185,7 +189,8 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		OutputTokens: 350,
 		TotalTokens:  1550,
 		InputTokensDetails: responses.ResponseUsageInputTokensDetails{
-			CachedTokens: 900,
+			CachedTokens:     900,
+			CacheWriteTokens: 200,
 		},
 		OutputTokensDetails: responses.ResponseUsageOutputTokensDetails{
 			ReasoningTokens: 125,
@@ -200,7 +205,10 @@ func TestResponseUsageLogAttr(t *testing.T) {
 	}
 	if !reflect.DeepEqual(attr.Value.Group(), []slog.Attr{
 		slog.Int64("inputTokens", 1200),
-		slog.Group("inputTokensDetails", slog.Int64("cachedTokens", 900)),
+		slog.Group("inputTokensDetails",
+			slog.Int64("cachedTokens", 900),
+			slog.Int64("cacheWriteTokens", 200),
+		),
 		slog.Int64("outputTokens", 350),
 		slog.Group("outputTokensDetails", slog.Int64("reasoningTokens", 125)),
 		slog.Int64("totalTokens", 1550),

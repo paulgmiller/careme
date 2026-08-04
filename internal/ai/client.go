@@ -2,10 +2,14 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"careme/internal/logsetup"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -105,6 +109,33 @@ func userPromptMessage(msg string) PromptMessage {
 
 func user(msg string) responses.ResponseInputItemUnionParam {
 	return responses.ResponseInputItemParamOfMessage(msg, responses.EasyInputMessageRoleUser)
+}
+
+func userWithCacheBreakpoint(msg string) responses.ResponseInputItemUnionParam {
+	content := responses.ResponseInputMessageContentListParam{
+		responses.ResponseInputContentParamOfInputText(msg),
+	}
+	content[0].OfInputText.PromptCacheBreakpoint = responses.NewResponseInputTextPromptCacheBreakpointParam()
+	return responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
+}
+
+func recipePromptCacheKey(ctx context.Context) string {
+	userID, _ := logsetup.UserIDFromContext(ctx)
+	sessionID, _ := logsetup.SessionIDFromContext(ctx)
+	identity := userID + "\x00" + sessionID
+	if identity == "\x00" {
+		identity = "anonymous"
+	}
+	sum := sha256.Sum256([]byte(identity))
+	return fmt.Sprintf("careme:recipe:v1:%x", sum[:12])
+}
+
+func configureRecipePromptCache(ctx context.Context, params *responses.ResponseNewParams) {
+	params.PromptCacheKey = openai.String(recipePromptCacheKey(ctx))
+	params.PromptCacheOptions = responses.ResponseNewParamsPromptCacheOptions{
+		Mode: "explicit",
+		Ttl:  "30m",
+	}
 }
 
 func messagesToInput(messages []PromptMessage) []responses.ResponseInputItemUnionParam {
