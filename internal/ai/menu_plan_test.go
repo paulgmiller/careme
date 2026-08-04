@@ -189,6 +189,20 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 	if len(requestBodies) != 2 {
 		t.Fatalf("expected initial request and regeneration request, got %d", len(requestBodies))
 	}
+	for _, requestBody := range requestBodies {
+		if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) {
+			t.Fatalf("expected stable recipe prompt cache key: %s", requestBody)
+		}
+		if !strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
+			t.Fatalf("expected explicit prompt cache mode: %s", requestBody)
+		}
+	}
+	if got := strings.Count(requestBodies[0], `"prompt_cache_breakpoint":{"mode":"explicit"}`); got != 2 {
+		t.Fatalf("expected ingredient and complete menu prompt cache breakpoints, got %d: %s", got, requestBodies[0])
+	}
+	if strings.Contains(requestBodies[1], `"prompt_cache_breakpoint":{"mode":"explicit"}`) {
+		t.Fatalf("did not expect a new cache breakpoint on menu regeneration: %s", requestBodies[1])
+	}
 	if !strings.Contains(requestBodies[1], `"previous_response_id":"resp-menu-invalid"`) {
 		t.Fatalf("expected regeneration to continue from invalid response: %s", requestBodies[1])
 	}
@@ -250,10 +264,24 @@ func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 	if !strings.Contains(body, "Build 2 distinct recipe plans by default") || !strings.Contains(body, "make it vegetarian") {
 		t.Fatalf("unexpected recorded menu prompt: %s", body)
 	}
+	var breakpoints int
+	for _, message := range recorder.record.Input {
+		if message.PromptCacheBreakpoint {
+			breakpoints++
+		}
+	}
+	if breakpoints != 2 || !recorder.record.Input[1].PromptCacheBreakpoint || !recorder.record.Input[len(recorder.record.Input)-1].PromptCacheBreakpoint {
+		t.Fatalf("expected breakpoints after ingredients and the complete initial prompt: %#v", recorder.record.Input)
+	}
 }
 
 func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
+	for _, message := range messages {
+		if message.PromptCacheBreakpoint {
+			t.Fatalf("did not expect regeneration message cache breakpoint: %#v", messages)
+		}
+	}
 	body := mustJSON(t, messages)
 	for _, want := range []string{
 		"Build 1 replacement recipe plan(s) by default",
@@ -304,7 +332,7 @@ func TestRecipePlanInstructions(t *testing.T) {
 
 func TestRegenerateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
-	_, err := client.RegenerateMenuPlan(t.Context(), nil, "resp-menu", 0)
+	_, err := client.RegenerateMenuPlan(t.Context(), nil, ResponseRef{ID: "resp-menu"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "menu plan count must be greater than zero") {
 		t.Fatalf("expected count error, got %v", err)
 	}
@@ -314,7 +342,7 @@ func TestRegenerateMenuPlanRecordsPrompt(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	client := NewClient("test-key", "ignored", menuPlanResponseClient(t, "resp-menu-after"), recorder)
 
-	_, err := client.RegenerateMenuPlan(t.Context(), []string{"less spicy"}, "resp-menu-before", 1)
+	_, err := client.RegenerateMenuPlan(t.Context(), []string{"less spicy"}, ResponseRef{ID: "resp-menu-before"}, 1)
 	if err != nil {
 		t.Fatalf("RegenerateMenuPlan returned error: %v", err)
 	}

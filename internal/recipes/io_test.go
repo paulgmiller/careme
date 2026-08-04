@@ -73,13 +73,14 @@ func TestSaveParams_UsesPrefixedKey(t *testing.T) {
 	}
 }
 
-func TestSaveParams_PersistsPreviousMenuPlanResponseID(t *testing.T) {
+func TestSaveParams_PersistsPreviousMenuPlanResponse(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
 	rio := IO(cacheStore)
 
 	p := DefaultParams(&locations.Location{ID: "123", Name: "Test Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
 	p.PreviousMenuPlanResponseID = "resp-menu-123"
+	p.PreviousMenuPlanPromptCacheKey = "careme:store-day:v1:test"
 
 	if err := rio.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("SaveParams failed: %v", err)
@@ -91,6 +92,9 @@ func TestSaveParams_PersistsPreviousMenuPlanResponseID(t *testing.T) {
 	}
 	if got.PreviousMenuPlanResponseID != p.PreviousMenuPlanResponseID {
 		t.Fatalf("expected previous menu plan response id %q, got %q", p.PreviousMenuPlanResponseID, got.PreviousMenuPlanResponseID)
+	}
+	if got.PreviousMenuPlanPromptCacheKey != p.PreviousMenuPlanPromptCacheKey {
+		t.Fatalf("expected previous menu plan cache key %q, got %q", p.PreviousMenuPlanPromptCacheKey, got.PreviousMenuPlanPromptCacheKey)
 	}
 }
 

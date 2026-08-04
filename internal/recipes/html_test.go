@@ -933,7 +933,10 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 		},
 	}
 
-	FormatRecipeThreadHTML(thread, true, "conv123", "recipe123", w)
+	FormatRecipeThreadHTML(thread, true, ai.ResponseRef{
+		ID:             "conv123",
+		PromptCacheKey: "careme:store-day:v1:test",
+	}, "recipe123", w)
 	body := assertHTTPSuccess(t, w)
 
 	newerIndex := strings.Index(body, "newer question")
@@ -953,4 +956,16 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 	if !strings.Contains(body, "group-open:hidden") || !strings.Contains(body, "group-open:block") {
 		t.Fatalf("expected thread entries to include chevron expand/collapse indicator, body: %s", body)
 	}
+	if !strings.Contains(body, `name="prompt_cache_key" value="careme:store-day:v1:test"`) {
+		t.Fatalf("expected thread fragment to preserve prompt cache key, body: %s", body)
+	}
+}
+
+func TestFormatRecipeThreadHTML_RendersEmptyContinuationFields(t *testing.T) {
+	w := httptest.NewRecorder()
+	FormatRecipeThreadHTML(nil, true, ai.ResponseRef{}, "recipe123", w)
+	body := assertHTTPSuccess(t, w)
+
+	assert.Contains(t, body, `name="response_id" value=""`)
+	assert.Contains(t, body, `name="prompt_cache_key" value=""`)
 }

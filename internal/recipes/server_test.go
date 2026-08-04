@@ -995,8 +995,9 @@ func TestHandleQuestion_RequiresSignedInUser(t *testing.T) {
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
 	form := url.Values{
-		"response_id": {"resp-test"},
-		"question":    {"Can I swap the protein?"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1014,8 +1015,9 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 	s := newTestServer(t, withTestCache(cacheStore))
 
 	form := url.Values{
-		"response_id": {"resp-test"},
-		"question":    {"Can I swap the protein?"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1112,7 +1114,6 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	clone := *p
 	clone.LastRecipes = append([]string(nil), p.LastRecipes...)
 	clone.PriorSavedHashes = append([]string(nil), p.PriorSavedHashes...)
-	clone.PreviousMenuPlanResponseID = p.PreviousMenuPlanResponseID
 	clone.Saved = append([]ai.Recipe(nil), p.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), p.Dismissed...)
 	c.last = &clone
@@ -1132,11 +1133,11 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	panic("unexpected call to RegenerateRecipe")
 }
 
-func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	panic("unexpected call to AskQuestion")
 }
 
@@ -1341,6 +1342,7 @@ func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 type captureQuestionGenerator struct {
 	lastQuestion   string
 	lastResponseID string
+	lastResponse   ai.ResponseRef
 	lastWinePick   struct {
 		recipeTitle string
 		date        time.Time
@@ -1354,7 +1356,8 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+	c.lastResponse = previous
 	return &ai.Recipe{
 		Title:        "Updated Skirt Steak Dinner",
 		Description:  "Updated after questions.",
@@ -1364,9 +1367,10 @@ func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instruc
 	}, nil
 }
 
-func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	c.lastQuestion = question
-	c.lastResponseID = previousResponseID
+	c.lastResponseID = previous.ID
+	c.lastResponse = previous
 	return &ai.QuestionResponse{
 		Answer:     "Try chicken thighs at the same cook time.",
 		ResponseID: "resp-next",
@@ -1422,11 +1426,12 @@ func seedQuestionConversation(t *testing.T, s *server, responseID string) string
 		t.Fatalf("failed to save params: %v", err)
 	}
 	recipe := ai.Recipe{
-		OriginHash:   originHash,
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		Instructions: []string{"Roast until done."},
+		OriginHash:     originHash,
+		PromptCacheKey: "careme:store-day:v1:test",
+		Title:          "Roast Chicken",
+		Description:    "Crisp skin and herbs.",
+		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions:   []string{"Roast until done."},
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -1448,8 +1453,9 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	recipeHash := seedQuestionConversation(t, s, "resp-test")
 
 	form := url.Values{
-		"response_id": {"resp-test"},
-		"question":    {"Can I swap the protein?"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1478,8 +1484,14 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	if got, want := s.generator.(*captureQuestionGenerator).lastResponseID, "resp-test"; got != want {
 		t.Fatalf("expected generator response ID %q, got %q", want, got)
 	}
+	if got, want := s.generator.(*captureQuestionGenerator).lastResponse.PromptCacheKey, "careme:store-day:v1:test"; got != want {
+		t.Fatalf("expected generator prompt cache key %q, got %q", want, got)
+	}
 	if !strings.Contains(body, `name="response_id" value="resp-next"`) {
 		t.Fatalf("expected updated response id in thread fragment, got body: %s", body)
+	}
+	if !strings.Contains(body, `name="prompt_cache_key" value="careme:store-day:v1:test"`) {
+		t.Fatalf("expected prompt cache key in thread fragment, got body: %s", body)
 	}
 	if !strings.Contains(body, `action="/recipe/`+recipeHash+`/regenerate"`) || !strings.Contains(body, "Tweak it, chef") {
 		t.Fatalf("expected regenerate action after first question, got body: %s", body)
@@ -1524,9 +1536,10 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	recipeHash := seedQuestionConversation(t, s, "resp-test")
 
 	form := url.Values{
-		"response_id":  {"resp-test"},
-		"question":     {"Can I swap the protein?"},
-		"recipe_title": {"BBQ Pulled Pork"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
+		"recipe_title":     {"BBQ Pulled Pork"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -2265,7 +2278,10 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	recipe := ai.Recipe{Title: "Guest Recipe", Description: "Guest", ResponseID: "resp-guest"}
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes: []ai.Recipe{recipe},
-		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},
+		Plan: &ai.MenuPlan{
+			ResponseID:     "resp-menu-original",
+			PromptCacheKey: "careme:store-day:v1:test",
+		},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -2314,6 +2330,7 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	require.NotNil(t, captured)
 	require.Equal(t, "make it vegetarian", captured.Instructions)
 	require.Equal(t, "resp-menu-original", captured.PreviousMenuPlanResponseID)
+	require.Equal(t, "careme:store-day:v1:test", captured.PreviousMenuPlanPromptCacheKey)
 	require.Empty(t, captured.Saved)
 	require.Len(t, captured.Dismissed, 1)
 	require.Equal(t, recipe.ComputeHash(), captured.Dismissed[0].ComputeHash())

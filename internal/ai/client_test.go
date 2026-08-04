@@ -1,6 +1,8 @@
 package ai
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestNewClientUsesGPT56FamilyByRole(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, &capturePromptRecorder{})
