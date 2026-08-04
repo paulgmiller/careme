@@ -111,9 +111,13 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 
 func userWithCacheBreakpoint(msg string) responses.ResponseInputItemUnionParam {
 	content := responses.ResponseInputMessageContentListParam{
-		responses.ResponseInputContentParamOfInputText(msg),
+		{
+			OfInputText: &responses.ResponseInputTextParam{
+				Text:                  msg,
+				PromptCacheBreakpoint: responses.NewResponseInputTextPromptCacheBreakpointParam(),
+			},
+		},
 	}
-	content[0].OfInputText.PromptCacheBreakpoint = responses.NewResponseInputTextPromptCacheBreakpointParam()
 	return responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
 }
 
