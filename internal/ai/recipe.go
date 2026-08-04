@@ -49,6 +49,10 @@ type Recipe struct {
 	// Shove wine selection in here
 }
 
+func (r Recipe) ResponseRef() ResponseRef {
+	return ResponseRef{ID: r.ResponseID, PromptCacheKey: r.PromptCacheKey}
+}
+
 // ComputeHash calculates the fnv128 hash of the recipe content
 func (r *Recipe) ComputeHash() string {
 	// OriginHash, ParentHash, PromptCacheKey, and Saved are intentionally excluded because they describe provenance or UI state,
@@ -81,8 +85,9 @@ type ShoppingList struct {
 
 // question threads go off from the response that generated the recipe.
 type QuestionResponse struct {
-	Answer     string
-	ResponseID string
+	Answer         string
+	ResponseID     string
+	PromptCacheKey string
 }
 
 // edited out. Which recipe should be richer?!
@@ -118,7 +123,7 @@ Ensure cook_time reflects the total time implied by every instruction step, incl
 Cross-check every ingredient mention in the instructions for an exact step-level amount, and cross-check those amounts against the total quantity in ingredients.
 Do not include these checks in the output.`
 
-func responseToRecipe(ctx context.Context, category, model string, resp *responses.Response) (*Recipe, error) {
+func responseToRecipe(ctx context.Context, category, model, promptCacheKey string, resp *responses.Response) (*Recipe, error) {
 	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, responseUsageLogAttr(model, resp.Usage))
 	var recipe Recipe
 	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
@@ -129,12 +134,12 @@ func responseToRecipe(ctx context.Context, category, model string, resp *respons
 		return nil, fmt.Errorf("failed to get response ID")
 	}
 	recipe.ResponseID = resp.ID
-	recipe.PromptCacheKey = recipePromptCacheKey(ctx)
+	recipe.PromptCacheKey = promptCacheKey
 	return &recipe, nil
 }
 
-func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*Recipe, error) {
-	if previousResponseID == "" {
+func (c *client) Regenerate(ctx context.Context, instructions []string, previous ResponseRef) (*Recipe, error) {
+	if previous.ID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
@@ -142,7 +147,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 
 	params := responses.ResponseNewParams{
 		Model:              c.model,
-		PreviousResponseID: openai.String(previousResponseID),
+		PreviousResponseID: openai.String(previous.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
 		Instructions: openai.String(systemMessage),
@@ -152,25 +157,26 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		Store: openai.Bool(true),
 		Text:  scheme(c.recipeSchema),
 	}
-	configureRecipePromptCache(ctx, &params)
+	cacheKey := responsePromptCacheKey(ctx, previous)
+	configureRecipePromptCache(&params, cacheKey)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
 
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+	return responseToRecipe(ctx, aiCategoryRecipe, c.model, cacheKey, resp)
 }
 
-func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*Recipe, error) {
-	menuResponseID = strings.TrimSpace(menuResponseID)
-	if menuResponseID == "" {
+func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, error) {
+	menu.ID = strings.TrimSpace(menu.ID)
+	if menu.ID == "" {
 		return nil, fmt.Errorf("response ID is required for menu response generation")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
-		PreviousResponseID: openai.String(menuResponseID),
+		PreviousResponseID: openai.String(menu.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		Instructions: openai.String(systemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
@@ -179,17 +185,18 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		Store: openai.Bool(true),
 		Text:  scheme(c.recipeSchema),
 	}
-	configureRecipePromptCache(ctx, &params)
+	cacheKey := responsePromptCacheKey(ctx, menu)
+	configureRecipePromptCache(&params, cacheKey)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+	return responseToRecipe(ctx, aiCategoryRecipe, c.model, cacheKey, resp)
 }
 
-func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
+func (c *client) AskQuestion(ctx context.Context, question string, previous ResponseRef) (*QuestionResponse, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return nil, fmt.Errorf("question is required")
@@ -203,10 +210,11 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 		},
 		Store: openai.Bool(true),
 	}
-	if previousResponseID != "" {
-		params.PreviousResponseID = openai.String(previousResponseID)
+	if previous.ID != "" {
+		params.PreviousResponseID = openai.String(previous.ID)
 	}
-	configureRecipePromptCache(ctx, &params)
+	cacheKey := responsePromptCacheKey(ctx, previous)
+	configureRecipePromptCache(&params, cacheKey)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
@@ -220,8 +228,9 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 		return nil, fmt.Errorf("failed to get response ID for question")
 	}
 	return &QuestionResponse{
-		Answer:     answer,
-		ResponseID: resp.ID,
+		Answer:         answer,
+		ResponseID:     resp.ID,
+		PromptCacheKey: cacheKey,
 	}, nil
 }
 

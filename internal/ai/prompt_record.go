@@ -11,6 +11,13 @@ type PromptMessage struct {
 	PromptCacheBreakpoint bool   `json:"prompt_cache_breakpoint,omitempty"`
 }
 
+// ResponseRef identifies stored model state and the prompt-cache namespace needed
+// to continue it efficiently. PromptCacheKey is optional for legacy saved records.
+type ResponseRef struct {
+	ID             string `json:"id"`
+	PromptCacheKey string `json:"prompt_cache_key,omitempty"`
+}
+
 type PromptRecord struct {
 	CreatedAt          time.Time       `json:"created_at"`
 	ResponseID         string          `json:"response_id"`

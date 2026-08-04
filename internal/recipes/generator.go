@@ -23,10 +23,10 @@ const IngredientGradeCutoff = 6
 
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
-	RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error)
-	GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error)
-	Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error)
-	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
+	RegenerateMenuPlan(ctx context.Context, instructions []string, previous ai.ResponseRef, count int) (*ai.MenuPlan, error)
+	GenerateRecipe(ctx context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, error)
+	Regenerate(ctx context.Context, newinstructions []string, previous ai.ResponseRef) (*ai.Recipe, error)
+	AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error)
 	PickWine(ctx context.Context, recipe ai.Recipe, wines []ai.InputIngredient) (*ai.WineSelection, error)
 }
 
@@ -114,7 +114,6 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	hash := p.Hash()
 	start := time.Now()
-	ctx = ai.WithRecipePromptCacheKey(ctx, p.Location.ID, p.Date)
 
 	if p.isRegeneration() {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "dismissed_count", len(p.Dismissed))
@@ -141,13 +140,13 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
 		g.writeStatus(ctx, hash, plan.String())
-		menuResponseID := strings.TrimSpace(plan.ResponseID)
+		menuResponse := plan.ResponseRef()
 
 		results, err := parallelism.MapWithErrors(plan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
-			recipe, err := g.aiClient.GenerateRecipe(ctx, plan.Instructions(), menuResponseID)
+			recipe, err := g.aiClient.GenerateRecipe(ctx, plan.Instructions(), menuResponse)
 			if err != nil {
 				return nil, err
 			}
@@ -202,7 +201,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
-	menuResponseID := strings.TrimSpace(menuPlan.ResponseID)
+	menuResponse := menuPlan.ResponseRef()
 
 	g.writeStatus(ctx, hash, menuPlan.String())
 
@@ -210,7 +209,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
 		recipeInstructions := append([]string{p.Directive}, plan.Instructions()...)
-		recipe, err := g.aiClient.GenerateRecipe(ctx, recipeInstructions, menuResponseID)
+		recipe, err := g.aiClient.GenerateRecipe(ctx, recipeInstructions, menuResponse)
 		if err != nil {
 			return nil, err
 		}
@@ -234,14 +233,14 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 }
 
 func (p *generatorParams) isRegeneration() bool {
-	return len(p.Dismissed) > 0 || len(p.Saved) > 0 || strings.TrimSpace(p.PreviousMenuPlanResponseID) != ""
+	return len(p.Dismissed) > 0 || len(p.Saved) > 0 || strings.TrimSpace(p.previousMenuPlanResponse().ID) != ""
 }
 
 func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generatorParams, instructions []string, count int) (*ai.MenuPlan, error) {
-	if strings.TrimSpace(p.PreviousMenuPlanResponseID) == "" {
+	if strings.TrimSpace(p.previousMenuPlanResponse().ID) == "" {
 		return nil, fmt.Errorf("missing previous menu plan response ID for menu")
 	}
-	plan, err := g.aiClient.RegenerateMenuPlan(ctx, instructions, p.PreviousMenuPlanResponseID, count)
+	plan, err := g.aiClient.RegenerateMenuPlan(ctx, instructions, p.previousMenuPlanResponse(), count)
 	if err != nil {
 		return nil, err
 	}
@@ -257,8 +256,8 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 	return plan, nil
 }
 
-func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
-	r, err := g.aiClient.Regenerate(ctx, instructions, previousResponseID)
+func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+	r, err := g.aiClient.Regenerate(ctx, instructions, previous)
 	if err != nil {
 		return nil, err
 	}
@@ -268,8 +267,8 @@ func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []
 }
 
 // generator not prociding a lot of value here. Should sever just hold an ai client?
-func (g *generatorService) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
-	return g.aiClient.AskQuestion(ctx, question, previousResponseID)
+func (g *generatorService) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
+	return g.aiClient.AskQuestion(ctx, question, previous)
 }
 
 func newlySaved(saved []ai.Recipe, priorSavedHashes []string) []string {
@@ -324,7 +323,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	if strings.TrimSpace(recipe.ResponseID) == "" {
 		return nil, fmt.Errorf("recipe %q is missing response ID for critique retry", recipe.Title)
 	}
-	retry, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(*c), recipe.ResponseID)
+	retry, err := g.aiClient.Regenerate(ctx, critique.RetryInstructions(*c), recipe.ResponseRef())
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipe %q from critique feedback: %w", recipe.Title, err)
 	}

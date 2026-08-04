@@ -89,8 +89,8 @@ type locServer interface {
 
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
-	RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error)
-	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
+	RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error)
+	AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error)
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 }
 
@@ -357,9 +357,6 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	if recipeErr != nil && !errors.Is(recipeErr, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load recipe cache key", "hash", hash, "error", recipeErr)
 	}
-	if recipeErr == nil {
-		ctx = ai.WithSavedRecipePromptCacheKey(ctx, recipe.PromptCacheKey)
-	}
 	if responseID == "" {
 		slog.ErrorContext(ctx, "no response id falling back", "hash", hash)
 		if recipeErr != nil {
@@ -380,7 +377,11 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	// can't use request context because it will be canceled when request finishes but we want to finish processing question and save it to cache.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
 	defer cancel()
-	answer, err := s.generator.AskQuestion(ctx, questionForModel, responseID)
+	previous := ai.ResponseRef{ID: responseID}
+	if recipeErr == nil {
+		previous.PromptCacheKey = recipe.PromptCacheKey
+	}
+	answer, err := s.generator.AskQuestion(ctx, questionForModel, previous)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to answer question", "hash", hash, "error", err)
 		http.Error(w, "failed to answer question", http.StatusInternalServerError)
@@ -483,7 +484,6 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	// spin page for recipes?
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 90*time.Second)
 	defer cancel()
-	ctx = ai.WithSavedRecipePromptCacheKey(ctx, recipe.PromptCacheKey)
 	s.wg.Add(1)
 	defer s.wg.Done()
 	instructions := []string{"Rewrite the recipe to incorporate the user's question thread and your answers. Return a complete updated recipe."}
@@ -491,7 +491,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		instructions = append(instructions, "also incorporate these critique fixes")
 		instructions = append(instructions, critiqueFixes...)
 	}
-	replacement, err := s.generator.RegenerateRecipe(ctx, instructions, responseID)
+	replacement, err := s.generator.RegenerateRecipe(ctx, instructions, ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to regenerate single recipe", "hash", hash, "error", err)
 		http.Error(w, "failed to refresh recipe", http.StatusInternalServerError)
@@ -1041,7 +1041,8 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 	params.Instructions = instructions
 	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
 	if currentList.Plan != nil {
-		params.PreviousMenuPlanResponseID = strings.TrimSpace(currentList.Plan.ResponseID)
+		previousMenu := currentList.Plan.ResponseRef()
+		params.PreviousMenuPlanResponse = &previousMenu
 	}
 	originalSelection := selectionFromSaved(baseParams.Saved)
 	selection = originalSelection.override(selection)

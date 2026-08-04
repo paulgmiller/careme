@@ -96,7 +96,7 @@ The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Ea
 
 ## Recipe Prompt Caching
 
-Recipe generation uses the Responses API with `store: true` and continues model state through `previous_response_id`. Conversation state and prompt caching are separate: the response ID selects the conversation history, while `prompt_cache_key` helps route requests to the cache containing an exact prompt prefix.
+Recipe generation uses the Responses API with `store: true` and continues model state through `previous_response_id`. Conversation state and prompt caching are separate: the response ID selects the conversation history, while `prompt_cache_key` helps route requests to the cache containing an exact prompt prefix. Careme carries both values together as an `ai.ResponseRef`; its optional cache key preserves compatibility with older saved records that contain only a response ID.
 
 The initial menu-plan request has two explicit GPT-5.6 cache breakpoints:
 

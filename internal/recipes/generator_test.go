@@ -118,19 +118,19 @@ func (c *captureWineQuestionAIClient) CreateMenuPlan(ctx context.Context, locati
 	panic("unexpected call to CreateMenuPlan")
 }
 
-func (c *captureWineQuestionAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error) {
+func (c *captureWineQuestionAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previous ai.ResponseRef, count int) (*ai.MenuPlan, error) {
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureWineQuestionAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+func (c *captureWineQuestionAIClient) GenerateRecipe(ctx context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, error) {
 	panic("unexpected call to GenerateRecipe")
 }
 
-func (c *captureWineQuestionAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureWineQuestionAIClient) Regenerate(ctx context.Context, newinstructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	panic("unexpected call to Regenerate")
 }
 
-func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	c.question = question
 	return &ai.QuestionResponse{Answer: c.answer, ResponseID: "resp-question"}, nil
 }
@@ -169,12 +169,12 @@ func (c *captureRegenerateAIClient) CreateMenuPlan(ctx context.Context, location
 	return &ai.MenuPlan{ResponseID: "resp-menu-next"}, nil
 }
 
-func (c *captureRegenerateAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error) {
+func (c *captureRegenerateAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previous ai.ResponseRef, count int) (*ai.MenuPlan, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.menuPlanInstructions = append([]string(nil), instructions...)
-	c.menuPlanResponseID = previousResponseID
+	c.menuPlanResponseID = previous.ID
 	c.menuPlanCount = count
 	if c.menuPlan != nil {
 		if c.menuPlan.ResponseID == "" {
@@ -185,12 +185,12 @@ func (c *captureRegenerateAIClient) RegenerateMenuPlan(ctx context.Context, inst
 	return &ai.MenuPlan{ResponseID: "resp-menu-next"}, nil
 }
 
-func (c *captureRegenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+func (c *captureRegenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.instructions = append([]string(nil), instructions...)
-	c.generateMenuResponseID = menuResponseID
+	c.generateMenuResponseID = menu.ID
 	if c.recipe != nil {
 		recipe := *c.recipe
 		return &recipe, nil
@@ -198,12 +198,12 @@ func (c *captureRegenerateAIClient) GenerateRecipe(ctx context.Context, instruct
 	return &ai.Recipe{}, nil
 }
 
-func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.instructions = append([]string(nil), newinstructions...)
-	c.responseID = previousResponseID
+	c.responseID = previous.ID
 	if c.recipe != nil {
 		recipe := *c.recipe
 		return &recipe, nil
@@ -211,7 +211,7 @@ func (c *captureRegenerateAIClient) Regenerate(ctx context.Context, newinstructi
 	return &ai.Recipe{}, nil
 }
 
-func (c *captureRegenerateAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *captureRegenerateAIClient) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	panic("unexpected call to AskQuestion")
 }
 
@@ -243,15 +243,15 @@ func (c *captureGenerateAIClient) CreateMenuPlan(ctx context.Context, location *
 	return &ai.MenuPlan{}, nil
 }
 
-func (c *captureGenerateAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error) {
+func (c *captureGenerateAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previous ai.ResponseRef, count int) (*ai.MenuPlan, error) {
 	panic("unexpected call to RegenerateMenuPlan")
 }
 
-func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.generateMenuResponseIDs = append(c.generateMenuResponseIDs, menuResponseID)
+	c.generateMenuResponseIDs = append(c.generateMenuResponseIDs, menu.ID)
 	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
 	if c.shoppingList == nil {
 		return &ai.Recipe{}, nil
@@ -264,11 +264,11 @@ func (c *captureGenerateAIClient) GenerateRecipe(ctx context.Context, instructio
 	return &ai.Recipe{}, nil
 }
 
-func (c *captureGenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureGenerateAIClient) Regenerate(ctx context.Context, newinstructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	panic("unexpected call to Regenerate")
 }
 
-func (c *captureGenerateAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *captureGenerateAIClient) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	panic("unexpected call to AskQuestion")
 }
 
@@ -301,12 +301,12 @@ func (c *sequenceAIClient) CreateMenuPlan(ctx context.Context, location *locatio
 	return menuPlanForRecipes(resp.Recipes), nil
 }
 
-func (c *sequenceAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previousResponseID string, count int) (*ai.MenuPlan, error) {
+func (c *sequenceAIClient) RegenerateMenuPlan(ctx context.Context, instructions []string, previous ai.ResponseRef, count int) (*ai.MenuPlan, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.menuPlanInstructions = append(c.menuPlanInstructions, append([]string(nil), instructions...))
-	c.menuPlanResponseIDs = append(c.menuPlanResponseIDs, previousResponseID)
+	c.menuPlanResponseIDs = append(c.menuPlanResponseIDs, previous.ID)
 	c.menuPlanCounts = append(c.menuPlanCounts, count)
 	if len(c.menuPlanResponses) > 0 {
 		resp := c.menuPlanResponses[0]
@@ -323,11 +323,11 @@ func (c *sequenceAIClient) RegenerateMenuPlan(ctx context.Context, instructions 
 	return menuPlanForRecipes(resp.Recipes), nil
 }
 
-func (c *sequenceAIClient) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*ai.Recipe, error) {
+func (c *sequenceAIClient) GenerateRecipe(ctx context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.generateMenuResponseIDs = append(c.generateMenuResponseIDs, menuResponseID)
+	c.generateMenuResponseIDs = append(c.generateMenuResponseIDs, menu.ID)
 	c.generateInstructions = append(c.generateInstructions, append([]string(nil), instructions...))
 	for _, recipe := range c.plannedRecipes {
 		if recipeInstructionsContainAnchor(instructions, recipe.Title) {
@@ -342,17 +342,17 @@ func recipeInstructionsContainAnchor(instructions []string, title string) bool {
 	return slices.Contains(instructions, needle)
 }
 
-func (c *sequenceAIClient) Regenerate(ctx context.Context, newinstructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *sequenceAIClient) Regenerate(ctx context.Context, newinstructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.regenerateCalls++
 	c.regenerateInstructions = append(c.regenerateInstructions, append([]string(nil), newinstructions...))
-	c.regenerateResponseIDs = append(c.regenerateResponseIDs, previousResponseID)
+	c.regenerateResponseIDs = append(c.regenerateResponseIDs, previous.ID)
 	if len(c.regenerateResponses) == 0 {
 		return &ai.Recipe{}, nil
 	}
-	resp := c.regenerateResponse(previousResponseID)
+	resp := c.regenerateResponse(previous.ID)
 	return resp, nil
 }
 
@@ -393,7 +393,7 @@ func menuPlanForRecipes(recipes []ai.Recipe) *ai.MenuPlan {
 	return &ai.MenuPlan{Plans: plans, ResponseID: "resp-menu-plan"}
 }
 
-func (c *sequenceAIClient) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *sequenceAIClient) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	panic("unexpected call to AskQuestion")
 }
 

@@ -25,14 +25,14 @@ func TestRecipePromptCacheKeyUsesStoreAndDateAcrossUsers(t *testing.T) {
 	second := logsetup.WithUserID(t.Context(), "user-two")
 	second = logsetup.WithSessionID(second, "session-two")
 
-	first = WithRecipePromptCacheKey(first, "store-123", date)
-	second = WithRecipePromptCacheKey(second, "store-123", date)
+	firstRef := ResponseRef{PromptCacheKey: storeDayPromptCacheKey("store-123", date.Format("2006-01-02"))}
+	secondRef := ResponseRef{PromptCacheKey: storeDayPromptCacheKey("store-123", date.Format("2006-01-02"))}
 
-	if got, want := recipePromptCacheKey(first), recipePromptCacheKey(second); got != want {
+	if got, want := responsePromptCacheKey(first, firstRef), responsePromptCacheKey(second, secondRef); got != want {
 		t.Fatalf("expected users at the same store and date to share a cache key, got %q and %q", got, want)
 	}
-	nextDate := WithRecipePromptCacheKey(first, "store-123", date.AddDate(0, 0, 1))
-	if recipePromptCacheKey(first) == recipePromptCacheKey(nextDate) {
+	nextDate := storeDayPromptCacheKey("store-123", date.AddDate(0, 0, 1).Format("2006-01-02"))
+	if firstRef.PromptCacheKey == nextDate {
 		t.Fatal("expected a different date to use a different cache key")
 	}
 }

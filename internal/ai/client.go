@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"careme/internal/logsetup"
 
@@ -28,8 +27,6 @@ type client struct {
 	oai            openai.Client
 	promptRecorder PromptRecorder
 }
-
-type recipePromptCacheKeyContextKey struct{}
 
 // ignoring model for now.
 func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
@@ -123,9 +120,6 @@ func userWithCacheBreakpoint(msg string) responses.ResponseInputItemUnionParam {
 }
 
 func recipePromptCacheKey(ctx context.Context) string {
-	if cacheKey, ok := ctx.Value(recipePromptCacheKeyContextKey{}).(string); ok && cacheKey != "" {
-		return cacheKey
-	}
 	// The user/session fallback supports old saved recipes and callers without store
 	// context. Combining both avoids collisions from shared background session names.
 	// https://developers.openai.com/api/docs/guides/prompt-caching#improve-cache-hit-rates-with-a-prompt-cache-key
@@ -139,35 +133,26 @@ func recipePromptCacheKey(ctx context.Context) string {
 	return fmt.Sprintf("careme:recipe:v1:%x", sum[:12])
 }
 
-// WithRecipePromptCacheKey scopes recipe prompt caching to one store's ingredient
-// set for its local sale date. Exact prompt-prefix matching still isolates the
-// user-specific complete-menu breakpoint within this shared cache namespace.
-func WithRecipePromptCacheKey(ctx context.Context, storeID string, date time.Time) context.Context {
-	identity := strings.TrimSpace(storeID) + "\x00" + date.Format("2006-01-02")
+func storeDayPromptCacheKey(storeID, date string) string {
+	identity := strings.TrimSpace(storeID) + "\x00" + date
 	sum := sha256.Sum256([]byte(identity))
-	return withRecipePromptCacheKey(ctx, fmt.Sprintf("careme:store-day:v1:%x", sum[:12]))
+	return fmt.Sprintf("careme:store-day:v1:%x", sum[:12])
 }
 
-// WithSavedRecipePromptCacheKey restores the cache namespace persisted with a
-// recipe for later questions and rewrites in a separate request.
-func WithSavedRecipePromptCacheKey(ctx context.Context, cacheKey string) context.Context {
-	return withRecipePromptCacheKey(ctx, strings.TrimSpace(cacheKey))
-}
-
-func withRecipePromptCacheKey(ctx context.Context, cacheKey string) context.Context {
-	if cacheKey == "" {
-		return ctx
+func responsePromptCacheKey(ctx context.Context, ref ResponseRef) string {
+	if cacheKey := strings.TrimSpace(ref.PromptCacheKey); cacheKey != "" {
+		return cacheKey
 	}
-	return context.WithValue(ctx, recipePromptCacheKeyContextKey{}, cacheKey)
+	return recipePromptCacheKey(ctx)
 }
 
-func configureRecipePromptCache(ctx context.Context, params *responses.ResponseNewParams) {
+func configureRecipePromptCache(params *responses.ResponseNewParams, cacheKey string) {
 	// These controls are specific to GPT-5.6 and later OpenAI models. Stable prompt
 	// ordering is portable, but OpenRouter and other providers use different cache
 	// controls (for example session_id and model-dependent cache_control blocks).
 	// Introduce a provider/model-specific cache policy before routing recipe requests
 	// anywhere other than the direct OpenAI GPT-5.6 client.
-	params.PromptCacheKey = openai.String(recipePromptCacheKey(ctx))
+	params.PromptCacheKey = openai.String(cacheKey)
 	params.PromptCacheOptions = responses.ResponseNewParamsPromptCacheOptions{
 		Mode: "explicit",
 		Ttl:  "30m",

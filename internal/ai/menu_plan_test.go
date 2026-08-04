@@ -190,7 +190,7 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 		t.Fatalf("expected initial request and regeneration request, got %d", len(requestBodies))
 	}
 	for _, requestBody := range requestBodies {
-		if !strings.Contains(requestBody, `"prompt_cache_key":"careme:recipe:v1:`) {
+		if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) {
 			t.Fatalf("expected stable recipe prompt cache key: %s", requestBody)
 		}
 		if !strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
@@ -332,7 +332,7 @@ func TestRecipePlanInstructions(t *testing.T) {
 
 func TestRegenerateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
-	_, err := client.RegenerateMenuPlan(t.Context(), nil, "resp-menu", 0)
+	_, err := client.RegenerateMenuPlan(t.Context(), nil, ResponseRef{ID: "resp-menu"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "menu plan count must be greater than zero") {
 		t.Fatalf("expected count error, got %v", err)
 	}
@@ -342,7 +342,7 @@ func TestRegenerateMenuPlanRecordsPrompt(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	client := NewClient("test-key", "ignored", menuPlanResponseClient(t, "resp-menu-after"), recorder)
 
-	_, err := client.RegenerateMenuPlan(t.Context(), []string{"less spicy"}, "resp-menu-before", 1)
+	_, err := client.RegenerateMenuPlan(t.Context(), []string{"less spicy"}, ResponseRef{ID: "resp-menu-before"}, 1)
 	if err != nil {
 		t.Fatalf("RegenerateMenuPlan returned error: %v", err)
 	}

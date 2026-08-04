@@ -159,16 +159,17 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 		}, nil
 	})}, recorder)
 
-	ctx := WithRecipePromptCacheKey(t.Context(), "store-123", time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC))
-	got, err := client.GenerateRecipe(ctx, []string{"Cuisine direction for this recipe: Korean."}, "resp-menu-plan")
+	cacheKey := storeDayPromptCacheKey("store-123", time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC).Format("2006-01-02"))
+	menu := ResponseRef{ID: "resp-menu-plan", PromptCacheKey: cacheKey}
+	got, err := client.GenerateRecipe(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, menu)
 	if err != nil {
 		t.Fatalf("GenerateRecipe returned error: %v", err)
 	}
 	if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
 		t.Fatalf("unexpected recipe: %+v", got)
 	}
-	if got.PromptCacheKey != recipePromptCacheKey(ctx) {
-		t.Fatalf("expected recipe to retain prompt cache key %q, got %q", recipePromptCacheKey(ctx), got.PromptCacheKey)
+	if got.PromptCacheKey != cacheKey {
+		t.Fatalf("expected recipe to retain prompt cache key %q, got %q", cacheKey, got.PromptCacheKey)
 	}
 	if strings.Contains(requestBody, "Chicken thighs") {
 		t.Fatalf("recipe continuation should not resend ingredient TSV: %s", requestBody)

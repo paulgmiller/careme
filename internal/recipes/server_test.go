@@ -1079,7 +1079,11 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	clone := *p
 	clone.LastRecipes = append([]string(nil), p.LastRecipes...)
 	clone.PriorSavedHashes = append([]string(nil), p.PriorSavedHashes...)
-	clone.PreviousMenuPlanResponseID = p.PreviousMenuPlanResponseID
+	clone.PreviousMenuPlanResponseID = p.previousMenuPlanResponse().ID
+	if p.PreviousMenuPlanResponse != nil {
+		previous := *p.PreviousMenuPlanResponse
+		clone.PreviousMenuPlanResponse = &previous
+	}
 	clone.Saved = append([]ai.Recipe(nil), p.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), p.Dismissed...)
 	c.last = &clone
@@ -1099,11 +1103,11 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	panic("unexpected call to RegenerateRecipe")
 }
 
-func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	panic("unexpected call to AskQuestion")
 }
 
@@ -1308,6 +1312,7 @@ func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 type captureQuestionGenerator struct {
 	lastQuestion   string
 	lastResponseID string
+	lastResponse   ai.ResponseRef
 	lastWinePick   struct {
 		recipeTitle string
 		date        time.Time
@@ -1321,7 +1326,8 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+	c.lastResponse = previous
 	return &ai.Recipe{
 		Title:        "Updated Skirt Steak Dinner",
 		Description:  "Updated after questions.",
@@ -1331,9 +1337,10 @@ func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instruc
 	}, nil
 }
 
-func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	c.lastQuestion = question
-	c.lastResponseID = previousResponseID
+	c.lastResponseID = previous.ID
+	c.lastResponse = previous
 	return &ai.QuestionResponse{
 		Answer:     "Try chicken thighs at the same cook time.",
 		ResponseID: "resp-next",
@@ -1389,11 +1396,12 @@ func seedQuestionConversation(t *testing.T, s *server, responseID string) string
 		t.Fatalf("failed to save params: %v", err)
 	}
 	recipe := ai.Recipe{
-		OriginHash:   originHash,
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		Instructions: []string{"Roast until done."},
+		OriginHash:     originHash,
+		PromptCacheKey: "careme:store-day:v1:test",
+		Title:          "Roast Chicken",
+		Description:    "Crisp skin and herbs.",
+		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions:   []string{"Roast until done."},
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -1444,6 +1452,9 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	}
 	if got, want := s.generator.(*captureQuestionGenerator).lastResponseID, "resp-test"; got != want {
 		t.Fatalf("expected generator response ID %q, got %q", want, got)
+	}
+	if got, want := s.generator.(*captureQuestionGenerator).lastResponse.PromptCacheKey, "careme:store-day:v1:test"; got != want {
+		t.Fatalf("expected generator prompt cache key %q, got %q", want, got)
 	}
 	if !strings.Contains(body, `name="response_id" value="resp-next"`) {
 		t.Fatalf("expected updated response id in thread fragment, got body: %s", body)
