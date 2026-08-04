@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -353,34 +352,13 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseID := strings.TrimSpace(r.FormValue("response_id"))
-	recipe, recipeErr := s.SingleFromCache(ctx, hash)
-	if recipeErr != nil && !errors.Is(recipeErr, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load recipe cache key", "hash", hash, "error", recipeErr)
-	}
-	if responseID == "" {
-		slog.ErrorContext(ctx, "no response id falling back", "hash", hash)
-		if recipeErr != nil {
-			slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
-			http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
-			return
-		}
-		rjson, err := json.Marshal(recipe)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
-			http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
-			return
-		}
-		questionForModel = fmt.Sprintf("Regarding  this json recipe %s: %s", rjson, question)
-	}
+	promptCacheKey := strings.TrimSpace(r.FormValue("prompt_cache_key"))
 
 	// this is going to take a while. Start a go routine? and spin?
 	// can't use request context because it will be canceled when request finishes but we want to finish processing question and save it to cache.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
 	defer cancel()
-	previous := ai.ResponseRef{ID: responseID}
-	if recipeErr == nil {
-		previous.PromptCacheKey = recipe.PromptCacheKey
-	}
+	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: promptCacheKey}
 	answer, err := s.generator.AskQuestion(ctx, questionForModel, previous)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to answer question", "hash", hash, "error", err)
@@ -405,7 +383,10 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	FormatRecipeThreadHTML(thread, true, answer.ResponseID, hash, w)
+	FormatRecipeThreadHTML(thread, true, ai.ResponseRef{
+		ID:             answer.ResponseID,
+		PromptCacheKey: promptCacheKey,
+	}, hash, w)
 }
 
 func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Request) {

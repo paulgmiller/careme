@@ -962,8 +962,9 @@ func TestHandleQuestion_RequiresSignedInUser(t *testing.T) {
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
 	form := url.Values{
-		"response_id": {"resp-test"},
-		"question":    {"Can I swap the protein?"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -981,8 +982,9 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 	s := newTestServer(t, withTestCache(cacheStore))
 
 	form := url.Values{
-		"response_id": {"resp-test"},
-		"question":    {"Can I swap the protein?"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1418,8 +1420,9 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	recipeHash := seedQuestionConversation(t, s, "resp-test")
 
 	form := url.Values{
-		"response_id": {"resp-test"},
-		"question":    {"Can I swap the protein?"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1453,6 +1456,9 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	}
 	if !strings.Contains(body, `name="response_id" value="resp-next"`) {
 		t.Fatalf("expected updated response id in thread fragment, got body: %s", body)
+	}
+	if !strings.Contains(body, `name="prompt_cache_key" value="careme:store-day:v1:test"`) {
+		t.Fatalf("expected prompt cache key in thread fragment, got body: %s", body)
 	}
 	if !strings.Contains(body, `action="/recipe/`+recipeHash+`/regenerate"`) || !strings.Contains(body, "Tweak it, chef") {
 		t.Fatalf("expected regenerate action after first question, got body: %s", body)
@@ -1497,9 +1503,10 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	recipeHash := seedQuestionConversation(t, s, "resp-test")
 
 	form := url.Values{
-		"response_id":  {"resp-test"},
-		"question":     {"Can I swap the protein?"},
-		"recipe_title": {"BBQ Pulled Pork"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
+		"recipe_title":     {"BBQ Pulled Pork"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

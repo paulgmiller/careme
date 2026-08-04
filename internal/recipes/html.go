@@ -187,6 +187,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		DisplayIngredients      []ai.Ingredient
 		OriginHash              string
 		ResponseID              string
+		PromptCacheKey          string
 		WineRecommendation      *ai.WineSelection
 		Thread                  []RecipeThreadEntry
 		Feedback                feedback.Feedback
@@ -211,6 +212,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		OriginHash:              recipe.OriginHash,
 		ResponseID:              activeResponseID,
+		PromptCacheKey:          recipe.PromptCacheKey,
 		WineRecommendation:      wineRecommendation,
 		Thread:                  thread,
 		Feedback:                fb,
@@ -242,18 +244,20 @@ func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeIma
 }
 
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
-func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseID, recipeHash string, writer http.ResponseWriter) {
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, response ai.ResponseRef, recipeHash string, writer http.ResponseWriter) {
 	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	data := struct {
 		ResponseID     string
+		PromptCacheKey string
 		RecipeHash     string
 		Thread         []RecipeThreadEntry
 		ServerSignedIn bool
 	}{
-		ResponseID:     responseID,
+		ResponseID:     response.ID,
+		PromptCacheKey: response.PromptCacheKey,
 		RecipeHash:     recipeHash,
 		Thread:         thread,
 		ServerSignedIn: signedIn,
