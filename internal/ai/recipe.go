@@ -215,6 +215,11 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 	}
 	cacheKey := responsePromptCacheKey(ctx, previous)
 	configureRecipePromptCache(&params, cacheKey)
+	// Questions are sequential and likely to be followed by another question. Let
+	// GPT-5.6 advance its implicit latest-user breakpoint so the next turn can reuse
+	// the recipe and preceding question thread. Generation and regeneration remain
+	// explicit-only because their changing branches are less likely to be reused.
+	params.PromptCacheOptions.Mode = "implicit"
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)

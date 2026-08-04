@@ -103,7 +103,7 @@ The initial menu-plan request has two explicit GPT-5.6 cache breakpoints:
 1. Immediately after the ingredient TSV. This preserves the large ingredient prefix when later menu instructions differ.
 2. At the end of the complete initial menu-plan prompt. Descendant recipe calls can reuse the longest matching initial-menu prefix.
 
-Menu regeneration requests add no new breakpoint markers. Breakpoints inherited through the response chain remain available for reads, while the changing regeneration suffix is not written as another cache entry. Requests use `prompt_cache_options.mode: "explicit"` so GPT-5.6 does not also place an implicit breakpoint after the changing final message.
+Menu and recipe regeneration requests add no new breakpoint markers. Breakpoints inherited through the response chain remain available for reads, while speculative regeneration suffixes are not written as new cache entries. Initial generation and regeneration use `prompt_cache_options.mode: "explicit"` so GPT-5.6 caches only deliberate boundaries. Recipe questions use `implicit` mode because questions are sequential; the latest-user breakpoint advances so a later question can reuse the recipe and preceding question thread.
 
 The prompt cache key hashes the store ID and store-local sale date. Users generating from the same ingredient set can therefore share the ingredient breakpoint. The complete-menu breakpoint remains isolated by exact prefix matching: it is reused only when all content through that breakpoint also matches. Generated recipes retain the hashed key as server-owned metadata so later questions and rewrites can use the same cache namespace in a separate HTTP request. Older recipes without this metadata fall back to a hash of Careme user and session identity.
 
