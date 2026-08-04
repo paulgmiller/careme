@@ -114,6 +114,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	hash := p.Hash()
 	start := time.Now()
+	ctx = ai.WithRecipePromptCacheKey(ctx, p.Location.ID, p.Date)
 
 	if p.isRegeneration() {
 		slog.InfoContext(ctx, "Regenerating recipes for location", "location", p.String(), "dismissed_count", len(p.Dismissed))

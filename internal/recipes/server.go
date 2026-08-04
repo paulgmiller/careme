@@ -353,15 +353,21 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseID := strings.TrimSpace(r.FormValue("response_id"))
+	recipe, recipeErr := s.SingleFromCache(ctx, hash)
+	if recipeErr != nil && !errors.Is(recipeErr, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load recipe cache key", "hash", hash, "error", recipeErr)
+	}
+	if recipeErr == nil {
+		ctx = ai.WithSavedRecipePromptCacheKey(ctx, recipe.PromptCacheKey)
+	}
 	if responseID == "" {
 		slog.ErrorContext(ctx, "no response id falling back", "hash", hash)
-		r, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
+		if recipeErr != nil {
 			slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
 			http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
 			return
 		}
-		rjson, err := json.Marshal(r)
+		rjson, err := json.Marshal(recipe)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
 			http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
@@ -372,7 +378,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 
 	// this is going to take a while. Start a go routine? and spin?
 	// can't use request context because it will be canceled when request finishes but we want to finish processing question and save it to cache.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
 	defer cancel()
 	answer, err := s.generator.AskQuestion(ctx, questionForModel, responseID)
 	if err != nil {
@@ -477,6 +483,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	// spin page for recipes?
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 90*time.Second)
 	defer cancel()
+	ctx = ai.WithSavedRecipePromptCacheKey(ctx, recipe.PromptCacheKey)
 	s.wg.Add(1)
 	defer s.wg.Done()
 	instructions := []string{"Rewrite the recipe to incorporate the user's question thread and your answers. Return a complete updated recipe."}

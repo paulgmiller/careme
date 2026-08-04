@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"careme/internal/logsetup"
 
@@ -27,6 +28,8 @@ type client struct {
 	oai            openai.Client
 	promptRecorder PromptRecorder
 }
+
+type recipePromptCacheKeyContextKey struct{}
 
 // ignoring model for now.
 func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
@@ -120,9 +123,11 @@ func userWithCacheBreakpoint(msg string) responses.ResponseInputItemUnionParam {
 }
 
 func recipePromptCacheKey(ctx context.Context) string {
-	// Combine user and session identity so web requests remain stable within a
-	// session while shared background session names such as "mail" or campaign jobs
-	// do not route unrelated users through one cache key.
+	if cacheKey, ok := ctx.Value(recipePromptCacheKeyContextKey{}).(string); ok && cacheKey != "" {
+		return cacheKey
+	}
+	// The user/session fallback supports old saved recipes and callers without store
+	// context. Combining both avoids collisions from shared background session names.
 	// https://developers.openai.com/api/docs/guides/prompt-caching#improve-cache-hit-rates-with-a-prompt-cache-key
 	userID, _ := logsetup.UserIDFromContext(ctx)
 	sessionID, _ := logsetup.SessionIDFromContext(ctx)
@@ -132,6 +137,28 @@ func recipePromptCacheKey(ctx context.Context) string {
 	}
 	sum := sha256.Sum256([]byte(identity))
 	return fmt.Sprintf("careme:recipe:v1:%x", sum[:12])
+}
+
+// WithRecipePromptCacheKey scopes recipe prompt caching to one store's ingredient
+// set for its local sale date. Exact prompt-prefix matching still isolates the
+// user-specific complete-menu breakpoint within this shared cache namespace.
+func WithRecipePromptCacheKey(ctx context.Context, storeID string, date time.Time) context.Context {
+	identity := strings.TrimSpace(storeID) + "\x00" + date.Format("2006-01-02")
+	sum := sha256.Sum256([]byte(identity))
+	return withRecipePromptCacheKey(ctx, fmt.Sprintf("careme:store-day:v1:%x", sum[:12]))
+}
+
+// WithSavedRecipePromptCacheKey restores the cache namespace persisted with a
+// recipe for later questions and rewrites in a separate request.
+func WithSavedRecipePromptCacheKey(ctx context.Context, cacheKey string) context.Context {
+	return withRecipePromptCacheKey(ctx, strings.TrimSpace(cacheKey))
+}
+
+func withRecipePromptCacheKey(ctx context.Context, cacheKey string) context.Context {
+	if cacheKey == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, recipePromptCacheKeyContextKey{}, cacheKey)
 }
 
 func configureRecipePromptCache(ctx context.Context, params *responses.ResponseNewParams) {

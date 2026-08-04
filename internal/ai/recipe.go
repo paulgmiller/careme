@@ -33,24 +33,25 @@ type Ingredient struct {
 }
 
 type Recipe struct {
-	Title        string       `json:"title"`
-	Description  string       `json:"description"`
-	CookTime     string       `json:"cook_time"`
-	CostEstimate string       `json:"cost_estimate"`
-	Ingredients  []Ingredient `json:"ingredients"`
-	Instructions []string     `json:"instructions"`
-	Health       string       `json:"health"`
-	DrinkPairing string       `json:"drink_pairing"`
-	WineStyles   []string     `json:"wine_styles"`
-	ResponseID   string       `json:"response_id,omitempty" jsonschema:"-"` // not in schema
-	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"` // not in schema
-	ParentHash   string       `json:"parent_hash,omitempty" jsonschema:"-"` // regeneration metadata, not in schema
+	Title          string       `json:"title"`
+	Description    string       `json:"description"`
+	CookTime       string       `json:"cook_time"`
+	CostEstimate   string       `json:"cost_estimate"`
+	Ingredients    []Ingredient `json:"ingredients"`
+	Instructions   []string     `json:"instructions"`
+	Health         string       `json:"health"`
+	DrinkPairing   string       `json:"drink_pairing"`
+	WineStyles     []string     `json:"wine_styles"`
+	ResponseID     string       `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
+	OriginHash     string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
+	ParentHash     string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
+	PromptCacheKey string       `json:"prompt_cache_key,omitempty" jsonschema:"-"` // server-owned cache routing metadata
 	// Shove wine selection in here
 }
 
 // ComputeHash calculates the fnv128 hash of the recipe content
 func (r *Recipe) ComputeHash() string {
-	// OriginHash, ParentHash, Saved are intentionally excluded because they describe provenance or UI state,
+	// OriginHash, ParentHash, PromptCacheKey, and Saved are intentionally excluded because they describe provenance or UI state,
 	// not the recipe content itself. If ancestor links ever need to affect identity, that
 	// is a separate model change and should not happen implicitly here.
 	fnv := fnv.New128a()
@@ -128,6 +129,7 @@ func responseToRecipe(ctx context.Context, category, model string, resp *respons
 		return nil, fmt.Errorf("failed to get response ID")
 	}
 	recipe.ResponseID = resp.ID
+	recipe.PromptCacheKey = recipePromptCacheKey(ctx)
 	return &recipe, nil
 }
 

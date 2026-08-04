@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/openai/openai-go/v3/responses"
 )
@@ -158,12 +159,16 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 		}, nil
 	})}, recorder)
 
-	got, err := client.GenerateRecipe(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, "resp-menu-plan")
+	ctx := WithRecipePromptCacheKey(t.Context(), "store-123", time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC))
+	got, err := client.GenerateRecipe(ctx, []string{"Cuisine direction for this recipe: Korean."}, "resp-menu-plan")
 	if err != nil {
 		t.Fatalf("GenerateRecipe returned error: %v", err)
 	}
 	if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
 		t.Fatalf("unexpected recipe: %+v", got)
+	}
+	if got.PromptCacheKey != recipePromptCacheKey(ctx) {
+		t.Fatalf("expected recipe to retain prompt cache key %q, got %q", recipePromptCacheKey(ctx), got.PromptCacheKey)
 	}
 	if strings.Contains(requestBody, "Chicken thighs") {
 		t.Fatalf("recipe continuation should not resend ingredient TSV: %s", requestBody)
@@ -171,7 +176,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	if !strings.Contains(requestBody, `"previous_response_id":"resp-menu-plan"`) {
 		t.Fatalf("expected previous response id in request: %s", requestBody)
 	}
-	if !strings.Contains(requestBody, `"prompt_cache_key":"careme:recipe:v1:`) ||
+	if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) ||
 		!strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
 		t.Fatalf("expected explicit prompt cache configuration: %s", requestBody)
 	}
