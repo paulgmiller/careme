@@ -154,18 +154,18 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.recipeSchema),
+		Store:              openai.Bool(true),
+		Text:               scheme(c.recipeSchema),
+		PromptCacheKey:     openai.String(previous.PromptCacheKey),
+		PromptCacheOptions: defaultCacheOptions(),
 	}
-	cacheKey := responsePromptCacheKey(ctx, previous)
-	configureRecipePromptCache(&params, cacheKey)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
 
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, cacheKey, resp)
+	return responseToRecipe(ctx, aiCategoryRecipe, c.model, previous.PromptCacheKey, resp)
 }
 
 func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, error) {
@@ -182,18 +182,18 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
 		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.recipeSchema),
+		Store:              openai.Bool(true),
+		Text:               scheme(c.recipeSchema),
+		PromptCacheKey:     openai.String(menu.PromptCacheKey),
+		PromptCacheOptions: defaultCacheOptions(),
 	}
-	cacheKey := responsePromptCacheKey(ctx, menu)
-	configureRecipePromptCache(&params, cacheKey)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, cacheKey, resp)
+	return responseToRecipe(ctx, aiCategoryRecipe, c.model, menu.PromptCacheKey, resp)
 }
 
 func (c *client) AskQuestion(ctx context.Context, question string, previous ResponseRef) (*QuestionResponse, error) {
@@ -208,13 +208,12 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{userWithCacheBreakpoint(question)},
 		},
-		Store: openai.Bool(true),
+		Store:              openai.Bool(true),
+		PreviousResponseID: openai.String(previous.ID),
+
+		PromptCacheKey:     openai.String(previous.PromptCacheKey),
+		PromptCacheOptions: defaultCacheOptions(),
 	}
-	if previous.ID != "" {
-		params.PreviousResponseID = openai.String(previous.ID)
-	}
-	cacheKey := responsePromptCacheKey(ctx, previous)
-	configureRecipePromptCache(&params, cacheKey)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
@@ -230,7 +229,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 	return &QuestionResponse{
 		Answer:         answer,
 		ResponseID:     resp.ID,
-		PromptCacheKey: cacheKey,
+		PromptCacheKey: previous.PromptCacheKey,
 	}, nil
 }
 

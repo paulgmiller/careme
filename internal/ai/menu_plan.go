@@ -160,17 +160,19 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 	if err != nil {
 		return nil, fmt.Errorf("failed to build menu plan messages: %w", err)
 	}
+	cacheKey := storeDayPromptCacheKey(location.ID, date.Format("2006-01-02"))
+
 	params := responses.ResponseNewParams{
 		Model:        recipePlanModel,
 		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
 		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.menuSchema),
+		Store:              openai.Bool(true),
+		Text:               scheme(c.menuSchema),
+		PromptCacheKey:     openai.String(cacheKey),
+		PromptCacheOptions: defaultCacheOptions(),
 	}
-	cacheKey := storeDayPromptCacheKey(location.ID, date.Format("2006-01-02"))
-	configureRecipePromptCache(&params, cacheKey)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, err
@@ -199,11 +201,12 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
 		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.menuSchema),
+		Store:              openai.Bool(true),
+		Text:               scheme(c.menuSchema),
+		PromptCacheKey:     openai.String(previous.PromptCacheKey),
+		PromptCacheOptions: defaultCacheOptions(),
 	}
-	cacheKey := responsePromptCacheKey(ctx, previous)
-	configureRecipePromptCache(&params, cacheKey)
+
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan after ingredient mismatch: %w", err)
@@ -214,7 +217,7 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 	if err != nil {
 		return nil, err
 	}
-	plan.PromptCacheKey = cacheKey
+	plan.PromptCacheKey = previous.PromptCacheKey
 	if err := alignMenuPlanIngredients(plan, saleIngredients); err != nil {
 		return nil, fmt.Errorf("regenerated menu plan still used unavailable ingredient: %w", err)
 	}
@@ -239,11 +242,11 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
 		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.menuSchema),
+		Store:              openai.Bool(true),
+		Text:               scheme(c.menuSchema),
+		PromptCacheKey:     openai.String(previous.PromptCacheKey),
+		PromptCacheOptions: defaultCacheOptions(),
 	}
-	cacheKey := responsePromptCacheKey(ctx, previous)
-	configureRecipePromptCache(&params, cacheKey)
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
@@ -253,7 +256,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 	if err != nil {
 		return nil, err
 	}
-	plan.PromptCacheKey = cacheKey
+	plan.PromptCacheKey = previous.PromptCacheKey
 	return plan, nil
 }
 

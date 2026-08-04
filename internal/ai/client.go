@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	"careme/internal/logsetup"
-
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
@@ -119,19 +117,11 @@ func userWithCacheBreakpoint(msg string) responses.ResponseInputItemUnionParam {
 	return responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
 }
 
-func recipePromptCacheKey(ctx context.Context) string {
-	// The user/session fallback supports old saved recipes and callers without store
-	// context. Combining both avoids collisions from shared background session names.
-	// https://developers.openai.com/api/docs/guides/prompt-caching#improve-cache-hit-rates-with-a-prompt-cache-key
-	userID, _ := logsetup.UserIDFromContext(ctx)
-	sessionID, _ := logsetup.SessionIDFromContext(ctx)
-	identity := userID + "\x00" + sessionID
-	if identity == "\x00" {
-		identity = "anonymous"
-	}
-	sum := sha256.Sum256([]byte(identity))
-	return fmt.Sprintf("careme:recipe:v1:%x", sum[:12])
-}
+// These cache options and cache key are specific to GPT-5.6 and later OpenAI models. Stable prompt
+// ordering is portable, but OpenRouter and other providers use different cache
+// controls (for example session_id and model-dependent cache_control blocks).
+// Introduce a provider/model-specific cache policy before routing recipe requests
+// anywhere other than the direct OpenAI GPT-5.6 client.
 
 func storeDayPromptCacheKey(storeID, date string) string {
 	identity := strings.TrimSpace(storeID) + "\x00" + date
@@ -139,21 +129,8 @@ func storeDayPromptCacheKey(storeID, date string) string {
 	return fmt.Sprintf("careme:store-day:v1:%x", sum[:12])
 }
 
-func responsePromptCacheKey(ctx context.Context, ref ResponseRef) string {
-	if cacheKey := strings.TrimSpace(ref.PromptCacheKey); cacheKey != "" {
-		return cacheKey
-	}
-	return recipePromptCacheKey(ctx)
-}
-
-func configureRecipePromptCache(params *responses.ResponseNewParams, cacheKey string) {
-	// These controls are specific to GPT-5.6 and later OpenAI models. Stable prompt
-	// ordering is portable, but OpenRouter and other providers use different cache
-	// controls (for example session_id and model-dependent cache_control blocks).
-	// Introduce a provider/model-specific cache policy before routing recipe requests
-	// anywhere other than the direct OpenAI GPT-5.6 client.
-	params.PromptCacheKey = openai.String(cacheKey)
-	params.PromptCacheOptions = responses.ResponseNewParamsPromptCacheOptions{
+func defaultCacheOptions() responses.ResponseNewParamsPromptCacheOptions {
+	return responses.ResponseNewParamsPromptCacheOptions{
 		Mode: "explicit",
 		Ttl:  "30m",
 	}
