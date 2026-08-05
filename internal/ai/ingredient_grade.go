@@ -96,6 +96,13 @@ type IngredientGrade struct {
 	Reason string `json:"reason"`
 }
 
+func (i *IngredientGrade) GetScore() int {
+	if i == nil {
+		return 0
+	}
+	return i.Score
+}
+
 // Not a big fand of the number of places that normalize should be done once and not always
 func NormalizeInputIngredient(ingredient InputIngredient) InputIngredient {
 	ingredient.ProductID = strings.TrimSpace(ingredient.ProductID)

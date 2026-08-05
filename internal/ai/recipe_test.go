@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/openai/openai-go/v3/responses"
 )
@@ -160,18 +161,27 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 		}, nil
 	})}, recorder)
 
-	got, err := client.GenerateRecipe(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, "resp-menu-plan")
+	cacheKey := storeDayPromptCacheKey("store-123", time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC).Format("2006-01-02"))
+	menu := ResponseRef{ID: "resp-menu-plan", PromptCacheKey: cacheKey}
+	got, err := client.GenerateRecipe(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, menu)
 	if err != nil {
 		t.Fatalf("GenerateRecipe returned error: %v", err)
 	}
 	if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
 		t.Fatalf("unexpected recipe: %+v", got)
 	}
+	if got.PromptCacheKey != cacheKey {
+		t.Fatalf("expected recipe to retain prompt cache key %q, got %q", cacheKey, got.PromptCacheKey)
+	}
 	if strings.Contains(requestBody, "Chicken thighs") {
 		t.Fatalf("recipe continuation should not resend ingredient TSV: %s", requestBody)
 	}
 	if !strings.Contains(requestBody, `"previous_response_id":"resp-menu-plan"`) {
 		t.Fatalf("expected previous response id in request: %s", requestBody)
+	}
+	if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) ||
+		!strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
+		t.Fatalf("expected explicit prompt cache configuration: %s", requestBody)
 	}
 	if !strings.Contains(requestBody, "Cuisine direction for this recipe: Korean.") || !strings.Contains(requestBody, "professional chef and recipe developer") {
 		t.Fatalf("expected recipe instructions and system prompt in request: %s", requestBody)
@@ -181,13 +191,52 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	}
 }
 
+func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
+	var requestBody string
+	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		requestBody = string(body)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"id":"resp-question","object":"response","created_at":1778529600,
+				"status":"completed","model":%q,
+				"output":[{"id":"msg-question","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Use half as much salt.","annotations":[]}]}],
+				"usage":{"input_tokens":20,"input_tokens_details":{"cached_tokens":15},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":25}
+			}`, defaultRecipeModel))),
+			Request: req,
+		}, nil
+	})}, nil)
+
+	answer, err := client.AskQuestion(t.Context(), "Can I reduce the salt?", ResponseRef{
+		ID:             "resp-recipe",
+		PromptCacheKey: "careme:store-day:v1:test",
+	})
+	if err != nil {
+		t.Fatalf("AskQuestion returned error: %v", err)
+	}
+	if answer.ResponseID != "resp-question" || answer.Answer != "Use half as much salt." {
+		t.Fatalf("unexpected answer: %+v", answer)
+	}
+	if !strings.Contains(requestBody, `"previous_response_id":"resp-recipe"`) ||
+		!strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) ||
+		!strings.Contains(requestBody, `"prompt_cache_breakpoint":{"mode":"explicit"}`) {
+		t.Fatalf("expected explicit question cache breakpoint: %s", requestBody)
+	}
+}
+
 func TestResponseUsageLogAttr(t *testing.T) {
 	attr := responseUsageLogAttr(defaultRecipeModel, responses.ResponseUsage{
 		InputTokens:  1200,
 		OutputTokens: 350,
 		TotalTokens:  1550,
 		InputTokensDetails: responses.ResponseUsageInputTokensDetails{
-			CachedTokens: 900,
+			CachedTokens:     900,
+			CacheWriteTokens: 200,
 		},
 		OutputTokensDetails: responses.ResponseUsageOutputTokensDetails{
 			ReasoningTokens: 125,
@@ -202,15 +251,19 @@ func TestResponseUsageLogAttr(t *testing.T) {
 	}
 	if !reflect.DeepEqual(attr.Value.Group(), []slog.Attr{
 		slog.Int64("inputTokens", 1200),
-		slog.Group("inputTokensDetails", slog.Int64("cachedTokens", 900)),
+		slog.Group("inputTokensDetails",
+			slog.Int64("cachedTokens", 900),
+			slog.Int64("cacheWriteTokens", 200),
+		),
 		slog.Int64("outputTokens", 350),
 		slog.Group("outputTokensDetails", slog.Int64("reasoningTokens", 125)),
 		slog.Int64("totalTokens", 1550),
 		slog.Group("spend",
 			slog.String("currency", "USD"),
-			slog.Float64("totalUSD", 0.01245),
-			slog.Float64("inputUSD", 0.0015),
+			slog.Float64("totalUSD", 0.0127),
+			slog.Float64("inputUSD", 0.0005),
 			slog.Float64("cachedInputUSD", 0.00045),
+			slog.Float64("cacheWriteInputUSD", 0.00125),
 			slog.Float64("outputUSD", 0.0105),
 		),
 	}) {

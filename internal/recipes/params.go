@@ -40,8 +40,16 @@ type generatorParams struct {
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 
 	// regeneration-only context from the origin params; not hashed
-	PriorSavedHashes           []string `json:"-"`
-	PreviousMenuPlanResponseID string   `json:"previous_menu_plan_response_id,omitempty"`
+	PriorSavedHashes               []string `json:"-"`
+	PreviousMenuPlanResponseID     string   `json:"previous_menu_plan_response_id,omitempty"`
+	PreviousMenuPlanPromptCacheKey string   `json:"previous_menu_plan_prompt_cache_key,omitempty"`
+}
+
+func (g *generatorParams) previousMenuPlanResponse() ai.ResponseRef {
+	return ai.ResponseRef{
+		ID:             g.PreviousMenuPlanResponseID,
+		PromptCacheKey: g.PreviousMenuPlanPromptCacheKey,
+	}
 }
 
 // exist for mail's interface be careful please.

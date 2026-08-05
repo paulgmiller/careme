@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -73,8 +72,8 @@ type locServer interface {
 
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
-	RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error)
-	AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error)
+	RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error)
+	AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error)
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 }
 
@@ -337,28 +336,14 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseID := strings.TrimSpace(r.FormValue("response_id"))
-	if responseID == "" {
-		slog.ErrorContext(ctx, "no response id falling back", "hash", hash)
-		r, err := s.SingleFromCache(ctx, hash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
-			http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
-			return
-		}
-		rjson, err := json.Marshal(r)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load response id", "hash", hash)
-			http.Error(w, "lost context on this recipe", http.StatusInternalServerError)
-			return
-		}
-		questionForModel = fmt.Sprintf("Regarding  this json recipe %s: %s", rjson, question)
-	}
+	promptCacheKey := strings.TrimSpace(r.FormValue("prompt_cache_key"))
 
 	// this is going to take a while. Start a go routine? and spin?
 	// can't use request context because it will be canceled when request finishes but we want to finish processing question and save it to cache.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
 	defer cancel()
-	answer, err := s.generator.AskQuestion(ctx, questionForModel, responseID)
+	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: promptCacheKey}
+	answer, err := s.generator.AskQuestion(ctx, questionForModel, previous)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to answer question", "hash", hash, "error", err)
 		http.Error(w, "failed to answer question", http.StatusInternalServerError)
@@ -382,7 +367,10 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	FormatRecipeThreadHTML(thread, true, answer.ResponseID, hash, w)
+	FormatRecipeThreadHTML(thread, true, ai.ResponseRef{
+		ID:             answer.ResponseID,
+		PromptCacheKey: promptCacheKey,
+	}, hash, w)
 }
 
 func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Request) {
@@ -468,7 +456,8 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		instructions = append(instructions, "also incorporate these critique fixes")
 		instructions = append(instructions, critiqueFixes...)
 	}
-	replacement, err := s.generator.RegenerateRecipe(ctx, instructions, responseID)
+	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
+	replacement, err := s.generator.RegenerateRecipe(ctx, instructions, previous)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to regenerate single recipe", "hash", hash, "error", err)
 		http.Error(w, "failed to refresh recipe", http.StatusInternalServerError)
@@ -610,8 +599,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			returnTo := shoppingListArgs(map[string]string{
-				queryArgHash:        shoppingListHash,
-				queryArgPendingSave: recipeHash,
+				queryArgHash: shoppingListHash,
 			})
 			redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, returnTo)
 			return
@@ -755,7 +743,7 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 
 	httpx.SetHTMLContentType(w)
 	if saved {
-		w.Header().Set("HX-Trigger", "careme:saved-recipes-changed")
+		w.Header().Set("HX-Trigger", `{"careme:saved-recipes-changed":{},"careme:recipe-saved":{}}`)
 	}
 	if _, err := w.Write(response.Bytes()); err != nil {
 		return fmt.Errorf("write recipe selection response: %w", err)
@@ -999,7 +987,8 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 	params.Instructions = instructions
 	params.PriorSavedHashes = lo.Map(baseParams.Saved, func(r ai.Recipe, _ int) string { return r.ComputeHash() })
 	if currentList.Plan != nil {
-		params.PreviousMenuPlanResponseID = strings.TrimSpace(currentList.Plan.ResponseID)
+		params.PreviousMenuPlanResponseID = currentList.Plan.ResponseID
+		params.PreviousMenuPlanPromptCacheKey = currentList.Plan.PromptCacheKey
 	}
 	originalSelection := selectionFromSaved(baseParams.Saved)
 	selection = originalSelection.override(selection)
@@ -1036,20 +1025,11 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 const (
 	queryArgHash         = "h"
 	queryArgStart        = "start"
-	queryArgPendingSave  = "save"
+	queryArgConversion   = "conversion"
 	queryArgInstructions = "instructions"
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
-
-func (s *server) recipeFromShoppingList(list ai.ShoppingList, recipeHash string) (*ai.Recipe, error) {
-	for i := range list.Recipes {
-		if list.Recipes[i].ComputeHash() == recipeHash {
-			return &list.Recipes[i], nil
-		}
-	}
-	return nil, cache.ErrNotFound
-}
 
 // notFound handles a missing generated shopping list by showing the generation
 // spinner while work is in progress and the retry page after generation times out.
@@ -1142,7 +1122,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Has(queryArgStart) {
-		redirectToHash(w, r, hashParam, QueryArgHelp)
+		redirectToHashWithConversion(w, r, hashParam, templates.RecipeGenerationConversion)
 		return
 	}
 
@@ -1163,25 +1143,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		selection = selection.override(userSelection)
-
-		// don't like mutating on a get. Find a better way to do this
-		if pendingSave := strings.TrimSpace(r.URL.Query().Get(queryArgPendingSave)); pendingSave != "" {
-			if _, err := s.recipeFromShoppingList(*slist, pendingSave); err != nil {
-				http.Error(w, "recipe not found", http.StatusNotFound)
-				return
-			}
-			if _, err := s.saveRecipeForUser(ctx, currentUser, hashParam, pendingSave); err != nil {
-				if errors.Is(err, cache.ErrNotFound) {
-					http.Error(w, "recipe not found", http.StatusNotFound)
-					return
-				}
-				slog.ErrorContext(ctx, "failed to save pending recipe", "hash", hashParam, "recipe_hash", pendingSave, "error", err)
-				http.Error(w, "failed to save recipe", http.StatusInternalServerError)
-				return
-			}
-			redirectToHash(w, r, hashParam)
-			return
-		}
 	}
 	if r.URL.Query().Get("mail") == "true" {
 		tf := users.NewUnsubscribeTokenFactory(*s.cfg)
@@ -1488,17 +1449,30 @@ func generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 }
 
-// does not send over help
+// redirectToHash keeps only query arguments explicitly named by the caller.
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToKeep ...string) {
-	u := url.URL{Path: "/recipes"}
-	args := url.Values{} // intentioanlly clear other args
-	args.Set(queryArgHash, hash)
+	args := url.Values{} // intentionally clear other args
 	if slices.Contains(argsToKeep, queryArgStart) {
 		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
 	}
 	if slices.Contains(argsToKeep, QueryArgHelp) {
 		args.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
 	}
+	redirectToHashWithArgs(w, r, hash, args)
+}
+
+func redirectToHashWithConversion(w http.ResponseWriter, r *http.Request, hash string, event templates.ConversionEvent) {
+	args := url.Values{}
+	args.Add(queryArgConversion, string(event))
+	if help := r.URL.Query().Get(QueryArgHelp); help != "" {
+		args.Set(QueryArgHelp, help)
+	}
+	redirectToHashWithArgs(w, r, hash, args)
+}
+
+func redirectToHashWithArgs(w http.ResponseWriter, r *http.Request, hash string, args url.Values) {
+	u := url.URL{Path: "/recipes"}
+	args.Set(queryArgHash, hash)
 
 	u.RawQuery = args.Encode()
 	if httpx.IsHTMX(r) {

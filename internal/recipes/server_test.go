@@ -24,6 +24,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
+	"careme/internal/templates"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
@@ -287,6 +288,38 @@ func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T
 	require.Contains(t, body, `Restore`)
 	require.Contains(t, body, `/recipes/`+originHash+`/finalize`)
 	require.NotContains(t, body, `Add at least one recipe`)
+}
+
+func TestHandleRecipes_TracksCompletedGeneration(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore))
+
+	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+	hash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes: []ai.Recipe{{Title: "Fresh Recipe", Description: "Just generated"}},
+	}, hash))
+
+	start := time.Now().Format(time.RFC3339Nano)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(hash)+"&start="+url.QueryEscape(start)+"&help=Save+two+dinners", nil)
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	redirect, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, hash, redirect.Query().Get(queryArgHash))
+	require.Equal(t, string(templates.RecipeGenerationConversion), redirect.Query().Get(queryArgConversion))
+	require.Equal(t, "Save two dinners", redirect.Query().Get(QueryArgHelp))
+
+	followReq := httptest.NewRequest(http.MethodGet, redirect.String(), nil)
+	followRR := httptest.NewRecorder()
+	s.handleRecipes(followRR, followReq)
+	require.Equal(t, http.StatusOK, followRR.Code)
+	require.Contains(t, followRR.Body.String(), `.get("conversion")`)
+	require.Contains(t, followRR.Body.String(), `url.searchParams.delete("conversion")`)
 }
 
 func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
@@ -962,8 +995,9 @@ func TestHandleQuestion_RequiresSignedInUser(t *testing.T) {
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
 	form := url.Values{
-		"response_id": {"resp-test"},
-		"question":    {"Can I swap the protein?"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -981,8 +1015,9 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 	s := newTestServer(t, withTestCache(cacheStore))
 
 	form := url.Values{
-		"response_id": {"resp-test"},
-		"question":    {"Can I swap the protein?"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/hash/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1079,7 +1114,6 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	clone := *p
 	clone.LastRecipes = append([]string(nil), p.LastRecipes...)
 	clone.PriorSavedHashes = append([]string(nil), p.PriorSavedHashes...)
-	clone.PreviousMenuPlanResponseID = p.PreviousMenuPlanResponseID
 	clone.Saved = append([]ai.Recipe(nil), p.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), p.Dismissed...)
 	c.last = &clone
@@ -1099,11 +1133,11 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	panic("unexpected call to RegenerateRecipe")
 }
 
-func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	panic("unexpected call to AskQuestion")
 }
 
@@ -1308,6 +1342,7 @@ func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 type captureQuestionGenerator struct {
 	lastQuestion   string
 	lastResponseID string
+	lastResponse   ai.ResponseRef
 	lastWinePick   struct {
 		recipeTitle string
 		date        time.Time
@@ -1321,7 +1356,8 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previousResponseID string) (*ai.Recipe, error) {
+func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+	c.lastResponse = previous
 	return &ai.Recipe{
 		Title:        "Updated Skirt Steak Dinner",
 		Description:  "Updated after questions.",
@@ -1331,9 +1367,10 @@ func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instruc
 	}, nil
 }
 
-func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previousResponseID string) (*ai.QuestionResponse, error) {
+func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
 	c.lastQuestion = question
-	c.lastResponseID = previousResponseID
+	c.lastResponseID = previous.ID
+	c.lastResponse = previous
 	return &ai.QuestionResponse{
 		Answer:     "Try chicken thighs at the same cook time.",
 		ResponseID: "resp-next",
@@ -1389,11 +1426,12 @@ func seedQuestionConversation(t *testing.T, s *server, responseID string) string
 		t.Fatalf("failed to save params: %v", err)
 	}
 	recipe := ai.Recipe{
-		OriginHash:   originHash,
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		Instructions: []string{"Roast until done."},
+		OriginHash:     originHash,
+		PromptCacheKey: "careme:store-day:v1:test",
+		Title:          "Roast Chicken",
+		Description:    "Crisp skin and herbs.",
+		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions:   []string{"Roast until done."},
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -1415,8 +1453,9 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	recipeHash := seedQuestionConversation(t, s, "resp-test")
 
 	form := url.Values{
-		"response_id": {"resp-test"},
-		"question":    {"Can I swap the protein?"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1445,8 +1484,14 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	if got, want := s.generator.(*captureQuestionGenerator).lastResponseID, "resp-test"; got != want {
 		t.Fatalf("expected generator response ID %q, got %q", want, got)
 	}
+	if got, want := s.generator.(*captureQuestionGenerator).lastResponse.PromptCacheKey, "careme:store-day:v1:test"; got != want {
+		t.Fatalf("expected generator prompt cache key %q, got %q", want, got)
+	}
 	if !strings.Contains(body, `name="response_id" value="resp-next"`) {
 		t.Fatalf("expected updated response id in thread fragment, got body: %s", body)
+	}
+	if !strings.Contains(body, `name="prompt_cache_key" value="careme:store-day:v1:test"`) {
+		t.Fatalf("expected prompt cache key in thread fragment, got body: %s", body)
 	}
 	if !strings.Contains(body, `action="/recipe/`+recipeHash+`/regenerate"`) || !strings.Contains(body, "Tweak it, chef") {
 		t.Fatalf("expected regenerate action after first question, got body: %s", body)
@@ -1491,9 +1536,10 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 	recipeHash := seedQuestionConversation(t, s, "resp-test")
 
 	form := url.Values{
-		"response_id":  {"resp-test"},
-		"question":     {"Can I swap the protein?"},
-		"recipe_title": {"BBQ Pulled Pork"},
+		"response_id":      {"resp-test"},
+		"prompt_cache_key": {"careme:store-day:v1:test"},
+		"question":         {"Can I swap the protein?"},
+		"recipe_title":     {"BBQ Pulled Pork"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/question", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1590,7 +1636,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	require.Equal(t, "careme:saved-recipes-changed", rr.Header().Get("HX-Trigger"))
+	require.JSONEq(t, `{"careme:saved-recipes-changed":{},"careme:recipe-saved":{}}`, rr.Header().Get("HX-Trigger"))
 	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
 	require.Contains(t, rr.Body.String(), `✓ Added`)
 	require.Contains(t, rr.Body.String(), `Hide`)
@@ -1622,7 +1668,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 	}
 }
 
-func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeaderToShoppingListPendingSave(t *testing.T) {
+func TestHandleSaveRecipe_NoSessionReturnsToShoppingList(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -1636,12 +1682,12 @@ func TestHandleSaveRecipe_NoSessionHTMXSetsRedirectHeaderToShoppingListPendingSa
 	s.handleSaveRecipe(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=shopping-hash&save=hash"); got != want {
+	if got, want := rr.Header().Get("HX-Redirect"), auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=shopping-hash"); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }
 
-func TestHandleSaveRecipe_NoSessionFromRecipePageRedirectsToShoppingListPendingSave(t *testing.T) {
+func TestHandleSaveRecipe_NoSessionFromRecipePageReturnsToShoppingList(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -1655,10 +1701,10 @@ func TestHandleSaveRecipe_NoSessionFromRecipePageRedirectsToShoppingListPendingS
 	s.handleSaveRecipe(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=origin-hash&save=recipe-hash"), rr.Header().Get("HX-Redirect"))
+	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredAddRecipe, "/recipes?h=origin-hash"), rr.Header().Get("HX-Redirect"))
 }
 
-func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T) {
+func TestHandleRecipes_ReturnAfterSignInDoesNotSaveRecipe(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -1669,7 +1715,7 @@ func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T
 	recipe := ai.Recipe{
 		Title:       "Save After Login",
 		Description: "Recipe to save after login",
-		ResponseID:  "resp-pending-save",
+		ResponseID:  "resp-save-after-login",
 	}
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	hash := params.Hash()
@@ -1678,21 +1724,22 @@ func TestHandleRecipes_PendingSaveAfterSignInAddsRecipeAndRedirects(t *testing.T
 	saveRecipesForOrigin(t, s, hash, recipe)
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, hash))
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&save="+recipeHash, nil)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&conversion="+string(templates.SignupCompletedConversion), nil)
 	rr := httptest.NewRecorder()
 
 	s.handleRecipes(rr, req)
-	s.Wait()
 
-	require.Equal(t, http.StatusSeeOther, rr.Code)
-	require.Equal(t, "/recipes?h="+hash, rr.Header().Get("Location"))
+	require.Equal(t, http.StatusOK, rr.Code)
 	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
 	require.NoError(t, err)
-	require.Equal(t, []string{recipeHash}, selection.SavedHashes)
+	require.Empty(t, selection.SavedHashes)
 	user, err := storage.GetByID("mock-clerk-user-id")
 	require.NoError(t, err)
-	require.Len(t, user.LastRecipes, 1)
-	require.Equal(t, recipeHash, user.LastRecipes[0].Hash)
+	require.Empty(t, user.LastRecipes)
+	body := rr.Body.String()
+	require.Contains(t, body, `hx-post="/recipe/`+recipeHash+`/save"`)
+	require.Contains(t, body, "\n    Add\n")
+	require.Contains(t, body, `.get("conversion")`)
 }
 
 func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
@@ -2231,7 +2278,10 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	recipe := ai.Recipe{Title: "Guest Recipe", Description: "Guest", ResponseID: "resp-guest"}
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes: []ai.Recipe{recipe},
-		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},
+		Plan: &ai.MenuPlan{
+			ResponseID:     "resp-menu-original",
+			PromptCacheKey: "careme:store-day:v1:test",
+		},
 	}, originHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
@@ -2280,6 +2330,7 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	require.NotNil(t, captured)
 	require.Equal(t, "make it vegetarian", captured.Instructions)
 	require.Equal(t, "resp-menu-original", captured.PreviousMenuPlanResponseID)
+	require.Equal(t, "careme:store-day:v1:test", captured.PreviousMenuPlanPromptCacheKey)
 	require.Empty(t, captured.Saved)
 	require.Len(t, captured.Dismissed, 1)
 	require.Equal(t, recipe.ComputeHash(), captured.Dismissed[0].ComputeHash())

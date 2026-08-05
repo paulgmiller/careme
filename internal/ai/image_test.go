@@ -67,6 +67,7 @@ func TestImageUsageLogAttr(t *testing.T) {
 			slog.Float64("totalUSD", 0.00668),
 			slog.Float64("inputUSD", 0.00068),
 			slog.Float64("cachedInputUSD", 0),
+			slog.Float64("cacheWriteInputUSD", 0),
 			slog.Float64("outputUSD", 0.006),
 		),
 	}) {
