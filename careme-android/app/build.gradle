@@ -56,9 +56,9 @@ android {
     defaultConfig {
         applicationId "cooking.careme"
         minSdkVersion 21
-        targetSdkVersion 35
-        versionCode 7
-        versionName "1.3"
+        targetSdkVersion 36
+        versionCode 8
+        versionName "1.4"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
