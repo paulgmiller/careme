@@ -341,7 +341,7 @@ func TestGetLocationsByCoordinatesReturnsErrorWhenAllBackendsFail(t *testing.T) 
 	}
 }
 
-func TestGetLocationsByCoordinatesWhenAtLeastOneBackendSucceeds(t *testing.T) {
+func TestGetLocationsByCoordinatesIgnoresErrorsWhenAtLeastOneBackendSucceeds(t *testing.T) {
 	fail := newFakeLocationClient()
 	fail.err = fmt.Errorf("backend down")
 
@@ -354,8 +354,8 @@ func TestGetLocationsByCoordinatesWhenAtLeastOneBackendSucceeds(t *testing.T) {
 
 	server := newTestLocationServerWithBackends([]locationBackend{fail, success})
 	locs, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "00601"))
-	if err == nil {
-		t.Fatalf("expected an error: %v", err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(locs) != 1 || locs[0].ID != "ok" {
 		t.Fatalf("unexpected locations: %+v", locs)

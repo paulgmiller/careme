@@ -41,6 +41,34 @@ func TestGetLocationsByCoordinatesSearchesWalmart(t *testing.T) {
 	}
 }
 
+func TestGetLocationsByCoordinatesTreatsBadRequestAsNoLocations(t *testing.T) {
+	t.Parallel()
+
+	_, encodedKey := newBase64RSAPrivateKey(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "no stores near these coordinates", http.StatusBadRequest)
+	}))
+	t.Cleanup(server.Close)
+	client, err := NewClient(config.WalmartConfig{
+		ConsumerID: "consumer-id-123",
+		KeyVersion: "1",
+		PrivateKey: encodedKey,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	locations, err := client.GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 38.712187, Lon: -9.298469})
+	if err != nil {
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
+	}
+	if len(locations) != 0 {
+		t.Fatalf("expected no Walmart locations, got %+v", locations)
+	}
+}
+
 func TestParseStore_SampleJSON(t *testing.T) {
 	t.Parallel()
 
