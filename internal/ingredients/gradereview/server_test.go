@@ -43,7 +43,6 @@ func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.Contains(t, response.Body.String(), "Asparagus")
 	assert.Contains(t, response.Body.String(), "9<small>/10</small>")
-	assert.Contains(t, response.Body.String(), "0 of 2 reviewed")
 	assert.Contains(t, response.Body.String(), "Too high")
 	assert.Contains(t, response.Body.String(), "Correct")
 	assert.Contains(t, response.Body.String(), "Too low")
@@ -73,7 +72,6 @@ func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.Contains(t, response.Body.String(), "Prepared dip")
-	assert.Contains(t, response.Body.String(), "1 of 2 reviewed")
 	assert.Equal(t, 1, cacheStore.listCalls, "the sampled grade index should only be listed once")
 }
 
@@ -94,8 +92,7 @@ func TestHandlerShowsCompletionWhenEveryGradeIsReviewed(t *testing.T) {
 	newHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	require.Equal(t, http.StatusOK, response.Code)
-	assert.Contains(t, response.Body.String(), "All caught up")
-	assert.Contains(t, response.Body.String(), "1 of 1 reviewed")
+	assert.Contains(t, response.Body.String(), "No grades found")
 }
 
 func TestStoreReloadsWithANewPrefixWhenBatchIsFullyReviewed(t *testing.T) {

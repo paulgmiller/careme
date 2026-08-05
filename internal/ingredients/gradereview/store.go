@@ -38,8 +38,6 @@ type Review struct {
 type Candidate struct {
 	GradeKey   string
 	Ingredient ai.InputIngredient
-	Reviewed   int
-	Total      int
 }
 
 type Store struct {
@@ -68,7 +66,7 @@ func (s *Store) Next(ctx context.Context) (*Candidate, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !found && candidate.Total > 0 {
+	if !found {
 		s.mu.Lock()
 		s.loaded = false
 		s.mu.Unlock()
@@ -98,14 +96,12 @@ func (s *Store) nextCandidate(ctx context.Context) (*Candidate, bool, error) {
 	s.mu.Unlock()
 
 	var nextKey string
-	reviewedCount := 0
 	for _, key := range gradeKeys {
 		reviewed, err := s.cache.Exists(ctx, reviewCachePrefix+key)
 		if err != nil {
 			return nil, false, fmt.Errorf("check ingredient grade review %q: %w", key, err)
 		}
 		if reviewed {
-			reviewedCount++
 			continue
 		}
 		if nextKey == "" {
@@ -114,8 +110,6 @@ func (s *Store) nextCandidate(ctx context.Context) (*Candidate, bool, error) {
 	}
 	return &Candidate{
 		GradeKey: nextKey,
-		Reviewed: reviewedCount,
-		Total:    len(gradeKeys),
 	}, nextKey != "", nil
 }
 

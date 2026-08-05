@@ -86,9 +86,8 @@ var pageTemplate = template.Must(template.New("ingredient-grade-review").Funcs(t
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
     main { width: min(100%, 680px); }
-    header { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 18px; }
+    header { margin-bottom: 18px; }
     h1 { margin: 0; font-family: Georgia, serif; font-size: clamp(1.65rem, 5vw, 2.35rem); line-height: 1; }
-    .progress { margin: 0; color: #6d6559; white-space: nowrap; }
     .card { background: #fffdf8; border: 1px solid #ded6c8; border-radius: 18px; padding: clamp(24px, 6vw, 42px); box-shadow: 0 16px 50px rgb(70 53 25 / 10%); }
     .eyebrow { margin: 0 0 10px; color: #796f62; font-size: .8rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
     h2 { margin: 0; font-family: Georgia, serif; font-size: clamp(1.7rem, 6vw, 2.7rem); line-height: 1.08; }
@@ -114,7 +113,6 @@ var pageTemplate = template.Must(template.New("ingredient-grade-review").Funcs(t
   <main>
     <header>
       <h1>Ingredient grade check</h1>
-      <p class="progress">{{.Reviewed}} of {{.Total}} reviewed</p>
     </header>
     <section class="card">
       {{if .Ingredient.Grade}}
@@ -136,8 +134,8 @@ var pageTemplate = template.Must(template.New("ingredient-grade-review").Funcs(t
         </form>
       {{else}}
         <div class="done">
-          <h2>{{if .Total}}All caught up{{else}}No grades yet{{end}}</h2>
-          <p>{{if .Total}}You reviewed every cached ingredient grade.{{else}}Run ingredient grading first, then refresh this page.{{end}}</p>
+          <h2>No grades found</h2>
+          <p>Refresh to try another batch.</p>
         </div>
       {{end}}
     </section>
