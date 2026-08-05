@@ -57,7 +57,7 @@ Run the small local review app with:
 go run ./cmd/ingredientreview
 ```
 
-Then open `http://127.0.0.1:8090`. It shows cached ingredient grades one at a time and records each as too high, correct, or too low.
+Then open `http://127.0.0.1:8090/grader`. It shows cached ingredient grades one at a time and records each as too high, correct, or too low.
 
 
 ## Cache Key Layout

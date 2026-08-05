@@ -165,6 +165,9 @@ jobs:
           - name: careme
             cmd_path: ./cmd/careme
             image_suffix: ""
+          - name: ingredientreview
+            cmd_path: ./cmd/ingredientreview
+            image_suffix: ingredientreview
           - name: wholefoods
             cmd_path: ./cmd/wholefoods
             image_suffix: wholefoods

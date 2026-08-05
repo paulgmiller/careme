@@ -16,8 +16,8 @@ type Server struct {
 	now   func() time.Time
 }
 
-func NewHandler(c cache.ListCache) http.Handler {
-	return newHandler(NewStore(c))
+func NewHandler(c cache.ListCache, cacheVersion string) http.Handler {
+	return newHandler(NewStore(c, cacheVersion))
 }
 
 func newHandler(store *Store) http.Handler {
@@ -26,8 +26,9 @@ func newHandler(store *Store) http.Handler {
 		now:   time.Now,
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", server.handleIndex)
-	mux.HandleFunc("POST /review", server.handleReview)
+	mux.HandleFunc("GET /grader", server.handleIndex)
+	mux.HandleFunc("GET /grader/", server.handleIndex)
+	mux.HandleFunc("POST /grader/review", server.handleReview)
 	return mux
 }
 
@@ -62,7 +63,7 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	err := s.store.Save(r.Context(), gradeKey, verdict, s.now())
 	switch {
 	case err == nil, errors.Is(err, cache.ErrAlreadyExists):
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, "/grader", http.StatusSeeOther)
 	case errors.Is(err, cache.ErrNotFound):
 		http.Error(w, "Ingredient grade not found.", http.StatusNotFound)
 	case errors.Is(err, ErrInvalidVerdict):
@@ -124,7 +125,7 @@ var pageTemplate = template.Must(template.New("ingredient-grade-review").Funcs(t
           <p class="reason">{{.Ingredient.Grade.Reason}}</p>
         </div>
         <p class="question">How does this grade look?</p>
-        <form method="post" action="/review">
+        <form method="post" action="/grader/review">
           <input type="hidden" name="grade_key" value="{{.GradeKey}}">
           <div class="actions">
             <button class="high" type="submit" name="verdict" value="too_high">Too high</button>

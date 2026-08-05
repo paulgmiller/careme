@@ -41,7 +41,8 @@ type Candidate struct {
 }
 
 type Store struct {
-	cache cache.ListCache
+	cache        cache.ListCache
+	cacheVersion string
 
 	mu          sync.Mutex
 	loaded      bool
@@ -50,11 +51,14 @@ type Store struct {
 	prefix      func() (string, error)
 }
 
-func NewStore(c cache.ListCache) *Store {
+func NewStore(c cache.ListCache, cacheVersion string) *Store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
-	return &Store{cache: c, prefix: randomPrefix}
+	if cacheVersion == "" {
+		panic("cache version must not be empty")
+	}
+	return &Store{cache: c, cacheVersion: cacheVersion, prefix: randomPrefix}
 }
 
 func (s *Store) Next(ctx context.Context) (*Candidate, error) {
@@ -166,13 +170,14 @@ func (s *Store) loadIndex(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("generate ingredient grade prefix: %w", err)
 	}
-	gradeKeys, err := s.cache.List(ctx, grading.CachePrefix()+prefix, "")
+	gradeKeyPrefix := s.cacheVersion + "/" + prefix
+	gradeKeys, err := s.cache.List(ctx, grading.CachePrefix()+gradeKeyPrefix, "")
 	if err != nil {
 		return fmt.Errorf("list ingredient grades: %w", err)
 	}
 	gradeKeySet := make(map[string]struct{}, len(gradeKeys))
 	for i, key := range gradeKeys {
-		key = prefix + key
+		key = gradeKeyPrefix + key
 		gradeKeys[i] = key
 		gradeKeySet[key] = struct{}{}
 	}
