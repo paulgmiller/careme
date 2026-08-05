@@ -49,6 +49,16 @@ For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry en
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
 
+## Ingredient grade review
+
+Run the small local review app with:
+
+```sh
+go run ./cmd/ingredientreview
+```
+
+Then open `http://127.0.0.1:8090`. It shows cached ingredient grades one at a time and records each as too high, correct, or too low.
+
 
 ## Cache Key Layout
 See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key/prefix layout and backend notes.
