@@ -1,5 +1,5 @@
 {
-  "packageId": "cooking.careme.twa",
+  "packageId": "cooking.careme",
   "host": "careme.cooking",
   "name": "Careme",
   "launcherName": "Careme",
@@ -20,8 +20,8 @@
     "path": "/home/pmiller/careme_admin/careme-android/android.keystore",
     "alias": "android"
   },
-  "appVersionName": "1.2",
-  "appVersionCode": 6,
+  "appVersionName": "1.4",
+  "appVersionCode": 8,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://careme.cooking/manifest.webmanifest",
@@ -51,5 +51,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1.2"
+  "appVersion": "1.4"
 }

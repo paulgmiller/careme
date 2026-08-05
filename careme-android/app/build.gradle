@@ -21,7 +21,7 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'cooking.careme.twa',
+    applicationId: 'cooking.careme',
     hostName: 'careme.cooking', // The domain being opened in the TWA.
     launchUrl: '/', // The start path for the TWA. Must be relative to the domain.
     name: 'Careme', // The application name.
@@ -52,13 +52,13 @@ def twaManifest = [
 
 android {
     compileSdkVersion 36
-    namespace "cooking.careme.twa"
+    namespace "cooking.careme"
     defaultConfig {
-        applicationId "cooking.careme.twa"
+        applicationId "cooking.careme"
         minSdkVersion 21
-        targetSdkVersion 35
-        versionCode 6
-        versionName "1.2"
+        targetSdkVersion 36
+        versionCode 8
+        versionName "1.4"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
