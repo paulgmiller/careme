@@ -3,6 +3,7 @@ package locations
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -203,6 +204,38 @@ func TestLocationsPageSearchesWithProvidedCoordinates(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "Showing results near your location") {
 		t.Fatalf("expected coordinate location copy, body=%q", rr.Body.String())
 	}
+}
+
+func TestLocationsPageRendersEmptyStateForUnsupportedCoordinates(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	assertLocationsPageEmptyState(t, client)
+}
+
+func TestLocationsPageRendersEmptyStateWhenBackendsFail(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.err = errors.New("backend unavailable")
+	assertLocationsPageEmptyState(t, client)
+}
+
+func assertLocationsPageEmptyState(t *testing.T, client *fakeLocationClient) {
+	t.Helper()
+
+	server := NewServer(newTestLocationServer(client), LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?lat=38.712187&lon=-9.298469", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "No nearby stores found.")
+	assert.NotContains(t, rr.Body.String(), "Failed to render locations page.")
 }
 
 func TestLocationsPageRejectsNonFiniteCoordinatesBeforeSearching(t *testing.T) {

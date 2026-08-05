@@ -21,6 +21,7 @@
           <p class="mt-2 text-gray-600">Showing results near your location.</p>
         </div>
 
+        {{if .Locations}}
         <ul id="locations-list" class="divide-y divide-brand-100">
           {{range .Locations}}
           <li class="px-8 {{if .SupportsStaples}}py-6{{else}}py-4{{end}} {{if not .SupportsStaples}}opacity-60{{end}}">
@@ -100,6 +101,16 @@
           </li>
           {{end}}
         </ul>
+        {{else}}
+        <div id="locations-list" class="px-8 py-10 text-center">
+          <p class="text-lg font-semibold text-brand-700">No nearby stores found.</p>
+          <p class="mt-2 text-sm text-gray-600">Try another location or ZIP code.</p>
+          <a href="/"
+            class="mt-5 inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+            Search again
+          </a>
+        </div>
+        {{end}}
       </div>
 
       <p class="mt-6 text-center text-sm text-gray-500">
