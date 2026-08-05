@@ -211,18 +211,29 @@ func TestLocationsPageRendersEmptyStateForUnsupportedCoordinates(t *testing.T) {
 	mustInitLocationTemplates(t)
 
 	client := newFakeLocationClient()
-	assertLocationsPageEmptyState(t, client)
+	rr := requestLocationsPage(t, client)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "No nearby stores found.")
+	assert.Contains(t, rr.Body.String(), "Careme mostly supports stores in the United States right now.")
+	assert.Contains(t, rr.Body.String(), "Want your grocery chain supported?")
+	assert.Contains(t, rr.Body.String(), "Submit it here")
+	assert.NotContains(t, rr.Body.String(), "Failed to render locations page.")
 }
 
-func TestLocationsPageRendersEmptyStateWhenBackendsFail(t *testing.T) {
+func TestLocationsPageReturnsServerErrorWhenBackendsFail(t *testing.T) {
 	mustInitLocationTemplates(t)
 
 	client := newFakeLocationClient()
 	client.err = errors.New("backend unavailable")
-	assertLocationsPageEmptyState(t, client)
+	rr := requestLocationsPage(t, client)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Failed to render locations page.")
+	assert.NotContains(t, rr.Body.String(), "No nearby stores found.")
 }
 
-func assertLocationsPageEmptyState(t *testing.T, client *fakeLocationClient) {
+func requestLocationsPage(t *testing.T, client *fakeLocationClient) *httptest.ResponseRecorder {
 	t.Helper()
 
 	server := NewServer(newTestLocationServer(client), LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
@@ -234,12 +245,7 @@ func assertLocationsPageEmptyState(t *testing.T, client *fakeLocationClient) {
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
-	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "No nearby stores found.")
-	assert.Contains(t, rr.Body.String(), "Careme mostly supports stores in the United States right now.")
-	assert.Contains(t, rr.Body.String(), "Want your grocery chain supported?")
-	assert.Contains(t, rr.Body.String(), "Submit it here")
-	assert.NotContains(t, rr.Body.String(), "Failed to render locations page.")
+	return rr
 }
 
 func TestLocationsPageRejectsNonFiniteCoordinatesBeforeSearching(t *testing.T) {

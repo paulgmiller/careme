@@ -154,9 +154,10 @@ func (l *locationServer) searchCoordinates(r *http.Request) (geo.Coordinate, err
 }
 
 func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, coordinates geo.Coordinate, favoriteStore string, serverSignedIn bool) error {
+	// zero locations is valid here.
 	locs, err := l.storage.GetLocationsByCoordinates(ctx, coordinates)
 	if err != nil {
-		slog.WarnContext(ctx, "rendering locations page despite backend errors", "lat", coordinates.Lat, "lon", coordinates.Lon, "location_count", len(locs), "error", err)
+		return fmt.Errorf("failed to get locations near %f,%f: %w", coordinates.Lat, coordinates.Lon, err)
 	}
 
 	type locationRow struct {
