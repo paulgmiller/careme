@@ -109,7 +109,7 @@ The prompt cache key hashes the store ID and store-local sale date. Users genera
 
 These request controls are specific to direct OpenAI GPT-5.6 and later models. Stable prefix ordering is portable, but OpenRouter and other providers use different controls, including provider-specific `cache_control` blocks and sticky `session_id` routing. Introduce a provider/model-specific cache policy before routing recipe requests through another provider or an incompatible model. See the [OpenAI prompt cache key guidance](https://developers.openai.com/api/docs/guides/prompt-caching#improve-cache-hit-rates-with-a-prompt-cache-key).
 
-Usage logs expose both `usage_inputTokensDetails_cachedTokens` and `usage_inputTokensDetails_cacheWriteTokens`. The first request for a prefix should generally report a cache write; later requests in the same response chain should report cached-token reads. A zero read is expected when the exact prefix changed or no prior write is available.
+Usage logs expose both `usage_inputTokensDetails_cachedTokens` and `usage_inputTokensDetails_cacheWriteTokens`. Spend logging prices cache writes separately as `usage_spend_cacheWriteInputUSD`, using the GPT-5.6 cache-write rate rather than treating them as ordinary input. The first request for a prefix should generally report a cache write; later requests in the same response chain should report cached-token reads. A zero read is expected when the exact prefix changed or no prior write is available.
 
 ## Critique And Fan-In
 

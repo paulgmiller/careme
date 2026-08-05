@@ -246,7 +246,7 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 			slog.Int64("reasoningTokens", usage.OutputTokensDetails.ReasoningTokens),
 		),
 		slog.Int64("totalTokens", usage.TotalTokens),
-		estimatedSpendLogAttr(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.OutputTokens)),
+		estimatedSpendLogAttr(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.InputTokensDetails.CacheWriteTokens, usage.OutputTokens)),
 	)
 }
 
