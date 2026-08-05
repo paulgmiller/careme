@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/ingredients/gradereview"
 
@@ -23,7 +24,7 @@ func main() {
 
 func run(args []string) error {
 	fs := flag.NewFlagSet("ingredientreview", flag.ContinueOnError)
-	addr := fs.String("addr", "127.0.0.1:8090", "address for the ingredient grade review app")
+	addr := fs.String("addr", ":8090", "address for the ingredient grade review app")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -38,7 +39,7 @@ func run(args []string) error {
 
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           gradereview.NewHandler(cacheStore),
+		Handler:           gradereview.NewHandler(cacheStore, ai.IngredientGradeCacheVersion(os.Getenv("INGREDIENT_GRADING_MODEL"))),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.Printf("Ingredient grade review app listening at http://%s", *addr)
