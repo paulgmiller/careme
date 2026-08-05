@@ -49,7 +49,6 @@ type Store struct {
 	loaded      bool
 	gradeKeys   []string
 	gradeKeySet map[string]struct{}
-	reviewed    map[string]struct{}
 	prefix      func() (string, error)
 }
 
@@ -60,27 +59,29 @@ func NewStore(c cache.ListCache) *Store {
 	return &Store{cache: c, prefix: randomPrefix}
 }
 
-func ReviewCachePrefix() string {
-	return reviewCachePrefix
-}
-
 func (s *Store) Next(ctx context.Context) (*Candidate, error) {
 	if err := s.loadIndex(ctx); err != nil {
 		return nil, err
 	}
 
-	candidate := s.nextCandidate()
-	if candidate.GradeKey == "" && candidate.Total > 0 {
+	candidate, found, err := s.nextCandidate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !found && candidate.Total > 0 {
 		s.mu.Lock()
 		s.loaded = false
 		s.mu.Unlock()
 		if err := s.loadIndex(ctx); err != nil {
 			return nil, err
 		}
-		candidate = s.nextCandidate()
+		candidate, found, err = s.nextCandidate(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	if candidate.GradeKey == "" {
+	if !found {
 		return candidate, nil
 	}
 	ingredient, err := s.loadIngredient(ctx, candidate.GradeKey)
@@ -91,24 +92,31 @@ func (s *Store) Next(ctx context.Context) (*Candidate, error) {
 	return candidate, nil
 }
 
-func (s *Store) nextCandidate() *Candidate {
+func (s *Store) nextCandidate(ctx context.Context) (*Candidate, bool, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	gradeKeys := append([]string(nil), s.gradeKeys...)
+	s.mu.Unlock()
+
 	var nextKey string
-	for _, key := range s.gradeKeys {
-		if _, ok := s.reviewed[key]; ok {
+	reviewedCount := 0
+	for _, key := range gradeKeys {
+		reviewed, err := s.cache.Exists(ctx, reviewCachePrefix+key)
+		if err != nil {
+			return nil, false, fmt.Errorf("check ingredient grade review %q: %w", key, err)
+		}
+		if reviewed {
+			reviewedCount++
 			continue
 		}
-		nextKey = key
-		break
+		if nextKey == "" {
+			nextKey = key
+		}
 	}
-	reviewedCount := len(s.reviewed)
-	total := len(s.gradeKeys)
 	return &Candidate{
 		GradeKey: nextKey,
 		Reviewed: reviewedCount,
-		Total:    total,
-	}
+		Total:    len(gradeKeys),
+	}, nextKey != "", nil
 }
 
 func (s *Store) Save(ctx context.Context, gradeKey string, verdict Verdict, reviewedAt time.Time) error {
@@ -121,10 +129,13 @@ func (s *Store) Save(ctx context.Context, gradeKey string, verdict Verdict, revi
 
 	s.mu.Lock()
 	_, exists := s.gradeKeySet[gradeKey]
-	_, alreadyReviewed := s.reviewed[gradeKey]
 	s.mu.Unlock()
 	if !exists {
 		return cache.ErrNotFound
+	}
+	alreadyReviewed, err := s.cache.Exists(ctx, reviewCachePrefix+gradeKey)
+	if err != nil {
+		return fmt.Errorf("check ingredient grade review %q: %w", gradeKey, err)
 	}
 	if alreadyReviewed {
 		return cache.ErrAlreadyExists
@@ -145,12 +156,8 @@ func (s *Store) Save(ctx context.Context, gradeKey string, verdict Verdict, revi
 		return fmt.Errorf("encode ingredient grade review: %w", err)
 	}
 	if err := s.cache.Put(ctx, reviewCachePrefix+gradeKey, string(body), cache.IfNoneMatch()); err != nil {
-		if errors.Is(err, cache.ErrAlreadyExists) {
-			s.markReviewed(gradeKey)
-		}
 		return fmt.Errorf("save ingredient grade review: %w", err)
 	}
-	s.markReviewed(gradeKey)
 	return nil
 }
 
@@ -169,39 +176,16 @@ func (s *Store) loadIndex(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list ingredient grades: %w", err)
 	}
-	reviewKeys, err := s.cache.List(ctx, reviewCachePrefix+prefix, "")
-	if err != nil {
-		return fmt.Errorf("list ingredient grade reviews: %w", err)
-	}
-
 	gradeKeySet := make(map[string]struct{}, len(gradeKeys))
 	for i, key := range gradeKeys {
 		key = prefix + key
 		gradeKeys[i] = key
 		gradeKeySet[key] = struct{}{}
 	}
-	reviewed := make(map[string]struct{}, len(reviewKeys))
-	for _, key := range reviewKeys {
-		key = prefix + key
-		if _, ok := gradeKeySet[key]; ok {
-			reviewed[key] = struct{}{}
-		}
-	}
-
 	s.gradeKeys = gradeKeys
 	s.gradeKeySet = gradeKeySet
-	s.reviewed = reviewed
 	s.loaded = true
 	return nil
-}
-
-func (s *Store) markReviewed(gradeKey string) {
-	s.mu.Lock()
-	s.reviewed[gradeKey] = struct{}{}
-	if len(s.reviewed) == len(s.gradeKeys) {
-		s.loaded = false
-	}
-	s.mu.Unlock()
 }
 
 func randomPrefix() (string, error) {

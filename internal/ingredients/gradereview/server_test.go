@@ -74,7 +74,7 @@ func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.Contains(t, response.Body.String(), "Prepared dip")
 	assert.Contains(t, response.Body.String(), "1 of 2 reviewed")
-	assert.Equal(t, 2, cacheStore.listCalls, "the grade and review indexes should each be listed only once")
+	assert.Equal(t, 1, cacheStore.listCalls, "the sampled grade index should only be listed once")
 }
 
 func TestHandlerShowsCompletionWhenEveryGradeIsReviewed(t *testing.T) {
@@ -84,9 +84,11 @@ func TestHandlerShowsCompletionWhenEveryGradeIsReviewed(t *testing.T) {
 		Description: "Asparagus",
 		Grade:       &ai.IngredientGrade{Score: 9, Reason: "Fresh and flexible."},
 	})
+	reviewer := NewStore(cacheStore)
+	reviewer.prefix = func() (string, error) { return "ve", nil }
+	require.NoError(t, reviewer.Save(t.Context(), "ve/one", VerdictCorrect, time.Now()))
 	store := NewStore(cacheStore)
 	store.prefix = func() (string, error) { return "ve", nil }
-	require.NoError(t, store.Save(t.Context(), "ve/one", VerdictCorrect, time.Now()))
 
 	response := httptest.NewRecorder()
 	newHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
