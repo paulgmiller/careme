@@ -18,6 +18,7 @@ import (
 	"careme/internal/templates"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type fakeProduceScoreLookup struct {
@@ -169,10 +170,10 @@ func TestLocationsPageSetsGuestShoppingListCookieWhenMissing(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
 	}
+	assert.Contains(t, rr.Body.String(), "Want your grocery chain supported?")
+	assert.Contains(t, rr.Body.String(), "Submit it here")
 	cookie := findResponseCookie(rr, guest.ShoppingListCookieName)
-	if cookie == nil {
-		t.Fatalf("expected %s cookie to be set", guest.ShoppingListCookieName)
-	}
+	require.NotNil(t, cookie, "expected %s cookie to be set", guest.ShoppingListCookieName)
 	if cookie.Value != "0" {
 		t.Fatalf("guest cookie value = %q, want 0", cookie.Value)
 	}
@@ -235,6 +236,9 @@ func assertLocationsPageEmptyState(t *testing.T, client *fakeLocationClient) {
 
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "No nearby stores found.")
+	assert.Contains(t, rr.Body.String(), "Careme mostly supports stores in the United States right now.")
+	assert.Contains(t, rr.Body.String(), "Want your grocery chain supported?")
+	assert.Contains(t, rr.Body.String(), "Submit it here")
 	assert.NotContains(t, rr.Body.String(), "Failed to render locations page.")
 }
 
@@ -321,9 +325,7 @@ func TestLocationsPageResetsInvalidGuestShoppingListCookie(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
 	}
 	cookie := findResponseCookie(rr, guest.ShoppingListCookieName)
-	if cookie == nil {
-		t.Fatalf("expected invalid %s cookie to be reset", guest.ShoppingListCookieName)
-	}
+	require.NotNil(t, cookie, "expected invalid %s cookie to be reset", guest.ShoppingListCookieName)
 	if cookie.Value != "0" {
 		t.Fatalf("guest cookie value = %q, want 0", cookie.Value)
 	}
