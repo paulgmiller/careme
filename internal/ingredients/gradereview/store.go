@@ -2,6 +2,7 @@ package gradereview
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 )
 
 const reviewCachePrefix = "ingredient_grade_reviews/"
+
+const prefixAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
 type Verdict string
 
@@ -47,13 +50,14 @@ type Store struct {
 	gradeKeys   []string
 	gradeKeySet map[string]struct{}
 	reviewed    map[string]struct{}
+	prefix      func() (string, error)
 }
 
 func NewStore(c cache.ListCache) *Store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
-	return &Store{cache: c}
+	return &Store{cache: c, prefix: randomPrefix}
 }
 
 func ReviewCachePrefix() string {
@@ -65,7 +69,31 @@ func (s *Store) Next(ctx context.Context) (*Candidate, error) {
 		return nil, err
 	}
 
+	candidate := s.nextCandidate()
+	if candidate.GradeKey == "" && candidate.Total > 0 {
+		s.mu.Lock()
+		s.loaded = false
+		s.mu.Unlock()
+		if err := s.loadIndex(ctx); err != nil {
+			return nil, err
+		}
+		candidate = s.nextCandidate()
+	}
+
+	if candidate.GradeKey == "" {
+		return candidate, nil
+	}
+	ingredient, err := s.loadIngredient(ctx, candidate.GradeKey)
+	if err != nil {
+		return nil, err
+	}
+	candidate.Ingredient = *ingredient
+	return candidate, nil
+}
+
+func (s *Store) nextCandidate() *Candidate {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	var nextKey string
 	for _, key := range s.gradeKeys {
 		if _, ok := s.reviewed[key]; ok {
@@ -76,21 +104,11 @@ func (s *Store) Next(ctx context.Context) (*Candidate, error) {
 	}
 	reviewedCount := len(s.reviewed)
 	total := len(s.gradeKeys)
-	s.mu.Unlock()
-
-	if nextKey == "" {
-		return &Candidate{Reviewed: reviewedCount, Total: total}, nil
-	}
-	ingredient, err := s.loadIngredient(ctx, nextKey)
-	if err != nil {
-		return nil, err
-	}
 	return &Candidate{
-		GradeKey:   nextKey,
-		Ingredient: *ingredient,
-		Reviewed:   reviewedCount,
-		Total:      total,
-	}, nil
+		GradeKey: nextKey,
+		Reviewed: reviewedCount,
+		Total:    total,
+	}
 }
 
 func (s *Store) Save(ctx context.Context, gradeKey string, verdict Verdict, reviewedAt time.Time) error {
@@ -143,21 +161,28 @@ func (s *Store) loadIndex(ctx context.Context) error {
 		return nil
 	}
 
-	gradeKeys, err := s.cache.List(ctx, grading.CachePrefix(), "")
+	prefix, err := s.prefix()
+	if err != nil {
+		return fmt.Errorf("generate ingredient grade prefix: %w", err)
+	}
+	gradeKeys, err := s.cache.List(ctx, grading.CachePrefix()+prefix, "")
 	if err != nil {
 		return fmt.Errorf("list ingredient grades: %w", err)
 	}
-	reviewKeys, err := s.cache.List(ctx, reviewCachePrefix, "")
+	reviewKeys, err := s.cache.List(ctx, reviewCachePrefix+prefix, "")
 	if err != nil {
 		return fmt.Errorf("list ingredient grade reviews: %w", err)
 	}
 
 	gradeKeySet := make(map[string]struct{}, len(gradeKeys))
-	for _, key := range gradeKeys {
+	for i, key := range gradeKeys {
+		key = prefix + key
+		gradeKeys[i] = key
 		gradeKeySet[key] = struct{}{}
 	}
 	reviewed := make(map[string]struct{}, len(reviewKeys))
 	for _, key := range reviewKeys {
+		key = prefix + key
 		if _, ok := gradeKeySet[key]; ok {
 			reviewed[key] = struct{}{}
 		}
@@ -173,7 +198,21 @@ func (s *Store) loadIndex(ctx context.Context) error {
 func (s *Store) markReviewed(gradeKey string) {
 	s.mu.Lock()
 	s.reviewed[gradeKey] = struct{}{}
+	if len(s.reviewed) == len(s.gradeKeys) {
+		s.loaded = false
+	}
 	s.mu.Unlock()
+}
+
+func randomPrefix() (string, error) {
+	var bytes [2]byte
+	if _, err := rand.Read(bytes[:]); err != nil {
+		return "", err
+	}
+	return string([]byte{
+		prefixAlphabet[int(bytes[0])%len(prefixAlphabet)],
+		prefixAlphabet[int(bytes[1])%len(prefixAlphabet)],
+	}), nil
 }
 
 func (v Verdict) Valid() bool {

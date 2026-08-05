@@ -20,7 +20,7 @@ import (
 
 func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
 	cacheStore := &countingCache{InMemoryCache: cache.NewInMemoryCache()}
-	saveGrade(t, cacheStore, "version/one", ai.InputIngredient{
+	saveGrade(t, cacheStore, "ve/one", ai.InputIngredient{
 		ProductID:   "one",
 		Brand:       "Garden Farm",
 		Description: "Asparagus",
@@ -28,13 +28,15 @@ func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
 		Categories:  []string{"produce", "vegetables"},
 		Grade:       &ai.IngredientGrade{Score: 9, Reason: "Fresh and flexible."},
 	})
-	saveGrade(t, cacheStore, "version/two", ai.InputIngredient{
+	saveGrade(t, cacheStore, "ve/two", ai.InputIngredient{
 		ProductID:   "two",
 		Description: "Prepared dip",
 		Grade:       &ai.IngredientGrade{Score: 2, Reason: "Ready to eat."},
 	})
 
-	handler := NewHandler(cacheStore)
+	store := NewStore(cacheStore)
+	store.prefix = func() (string, error) { return "ve", nil }
+	handler := newHandler(store)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
 
@@ -47,7 +49,7 @@ func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
 	assert.Contains(t, response.Body.String(), "Too low")
 
 	form := url.Values{
-		"grade_key": {"version/one"},
+		"grade_key": {"ve/one"},
 		"verdict":   {string(VerdictTooHigh)},
 	}
 	response = httptest.NewRecorder()
@@ -58,7 +60,7 @@ func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, response.Code)
 	assert.Equal(t, "/", response.Header().Get("Location"))
 
-	reviewReader, err := cacheStore.Get(t.Context(), reviewCachePrefix+"version/one")
+	reviewReader, err := cacheStore.Get(t.Context(), reviewCachePrefix+"ve/one")
 	require.NoError(t, err)
 	defer func() { require.NoError(t, reviewReader.Close()) }()
 	var review Review
@@ -77,20 +79,47 @@ func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
 
 func TestHandlerShowsCompletionWhenEveryGradeIsReviewed(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
-	saveGrade(t, cacheStore, "version/one", ai.InputIngredient{
+	saveGrade(t, cacheStore, "ve/one", ai.InputIngredient{
 		ProductID:   "one",
 		Description: "Asparagus",
 		Grade:       &ai.IngredientGrade{Score: 9, Reason: "Fresh and flexible."},
 	})
 	store := NewStore(cacheStore)
-	require.NoError(t, store.Save(t.Context(), "version/one", VerdictCorrect, time.Now()))
+	store.prefix = func() (string, error) { return "ve", nil }
+	require.NoError(t, store.Save(t.Context(), "ve/one", VerdictCorrect, time.Now()))
 
 	response := httptest.NewRecorder()
-	NewHandler(cacheStore).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	newHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.Contains(t, response.Body.String(), "All caught up")
 	assert.Contains(t, response.Body.String(), "1 of 1 reviewed")
+}
+
+func TestStoreReloadsWithANewPrefixWhenBatchIsFullyReviewed(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
+	saveGrade(t, cacheStore, "ab/one", ai.InputIngredient{
+		ProductID: "one",
+		Grade:     &ai.IngredientGrade{Score: 9, Reason: "Flexible."},
+	})
+	saveGrade(t, cacheStore, "cd/two", ai.InputIngredient{
+		ProductID: "two",
+		Grade:     &ai.IngredientGrade{Score: 3, Reason: "Prepared."},
+	})
+
+	prefixes := []string{"ab", "cd"}
+	store := NewStore(cacheStore)
+	store.prefix = func() (string, error) {
+		prefix := prefixes[0]
+		prefixes = prefixes[1:]
+		return prefix, nil
+	}
+	require.NoError(t, store.Save(t.Context(), "ab/one", VerdictCorrect, time.Now()))
+
+	candidate, err := store.Next(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "cd/two", candidate.GradeKey)
+	assert.Equal(t, "two", candidate.Ingredient.ProductID)
 }
 
 func TestHandlerRejectsInvalidReview(t *testing.T) {

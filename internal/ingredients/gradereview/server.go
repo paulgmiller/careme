@@ -17,8 +17,12 @@ type Server struct {
 }
 
 func NewHandler(c cache.ListCache) http.Handler {
+	return newHandler(NewStore(c))
+}
+
+func newHandler(store *Store) http.Handler {
 	server := &Server{
-		store: NewStore(c),
+		store: store,
 		now:   time.Now,
 	}
 	mux := http.NewServeMux()
