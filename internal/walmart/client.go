@@ -172,6 +172,13 @@ func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) 
 		return nil, fmt.Errorf("read stores response: %w", err)
 	}
 
+	// Walmart returns 400 when valid coordinates are outside its store coverage.
+	// The caller validates coordinates before making this fixed-shape request, so
+	// this response means there are no nearby Walmart stores.
+	if resp.StatusCode == http.StatusBadRequest {
+		slog.InfoContext(ctx, "Walmart store search returned no stores", "status", resp.StatusCode)
+		return json.RawMessage(`[]`), nil
+	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		slog.ErrorContext(ctx, "received Walmart stores response", "status", resp.StatusCode)
 		return nil, fmt.Errorf("stores request failed: status %d", resp.StatusCode) //, strings.TrimSpace(string(body)))

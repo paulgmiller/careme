@@ -222,9 +222,14 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 		filtered = append(filtered, *loc)
 	}
 
-	sortLocationsByDistanceFromCoordinates(filtered, coordinates)
+	if len(filtered) == 0 {
+		return nil, fetcherrors
+	}
 
-	return filtered, fetcherrors
+	sortLocationsByDistanceFromCoordinates(filtered, coordinates)
+	// as long a we got some results try and show them
+	// could also desploy to user the chains we failed to query
+	return filtered, nil
 }
 
 func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID string) (Location, bool) {

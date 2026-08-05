@@ -154,9 +154,9 @@ func (l *locationServer) searchCoordinates(r *http.Request) (geo.Coordinate, err
 }
 
 func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, coordinates geo.Coordinate, favoriteStore string, serverSignedIn bool) error {
+	// zero locations is valid here.
 	locs, err := l.storage.GetLocationsByCoordinates(ctx, coordinates)
-	// be very forgiving of errors here.
-	if len(locs) == 0 && err != nil {
+	if err != nil {
 		return fmt.Errorf("failed to get locations near %f,%f: %w", coordinates.Lat, coordinates.Lon, err)
 	}
 
