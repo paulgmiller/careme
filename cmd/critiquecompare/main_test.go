@@ -95,6 +95,34 @@ func TestCompareCritiquesReusesSavedBenchmarkCritiquesUnlessRefreshIsSet(t *test
 	assert.Equal(t, "second flash", rows[0].Flash.Summary)
 }
 
+func TestCompareCritiqueByHashTargetsRequestedRecipeAndRefreshes(t *testing.T) {
+	t.Parallel()
+
+	cacheStore := cache.NewInMemoryCache()
+	now := time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC)
+	seedRecipeWithCritique(t, cacheStore, "alpha", testRecipe("Alpha"), cachedCritique(8, "alpha cached", "pro", now))
+	seedRecipeWithCritique(t, cacheStore, "target", testRecipe("Target"), cachedCritique(9, "target cached", "pro", now))
+	require.NoError(t, newBenchmarkStore(cacheStore, "gemini-test").Save(
+		t.Context(),
+		"target",
+		cachedCritique(10, "stale benchmark", "flash", now),
+	))
+
+	fake := &fakeCritiquer{responses: map[string]*ai.RecipeCritique{
+		"Target": cachedCritique(6, "fresh target critique", "flash", now),
+	}}
+	row, err := compareCritiqueByHash(t.Context(), cacheStore, fake, "gemini-test", "target", true)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Target"}, fake.Calls())
+	assert.Equal(t, "target", row.Hash)
+	assert.Equal(t, "Target", row.Title)
+	assert.Equal(t, 9, row.Cached.OverallScore)
+	assert.Equal(t, 6, row.Flash.OverallScore)
+	assert.Equal(t, -3, row.ScoreDelta)
+	assert.Equal(t, "fresh target critique", row.Flash.Summary)
+}
+
 func TestPrintRowsIncludesStats(t *testing.T) {
 	t.Parallel()
 

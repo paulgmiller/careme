@@ -1,0 +1,9 @@
+default_permissions = "careme-dev"
+
+[permissions.careme-dev]
+extends = ":workspace"
+
+[permissions.careme-dev.filesystem]
+"/home/pmiller/.cache/go-build" = "write"
+"/home/pmiller/.cache/golangci-lint" = "write"
+"/home/pmiller/go/pkg/mod" = "write"

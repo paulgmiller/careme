@@ -61,8 +61,27 @@ func TestGoogleTagNoScriptIncludesContainerID(t *testing.T) {
 	}
 }
 
+func TestGuestGenerationCopyMatchesFreeBuildBehavior(t *testing.T) {
+	locationsBody, err := htmlFiles.ReadFile("locations.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(locationsBody), "building recipes requires signing in") {
+		t.Fatal("locations page should not claim that all recipe building requires sign-in")
+	}
+
+	homeBody, err := htmlFiles.ReadFile("home.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(homeBody), "Build two recipe lists free") {
+		t.Fatal("home page should explain the two free recipe builds")
+	}
+}
+
 func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	for _, name := range []string{
+		"account_required.html",
 		"about.html",
 		"critique.html",
 		"farmersmarket.html",
@@ -606,8 +625,9 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	if !strings.Contains(rendered, `name="instructions"`) {
 		t.Fatalf("home page should render instructions textarea, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `/recipes?location=70500874`) {
-		t.Fatalf("home page should render direct recipe link, body: %s", rendered)
+	if !strings.Contains(rendered, `method="POST" action="/recipes"`) ||
+		!strings.Contains(rendered, `name="location" value="70500874"`) {
+		t.Fatalf("home page should render recipe generation form, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, `<span class="sm:hidden">C</span>`) {
 		t.Fatalf("home page should render compact mobile account initial, body: %s", rendered)
@@ -703,6 +723,15 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 	if !strings.Contains(rendered, `careme:saved-recipes-changed`) {
 		t.Fatalf("home page should refresh offline saved recipes after save changes, body: %s", rendered)
 	}
+	if !strings.Contains(rendered, `careme:recipe-saved`) || !strings.Contains(rendered, `publishCaremeConversion("recipe_save")`) {
+		t.Fatalf("home page should publish successful recipe saves to the data layer, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `.get("conversion")`) ||
+		!strings.Contains(rendered, `url.searchParams.delete("conversion")`) ||
+		!strings.Contains(rendered, `publishCaremeConversion(eventName)`) ||
+		!strings.Contains(rendered, `window.dataLayer.push({ event: eventName })`) {
+		t.Fatalf("home page should consume conversion query events into the data layer, body: %s", rendered)
+	}
 }
 
 func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
@@ -746,14 +775,17 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	if strings.Contains(rendered, `for (let attempt = 0; attempt < 5; attempt++)`) {
 		t.Fatalf("auth establish page should not retry user exists check, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `if (!payload.exists &&`) {
+	if !strings.Contains(rendered, `if (!payload.exists) {`) {
 		t.Fatalf("auth establish page should gate conversion on missing user, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `event: "signup_completed"`) {
-		t.Fatalf("auth establish page should push signup event to dataLayer, body: %s", rendered)
+	if !strings.Contains(rendered, `finishRedirect("signup_completed")`) {
+		t.Fatalf("auth establish page should redirect new users with the signup conversion, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `eventCallback: finishRedirect`) {
-		t.Fatalf("auth establish page should redirect after GTM event callback, body: %s", rendered)
+	if !strings.Contains(rendered, `destination.searchParams.set("conversion", conversionEvent)`) {
+		t.Fatalf("auth establish page should add the conversion query argument, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `eventCallback`) || strings.Contains(rendered, `eventTimeout`) {
+		t.Fatalf("auth establish page should defer conversion publishing to the destination, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, "console.warn(`auth user exists failed: ${response.status}`)") {
 		t.Fatalf("auth establish page should log when user exists endpoint returns a failure, body: %s", rendered)

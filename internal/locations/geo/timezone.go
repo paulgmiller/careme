@@ -1,22 +1,21 @@
 package geo
 
-import "strings"
+import (
+	_ "time/tzdata" // Embed IANA data for minimal containers without system zoneinfo.
 
-func TimezoneNameForZip(zip string) (string, bool) {
-	trimmed := strings.TrimSpace(zip)
-	if trimmed == "" {
+	tz "github.com/ugjka/go-tz/v2"
+)
+
+// TimezoneNameForCoordinates uses go-tz's embedded, simplified timezone
+// polygons. It avoids a network lookup, but can be inaccurate very close to
+// timezone borders.
+func TimezoneNameForCoordinates(coordinates Coordinate) (string, bool) {
+	if coordinates.Valid() != nil {
 		return "", false
 	}
-	switch first := trimmed[0]; {
-	case first >= '0' && first <= '3':
-		return "America/New_York", true
-	case first >= '4' && first <= '7':
-		return "America/Chicago", true
-	case first == '8':
-		return "America/Denver", true
-	case first == '9':
-		return "America/Los_Angeles", true
-	default:
+	names, err := tz.GetZone(tz.Point{Lat: coordinates.Lat, Lon: coordinates.Lon})
+	if err != nil || len(names) == 0 {
 		return "", false
 	}
+	return names[0], true
 }

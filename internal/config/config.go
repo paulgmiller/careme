@@ -19,7 +19,7 @@ const (
 
 type Config struct {
 	AI                AIConfig                `json:"ai"`
-	Gemini            GeminiConfig            `json:"gemini"`
+	OpenRouter        OpenRouterConfig        `json:"openrouter"`
 	IngredientGrading IngredientGradingConfig `json:"ingredient_grading"`
 	Kroger            KrogerConfig            `json:"kroger"`
 	Walmart           WalmartConfig           `json:"walmart"`
@@ -45,12 +45,12 @@ type IngredientGradingConfig struct {
 	Model  string `json:"model"`
 }
 
-type GeminiConfig struct {
+type OpenRouterConfig struct {
 	APIKey        string `json:"api_key"`
 	CritiqueModel string `json:"critique_model"`
 }
 
-func (c *GeminiConfig) IsEnabled() bool {
+func (c *OpenRouterConfig) IsEnabled() bool {
 	return strings.TrimSpace(c.APIKey) != ""
 }
 
@@ -176,9 +176,9 @@ func Load() (*Config, error) {
 			Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
 			Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
 		},
-		Gemini: GeminiConfig{
-			APIKey:        os.Getenv("GEMINI_API_KEY"),
-			CritiqueModel: os.Getenv("GEMINI_CRITIQUE_MODEL"),
+		OpenRouter: OpenRouterConfig{
+			APIKey:        os.Getenv("OPENROUTER_API_KEY"),
+			CritiqueModel: os.Getenv("OPENROUTER_CRITIQUE_MODEL"),
 		},
 		Kroger: KrogerConfig{
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),

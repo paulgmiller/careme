@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"careme/internal/config"
+	"careme/internal/templates"
 
 	"github.com/stretchr/testify/require"
 )
@@ -62,6 +64,66 @@ func TestSignInURLFallsBackToLocalhostForLocalRequests(t *testing.T) {
 	redirectURL := clerkRedirectURL(t, client.signInURL(req, false))
 
 	require.Equal(t, "http://localhost:8080/auth/establish", redirectURL)
+}
+
+func TestAccountRequiredPageExplainsReasonAndPreservesReturnTo(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	client := &clerkClient{cfg: &config.Config{}}
+	mux := http.NewServeMux()
+	client.Register(mux)
+
+	tests := []struct {
+		name    string
+		reason  AccountRequiredReason
+		message string
+	}{
+		{
+			name:    "generation limit",
+			reason:  AccountRequiredGenerationLimit,
+			message: "two free recipe builds",
+		},
+		{
+			name:    "add recipe",
+			reason:  AccountRequiredAddRecipe,
+			message: "add recipes to your kitchen and keep them for later",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			returnTo := "/recipes?h=shopping-list"
+			req := httptest.NewRequest(http.MethodGet, AccountRequiredPath(tt.reason, returnTo), nil)
+			rr := httptest.NewRecorder()
+
+			mux.ServeHTTP(rr, req)
+
+			require.Equal(t, http.StatusOK, rr.Code)
+			require.Contains(t, rr.Body.String(), tt.message)
+			require.Contains(t, rr.Body.String(), authPath("/sign-in", returnTo))
+			require.Contains(t, rr.Body.String(), authPath("/sign-up", returnTo))
+		})
+	}
+}
+
+func TestAccountRequiredPageRejectsInvalidInput(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	client := &clerkClient{cfg: &config.Config{}}
+	mux := http.NewServeMux()
+	client.Register(mux)
+
+	tests := []string{
+		"/account-required?reason=unknown&return_to_b64=" + base64.RawURLEncoding.EncodeToString([]byte("/recipes")),
+		"/account-required?reason=generation-limit&return_to_b64=" + base64.RawURLEncoding.EncodeToString([]byte("https://example.com")),
+	}
+	for _, target := range tests {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		rr := httptest.NewRecorder()
+
+		mux.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusBadRequest, rr.Code)
+		require.False(t, strings.Contains(rr.Body.String(), "Sign in"))
+	}
 }
 
 func clerkRedirectURL(t *testing.T, signInURL string) string {

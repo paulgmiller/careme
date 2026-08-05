@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -46,6 +47,27 @@ type stubRoutingStaplesProvider struct {
 	ingredients []ai.InputIngredient
 	err         error
 	calls       int
+}
+
+type stubWatchdogLocationLookup struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (s *stubWatchdogLocationLookup) GetLocationByID(_ context.Context, locationID string) (*locations.Location, error) {
+	s.mu.Lock()
+	s.calls = append(s.calls, locationID)
+	s.mu.Unlock()
+
+	lat := 45.5231
+	lon := -122.6765
+	return &locations.Location{
+		ID:      locationID,
+		Name:    "Hydrated " + locationID,
+		ZipCode: "97209",
+		Lat:     &lat,
+		Lon:     &lon,
+	}, nil
 }
 
 type stubIngredientGrader struct {
@@ -363,10 +385,15 @@ func TestWatchdogUsesStoreLocalDateForCacheKey(t *testing.T) {
 		provider: provider,
 		grader:   &stubIngredientGrader{},
 	}
+	locationLookup := &stubWatchdogLocationLookup{}
+	watchdog := NewStaplesWatchdog(locationLookup, service)
 	withNow(t, time.Date(2026, time.January, 15, 16, 30, 0, 0, time.UTC)) // 08:30 Pacific, before store-day boundary.
 
-	if err := service.Watchdog(t.Context()); err != nil {
+	if err := watchdog.Watchdog(t.Context()); err != nil {
 		t.Fatalf("Watchdog returned error: %v", err)
+	}
+	if len(locationLookup.calls) != len(StaplesWatchdogLocationIDs()) {
+		t.Fatalf("location lookup calls = %d, want %d", len(locationLookup.calls), len(StaplesWatchdogLocationIDs()))
 	}
 
 	previousPacificDay := time.Date(2026, time.January, 14, 0, 0, 0, 0, time.UTC)

@@ -41,7 +41,6 @@ type Market struct {
 	ID    string   `json:"id"`
 	Names []string `json:"names"`
 	geo.Coordinate
-	ZipCode    string    `json:"zip_code"`
 	PhotoCount int       `json:"photo_count"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
@@ -72,7 +71,10 @@ func (s *store) freshInventory(ctx context.Context, locationID string) ([]ai.Inp
 	if err != nil {
 		return nil, err
 	}
-	date := farmersMarketDate(time.Now(), market.ZipCode)
+	date, err := farmersMarketDate(time.Now(), market.Coordinate)
+	if err != nil {
+		return nil, err
+	}
 	return s.loadInventoryByDate(ctx, locationID, date)
 }
 
@@ -81,15 +83,10 @@ func (m Market) Location() locationtypes.Location {
 	if len(m.Names) > 0 {
 		name = m.Names[0]
 	}
-	address := "Farmers market"
-	if m.ZipCode != "" {
-		address = "Farmers market near ZIP " + m.ZipCode
-	}
 	return locationtypes.Location{
 		ID:       m.ID,
 		Name:     name,
-		Address:  address,
-		ZipCode:  m.ZipCode,
+		Address:  "Farmers market",
 		Lat:      &m.Lat,
 		Lon:      &m.Lon,
 		CachedAt: m.UpdatedAt,
@@ -97,11 +94,11 @@ func (m Market) Location() locationtypes.Location {
 	}
 }
 
-func (m *Market) merge(name string, lat, lon float64, photoCount int, now time.Time) {
+func (m *Market) merge(name string, coordinates geo.Coordinate, photoCount int, now time.Time) {
 	total := m.PhotoCount + photoCount
 	if total > 0 {
-		m.Lat = ((m.Lat * float64(m.PhotoCount)) + (lat * float64(photoCount))) / float64(total)
-		m.Lon = ((m.Lon * float64(m.PhotoCount)) + (lon * float64(photoCount))) / float64(total)
+		m.Lat = ((m.Lat * float64(m.PhotoCount)) + (coordinates.Lat * float64(photoCount))) / float64(total)
+		m.Lon = ((m.Lon * float64(m.PhotoCount)) + (coordinates.Lon * float64(photoCount))) / float64(total)
 		m.PhotoCount = total
 	}
 	if !slices.ContainsFunc(m.Names, func(existing string) bool {
@@ -112,7 +109,7 @@ func (m *Market) merge(name string, lat, lon float64, photoCount int, now time.T
 	m.UpdatedAt = now
 }
 
-func (s *store) findNearbyMarket(ctx context.Context, lat, lon float64) (*Market, error) {
+func (s *store) findNearbyMarket(ctx context.Context, coordinates geo.Coordinate) (*Market, error) {
 	markets, err := s.listMarkets(ctx)
 	if err != nil {
 		return nil, err
@@ -121,7 +118,7 @@ func (s *store) findNearbyMarket(ctx context.Context, lat, lon float64) (*Market
 	nearestDistance := math.MaxFloat64
 	for i := range markets {
 		market := markets[i]
-		distance := geo.HaversineMiles(lat, lon, market.Lat, market.Lon)
+		distance := geo.HaversineMiles(coordinates, market.Coordinate)
 		if distance > mergeRadiusMI || distance >= nearestDistance {
 			continue
 		}
@@ -167,6 +164,9 @@ func (s *store) loadMarketByKey(ctx context.Context, key string) (Market, error)
 	var market Market
 	if err := json.NewDecoder(reader).Decode(&market); err != nil {
 		return Market{}, fmt.Errorf("decode farmers market: %w", err)
+	}
+	if err := market.Valid(); err != nil {
+		return Market{}, fmt.Errorf("load farmers market %q: invalid coordinates: %w", market.ID, err)
 	}
 	return market, nil
 }
@@ -231,9 +231,8 @@ func inventoryKey(locationID string, date time.Time) string {
 	return inventoryPrefix + locationID + "/" + date.Format("2006-01-02") + ".json"
 }
 
-func marketID(name string, lat, lon float64) string {
+func marketID(coordinates geo.Coordinate) string {
 	h := fnv.New64a()
-	_, _ = io.WriteString(h, strings.ToLower(strings.TrimSpace(name)))
-	_, _ = io.WriteString(h, fmt.Sprintf("|%.4f|%.4f", lat, lon))
+	_, _ = io.WriteString(h, fmt.Sprintf("%.4f|%.4f", coordinates.Lat, coordinates.Lon))
 	return LocationIDPrefix + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }

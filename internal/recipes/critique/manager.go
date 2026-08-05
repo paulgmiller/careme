@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -15,7 +16,10 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-const MinimumRecipeScore = 8
+const (
+	MinimumRecipeScore        = 8
+	backgroundCritiqueTimeout = 2 * time.Minute
+)
 
 type recipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
@@ -43,10 +47,10 @@ type waitingCritiquer struct {
 var _ recipeCritiquer = &waitingCritiquer{}
 
 func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) *waitingCritiquer {
-	if !cfg.Gemini.IsEnabled() {
-		panic("gemini must be enabled")
+	if !cfg.OpenRouter.IsEnabled() {
+		panic("OpenRouter must be enabled")
 	}
-	crit := ai.NewCritiquer(cfg.Gemini.APIKey, cfg.Gemini.CritiqueModel, httpClient)
+	crit := ai.NewCritiquer(cfg.OpenRouter.APIKey, cfg.OpenRouter.CritiqueModel, httpClient)
 	return &waitingCritiquer{
 		critiquer: newCachingCritiquer(crit, NewStore(c)),
 	}
@@ -65,9 +69,11 @@ func (mc *waitingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe
 }
 
 func (mc *waitingCritiquer) CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), backgroundCritiqueTimeout)
 	mc.wg.Add(1)
 	go func() {
 		defer mc.wg.Done()
+		defer cancel()
 		_, err := mc.CritiqueRecipe(ctx, recipe)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to critique recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", err)

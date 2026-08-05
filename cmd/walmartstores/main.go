@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"careme/internal/config"
+	"careme/internal/locations/geo"
 	"careme/internal/walmart"
 )
 
@@ -16,7 +17,8 @@ const defaultConsumerID = "52dae855-d02f-488b-b179-1df6700d7dcf"
 
 func main() {
 	var (
-		zip        = flag.String("zip", "98005", "ZIP code to query")
+		lat        = flag.Float64("lat", 47.6097, "latitude to query")
+		lon        = flag.Float64("lon", -122.3331, "longitude to query")
 		keyVersion = flag.String("key-version", envOrDefault("WALMART_KEY_VERSION", "1"), "Walmart key version header")
 		baseURL    = flag.String("base-url", walmart.DefaultBaseURL, "Walmart affiliates API base URL")
 		privateKey = flag.String("private-key", envOrDefault("WALMART_PRIVATE_KEY", ""), "path to Walmart private key")
@@ -45,8 +47,9 @@ func main() {
 	//}
 	//fmt.Printf("taxonomy: %s\n", string(taxonomy))
 
-	slog.Info("querying Walmart stores", "zip", *zip)
-	stores, err := client.SearchStoresByZIP(ctx, *zip)
+	coordinates := geo.Coordinate{Lat: *lat, Lon: *lon}
+	slog.Info("querying Walmart stores", "lat", coordinates.Lat, "lon", coordinates.Lon)
+	stores, err := client.SearchStores(ctx, coordinates)
 	if err != nil {
 		exitErr(err)
 	}

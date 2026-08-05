@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"careme/internal/cache"
+	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -69,7 +70,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	}
 }
 
-func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
+func TestLocationBackendGetLocationsByCoordinatesUsesDistance(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
@@ -91,9 +92,9 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 		t.Fatalf("NewLocationBackend returned error: %v", err)
 	}
 
-	locs, err := backend.GetLocationsByZip(context.Background(), "98006")
+	locs, err := backend.GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 47.5750, Lon: -122.1400})
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
 	if len(locs) != 1 {
 		t.Fatalf("expected 1 nearby location, got %d", len(locs))
@@ -128,9 +129,9 @@ func TestLocationBackendUsesZipCentroidWhenCoordinatesMissing(t *testing.T) {
 		t.Fatalf("NewLocationBackend returned error: %v", err)
 	}
 
-	locs, err := backend.GetLocationsByZip(context.Background(), "98006")
+	locs, err := backend.GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 47.5750, Lon: -122.1400})
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
 	if len(locs) != 1 {
 		t.Fatalf("expected 1 nearby location, got %d", len(locs))

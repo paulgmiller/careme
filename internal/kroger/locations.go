@@ -7,6 +7,8 @@ import (
 
 	"careme/internal/config"
 	krogerlocations "careme/internal/kroger/locations"
+	"careme/internal/locations/geo"
+	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -85,9 +87,12 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 	}, nil
 }
 
-func (b *LocationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
+func (b *LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
+	latLong := fmt.Sprintf("%g,%g", coordinates.Lat, coordinates.Lon)
+	radius := int(nearby.MaxLocationDistanceMiles)
 	params := &krogerlocations.SearchLocationsParams{
-		FilterZipCodeNear: &zipcode,
+		FilterLatLongNear:   &latLong,
+		FilterRadiusInMiles: &radius,
 	}
 	resp, err := b.client.SearchLocationsWithResponse(ctx, params)
 	if err != nil {

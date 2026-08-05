@@ -28,7 +28,7 @@ jobs:
           cache: true
 
       - name: Run Go tests
-        run: go test ./...
+        run: ./task.sh test
 
   vet:
     name: vet
@@ -45,7 +45,7 @@ jobs:
           cache: true
 
       - name: Run go vet
-        run: go vet ./...
+        run: ./task.sh vet
 
   format:
     name: format
@@ -60,12 +60,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Install gofumpt
-        run: bash tools/install.sh gofumpt
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
 
       - name: Check Go formatting
-        run: test -z "$(./bin/gofumpt -l .)"
+        run: ./task.sh fmt-check
 
   lint:
     name: lint
@@ -80,18 +80,32 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Read tool versions
-        id: tool-versions
-        run: |
-          source tools/versions.sh
-          echo "golangci-lint=${GOLANGCI_LINT_VERSION}" >> "${GITHUB_OUTPUT}"
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        run: ./task.sh lint
+
+  crap:
+    name: crap
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
         with:
-          version: ${{ steps.tool-versions.outputs.golangci-lint }}
-          args: --timeout=5m
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
+
+      - name: Run go-crap scan
+        run: ./task.sh crap
 
   js-lint:
     name: js-lint
@@ -106,8 +120,16 @@ jobs:
         with:
           node-version: 22
 
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
+
       - name: Run JavaScript lint
-        run: npm exec --yes --package eslint@10.4.0 -- eslint internal/static/user-clerk-billing.js internal/static/share.js
+        run: ./task.sh js-lint
 
   k8s-lint:
     name: k8s-lint
@@ -122,16 +144,16 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Install kubeconform
-        run: bash tools/install.sh kubeconform
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
 
       - name: Validate Kubernetes manifests
-        run: ./bin/kubeconform -strict -summary deploy/*.yaml
+        run: ./task.sh k8s-lint
 
   publish:
     name: publish (${{ matrix.name }})
-    needs: [verify, vet, format, lint, js-lint, k8s-lint]
+    needs: [verify, vet, format, lint, crap, js-lint, k8s-lint]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -143,6 +165,9 @@ jobs:
           - name: careme
             cmd_path: ./cmd/careme
             image_suffix: ""
+          - name: ingredientreview
+            cmd_path: ./cmd/ingredientreview
+            image_suffix: ingredientreview
           - name: wholefoods
             cmd_path: ./cmd/wholefoods
             image_suffix: wholefoods
@@ -193,8 +218,11 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name == 'push' }}
+          # BuildKit removes .git from Git contexts by default. Go needs it
+          # during the builder stage to populate its standard vcs.* settings.
           build-args: |
             CMD_PATH=${{ matrix.cmd_path }}
+            BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
           tags: |
             ${{ steps.vars.outputs.IMAGE }}:latest
             ${{ steps.vars.outputs.IMAGE }}:${{ steps.vars.outputs.SHORT_SHA }}

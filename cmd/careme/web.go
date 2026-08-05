@@ -72,6 +72,12 @@ func runServer(cfg *config.Config, addr string) error {
 	// TODO  make the mock more transparent?
 	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 
+	centroids := locations.LoadCentroids()
+	locationStorage, err := locations.New(cfg, cache, centroids)
+	if err != nil {
+		return fmt.Errorf("failed to create location server: %w", err)
+	}
+
 	var generator recipes.ExtGenerator
 	var imageGen recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
@@ -94,7 +100,7 @@ func runServer(cfg *config.Config, addr string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}
-		watchdogServer.Add("staples", staples, 6.*time.Hour)
+		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := recipes.StatusStore(cache)
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
 		if err != nil {
@@ -103,13 +109,6 @@ func runServer(cfg *config.Config, addr string) error {
 		waiters = append(waiters, critiquer)
 	}
 	watchdogServer.Register(infraRoutes)
-
-	centroids := locations.LoadCentroids()
-
-	locationStorage, err := locations.New(cfg, cache, centroids)
-	if err != nil {
-		return fmt.Errorf("failed to create location server: %w", err)
-	}
 
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
@@ -124,11 +123,11 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 	farmersMarketStore := farmersmarket.NewStore(farmersMarketCache)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
-	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, farmersMarketCache, authClient, marketExtractor, centroids)
+	farmersMarketHandler := farmersmarket.NewHandler(farmersMarketUploader, farmersMarketCache, authClient, marketExtractor)
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)
 
-	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin())
+	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
@@ -139,13 +138,13 @@ func runServer(cfg *config.Config, addr string) error {
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
+	adminMux.Handle("/{$}", admin.Page())
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
 	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))
 	adminMux.Handle("/prompt/recipe/{hash}", prompts.AdminRecipePromptJSON(cache))
 	adminMux.Handle("/mealplan/{hash}", recipes.AdminMealPlanPage(recipeIO))
-	adminMux.Handle("/critiques", critique.AdminCritiquesPage(critique.NewStore(cache), recipeIO))
 	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
@@ -172,9 +171,13 @@ func runServer(cfg *config.Config, addr string) error {
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})
 
+	return serve(addr, rootMux, waiters)
+}
+
+func serve(addr string, handler http.Handler, waiters []waiter) error {
 	server := &http.Server{
 		Addr:    addr,
-		Handler: rootMux,
+		Handler: handler,
 	}
 
 	// Channel to listen for errors coming from the server
@@ -189,6 +192,7 @@ func runServer(cfg *config.Config, addr string) error {
 	// Channel to listen for interrupt or terminate signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(shutdown)
 
 	// Block until we receive a signal or server error
 	select {
