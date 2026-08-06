@@ -246,6 +246,8 @@ func parseLocationID(locationID string) (string, bool) {
 }
 
 func productToIngredient(product StoreProduct, category StapleCategory) ai.InputIngredient {
+	// TODO: Validate whether the display PriceLine carries a pricing basis; the
+	// current search payload has no structured per-weight field to map yet.
 	salePrice := priceFromLine(stringValue(product.PriceLine))
 	regularPrice := priceFromLine(stringValue(product.OriginalPriceLine))
 	return ai.NormalizeInputIngredient(ai.InputIngredient{

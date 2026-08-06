@@ -13,6 +13,7 @@ type Ingredient struct {
 	PriceSale    *float32 `json:"salePrice,omitempty"`
 	PriceRegular *float32 `json:"regularPrice,omitempty"`
 	Size         *string  `json:"size,omitempty"`
+	SoldBy       *string  `json:"soldBy,omitempty"`
 	// not used by llm.
 	Categories *[]string `json:"categories,omitempty"`
 	// Figure out what is in taxonomies
