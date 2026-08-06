@@ -129,8 +129,9 @@ func TestRecipeCritiqueJSONSchemaTracksStruct(t *testing.T) {
 
 	overallScore, ok := properties["overall_score"].(map[string]any)
 	require.True(t, ok, "expected overall_score schema object, got %#v", properties["overall_score"])
-	assert.Equal(t, float64(1), overallScore["minimum"])
-	assert.Equal(t, float64(10), overallScore["maximum"])
+	assert.Equal(t, "integer", overallScore["type"])
+	assert.NotContains(t, overallScore, "minimum")
+	assert.NotContains(t, overallScore, "maximum")
 }
 
 func TestCritiqueRecipeUsesOpenRouterStructuredOutput(t *testing.T) {

@@ -54,7 +54,10 @@ type RecipeCritiqueIssue struct {
 
 type RecipeCritique struct {
 	SchemaVersion string `json:"schema_version" jsonschema:"enum=recipe-critique-v1"`
-	OverallScore  int    `json:"overall_score" jsonschema:"minimum=1,maximum=10"`
+	// OpenRouter routes Claude structured output through providers that reject
+	// JSON Schema numeric bounds. parseRecipeCritique enforces the 1–10 range
+	// after decoding instead.
+	OverallScore int `json:"overall_score"`
 	// creativity and practicality scores?
 	Summary        string                `json:"summary"`
 	Strengths      []string              `json:"strengths"`
