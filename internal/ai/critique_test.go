@@ -53,12 +53,32 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 	}
 }
 
+func TestRecipeCritiqueDefaultsAndFingerprint(t *testing.T) {
+	t.Parallel()
+
+	client := NewCritiquer("openrouter-key", "", http.DefaultClient)
+
+	assert.Equal(t, "anthropic/claude-opus-5", client.model)
+	assert.Len(t, RecipeCritiqueFingerprint(), 64)
+	assert.Equal(t, RecipeCritiqueFingerprint(), RecipeCritiqueFingerprint())
+}
+
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"do the instructions begin with preparation before active cooking starts",
 		"does every mention of an ingredient in the instructions include the exact amount used in that step",
 		"do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list",
 		"does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
+	}
+}
+
+func TestRecipeCritiqueSystemInstructionRequiresProviderCompatibleOutput(t *testing.T) {
+	for _, want := range []string{
+		"overall_score must be an integer from 1 through 10",
+		"summary must be a non-empty, concise sentence",
+		"return one valid JSON object only",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}
@@ -119,8 +139,9 @@ func TestRecipeCritiqueJSONSchemaTracksStruct(t *testing.T) {
 
 	overallScore, ok := properties["overall_score"].(map[string]any)
 	require.True(t, ok, "expected overall_score schema object, got %#v", properties["overall_score"])
-	assert.Equal(t, float64(1), overallScore["minimum"])
-	assert.Equal(t, float64(10), overallScore["maximum"])
+	assert.Equal(t, "integer", overallScore["type"])
+	assert.NotContains(t, overallScore, "minimum")
+	assert.NotContains(t, overallScore, "maximum")
 }
 
 func TestCritiqueRecipeUsesOpenRouterStructuredOutput(t *testing.T) {

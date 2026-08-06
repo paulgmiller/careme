@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -16,11 +17,13 @@ import (
 
 const (
 	openRouterBaseURL          = "https://openrouter.ai/api/v1"
-	defaultCritiqueModel       = "google/gemini-3.1-pro-preview"
+	defaultCritiqueModel       = "anthropic/claude-opus-5"
 	recipeCritiqueSchemaV1     = "recipe-critique-v1"
 	openRouterApplicationTitle = "Careme"
 	openRouterApplicationURL   = "https://careme.cooking"
 )
+
+const recipeCritiquePromptFormat = "Critique this generated recipe for correctness and usefulness to a home cook.\nReturn JSON only using schema_version %q.\nRecipe JSON:\n%s"
 
 const recipeCritiqueSystemInstruction = `
 You are a strict recipe editor reviewing AI-generated recipes before they are given to human cooks and used for future fine tuning.
@@ -41,7 +44,11 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 
-Be concise and concrete. Return JSON only.`
+Be concise and concrete.
+- overall_score must be an integer from 1 through 10
+- summary must be a non-empty, concise sentence
+- return one valid JSON object only
+`
 
 type RecipeCritiqueIssue struct {
 	Severity string `json:"severity" jsonschema:"enum=low,enum=medium,enum=high"`
@@ -51,7 +58,10 @@ type RecipeCritiqueIssue struct {
 
 type RecipeCritique struct {
 	SchemaVersion string `json:"schema_version" jsonschema:"enum=recipe-critique-v1"`
-	OverallScore  int    `json:"overall_score" jsonschema:"minimum=1,maximum=10"`
+	// OpenRouter routes Claude structured output through providers that reject
+	// JSON Schema numeric bounds. parseRecipeCritique enforces the 1–10 range
+	// after decoding instead.
+	OverallScore int `json:"overall_score"`
 	// creativity and practicality scores?
 	Summary        string                `json:"summary"`
 	Strengths      []string              `json:"strengths"`
@@ -206,10 +216,26 @@ func buildRecipeCritiquePrompt(recipe Recipe) (string, error) {
 		return "", fmt.Errorf("marshal recipe critique payload: %w", err)
 	}
 	return fmt.Sprintf(
-		"Critique this generated recipe for correctness and usefulness to a home cook.\nReturn JSON only using schema_version %q.\nRecipe JSON:\n%s",
+		recipeCritiquePromptFormat,
 		recipeCritiqueSchemaV1,
 		string(body),
 	), nil
+}
+
+// RecipeCritiqueFingerprint identifies the instructions and output schema used
+// for a critique so eval caches cannot cross prompt or schema revisions.
+func RecipeCritiqueFingerprint() string {
+	body, err := json.Marshal(recipeCritiqueJSONSchema())
+	if err != nil {
+		panic(fmt.Sprintf("marshal recipe critique fingerprint schema: %v", err))
+	}
+	value := strings.Join([]string{
+		recipeCritiqueSystemInstruction,
+		recipeCritiquePromptFormat,
+		recipeCritiqueSchemaV1,
+		string(body),
+	}, "\n")
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
 }
 
 func recipeCritiqueJSONSchema() map[string]any {
