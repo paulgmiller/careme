@@ -74,6 +74,16 @@ func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing
 	}
 }
 
+func TestRecipeCritiqueSystemInstructionRequiresProviderCompatibleOutput(t *testing.T) {
+	for _, want := range []string{
+		"overall_score must be an integer from 1 through 10",
+		"summary must be a non-empty, concise sentence",
+		"return one valid JSON object only",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
+	}
+}
+
 func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T) {
 	for _, want := range []string{
 		"1.25% salt by weight for boneless meat",

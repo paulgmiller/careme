@@ -44,7 +44,11 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 
-Be concise and concrete. Return JSON only.`
+Be concise and concrete.
+- overall_score must be an integer from 1 through 10
+- summary must be a non-empty, concise sentence
+- return one valid JSON object only
+`
 
 type RecipeCritiqueIssue struct {
 	Severity string `json:"severity" jsonschema:"enum=low,enum=medium,enum=high"`

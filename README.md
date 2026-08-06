@@ -54,6 +54,7 @@ Create an immutable private snapshot, evaluate the same recipes with multiple mo
 go run ./cmd/critiqueeval snapshot -secret-file secrets/envprod -email paul.miller@gmail.com -name cooked-2026-08-06 -n 20
 go run ./cmd/critiqueeval run -secret-file secrets/envprod -dataset cooked-2026-08-06 -models google/gemini-3.1-pro-preview,anthropic/claude-opus-5
 go run ./cmd/critiqueeval report -secret-file secrets/envprod -dataset cooked-2026-08-06
+go run ./cmd/critiqueeval show -secret-file secrets/envprod -dataset cooked-2026-08-06 -hash _7I6VbwVcIHdgdgVHSSUuw==
 ```
 
 Snapshots and results stay in the configured recipe cache and are not written to the repository. Create a new named snapshot when the cooked-recipe sample should change. Results are isolated by critique prompt fingerprint and requested model.

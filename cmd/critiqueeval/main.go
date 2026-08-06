@@ -80,7 +80,7 @@ func main() {
 
 func run(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: critiqueeval <snapshot|run|report> [flags]")
+		return errors.New("usage: critiqueeval <snapshot|run|report|show> [flags]")
 	}
 	switch args[0] {
 	case "snapshot":
@@ -89,8 +89,10 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return runModels(ctx, args[1:], out)
 	case "report":
 		return runReport(ctx, args[1:], out)
+	case "show":
+		return runShow(ctx, args[1:], out)
 	default:
-		return fmt.Errorf("unknown operation %q; want snapshot, run, or report", args[0])
+		return fmt.Errorf("unknown operation %q; want snapshot, run, report, or show", args[0])
 	}
 }
 
@@ -202,6 +204,37 @@ func runReport(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	return printReport(ctx, out, store, dataset, parseModels(modelsCSV), strings.TrimSpace(fingerprint))
+}
+
+func runShow(ctx context.Context, args []string, out io.Writer) error {
+	var datasetName, hash, modelsCSV, secretFile, fingerprint string
+	fs := flag.NewFlagSet("critiqueeval show", flag.ContinueOnError)
+	fs.SetOutput(out)
+	fs.StringVar(&datasetName, "dataset", "", "named eval dataset")
+	fs.StringVar(&hash, "hash", "", "recipe hash")
+	fs.StringVar(&modelsCSV, "models", "", "optional comma-separated model filter")
+	fs.StringVar(&fingerprint, "prompt-fingerprint", ai.RecipeCritiqueFingerprint(), "critique prompt fingerprint to show")
+	fs.StringVar(&secretFile, "secret-file", "", "encrypted kage environment file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := validateDatasetName(datasetName); err != nil {
+		return fmt.Errorf("invalid -dataset: %w", err)
+	}
+	hash = strings.TrimSpace(hash)
+	if hash == "" {
+		return errors.New("-hash is required")
+	}
+	c, _, err := configuredCache(secretFile)
+	if err != nil {
+		return err
+	}
+	store := evalStore{cache: c}
+	dataset, err := store.loadDataset(ctx, datasetName)
+	if err != nil {
+		return err
+	}
+	return printCritiqueDetails(ctx, out, store, dataset, hash, parseModels(modelsCSV), strings.TrimSpace(fingerprint))
 }
 
 func configuredCache(secretFile string) (cache.ListCache, *config.Config, error) {
@@ -568,6 +601,105 @@ func printReport(ctx context.Context, out io.Writer, store evalStore, dataset *e
 		}
 	}
 	return printPairwise(out, dataset.Samples, models, byModel)
+}
+
+func printCritiqueDetails(ctx context.Context, out io.Writer, store evalStore, dataset *evalDataset, hash string, modelFilter []string, fingerprint string) error {
+	sampleIndex := slices.IndexFunc(dataset.Samples, func(sample evalSample) bool {
+		return sample.Hash == hash
+	})
+	if sampleIndex < 0 {
+		return fmt.Errorf("recipe %q is not in dataset %q", hash, dataset.Name)
+	}
+	sample := dataset.Samples[sampleIndex]
+	if _, err := fmt.Fprintf(out, "%s (%s)\nFeedback: %s; stars: %s\n", sample.Title, sample.Hash, sample.FeedbackUpdatedAt.Format(time.RFC3339), optionalInt(sample.Stars)); err != nil {
+		return err
+	}
+	if err := printCritiqueDetail(out, "Historical critique", sample.HistoricalCritique); err != nil {
+		return err
+	}
+
+	allowed := make(map[string]struct{}, len(modelFilter))
+	for _, model := range modelFilter {
+		allowed[model] = struct{}{}
+	}
+	results, err := store.listResults(ctx, dataset.ID)
+	if err != nil {
+		return fmt.Errorf("list eval results: %w", err)
+	}
+	byModel := make(map[string]evalResult)
+	for _, result := range results {
+		if result.RecipeHash != hash || result.PromptFingerprint != fingerprint {
+			continue
+		}
+		if len(allowed) > 0 {
+			if _, ok := allowed[result.RequestedModel]; !ok {
+				continue
+			}
+		}
+		byModel[result.RequestedModel] = result
+	}
+	models := make([]string, 0, len(byModel))
+	for model := range byModel {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	if len(models) == 0 {
+		_, err := fmt.Fprintf(out, "\nNo eval results for prompt fingerprint %s\n", fingerprint)
+		return err
+	}
+	for _, model := range models {
+		if err := printCritiqueDetail(out, "Eval critique requested from "+model, byModel[model].Critique); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func printCritiqueDetail(out io.Writer, heading string, value *ai.RecipeCritique) error {
+	if _, err := fmt.Fprintf(out, "\n%s\n", heading); err != nil {
+		return err
+	}
+	if value == nil {
+		_, err := fmt.Fprintln(out, "- unavailable")
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "Model: %s\nScore: %d/%s\nSummary: %s\n", cleanCell(value.Model), value.OverallScore, passLabel(value.OverallScore), cleanCell(value.Summary)); err != nil {
+		return err
+	}
+	if err := printDetailList(out, "Strengths", value.Strengths); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(out, "Issues:"); err != nil {
+		return err
+	}
+	if len(value.Issues) == 0 {
+		if _, err := fmt.Fprintln(out, "- none"); err != nil {
+			return err
+		}
+	} else {
+		for _, issue := range value.Issues {
+			if _, err := fmt.Fprintf(out, "- [%s/%s] %s\n", cleanCell(issue.Category), cleanCell(issue.Severity), cleanCell(issue.Detail)); err != nil {
+				return err
+			}
+		}
+	}
+	return printDetailList(out, "Suggested fixes", value.SuggestedFixes)
+}
+
+func printDetailList(out io.Writer, heading string, values []string) error {
+	if _, err := fmt.Fprintf(out, "%s:\n", heading); err != nil {
+		return err
+	}
+	if len(values) == 0 {
+		_, err := fmt.Fprintln(out, "- none")
+		return err
+	}
+	for _, value := range values {
+		if _, err := fmt.Fprintf(out, "- %s\n", cleanCell(value)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func calculateModelStats(samples []evalSample, results map[string]evalResult) modelStats {

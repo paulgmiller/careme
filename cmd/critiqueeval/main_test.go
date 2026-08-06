@@ -158,6 +158,41 @@ func TestPrintReportIncludesRowsStatsAndPairwiseComparison(t *testing.T) {
 	assert.Contains(t, body, "model-a -> model-b\t1\t+2.00\t1\t2")
 }
 
+func TestPrintCritiqueDetailsShowsHistoricalAndEvalResults(t *testing.T) {
+	t.Parallel()
+	c := cache.NewInMemoryCache()
+	store := evalStore{cache: c}
+	dataset := &evalDataset{ID: "dataset", Samples: []evalSample{{
+		Hash:               "recipe-hash",
+		Title:              "Orecchiette",
+		Stars:              4,
+		HistoricalCritique: &ai.RecipeCritique{OverallScore: 9, Model: "historical", Summary: "Old result."},
+	}}}
+	require.NoError(t, store.saveResult(t.Context(), evalResult{
+		DatasetID:         dataset.ID,
+		PromptFingerprint: "prompt",
+		RequestedModel:    "opus",
+		RecipeHash:        "recipe-hash",
+		Critique: &ai.RecipeCritique{
+			OverallScore: 6,
+			Model:        "anthropic/claude-opus-5",
+			Summary:      "Needs work.",
+			Issues:       []ai.RecipeCritiqueIssue{{Category: "timing", Severity: "high", Detail: "Too short."}},
+		},
+	}))
+	var out bytes.Buffer
+
+	require.NoError(t, printCritiqueDetails(t.Context(), &out, store, dataset, "recipe-hash", nil, "prompt"))
+
+	body := out.String()
+	assert.Contains(t, body, "Orecchiette (recipe-hash)")
+	assert.Contains(t, body, "Historical critique")
+	assert.Contains(t, body, "Score: 9/pass")
+	assert.Contains(t, body, "Eval critique requested from opus")
+	assert.Contains(t, body, "Score: 6/fail")
+	assert.Contains(t, body, "[timing/high] Too short.")
+}
+
 func saveRecipe(t *testing.T, c cache.ListCache, title string) ai.Recipe {
 	t.Helper()
 	recipe := ai.Recipe{Title: title, Description: "Dinner", Instructions: []string{"Cook it."}}
