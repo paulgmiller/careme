@@ -37,23 +37,28 @@ function cacheSavedRecipeURLs(body) {
   const urls = body.split(/\r?\n/).filter(Boolean);
   return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
     Promise.all(
-      urls.map((url) => {
-        const request = new Request(url, {
-          credentials: "same-origin",
-          cache: "reload",
-        });
-        // Recipe pages are refreshed on each sync so offline copies pick up
-        // later additions like questions, generated images, and wine pairings.
-        // Ideally the app would trigger this only when one of those changes.
-        return fetch(request)
-          .then((response) => {
-            if (response && response.ok) {
-              return cache.put(url, response).then(() => true);
-            }
-            return false;
-          })
-          .catch(() => false);
-      }),
+      urls.map((url) =>
+        cache.match(url).then((cached) => {
+          if (cached) {
+            return true;
+          }
+
+          const request = new Request(url, {
+            credentials: "same-origin",
+          });
+          // Saved recipe pages and their generated images are immutable enough
+          // for offline use. Only fetch missing URLs so reconnecting does not
+          // redownload every saved recipe each time the app asks for a sync.
+          return fetch(request)
+            .then((response) => {
+              if (response && response.ok) {
+                return cache.put(url, response).then(() => true);
+              }
+              return url.endsWith("/image");
+            })
+            .catch(() => url.endsWith("/image"));
+        }),
+      ),
     ).then((results) => {
       if (!results.every(Boolean)) {
         return false;
@@ -90,12 +95,7 @@ function syncSavedRecipes() {
       if (body === false) {
         return false;
       }
-      return savedRecipeListChanged(body).then((changed) => {
-        if (!changed) {
-          return true;
-        }
-        return cacheSavedRecipeURLs(body);
-      });
+      return savedRecipeListChanged(body).then(() => cacheSavedRecipeURLs(body));
     })
     .catch(() => false);
 }
@@ -130,6 +130,16 @@ function cacheFirstWithNetworkFill(request) {
 
     return fetch(request).then((response) => cacheSuccessfulResponse(request, response));
   });
+}
+
+function savedRecipeImageFromCacheWithNetworkFallback(request) {
+  return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
+    cache.match(request).then((cached) => cached || fetch(request)),
+  );
+}
+
+function isSavedRecipeImagePath(pathname) {
+  return /^\/recipe\/[^/]+\/image$/.test(pathname);
 }
 
 self.addEventListener("fetch", (event) => {
@@ -168,6 +178,14 @@ self.addEventListener("fetch", (event) => {
   // current icon, but keep the last successful response for offline launches.
   if (url.pathname === "/favicon.ico") {
     event.respondWith(networkFirstWithCacheFallback(request));
+    return;
+  }
+
+  // Saved recipe images are populated by the offline recipe sync, but <img>
+  // requests are not navigations or static assets. Serve those cached images
+  // before falling through to the default network behavior for dynamic routes.
+  if (isSavedRecipeImagePath(url.pathname)) {
+    event.respondWith(savedRecipeImageFromCacheWithNetworkFallback(request));
     return;
   }
 
