@@ -53,6 +53,16 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 	}
 }
 
+func TestRecipeCritiqueDefaultsAndFingerprint(t *testing.T) {
+	t.Parallel()
+
+	client := NewCritiquer("openrouter-key", "", http.DefaultClient)
+
+	assert.Equal(t, "anthropic/claude-opus-5", client.model)
+	assert.Len(t, RecipeCritiqueFingerprint(), 64)
+	assert.Equal(t, RecipeCritiqueFingerprint(), RecipeCritiqueFingerprint())
+}
+
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"do the instructions begin with preparation before active cooking starts",
