@@ -18,11 +18,11 @@ func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal default staples: %v", err)
 	}
-	if got != string(want) {
+	if got != string(want)+"-price-unit-v1" {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
 	}
 
-	if got != string(want) {
+	if got != string(want)+"-price-unit-v1" {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
 	}
 }
@@ -100,6 +100,9 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	}
 	if ingredient.PriceSale == nil || *ingredient.PriceSale != float32(4.49) {
 		t.Fatalf("unexpected sale price: %+v", ingredient.PriceSale)
+	}
+	if ingredient.PriceUnit != "lb" {
+		t.Fatalf("unexpected price unit: %q", ingredient.PriceUnit)
 	}
 	if got, want := client.callCount(), len(defaultStaples()); got != want {
 		t.Fatalf("expected %d category calls, got %d", want, got)

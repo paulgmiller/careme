@@ -15,7 +15,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var defaultStaplesSignature = lo.Must(json.Marshal(defaultStaples()))
+var defaultStaplesSignature = append(lo.Must(json.Marshal(defaultStaples())), []byte("-price-unit-v1")...)
 
 type CategoryClient interface {
 	Category(ctx context.Context, queryterm, store string) ([]product, error)
@@ -127,25 +127,33 @@ func productToIngredient(product product, category string) ai.InputIngredient {
 		salePrice = &price
 	}
 
-	/* unit of measure is more around pricing than total size)
-	TODO how should we normalize prices per units here and in kroger.
-	var size *string
-	sizeText := strings.TrimSpace(strings.Join(compactStrings(product.UOM), " "))
-	if sizeText != "" {
-		size = &sizeText
-	}*/
-
 	hasher := fnv.New32a()
 	// dupes for different units of measure?
 	_ = lo.Must(hasher.Write([]byte(product.Slug)))
 	productId := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
-		ProductID:   productId,
-		Brand:       strings.TrimSpace(product.Brand),
-		Description: strings.TrimSpace(product.Name),
-		// Size:         size,
+		ProductID:    productId,
+		Brand:        strings.TrimSpace(product.Brand),
+		Description:  strings.TrimSpace(product.Name),
+		PriceUnit:    priceUnit(product.UOM),
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		AisleNumber:  category, // not as good as an actual aisle but still lets us sort
 	})
+}
+
+func priceUnit(uom string) string {
+	for _, word := range strings.Fields(strings.ToLower(uom)) {
+		switch strings.Trim(word, ".,()") {
+		case "lb", "lbs", "pound", "pounds":
+			return "lb"
+		case "oz", "ounce", "ounces":
+			return "oz"
+		case "kg", "kilogram", "kilograms":
+			return "kg"
+		case "g", "gram", "grams":
+			return "g"
+		}
+	}
+	return ""
 }

@@ -73,15 +73,18 @@ Important calibration:
 Return JSON only. Preserve each input id/index exactly. Be concise.`
 
 type InputIngredient struct {
-	ProductID    string           `json:"id,omitempty"`
-	AisleNumber  string           `json:"number,omitempty"` // this is a dumb json name fix it later
-	Brand        string           `json:"brand,omitempty"`
-	Description  string           `json:"description,omitempty"`
-	Size         string           `json:"size,omitempty"`
-	PriceRegular *float32         `json:"regularPrice,omitempty"`
-	PriceSale    *float32         `json:"salePrice,omitempty"`
-	Categories   []string         `json:"categories,omitempty"`
-	Grade        *IngredientGrade `json:"grade,omitempty"`
+	ProductID    string   `json:"id,omitempty"`
+	AisleNumber  string   `json:"number,omitempty"` // this is a dumb json name fix it later
+	Brand        string   `json:"brand,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	Size         string   `json:"size,omitempty"`
+	PriceRegular *float32 `json:"regularPrice,omitempty"`
+	PriceSale    *float32 `json:"salePrice,omitempty"`
+	// PriceUnit is the unit the listed price is charged by, such as "lb" or
+	// "weight". An empty value means the provider did not report a price basis.
+	PriceUnit  string           `json:"priceUnit,omitempty"`
+	Categories []string         `json:"categories,omitempty"`
+	Grade      *IngredientGrade `json:"grade,omitempty"`
 }
 
 func (ii InputIngredient) PercentOff() float32 {
@@ -110,6 +113,7 @@ func NormalizeInputIngredient(ingredient InputIngredient) InputIngredient {
 	ingredient.Brand = strings.TrimSpace(ingredient.Brand)
 	ingredient.Description = strings.TrimSpace(ingredient.Description)
 	ingredient.Size = strings.TrimSpace(ingredient.Size)
+	ingredient.PriceUnit = strings.TrimSpace(ingredient.PriceUnit)
 	return ingredient
 }
 

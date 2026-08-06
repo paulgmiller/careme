@@ -1462,3 +1462,14 @@ func TestNewlySaved(t *testing.T) {
 		t.Fatalf("unexpected saved avoid instruction: got %q want %q", got, want)
 	}
 }
+
+func TestInputIngredientDisplayPriceIncludesPriceUnit(t *testing.T) {
+	price := float32(4.99)
+
+	got := inputIngredientDisplayPrice(ai.InputIngredient{
+		PriceRegular: &price,
+		PriceUnit:    "lb",
+	})
+
+	assert.Equal(t, "$4.99 / lb", got)
+}
