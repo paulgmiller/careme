@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin</title>
+</head>
+<body>
+  <nav>
+    <a href="/admin/">Admin</a> |
+    <a href="/admin/users">Users</a>
+  </nav>
+  <h1>Admin</h1>
+  <dl>
+    <dt>Git hash</dt>
+    <dd><code>{{.GitHash}}</code></dd>
+    <dt>Commit time</dt>
+    <dd><time>{{.CommitTime}}</time></dd>
+    <dt>Go version</dt>
+    <dd><code>{{.GoVersion}}</code></dd>
+    <dt>Dirty tree</dt>
+    <dd>{{.DirtyTree}}</dd>
+  </dl>
+</body>
+</html>

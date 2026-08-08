@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -24,6 +24,9 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 		"Farmers market finds",
 		`id="farmers-market-error"`,
 		`hx-post="/farmersmarket"`,
+		`id="farmers-market-form"`,
+		`name="lat"`,
+		`name="lon"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("expected farmers market page to contain %q, got body: %s", want, body)
@@ -41,7 +44,7 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 	}
 	for _, want := range []string{
 		`id="farmers-market-error"`,
-		"could not read location",
+		"invalid latitude",
 	} {
 		if !strings.Contains(respBody, want) {
 			t.Fatalf("expected farmers market upload response to contain %q, got body: %s", want, respBody)
@@ -49,14 +52,17 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 	}
 }
 
-func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToRecipes(t *testing.T) {
+func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToLocations(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
 
 	client := newTestClient(t)
 	progressBody, _ := mustPostMultipartHTMX(t, client, srv.URL+"/farmersmarket", map[string]string{
-		"name": "Test Market",
-	}, "photos", "market.jpg", geotaggedJPEGBytes(t))
+		"name":     "Test Market",
+		"lat":      "47.610000",
+		"lon":      "-122.330000",
+		"timezone": "America/Los_Angeles",
+	}, "photos", "market.jpg", jpegBytes(t))
 	for _, want := range []string{
 		`id="farmers-market-work"`,
 		`hx-get="/farmersmarket/status/`,
@@ -68,12 +74,27 @@ func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToRecipes(t *testing.T) {
 	}
 
 	statusPath := extractFarmersMarketStatusPath(t, progressBody)
-	redirect := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
-	if !strings.HasPrefix(redirect, "/recipes?") {
-		t.Fatalf("expected farmers market upload to redirect to recipes, got %q", redirect)
+	locationsURL := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
+	parsedLocationsURL, err := url.Parse(locationsURL)
+	if err != nil {
+		t.Fatalf("parse farmers market locations redirect %q: %v", locationsURL, err)
 	}
-	if !strings.Contains(redirect, "location=farmersmarket_") {
-		t.Fatalf("expected farmers market location redirect, got %q", redirect)
+	if parsedLocationsURL.Path != "/locations" {
+		t.Fatalf("expected farmers market locations path, got %q", parsedLocationsURL.Path)
+	}
+	query := parsedLocationsURL.Query()
+	if got, want := query.Get("lat"), "47.61"; got != want {
+		t.Fatalf("expected latitude %q, got %q", want, got)
+	}
+	if got, want := query.Get("lon"), "-122.33"; got != want {
+		t.Fatalf("expected longitude %q, got %q", want, got)
+	}
+	if query.Has("zip") {
+		t.Fatalf("coordinate redirect should not contain ZIP: %q", locationsURL)
+	}
+	locationsBody := mustGetBody(t, client, srv.URL+locationsURL)
+	if !strings.Contains(locationsBody, "Big Willys") {
+		t.Fatalf("expected store locations page after upload, got body: %s", locationsBody)
 	}
 }
 
@@ -133,7 +154,7 @@ func waitForFarmersMarketRedirect(t *testing.T, client *http.Client, statusURL s
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for farmers market redirect from %s", statusURL)
+			t.Fatalf("timed out waiting for farmers market locations redirect from %s", statusURL)
 		}
 		req, err := http.NewRequest(http.MethodGet, statusURL, nil)
 		if err != nil {
@@ -158,11 +179,6 @@ func waitForFarmersMarketRedirect(t *testing.T, client *http.Client, statusURL s
 	}
 }
 
-func geotaggedJPEGBytes(t *testing.T) []byte {
-	t.Helper()
-	return addGPSExif(t, jpegBytes(t))
-}
-
 func jpegBytes(t *testing.T) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
@@ -172,69 +188,4 @@ func jpegBytes(t *testing.T) []byte {
 		t.Fatalf("failed to encode jpeg: %v", err)
 	}
 	return b.Bytes()
-}
-
-func addGPSExif(t *testing.T, jpg []byte) []byte {
-	t.Helper()
-	if len(jpg) < 2 || jpg[0] != 0xff || jpg[1] != 0xd8 {
-		t.Fatalf("expected jpeg data to start with SOI marker")
-	}
-
-	tiff := make([]byte, 128)
-	copy(tiff[0:], []byte{'I', 'I'})
-	binary.LittleEndian.PutUint16(tiff[2:], 42)
-	binary.LittleEndian.PutUint32(tiff[4:], 8)
-
-	const (
-		ifd0Offset = 8
-		gpsOffset  = 26
-		latOffset  = 80
-		lonOffset  = 104
-	)
-	binary.LittleEndian.PutUint16(tiff[ifd0Offset:], 1)
-	putIFDEntry(tiff, ifd0Offset+2, 0x8825, 4, 1, gpsOffset)
-
-	binary.LittleEndian.PutUint16(tiff[gpsOffset:], 4)
-	putASCIIIFDEntry(tiff, gpsOffset+2, 1, "N")
-	putIFDEntry(tiff, gpsOffset+14, 2, 5, 3, latOffset)
-	putASCIIIFDEntry(tiff, gpsOffset+26, 3, "W")
-	putIFDEntry(tiff, gpsOffset+38, 4, 5, 3, lonOffset)
-
-	putDMSRationals(tiff[latOffset:], 47, 36, 36)
-	putDMSRationals(tiff[lonOffset:], 122, 19, 48)
-
-	payload := append([]byte("Exif\x00\x00"), tiff...)
-	if len(payload)+2 > 0xffff {
-		t.Fatalf("exif payload too large")
-	}
-	app1 := []byte{0xff, 0xe1, byte((len(payload) + 2) >> 8), byte(len(payload) + 2)}
-	app1 = append(app1, payload...)
-
-	out := make([]byte, 0, len(jpg)+len(app1))
-	out = append(out, jpg[:2]...)
-	out = append(out, app1...)
-	out = append(out, jpg[2:]...)
-	return out
-}
-
-func putIFDEntry(tiff []byte, offset int, tag, typ uint16, count, value uint32) {
-	binary.LittleEndian.PutUint16(tiff[offset:], tag)
-	binary.LittleEndian.PutUint16(tiff[offset+2:], typ)
-	binary.LittleEndian.PutUint32(tiff[offset+4:], count)
-	binary.LittleEndian.PutUint32(tiff[offset+8:], value)
-}
-
-func putASCIIIFDEntry(tiff []byte, offset int, tag uint16, value string) {
-	binary.LittleEndian.PutUint16(tiff[offset:], tag)
-	binary.LittleEndian.PutUint16(tiff[offset+2:], 2)
-	binary.LittleEndian.PutUint32(tiff[offset+4:], 2)
-	tiff[offset+8] = value[0]
-	tiff[offset+9] = 0
-}
-
-func putDMSRationals(dst []byte, degrees, minutes, seconds uint32) {
-	values := []uint32{degrees, 1, minutes, 1, seconds, 1}
-	for i, value := range values {
-		binary.LittleEndian.PutUint32(dst[i*4:], value)
-	}
 }

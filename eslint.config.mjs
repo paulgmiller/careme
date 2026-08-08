@@ -7,7 +7,9 @@ export default [
       globals: {
         console: "readonly",
         document: "readonly",
+        navigator: "readonly",
         setTimeout: "readonly",
+        URL: "readonly",
         window: "readonly",
       },
     },

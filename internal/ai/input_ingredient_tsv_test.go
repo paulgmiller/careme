@@ -16,14 +16,17 @@ func TestInputIngredientsToTSV_UsesRegularPriceWhenSaleMissing(t *testing.T) {
 		PriceRegular: new(float32(4.99)),
 	}}, &buf)
 	if err != nil {
-		t.Fatalf("inputIngredientsToTSV returned error: %v", err)
+		t.Fatalf("InputIngredientsToTSV returned error: %v", err)
 	}
 
 	got := buf.String()
-	if !strings.Contains(got, "ProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale") {
+	if !strings.Contains(got, "ProductId\tBrand\tDescription\tSize\tPriceRegular\tPriceSale") {
 		t.Fatalf("expected TSV header, got %q", got)
 	}
-	if !strings.Contains(got, "item-1\t12\tAcme\tAsparagus\t1 lb\t4.99\t4.99") {
+	if strings.Contains(got, "AisleNumber") || strings.Contains(got, "\t12\t") {
+		t.Fatalf("did not expect aisle information in prompt TSV, got %q", got)
+	}
+	if !strings.Contains(got, "item-1\tAcme\tAsparagus\t1 lb\t4.99\t4.99") {
 		t.Fatalf("expected regular price copied into sale column, got %q", got)
 	}
 }

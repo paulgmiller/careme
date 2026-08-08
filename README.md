@@ -32,8 +32,8 @@ The application is configured via environment variables:
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI API key for recipe generation and chat (required)
 ### Optional 
-- `GEMINI_API_KEY` - Gemini API key for cached recipe critique generation
-- `GEMINI_CRITIQUE_MODEL` - Gemini model for recipe critique (defaults to `gemini-2.5-flash`)
+- `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
+- `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-3.1-pro-preview`)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `GOOGLE_TAG_MANAGER_ID` - Google Tag Manager container ID for web analytics and ad conversion tags (optional); see `docs/gtm-ads.md` for conversion setup
 - `OTEL_EXPORTER_OTLP_ENDPOINT` - OTLP HTTP endpoint. For Grafana Cloud, use the endpoint from the OpenTelemetry connection tile.
@@ -48,6 +48,16 @@ For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry en
 
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
+
+## Ingredient grade review
+
+Run the small local review app with:
+
+```sh
+go run ./cmd/ingredientreview
+```
+
+Then open `http://127.0.0.1:8090/grader`. It shows cached ingredient grades one at a time and records each as too high, correct, or too low.
 
 
 ## Cache Key Layout

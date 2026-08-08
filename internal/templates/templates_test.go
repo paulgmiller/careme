@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"html/template"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -60,12 +61,33 @@ func TestGoogleTagNoScriptIncludesContainerID(t *testing.T) {
 	}
 }
 
+func TestGuestGenerationCopyMatchesFreeBuildBehavior(t *testing.T) {
+	locationsBody, err := htmlFiles.ReadFile("locations.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(locationsBody), "building recipes requires signing in") {
+		t.Fatal("locations page should not claim that all recipe building requires sign-in")
+	}
+
+	homeBody, err := htmlFiles.ReadFile("home.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(homeBody), "Build two recipe lists free") {
+		t.Fatal("home page should explain the two free recipe builds")
+	}
+}
+
 func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	for _, name := range []string{
+		"account_required.html",
 		"about.html",
 		"critique.html",
+		"farmersmarket.html",
 		"home.html",
 		"locations.html",
+		"privacy.html",
 		"recipe.html",
 		"shoppinglist.html",
 		"spinner.html",
@@ -99,6 +121,62 @@ func TestFullPageTemplatesIncludeSeasonalBackground(t *testing.T) {
 	}
 }
 
+func TestBrowserPageTemplatesIncludeAppHead(t *testing.T) {
+	nonAppPages := map[string]bool{
+		"auth_establish.html": true,
+		"mail.html":           true,
+	}
+
+	names, err := fs.Glob(htmlFiles, "*.html")
+	if err != nil {
+		t.Fatalf("glob templates: %v", err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if !strings.Contains(rendered, "<head") || nonAppPages[name] {
+				return
+			}
+			if !strings.Contains(rendered, `{{template "app_head" .Style}}`) {
+				t.Fatalf("%s should include app_head for PWA metadata", name)
+			}
+		})
+	}
+}
+
+func TestBrowserPageTemplatesDisablePinchZoom(t *testing.T) {
+	nonBrowserPages := map[string]bool{
+		"mail.html": true,
+	}
+
+	names, err := fs.Glob(htmlFiles, "*.html")
+	if err != nil {
+		t.Fatalf("glob templates: %v", err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			if nonBrowserPages[name] {
+				return
+			}
+			body, err := htmlFiles.ReadFile(name)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			rendered := string(body)
+			if !strings.Contains(rendered, "<head") {
+				return
+			}
+			if !strings.Contains(rendered, `content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"`) {
+				t.Fatalf("%s should disable pinch zoom in the viewport metadata", name)
+			}
+		})
+	}
+}
+
 func firstElementClasses(node *html.Node, element string) (map[string]bool, bool) {
 	if node.Type == html.ElementNode && node.Data == element {
 		classes := make(map[string]bool)
@@ -127,9 +205,11 @@ func TestTemplatePageTitlesAreUnique(t *testing.T) {
 		"about.html",
 		"auth_establish.html",
 		"critique.html",
+		"farmersmarket.html",
 		"home.html",
 		"locations.html",
 		"mail.html",
+		"privacy.html",
 		"recipe.html",
 		"shoppinglist.html",
 		"spinner.html",
@@ -235,6 +315,43 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	}
 }
 
+func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := Privacy.Execute(&buf, NewPrivacyPageData(seasons.GetCurrentStyle())); err != nil {
+		t.Fatalf("Privacy.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
+		t.Fatalf("privacy page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
+	}
+	for _, disclosure := range []string{
+		"North Briton LLC",
+		"does not sell or rent your personal information",
+		"recipes you save or dismiss",
+		"written feedback",
+		"OpenAI",
+		"Google Gemini",
+		"Microsoft Clarity",
+		"Google Tag Manager",
+		`id="retention"`,
+		`id="delete"`,
+		"Careme account deletion request",
+		"chef@careme.cooking",
+	} {
+		if !strings.Contains(rendered, disclosure) {
+			t.Fatalf("privacy page should include %q, body: %s", disclosure, rendered)
+		}
+	}
+	if strings.Contains(rendered, `www.clarity.ms`) || strings.Contains(rendered, `www.googletagmanager.com`) {
+		t.Fatalf("privacy page should not load analytics or tag-manager scripts, body: %s", rendered)
+	}
+}
+
 func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
@@ -254,11 +371,13 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 		ServerSignedIn  bool
 		RefreshInterval string
 		StatusMessage   string
+		CurrentPath     string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
 		StatusMessage:   "Ingredients are ready. Building your recipes.",
+		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
 	}
 
 	var buf bytes.Buffer
@@ -275,6 +394,14 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	}
 	if !strings.Contains(rendered, data.StatusMessage) {
 		t.Fatalf("spinner page should render status message, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `http-equiv="refresh"`) {
+		t.Fatalf("spinner page should use htmx polling instead of meta refresh, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<script src="/static/htmx@2.0.8.js"></script>`) ||
+		!strings.Contains(rendered, `hx-get="/recipes?h=abc&amp;start=2026-07-10T00:00:00Z"`) ||
+		!strings.Contains(rendered, `hx-trigger="load delay:10s"`) {
+		t.Fatalf("spinner page should poll with htmx, body: %s", rendered)
 	}
 }
 
@@ -398,11 +525,13 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 		ServerSignedIn  bool
 		RefreshInterval string
 		StatusMessage   string
+		CurrentPath     string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
 		StatusMessage:   "Considering ingredients\nHalf Off Spinach",
+		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
 	}
 
 	var buf bytes.Buffer
@@ -496,8 +625,18 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	if !strings.Contains(rendered, `name="instructions"`) {
 		t.Fatalf("home page should render instructions textarea, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `/recipes?location=70500874`) {
-		t.Fatalf("home page should render direct recipe link, body: %s", rendered)
+	if !strings.Contains(rendered, `method="POST" action="/recipes"`) ||
+		!strings.Contains(rendered, `name="location" value="70500874"`) {
+		t.Fatalf("home page should render recipe generation form, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<span class="sm:hidden">C</span>`) {
+		t.Fatalf("home page should render compact mobile account initial, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `aria-label="Account menu"`) {
+		t.Fatalf("home page should render accessible account menu label, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<span class="hidden max-w-[14rem] truncate sm:block">chef@example.com</span>`) {
+		t.Fatalf("home page should keep full account email for larger screens, body: %s", rendered)
 	}
 }
 
@@ -538,6 +677,60 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 	}
 	if strings.Contains(rendered, `name="instructions"`) {
 		t.Fatalf("home page should not render favorite store instructions field without a favorite store, body: %s", rendered)
+	}
+}
+
+func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	style := seasons.GetCurrentStyle()
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		User            *utypes.User
+		ServerSignedIn  bool
+	}{
+		Style: style,
+	}
+
+	var buf bytes.Buffer
+	if err := Home.Execute(&buf, data); err != nil {
+		t.Fatalf("Home.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if !strings.Contains(rendered, `<link rel="manifest" href="/manifest.webmanifest">`) {
+		t.Fatalf("home page should include manifest link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<meta name="theme-color" content="`+style.Colors.C50+`">`) {
+		t.Fatalf("home page should use the page background color for PWA chrome, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `<link rel="apple-touch-icon" href="/static/app-icon-192.png">`) {
+		t.Fatalf("home page should include app icon link, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `navigator.serviceWorker.register("/sw.js")`) {
+		t.Fatalf("home page should register the service worker, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `CAREME_SYNC_SAVED_RECIPES`) {
+		t.Fatalf("home page should tell the service worker to sync saved recipes, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `new MessageChannel()`) || strings.Contains(rendered, `caremeSavedRecipesSynced`) {
+		t.Fatalf("home page should not use acknowledgement or session state for saved recipe sync, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `careme:saved-recipes-changed`) {
+		t.Fatalf("home page should refresh offline saved recipes after save changes, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `careme:recipe-saved`) || !strings.Contains(rendered, `publishCaremeConversion("recipe_save")`) {
+		t.Fatalf("home page should publish successful recipe saves to the data layer, body: %s", rendered)
+	}
+	if !strings.Contains(rendered, `.get("conversion")`) ||
+		!strings.Contains(rendered, `url.searchParams.delete("conversion")`) ||
+		!strings.Contains(rendered, `publishCaremeConversion(eventName)`) ||
+		!strings.Contains(rendered, `window.dataLayer.push({ event: eventName })`) {
+		t.Fatalf("home page should consume conversion query events into the data layer, body: %s", rendered)
 	}
 }
 
@@ -582,14 +775,17 @@ func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	if strings.Contains(rendered, `for (let attempt = 0; attempt < 5; attempt++)`) {
 		t.Fatalf("auth establish page should not retry user exists check, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `if (!payload.exists &&`) {
+	if !strings.Contains(rendered, `if (!payload.exists) {`) {
 		t.Fatalf("auth establish page should gate conversion on missing user, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `event: "signup_completed"`) {
-		t.Fatalf("auth establish page should push signup event to dataLayer, body: %s", rendered)
+	if !strings.Contains(rendered, `finishRedirect("signup_completed")`) {
+		t.Fatalf("auth establish page should redirect new users with the signup conversion, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `eventCallback: finishRedirect`) {
-		t.Fatalf("auth establish page should redirect after GTM event callback, body: %s", rendered)
+	if !strings.Contains(rendered, `destination.searchParams.set("conversion", conversionEvent)`) {
+		t.Fatalf("auth establish page should add the conversion query argument, body: %s", rendered)
+	}
+	if strings.Contains(rendered, `eventCallback`) || strings.Contains(rendered, `eventTimeout`) {
+		t.Fatalf("auth establish page should defer conversion publishing to the destination, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, "console.warn(`auth user exists failed: ${response.status}`)") {
 		t.Fatalf("auth establish page should log when user exists endpoint returns a failure, body: %s", rendered)

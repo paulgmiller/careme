@@ -6,23 +6,43 @@ Careme loads a Google Tag Manager (GTM) web container when `GOOGLE_TAG_MANAGER_I
 
 Set `GOOGLE_TAG_MANAGER_ID` to your GTM web container ID, for example `GTM-KP55TPW6`. Do not use a Google Ads ID like `AW-...` here; Google Ads conversion IDs and labels belong inside GTM tags.
 
-## Signup conversion event
+## Conversion events
 
-When `/auth/establish` detects a first-time user, the page pushes this event:
+Careme publishes neutral custom events to `window.dataLayer` only after the corresponding server action succeeds:
+
+| Event | When it fires |
+| --- | --- |
+| `signup_completed` | A first-time user finishes signing up. |
+| `recipe_generation` | A newly generated recipe list finishes and is shown to the cook. |
+| `recipe_save` | An authenticated recipe save succeeds. |
+
+The destination page removes its one-time conversion query parameter with `history.replaceState` before publishing the event. This prevents a refresh from counting the same signup or generation again.
+
+### Signup
+
+When `/auth/establish` detects a first-time user, it adds the conversion to the local return destination:
 
 ```js
-window.dataLayer.push({
-  event: "signup_completed",
-  eventCallback: finishRedirect,
-  eventTimeout: 1500,
-});
+destination.searchParams.set("conversion", "signup_completed");
+location.replace(destination);
 ```
 
-The app renders both the GTM head script and the GTM `noscript` iframe fallback immediately after the opening `<body>` tag when this environment variable is set. Use a GTM custom event trigger named `signup_completed` for conversion tags.
+The shared application head consumes the query argument on the destination, publishes `signup_completed` to `window.dataLayer`, and removes the argument from the visible URL. The app renders both the GTM head script and the GTM `noscript` iframe fallback immediately after the opening `<body>` tag when this environment variable is set.
+
+### Recipe generation and saves
+
+Successful recipe generations and saves publish these payloads:
+
+```js
+window.dataLayer.push({ event: "recipe_generation" });
+window.dataLayer.push({ event: "recipe_save" });
+```
+
+In GTM, create Custom Event triggers named `recipe_generation` and `recipe_save` and attach them to the appropriate conversion tags.
 
 ## Google Ads conversion tag
 
-In GTM, create a Google Ads conversion tag using the existing Google Ads conversion ID and label. Trigger it with the `signup_completed` custom event.
+In GTM, create a Google Ads conversion tag using the relevant Google Ads conversion ID and label. Trigger it with the matching custom event from the table above. Use a separate tag when the Google Ads conversion action or value differs by event.
 
 ## OpenAI / ChatGPT Ads pixel
 

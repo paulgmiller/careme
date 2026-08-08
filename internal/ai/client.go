@@ -2,7 +2,9 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -75,6 +77,10 @@ func scheme(schema map[string]any) responses.ResponseTextConfigParam {
 	}
 }
 
+func noReasoning() responses.ReasoningParam {
+	return responses.ReasoningParam{Effort: responses.ReasoningEffortNone}
+}
+
 func (c *client) Ready(ctx context.Context) error {
 	// more CORRECT to do a very simple response request with allowed tokens 1 but this seems cheaper
 	// https://chatgpt.com/share/6984da16-ff88-8009-8486-4e0479ac6a01
@@ -103,10 +109,45 @@ func user(msg string) responses.ResponseInputItemUnionParam {
 	return responses.ResponseInputItemParamOfMessage(msg, responses.EasyInputMessageRoleUser)
 }
 
+func userWithCacheBreakpoint(msg string) responses.ResponseInputItemUnionParam {
+	content := responses.ResponseInputMessageContentListParam{
+		{
+			OfInputText: &responses.ResponseInputTextParam{
+				Text:                  msg,
+				PromptCacheBreakpoint: responses.NewResponseInputTextPromptCacheBreakpointParam(),
+			},
+		},
+	}
+	return responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
+}
+
+// These cache options and cache key are specific to GPT-5.6 and later OpenAI models. Stable prompt
+// ordering is portable, but OpenRouter and other providers use different cache
+// controls (for example session_id and model-dependent cache_control blocks).
+// Introduce a provider/model-specific cache policy before routing recipe requests
+// anywhere other than the direct OpenAI GPT-5.6 client.
+
+func storeDayPromptCacheKey(storeID, date string) string {
+	identity := strings.TrimSpace(storeID) + "\x00" + date
+	sum := sha256.Sum256([]byte(identity))
+	return fmt.Sprintf("careme:store-day:v1:%x", sum[:12])
+}
+
+func defaultCacheOptions() responses.ResponseNewParamsPromptCacheOptions {
+	return responses.ResponseNewParamsPromptCacheOptions{
+		Mode: "explicit",
+		Ttl:  "30m",
+	}
+}
+
 func messagesToInput(messages []PromptMessage) []responses.ResponseInputItemUnionParam {
 	input := make([]responses.ResponseInputItemUnionParam, 0, len(messages))
 	for _, msg := range messages {
 		if msg.Role != "user" {
+			continue
+		}
+		if msg.PromptCacheBreakpoint {
+			input = append(input, userWithCacheBreakpoint(msg.Content))
 			continue
 		}
 		input = append(input, user(msg.Content))

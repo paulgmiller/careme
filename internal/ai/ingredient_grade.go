@@ -18,9 +18,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const (
-	defaultIngredientGradeModel = openai.ChatModelGPT5Mini
-)
+const defaultIngredientGradeModel = gpt56Luna
 
 // should we have category spefic grading prompts?
 const ingredientGradeSystemInstruction = `
@@ -98,6 +96,13 @@ type IngredientGrade struct {
 	Reason string `json:"reason"`
 }
 
+func (i *IngredientGrade) GetScore() int {
+	if i == nil {
+		return 0
+	}
+	return i.Score
+}
+
 // Not a big fand of the number of places that normalize should be done once and not always
 func NormalizeInputIngredient(ingredient InputIngredient) InputIngredient {
 	ingredient.ProductID = strings.TrimSpace(ingredient.ProductID)
@@ -141,6 +146,15 @@ func ingredientGradeCacheVersion(model, systemInstruction string) string {
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
+// IngredientGradeCacheVersion returns the cache version for the current grading prompt and model.
+func IngredientGradeCacheVersion(model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		model = defaultIngredientGradeModel
+	}
+	return ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction)
+}
+
 func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredientGrader {
 	model = strings.TrimSpace(model)
 	if model == "" {
@@ -155,7 +169,7 @@ func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredi
 	return &ingredientGrader{
 		oai:          aiClient,
 		model:        model,
-		cacheVersion: ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction),
+		cacheVersion: IngredientGradeCacheVersion(model),
 		schema:       ingredientGradeJSONSchema(),
 	}
 }
@@ -185,6 +199,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 
 	resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
 		Model:        g.model,
+		Reasoning:    noReasoning(),
 		Instructions: openai.String(ingredientGradeSystemInstruction),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
@@ -196,7 +211,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	}
 	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage))
 
-	return parseIngredientGrades(resp.OutputText(), items)
+	return parseIngredientGrades(ctx, resp.OutputText(), items)
 }
 
 func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
@@ -224,7 +239,7 @@ func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
 	return fmt.Sprintf("Grade these grocery catalog items for home recipe generation.\nReturn one result per item, preserving each id exactly.\nReturn JSON only matching the provided schema.\nIngredient JSON:\n%s", string(body)), nil
 }
 
-func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredient, error) {
+func parseIngredientGrades(ctx context.Context, body string, items []InputIngredient) ([]InputIngredient, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return nil, fmt.Errorf("empty ingredient grading response from model")
@@ -246,10 +261,6 @@ func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredi
 	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
 		return nil, fmt.Errorf("failed to parse ingredient grading response: %w", err)
 	}
-	if len(parsed.Grades) != len(items) {
-		return nil, fmt.Errorf("ingredient grading response count mismatch: got %d want %d", len(parsed.Grades), len(items))
-	}
-
 	var graded []InputIngredient
 	seen := make(map[string]bool, len(items))
 	for _, result := range parsed.Grades {
@@ -259,12 +270,15 @@ func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredi
 		}
 		item, ok := itemMap[productID]
 		if !ok {
-			return nil, fmt.Errorf("ingredient grade returned unknown product_id %q", productID)
+			slog.ErrorContext(ctx, "ingredient grade returned extra product", "product_id", productID)
+			continue
 		}
 		if seen[productID] {
-			return nil, fmt.Errorf("ingredient grading duplicated product_id %q", productID)
+			slog.ErrorContext(ctx, "ingredient grade duplicate product", "product_id", productID)
+			continue
 		}
 		seen[productID] = true
+		// continue on these?
 		if result.Score < 0 || result.Score > 10 {
 			return nil, fmt.Errorf("ingredient score must be between 0 and 10")
 		}
@@ -279,6 +293,19 @@ func parseIngredientGrades(body string, items []InputIngredient) ([]InputIngredi
 		graded = append(graded, item)
 	}
 
+	if len(graded) < len(items) {
+		missingProductIDs := lo.Filter(items, func(ing InputIngredient, _ int) bool {
+			return !seen[ing.ProductID]
+		})
+
+		slog.ErrorContext(ctx, "ingredient grading response missing products",
+			"missing_product_ids", missingProductIDs,
+			"seen", lo.Keys(seen),
+			"graded_count", len(graded),
+			"input_count", len(items),
+		)
+
+	}
 	return graded, nil
 }
 

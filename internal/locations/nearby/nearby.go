@@ -1,31 +1,18 @@
 package nearby
 
 import (
-	"context"
-	"log/slog"
 	"sort"
-	"strings"
 
 	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 )
-
-type CentroidLookup interface {
-	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
-}
 
 // rural a problem?
 const MaxLocationDistanceMiles = 20.0
 
 var MaxLocationCount = 10
 
-func FilterAndSortByZip(ctx context.Context, zipLookup CentroidLookup, zipcode string, candidates []locationtypes.Location, maxDistanceMiles float64) []locationtypes.Location {
-	centroid, ok := zipLookup.ZipCentroidByZIP(strings.TrimSpace(zipcode))
-	if !ok {
-		slog.WarnContext(ctx, "requested zip has no centroid; returning unsorted locations without distance filter", "zip", zipcode)
-		return nil
-	}
-
+func FilterAndSortByCoordinates(origin geo.Coordinate, candidates []locationtypes.Location, maxDistanceMiles float64) []locationtypes.Location {
 	type ranked struct {
 		location locationtypes.Location
 		distance float64
@@ -37,7 +24,7 @@ func FilterAndSortByZip(ctx context.Context, zipLookup CentroidLookup, zipcode s
 			continue
 		}
 
-		distance := geo.HaversineMiles(centroid.Lat, centroid.Lon, *loc.Lat, *loc.Lon)
+		distance := geo.HaversineMiles(origin, loc.Coordinate())
 		if distance > maxDistanceMiles {
 			continue
 		}

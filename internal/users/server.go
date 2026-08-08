@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/httpx"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
@@ -35,6 +37,7 @@ type server struct {
 	locGetter          locationGetter
 	clerk              auth.AuthClient // make an interface
 	unsubscribeFactory UnsubscribeTokenFactory
+	publicOrigin       string
 }
 
 type pastRecipeView struct {
@@ -50,22 +53,52 @@ const (
 )
 
 // NewHandler returns an http.Handler that serves the user related routes under /user.
-func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient, unsubscribe UnsubscribeTokenFactory) *server {
+func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.AuthClient, unsubscribe UnsubscribeTokenFactory, publicOrigin string) *server {
 	return &server{
 		storage:            storage,
 		userTmpl:           templates.User,
 		locGetter:          locGetter,
 		clerk:              clerkClient,
 		unsubscribeFactory: unsubscribe,
+		publicOrigin:       strings.TrimRight(publicOrigin, "/"),
 	}
 }
 
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
+	mux.HandleFunc("GET /user/recipes/offline-cache", s.handleOfflineRecipeCache)
 	mux.HandleFunc("POST /user/recipes/remove", s.handleRemoveUserRecipe)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
 	mux.HandleFunc("GET /user/unsubscribe", s.handleUnsubscribe)
 	mux.HandleFunc("GET /user/exists", s.handleExists)
+}
+
+func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			http.Error(w, "no valid session found", http.StatusUnauthorized)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for offline recipe cache", "error", err)
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+
+	urls := make([]string, 0, 10)
+	for _, recipe := range lo.Take(currentUser.LastRecipes, 10) {
+		urls = append(urls, s.publicOrigin+"/recipe/"+recipe.Hash)
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	for _, recipeURL := range urls {
+		if _, err := fmt.Fprintln(w, recipeURL); err != nil {
+			slog.ErrorContext(ctx, "failed to write offline recipe cache list", "user_id", currentUser.ID, "error", err)
+			return
+		}
+	}
 }
 
 func (s *server) handleExists(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +141,7 @@ func (s *server) exists(uid string) (bool, error) {
 
 func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -308,7 +341,7 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -390,8 +423,4 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("You are unsubscribed from Careme recipe emails."))
-}
-
-func isHTMXRequest(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }

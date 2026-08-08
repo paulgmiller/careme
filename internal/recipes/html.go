@@ -12,9 +12,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"careme/internal/ai"
+	"careme/internal/httpx"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
@@ -49,6 +51,7 @@ type shoppingRecipeView struct {
 	DisplayIngredients []ai.Ingredient // merged food and wine
 	Saved              bool
 	Dismissed          bool
+	HasImage           bool
 	WineRecommendation *ai.WineSelection
 }
 
@@ -57,12 +60,16 @@ type shoppingListGroup struct {
 	Items []*ai.Ingredient
 }
 
-// FormatShoppingListHTMLForHash renders the multi-recipe shopping list view for a specific hash.
+// FormatShoppingListHTMLForHashWithHelp renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
-func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, writer http.ResponseWriter,
+func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
+	instructions := strings.TrimSpace(p.Instructions)
+	if instructions == "" && l.Plan != nil {
+		instructions = l.Plan.ChefNoteSuggestion
+	}
 	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
@@ -79,6 +86,7 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 			DisplayIngredients: displayIngredients,
 			Saved:              saved,
 			Dismissed:          selection.IsDismissed(recipeHash),
+			HasImage:           recipeImages[recipeHash],
 			WineRecommendation: wineRecommendation,
 		})
 		if saved {
@@ -87,41 +95,59 @@ func FormatShoppingListHTMLForHash(ctx context.Context, p *generatorParams, l ai
 		}
 	}
 	data := struct {
-		Location        locations.Location
-		Date            string
-		MetaDescription string
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Instructions    string
-		Hash            string
-		Recipes         []shoppingRecipeView
-		ShoppingList    []shoppingListGroup
-		HasSavedRecipes bool
-		Style           seasons.Style
-		ServerSignedIn  bool
-		User            *utypes.User
-		AuthReturnTo    string
+		Location             locations.Location
+		Date                 string
+		DateDisplay          string
+		MetaDescription      string
+		ClarityScript        template.HTML
+		GoogleTagScript      template.HTML
+		Instructions         string
+		PendingInstructions  string
+		HelpMessage          string
+		Hash                 string
+		Recipes              []shoppingRecipeView
+		ShoppingList         []shoppingListGroup
+		HasSavedRecipes      bool
+		Style                seasons.Style
+		ServerSignedIn       bool
+		User                 *utypes.User
+		AuthReturnTo         string
+		UseTodaysIngredients bool
+		AdminURL             string
 	}{
-		Location:        *p.Location,
-		Date:            p.Date.Format("2006-01-02"),
-		MetaDescription: shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Instructions:    p.Instructions,
-		Hash:            hash,
-		Recipes:         recipeViews,
-		ShoppingList:    shoppingListForDisplay(combinedIngredients),
-		HasSavedRecipes: hasSavedRecipes,
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  serverSignedIn,
-		User:            currentUser,
-		AuthReturnTo:    "/recipes?h=" + hash,
+		Location:             *p.Location,
+		Date:                 p.Date.Format("2006-01-02"),
+		DateDisplay:          p.Date.Format("January 2, 2006"),
+		MetaDescription:      shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
+		ClarityScript:        templates.ClarityScript(ctx),
+		GoogleTagScript:      templates.GoogleTagScript(),
+		Instructions:         instructions,
+		PendingInstructions:  pendingInstructions,
+		HelpMessage:          strings.TrimSpace(helpMessage),
+		Hash:                 hash,
+		Recipes:              recipeViews,
+		ShoppingList:         shoppingListForDisplay(combinedIngredients),
+		HasSavedRecipes:      hasSavedRecipes,
+		Style:                seasons.GetCurrentStyle(),
+		ServerSignedIn:       serverSignedIn,
+		User:                 currentUser,
+		AuthReturnTo:         "/recipes?h=" + hash,
+		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
+		AdminURL:             "/admin/mealplan/" + hash,
 	}
 
-	setTextContent(writer)
+	httpx.SetHTMLContentType(writer)
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
+	today, err := StoreToDate(ctx, nowFn(), p.Location)
+	if err != nil {
+		return false
+	}
+	return today.Sub(p.Date) > 24*time.Hour
 }
 
 func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
@@ -162,6 +188,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		DisplayIngredients      []ai.Ingredient
 		OriginHash              string
 		ResponseID              string
+		PromptCacheKey          string
 		WineRecommendation      *ai.WineSelection
 		Thread                  []RecipeThreadEntry
 		Feedback                feedback.Feedback
@@ -175,6 +202,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore     *int
 		RecipeCritiqueNeedsCare bool
 		MinimumRecipeScore      int
+		AdminURL                string
 	}{
 		Location:                *p.Location,
 		Date:                    p.Date.Format("2006-01-02"),
@@ -185,6 +213,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		OriginHash:              recipe.OriginHash,
 		ResponseID:              activeResponseID,
+		PromptCacheKey:          recipe.PromptCacheKey,
 		WineRecommendation:      wineRecommendation,
 		Thread:                  thread,
 		Feedback:                fb,
@@ -198,9 +227,10 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore:     critiqueScore,
 		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
 		MinimumRecipeScore:      critique.MinimumRecipeScore,
+		AdminURL:                "/admin/prompt/recipe/" + recipeHash,
 	}
 
-	setTextContent(writer)
+	httpx.SetHTMLContentType(writer)
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -215,24 +245,26 @@ func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeIma
 }
 
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
-func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseID, recipeHash string, writer http.ResponseWriter) {
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, response ai.ResponseRef, recipeHash string, writer http.ResponseWriter) {
 	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	data := struct {
 		ResponseID     string
+		PromptCacheKey string
 		RecipeHash     string
 		Thread         []RecipeThreadEntry
 		ServerSignedIn bool
 	}{
-		ResponseID:     responseID,
+		ResponseID:     response.ID,
+		PromptCacheKey: response.PromptCacheKey,
 		RecipeHash:     recipeHash,
 		Thread:         thread,
 		ServerSignedIn: signedIn,
 	}
 
-	setTextContent(writer)
+	httpx.SetHTMLContentType(writer)
 	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
 		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -251,7 +283,7 @@ func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 }
 
 // called from shoppping list and will either mimimize dimissed or bring back in all on undo.
-func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, hasImage bool, writer io.Writer) error {
 	data := shoppingRecipeView{
 		Recipe:             recipe,
 		Hash:               recipe.ComputeHash(),
@@ -260,6 +292,7 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		Saved:              saved,
 		Dismissed:          !saved,
+		HasImage:           hasImage,
 		WineRecommendation: wineRecommendation,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)

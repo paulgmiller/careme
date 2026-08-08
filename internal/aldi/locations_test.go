@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"careme/internal/cache"
+	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -49,7 +50,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	_ = reader.Close()
 }
 
-func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
+func TestLocationBackendGetLocationsByCoordinatesUsesDistance(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
@@ -71,9 +72,9 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
-	locs, err := backend.GetLocationsByZip(context.Background(), "60610")
+	locs, err := backend.GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 41.9033, Lon: -87.6313})
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
 	if len(locs) != 1 {
 		t.Fatalf("expected 1 nearby location, got %d", len(locs))

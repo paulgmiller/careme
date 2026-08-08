@@ -10,6 +10,9 @@ import (
 	"time"
 
 	locationtypes "careme/internal/locations/types"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildMenuPlanMessagesIncludesRecipeParentDefaults(t *testing.T) {
@@ -44,12 +47,30 @@ func TestBuildMenuPlanMessagesUsesRequestedCountAsDefault(t *testing.T) {
 	if !strings.Contains(body, "If the user's directions clearly ask for a different number of recipes, return that many plans instead") {
 		t.Fatalf("expected prompt to let user directions change the count: %s", body)
 	}
-	if strings.Contains(body, "Mark one plan fancy") {
-		t.Fatalf("did not expect fancy-plan requirement for a two-plan request: %s", body)
+	if !strings.Contains(body, "If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy.") {
+		t.Fatalf("expected conditional fancy-plan requirement: %s", body)
 	}
 	if strings.Contains(body, "Include one less-common cuisine direction") {
 		t.Fatalf("did not expect less-common cuisine requirement for a two-plan request: %s", body)
 	}
+}
+
+func TestBuildMenuPlanMessagesExcludesIngredientAisleNumbers(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil, nil)
+	location := &locationtypes.Location{State: "WA"}
+	ingredients := []InputIngredient{{
+		ProductID:   "asparagus-1",
+		AisleNumber: "SECRET-AISLE-42",
+		Description: "Asparagus",
+	}}
+
+	messages, err := client.buildMenuPlanMessages(location, ingredients, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
+	require.NoError(t, err)
+
+	body := mustJSON(t, messages)
+	assert.NotContains(t, body, "AisleNumber")
+	assert.NotContains(t, body, "SECRET-AISLE-42")
+	assert.Contains(t, body, "ProductId\\tBrand\\tDescription\\tSize\\tPriceRegular\\tPriceSale")
 }
 
 func TestBuildMenuPlanMessagesIncludesCuisineListInspiration(t *testing.T) {
@@ -168,6 +189,20 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 	if len(requestBodies) != 2 {
 		t.Fatalf("expected initial request and regeneration request, got %d", len(requestBodies))
 	}
+	for _, requestBody := range requestBodies {
+		if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) {
+			t.Fatalf("expected stable recipe prompt cache key: %s", requestBody)
+		}
+		if !strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
+			t.Fatalf("expected explicit prompt cache mode: %s", requestBody)
+		}
+	}
+	if got := strings.Count(requestBodies[0], `"prompt_cache_breakpoint":{"mode":"explicit"}`); got != 2 {
+		t.Fatalf("expected ingredient and complete menu prompt cache breakpoints, got %d: %s", got, requestBodies[0])
+	}
+	if strings.Contains(requestBodies[1], `"prompt_cache_breakpoint":{"mode":"explicit"}`) {
+		t.Fatalf("did not expect a new cache breakpoint on menu regeneration: %s", requestBodies[1])
+	}
 	if !strings.Contains(requestBodies[1], `"previous_response_id":"resp-menu-invalid"`) {
 		t.Fatalf("expected regeneration to continue from invalid response: %s", requestBodies[1])
 	}
@@ -188,7 +223,7 @@ func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "If doing more than 3 plans mark one plan fancy.") {
+	if !strings.Contains(body, "If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy.") {
 		t.Fatalf("expected menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
@@ -229,10 +264,24 @@ func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 	if !strings.Contains(body, "Build 2 distinct recipe plans by default") || !strings.Contains(body, "make it vegetarian") {
 		t.Fatalf("unexpected recorded menu prompt: %s", body)
 	}
+	var breakpoints int
+	for _, message := range recorder.record.Input {
+		if message.PromptCacheBreakpoint {
+			breakpoints++
+		}
+	}
+	if breakpoints != 2 || !recorder.record.Input[1].PromptCacheBreakpoint || !recorder.record.Input[len(recorder.record.Input)-1].PromptCacheBreakpoint {
+		t.Fatalf("expected breakpoints after ingredients and the complete initial prompt: %#v", recorder.record.Input)
+	}
 }
 
 func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
+	for _, message := range messages {
+		if message.PromptCacheBreakpoint {
+			t.Fatalf("did not expect regeneration message cache breakpoint: %#v", messages)
+		}
+	}
 	body := mustJSON(t, messages)
 	for _, want := range []string{
 		"Build 1 replacement recipe plan(s) by default",
@@ -251,7 +300,7 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 func TestBuildRegenerateMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages(nil, 3)
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "make one of the new ones fancy") {
+	if !strings.Contains(body, "If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy.") {
 		t.Fatalf("expected regenerate menu plan prompt to contain fancy requirement: %s", body)
 	}
 }
@@ -283,7 +332,7 @@ func TestRecipePlanInstructions(t *testing.T) {
 
 func TestRegenerateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
-	_, err := client.RegenerateMenuPlan(t.Context(), nil, "resp-menu", 0)
+	_, err := client.RegenerateMenuPlan(t.Context(), nil, ResponseRef{ID: "resp-menu"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "menu plan count must be greater than zero") {
 		t.Fatalf("expected count error, got %v", err)
 	}
@@ -293,7 +342,7 @@ func TestRegenerateMenuPlanRecordsPrompt(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	client := NewClient("test-key", "ignored", menuPlanResponseClient(t, "resp-menu-after"), recorder)
 
-	_, err := client.RegenerateMenuPlan(t.Context(), []string{"less spicy"}, "resp-menu-before", 1)
+	_, err := client.RegenerateMenuPlan(t.Context(), []string{"less spicy"}, ResponseRef{ID: "resp-menu-before"}, 1)
 	if err != nil {
 		t.Fatalf("RegenerateMenuPlan returned error: %v", err)
 	}
@@ -316,6 +365,12 @@ func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
 		"Use the exact ingredient Description text from the TSV",
 		"Do not choose an unavailable related ingredient",
 		"Do not write recipe steps",
+		"chef_note_suggestion",
+		"Tailor it to the planned dishes",
+		"available ingredients, seasonality",
+		"24 characters or fewer",
+		"fit in a mobile text box",
+		`Good examples: "less spicy", "faster dinners", "more vegetables", "no seafood"`,
 		"rationale, or prose notes",
 	} {
 		if !strings.Contains(menuPlanSystemMessage, phrase) {

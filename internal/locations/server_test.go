@@ -3,35 +3,45 @@ package locations
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"careme/internal/auth"
 	cachepkg "careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/guest"
 	"careme/internal/templates"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type fakeProduceScoreLookup struct {
-	scores map[string]*ProduceScore
+	scores map[string]*int
 }
 
-func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
+func (f fakeProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *int {
 	return f.scores[loc.ID]
 }
 
 type recordingProduceScoreLookup struct {
 	mu     sync.Mutex
 	calls  []string
-	scores map[string]*ProduceScore
+	scores map[string]*int
 }
 
-func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *ProduceScore {
+func testRequestedLocation() Location {
+	lat := 40.7128
+	lon := -74.006
+	return Location{ID: "publix_123", Name: "Publix 123", Lat: &lat, Lon: &lon}
+}
+
+func (r *recordingProduceScoreLookup) ProduceScore(_ context.Context, loc Location) *int {
 	r.mu.Lock()
 	r.calls = append(r.calls, loc.ID)
 	r.mu.Unlock()
@@ -50,7 +60,7 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	client := newFakeLocationClient()
-	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
@@ -92,7 +102,7 @@ func TestRequestStoreIsIdempotent(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	client := newFakeLocationClient()
-	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
@@ -118,7 +128,7 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 
 	fc := cachepkg.NewInMemoryCache()
 	client := newFakeLocationClient()
-	client.setDetailResponse("publix_123", Location{ID: "publix_123", Name: "Publix 123"})
+	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", true)
 	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
@@ -137,6 +147,196 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 	}
 }
 
+func TestLocationsPageSetsGuestShoppingListCookieWhenMissing(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.setListResponse("10001", []Location{{
+		ID:      "12345678",
+		Name:    "Kroger Test",
+		Address: "1 Market St",
+		ZipCode: "10001",
+	}})
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	assert.Contains(t, rr.Body.String(), "Want your grocery chain supported?")
+	assert.Contains(t, rr.Body.String(), "Submit it here")
+	cookie := findResponseCookie(rr, guest.ShoppingListCookieName)
+	require.NotNil(t, cookie, "expected %s cookie to be set", guest.ShoppingListCookieName)
+	if cookie.Value != "0" {
+		t.Fatalf("guest cookie value = %q, want 0", cookie.Value)
+	}
+}
+
+func TestLocationsPageSearchesWithProvidedCoordinates(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?lat=47.6097&lon=-122.3331", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if len(client.search) != 1 {
+		t.Fatalf("search count = %d, want 1", len(client.search))
+	}
+	if got := client.search[0]; got.Lat != 47.6097 || got.Lon != -122.3331 {
+		t.Fatalf("search coordinates = %+v", got)
+	}
+	if !strings.Contains(rr.Body.String(), "Showing results near your location") {
+		t.Fatalf("expected coordinate location copy, body=%q", rr.Body.String())
+	}
+}
+
+func TestLocationsPageRendersEmptyStateForUnsupportedCoordinates(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	rr := requestLocationsPage(t, client)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "No nearby stores found.")
+	assert.Contains(t, rr.Body.String(), "Careme mostly supports stores in the United States right now.")
+	assert.Contains(t, rr.Body.String(), "Want your grocery chain supported?")
+	assert.Contains(t, rr.Body.String(), "Submit it here")
+	assert.NotContains(t, rr.Body.String(), "Failed to render locations page.")
+}
+
+func TestLocationsPageReturnsServerErrorWhenBackendsFail(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.err = errors.New("backend unavailable")
+	rr := requestLocationsPage(t, client)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Failed to render locations page.")
+	assert.NotContains(t, rr.Body.String(), "No nearby stores found.")
+}
+
+func requestLocationsPage(t *testing.T, client *fakeLocationClient) *httptest.ResponseRecorder {
+	t.Helper()
+
+	server := NewServer(newTestLocationServer(client), LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?lat=38.712187&lon=-9.298469", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	return rr
+}
+
+func TestLocationsPageRejectsNonFiniteCoordinatesBeforeSearching(t *testing.T) {
+	client := newFakeLocationClient()
+	server := NewServer(newTestLocationServer(client), LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?lat=NaN&lon=NaN", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Empty(t, client.search)
+	assert.Contains(t, rr.Body.String(), "latitude must be finite")
+}
+
+func TestLocationsPageRejectsMixedLocationInputs(t *testing.T) {
+	server := NewServer(newTestLocationServer(newFakeLocationClient()), LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001&lat=47.6&lon=-122.3", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestLocationsPagePreservesValidGuestShoppingListCookie(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.setListResponse("10001", []Location{{
+		ID:      "12345678",
+		Name:    "Kroger Test",
+		Address: "1 Market St",
+		ZipCode: "10001",
+	}})
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "1"})
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if cookie := findResponseCookie(rr, guest.ShoppingListCookieName); cookie != nil {
+		t.Fatalf("expected valid guest cookie to be preserved without resetting, got %#v", cookie)
+	}
+}
+
+func TestLocationsPageResetsInvalidGuestShoppingListCookie(t *testing.T) {
+	mustInitLocationTemplates(t)
+
+	client := newFakeLocationClient()
+	client.setListResponse("10001", []Location{{
+		ID:      "12345678",
+		Name:    "Kroger Test",
+		Address: "1 Market St",
+		ZipCode: "10001",
+	}})
+	storage := newTestLocationServer(client)
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	req := httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil)
+	req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "wat"})
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	cookie := findResponseCookie(rr, guest.ShoppingListCookieName)
+	require.NotNil(t, cookie, "expected invalid %s cookie to be reset", guest.ShoppingListCookieName)
+	if cookie.Value != "0" {
+		t.Fatalf("guest cookie value = %q, want 0", cookie.Value)
+	}
+}
+
 func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
 	mustInitLocationTemplates(t)
 
@@ -150,11 +350,8 @@ func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
 	client.setHasInventory("12345678", true)
 	storage := newTestLocationServer(client)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
-		scores: map[string]*ProduceScore{
-			"12345678": {
-				Score: 27,
-				Date:  time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC),
-			},
+		scores: map[string]*int{
+			"12345678": new(27),
 		},
 	})
 
@@ -185,7 +382,7 @@ func TestLocationsPageOmitsMissingProduceScoreBadge(t *testing.T) {
 	}})
 	storage := newTestLocationServer(client)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
-		scores: map[string]*ProduceScore{},
+		scores: map[string]*int{},
 	})
 
 	mux := http.NewServeMux()
@@ -236,7 +433,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 
 	client := newFakeLocationClient()
 	locations := make([]Location, 0, 13)
-	scores := make(map[string]*ProduceScore)
+	scores := make(map[string]*int)
 	// 10 will get cut off
 	for i := range 11 {
 		id := "store-" + strconv.Itoa(i)
@@ -247,7 +444,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 			ZipCode: "10001",
 		})
 		client.setHasInventory(id, i != 0)
-		scores[id] = &ProduceScore{Score: i}
+		scores[id] = &i
 	}
 	client.setListResponse("10001", locations)
 
@@ -262,7 +459,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 			ZipCode: "10001",
 		})
 		client2.setHasInventory(id, true)
-		scores[id] = &ProduceScore{Score: i}
+		scores[id] = &i
 	}
 	client2.setListResponse("10001", locations)
 
@@ -305,4 +502,13 @@ func mustInitLocationTemplates(t *testing.T) {
 	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
 		t.Fatalf("failed to init templates: %v", err)
 	}
+}
+
+func findResponseCookie(rr *httptest.ResponseRecorder, name string) *http.Cookie {
+	for _, cookie := range rr.Result().Cookies() {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	return nil
 }
