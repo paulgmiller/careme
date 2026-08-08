@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="description" content="Choose which Careme meal ideas should become complete recipes." />
+  <title>Choose your menu | Careme</title>
+  {{template "app_head" .Style}}
+  {{.ClarityScript}}
+  {{.GoogleTagScript}}
+</head>
+<body class="relative min-h-screen overflow-x-hidden bg-gradient-to-b from-brand-50/80 via-white to-brand-50/80 text-ink-700 antialiased">
+  {{GoogleTagNoScript}}
+  {{template "seasonal_background" .}}
+
+  <main class="relative z-10 px-4 py-4 sm:py-8">
+    <section class="mx-auto w-full max-w-3xl">
+      <div class="friendly-card border border-brand-100 bg-white/92 shadow-2xl backdrop-blur-[2px]">
+        <header class="border-b border-brand-100 p-4 sm:p-6">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-sm font-semibold uppercase tracking-wide text-brand-600">Your first look</p>
+              <h1 class="mt-1 font-display text-3xl font-extrabold tracking-tight text-brand-700 sm:text-4xl">Choose your menu</h1>
+              <p class="mt-2 max-w-2xl text-ink-600">Pick the ideas worth developing. Full recipes and chef checks start only after you continue.</p>
+            </div>
+            {{template "account_widget" .}}
+          </div>
+        </header>
+
+        <form method="POST" action="/recipes/{{.Hash}}/plan" class="p-4 sm:p-6">
+          <fieldset>
+            <legend class="sr-only">Meal ideas to turn into recipes</legend>
+            <div class="space-y-3">
+              {{range $index, $idea := .Plan.Plans}}
+              <label class="group block cursor-pointer rounded-2xl border border-brand-200 bg-white p-4 shadow-sm transition hover:border-brand-400 hover:bg-brand-50/40 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 has-[:checked]:ring-2 has-[:checked]:ring-brand-200">
+                <div class="flex items-start gap-3">
+                  <input type="checkbox" name="plan" value="{{$index}}" checked
+                    class="menu-choice mt-1 h-5 w-5 shrink-0 rounded border-brand-300 text-brand-600 focus:ring-brand-400" />
+                  <span class="min-w-0 flex-1">
+                    <span class="flex flex-wrap items-center gap-2">
+                      <span class="text-lg font-bold text-brand-800">{{$idea.AnchorIngredient}}</span>
+                      {{if $idea.Fancy}}<span class="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-700">A little fancy</span>{{end}}
+                    </span>
+                    <span class="mt-1 block text-sm font-medium text-ink-700">{{$idea.Cuisine}}</span>
+                    <span class="mt-2 block text-sm text-ink-600">{{$idea.Technique}}{{if $idea.SideVegetable}} · With {{$idea.SideVegetable}}{{end}}</span>
+                  </span>
+                </div>
+              </label>
+              {{end}}
+            </div>
+          </fieldset>
+
+          {{if .Plan.ChefNoteSuggestion}}
+          <div class="mt-4 rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3 text-sm text-ink-700">
+            <span class="font-semibold text-brand-700">Chef's note:</span> {{.Plan.ChefNoteSuggestion}}
+          </div>
+          {{end}}
+
+          <div class="mt-6 flex flex-col-reverse gap-3 border-t border-brand-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <a href="/" class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Start over</a>
+            <button id="create-recipes" type="submit"
+              class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-3 font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-gray-300">
+              Create <span id="choice-count" class="mx-1">{{len .Plan.Plans}}</span> recipes
+            </button>
+          </div>
+          <p id="choice-help" class="mt-3 text-center text-sm text-ink-600" aria-live="polite">Keep the meal ideas you want to cook.</p>
+        </form>
+      </div>
+    </section>
+  </main>
+  {{template "clerk_refresh.html" .}}
+  <script>
+    (() => {
+      const choices = Array.from(document.querySelectorAll(".menu-choice"));
+      const count = document.getElementById("choice-count");
+      const button = document.getElementById("create-recipes");
+      const help = document.getElementById("choice-help");
+      const update = () => {
+        const selected = choices.filter((choice) => choice.checked).length;
+        count.textContent = selected.toString();
+        button.disabled = selected === 0;
+        help.textContent = selected === 0
+          ? "Choose at least one idea to continue."
+          : `You chose ${selected} meal idea${selected === 1 ? "" : "s"}.`;
+      };
+      choices.forEach((choice) => choice.addEventListener("change", update));
+      update();
+    })();
+  </script>
+</body>
+</html>

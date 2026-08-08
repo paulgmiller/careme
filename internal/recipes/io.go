@@ -19,11 +19,57 @@ const (
 	ShoppingListCachePrefix = "shoppinglist/"
 	ingredientsCachePrefix  = "ingredients/"
 	paramsCachePrefix       = "params/"
+	menuPlanCachePrefix     = "menuplan/"
+	approvedPlanCachePrefix = "approvedmenuplan/"
 )
 
 type recipeio struct {
 	Cache               cache.Cache
 	feedback.FeedbackIO // should this be pulled out?
+}
+
+func (rio recipeio) MenuPlanFromCache(ctx context.Context, hash string) (*ai.MenuPlan, error) {
+	return rio.menuPlanFromCache(ctx, menuPlanCachePrefix+hash)
+}
+
+func (rio recipeio) ApprovedMenuPlanFromCache(ctx context.Context, hash string) (*ai.MenuPlan, error) {
+	return rio.menuPlanFromCache(ctx, approvedPlanCachePrefix+hash)
+}
+
+func (rio recipeio) menuPlanFromCache(ctx context.Context, key string) (*ai.MenuPlan, error) {
+	reader, err := rio.Cache.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := reader.Close(); err != nil {
+			slog.ErrorContext(ctx, "failed to close menu plan reader", "key", key, "error", err)
+		}
+	}()
+	var plan ai.MenuPlan
+	if err := json.NewDecoder(reader).Decode(&plan); err != nil {
+		return nil, fmt.Errorf("failed to decode menu plan: %w", err)
+	}
+	return &plan, nil
+}
+
+func (rio recipeio) SaveMenuPlan(ctx context.Context, hash string, plan *ai.MenuPlan) error {
+	return rio.saveMenuPlan(ctx, menuPlanCachePrefix+hash, plan)
+}
+
+func (rio recipeio) SaveApprovedMenuPlan(ctx context.Context, hash string, plan *ai.MenuPlan) error {
+	return rio.saveMenuPlan(ctx, approvedPlanCachePrefix+hash, plan)
+}
+
+func (rio recipeio) saveMenuPlan(ctx context.Context, key string, plan *ai.MenuPlan) error {
+	if plan == nil {
+		return errors.New("menu plan is required")
+	}
+	body, err := json.Marshal(plan)
+	if err != nil {
+		return err
+	}
+	return rio.Cache.Put(ctx, key, string(body), cache.Unconditional())
 }
 
 func IO(c cache.Cache) recipeio {

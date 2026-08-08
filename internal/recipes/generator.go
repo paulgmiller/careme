@@ -174,6 +174,20 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	defer span.End()
 	slog.InfoContext(ctx, "Generating recipes for location", "location", p.String())
 
+	menuPlan, err := g.PlanRecipes(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	return g.GenerateRecipesFromPlan(ctx, p, menuPlan)
+}
+
+// PlanRecipes performs the inexpensive first stage of initial generation.
+// The web flow can present this result for approval before generating recipes.
+func (g *generatorService) PlanRecipes(ctx context.Context, p *generatorParams) (*ai.MenuPlan, error) {
+	hash := p.Hash()
+	ctx, span := tracer.Start(ctx, "recipes.plan")
+	defer span.End()
+
 	ingredients, err := g.staples.FetchStaples(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staples: %w", err)
@@ -183,8 +197,6 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		// TODO make configurable?
 		return ing.Grade.GetScore() > IngredientGradeCutoff
 	})
-	ingMap := inputIngredientMap(ingredients)
-
 	g.writeStatus(ctx, hash, status.Ingredients(ingredients, ogCount))
 	// Prompt caching requires byte-for-byte identical prefixes. Keep the ingredient
 	// TSV deterministic while the menu planner supplies variety itself.
@@ -206,9 +218,34 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to plan recipe variety: %w", err)
 	}
-	menuResponse := menuPlan.ResponseRef()
+	if menuPlan == nil {
+		return nil, fmt.Errorf("AI returned no menu plan")
+	}
 
 	g.writeStatus(ctx, hash, menuPlan.String())
+	return menuPlan, nil
+}
+
+// GenerateRecipesFromPlan expands an approved initial menu into full recipes
+// and runs the existing critique/retry stage.
+func (g *generatorService) GenerateRecipesFromPlan(ctx context.Context, p *generatorParams, menuPlan *ai.MenuPlan) (*ai.ShoppingList, error) {
+	if menuPlan == nil {
+		return nil, fmt.Errorf("approved menu is required")
+	}
+	hash := p.Hash()
+	start := time.Now()
+	ctx, span := tracer.Start(ctx, "recipes.generate.approved")
+	defer span.End()
+
+	ingredients, err := g.staples.FetchStaples(ctx, p)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get staples: %w", err)
+	}
+	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
+		return ing.Grade.GetScore() > IngredientGradeCutoff
+	})
+	ingMap := inputIngredientMap(ingredients)
+	menuResponse := menuPlan.ResponseRef()
 
 	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")

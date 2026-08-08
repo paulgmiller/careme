@@ -77,6 +77,11 @@ type generator interface {
 	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 }
 
+type menuPlanningGenerator interface {
+	PlanRecipes(ctx context.Context, p *generatorParams) (*ai.MenuPlan, error)
+	GenerateRecipesFromPlan(ctx context.Context, p *generatorParams, plan *ai.MenuPlan) (*ai.ShoppingList, error)
+}
+
 type ExtGenerator = generator
 
 // should probably be in ai package?
@@ -125,6 +130,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("POST /recipes", s.handleGenerate)
+	mux.HandleFunc("POST /recipes/{hash}/plan", s.handleApproveMenuPlan)
 	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
@@ -1114,6 +1120,22 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
+			if _, approvedErr := s.ApprovedMenuPlanFromCache(ctx, hashParam); approvedErr == nil {
+				s.notFound(ctx, w, r)
+				return
+			} else if !errors.Is(approvedErr, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to load approved menu plan", "hash", hashParam, "error", approvedErr)
+				http.Error(w, "failed to load menu plan", http.StatusInternalServerError)
+				return
+			}
+			if plan, planErr := s.MenuPlanFromCache(ctx, hashParam); planErr == nil {
+				s.renderMenuPlan(ctx, w, hashParam, plan, currentUser)
+				return
+			} else if !errors.Is(planErr, cache.ErrNotFound) {
+				slog.ErrorContext(ctx, "failed to load menu plan", "hash", hashParam, "error", planErr)
+				http.Error(w, "failed to load menu plan", http.StatusInternalServerError)
+				return
+			}
 			s.notFound(ctx, w, r)
 			return
 		}
@@ -1250,7 +1272,11 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	s.kickgeneration(ctx, p)
+	if planner, ok := s.generator.(menuPlanningGenerator); ok && !p.isRegeneration() {
+		s.kickMenuPlanning(ctx, p, planner)
+	} else {
+		s.kickgeneration(ctx, p)
+	}
 
 	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
 }
@@ -1282,7 +1308,96 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.kickgeneration(ctx, p)
+	if planner, ok := s.generator.(menuPlanningGenerator); ok && !p.isRegeneration() {
+		if approved, approvedErr := s.ApprovedMenuPlanFromCache(ctx, hash); approvedErr == nil {
+			s.kickApprovedGeneration(ctx, p, approved, planner)
+		} else if errors.Is(approvedErr, cache.ErrNotFound) {
+			s.kickMenuPlanning(ctx, p, planner)
+		} else {
+			slog.ErrorContext(ctx, "failed to load approved plan for retry", "hash", hash, "error", approvedErr)
+			http.Error(w, "failed to retry recipe generation", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		s.kickgeneration(ctx, p)
+	}
+	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
+}
+
+func (s *server) handleApproveMenuPlan(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	if hash == "" {
+		http.Error(w, "missing recipe list hash", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	planner, ok := s.generator.(menuPlanningGenerator)
+	if !ok {
+		http.Error(w, "menu approval is unavailable", http.StatusNotImplemented)
+		return
+	}
+	if _, err := s.FromCache(ctx, hash); err == nil {
+		redirectToHash(w, r, hash, QueryArgHelp)
+		return
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		http.Error(w, "failed to load recipes", http.StatusInternalServerError)
+		return
+	}
+	if _, err := s.ApprovedMenuPlanFromCache(ctx, hash); err == nil {
+		redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
+		return
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		http.Error(w, "failed to load approved menu", http.StatusInternalServerError)
+		return
+	}
+	plan, err := s.MenuPlanFromCache(ctx, hash)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			http.Error(w, "menu plan not found or expired", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load menu plan", http.StatusInternalServerError)
+		return
+	}
+	selected := make([]ai.RecipePlan, 0, len(r.PostForm["plan"]))
+	seen := make(map[int]bool)
+	for _, raw := range r.PostForm["plan"] {
+		index, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || index < 0 || index >= len(plan.Plans) {
+			http.Error(w, "invalid menu choice", http.StatusBadRequest)
+			return
+		}
+		if !seen[index] {
+			selected = append(selected, plan.Plans[index])
+			seen[index] = true
+		}
+	}
+	if len(selected) == 0 {
+		http.Error(w, "choose at least one meal idea", http.StatusBadRequest)
+		return
+	}
+	approved := &ai.MenuPlan{
+		Plans:              selected,
+		ChefNoteSuggestion: plan.ChefNoteSuggestion,
+		ResponseID:         plan.ResponseID,
+		PromptCacheKey:     plan.PromptCacheKey,
+	}
+	p, err := s.ParamsFromCache(ctx, hash)
+	if err != nil {
+		http.Error(w, "recipe request not found or expired", http.StatusNotFound)
+		return
+	}
+	if err := s.SaveApprovedMenuPlan(ctx, hash, approved); err != nil {
+		slog.ErrorContext(ctx, "failed to save approved menu plan", "hash", hash, "error", err)
+		http.Error(w, "failed to save menu choices", http.StatusInternalServerError)
+		return
+	}
+	s.writeGenerationStatus(ctx, hash, "Turning your picks into complete recipes and checking the details...")
+	s.kickApprovedGeneration(ctx, p, approved, planner)
 	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
 }
 
@@ -1338,6 +1453,71 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 			return
 		}
 	})
+}
+
+func (s *server) kickMenuPlanning(ctx context.Context, p *generatorParams, planner menuPlanningGenerator) {
+	hash := p.Hash()
+	ctx = context.WithoutCancel(ctx)
+	s.wg.Go(func() {
+		slog.InfoContext(ctx, "planning menu for approval", "params", p.String(), "hash", hash)
+		plan, err := planner.PlanRecipes(ctx, p)
+		if err != nil {
+			slog.ErrorContext(ctx, "menu planning error", "hash", hash, "error", err)
+			s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
+			return
+		}
+		if plan == nil || len(plan.Plans) == 0 {
+			err := errors.New("menu planner returned no meal ideas")
+			slog.ErrorContext(ctx, "menu planning error", "hash", hash, "error", err)
+			s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
+			return
+		}
+		if err := s.SaveMenuPlan(ctx, hash, plan); err != nil {
+			slog.ErrorContext(ctx, "failed to save menu plan", "hash", hash, "error", err)
+		}
+	})
+}
+
+func (s *server) kickApprovedGeneration(ctx context.Context, p *generatorParams, plan *ai.MenuPlan, planner menuPlanningGenerator) {
+	hash := p.Hash()
+	ctx = context.WithoutCancel(ctx)
+	s.wg.Go(func() {
+		slog.InfoContext(ctx, "generating approved menu", "params", p.String(), "hash", hash, "recipe_count", len(plan.Plans))
+		shoppingList, err := planner.GenerateRecipesFromPlan(ctx, p, plan)
+		if err != nil {
+			slog.ErrorContext(ctx, "approved recipe generation error", "hash", hash, "error", err)
+			s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
+			return
+		}
+		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
+			slog.ErrorContext(ctx, "failed to save approved recipes", "hash", hash, "error", err)
+		}
+	})
+}
+
+func (s *server) renderMenuPlan(ctx context.Context, w http.ResponseWriter, hash string, plan *ai.MenuPlan, currentUser *utypes.User) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	data := struct {
+		ClarityScript   template.HTML
+		GoogleTagScript template.HTML
+		Style           seasons.Style
+		User            *utypes.User
+		AuthReturnTo    string
+		Hash            string
+		Plan            *ai.MenuPlan
+	}{
+		ClarityScript:   templates.ClarityScript(ctx),
+		GoogleTagScript: templates.GoogleTagScript(),
+		Style:           seasons.GetCurrentStyle(),
+		User:            currentUser,
+		AuthReturnTo:    "/recipes?h=" + url.QueryEscape(hash),
+		Hash:            hash,
+		Plan:            plan,
+	}
+	if err := templates.MenuPlan.Execute(w, data); err != nil {
+		slog.ErrorContext(ctx, "menu plan template execute error", "hash", hash, "error", err)
+		http.Error(w, "failed to render menu ideas", http.StatusInternalServerError)
+	}
 }
 
 // Almost same as kick generation except

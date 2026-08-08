@@ -71,6 +71,63 @@ func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
 	assert.Equal(t, "Save two dinners", u.Query().Get("help"))
 }
 
+func TestHandleRecipesShowsMenuChoicesBeforeGeneratingRecipes(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore))
+	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store"}, time.Now())
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.SaveMenuPlan(t.Context(), p.Hash(), &ai.MenuPlan{Plans: []ai.RecipePlan{
+		{Cuisine: "Korean", AnchorIngredient: "Beef Tacos", Technique: "Grill", SideVegetable: "broccoli"},
+		{Cuisine: "Italian", AnchorIngredient: "Glue Pizza", Technique: "Bake", SideVegetable: "salad"},
+	}}))
+
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(p.Hash()), nil)
+	rr := httptest.NewRecorder()
+	s.handleRecipes(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Choose your menu")
+	assert.Contains(t, rr.Body.String(), "Beef Tacos")
+	assert.Contains(t, rr.Body.String(), "Glue Pizza")
+	assert.Contains(t, rr.Body.String(), `/recipes/`+p.Hash()+`/plan`)
+}
+
+func TestHandleApproveMenuPlanGeneratesOnlySelectedIdeas(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t, withTestCache(cacheStore))
+	t.Cleanup(s.Wait)
+	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store"}, time.Now())
+	plan := &ai.MenuPlan{
+		ResponseID: "menu-response",
+		Plans: []ai.RecipePlan{
+			{Cuisine: "Italian", AnchorIngredient: "Glue Pizza"},
+			{Cuisine: "Mexican", AnchorIngredient: "Beef Tacos"},
+		},
+	}
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.SaveMenuPlan(t.Context(), p.Hash(), plan))
+
+	form := url.Values{"plan": {"1"}}
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash()+"/plan", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("hash", p.Hash())
+	rr := httptest.NewRecorder()
+	s.handleApproveMenuPlan(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	assert.Contains(t, rr.Header().Get("Location"), "start=")
+	approved, err := s.ApprovedMenuPlanFromCache(t.Context(), p.Hash())
+	require.NoError(t, err)
+	require.Len(t, approved.Plans, 1)
+	assert.Equal(t, "Beef Tacos", approved.Plans[0].AnchorIngredient)
+
+	s.Wait()
+	shoppingList, err := s.FromCache(t.Context(), p.Hash())
+	require.NoError(t, err)
+	require.Len(t, shoppingList.Recipes, 1)
+	assert.Equal(t, "Beef Tacos", shoppingList.Recipes[0].Title)
+}
+
 func TestNotFoundTimedOutShowsRetryButton(t *testing.T) {
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t, withTestGenerator(generator))

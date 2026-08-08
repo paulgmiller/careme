@@ -375,32 +375,54 @@ var mockRecipes = []ai.Recipe{
 }
 
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+	plan, err := m.PlanRecipes(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	return m.GenerateRecipesFromPlan(ctx, p, plan)
+}
+
+func (m mock) PlanRecipes(_ context.Context, p *generatorParams) (*ai.MenuPlan, error) {
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	seen := map[string]bool{}
+	for _, recipe := range append(p.Saved, p.Dismissed...) {
+		seen[recipe.ComputeHash()] = true
+	}
+	plans := make([]ai.RecipePlan, 0, 3)
+	for _, idx := range rng.Perm(len(mockRecipes)) {
+		recipe := mockRecipes[idx]
+		if seen[recipe.ComputeHash()] {
+			continue
+		}
+		plans = append(plans, ai.RecipePlan{
+			Cuisine:          "Chef's choice",
+			AnchorIngredient: recipe.Title,
+			Technique:        "Weeknight cooking",
+			SideVegetable:    "Seasonal vegetables",
+		})
+		if len(plans) == 3 {
+			break
+		}
+	}
+	return &ai.MenuPlan{Plans: plans, ResponseID: uuid.NewString()}, nil
+}
+
+func (m mock) GenerateRecipesFromPlan(ctx context.Context, p *generatorParams, plan *ai.MenuPlan) (*ai.ShoppingList, error) {
 	originHash := p.Hash()
 	// fake like we're taking time to call an LLM so we get the spinner.
 	time.Sleep(100 * time.Millisecond)
 
-	// Select 3 random recipes from the pool of 20
-	// Create a new random generator with current time as seed
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	toGenerate := 3 - len(p.Saved)
-	var selectedRecipes []ai.Recipe
-	seen := map[string]bool{}
-	for _, s := range append(p.Saved, p.Dismissed...) {
-		seen[s.ComputeHash()] = true
+	requested := make(map[string]bool, len(plan.Plans))
+	for _, recipePlan := range plan.Plans {
+		requested[recipePlan.AnchorIngredient] = true
 	}
-	indices := rng.Perm(len(mockRecipes)) // just shuffle?
-	for _, idx := range indices {
-		if toGenerate <= 0 {
-			break
-		}
-		mr := mockRecipes[idx]
-		if _, found := seen[mr.ComputeHash()]; !found {
+	var selectedRecipes []ai.Recipe
+	for _, mr := range mockRecipes {
+		if requested[mr.Title] {
 			mr.OriginHash = originHash
 			mr.ResponseID = uuid.NewString()
-
 			slog.InfoContext(ctx, "adding", "title", mr.Title)
 			selectedRecipes = append(selectedRecipes, mr)
-			toGenerate--
 		}
 	}
 	// not presisting dimissed as
@@ -426,6 +448,7 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 
 	return &ai.ShoppingList{
 		Recipes: selectedRecipes,
+		Plan:    plan,
 	}, nil
 }
 
