@@ -1240,7 +1240,15 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 			return
 		}
+		if s.generationFailed(ctx, hashParam) {
+			generationTimedOut(ctx, w, r, hashParam)
+			return
+		}
 		redirectToHash(w, r, hashParam, queryArgStart, QueryArgHelp)
+		return
+	}
+	if s.generationFailed(ctx, hashParam) {
+		generationTimedOut(ctx, w, r, hashParam)
 		return
 	}
 
@@ -1256,11 +1264,18 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 	slog.WarnContext(ctx, "recipe generation timed out", "time", startArg, "hash", hashParam)
-	if !httpx.IsHTMX(r) {
-		s.spin(ctx, w, r, hashParam)
-		return
-	}
 	generationTimedOut(ctx, w, r, hashParam)
+}
+
+func (s *server) generationFailed(ctx context.Context, hash string) bool {
+	statusMessage, err := s.statusReader.GenerationStatusFromCache(ctx, hash)
+	if err != nil {
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to check recipe generation status", "hash", hash, "error", err)
+		}
+		return false
+	}
+	return recipestatus.IsError(statusMessage)
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1474,6 +1489,7 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.writeGenerationStatus(ctx, hash, "Trying again, chef.")
 	s.kickgeneration(ctx, p)
 	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
 }
@@ -1590,8 +1606,7 @@ type spinnerData struct {
 	StatusMessage   string
 	ServerSignedIn  bool
 	CurrentPath     string
-	ErrorMessage    string
-	BackPath        string
+	RetryPath       string
 }
 
 func newSpinnerData(ctx context.Context) spinnerData {
@@ -1630,26 +1645,9 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (s *server) renderRecipeRegenerationFailure(ctx context.Context, w http.ResponseWriter, r *http.Request, job recipeRegenerationJob) {
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	data := newSpinnerData(ctx)
-	data.ErrorMessage = job.Message
-	data.BackPath = "/recipe/" + url.PathEscape(job.OldHash)
-	if data.ErrorMessage == "" {
-		data.ErrorMessage = "We couldn't tweak this recipe. Return to the recipe."
-	}
-
-	if httpx.IsHTMX(r) {
-		if err := templates.Spin.ExecuteTemplate(w, "spin_failure", data); err != nil {
-			slog.ErrorContext(ctx, "recipe regeneration failure template execute error", "error", err)
-			http.Error(w, "template error", http.StatusInternalServerError)
-		}
-		return
-	}
-	if err := templates.Spin.Execute(w, data); err != nil {
-		slog.ErrorContext(ctx, "recipe regeneration failure page execute error", "error", err)
-		http.Error(w, "template error", http.StatusInternalServerError)
-	}
+func (s *server) renderRecipeRegenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, job recipeRegenerationJob) {
+	retryURL := url.URL{Path: "/recipe/" + url.PathEscape(job.OldHash) + "/regen/" + url.PathEscape(job.ID) + "/retry"}
+	renderGenerationRetry(ctx, w, r, retryURL.String())
 }
 
 func generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
@@ -1658,15 +1656,23 @@ func generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	retryQuery.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
 	retryURL.RawQuery = retryQuery.Encode()
 
-	data := struct {
-		RetryPath string
-	}{
-		RetryPath: retryURL.String(),
-	}
+	renderGenerationRetry(ctx, w, r, retryURL.String())
+}
+
+func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, retryPath string) {
+	data := newSpinnerData(ctx)
+	data.RetryPath = retryPath
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	if err := templates.Spin.ExecuteTemplate(w, "generation_timeout", data); err != nil {
-		slog.ErrorContext(ctx, "generation timeout template execute error", "error", err)
+	if httpx.IsHTMX(r) {
+		if err := templates.Spin.ExecuteTemplate(w, "generation_retry", data); err != nil {
+			slog.ErrorContext(ctx, "generation retry template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+		return
+	}
+	if err := templates.Spin.Execute(w, data); err != nil {
+		slog.ErrorContext(ctx, "generation retry page execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
 }

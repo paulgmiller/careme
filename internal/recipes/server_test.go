@@ -85,7 +85,7 @@ func TestNotFoundTimedOutShowsRetryButton(t *testing.T) {
 	s.notFound(t.Context(), rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "That took longer than expected.")
+	assert.Contains(t, rr.Body.String(), "Let's give that another go.")
 	assert.Contains(t, rr.Body.String(), "Try again, chef")
 	assert.Contains(t, rr.Body.String(), `method="POST"`)
 	assert.Contains(t, rr.Body.String(), "/recipes/"+p.Hash()+"/retry")
@@ -94,6 +94,25 @@ func TestNotFoundTimedOutShowsRetryButton(t *testing.T) {
 		t.Fatal("GET timeout page should not restart generation")
 	default:
 	}
+}
+
+func TestNotFoundFailedGenerationShowsNeutralRetryButton(t *testing.T) {
+	s := newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.statusWriter.SaveGenerationStatus(t.Context(), p.Hash(), recipestatus.Error(errors.New("provider secret detail"))))
+
+	start := time.Now().Format(time.RFC3339Nano)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash()+"&start="+url.QueryEscape(start), nil)
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+
+	s.notFound(t.Context(), rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Let's give that another go.")
+	assert.Contains(t, rr.Body.String(), "/recipes/"+p.Hash()+"/retry")
+	assert.NotContains(t, rr.Body.String(), "provider secret detail")
 }
 
 func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
@@ -120,6 +139,9 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for retried generation")
 	}
+	statusMessage, err := s.statusReader.GenerationStatusFromCache(t.Context(), p.Hash())
+	require.NoError(t, err)
+	assert.False(t, recipestatus.IsError(statusMessage))
 }
 
 func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
@@ -1080,7 +1102,7 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	spinLocation := rr.Header().Get("Location")
-	jobID := recipeRegenerationJobID(originalHash, "resp-question")
+	jobID := recipeRegenerationJobID(originalHash, "resp-question", 1)
 	require.Equal(t, "/recipe/"+url.PathEscape(originalHash)+"/regen/"+jobID, spinLocation)
 	require.NotContains(t, spinLocation, "resp-question")
 
@@ -1139,6 +1161,39 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	require.Equal(t, http.StatusSeeOther, duplicateRR.Code)
 	assert.Equal(t, spinLocation, duplicateRR.Header().Get("Location"))
 	assert.Equal(t, 1, generator.regenerateCalls)
+
+	failedJob := newRecipeRegenerationAttempt(originalHash, "resp-question", 2)
+	failedJob.State = recipeRegenerationFailed
+	created, err := s.createRecipeRegenerationJob(t.Context(), failedJob)
+	require.NoError(t, err)
+	require.True(t, created)
+	failedPath := "/recipe/" + url.PathEscape(originalHash) + "/regen/" + failedJob.ID
+	failedReq := httptest.NewRequest(http.MethodGet, failedPath, nil)
+	failedReq.Header.Set("HX-Request", "true")
+	failedReq.SetPathValue("hash", originalHash)
+	failedReq.SetPathValue("jobID", failedJob.ID)
+	failedRR := httptest.NewRecorder()
+	s.handleSingleRecipeRegeneration(failedRR, failedReq)
+	require.Equal(t, http.StatusOK, failedRR.Code)
+	assert.Contains(t, failedRR.Body.String(), failedPath+"/retry")
+	assert.Contains(t, failedRR.Body.String(), "Try again, chef")
+	assert.NotContains(t, failedRR.Body.String(), "couldn't")
+
+	retryJobID := recipeRegenerationJobID(originalHash, "resp-question", 3)
+	for range 2 {
+		retryReq := httptest.NewRequest(http.MethodPost, failedPath+"/retry", nil)
+		retryReq.SetPathValue("hash", originalHash)
+		retryReq.SetPathValue("jobID", failedJob.ID)
+		retryRR := httptest.NewRecorder()
+		s.handleRetrySingleRecipeRegeneration(retryRR, retryReq)
+		require.Equal(t, http.StatusSeeOther, retryRR.Code)
+		assert.Contains(t, retryRR.Header().Get("Location"), retryJobID)
+	}
+	require.Eventually(t, func() bool {
+		retryJob, loadErr := s.loadRecipeRegenerationJob(t.Context(), retryJobID)
+		return loadErr == nil && retryJob.State == recipeRegenerationComplete
+	}, time.Second, 10*time.Millisecond)
+	assert.Equal(t, 2, generator.regenerateCalls)
 }
 
 type captureKickgenerationGenerator struct {
