@@ -378,6 +378,7 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expe
 	deadline := time.Now().Add(10 * time.Second)
 	current := startURL
 	sawSpinner := false
+	sawMenu := false
 	for {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for recipes page starting at %s", startURL)
@@ -396,12 +397,41 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expe
 			continue
 		}
 
+		if strings.Contains(body, "<title>Choose your menu | Careme</title>") {
+			sawMenu = true
+			actionMatch := regexp.MustCompile(`<form method="POST" action="([^"]+/plan)"`).FindStringSubmatch(body)
+			if len(actionMatch) != 2 {
+				t.Fatal("menu page did not include an approval form")
+			}
+			choices := regexp.MustCompile(`name="plan" value="([0-9]+)"`).FindAllStringSubmatch(body, -1)
+			if len(choices) == 0 {
+				t.Fatal("menu page did not include meal choices")
+			}
+			values := url.Values{}
+			for _, choice := range choices {
+				values.Add("plan", choice[1])
+			}
+			pageURL, err := url.Parse(current)
+			if err != nil {
+				t.Fatalf("parse menu page URL: %v", err)
+			}
+			actionURL, err := pageURL.Parse(actionMatch[1])
+			if err != nil {
+				t.Fatalf("parse menu approval URL: %v", err)
+			}
+			current = mustStartRecipeGeneration(t, client, actionURL.String(), values)
+			continue
+		}
+
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected recipes page 200, got %d: %s", resp.StatusCode, body)
 		}
 
 		if sawSpinner != expectSpinner {
 			t.Fatal("expected spinner but never got one")
+		}
+		if expectSpinner && !sawMenu {
+			t.Fatal("expected menu approval page but never got one")
 		}
 
 		return current, body

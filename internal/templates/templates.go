@@ -35,6 +35,7 @@ var Home,
 	AccountRequired,
 	User,
 	ShoppingList,
+	MenuPlan,
 	Recipe,
 	Critique,
 	About,
@@ -73,6 +74,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	AccountRequired = ensure(tmpls, "account_required.html")
 	User = ensure(tmpls, "user.html")
 	ShoppingList = ensure(tmpls, "shoppinglist.html")
+	MenuPlan = ensure(tmpls, "menu_plan.html")
 	Recipe = ensure(tmpls, "recipe.html")
 	Critique = ensure(tmpls, "critique.html")
 	About = ensure(tmpls, "about.html")

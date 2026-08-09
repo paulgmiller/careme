@@ -680,6 +680,29 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	}
 }
 
+func TestReplaceMenuPlanContinuesFromCurrentPlan(t *testing.T) {
+	aiStub := &captureRegenerateAIClient{
+		menuPlan: &ai.MenuPlan{
+			Plans:      []ai.RecipePlan{{Cuisine: "Thai", AnchorIngredient: "tofu"}},
+			ResponseID: "replacement-response",
+		},
+	}
+	g := newTestGenerator(t, aiStub, nil, nil, nil, nil)
+	current := &ai.MenuPlan{ResponseID: "current-response", PromptCacheKey: "store-day", Plans: []ai.RecipePlan{
+		{Cuisine: "Italian", AnchorIngredient: "chicken", Technique: "roast", SideVegetable: "broccoli"},
+	}}
+
+	replacement, err := g.ReplaceMenuPlan(t.Context(), current, current.Plans[0])
+	require.NoError(t, err)
+	require.Len(t, replacement.Plans, 1)
+	assert.Equal(t, "tofu", replacement.Plans[0].AnchorIngredient)
+	assert.Equal(t, "current-response", aiStub.menuPlanResponseID)
+	assert.Equal(t, 1, aiStub.menuPlanCount)
+	require.Len(t, aiStub.menuPlanInstructions, 1)
+	assert.Contains(t, aiStub.menuPlanInstructions[0], "Passed on the Italian idea using chicken, roast, and broccoli")
+	assert.Contains(t, aiStub.menuPlanInstructions[0], "distinctly different replacement")
+}
+
 func TestGenerateRecipes_RegenerateNoReplacementPlansReturnsHelpfulError(t *testing.T) {
 	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
 	aiStub := &captureRegenerateAIClient{
