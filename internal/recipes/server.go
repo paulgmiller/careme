@@ -79,6 +79,7 @@ type generator interface {
 
 type menuPlanningGenerator interface {
 	PlanRecipes(ctx context.Context, p *generatorParams) (*ai.MenuPlan, error)
+	ReplaceMenuPlan(ctx context.Context, plan *ai.MenuPlan, dismissed ai.RecipePlan) (*ai.MenuPlan, error)
 	GenerateRecipesFromPlan(ctx context.Context, p *generatorParams, plan *ai.MenuPlan) (*ai.ShoppingList, error)
 }
 
@@ -131,6 +132,7 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("POST /recipes", s.handleGenerate)
 	mux.HandleFunc("POST /recipes/{hash}/plan", s.handleApproveMenuPlan)
+	mux.HandleFunc("POST /recipes/{hash}/plan/{index}/dismiss", s.handleDismissMenuPlan)
 	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
@@ -1401,6 +1403,90 @@ func (s *server) handleApproveMenuPlan(w http.ResponseWriter, r *http.Request) {
 	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
 }
 
+func (s *server) handleDismissMenuPlan(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	index, err := strconv.Atoi(strings.TrimSpace(r.PathValue("index")))
+	if hash == "" || err != nil {
+		http.Error(w, "invalid menu choice", http.StatusBadRequest)
+		return
+	}
+	planner, ok := s.generator.(menuPlanningGenerator)
+	if !ok {
+		http.Error(w, "menu changes are unavailable", http.StatusNotImplemented)
+		return
+	}
+	plan, err := s.MenuPlanFromCache(ctx, hash)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			http.Error(w, "menu plan not found or expired", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load menu plan", http.StatusInternalServerError)
+		return
+	}
+	if index < 0 || index >= len(plan.Plans) {
+		http.Error(w, "invalid menu choice", http.StatusBadRequest)
+		return
+	}
+
+	replacement, err := planner.ReplaceMenuPlan(ctx, plan, plan.Plans[index])
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to replace menu idea", "hash", hash, "index", index, "error", err)
+		http.Error(w, "could not find another meal idea", http.StatusInternalServerError)
+		return
+	}
+	if replacement == nil || len(replacement.Plans) == 0 {
+		http.Error(w, "could not find another meal idea", http.StatusInternalServerError)
+		return
+	}
+
+	updated := &ai.MenuPlan{
+		Plans:              slices.Clone(plan.Plans),
+		ChefNoteSuggestion: replacement.ChefNoteSuggestion,
+		ResponseID:         replacement.ResponseID,
+		PromptCacheKey:     replacement.PromptCacheKey,
+	}
+	if strings.TrimSpace(updated.ChefNoteSuggestion) == "" {
+		updated.ChefNoteSuggestion = plan.ChefNoteSuggestion
+	}
+	updated.Plans[index] = replacement.Plans[0]
+	if err := s.SaveMenuPlan(ctx, hash, updated); err != nil {
+		slog.ErrorContext(ctx, "failed to save replacement menu idea", "hash", hash, "index", index, "error", err)
+		http.Error(w, "failed to save another meal idea", http.StatusInternalServerError)
+		return
+	}
+
+	if !httpx.IsHTMX(r) {
+		redirectToHash(w, r, hash)
+		return
+	}
+	selected := selectedMenuPlans(r, len(updated.Plans))
+	selected[index] = true
+	if err := templates.MenuPlan.ExecuteTemplate(w, "menu_plan_form", menuPlanPageData{
+		Hash:     hash,
+		Plan:     updated,
+		Selected: selected,
+	}); err != nil {
+		slog.ErrorContext(ctx, "replacement menu template execute error", "hash", hash, "error", err)
+		http.Error(w, "failed to show another meal idea", http.StatusInternalServerError)
+	}
+}
+
+func selectedMenuPlans(r *http.Request, count int) map[int]bool {
+	selected := make(map[int]bool, count)
+	if err := r.ParseForm(); err != nil {
+		return selected
+	}
+	for _, raw := range r.PostForm["plan"] {
+		index, err := strconv.Atoi(raw)
+		if err == nil && index >= 0 && index < count {
+			selected[index] = true
+		}
+	}
+	return selected
+}
+
 // best effort attempt to set favorite store if non is thre
 func (s *server) setFavoriteStore(ctx context.Context, currentUser *utypes.User, loc *locations.Location) {
 	if strings.TrimSpace(currentUser.FavoriteStore) != "" {
@@ -1495,17 +1581,24 @@ func (s *server) kickApprovedGeneration(ctx context.Context, p *generatorParams,
 	})
 }
 
+type menuPlanPageData struct {
+	ClarityScript   template.HTML
+	GoogleTagScript template.HTML
+	Style           seasons.Style
+	User            *utypes.User
+	AuthReturnTo    string
+	Hash            string
+	Plan            *ai.MenuPlan
+	Selected        map[int]bool
+}
+
 func (s *server) renderMenuPlan(ctx context.Context, w http.ResponseWriter, hash string, plan *ai.MenuPlan, currentUser *utypes.User) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	data := struct {
-		ClarityScript   template.HTML
-		GoogleTagScript template.HTML
-		Style           seasons.Style
-		User            *utypes.User
-		AuthReturnTo    string
-		Hash            string
-		Plan            *ai.MenuPlan
-	}{
+	selected := make(map[int]bool, len(plan.Plans))
+	for index := range plan.Plans {
+		selected[index] = true
+	}
+	data := menuPlanPageData{
 		ClarityScript:   templates.ClarityScript(ctx),
 		GoogleTagScript: templates.GoogleTagScript(),
 		Style:           seasons.GetCurrentStyle(),
@@ -1513,6 +1606,7 @@ func (s *server) renderMenuPlan(ctx context.Context, w http.ResponseWriter, hash
 		AuthReturnTo:    "/recipes?h=" + url.QueryEscape(hash),
 		Hash:            hash,
 		Plan:            plan,
+		Selected:        selected,
 	}
 	if err := templates.MenuPlan.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "menu plan template execute error", "hash", hash, "error", err)

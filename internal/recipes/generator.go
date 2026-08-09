@@ -226,6 +226,32 @@ func (g *generatorService) PlanRecipes(ctx context.Context, p *generatorParams) 
 	return menuPlan, nil
 }
 
+// ReplaceMenuPlan asks the existing menu-planning conversation for one new
+// idea after the cook passes on a suggestion.
+func (g *generatorService) ReplaceMenuPlan(ctx context.Context, menuPlan *ai.MenuPlan, dismissed ai.RecipePlan) (*ai.MenuPlan, error) {
+	if menuPlan == nil || strings.TrimSpace(menuPlan.ResponseID) == "" {
+		return nil, fmt.Errorf("previous menu plan response ID is required")
+	}
+	instruction := fmt.Sprintf(
+		"Passed on the %s idea using %s, %s, and %s. Suggest a distinctly different replacement and do not repeat that meal or a close variant.",
+		dismissed.Cuisine,
+		dismissed.AnchorIngredient,
+		dismissed.Technique,
+		dismissed.SideVegetable,
+	)
+	replacement, err := g.aiClient.RegenerateMenuPlan(ctx, []string{instruction}, menuPlan.ResponseRef(), 1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to plan a replacement meal: %w", err)
+	}
+	if replacement == nil || len(replacement.Plans) == 0 {
+		return nil, fmt.Errorf("planned 0 replacement meals")
+	}
+	if strings.TrimSpace(replacement.ResponseID) == "" {
+		return nil, fmt.Errorf("replacement menu plan response ID is required")
+	}
+	return replacement, nil
+}
+
 // GenerateRecipesFromPlan expands an approved initial menu into full recipes
 // and runs the existing critique/retry stage.
 func (g *generatorService) GenerateRecipesFromPlan(ctx context.Context, p *generatorParams, menuPlan *ai.MenuPlan) (*ai.ShoppingList, error) {

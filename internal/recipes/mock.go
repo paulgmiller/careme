@@ -407,6 +407,28 @@ func (m mock) PlanRecipes(_ context.Context, p *generatorParams) (*ai.MenuPlan, 
 	return &ai.MenuPlan{Plans: plans, ResponseID: uuid.NewString()}, nil
 }
 
+func (m mock) ReplaceMenuPlan(_ context.Context, plan *ai.MenuPlan, _ ai.RecipePlan) (*ai.MenuPlan, error) {
+	seen := make(map[string]bool, len(plan.Plans))
+	for _, current := range plan.Plans {
+		seen[current.AnchorIngredient] = true
+	}
+	for _, recipe := range mockRecipes {
+		if seen[recipe.Title] {
+			continue
+		}
+		return &ai.MenuPlan{
+			Plans: []ai.RecipePlan{{
+				Cuisine:          "Chef's choice",
+				AnchorIngredient: recipe.Title,
+				Technique:        "Weeknight cooking",
+				SideVegetable:    "Seasonal vegetables",
+			}},
+			ResponseID: uuid.NewString(),
+		}, nil
+	}
+	return nil, fmt.Errorf("no mock replacement recipes remain")
+}
+
 func (m mock) GenerateRecipesFromPlan(ctx context.Context, p *generatorParams, plan *ai.MenuPlan) (*ai.ShoppingList, error) {
 	originHash := p.Hash()
 	// fake like we're taking time to call an LLM so we get the spinner.
