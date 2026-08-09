@@ -23,6 +23,7 @@ import (
 	"careme/internal/guest"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
+	recipestatus "careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/templates"
 	"careme/internal/users"
