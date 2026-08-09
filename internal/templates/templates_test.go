@@ -372,6 +372,8 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 		RefreshInterval string
 		StatusMessage   string
 		CurrentPath     string
+		ErrorMessage    string
+		BackPath        string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,
@@ -526,6 +528,8 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 		RefreshInterval string
 		StatusMessage   string
 		CurrentPath     string
+		ErrorMessage    string
+		BackPath        string
 	}{
 		Style:           seasons.GetCurrentStyle(),
 		ServerSignedIn:  false,

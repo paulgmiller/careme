@@ -17,7 +17,11 @@
   {{GoogleTagNoScript}}
   {{template "seasonal_background" .}}
   <main class="relative z-10 grid min-h-screen place-items-center px-4" role="status" aria-live="polite">
+    {{if .ErrorMessage}}
+    {{template "spin_failure" .}}
+    {{else}}
     {{template "spin_progress" .}}
+    {{end}}
   </main>
   {{template "clerk_refresh.html" .}}
 </body>
@@ -41,6 +45,20 @@
       hx-get="{{.CurrentPath}}"
       hx-target="#spin-page-work"
       hx-swap="outerHTML">Refresh now</a>
+  </p>
+</section>
+{{end}}
+
+{{define "spin_failure"}}
+<section id="spin-page-work"
+  class="friendly-card w-full max-w-md border border-brand-100 bg-white/90 p-10 text-center shadow-xl">
+  <h1 class="text-2xl font-semibold text-brand-700">That tweak didn't finish.</h1>
+  <p class="mt-3 text-sm text-ink-600">{{.ErrorMessage}}</p>
+  <p class="mt-6">
+    <a href="{{.BackPath}}"
+      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+      Back to the recipe
+    </a>
   </p>
 </section>
 {{end}}
