@@ -142,7 +142,6 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
 	mux.HandleFunc("POST /recipe/{hash}/regenerate", s.handleRegenerateSingleRecipe)
 	mux.HandleFunc("GET /recipe/{hash}/regen/{jobID}", s.handleSingleRecipeRegeneration)
-	mux.HandleFunc("POST /recipe/{hash}/regen/{jobID}/retry", s.handleRetrySingleRecipeRegeneration)
 	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
 	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
 	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
@@ -460,7 +459,22 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
 	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
 	id := regeneration.ID(hash, responseID)
-	err := s.regenerations.Start(ctx, id, cache.IfNoneMatch())
+
+	putOptions := cache.IfNoneMatch()
+	_, timedOut, err := s.regenerations.Load(ctx, id)
+	if err == nil {
+		if !timedOut {
+			redirectToRecipeRegeneration(w, r, hash, id)
+			return
+		}
+		putOptions = cache.Unconditional()
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load recipe regeneration job", "hash", hash, "job_id", id, "error", err)
+		http.Error(w, "failed to prepare recipe refresh", http.StatusInternalServerError)
+		return
+	}
+
+	err = s.regenerations.Start(ctx, id, putOptions)
 	if err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			redirectToRecipeRegeneration(w, r, hash, id)
@@ -510,85 +524,10 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 	if timedOut {
-		s.renderRecipeRegenerationRetry(ctx, w, r, hash, jobID)
+		s.renderRecipeRegenerationRetry(ctx, w, r, hash)
 		return
 	}
 	s.spin(ctx, w, r, hash)
-}
-
-func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	hash := strings.TrimSpace(r.PathValue("hash"))
-	jobID := strings.TrimSpace(r.PathValue("jobID"))
-	newHash, timedOut, err := s.regenerations.Load(ctx, jobID)
-	if err != nil {
-		if err != nil && !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
-		}
-		http.Error(w, "recipe regeneration not found", http.StatusNotFound)
-		return
-	}
-	if newHash != "" {
-		redirectToRecipe(w, r, newHash)
-		return
-	}
-	if !timedOut {
-		redirectToRecipeRegeneration(w, r, hash, jobID)
-		return
-	}
-
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
-	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r, http.StatusUnauthorized)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load user for recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
-	}
-	recipe, err := s.SingleFromCache(ctx, hash)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			http.Error(w, "recipe not found", http.StatusNotFound)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load recipe for regeneration retry", "hash", hash, "job_id", jobID, "error", err)
-		http.Error(w, "failed to load recipe", http.StatusInternalServerError)
-		return
-	}
-	thread, err := s.ThreadFromCache(ctx, hash)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			http.Error(w, "ask a question before refreshing this recipe", http.StatusBadRequest)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load recipe thread for regeneration retry", "hash", hash, "job_id", jobID, "error", err)
-		http.Error(w, "failed to load recipe questions", http.StatusInternalServerError)
-		return
-	}
-	responseID := latestThreadResponseID(thread)
-	if responseID == "" {
-		http.Error(w, "ask a question before refreshing this recipe", http.StatusBadRequest)
-		return
-	}
-
-	var critiqueFixes []string
-	if c, critiqueErr := s.critiques.Load(ctx, hash); critiqueErr == nil {
-		critiqueFixes = c.SuggestedFixes
-	} else if !errors.Is(critiqueErr, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load recipe critique for retry", "hash", hash, "job_id", jobID, "error", critiqueErr)
-	}
-	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
-	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
-	err = s.regenerations.Start(ctx, jobID, cache.Unconditional())
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to create recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
-		http.Error(w, "failed to retry recipe refresh", http.StatusInternalServerError)
-		return
-	}
-	s.kickSingleRecipeRegeneration(ctx, jobID, currentUser, *recipe, instructions, previous)
-	redirectToRecipeRegeneration(w, r, hash, jobID)
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -1573,8 +1512,8 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (s *server) renderRecipeRegenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, hash, id string) {
-	retryURL := url.URL{Path: "/recipe/" + url.PathEscape(hash) + "/regen/" + url.PathEscape(id) + "/retry"}
+func (s *server) renderRecipeRegenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
+	retryURL := url.URL{Path: "/recipe/" + url.PathEscape(hash) + "/regenerate"}
 	renderGenerationRetry(ctx, w, r, retryURL.String())
 }
 

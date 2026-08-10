@@ -48,6 +48,6 @@ func TestHandleSingleRecipeRegenerationRendersRetryAfterTimeout(t *testing.T) {
 	s.handleSingleRecipeRegeneration(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), path+"/retry")
+	assert.Contains(t, rr.Body.String(), `/recipe/old-hash/regenerate`)
 	assert.Contains(t, rr.Body.String(), "Try again, chef")
 }

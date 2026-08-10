@@ -1150,14 +1150,14 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	timedOutRR := httptest.NewRecorder()
 	s.handleSingleRecipeRegeneration(timedOutRR, timedOutReq)
 	require.Equal(t, http.StatusOK, timedOutRR.Code)
-	assert.Contains(t, timedOutRR.Body.String(), spinLocation+"/retry")
+	retryPath := "/recipe/" + url.PathEscape(originalHash) + "/regenerate"
+	assert.Contains(t, timedOutRR.Body.String(), retryPath)
 	assert.Contains(t, timedOutRR.Body.String(), "Try again, chef")
 
-	retryReq := httptest.NewRequest(http.MethodPost, spinLocation+"/retry", nil)
+	retryReq := httptest.NewRequest(http.MethodPost, retryPath, nil)
 	retryReq.SetPathValue("hash", originalHash)
-	retryReq.SetPathValue("jobID", jobID)
 	retryRR := httptest.NewRecorder()
-	s.handleRetrySingleRecipeRegeneration(retryRR, retryReq)
+	s.handleRegenerateSingleRecipe(retryRR, retryReq)
 	require.Equal(t, http.StatusSeeOther, retryRR.Code)
 	assert.Equal(t, spinLocation, retryRR.Header().Get("Location"))
 	require.Eventually(t, func() bool {
