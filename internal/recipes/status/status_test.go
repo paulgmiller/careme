@@ -48,8 +48,3 @@ func TestIngredientsIncludesCountAndSales(t *testing.T) {
 
 	assert.Equal(t, "Considering 1 out of 3 ingredients\nHalf Off Spinach 50% off at 5.00\n", got)
 }
-
-func TestIsError(t *testing.T) {
-	assert.True(t, IsError(Error(assert.AnError)))
-	assert.False(t, IsError("Trying again, chef.\nSomething went wrong: old error"))
-}

@@ -475,24 +475,17 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
 	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
-	job := newRecipeRegenerationJob(hash, responseID)
-	created, err := s.createRecipeRegenerationJob(ctx, job)
+	id := recipeRegenerationJobID(hash, responseID)
+	err := s.createRecipeRegenerationJob(ctx, id)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create recipe regeneration job", "hash", hash, "response_id", responseID, "error", err)
 		http.Error(w, "failed to prepare recipe refresh", http.StatusInternalServerError)
 		return
 	}
-	if created {
-		s.kickSingleRecipeRegeneration(ctx, job, currentUser, *recipe, instructions, previous)
-	} else {
-		existing, loadErr := s.loadRecipeRegenerationJob(ctx, job.ID)
-		if loadErr != nil || existing.OldHash != hash || existing.ResponseID != responseID {
-			slog.ErrorContext(ctx, "failed to reuse recipe regeneration job", "hash", hash, "job_id", job.ID, "error", loadErr)
-			http.Error(w, "failed to prepare recipe refresh", http.StatusInternalServerError)
-			return
-		}
-	}
-	redirectToRecipeRegeneration(w, r, hash, job.ID)
+
+	s.kickSingleRecipeRegeneration(ctx, id, currentUser, *recipe, instructions, previous)
+
+	redirectToRecipeRegeneration(w, r, hash, id)
 }
 
 func singleRecipeRegenerationInstructions(critiqueFixes []string) []string {
@@ -523,10 +516,6 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		http.Error(w, "failed to load recipe refresh", http.StatusInternalServerError)
 		return
 	}
-	if job.OldHash != hash || job.ID != jobID {
-		http.Error(w, "recipe regeneration not found", http.StatusNotFound)
-		return
-	}
 
 	switch job.State {
 	case recipeRegenerationComplete:
@@ -536,8 +525,8 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		}
 		redirectToRecipe(w, r, job.NewHash, false /*useStart*/)
 	case recipeRegenerationRunning:
-		if time.Since(job.CreatedAt) >= 10*time.Minute {
-			s.renderRecipeRegenerationRetry(ctx, w, r, job)
+		if time.Since(job.UpdatedAt) >= 10*time.Minute {
+			s.renderRecipeRegenerationRetry(ctx, w, r, hash, jobID)
 			return
 		}
 		s.spin(ctx, w, r, hash)
@@ -551,7 +540,7 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 	hash := strings.TrimSpace(r.PathValue("hash"))
 	jobID := strings.TrimSpace(r.PathValue("jobID"))
 	job, err := s.loadRecipeRegenerationJob(ctx, jobID)
-	if err != nil || job.OldHash != hash || job.ID != jobID {
+	if err != nil {
 		if err != nil && !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to load recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
 		}
@@ -562,8 +551,8 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 		redirectToRecipe(w, r, job.NewHash, false /*useStart*/)
 		return
 	}
-	if job.State == recipeRegenerationRunning && time.Since(job.CreatedAt) < 10*time.Minute {
-		redirectToRecipeRegeneration(w, r, hash, job.ID)
+	if job.State == recipeRegenerationRunning && time.Since(job.UpdatedAt) < 10*time.Minute {
+		redirectToRecipeRegeneration(w, r, hash, jobID)
 		return
 	}
 
@@ -595,25 +584,15 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 		slog.ErrorContext(ctx, "failed to load recipe critique for retry", "hash", hash, "job_id", jobID, "error", critiqueErr)
 	}
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
-	previous := ai.ResponseRef{ID: job.ResponseID, PromptCacheKey: recipe.PromptCacheKey}
-	nextJob := newRecipeRegenerationAttempt(hash, job.ResponseID, max(job.Attempt, 1)+1)
-	created, err := s.createRecipeRegenerationJob(ctx, nextJob)
+	previous := ai.ResponseRef{ID: recipe.ResponseID, PromptCacheKey: recipe.PromptCacheKey}
+	err = s.createRecipeRegenerationJob(ctx, jobID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
 		http.Error(w, "failed to retry recipe refresh", http.StatusInternalServerError)
 		return
 	}
-	if created {
-		s.kickSingleRecipeRegeneration(ctx, nextJob, currentUser, *recipe, instructions, previous)
-	} else {
-		existing, loadErr := s.loadRecipeRegenerationJob(ctx, nextJob.ID)
-		if loadErr != nil || existing.OldHash != hash || existing.ResponseID != job.ResponseID || existing.Attempt != nextJob.Attempt {
-			slog.ErrorContext(ctx, "failed to reuse recipe regeneration retry", "hash", hash, "job_id", nextJob.ID, "error", loadErr)
-			http.Error(w, "failed to retry recipe refresh", http.StatusInternalServerError)
-			return
-		}
-	}
-	redirectToRecipeRegeneration(w, r, hash, nextJob.ID)
+	s.kickSingleRecipeRegeneration(ctx, jobID, currentUser, *recipe, instructions, previous)
+	redirectToRecipeRegeneration(w, r, hash, jobID)
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -948,31 +927,32 @@ func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recip
 	}
 }
 
-func (s *server) kickSingleRecipeRegeneration(ctx context.Context, job recipeRegenerationJob, currentUser *utypes.User, recipe ai.Recipe, instructions []string, previous ai.ResponseRef) {
+func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, currentUser *utypes.User, recipe ai.Recipe, instructions []string, previous ai.ResponseRef) {
 	s.wg.Go(func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
 		defer cancel()
 
 		replacement, err := s.generator.RegenerateRecipe(ctx, instructions, previous)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed generation", "job", job, "error", err)
+			slog.ErrorContext(ctx, "failed generation", "job", id, "error", err)
 			return
 		}
 		// TODO generate a new shoppinglist? only if ingredients changed or user asked?
 		replacement.OriginHash = recipe.OriginHash
-		replacement.ParentHash = job.OldHash
+		oldHash := recipe.ComputeHash()
+		replacement.ParentHash = oldHash
 		newHash := replacement.ComputeHash()
 		if err := s.SaveRecipe(ctx, *replacement); err != nil {
-			slog.ErrorContext(ctx, "failed to save", "job", job, "error", err)
+			slog.ErrorContext(ctx, "failed to save", "job", id, "error", err)
 			return
 		}
-		replaced, err := s.storage.ReplaceRecipe(currentUser, job.OldHash, utypes.Recipe{
+		replaced, err := s.storage.ReplaceRecipe(currentUser, oldHash, utypes.Recipe{
 			Title:     replacement.Title,
 			Hash:      newHash,
 			CreatedAt: time.Now(),
 		})
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to replace", "job", job, "error", err)
+			slog.ErrorContext(ctx, "failed to replace", "job", id, "error", err)
 			return
 		}
 		if replaced {
@@ -982,10 +962,8 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, job recipeReg
 				s.startSavedRecipeBackgroundGeneration(ctx, newHash, *replacement, params.Location.ID, params.Date)
 			}
 		}
-		job.State = recipeRegenerationComplete
-		job.NewHash = newHash
-		if err := s.saveRecipeRegenerationJob(ctx, job); err != nil {
-			slog.ErrorContext(ctx, "failed to complete recipe regeneration job", "hash", job.OldHash, "job_id", job.ID, "new_hash", newHash, "error", err)
+		if err := s.completeRecipeRegenerationJob(ctx, id, newHash); err != nil {
+			slog.ErrorContext(ctx, "failed to complete recipe regeneration job", "job_id", id, "new_hash", newHash, "error", err)
 		}
 	})
 }
@@ -1037,7 +1015,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 			}
 			currentUser = guestUser
 		} else {
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			http.Error(w, "unable to loadRecipeRegenerationJob account", http.StatusInternalServerError)
 			return
 		}
 	}
@@ -1616,8 +1594,8 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (s *server) renderRecipeRegenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, job recipeRegenerationJob) {
-	retryURL := url.URL{Path: "/recipe/" + url.PathEscape(job.OldHash) + "/regen/" + url.PathEscape(job.ID) + "/retry"}
+func (s *server) renderRecipeRegenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, hash, id string) {
+	retryURL := url.URL{Path: "/recipe/" + url.PathEscape(hash) + "/regen/" + url.PathEscape(id) + "/retry"}
 	renderGenerationRetry(ctx, w, r, retryURL.String())
 }
 
