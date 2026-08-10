@@ -151,31 +151,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.URL.Query().Has(queryArgStart) {
-		newHash, err := s.regeneratedRecipeHash(ctx, hash)
-		if err == nil {
-			redirectToRecipe(w, r, newHash, false /*useStart*/)
-			return
-		}
-		if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load regenerated recipe mapping", "hash", hash, "error", err)
-			http.Error(w, "failed to load refreshed recipe", http.StatusInternalServerError)
-			return
-		}
-
-		startTime, err := time.Parse(time.RFC3339Nano, r.URL.Query().Get(queryArgStart))
-		if err != nil {
-			redirectToRecipe(w, r, hash, true /*useStart*/)
-			return
-		}
-		if !generationWaitExpired(startTime) {
-			s.spin(ctx, w, r, hash)
-			return
-		}
-		http.Error(w, "recipe refresh is taking longer than expected", http.StatusGatewayTimeout)
-		return
-	}
-
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
 		http.Error(w, "recipe not found", http.StatusNotFound)
@@ -527,7 +502,7 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 			http.Error(w, "recipe regeneration has no result", http.StatusInternalServerError)
 			return
 		}
-		redirectToRecipe(w, r, job.NewHash, false /*useStart*/)
+		redirectToRecipe(w, r, job.NewHash)
 	case recipeRegenerationRunning:
 		if generationWaitExpired(job.UpdatedAt) {
 			s.renderRecipeRegenerationRetry(ctx, w, r, hash, jobID)
@@ -552,7 +527,7 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 		return
 	}
 	if job.State == recipeRegenerationComplete && strings.TrimSpace(job.NewHash) != "" {
-		redirectToRecipe(w, r, job.NewHash, false /*useStart*/)
+		redirectToRecipe(w, r, job.NewHash)
 		return
 	}
 	if job.State == recipeRegenerationRunning && !generationWaitExpired(job.UpdatedAt) {
@@ -987,23 +962,6 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 	})
 }
 
-func (s *server) regeneratedRecipeHash(ctx context.Context, originalHash string) (string, error) {
-	r, err := s.recipeio.Cache.Get(ctx, regeneratedRecipeCacheKeyPrefix+originalHash)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		if err := r.Close(); err != nil {
-			slog.ErrorContext(ctx, "failed to close regenerated recipe mapping", "hash", originalHash, "error", err)
-		}
-	}()
-	b, err := io.ReadAll(r)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(b)), nil
-}
-
 func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	hash := strings.TrimSpace(r.PathValue("hash"))
@@ -1201,12 +1159,11 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	generationWaitTimeout           = 10 * time.Minute
-	queryArgHash                    = "h"
-	queryArgStart                   = "start"
-	queryArgConversion              = "conversion"
-	queryArgInstructions            = "instructions"
-	regeneratedRecipeCacheKeyPrefix = "recipe-regeneration/"
+	generationWaitTimeout = 10 * time.Minute
+	queryArgHash          = "h"
+	queryArgStart         = "start"
+	queryArgConversion    = "conversion"
+	queryArgInstructions  = "instructions"
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
@@ -1662,13 +1619,8 @@ func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToK
 	redirectToHashWithArgs(w, r, hash, args)
 }
 
-func redirectToRecipe(w http.ResponseWriter, r *http.Request, hash string, useStart bool) {
+func redirectToRecipe(w http.ResponseWriter, r *http.Request, hash string) {
 	u := url.URL{Path: "/recipe/" + url.PathEscape(hash)}
-	if useStart {
-		args := url.Values{}
-		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
-		u.RawQuery = args.Encode()
-	}
 	if httpx.IsHTMX(r) {
 		w.Header().Set("HX-Redirect", u.String())
 		w.WriteHeader(http.StatusOK)
