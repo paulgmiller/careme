@@ -535,8 +535,6 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 			return
 		}
 		redirectToRecipe(w, r, job.NewHash, false /*useStart*/)
-	case recipeRegenerationFailed:
-		s.renderRecipeRegenerationRetry(ctx, w, r, job)
 	case recipeRegenerationRunning:
 		if time.Since(job.CreatedAt) >= 10*time.Minute {
 			s.renderRecipeRegenerationRetry(ctx, w, r, job)
@@ -957,7 +955,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, job recipeReg
 
 		replacement, err := s.generator.RegenerateRecipe(ctx, instructions, previous)
 		if err != nil {
-			s.failSingleRecipeRegeneration(ctx, job, err)
+			slog.ErrorContext(ctx, "failed generation", "job", job, "error", err)
 			return
 		}
 		// TODO generate a new shoppinglist? only if ingredients changed or user asked?
@@ -965,7 +963,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, job recipeReg
 		replacement.ParentHash = job.OldHash
 		newHash := replacement.ComputeHash()
 		if err := s.SaveRecipe(ctx, *replacement); err != nil {
-			s.failSingleRecipeRegeneration(ctx, job, err)
+			slog.ErrorContext(ctx, "failed to save", "job", job, "error", err)
 			return
 		}
 		replaced, err := s.storage.ReplaceRecipe(currentUser, job.OldHash, utypes.Recipe{
@@ -974,7 +972,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, job recipeReg
 			CreatedAt: time.Now(),
 		})
 		if err != nil {
-			s.failSingleRecipeRegeneration(ctx, job, err)
+			slog.ErrorContext(ctx, "failed to replace", "job", job, "error", err)
 			return
 		}
 		if replaced {
@@ -990,14 +988,6 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, job recipeReg
 			slog.ErrorContext(ctx, "failed to complete recipe regeneration job", "hash", job.OldHash, "job_id", job.ID, "new_hash", newHash, "error", err)
 		}
 	})
-}
-
-func (s *server) failSingleRecipeRegeneration(ctx context.Context, job recipeRegenerationJob, cause error) {
-	slog.ErrorContext(ctx, "failed to regenerate single recipe", "hash", job.OldHash, "job_id", job.ID, "error", cause)
-	job.State = recipeRegenerationFailed
-	if err := s.saveRecipeRegenerationJob(ctx, job); err != nil {
-		slog.ErrorContext(ctx, "failed to record recipe regeneration failure", "hash", job.OldHash, "job_id", job.ID, "error", err)
-	}
 }
 
 func (s *server) regeneratedRecipeHash(ctx context.Context, originalHash string) (string, error) {
@@ -1240,15 +1230,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 			return
 		}
-		if s.generationFailed(ctx, hashParam) {
-			generationTimedOut(ctx, w, r, hashParam)
-			return
-		}
 		redirectToHash(w, r, hashParam, queryArgStart, QueryArgHelp)
-		return
-	}
-	if s.generationFailed(ctx, hashParam) {
-		generationTimedOut(ctx, w, r, hashParam)
 		return
 	}
 
@@ -1265,17 +1247,6 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	}
 	slog.WarnContext(ctx, "recipe generation timed out", "time", startArg, "hash", hashParam)
 	generationTimedOut(ctx, w, r, hashParam)
-}
-
-func (s *server) generationFailed(ctx context.Context, hash string) bool {
-	statusMessage, err := s.statusReader.GenerationStatusFromCache(ctx, hash)
-	if err != nil {
-		if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to check recipe generation status", "hash", hash, "error", err)
-		}
-		return false
-	}
-	return recipestatus.IsError(statusMessage)
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}

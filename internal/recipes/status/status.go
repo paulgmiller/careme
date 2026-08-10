@@ -42,10 +42,6 @@ func Error(err error) string {
 	return "Something went wrong: " + err.Error()
 }
 
-func IsError(status string) bool {
-	return strings.HasPrefix(strings.TrimSpace(status), "Something went wrong:")
-}
-
 func Regen(instructions string, dismissed []ai.Recipe) string {
 	var sb strings.Builder
 	if len(instructions) > 0 {

@@ -22,7 +22,6 @@ type recipeRegenerationState string
 const (
 	recipeRegenerationRunning  recipeRegenerationState = "running"
 	recipeRegenerationComplete recipeRegenerationState = "complete"
-	recipeRegenerationFailed   recipeRegenerationState = "failed"
 )
 
 type recipeRegenerationJob struct {
