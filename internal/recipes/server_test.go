@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +23,7 @@ import (
 	"careme/internal/guest"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
+	"careme/internal/recipes/regeneration"
 	"careme/internal/routing"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -1081,18 +1081,18 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	spinLocation := rr.Header().Get("Location")
-	jobID := recipeRegenerationJobID(originalHash, "resp-question")
+	jobID := regeneration.ID(originalHash, "resp-question")
 	require.Equal(t, "/recipe/"+url.PathEscape(originalHash)+"/regen/"+jobID, spinLocation)
 	require.NotContains(t, spinLocation, "resp-question")
 
 	require.Eventually(t, func() bool {
-		job, err := s.loadRecipeRegenerationJob(t.Context(), jobID)
-		return err == nil && job.State == recipeRegenerationComplete
+		newHash, _, loadErr := s.regenerations.Load(t.Context(), jobID)
+		return loadErr == nil && newHash != ""
 	}, time.Second, 10*time.Millisecond)
-	job, err := s.loadRecipeRegenerationJob(t.Context(), jobID)
+	regeneratedHash, timedOut, err := s.regenerations.Load(t.Context(), jobID)
 	require.NoError(t, err)
-	assert.Equal(t, recipeRegenerationComplete, job.State)
-	assert.NotEmpty(t, job.NewHash)
+	assert.NotEmpty(t, regeneratedHash)
+	assert.False(t, timedOut)
 	pollServer := newTestServer(t, withTestCache(cacheStore))
 
 	htmxSpinReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
@@ -1141,13 +1141,8 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	assert.Equal(t, spinLocation, duplicateRR.Header().Get("Location"))
 	assert.Equal(t, 1, generator.regenerateCalls)
 
-	timedOutJob := recipeRegenerationJob{
-		State:     recipeRegenerationRunning,
-		UpdatedAt: time.Now().Add(-generationWaitTimeout - time.Minute),
-	}
-	timedOutJSON, err := json.Marshal(timedOutJob)
-	require.NoError(t, err)
-	require.NoError(t, cacheStore.Put(t.Context(), recipeRegenerationJobKey(jobID), string(timedOutJSON), cache.Unconditional()))
+	s.regenerations = regeneration.NewStore(cacheStore, time.Nanosecond)
+	require.NoError(t, s.regenerations.Restart(t.Context(), jobID))
 	timedOutReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
 	timedOutReq.Header.Set("HX-Request", "true")
 	timedOutReq.SetPathValue("hash", originalHash)
@@ -1166,8 +1161,8 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	require.Equal(t, http.StatusSeeOther, retryRR.Code)
 	assert.Equal(t, spinLocation, retryRR.Header().Get("Location"))
 	require.Eventually(t, func() bool {
-		retryJob, loadErr := s.loadRecipeRegenerationJob(t.Context(), jobID)
-		return loadErr == nil && retryJob.State == recipeRegenerationComplete
+		retryHash, _, loadErr := s.regenerations.Load(t.Context(), jobID)
+		return loadErr == nil && retryHash != ""
 	}, time.Second, 10*time.Millisecond)
 	assert.Equal(t, 2, generator.regenerateCalls)
 	assert.Equal(t, "resp-question", generator.lastResponse.ID)

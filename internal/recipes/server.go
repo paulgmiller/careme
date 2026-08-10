@@ -28,6 +28,7 @@ import (
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
+	"careme/internal/recipes/regeneration"
 	recipestatus "careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -87,16 +88,17 @@ type ImageGen interface {
 type server struct {
 	recipeio
 	imageio
-	imagegen     ImageGen
-	statusReader statusReader
-	statusWriter statusWriter
-	cfg          *config.Config
-	storage      *users.Storage
-	generator    generator
-	locServer    locServer
-	wg           sync.WaitGroup
-	clerk        auth.AuthClient
-	critiques    critiqueStore
+	imagegen      ImageGen
+	statusReader  statusReader
+	statusWriter  statusWriter
+	cfg           *config.Config
+	storage       *users.Storage
+	generator     generator
+	locServer     locServer
+	wg            sync.WaitGroup
+	clerk         auth.AuthClient
+	critiques     critiqueStore
+	regenerations *regeneration.Store
 }
 
 type critiqueStore interface {
@@ -108,17 +110,18 @@ type critiqueStore interface {
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
 	statusStore := StatusStore(c)
 	return &server{
-		recipeio:     IO(c),
-		imageio:      imageio{Cache: imageCache},
-		imagegen:     imagegen,
-		statusReader: statusStore,
-		statusWriter: statusStore,
-		cfg:          cfg,
-		storage:      storage,
-		generator:    generator,
-		locServer:    locServer,
-		clerk:        clerkClient,
-		critiques:    critique.NewStore(c),
+		recipeio:      IO(c),
+		imageio:       imageio{Cache: imageCache},
+		imagegen:      imagegen,
+		statusReader:  statusStore,
+		statusWriter:  statusStore,
+		cfg:           cfg,
+		storage:       storage,
+		generator:     generator,
+		locServer:     locServer,
+		clerk:         clerkClient,
+		critiques:     critique.NewStore(c),
+		regenerations: regeneration.NewStore(c, generationWaitTimeout),
 	}
 }
 
@@ -450,8 +453,8 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
 	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
-	id := recipeRegenerationJobID(hash, responseID)
-	err := s.startRecipeRegenerationJob(ctx, id, cache.IfNoneMatch())
+	id := regeneration.ID(hash, responseID)
+	err := s.regenerations.Start(ctx, id)
 	if err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			redirectToRecipeRegeneration(w, r, hash, id)
@@ -485,7 +488,7 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	job, err := s.loadRecipeRegenerationJob(ctx, jobID)
+	newHash, timedOut, err := s.regenerations.Load(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe regeneration not found", http.StatusNotFound)
@@ -496,29 +499,22 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	switch job.State {
-	case recipeRegenerationComplete:
-		if strings.TrimSpace(job.NewHash) == "" {
-			http.Error(w, "recipe regeneration has no result", http.StatusInternalServerError)
-			return
-		}
-		redirectToRecipe(w, r, job.NewHash)
-	case recipeRegenerationRunning:
-		if generationWaitExpired(job.UpdatedAt) {
-			s.renderRecipeRegenerationRetry(ctx, w, r, hash, jobID)
-			return
-		}
-		s.spin(ctx, w, r, hash)
-	default:
-		http.Error(w, "invalid recipe regeneration state", http.StatusInternalServerError)
+	if newHash != "" {
+		redirectToRecipe(w, r, newHash)
+		return
 	}
+	if timedOut {
+		s.renderRecipeRegenerationRetry(ctx, w, r, hash, jobID)
+		return
+	}
+	s.spin(ctx, w, r, hash)
 }
 
 func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	hash := strings.TrimSpace(r.PathValue("hash"))
 	jobID := strings.TrimSpace(r.PathValue("jobID"))
-	job, err := s.loadRecipeRegenerationJob(ctx, jobID)
+	newHash, timedOut, err := s.regenerations.Load(ctx, jobID)
 	if err != nil {
 		if err != nil && !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to load recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
@@ -526,11 +522,11 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 		http.Error(w, "recipe regeneration not found", http.StatusNotFound)
 		return
 	}
-	if job.State == recipeRegenerationComplete && strings.TrimSpace(job.NewHash) != "" {
-		redirectToRecipe(w, r, job.NewHash)
+	if newHash != "" {
+		redirectToRecipe(w, r, newHash)
 		return
 	}
-	if job.State == recipeRegenerationRunning && !generationWaitExpired(job.UpdatedAt) {
+	if !timedOut {
 		redirectToRecipeRegeneration(w, r, hash, jobID)
 		return
 	}
@@ -579,7 +575,7 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 	}
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
 	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
-	err = s.startRecipeRegenerationJob(ctx, jobID, cache.Unconditional())
+	err = s.regenerations.Restart(ctx, jobID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
 		http.Error(w, "failed to retry recipe refresh", http.StatusInternalServerError)
@@ -956,7 +952,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 				s.startSavedRecipeBackgroundGeneration(ctx, newHash, *replacement, params.Location.ID, params.Date)
 			}
 		}
-		if err := s.completeRecipeRegenerationJob(ctx, id, newHash); err != nil {
+		if err := s.regenerations.Complete(ctx, id, newHash); err != nil {
 			slog.ErrorContext(ctx, "failed to complete recipe regeneration job", "job_id", id, "new_hash", newHash, "error", err)
 		}
 	})
