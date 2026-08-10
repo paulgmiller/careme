@@ -476,7 +476,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
 	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
 	id := recipeRegenerationJobID(hash, responseID)
-	err := s.createRecipeRegenerationJob(ctx, id)
+	err := s.startRecipeRegenerationJob(ctx, id, cache.IfNoneMatch())
 	if err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			redirectToRecipeRegeneration(w, r, hash, id)
@@ -604,7 +604,7 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 	}
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
 	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
-	err = s.restartRecipeRegenerationJob(ctx, jobID)
+	err = s.startRecipeRegenerationJob(ctx, jobID, cache.Unconditional())
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
 		http.Error(w, "failed to retry recipe refresh", http.StatusInternalServerError)

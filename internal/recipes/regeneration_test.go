@@ -25,7 +25,7 @@ func TestHandleSingleRecipeRegenerationRendersPersistedRunningJob(t *testing.T) 
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := newTestServer(t, withTestCache(cacheStore))
 	jobID := recipeRegenerationJobID("old-hash", "response-id")
-	require.NoError(t, s.createRecipeRegenerationJob(t.Context(), jobID))
+	require.NoError(t, s.startRecipeRegenerationJob(t.Context(), jobID, cache.IfNoneMatch()))
 
 	path := "/recipe/old-hash/regen/" + jobID
 	req := httptest.NewRequest(http.MethodGet, path, nil)
