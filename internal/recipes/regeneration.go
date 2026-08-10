@@ -58,6 +58,24 @@ func (rio recipeio) createRecipeRegenerationJob(ctx context.Context, id string) 
 	return nil
 }
 
+func (rio recipeio) restartRecipeRegenerationJob(ctx context.Context, id string) error {
+	if !validRecipeRegenerationJobID(id) {
+		return fmt.Errorf("invalid recipe regeneration job id")
+	}
+	job := recipeRegenerationJob{
+		State:     recipeRegenerationRunning,
+		UpdatedAt: time.Now().UTC(),
+	}
+	raw, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("marshal recipe regeneration job: %w", err)
+	}
+	if err := rio.Cache.Put(ctx, recipeRegenerationJobKey(id), string(raw), cache.Unconditional()); err != nil {
+		return fmt.Errorf("restart recipe regeneration job: %w", err)
+	}
+	return nil
+}
+
 func (rio recipeio) completeRecipeRegenerationJob(ctx context.Context, id, hash string) error {
 	if !validRecipeRegenerationJobID(id) {
 		return fmt.Errorf("valid recipe regeneration job id is required")

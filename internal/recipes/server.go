@@ -168,7 +168,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			redirectToRecipe(w, r, hash, true /*useStart*/)
 			return
 		}
-		if time.Since(startTime) < time.Minute*10 {
+		if !generationWaitExpired(startTime) {
 			s.spin(ctx, w, r, hash)
 			return
 		}
@@ -478,6 +478,10 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	id := recipeRegenerationJobID(hash, responseID)
 	err := s.createRecipeRegenerationJob(ctx, id)
 	if err != nil {
+		if errors.Is(err, cache.ErrAlreadyExists) {
+			redirectToRecipeRegeneration(w, r, hash, id)
+			return
+		}
 		slog.ErrorContext(ctx, "failed to create recipe regeneration job", "hash", hash, "response_id", responseID, "error", err)
 		http.Error(w, "failed to prepare recipe refresh", http.StatusInternalServerError)
 		return
@@ -525,7 +529,7 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		}
 		redirectToRecipe(w, r, job.NewHash, false /*useStart*/)
 	case recipeRegenerationRunning:
-		if time.Since(job.UpdatedAt) >= 10*time.Minute {
+		if generationWaitExpired(job.UpdatedAt) {
 			s.renderRecipeRegenerationRetry(ctx, w, r, hash, jobID)
 			return
 		}
@@ -551,7 +555,7 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 		redirectToRecipe(w, r, job.NewHash, false /*useStart*/)
 		return
 	}
-	if job.State == recipeRegenerationRunning && time.Since(job.UpdatedAt) < 10*time.Minute {
+	if job.State == recipeRegenerationRunning && !generationWaitExpired(job.UpdatedAt) {
 		redirectToRecipeRegeneration(w, r, hash, jobID)
 		return
 	}
@@ -576,6 +580,21 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 		http.Error(w, "failed to load recipe", http.StatusInternalServerError)
 		return
 	}
+	thread, err := s.ThreadFromCache(ctx, hash)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			http.Error(w, "ask a question before refreshing this recipe", http.StatusBadRequest)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load recipe thread for regeneration retry", "hash", hash, "job_id", jobID, "error", err)
+		http.Error(w, "failed to load recipe questions", http.StatusInternalServerError)
+		return
+	}
+	responseID := latestThreadResponseID(thread)
+	if responseID == "" {
+		http.Error(w, "ask a question before refreshing this recipe", http.StatusBadRequest)
+		return
+	}
 
 	var critiqueFixes []string
 	if c, critiqueErr := s.critiques.Load(ctx, hash); critiqueErr == nil {
@@ -584,8 +603,8 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 		slog.ErrorContext(ctx, "failed to load recipe critique for retry", "hash", hash, "job_id", jobID, "error", critiqueErr)
 	}
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
-	previous := ai.ResponseRef{ID: recipe.ResponseID, PromptCacheKey: recipe.PromptCacheKey}
-	err = s.createRecipeRegenerationJob(ctx, jobID)
+	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
+	err = s.restartRecipeRegenerationJob(ctx, jobID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
 		http.Error(w, "failed to retry recipe refresh", http.StatusInternalServerError)
@@ -1182,6 +1201,7 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
+	generationWaitTimeout           = 10 * time.Minute
 	queryArgHash                    = "h"
 	queryArgStart                   = "start"
 	queryArgConversion              = "conversion"
@@ -1219,12 +1239,16 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if time.Since(startTime) < time.Minute*10 {
+	if !generationWaitExpired(startTime) {
 		s.spin(ctx, w, r, hashParam)
 		return
 	}
 	slog.WarnContext(ctx, "recipe generation timed out", "time", startArg, "hash", hashParam)
 	generationTimedOut(ctx, w, r, hashParam)
+}
+
+func generationWaitExpired(updatedAt time.Time) bool {
+	return time.Since(updatedAt) >= generationWaitTimeout
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}

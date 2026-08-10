@@ -13,27 +13,24 @@ import (
 )
 
 func TestRecipeRegenerationJobIDIsStableAndURLSafe(t *testing.T) {
-	jobID := recipeRegenerationJobID("old-hash", "response/id+with=padding", 1)
+	jobID := recipeRegenerationJobID("old-hash", "response/id+with=padding")
 
 	require.Len(t, jobID, 22)
 	assert.False(t, strings.ContainsAny(jobID, "+/="))
-	assert.Equal(t, jobID, recipeRegenerationJobID("old-hash", "response/id+with=padding", 1))
-	assert.NotEqual(t, jobID, recipeRegenerationJobID("other-hash", "response/id+with=padding", 1))
-	assert.NotEqual(t, jobID, recipeRegenerationJobID("old-hash", "response/id+with=padding", 2))
+	assert.Equal(t, jobID, recipeRegenerationJobID("old-hash", "response/id+with=padding"))
+	assert.NotEqual(t, jobID, recipeRegenerationJobID("other-hash", "response/id+with=padding"))
 }
 
 func TestHandleSingleRecipeRegenerationRendersPersistedRunningJob(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := newTestServer(t, withTestCache(cacheStore))
-	job := newRecipeRegenerationJob("old-hash", "response-id")
-	created, err := s.createRecipeRegenerationJob(t.Context(), job)
-	require.NoError(t, err)
-	require.True(t, created)
+	jobID := recipeRegenerationJobID("old-hash", "response-id")
+	require.NoError(t, s.createRecipeRegenerationJob(t.Context(), jobID))
 
-	path := "/recipe/old-hash/regen/" + job.ID
+	path := "/recipe/old-hash/regen/" + jobID
 	req := httptest.NewRequest(http.MethodGet, path, nil)
-	req.SetPathValue("hash", job.OldHash)
-	req.SetPathValue("jobID", job.ID)
+	req.SetPathValue("hash", "old-hash")
+	req.SetPathValue("jobID", jobID)
 	rr := httptest.NewRecorder()
 
 	s.handleSingleRecipeRegeneration(rr, req)
