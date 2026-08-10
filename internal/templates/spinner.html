@@ -17,7 +17,11 @@
   {{GoogleTagNoScript}}
   {{template "seasonal_background" .}}
   <main class="relative z-10 grid min-h-screen place-items-center px-4" role="status" aria-live="polite">
+    {{if .RetryPath}}
+    {{template "generation_retry" .}}
+    {{else}}
     {{template "spin_progress" .}}
+    {{end}}
   </main>
   {{template "clerk_refresh.html" .}}
 </body>
@@ -45,13 +49,16 @@
 </section>
 {{end}}
 
-{{define "generation_timeout"}}
+{{define "generation_retry"}}
 <section id="spin-page-work"
   class="friendly-card w-full max-w-md border border-brand-100 bg-white/90 p-10 text-center shadow-xl">
-  <h1 class="text-2xl font-semibold text-brand-700">That took longer than expected.</h1>
-  <form method="POST" action="{{.RetryPath}}" class="mt-6">
+  <h1 class="text-2xl font-semibold text-brand-700">Let's give that another go.</h1>
+  <form method="POST"
+    action="{{.RetryPath}}"
+    onsubmit="const button=this.querySelector('button[type=submit]'); button.textContent='Trying again...'; button.disabled=true;"
+    class="mt-6">
     <button type="submit"
-      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-brand-400 disabled:text-white/90">
       Try again, chef
     </button>
   </form>
