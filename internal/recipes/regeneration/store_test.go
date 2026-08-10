@@ -22,16 +22,16 @@ func TestIDIsStableAndURLSafe(t *testing.T) {
 }
 
 func TestStoreLifecycle(t *testing.T) {
-	store := NewStore(cache.NewFileCache(t.TempDir()), 10*time.Minute)
+	store := NewStore(cache.NewFileCache(t.TempDir()))
 	id := ID("old-hash", "response-id")
 
-	require.NoError(t, store.Start(t.Context(), id))
+	require.NoError(t, store.Start(t.Context(), id, cache.IfNoneMatch()))
 	newHash, timedOut, err := store.Load(t.Context(), id)
 	require.NoError(t, err)
 	assert.Empty(t, newHash)
 	assert.False(t, timedOut)
 
-	err = store.Start(t.Context(), id)
+	err = store.Start(t.Context(), id, cache.IfNoneMatch())
 	require.ErrorIs(t, err, cache.ErrAlreadyExists)
 
 	require.NoError(t, store.Complete(t.Context(), id, "new-hash"))
@@ -42,9 +42,10 @@ func TestStoreLifecycle(t *testing.T) {
 }
 
 func TestLoadReportsTimedOutRunningRegeneration(t *testing.T) {
-	store := NewStore(cache.NewFileCache(t.TempDir()), time.Nanosecond)
+	store := NewStore(cache.NewFileCache(t.TempDir()))
+	store.timeout = time.Nanosecond
 	id := ID("old-hash", "response-id")
-	require.NoError(t, store.Start(t.Context(), id))
+	require.NoError(t, store.Start(t.Context(), id, cache.IfNoneMatch()))
 
 	newHash, timedOut, err := store.Load(t.Context(), id)
 	require.NoError(t, err)
@@ -53,7 +54,7 @@ func TestLoadReportsTimedOutRunningRegeneration(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidID(t *testing.T) {
-	store := NewStore(cache.NewFileCache(t.TempDir()), 10*time.Minute)
+	store := NewStore(cache.NewFileCache(t.TempDir()))
 
 	_, _, err := store.Load(t.Context(), "not-an-id")
 	require.Error(t, err)

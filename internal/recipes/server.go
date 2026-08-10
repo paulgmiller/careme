@@ -85,6 +85,12 @@ type ImageGen interface {
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 }
 
+type regens interface {
+	Start(ctx context.Context, id string, opts cache.PutOptions) error
+	Complete(ctx context.Context, id, newHash string) error
+	Load(ctx context.Context, id string) (newHash string, timedOut bool, err error)
+}
+
 type server struct {
 	recipeio
 	imageio
@@ -98,7 +104,7 @@ type server struct {
 	wg            sync.WaitGroup
 	clerk         auth.AuthClient
 	critiques     critiqueStore
-	regenerations *regeneration.Store
+	regenerations regens
 }
 
 type critiqueStore interface {
@@ -121,7 +127,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		locServer:     locServer,
 		clerk:         clerkClient,
 		critiques:     critique.NewStore(c),
-		regenerations: regeneration.NewStore(c, generationWaitTimeout),
+		regenerations: regeneration.NewStore(c),
 	}
 }
 
@@ -454,7 +460,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
 	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
 	id := regeneration.ID(hash, responseID)
-	err := s.regenerations.Start(ctx, id)
+	err := s.regenerations.Start(ctx, id, cache.IfNoneMatch())
 	if err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			redirectToRecipeRegeneration(w, r, hash, id)
@@ -575,7 +581,7 @@ func (s *server) handleRetrySingleRecipeRegeneration(w http.ResponseWriter, r *h
 	}
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
 	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
-	err = s.regenerations.Restart(ctx, jobID)
+	err = s.regenerations.Start(ctx, jobID, cache.Unconditional())
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create recipe regeneration retry", "hash", hash, "job_id", jobID, "error", err)
 		http.Error(w, "failed to retry recipe refresh", http.StatusInternalServerError)
@@ -1155,11 +1161,10 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	generationWaitTimeout = 10 * time.Minute
-	queryArgHash          = "h"
-	queryArgStart         = "start"
-	queryArgConversion    = "conversion"
-	queryArgInstructions  = "instructions"
+	queryArgHash         = "h"
+	queryArgStart        = "start"
+	queryArgConversion   = "conversion"
+	queryArgInstructions = "instructions"
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
@@ -1185,6 +1190,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// TODO use time in params
 	startTime, err := time.Parse(time.RFC3339Nano, startArg)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to parse start time", "time", startArg, "error", err)
@@ -1192,16 +1198,12 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if !generationWaitExpired(startTime) {
+	if time.Since(startTime) < 10*time.Minute {
 		s.spin(ctx, w, r, hashParam)
 		return
 	}
 	slog.WarnContext(ctx, "recipe generation timed out", "time", startArg, "hash", hashParam)
 	generationTimedOut(ctx, w, r, hashParam)
-}
-
-func generationWaitExpired(updatedAt time.Time) bool {
-	return time.Since(updatedAt) >= generationWaitTimeout
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}

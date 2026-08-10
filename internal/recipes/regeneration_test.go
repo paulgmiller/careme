@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"careme/internal/cache"
 	"careme/internal/recipes/regeneration"
@@ -17,7 +16,7 @@ func TestHandleSingleRecipeRegenerationRendersPersistedRunningJob(t *testing.T) 
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := newTestServer(t, withTestCache(cacheStore))
 	jobID := regeneration.ID("old-hash", "response-id")
-	require.NoError(t, s.regenerations.Start(t.Context(), jobID))
+	require.NoError(t, s.regenerations.Start(t.Context(), jobID, cache.IfNoneMatch()))
 
 	path := "/recipe/old-hash/regen/" + jobID
 	req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -35,9 +34,10 @@ func TestHandleSingleRecipeRegenerationRendersPersistedRunningJob(t *testing.T) 
 func TestHandleSingleRecipeRegenerationRendersRetryAfterTimeout(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := newTestServer(t, withTestCache(cacheStore))
-	s.regenerations = regeneration.NewStore(cacheStore, time.Nanosecond)
+	s.regenerations = regeneration.TimeoutStore(cacheStore)
+
 	jobID := regeneration.ID("old-hash", "response-id")
-	require.NoError(t, s.regenerations.Start(t.Context(), jobID))
+	require.NoError(t, s.regenerations.Start(t.Context(), jobID, cache.IfNoneMatch()))
 
 	path := "/recipe/old-hash/regen/" + jobID
 	req := httptest.NewRequest(http.MethodGet, path, nil)

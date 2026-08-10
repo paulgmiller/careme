@@ -16,7 +16,10 @@ import (
 	"careme/internal/cache"
 )
 
-const cachePrefix = "recipe_regenerations/"
+const (
+	cachePrefix           = "recipe_regenerations/"
+	generationWaitTimeout = 10 * time.Minute
+)
 
 type job struct {
 	NewHash   string    `json:"new_hash,omitempty"`
@@ -24,19 +27,21 @@ type job struct {
 }
 
 // Store persists and reads the progress of a single-recipe regeneration.
-type Store struct {
+type store struct {
 	cache   cache.Cache
 	timeout time.Duration
 }
 
-func NewStore(c cache.Cache, timeout time.Duration) *Store {
+func NewStore(c cache.Cache) *store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
-	if timeout <= 0 {
-		panic("timeout must be positive")
-	}
-	return &Store{cache: c, timeout: timeout}
+	return &store{cache: c, timeout: generationWaitTimeout}
+}
+
+// just for recipes unitt
+func TimeoutStore(c cache.Cache) *store {
+	return &store{cache: c, timeout: time.Duration(0)}
 }
 
 // ID returns the stable, URL-safe identifier for a regeneration attempt.
@@ -48,17 +53,12 @@ func ID(oldHash, responseID string) string {
 }
 
 // Start records a new regeneration without replacing an existing attempt.
-func (s *Store) Start(ctx context.Context, id string) error {
-	return s.save(ctx, id, job{UpdatedAt: time.Now().UTC()}, cache.IfNoneMatch())
-}
-
-// Restart resets the timeout for an existing regeneration attempt.
-func (s *Store) Restart(ctx context.Context, id string) error {
-	return s.save(ctx, id, job{UpdatedAt: time.Now().UTC()}, cache.Unconditional())
+func (s *store) Start(ctx context.Context, id string, opts cache.PutOptions) error {
+	return s.save(ctx, id, job{UpdatedAt: time.Now().UTC()}, opts)
 }
 
 // Complete records the hash produced by a regeneration attempt.
-func (s *Store) Complete(ctx context.Context, id, newHash string) error {
+func (s *store) Complete(ctx context.Context, id, newHash string) error {
 	if strings.TrimSpace(newHash) == "" {
 		return fmt.Errorf("new recipe hash is required")
 	}
@@ -70,7 +70,7 @@ func (s *Store) Complete(ctx context.Context, id, newHash string) error {
 
 // Load returns the generated recipe hash when complete and whether an in-progress
 // regeneration has timed out. A running regeneration returns an empty hash.
-func (s *Store) Load(ctx context.Context, id string) (newHash string, timedOut bool, err error) {
+func (s *store) Load(ctx context.Context, id string) (newHash string, timedOut bool, err error) {
 	id = strings.TrimSpace(id)
 	if !validID(id) {
 		return "", false, cache.ErrNotFound
@@ -97,7 +97,7 @@ func (s *Store) Load(ctx context.Context, id string) (newHash string, timedOut b
 	return "", time.Since(stored.UpdatedAt) >= s.timeout, nil
 }
 
-func (s *Store) save(ctx context.Context, id string, stored job, opts cache.PutOptions) error {
+func (s *store) save(ctx context.Context, id string, stored job, opts cache.PutOptions) error {
 	if !validID(id) {
 		return fmt.Errorf("invalid recipe regeneration id")
 	}
