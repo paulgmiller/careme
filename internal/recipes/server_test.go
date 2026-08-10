@@ -78,7 +78,7 @@ func TestNotFoundTimedOutShowsRetryButton(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
 
-	start := time.Now().Add(-generationWaitTimeout - time.Minute).Format(time.RFC3339Nano)
+	start := time.Now().Add(-11 * time.Minute).Format(time.RFC3339Nano)
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash()+"&start="+url.QueryEscape(start), nil)
 	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
@@ -1141,8 +1141,8 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	assert.Equal(t, spinLocation, duplicateRR.Header().Get("Location"))
 	assert.Equal(t, 1, generator.regenerateCalls)
 
-	s.regenerations = regeneration.NewStore(cacheStore, time.Nanosecond)
-	require.NoError(t, s.regenerations.Restart(t.Context(), jobID))
+	s.regenerations = regeneration.TimeoutStore(cacheStore)
+	require.NoError(t, s.regenerations.Start(t.Context(), jobID, cache.Unconditional()))
 	timedOutReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
 	timedOutReq.Header.Set("HX-Request", "true")
 	timedOutReq.SetPathValue("hash", originalHash)
