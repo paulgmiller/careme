@@ -227,6 +227,8 @@ func TestOfflinePageResumesOnlineAndShowsCachedRecipeLinks(t *testing.T) {
 		`data-offline-recipes-empty>No recipes yet.`,
 		`Careme will pick up automatically when you're back online.`,
 		`window.addEventListener("online", () => window.location.reload(), { once: true })`,
+		`if (navigator.onLine)`,
+		`window.setTimeout(() => window.location.reload(), 30_000)`,
 		`const savedRecipesCacheName = "careme-saved-recipes-v1";`,
 		`const savedRecipesListURL = "/user/recipes/offline-cache";`,
 		`await cache.match(savedRecipesListURL)`,

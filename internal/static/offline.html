@@ -45,6 +45,9 @@
       }
 
       window.addEventListener("online", () => window.location.reload(), { once: true });
+      if (navigator.onLine) {
+        window.setTimeout(() => window.location.reload(), 30_000);
+      }
 
       if (!("caches" in window)) {
         return;
