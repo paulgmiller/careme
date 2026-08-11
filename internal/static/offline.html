@@ -23,29 +23,31 @@
 </head>
 <body class="grid min-h-screen place-items-center bg-gradient-to-b from-brand-50 to-white px-6 text-ink-700 antialiased">
   <main class="friendly-card w-full max-w-2xl border border-brand-100 bg-white/90 p-8 shadow-xl sm:p-10">
-    <h1 class="text-3xl font-extrabold tracking-tight text-brand-700 sm:text-4xl">Careme needs a connection.</h1>
-    <p class="mt-3 text-base leading-7 text-ink-600">You can still reopen anything your browser has already saved, but fresh recipes and sign-in need the internet.</p>
-    <p class="mt-2 text-base leading-7 text-ink-600">Try again in a moment, chef.</p>
-    <section class="mt-8 hidden" data-offline-recipes-section>
+    <h1 class="text-3xl font-extrabold tracking-tight text-brand-700 sm:text-4xl">You're offline.</h1>
+    <p class="mt-3 text-base leading-7 text-ink-600">Careme needs an internet connection for fresh recipes and sign-in.</p>
+    <p class="mt-2 text-base leading-7 text-ink-600">Saved recipes are still available below. Careme will pick up automatically when you're back online.</p>
+    <section class="mt-8" data-offline-recipes-section>
       <h2 class="text-lg font-bold text-ink-800">Saved recipes on this device</h2>
-      <ul class="mt-3 divide-y divide-brand-100 overflow-hidden rounded-lg border border-brand-100 bg-white" data-offline-recipes-list></ul>
+      <p class="mt-3 text-sm text-ink-600" data-offline-recipes-empty>No recipes yet. Save one when you're back online, and Careme will keep it here for next time.</p>
+      <ul class="mt-3 hidden divide-y divide-brand-100 overflow-hidden rounded-lg border border-brand-100 bg-white" data-offline-recipes-list></ul>
     </section>
-    <p class="mt-6">
-      <a href="/" class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back home</a>
-    </p>
   </main>
   <script>
     (() => {
       const savedRecipesCacheName = "careme-saved-recipes-v1";
       const savedRecipesListURL = "/user/recipes/offline-cache";
       const section = document.querySelector("[data-offline-recipes-section]");
+      const empty = document.querySelector("[data-offline-recipes-empty]");
       const list = document.querySelector("[data-offline-recipes-list]");
+
+      if (!section || !empty || !list) {
+        throw new Error("offline page elements are missing");
+      }
+
+      window.addEventListener("online", () => window.location.reload(), { once: true });
 
       if (!("caches" in window)) {
         return;
-      }
-      if (!section || !list) {
-        throw new Error("offline recipe list elements are missing");
       }
 
       const titleFromResponse = async (response) => {
@@ -90,7 +92,8 @@
         }));
 
         list.replaceChildren(...rows);
-        section.classList.remove("hidden");
+        empty.classList.add("hidden");
+        list.classList.remove("hidden");
       };
 
       renderRecipeLinks().catch((error) => console.error(error));

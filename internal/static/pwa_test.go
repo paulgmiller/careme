@@ -80,7 +80,7 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			if tt.wantSnippet != "" && !strings.Contains(rec.Body.String(), tt.wantSnippet) {
 				t.Fatalf("GET %s body missing %q", tt.path, tt.wantSnippet)
 			}
-			if tt.path == "/offline" && !strings.Contains(rec.Body.String(), "Careme needs a connection.") {
+			if tt.path == "/offline" && !strings.Contains(rec.Body.String(), "You're offline.") {
 				t.Fatalf("GET %s body missing offline copy", tt.path)
 			}
 		})
@@ -212,7 +212,7 @@ func TestOfflinePageThemeColorMatchesPageBackground(t *testing.T) {
 	}
 }
 
-func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
+func TestOfflinePageResumesOnlineAndShowsCachedRecipeLinks(t *testing.T) {
 	Init()
 	var b strings.Builder
 	err := renderOfflinePage(&b)
@@ -224,15 +224,19 @@ func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
 	for _, snippet := range []string{
 		`data-offline-recipes-section`,
 		`Saved recipes on this device`,
+		`data-offline-recipes-empty>No recipes yet.`,
+		`Careme will pick up automatically when you're back online.`,
+		`window.addEventListener("online", () => window.location.reload(), { once: true })`,
 		`const savedRecipesCacheName = "careme-saved-recipes-v1";`,
 		`const savedRecipesListURL = "/user/recipes/offline-cache";`,
 		`await cache.match(savedRecipesListURL)`,
 		`body.split(/\r?\n/).filter(Boolean)`,
-		`throw new Error("offline recipe list elements are missing")`,
+		`throw new Error("offline page elements are missing")`,
 		`throw new Error("cached recipe response is missing")`,
 		`return doc.title.trim()`,
 		`list.replaceChildren(...rows)`,
-		`section.classList.remove("hidden")`,
+		`empty.classList.add("hidden")`,
+		`list.classList.remove("hidden")`,
 		`renderRecipeLinks().catch((error) => console.error(error))`,
 	} {
 		if !strings.Contains(rendered, snippet) {
@@ -251,6 +255,11 @@ func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
 	}
 	if strings.Contains(rendered, "new Set(recipeURLs)") {
 		t.Fatalf("offline page should not dedupe cached recipe URLs, page: %s", rendered)
+	}
+	for _, misleadingAction := range []string{"your browser", "Back home", "Try again"} {
+		if strings.Contains(rendered, misleadingAction) {
+			t.Fatalf("offline page should not show misleading action %q, page: %s", misleadingAction, rendered)
+		}
 	}
 	titleFunction := rendered[strings.Index(rendered, "const titleFromResponse"):]
 	titleFunction = titleFunction[:strings.Index(titleFunction, "const recipeURLsFromList")]
