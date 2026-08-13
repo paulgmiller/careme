@@ -113,6 +113,70 @@ spec:
       name: http
 
 ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingredient-review
+  labels:
+    app: ingredient-review
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingredient-review
+  template:
+    metadata:
+      labels:
+        app: ingredient-review
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      containers:
+        - name: ingredient-review
+          image: ghcr.io/paulgmiller/careme-ingredientreview:${IMAGE_TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8090
+              name: http
+          envFrom:
+            - secretRef:
+                name: ai
+            - secretRef:
+                name: storage
+          readinessProbe:
+            httpGet:
+              path: /grader
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /grader
+              port: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingredient-review
+  labels:
+    app: ingredient-review
+spec:
+  type: ClusterIP
+  selector:
+    app: ingredient-review
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -128,6 +192,13 @@ spec:
     - host: ${INGRESS_HOST}
       http:
         paths:
+          - path: /grader
+            pathType: Prefix
+            backend:
+              service:
+                name: ingredient-review
+                port:
+                  number: 80
           - path: /
             pathType: Prefix
             backend:

@@ -77,7 +77,7 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 		t.Fatalf("expected plain text content type, got %q", got)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "ProductId\tAisleNumber\tBrand\tDescription") {
+	if !strings.Contains(body, "ProductId\tBrand\tDescription") {
 		t.Fatalf("expected TSV header in response, got %q", body)
 	}
 	if !strings.Contains(body, "Broccoli") {

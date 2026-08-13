@@ -28,8 +28,7 @@ func TestCachedProduceScorerUsesTodayCacheBeforeYesterday(t *testing.T) {
 	score := NewCachedProduceScorer(IO(c)).ProduceScore(t.Context(), *loc)
 
 	require.NotNil(t, score)
-	assert.Equal(t, 1, score.Score)
-	assert.Equal(t, "2026-01-15", score.Date.Format("2006-01-02"))
+	assert.Equal(t, 1, *score)
 }
 
 func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
@@ -43,8 +42,7 @@ func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
 	score := NewCachedProduceScorer(IO(c)).ProduceScore(t.Context(), *loc)
 
 	require.NotNil(t, score)
-	assert.Equal(t, 1, score.Score)
-	assert.Equal(t, "2026-01-14", score.Date.Format("2006-01-02"))
+	assert.Equal(t, 1, *score)
 }
 
 func TestCachedProduceScorerReturnsNilWhenCacheMissing(t *testing.T) {
@@ -69,10 +67,14 @@ func TestSumIngredientGradesAboveCutoff(t *testing.T) {
 }
 
 func testProduceScoreLocation() *locations.Location {
+	lat := 40.7128
+	lon := -74.006
 	return &locations.Location{
 		ID:      "23456789",
 		Name:    "Test Store",
 		ZipCode: "10001",
+		Lat:     &lat,
+		Lon:     &lon,
 	}
 }
 

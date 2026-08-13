@@ -18,6 +18,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/httpx"
 	"careme/internal/locations/geo"
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -46,15 +47,10 @@ type authClient interface {
 	GetUserIDFromRequest(r *http.Request) (string, error)
 }
 
-type locationResolver interface {
-	NearestZIPToCoordinates(lat, lon float64) (string, bool)
-}
-
 type Handler struct {
 	uploader    *uploader
 	auth        authClient
 	extractor   IngredientExtractor
-	zipFinder   locationResolver
 	statusStore *analysisStatusStore
 	// exposed for tests
 	parsePhotos func(context.Context, *http.Request) ([]Photo, error)
@@ -71,12 +67,11 @@ func (p Photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor, zipFinder locationResolver) *Handler {
+func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor) *Handler {
 	return &Handler{
 		uploader:    uploader,
 		auth:        authClient,
 		extractor:   extractor,
-		zipFinder:   zipFinder,
 		statusStore: newAnalysisStatusStore(statusCache),
 		parsePhotos: parseUploadedPhotos,
 	}
@@ -124,7 +119,7 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -156,7 +151,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		renderError(ctx, w, err.Error())
 		return
 	}
-	coord, zip, err := h.resolveMarketLocation(r)
+	coord, err := resolveMarketLocation(r)
 	if err != nil {
 		renderError(ctx, w, err.Error())
 		return
@@ -178,7 +173,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	h.wg.Go(func() {
 		jobCtx := context.WithoutCancel(ctx)
-		h.runAnalysisJob(jobCtx, status, name, photos, coord, zip)
+		h.runAnalysisJob(jobCtx, status, name, photos, coord)
 	})
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -187,7 +182,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate, zip string) {
+func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate) {
 	update := func(next analysisStatus) {
 		if err := h.statusStore.save(ctx, next); err != nil {
 			slog.ErrorContext(ctx, "failed to save farmers market analysis status", "job_id", status.ID, "error", err)
@@ -223,16 +218,23 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	status.Message = fmt.Sprintf("Found %d ingredients. Saving this market.", len(ingredients))
 	update(status)
 
-	date := farmersMarketDate(time.Now(), zip)
-	market, err := h.uploader.saveUpload(ctx, name, coord, zip, len(photos), date, ingredients)
+	date, err := farmersMarketDate(time.Now(), coord)
+	if err != nil {
+		fail("Could not determine the market's local date.", err)
+		return
+	}
+	market, err := h.uploader.saveUpload(ctx, name, coord, len(photos), date, ingredients)
 	if err != nil {
 		fail("Could not save this market. Try again, chef.", err)
 		return
 	}
 
 	status.State = analysisStateComplete
-	status.RedirectURL = "/recipes?location=" + url.QueryEscape(market.ID) + "&date=" + url.QueryEscape(date.Format("2006-01-02"))
-	status.Message = fmt.Sprintf("Found %d ingredients. Building dinner ideas.", len(ingredients))
+	status.RedirectURL = "/locations?" + url.Values{
+		"lat": {fmt.Sprintf("%g", market.Lat)},
+		"lon": {fmt.Sprintf("%g", market.Lon)},
+	}.Encode()
+	status.Message = fmt.Sprintf("Found %d ingredients. Finding nearby stores.", len(ingredients))
 	update(status)
 }
 
@@ -322,16 +324,12 @@ func uniqueIngredients(ingredients []ai.InputIngredient) []ai.InputIngredient {
 	})
 }
 
-func (h *Handler) resolveMarketLocation(r *http.Request) (geo.Coordinate, string, error) {
+func resolveMarketLocation(r *http.Request) (geo.Coordinate, error) {
 	coord, err := geo.FromString(r.FormValue("lat"), r.FormValue("lon"))
 	if err != nil {
-		return geo.Coordinate{}, "", err
+		return geo.Coordinate{}, err
 	}
-	zip, ok := h.zipFinder.NearestZIPToCoordinates(coord.Lat, coord.Lon)
-	if !ok {
-		return geo.Coordinate{}, "", fmt.Errorf("could not match that location to a ZIP code")
-	}
-	return coord, zip, nil
+	return coord, nil
 }
 
 func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) {
@@ -377,34 +375,30 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 	return photos, nil
 }
 
-func farmersMarketDate(now time.Time, zip string) time.Time {
-	tzName, ok := geo.TimezoneNameForZip(zip)
+func farmersMarketDate(now time.Time, coordinates geo.Coordinate) (time.Time, error) {
+	timezone, ok := geo.TimezoneNameForCoordinates(coordinates)
 	if !ok {
-		tzName = "UTC"
+		return time.Time{}, fmt.Errorf("could not estimate timezone for coordinates %f,%f", coordinates.Lat, coordinates.Lon)
 	}
-	storeLoc, err := time.LoadLocation(tzName)
+	storeLoc, err := time.LoadLocation(timezone)
 	if err != nil {
-		storeLoc = time.UTC
+		return time.Time{}, fmt.Errorf("load estimated timezone %q: %w", timezone, err)
 	}
 	localNow := now.In(storeLoc)
 	if localNow.Hour() < storeDayStartHour {
 		localNow = localNow.AddDate(0, 0, -1)
 	}
-	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
+	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc), nil
 }
 
 func redirectToSignIn(w http.ResponseWriter, r *http.Request) {
 	target := "/sign-in?return_to_b64=" + url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(r.URL.RequestURI())))
-	if isHTMXRequest(r) {
+	if httpx.IsHTMX(r) {
 		w.Header().Set("HX-Redirect", target)
 		http.Error(w, "must be logged in", http.StatusUnauthorized)
 		return
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
-}
-
-func isHTMXRequest(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }
 
 func renderError(ctx context.Context, w http.ResponseWriter, message string) {

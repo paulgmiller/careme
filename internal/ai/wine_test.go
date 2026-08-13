@@ -78,7 +78,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "- Roast until golden.\n- Finish with lemon juice.\n") {
 		t.Fatalf("expected instructions replay in prompt: %s", prompt)
 	}
-	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tAisleNumber\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\npinot-noir-1\t\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
+	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\npinot-noir-1\t\tPinot Noir\t750mL\t13.99\t13.99\n") {
 		t.Fatalf("expected candidate wines TSV in prompt: %s", prompt)
 	}
 }

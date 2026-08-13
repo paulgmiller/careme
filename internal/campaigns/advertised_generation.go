@@ -40,7 +40,7 @@ func AdvertisedRecipeLocations() map[string]campaign {
 			HelpMessage: genericLocationHelp("University Village QFC"),
 		},*/
 		"redmond_wf": {
-			Location:    locations.Location{ID: "wholefoods_10260", ZipCode: "98052"},
+			Location:    locations.Location{ID: "wholefoods_10260"},
 			HelpMessage: genericLocationHelp("Redmond Whole Foods"),
 		},
 		/* Too close to fred meyers
@@ -49,11 +49,11 @@ func AdvertisedRecipeLocations() map[string]campaign {
 			HelpMessage: genericLocationHelp("Bellevue Whole Foods"),
 		},*/
 		"bellevue": {
-			Location:    locations.Location{ID: "70100023", ZipCode: "98007"},
+			Location:    locations.Location{ID: "70100023"},
 			HelpMessage: genericLocationHelp("Bellevue Fred Meyer"),
 		},
 		"issaquah": {
-			Location:    locations.Location{ID: "70100658", ZipCode: "98029"},
+			Location:    locations.Location{ID: "70100658"},
 			HelpMessage: genericLocationHelp("Issaquah Fred Meyer"),
 		},
 	}

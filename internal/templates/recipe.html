@@ -41,9 +41,9 @@
               {{if .Location.Name}}
               <p class="mt-2 text-gray-600">
                 Location:
-                <a href="/recipes?location={{.Location.ID}}"
-                   class="font-semibold text-brand-700 hover:text-brand-600 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{.Location.Name}}</a>
-                {{if .Location.Address}}<span class="text-sm text-gray-500">({{.Location.Address}})</span>{{end}}
+                <a href="/locations?lat={{.Location.Lat}}&amp;lon={{.Location.Lon}}"
+                  class="inline font-semibold text-brand-700 hover:text-brand-600 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{.Location.Name}}</a>
+                <span class="text-sm text-gray-500">({{.Location.Address}})</span>
               </p>
               {{end}}
               {{if .OriginHash}}
@@ -165,6 +165,7 @@
                      class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
               <input type="hidden" name="recipe_title" value="{{.Recipe.Title}}" />
               <input id="question-response-id" type="hidden" name="response_id" value="{{.ResponseID}}" />
+              <input id="question-prompt-cache-key" type="hidden" name="prompt_cache_key" value="{{.PromptCacheKey}}" />
               <div class="flex items-center gap-2">
                 <button type="submit"
                         id="ask-question-submit"
@@ -252,6 +253,11 @@
         <a href="/recipe/{{.Recipe.ParentHash}}" class="hover:text-gray-500">Previous iteration</a>
       </p>
       {{end}}
+      {{if .AdminURL}}
+      <p class="text-center text-[0.6875rem] text-gray-400">
+        <a href="{{.AdminURL}}" class="hover:text-gray-500">Admin</a>
+      </p>
+      {{end}}
       <p class="text-center text-sm text-gray-500">Planned by Careme.</p>
       </div>
     </section>
@@ -297,9 +303,8 @@
 
 {{define "recipe_thread"}}
 <div id="question-thread">
-  {{if .ResponseID}}
   <input id="question-response-id" type="hidden" name="response_id" value="{{.ResponseID}}" hx-swap-oob="outerHTML" />
-  {{end}}
+  <input id="question-prompt-cache-key" type="hidden" name="prompt_cache_key" value="{{.PromptCacheKey}}" hx-swap-oob="outerHTML" />
   {{if .Thread}}
   <div class="space-y-4">
     {{range $index, $entry := .Thread}}

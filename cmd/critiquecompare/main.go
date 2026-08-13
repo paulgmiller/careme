@@ -19,11 +19,12 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 
+	"github.com/paulgmiller/kage/pkg/kage"
 	"github.com/samber/lo"
 )
 
 const (
-	defaultCompareModel = "gemini-3.5-flash"
+	defaultCompareModel = "google/gemini-3.5-flash"
 	benchmarkPrefix     = "recipe_critique_comparisons/"
 	detailScoreDelta    = 1
 )
@@ -54,15 +55,19 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, out io.Writer) error {
+	var hash string
 	var limit int
 	var model string
 	var refresh bool
+	var secretFile string
 
-	fs := flag.NewFlagSet("geminicritiquecompare", flag.ContinueOnError)
+	fs := flag.NewFlagSet("critiquecompare", flag.ContinueOnError)
 	fs.SetOutput(out)
+	fs.StringVar(&hash, "hash", "", "compare one recipe by hash instead of selecting a batch")
 	fs.IntVar(&limit, "n", 10, "number of already-critiqued recipes to compare")
-	fs.StringVar(&model, "model", defaultCompareModel, "Gemini model to use for comparison critiques")
+	fs.StringVar(&model, "model", defaultCompareModel, "OpenRouter model to use for comparison critiques")
 	fs.BoolVar(&refresh, "refresh", false, "rerun comparison critiques even if benchmark results are cached")
+	fs.StringVar(&secretFile, "secret-file", "", "encrypted kage environment file to load before configuration")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -74,6 +79,12 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return errors.New("-model is required")
 	}
 
+	if secretFile = strings.TrimSpace(secretFile); secretFile != "" {
+		if err := loadEncryptedEnvironment(secretFile); err != nil {
+			return fmt.Errorf("load secret environment: %w", err)
+		}
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -83,13 +94,48 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("create cache: %w", err)
 	}
-	critiquer := ai.NewCritiquer(cfg.Gemini.APIKey, model, http.DefaultClient)
+	critiquer := ai.NewCritiquer(cfg.OpenRouter.APIKey, model, http.DefaultClient)
+
+	hash = strings.TrimSpace(hash)
+	if hash != "" {
+		row, err := compareCritiqueByHash(ctx, cacheStore, critiquer, model, hash, refresh)
+		if err != nil {
+			return err
+		}
+		return printDetailedRow(out, row)
+	}
 
 	rows, err := compareCritiques(ctx, cacheStore, critiquer, model, limit, refresh)
 	if err != nil {
 		return err
 	}
 	return printRows(out, rows)
+}
+
+func loadEncryptedEnvironment(path string) error {
+	identities, err := kage.DefaultSSHIdentities()
+	if err != nil {
+		return fmt.Errorf("load SSH identity: %w", err)
+	}
+	if len(identities) == 0 {
+		return errors.New("no SSH identity available")
+	}
+
+	secrets, err := kage.ReadEncryptedFile(path, identities)
+	if err != nil {
+		return err
+	}
+	for _, secret := range secrets {
+		for _, line := range secret.Lines {
+			if line.Key == "" {
+				continue
+			}
+			if err := os.Setenv(line.Key, line.Value); err != nil {
+				return fmt.Errorf("set %s: %w", line.Key, err)
+			}
+		}
+	}
+	return nil
 }
 
 func compareCritiques(
@@ -118,6 +164,25 @@ func compareCritiques(
 	}
 
 	return rows, nil
+}
+
+func compareCritiqueByHash(
+	ctx context.Context,
+	cacheStore cache.ListCache,
+	critiquer recipeCritiquer,
+	model string,
+	hash string,
+	refresh bool,
+) (comparisonRow, error) {
+	critiqueStore := critique.NewStore(cacheStore)
+	recipeStore := recipes.IO(cacheStore)
+	benchmarkStore := newBenchmarkStore(cacheStore, model)
+
+	c, err := loadCandidate(ctx, critiqueStore, recipeStore, hash)
+	if err != nil {
+		return comparisonRow{}, err
+	}
+	return compareCandidate(ctx, c, benchmarkStore, critiquer, model, refresh)
 }
 
 func compareCandidate(
@@ -173,21 +238,29 @@ func loadCandidates(ctx context.Context, critiqueStore storedCritique, recipeSto
 
 	candidates := make([]candidate, 0, limit)
 	for _, hash := range lo.Take(hashes, limit) {
-		cachedCritique, err := critiqueStore.Load(ctx, hash)
+		c, err := loadCandidate(ctx, critiqueStore, recipeStore, hash)
 		if err != nil {
-			return nil, fmt.Errorf("load cached critique for %s: %w", hash, err)
+			return nil, err
 		}
-		recipe, err := recipeStore.SingleFromCache(ctx, hash)
-		if err != nil {
-			return nil, fmt.Errorf("load recipe for %s: %w", hash, err)
-		}
-		candidates = append(candidates, candidate{
-			hash:     hash,
-			recipe:   recipe,
-			critique: cachedCritique,
-		})
+		candidates = append(candidates, c)
 	}
 	return candidates, nil
+}
+
+func loadCandidate(ctx context.Context, critiqueStore storedCritique, recipeStore storedRecipes, hash string) (candidate, error) {
+	cachedCritique, err := critiqueStore.Load(ctx, hash)
+	if err != nil {
+		return candidate{}, fmt.Errorf("load cached critique for %s: %w", hash, err)
+	}
+	recipe, err := recipeStore.SingleFromCache(ctx, hash)
+	if err != nil {
+		return candidate{}, fmt.Errorf("load recipe for %s: %w", hash, err)
+	}
+	return candidate{
+		hash:     hash,
+		recipe:   recipe,
+		critique: cachedCritique,
+	}, nil
 }
 
 func printRows(out io.Writer, rows []comparisonRow) error {

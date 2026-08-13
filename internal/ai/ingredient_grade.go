@@ -96,6 +96,13 @@ type IngredientGrade struct {
 	Reason string `json:"reason"`
 }
 
+func (i *IngredientGrade) GetScore() int {
+	if i == nil {
+		return 0
+	}
+	return i.Score
+}
+
 // Not a big fand of the number of places that normalize should be done once and not always
 func NormalizeInputIngredient(ingredient InputIngredient) InputIngredient {
 	ingredient.ProductID = strings.TrimSpace(ingredient.ProductID)
@@ -139,6 +146,15 @@ func ingredientGradeCacheVersion(model, systemInstruction string) string {
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
+// IngredientGradeCacheVersion returns the cache version for the current grading prompt and model.
+func IngredientGradeCacheVersion(model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		model = defaultIngredientGradeModel
+	}
+	return ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction)
+}
+
 func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredientGrader {
 	model = strings.TrimSpace(model)
 	if model == "" {
@@ -153,7 +169,7 @@ func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredi
 	return &ingredientGrader{
 		oai:          aiClient,
 		model:        model,
-		cacheVersion: ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction),
+		cacheVersion: IngredientGradeCacheVersion(model),
 		schema:       ingredientGradeJSONSchema(),
 	}
 }

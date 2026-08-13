@@ -3,38 +3,31 @@ package farmersmarket
 import (
 	"context"
 
+	"careme/internal/locations/geo"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
 
 	"github.com/samber/lo"
 )
 
-type ZipCentroidLookup interface {
-	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
-}
-
 type locationBackend struct {
 	identityProvider
-	store     *store
-	zipLookup ZipCentroidLookup
+	store *store
 }
 
-func NewLocationBackend(store *store, zipLookup ZipCentroidLookup) *locationBackend {
+func NewLocationBackend(store *store) *locationBackend {
 	if store == nil {
 		panic("nil store given to location backend")
 	}
-	if zipLookup == nil {
-		panic("nil zip lookup given to location backend")
-	}
-	return &locationBackend{store: store, zipLookup: zipLookup}
+	return &locationBackend{store: store}
 }
 
-func NewContainerLocationBackend(zipLookup ZipCentroidLookup) (*locationBackend, error) {
+func NewContainerLocationBackend() (*locationBackend, error) {
 	store, err := NewContainerStore()
 	if err != nil {
 		return nil, err
 	}
-	return NewLocationBackend(store, zipLookup), nil
+	return NewLocationBackend(store), nil
 }
 
 func (b *locationBackend) HasInventory(locationID string) bool {
@@ -50,7 +43,7 @@ func (b *locationBackend) GetLocationByID(ctx context.Context, locationID string
 	return &loc, nil
 }
 
-func (b *locationBackend) GetLocationsByZip(ctx context.Context, zipcode string) ([]locationtypes.Location, error) {
+func (b *locationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
 	markets, err := b.store.listMarkets(ctx)
 	if err != nil {
 		return nil, err
@@ -59,5 +52,5 @@ func (b *locationBackend) GetLocationsByZip(ctx context.Context, zipcode string)
 	locations := lo.Map(markets, func(market Market, _ int) locationtypes.Location {
 		return market.Location()
 	})
-	return nearby.FilterAndSortByZip(ctx, b.zipLookup, zipcode, locations, nearby.MaxLocationDistanceMiles), nil
+	return nearby.FilterAndSortByCoordinates(coordinates, locations, nearby.MaxLocationDistanceMiles), nil
 }

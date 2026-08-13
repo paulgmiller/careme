@@ -17,17 +17,28 @@ import (
 
 const clerkJSVersion = "5.99.0"
 
+// ConversionEvent identifies a neutral browser conversion published through Google Tag Manager.
+type ConversionEvent string
+
+const (
+	SignupCompletedConversion  ConversionEvent = "signup_completed"
+	RecipeGenerationConversion ConversionEvent = "recipe_generation"
+	RecipeSaveConversion       ConversionEvent = "recipe_save"
+)
+
 //go:embed *.html
 var htmlFiles embed.FS
 
 var Home,
 	Spin,
 	AuthEstablish,
+	AccountRequired,
 	User,
 	ShoppingList,
 	Recipe,
 	Critique,
 	About,
+	Privacy,
 	Location,
 	FarmersMarket,
 	Mail *template.Template
@@ -44,11 +55,13 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 			}
 			return "https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js"
 		},
-		"GoogleTagNoScript": GoogleTagNoScript,
-		"PublicOrigin":      func() string { return config.ResolvedPublicOrigin() },
-		"SignInPath":        signInPath,
-		"TailwindAssetPath": func() string { return tailwindAssetPath },
-		"UserInitial":       userInitial,
+		"GoogleTagNoScript":         GoogleTagNoScript,
+		"PublicOrigin":              func() string { return config.ResolvedPublicOrigin() },
+		"RecipeSaveConversion":      func() ConversionEvent { return RecipeSaveConversion },
+		"SignInPath":                signInPath,
+		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
+		"TailwindAssetPath":         func() string { return tailwindAssetPath },
+		"UserInitial":               userInitial,
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
 	if err != nil {
@@ -57,11 +70,13 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Home = ensure(tmpls, "home.html")
 	Spin = ensure(tmpls, "spinner.html")
 	AuthEstablish = ensure(tmpls, "auth_establish.html")
+	AccountRequired = ensure(tmpls, "account_required.html")
 	User = ensure(tmpls, "user.html")
 	ShoppingList = ensure(tmpls, "shoppinglist.html")
 	Recipe = ensure(tmpls, "recipe.html")
 	Critique = ensure(tmpls, "critique.html")
 	About = ensure(tmpls, "about.html")
+	Privacy = ensure(tmpls, "privacy.html")
 	Location = ensure(tmpls, "locations.html")
 	FarmersMarket = ensure(tmpls, "farmersmarket.html")
 	Mail = ensure(tmpls, "mail.html")

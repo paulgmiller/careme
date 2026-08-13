@@ -33,24 +33,29 @@ type Ingredient struct {
 }
 
 type Recipe struct {
-	Title        string       `json:"title"`
-	Description  string       `json:"description"`
-	CookTime     string       `json:"cook_time"`
-	CostEstimate string       `json:"cost_estimate"`
-	Ingredients  []Ingredient `json:"ingredients"`
-	Instructions []string     `json:"instructions"`
-	Health       string       `json:"health"`
-	DrinkPairing string       `json:"drink_pairing"`
-	WineStyles   []string     `json:"wine_styles"`
-	ResponseID   string       `json:"response_id,omitempty" jsonschema:"-"` // not in schema
-	OriginHash   string       `json:"origin_hash,omitempty" jsonschema:"-"` // not in schema
-	ParentHash   string       `json:"parent_hash,omitempty" jsonschema:"-"` // regeneration metadata, not in schema
+	Title          string       `json:"title"`
+	Description    string       `json:"description"`
+	CookTime       string       `json:"cook_time"`
+	CostEstimate   string       `json:"cost_estimate"`
+	Ingredients    []Ingredient `json:"ingredients"`
+	Instructions   []string     `json:"instructions"`
+	Health         string       `json:"health"`
+	DrinkPairing   string       `json:"drink_pairing"`
+	WineStyles     []string     `json:"wine_styles"`
+	ResponseID     string       `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
+	OriginHash     string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
+	ParentHash     string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
+	PromptCacheKey string       `json:"prompt_cache_key,omitempty" jsonschema:"-"` // server-owned cache routing metadata
 	// Shove wine selection in here
+}
+
+func (r Recipe) ResponseRef() ResponseRef {
+	return ResponseRef{ID: r.ResponseID, PromptCacheKey: r.PromptCacheKey}
 }
 
 // ComputeHash calculates the fnv128 hash of the recipe content
 func (r *Recipe) ComputeHash() string {
-	// OriginHash, ParentHash, Saved are intentionally excluded because they describe provenance or UI state,
+	// OriginHash, ParentHash, PromptCacheKey, and Saved are intentionally excluded because they describe provenance or UI state,
 	// not the recipe content itself. If ancestor links ever need to affect identity, that
 	// is a separate model change and should not happen implicitly here.
 	fnv := fnv.New128a()
@@ -80,8 +85,9 @@ type ShoppingList struct {
 
 // question threads go off from the response that generated the recipe.
 type QuestionResponse struct {
-	Answer     string
-	ResponseID string
+	Answer         string
+	ResponseID     string
+	PromptCacheKey string
 }
 
 // edited out. Which recipe should be richer?!
@@ -97,6 +103,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - Include pastas, noodles, stir-fries, stews, braises, curries, casseroles, or other compositions when they fit the ingredients.
 - Prioritize sale ingredients by value and quality. Only use prices from the input; never invent prices.
 - Pantry items are allowed when common and inexpensive.
+- Presalting meat and salting pasta or blanching water season food during cooking. Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead. Account for meat that is already brined or cured and for user requests to reduce sodium.
 - Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated quantities and servings.
 - Include wine pairing guidance when useful; otherwise explain briefly why a pairing is not needed.
 
@@ -117,7 +124,7 @@ Ensure cook_time reflects the total time implied by every instruction step, incl
 Cross-check every ingredient mention in the instructions for an exact step-level amount, and cross-check those amounts against the total quantity in ingredients.
 Do not include these checks in the output.`
 
-func responseToRecipe(ctx context.Context, category, model string, resp *responses.Response) (*Recipe, error) {
+func responseToRecipe(ctx context.Context, category, model, promptCacheKey string, resp *responses.Response) (*Recipe, error) {
 	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, responseUsageLogAttr(model, resp.Usage))
 	var recipe Recipe
 	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
@@ -128,11 +135,12 @@ func responseToRecipe(ctx context.Context, category, model string, resp *respons
 		return nil, fmt.Errorf("failed to get response ID")
 	}
 	recipe.ResponseID = resp.ID
+	recipe.PromptCacheKey = promptCacheKey
 	return &recipe, nil
 }
 
-func (c *client) Regenerate(ctx context.Context, instructions []string, previousResponseID string) (*Recipe, error) {
-	if previousResponseID == "" {
+func (c *client) Regenerate(ctx context.Context, instructions []string, previous ResponseRef) (*Recipe, error) {
+	if previous.ID == "" {
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
@@ -140,15 +148,17 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 
 	params := responses.ResponseNewParams{
 		Model:              c.model,
-		PreviousResponseID: openai.String(previousResponseID),
+		PreviousResponseID: openai.String(previous.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
 		Instructions: openai.String(systemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.recipeSchema),
+		Store:              openai.Bool(true),
+		Text:               scheme(c.recipeSchema),
+		PromptCacheKey:     openai.String(previous.PromptCacheKey),
+		PromptCacheOptions: defaultCacheOptions(),
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
@@ -156,25 +166,27 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	}
 
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+	return responseToRecipe(ctx, aiCategoryRecipe, c.model, previous.PromptCacheKey, resp)
 }
 
-func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menuResponseID string) (*Recipe, error) {
-	menuResponseID = strings.TrimSpace(menuResponseID)
-	if menuResponseID == "" {
+func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, error) {
+	menu.ID = strings.TrimSpace(menu.ID)
+	if menu.ID == "" {
 		return nil, fmt.Errorf("response ID is required for menu response generation")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
-		PreviousResponseID: openai.String(menuResponseID),
+		PreviousResponseID: openai.String(menu.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		Instructions: openai.String(systemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
 		},
-		Store: openai.Bool(true),
-		Text:  scheme(c.recipeSchema),
+		Store:              openai.Bool(true),
+		Text:               scheme(c.recipeSchema),
+		PromptCacheKey:     openai.String(menu.PromptCacheKey),
+		PromptCacheOptions: defaultCacheOptions(),
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
@@ -182,10 +194,10 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, resp)
+	return responseToRecipe(ctx, aiCategoryRecipe, c.model, menu.PromptCacheKey, resp)
 }
 
-func (c *client) AskQuestion(ctx context.Context, question string, previousResponseID string) (*QuestionResponse, error) {
+func (c *client) AskQuestion(ctx context.Context, question string, previous ResponseRef) (*QuestionResponse, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return nil, fmt.Errorf("question is required")
@@ -195,12 +207,13 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 		Model:        c.model,
 		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: []responses.ResponseInputItemUnionParam{user(question)},
+			OfInputItemList: []responses.ResponseInputItemUnionParam{userWithCacheBreakpoint(question)},
 		},
-		Store: openai.Bool(true),
-	}
-	if previousResponseID != "" {
-		params.PreviousResponseID = openai.String(previousResponseID)
+		Store:              openai.Bool(true),
+		PreviousResponseID: openai.String(previous.ID),
+
+		PromptCacheKey:     openai.String(previous.PromptCacheKey),
+		PromptCacheOptions: defaultCacheOptions(),
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
@@ -215,8 +228,9 @@ func (c *client) AskQuestion(ctx context.Context, question string, previousRespo
 		return nil, fmt.Errorf("failed to get response ID for question")
 	}
 	return &QuestionResponse{
-		Answer:     answer,
-		ResponseID: resp.ID,
+		Answer:         answer,
+		ResponseID:     resp.ID,
+		PromptCacheKey: previous.PromptCacheKey,
 	}, nil
 }
 
@@ -225,13 +239,14 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 		slog.Int64("inputTokens", usage.InputTokens),
 		slog.Group("inputTokensDetails",
 			slog.Int64("cachedTokens", usage.InputTokensDetails.CachedTokens),
+			slog.Int64("cacheWriteTokens", usage.InputTokensDetails.CacheWriteTokens),
 		),
 		slog.Int64("outputTokens", usage.OutputTokens),
 		slog.Group("outputTokensDetails",
 			slog.Int64("reasoningTokens", usage.OutputTokensDetails.ReasoningTokens),
 		),
 		slog.Int64("totalTokens", usage.TotalTokens),
-		estimatedSpendLogAttr(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.OutputTokens)),
+		estimatedSpendLogAttr(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.InputTokensDetails.CacheWriteTokens, usage.OutputTokens)),
 	)
 }
 
