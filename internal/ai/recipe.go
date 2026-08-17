@@ -109,6 +109,10 @@ type Recipe struct {
 }
 
 func (r *Recipe) UnmarshalJSON(data []byte) error {
+	// Rollback note: binaries from before structured instructions expect instructions to be []string
+	// and cannot decode object-form recipe/ or shoppinglist/ cache records. Before rolling back,
+	// backport a decoder that flattens each object's Text and Ingredients into one string (discarding
+	// Phase), or rewrite affected cache records to the legacy string-array shape.
 	type recipe Recipe
 	var decoded recipe
 	if err := json.Unmarshal(data, &decoded); err != nil {
@@ -196,9 +200,9 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
 - instructions: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers.
   - phase: start at 1 and keep phases contiguous and nondecreasing. Steps with the same phase can be done concurrently. A phase begins only after every step in the preceding phase finishes. Use the same phase only when the steps are genuinely independent.
-  - text: state the action clearly. For prep or a mixture involving several ingredients, introduce the work without packing every ingredient into one long sentence.
-  - ingredients: for prep or a mixture involving several ingredients, list each ingredient as a separate concise bullet with its exact amount and relevant preparation, such as "1 green bell pepper, diced". Otherwise return an empty list. Do not repeat listed ingredients in text.
-Every time a step uses an ingredient, including a pantry ingredient, state its exact amount in either the step text or that step's ingredients list. When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients. Do not use an unquantified phrase such as "the remaining oil"; write the amount, such as "the remaining 1 tablespoon oil."
+  - text: state the action clearly. For prep or a mixture that qualifies for an ingredients list, introduce the work without packing every ingredient into one long sentence.
+  - ingredients: use this nested list only when the cook must measure, prepare, or combine at least three distinct ingredients in this step and moving them out of the prose makes the action materially easier to scan. List each with its exact amount and relevant preparation, such as "1 green bell pepper, diced". Otherwise return an empty list. Do not use a nested list for ordinary cooking actions, resting, serving, plating, a single primary ingredient, or to restate ingredients or prepared components already established by an earlier step. Do not repeat listed ingredients in text.
+Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in either the step text or that step's ingredients list. Once quantified ingredients have been made into a named mixture or prepared component, later steps should refer to that component by name without restating its ingredients or their amounts. When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients. Do not use an unquantified phrase such as "the remaining oil"; write the amount, such as "the remaining 1 tablespoon oil."
 - health: one short sentence with plausible calories and macro notes for the stated servings.
 - drink_pairing: one concise sentence tied to the dish.
 - wine_styles: at most two searchable consumer wine styles, such as "Pinot Noir" or "Sauvignon Blanc"; no regions, parenthetical notes, commas, "or", or "*-style blend" phrasing.

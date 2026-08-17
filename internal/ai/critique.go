@@ -30,7 +30,8 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - are the instructions coherent and complete
 - do the instructions begin with preparation before active cooking starts
 - do steps with the same phase contain work that can genuinely happen concurrently, and do later phases wait for all work they require
-- does every mention of an ingredient in instruction text or nested ingredient lists include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
+- when an ingredient is first used, does instruction text or its nested ingredient list include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
+- do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts
 - do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list
 - are the applications of salt, acid, fat, and heat appropriate
 - when quantities permit calculation, use these salt amounts as starting points: 1.25% salt by weight for boneless meat, 1.5% for bone-in meat including roast chicken, 1% for vegetables and grains, and 2% salinity for pasta or vegetable-blanching water

@@ -62,7 +62,8 @@ func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing
 	for _, want := range []string{
 		"do the instructions begin with preparation before active cooking starts",
 		"do steps with the same phase contain work that can genuinely happen concurrently",
-		"does every mention of an ingredient in instruction text or nested ingredient lists include the exact amount used in that step",
+		"when an ingredient is first used, does instruction text or its nested ingredient list include the exact amount used in that step",
+		"do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts",
 		"do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list",
 		"does the stated cook_time match the total elapsed time implied by all instruction phases, including prep, resting, passive cooking, and concurrent work",
 	} {
