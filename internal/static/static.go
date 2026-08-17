@@ -23,6 +23,9 @@ var userClerkBillingJS []byte
 //go:embed share.js
 var shareJS []byte
 
+//go:embed recipe.js
+var recipeJS []byte
+
 //go:embed fonts/*.woff2
 var fontFiles embed.FS
 
@@ -89,6 +92,14 @@ func Register(mux routing.Registrar) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		if _, err := w.Write(shareJS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write share js", "error", err)
+		}
+	})
+
+	mux.HandleFunc("/static/recipe.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		if _, err := w.Write(recipeJS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write recipe js", "error", err)
 		}
 	})
 
