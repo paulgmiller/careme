@@ -129,11 +129,15 @@
               </details>
               <div id="recipe-instructions" data-recipe-steps>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
-                <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>Swipe or drag a step aside when it’s done.</p>
+                <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>Swipe or drag a step aside when it’s done. ↔</p>
                 <ol class="recipe-step-list mt-3 space-y-2 text-gray-700">
                   {{range $index, $instruction := .Recipe.Instructions}}
-                  <li class="recipe-step px-1 py-2 text-sm" data-recipe-step>
-                    <div class="flex items-start gap-3" data-recipe-step-content>
+                  <li class="recipe-step relative overflow-hidden text-sm" data-recipe-step>
+                    <span class="print-hidden pointer-events-none absolute inset-y-0 left-1 flex items-center text-xs font-medium text-action-green-700 opacity-0"
+                          data-recipe-step-reveal-start aria-hidden="true">Done</span>
+                    <span class="print-hidden pointer-events-none absolute inset-y-0 right-1 flex items-center text-xs font-medium text-action-green-700 opacity-0"
+                          data-recipe-step-reveal-end aria-hidden="true">Done</span>
+                    <div class="relative z-10 flex items-start gap-3 bg-white px-1 py-2" data-recipe-step-content>
                       <span class="w-5 shrink-0 text-right" data-recipe-step-number>{{InstructionNumber $index}}.</span>
                       <span class="min-w-0 flex-1">{{$instruction}}</span>
                     </div>
@@ -340,6 +344,7 @@
       const completeTimers = new WeakMap();
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
       const swipeIntentDistance = 10;
+      let hintAnimations = [];
 
       if (hint) hint.hidden = false;
 
@@ -373,24 +378,36 @@
         step.hidden = false;
         step.removeAttribute('data-recipe-step-completed');
         step.removeAttribute('data-recipe-step-dragging');
-        step.style.removeProperty('opacity');
-        step.style.removeProperty('transform');
+        const content = step.querySelector('[data-recipe-step-content]');
+        const revealStart = step.querySelector('[data-recipe-step-reveal-start]');
+        const revealEnd = step.querySelector('[data-recipe-step-reveal-end]');
+        content.style.removeProperty('opacity');
+        content.style.removeProperty('transform');
+        revealStart.style.removeProperty('opacity');
+        revealEnd.style.removeProperty('opacity');
       }
 
       function completeStep(step, direction) {
         if (step.hasAttribute('data-recipe-step-completed')) return;
 
+        const content = step.querySelector('[data-recipe-step-content]');
+        const revealStart = step.querySelector('[data-recipe-step-reveal-start]');
+        const revealEnd = step.querySelector('[data-recipe-step-reveal-end]');
         step.setAttribute('data-recipe-step-completed', 'true');
         step.removeAttribute('data-recipe-step-dragging');
-        step.style.transform = `translateX(${direction < 0 ? -110 : 110}%)`;
-        step.style.opacity = '0';
+        revealStart.style.opacity = direction > 0 ? '1' : '0';
+        revealEnd.style.opacity = direction < 0 ? '1' : '0';
+        content.style.transform = `translateX(${direction < 0 ? -110 : 110}%)`;
+        content.style.opacity = '0';
         completedSteps.push(step);
         showStatus();
 
         const timer = window.setTimeout(() => {
           step.hidden = true;
-          step.style.removeProperty('opacity');
-          step.style.removeProperty('transform');
+          content.style.removeProperty('opacity');
+          content.style.removeProperty('transform');
+          revealStart.style.removeProperty('opacity');
+          revealEnd.style.removeProperty('opacity');
           completeTimers.delete(step);
         }, reducedMotion.matches ? 0 : 180);
         completeTimers.set(step, timer);
@@ -416,6 +433,9 @@
       resetButton.addEventListener('click', restoreAllSteps);
 
       steps.forEach((step) => {
+        const content = step.querySelector('[data-recipe-step-content]');
+        const revealStart = step.querySelector('[data-recipe-step-reveal-start]');
+        const revealEnd = step.querySelector('[data-recipe-step-reveal-end]');
         let pointerID = null;
         let startX = 0;
         let startY = 0;
@@ -428,12 +448,16 @@
           isHorizontal = false;
           step.removeAttribute('data-recipe-step-dragging');
           if (!step.hasAttribute('data-recipe-step-completed')) {
-            step.style.removeProperty('opacity');
-            step.style.removeProperty('transform');
+            content.style.removeProperty('opacity');
+            content.style.removeProperty('transform');
+            revealStart.style.removeProperty('opacity');
+            revealEnd.style.removeProperty('opacity');
           }
         }
 
         step.addEventListener('pointerdown', (event) => {
+          hintAnimations.forEach((animation) => animation.cancel());
+          hintAnimations = [];
           if (event.pointerType === 'mouse') event.preventDefault();
           pointerID = event.pointerId;
           startX = event.clientX;
@@ -460,8 +484,9 @@
 
           offsetX = deltaX;
           const progress = Math.min(Math.abs(offsetX) / step.offsetWidth, 1);
-          step.style.transform = `translateX(${offsetX}px)`;
-          step.style.opacity = String(1 - (progress * 0.65));
+          content.style.transform = `translateX(${offsetX}px)`;
+          revealStart.style.opacity = offsetX > 0 ? String(Math.min(progress * 3, 1)) : '0';
+          revealEnd.style.opacity = offsetX < 0 ? String(Math.min(progress * 3, 1)) : '0';
         });
 
         step.addEventListener('pointerup', (event) => {
@@ -469,12 +494,53 @@
           const threshold = Math.min(120, step.offsetWidth * 0.3);
           const shouldComplete = isHorizontal && Math.abs(offsetX) >= threshold;
           const direction = offsetX < 0 ? -1 : 1;
+          if (shouldComplete) {
+            pointerID = null;
+            offsetX = 0;
+            isHorizontal = false;
+            completeStep(step, direction);
+            return;
+          }
           resetSwipe();
-          if (shouldComplete) completeStep(step, direction);
         });
 
         step.addEventListener('pointercancel', resetSwipe);
       });
+
+      if (!reducedMotion.matches) {
+        let showNudge = true;
+        try {
+          showNudge = window.sessionStorage.getItem('careme:recipe-step-swipe-hint') !== 'shown';
+          if (showNudge) window.sessionStorage.setItem('careme:recipe-step-swipe-hint', 'shown');
+        } catch (_) {
+          // Storage may be unavailable in private browsing; the hint can still run.
+        }
+
+        if (showNudge) {
+          const firstStep = steps[0];
+          const firstContent = firstStep.querySelector('[data-recipe-step-content]');
+          const firstReveal = firstStep.querySelector('[data-recipe-step-reveal-start]');
+          if (typeof firstContent.animate !== 'function') return;
+          hintAnimations = [
+            firstContent.animate(
+              [
+                { transform: 'translateX(0)' },
+                { transform: 'translateX(24px)' },
+                { transform: 'translateX(0)' },
+              ],
+              { delay: 500, duration: 650, easing: 'ease-in-out' },
+            ),
+            firstReveal.animate(
+              [
+                { opacity: 0 },
+                { opacity: 1 },
+                { opacity: 0 },
+              ],
+              { delay: 500, duration: 650, easing: 'ease-in-out' },
+            ),
+          ];
+        }
+      }
     }
 
     document.addEventListener('DOMContentLoaded', initializeRecipeSteps);

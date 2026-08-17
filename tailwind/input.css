@@ -139,6 +139,28 @@
     corner-shape: squircle;
   }
 
+  /* Let recipe steps follow the finger without interfering with vertical scrolling. */
+  .recipe-step {
+    touch-action: pan-y;
+  }
+
+  /* Move only the instruction surface so the Done hint stays behind it. */
+  .recipe-step [data-recipe-step-content] {
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+
+  /* Direct pointer tracking should not lag behind the user's swipe. */
+  .recipe-step[data-recipe-step-dragging] [data-recipe-step-content] {
+    transition: none;
+    user-select: none;
+  }
+
+  /* Honor the platform motion preference for swipe and snap-back transitions. */
+  @media (prefers-reduced-motion: reduce) {
+    .recipe-step [data-recipe-step-content] {
+      transition: none;
+    }
+  }
 }
 
 /*
@@ -283,6 +305,16 @@ https://tailwindcss.com/docs/adding-custom-variants#custom-variants
   /* Print ingredients even when the user collapsed their details element. */
   .recipe-ingredients > ul {
     display: block !important;
+  }
+
+  /* Temporary cooking progress must never remove steps from a printout. */
+  .recipe-step[hidden] {
+    display: list-item !important;
+  }
+
+  .recipe-step [data-recipe-step-content] {
+    opacity: 1 !important;
+    transform: none !important;
   }
 
   /* Keep each ingredient or instruction from splitting across pages. */
