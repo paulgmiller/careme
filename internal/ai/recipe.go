@@ -8,8 +8,10 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 
+	"github.com/invopop/jsonschema"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
@@ -32,20 +34,56 @@ type Ingredient struct {
 	Price       string `json:"price,omitempty" jsonschema:"-"`
 }
 
+type CookingMethod string
+
+const (
+	CookingMethodStovetop   CookingMethod = "stovetop"
+	CookingMethodOven       CookingMethod = "oven"
+	CookingMethodGrill      CookingMethod = "grill"
+	CookingMethodSlowCooker CookingMethod = "slow_cooker"
+	CookingMethodAirFryer   CookingMethod = "air_fryer"
+	CookingMethodNoCook     CookingMethod = "no_cook"
+)
+
+func (CookingMethod) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type: "string",
+		Enum: []any{
+			string(CookingMethodStovetop),
+			string(CookingMethodOven),
+			string(CookingMethodGrill),
+			string(CookingMethodSlowCooker),
+			string(CookingMethodAirFryer),
+			string(CookingMethodNoCook),
+		},
+	}
+}
+
+type RecipeProperties struct {
+	TotalMinutes         int             `json:"total_minutes" jsonschema:"minimum=1"`
+	Servings             int             `json:"servings" jsonschema:"minimum=1"`
+	EstimatedCostDollars int             `json:"estimated_cost_dollars" jsonschema:"minimum=1"`
+	CaloriesPerServing   int             `json:"calories_per_serving" jsonschema:"minimum=1"`
+	CookingMethods       []CookingMethod `json:"cooking_methods" jsonschema:"minItems=1,uniqueItems=true"`
+	HealthNote           string          `json:"health_note"`
+	SpecialEquipment     string          `json:"special_equipment"`
+}
+
 type Recipe struct {
-	Title          string       `json:"title"`
-	Description    string       `json:"description"`
-	CookTime       string       `json:"cook_time"`
-	CostEstimate   string       `json:"cost_estimate"`
-	Ingredients    []Ingredient `json:"ingredients"`
-	Instructions   []string     `json:"instructions"`
-	Health         string       `json:"health"`
-	DrinkPairing   string       `json:"drink_pairing"`
-	WineStyles     []string     `json:"wine_styles"`
-	ResponseID     string       `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
-	OriginHash     string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
-	ParentHash     string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
-	PromptCacheKey string       `json:"prompt_cache_key,omitempty" jsonschema:"-"` // server-owned cache routing metadata
+	Title          string           `json:"title"`
+	Description    string           `json:"description"`
+	Properties     RecipeProperties `json:"properties"`
+	CookTime       string           `json:"cook_time,omitempty" jsonschema:"-"`     // legacy cached recipe field
+	CostEstimate   string           `json:"cost_estimate,omitempty" jsonschema:"-"` // legacy cached recipe field
+	Ingredients    []Ingredient     `json:"ingredients"`
+	Instructions   []string         `json:"instructions"`
+	Health         string           `json:"health,omitempty" jsonschema:"-"` // legacy cached recipe field
+	DrinkPairing   string           `json:"drink_pairing"`
+	WineStyles     []string         `json:"wine_styles"`
+	ResponseID     string           `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
+	OriginHash     string           `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
+	ParentHash     string           `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
+	PromptCacheKey string           `json:"prompt_cache_key,omitempty" jsonschema:"-"` // server-owned cache routing metadata
 	// Shove wine selection in here
 }
 
@@ -73,7 +111,29 @@ func (r *Recipe) ComputeHash() string {
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
+	if r.hasStructuredProperties() {
+		lo.Must(io.WriteString(fnv, "recipe-properties-v1"))
+		lo.Must(io.WriteString(fnv, strconv.Itoa(r.Properties.TotalMinutes)))
+		lo.Must(io.WriteString(fnv, strconv.Itoa(r.Properties.Servings)))
+		lo.Must(io.WriteString(fnv, strconv.Itoa(r.Properties.EstimatedCostDollars)))
+		lo.Must(io.WriteString(fnv, strconv.Itoa(r.Properties.CaloriesPerServing)))
+		for _, method := range r.Properties.CookingMethods {
+			lo.Must(io.WriteString(fnv, string(method)))
+		}
+		lo.Must(io.WriteString(fnv, r.Properties.HealthNote))
+		lo.Must(io.WriteString(fnv, r.Properties.SpecialEquipment))
+	}
 	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
+}
+
+func (r Recipe) hasStructuredProperties() bool {
+	return r.Properties.TotalMinutes != 0 ||
+		r.Properties.Servings != 0 ||
+		r.Properties.EstimatedCostDollars != 0 ||
+		r.Properties.CaloriesPerServing != 0 ||
+		len(r.Properties.CookingMethods) != 0 ||
+		r.Properties.HealthNote != "" ||
+		r.Properties.SpecialEquipment != ""
 }
 
 // now we can reuse first recipes and people can go off in different directions.
@@ -105,22 +165,28 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - Pantry items are allowed when common and inexpensive.
 - Presalting meat and salting pasta or blanching water season food during cooking. Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead. Account for meat that is already brined or cured and for user requests to reduce sodium.
 - Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated quantities and servings.
+- Never recommend microwave cooking.
 - Include wine pairing guidance when useful; otherwise explain briefly why a pairing is not needed.
 
 # Field Guidance
 - title: use a short, appetizing name.
 - description: one appetizing sentence that notes what makes the dish practical, special, or seasonal.
-- cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
-- cost_estimate: align the range with listed priced ingredients.
+- properties.total_minutes: provide the total elapsed recipe time as an integer number of minutes; include prep, cooking, resting, and any other timed instruction steps.
+- properties.servings: provide the integer number of people served and ensure ingredient quantities match that yield.
+- properties.estimated_cost_dollars: provide one integer estimate of the total recipe cost in US dollars, rounded to the nearest dollar. Use only prices from the input and do not add costs for unpriced ingredients.
+- properties.calories_per_serving: provide a reasonable integer calorie estimate for one serving.
+- properties.cooking_methods: include every cooking method used, choosing only stovetop, oven, grill, slow_cooker, air_fryer, or no_cook. Do not include no_cook with another method.
+- properties.health_note: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap and its practical tradeoff; otherwise return an empty string. For example, brown rice adds fiber but takes longer to cook, while gluten-free pasta accommodates gluten avoidance but may soften faster. Do not imply that gluten-free food is inherently healthier.
+- properties.special_equipment: name uncommon required equipment not covered by cooking_methods, such as a pressure cooker, blender, smoker, or food processor; otherwise return an empty string. Do not list ordinary knives, bowls, pots, pans, baking sheets, or utensils.
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
 - instructions: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Every time a step mentions an ingredient, including a pantry ingredient, state the exact amount of that ingredient used in that step. When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients. Do not use an unquantified phrase such as "the remaining oil"; write the amount, such as "the remaining 1 tablespoon oil."
-- health: one short sentence with plausible calories and macro notes for the stated servings.
 - drink_pairing: one concise sentence tied to the dish.
 - wine_styles: at most two searchable consumer wine styles, such as "Pinot Noir" or "Sauvignon Blanc"; no regions, parenthetical notes, commas, "or", or "*-style blend" phrasing.
 
 # Quality Checks
 Before responding, ensure recipe is cookable, realistic, non-contradictory, correctly priced, safe, and visually appealing after plating.
-Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.
+Ensure properties.total_minutes reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.
+Ensure the four numeric properties are positive integers and cooking_methods agrees with the instructions.
 Cross-check every ingredient mention in the instructions for an exact step-level amount, and cross-check those amounts against the total quantity in ingredients.
 Do not include these checks in the output.`
 
@@ -131,12 +197,51 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
+	recipe.Properties.CookingMethods = normalizeCookingMethods(recipe.Properties.CookingMethods)
+	recipe.Properties.HealthNote = strings.TrimSpace(recipe.Properties.HealthNote)
+	recipe.Properties.SpecialEquipment = strings.TrimSpace(recipe.Properties.SpecialEquipment)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")
 	}
 	recipe.ResponseID = resp.ID
 	recipe.PromptCacheKey = promptCacheKey
 	return &recipe, nil
+}
+
+func normalizeCookingMethods(methods []CookingMethod) []CookingMethod {
+	allowed := map[CookingMethod]struct{}{
+		CookingMethodStovetop:   {},
+		CookingMethodOven:       {},
+		CookingMethodGrill:      {},
+		CookingMethodSlowCooker: {},
+		CookingMethodAirFryer:   {},
+		CookingMethodNoCook:     {},
+	}
+	cleaned := make([]CookingMethod, 0, len(methods))
+	seen := make(map[CookingMethod]struct{}, len(methods))
+	for _, method := range methods {
+		if _, ok := allowed[method]; !ok {
+			continue
+		}
+		if _, ok := seen[method]; ok {
+			continue
+		}
+		seen[method] = struct{}{}
+		cleaned = append(cleaned, method)
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	if len(cleaned) > 1 {
+		withoutNoCook := cleaned[:0]
+		for _, method := range cleaned {
+			if method != CookingMethodNoCook {
+				withoutNoCook = append(withoutNoCook, method)
+			}
+		}
+		cleaned = withoutNoCook
+	}
+	return cleaned
 }
 
 func (c *client) Regenerate(ctx context.Context, instructions []string, previous ResponseRef) (*Recipe, error) {

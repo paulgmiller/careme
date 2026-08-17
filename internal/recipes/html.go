@@ -33,6 +33,21 @@ type recipeImageView struct {
 	OutOfBand bool
 }
 
+type cookingMethodDisplay struct {
+	Key   ai.CookingMethod
+	Label string
+}
+
+type recipePropertyDisplay struct {
+	Time             string
+	Servings         string
+	Cost             string
+	Calories         string
+	CookingMethods   []cookingMethodDisplay
+	HealthNote       string
+	SpecialEquipment string
+}
+
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
 //
 // We keep ingredient expansion in Go instead of the template because the same derived
@@ -49,6 +64,7 @@ type shoppingRecipeView struct {
 	ShoppingListHash   string
 	ServerSignedIn     bool
 	DisplayIngredients []ai.Ingredient // merged food and wine
+	PropertyDisplay    recipePropertyDisplay
 	Saved              bool
 	Dismissed          bool
 	HasImage           bool
@@ -84,6 +100,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 			ShoppingListHash:   hash,
 			ServerSignedIn:     serverSignedIn,
 			DisplayIngredients: displayIngredients,
+			PropertyDisplay:    newRecipePropertyDisplay(recipe),
 			Saved:              saved,
 			Dismissed:          selection.IsDismissed(recipeHash),
 			HasImage:           recipeImages[recipeHash],
@@ -186,6 +203,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		Recipe                  ai.Recipe
 		Saved                   bool
 		DisplayIngredients      []ai.Ingredient
+		PropertyDisplay         recipePropertyDisplay
 		OriginHash              string
 		ResponseID              string
 		PromptCacheKey          string
@@ -211,6 +229,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		Recipe:                  recipe,
 		Saved:                   saved,
 		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		PropertyDisplay:         newRecipePropertyDisplay(recipe),
 		OriginHash:              recipe.OriginHash,
 		ResponseID:              activeResponseID,
 		PromptCacheKey:          recipe.PromptCacheKey,
@@ -290,12 +309,81 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash
 		ShoppingListHash:   shoppingListHash,
 		ServerSignedIn:     true, // have to be signed in to toggle
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		PropertyDisplay:    newRecipePropertyDisplay(recipe),
 		Saved:              saved,
 		Dismissed:          !saved,
 		HasImage:           hasImage,
 		WineRecommendation: wineRecommendation,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
+}
+
+func newRecipePropertyDisplay(recipe ai.Recipe) recipePropertyDisplay {
+	timeDisplay := strings.TrimSpace(recipe.CookTime)
+	if recipe.Properties.TotalMinutes > 0 {
+		timeDisplay = fmt.Sprintf("%d min", recipe.Properties.TotalMinutes)
+	}
+	if timeDisplay == "" {
+		timeDisplay = "—"
+	}
+
+	servingsDisplay := "—"
+	if recipe.Properties.Servings == 1 {
+		servingsDisplay = "1 serving"
+	} else if recipe.Properties.Servings > 1 {
+		servingsDisplay = fmt.Sprintf("%d servings", recipe.Properties.Servings)
+	}
+
+	costDisplay := strings.TrimSpace(recipe.CostEstimate)
+	if recipe.Properties.EstimatedCostDollars > 0 {
+		costDisplay = fmt.Sprintf("$%d", recipe.Properties.EstimatedCostDollars)
+	}
+	if costDisplay == "" {
+		costDisplay = "—"
+	}
+
+	caloriesDisplay := "—"
+	if recipe.Properties.CaloriesPerServing > 0 {
+		caloriesDisplay = fmt.Sprintf("%d cal", recipe.Properties.CaloriesPerServing)
+	}
+
+	methods := make([]cookingMethodDisplay, 0, len(recipe.Properties.CookingMethods))
+	for _, method := range recipe.Properties.CookingMethods {
+		label := cookingMethodLabel(method)
+		if label == "" {
+			continue
+		}
+		methods = append(methods, cookingMethodDisplay{Key: method, Label: label})
+	}
+
+	return recipePropertyDisplay{
+		Time:             timeDisplay,
+		Servings:         servingsDisplay,
+		Cost:             costDisplay,
+		Calories:         caloriesDisplay,
+		CookingMethods:   methods,
+		HealthNote:       strings.TrimSpace(recipe.Properties.HealthNote),
+		SpecialEquipment: strings.TrimSpace(recipe.Properties.SpecialEquipment),
+	}
+}
+
+func cookingMethodLabel(method ai.CookingMethod) string {
+	switch method {
+	case ai.CookingMethodStovetop:
+		return "Stovetop"
+	case ai.CookingMethodOven:
+		return "Oven"
+	case ai.CookingMethodGrill:
+		return "Grill"
+	case ai.CookingMethodSlowCooker:
+		return "Slow cooker"
+	case ai.CookingMethodAirFryer:
+		return "Air fryer"
+	case ai.CookingMethodNoCook:
+		return "No-cook"
+	default:
+		return ""
+	}
 }
 
 // called from single recipe page just swaps save dimiss

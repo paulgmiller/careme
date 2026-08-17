@@ -64,10 +64,17 @@ func TestMain(m *testing.M) {
 var list = ai.ShoppingList{
 	Recipes: []ai.Recipe{
 		{
-			Title:        "Test Recipe",
-			Description:  "A simple quail recipe",
-			CookTime:     "35 minutes",
-			CostEstimate: "$18-24",
+			Title:       "Test Recipe",
+			Description: "A simple quail recipe",
+			Properties: ai.RecipeProperties{
+				TotalMinutes:         35,
+				Servings:             4,
+				EstimatedCostDollars: 21,
+				CaloriesPerServing:   540,
+				CookingMethods:       []ai.CookingMethod{ai.CookingMethodStovetop, ai.CookingMethodOven},
+				HealthNote:           "Brown rice adds fiber but takes longer to cook.",
+				SpecialEquipment:     "Food processor",
+			},
 			Ingredients: []ai.Ingredient{
 				{Name: "quail", Quantity: "1 cup", Price: "2.00"},
 				{Name: "kohlrabi", Quantity: "2 tbsp", Price: "1.50"},
@@ -76,7 +83,7 @@ var list = ai.ShoppingList{
 				"Step 1: Do something.",
 				"Step 2: Do something else.",
 			},
-			Health:       "Healthy",
+			Health:       "Legacy health prose should stay hidden",
 			DrinkPairing: "Water",
 		},
 	},
@@ -89,12 +96,10 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	html := assertHTTPSuccess(t, w)
 	isValidHTML(t, html)
-	if !strings.Contains(html, "Total time:") {
-		t.Error("shopping list HTML should contain total time")
+	for _, want := range []string{"Total time:", "35 min", "Servings:", "4 servings", "Estimated total cost:", "$21", "Calories per serving:", "540 cal", "Stovetop", "Oven", "Health note:", "Brown rice adds fiber", "Special equipment:", "Food processor"} {
+		assert.Contains(t, html, want)
 	}
-	if !strings.Contains(html, "Estimated cost:") {
-		t.Error("shopping list HTML should contain estimated cost")
-	}
+	assert.NotContains(t, html, "Legacy health prose should stay hidden")
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("shopping list HTML should include htmx script")
 	}
@@ -136,6 +141,27 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	}
 	if strings.Contains(html, `href="/admin/ingredients/`) {
 		t.Error("shopping list HTML should not link directly to admin ingredients")
+	}
+}
+
+func TestCookingMethodLabel(t *testing.T) {
+	tests := []struct {
+		method ai.CookingMethod
+		want   string
+	}{
+		{method: ai.CookingMethodStovetop, want: "Stovetop"},
+		{method: ai.CookingMethodOven, want: "Oven"},
+		{method: ai.CookingMethodGrill, want: "Grill"},
+		{method: ai.CookingMethodSlowCooker, want: "Slow cooker"},
+		{method: ai.CookingMethodAirFryer, want: "Air fryer"},
+		{method: ai.CookingMethodNoCook, want: "No-cook"},
+		{method: ai.CookingMethod("microwave"), want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.method), func(t *testing.T) {
+			assert.Equal(t, tt.want, cookingMethodLabel(tt.method))
+		})
 	}
 }
 
@@ -516,12 +542,10 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if strings.Contains(html, "See plated dish") || strings.Contains(html, "Sign in to see plated dish") {
 		t.Error("recipe HTML should not include manual image generation actions")
 	}
-	if !strings.Contains(html, "Total time:") {
-		t.Error("recipe HTML should contain total time")
+	for _, want := range []string{"Total time:", "35 min", "Servings:", "4 servings", "Estimated total cost:", "$21", "Calories per serving:", "540 cal", "Stovetop", "Oven", "Health note:", "Brown rice adds fiber", "Special equipment:", "Food processor"} {
+		assert.Contains(t, html, want)
 	}
-	if !strings.Contains(html, "Estimated cost:") {
-		t.Error("recipe HTML should contain estimated cost")
-	}
+	assert.NotContains(t, html, "Legacy health prose should stay hidden")
 	if !strings.Contains(html, `sm:grid-cols-[minmax(0,1fr)_10rem_5rem]`) {
 		t.Error("recipe HTML should render ingredient rows with responsive aligned columns")
 	}
@@ -772,6 +796,9 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 	if !strings.Contains(html, `hidden sm:block`) {
 		t.Fatal("recipe HTML should reserve desktop alignment when ingredient price is empty")
 	}
+	assert.NotContains(t, html, "Health note:")
+	assert.NotContains(t, html, ">Light<")
+	assert.NotContains(t, html, "Special equipment:")
 }
 
 func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {

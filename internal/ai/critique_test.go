@@ -16,16 +16,20 @@ import (
 
 func TestBuildRecipeCritiquePrompt(t *testing.T) {
 	recipe := Recipe{
-		Title:        "Roast Chicken",
-		Description:  "Crisp skin and herbs.",
-		CookTime:     "45 minutes",
-		CostEstimate: "$18-24",
+		Title:       "Roast Chicken",
+		Description: "Crisp skin and herbs.",
+		Properties: RecipeProperties{
+			TotalMinutes:         45,
+			Servings:             4,
+			EstimatedCostDollars: 21,
+			CaloriesPerServing:   610,
+			CookingMethods:       []CookingMethod{CookingMethodOven},
+		},
 		Ingredients: []Ingredient{
 			{Name: "Chicken", Quantity: "1 whole", Price: "$12"},
 			{Name: "Lemon", Quantity: "1", Price: "$1"},
 		},
 		Instructions: []string{"Roast until golden.", "Finish with lemon juice."},
-		Health:       "Balanced dinner",
 		DrinkPairing: "Pinot Noir",
 		OriginHash:   "internal-metadata",
 	}
@@ -34,7 +38,11 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 	require.NoError(t, err)
 	for _, want := range []string{
 		`"title": "Roast Chicken"`,
-		`"cook_time": "45 minutes"`,
+		`"total_minutes": 45`,
+		`"servings": 4`,
+		`"estimated_cost_dollars": 21`,
+		`"calories_per_serving": 610`,
+		`"cooking_methods": [`,
 		`"name": "Chicken"`,
 		`"quantity": "1 whole"`,
 		`"price": "$12"`,
@@ -58,7 +66,10 @@ func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing
 		"do the instructions begin with preparation before active cooking starts",
 		"does every mention of an ingredient in the instructions include the exact amount used in that step",
 		"do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list",
-		"does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking",
+		"does properties.total_minutes match the total time implied by all instruction steps, including prep, resting, and passive cooking",
+		"are the total time, serving yield, total cost, and calories-per-serving estimates plausible",
+		"exclude microwave cooking",
+		"is properties.health_note empty unless it explains a meaningful dietary or nutritional ingredient swap",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}

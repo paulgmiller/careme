@@ -36,8 +36,11 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water; salty ingredients added later may justify reducing finishing salt, but they do not correct food that was underseasoned during cooking
 - account for ingredients that are already brined or cured and user requests to reduce sodium; because salt crystal sizes vary, evaluate salt by weight when available rather than assuming equal volume measures across salt types
 - report a material deviation from these salt starting points as a flavor issue and suggest a corrected amount at the proper cooking stage; if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 8 so the recipe is revised
-- are the timing and cost estimates plausible
-- does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking
+- are the total time, serving yield, total cost, and calories-per-serving estimates plausible for the ingredients and quantities
+- does properties.total_minutes match the total time implied by all instruction steps, including prep, resting, and passive cooking
+- do properties.cooking_methods match the instructions, exclude microwave cooking, and avoid combining no_cook with another method
+- is properties.health_note empty unless it explains a meaningful dietary or nutritional ingredient swap and its practical tradeoff, without unsupported health claims
+- is properties.special_equipment empty unless the recipe genuinely requires uncommon equipment not represented by cooking_methods
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 
